@@ -31,16 +31,31 @@ func TestSeedWritesMemoryEvalCorpus(t *testing.T) {
 	seedLocalPostgres(ctx, t, db, specs[0])
 
 	for _, spec := range specs {
-		main, ok := MemoryEvalProjectID(spec, memoryeval.ProjectMain)
-		require.True(t, ok)
-		other, ok := MemoryEvalProjectID(spec, memoryeval.ProjectOther)
-		require.True(t, ok)
-
 		corpus := MemoryEvalCorpus(spec, MemoryEvalAnchor(time.Now()))
-		count, err := q.MemoryEvalCountChats(ctx, repo.MemoryEvalCountChatsParams{OrgID: spec.OrgID, ProjectIds: []uuid.UUID{main, other}})
-		require.NoError(t, err)
-		require.Equal(t, int64(len(corpus.Chats)), count, spec.OrgSlug)
-		require.NotEqual(t, memoryeval.ChatID(corpus.Chats[0].Key), corpus.Chats[0].ID, "chat IDs are tenant-derived")
+		for _, key := range []memoryeval.ProjectKey{memoryeval.ProjectMain, memoryeval.ProjectOther} {
+			project, ok := MemoryEvalProjectID(spec, key)
+			require.True(t, ok)
+
+			var wantIDs []uuid.UUID
+			wantMessages := 0
+			for _, chat := range corpus.Chats {
+				if chat.Project != key {
+					continue
+				}
+				require.Equal(t, detUUID(spec.NameSeed+"memoryeval-chat-"+chat.Key), chat.ID, "chat IDs are tenant-derived")
+				wantIDs = append(wantIDs, chat.ID)
+				wantMessages += len(chat.Messages)
+			}
+			require.NotEmpty(t, wantIDs, "%s %s", spec.OrgSlug, key)
+
+			gotIDs, err := q.MemoryEvalListChatIDs(ctx, repo.MemoryEvalListChatIDsParams{OrgID: spec.OrgID, ProjectID: project})
+			require.NoError(t, err)
+			require.ElementsMatch(t, wantIDs, gotIDs, "%s %s", spec.OrgSlug, key)
+
+			messages, err := q.MemoryEvalCountChatMessages(ctx, project)
+			require.NoError(t, err)
+			require.Equal(t, int64(wantMessages), messages, "%s %s", spec.OrgSlug, key)
+		}
 	}
 	require.NotEqual(t, MemoryEvalCorpus(specs[0], time.Now()).Chats[0].ID, MemoryEvalCorpus(specs[1], time.Now()).Chats[0].ID)
 }

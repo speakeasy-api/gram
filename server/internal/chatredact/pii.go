@@ -10,20 +10,25 @@ import (
 // support chats. They favour precision so order numbers and timestamps
 // survive: phone numbers need separators, card numbers must start with an
 // issuer digit and pass the Luhn check, SSNs must use issuable area and group
-// numbers and medical record numbers need a label and a digit.
+// numbers (or a label when undashed) and medical record numbers need a label
+// and a digit.
 var (
 	piiEmail = regexp.MustCompile(`(?i)\b[a-z0-9._%+\-]+@[a-z0-9.\-]+\.[a-z]{2,}\b`)
-	piiPhone = regexp.MustCompile(`(?:\+?1[\s.\-]?)?(?:\(\d{3}\)\s?|\b\d{3}[\s.\-])\d{3}[\s.\-]\d{4}\b|\+\d{1,3}(?:[\s.\-]?\d){7,13}\b`)
+	piiPhone = regexp.MustCompile(`(?:\+?1[\s.\-]?)?(?:\(\d{3}\)\s?|\b\d{3}[\s.\-])\d{3}[\s.\-]\d{4}\b|\+\d{1,3}[\s.\-]?\(\d{1,4}\)(?:[\s.\-]?\d){5,11}\b|\+\d{1,3}(?:[\s.\-]?\d){7,13}\b`)
 	piiCard  = regexp.MustCompile(`\b[2-6](?:[ \-]?\d){12,18}\b`)
 	piiSSN   = regexp.MustCompile(`\b(\d{3})-(\d{2})-(\d{4})\b`)
+	// piiLabelledSSN catches SSNs written without dashes, which are too
+	// ambiguous to mask unlabelled. It keeps the label.
+	piiLabelledSSN = regexp.MustCompile(`(?i)\b(SSN|social security(?: number| no\.?| #)?)([\s:#\-]*)\d{3}[\s\-]?\d{2}[\s\-]?\d{4}\b`)
 	// piiMedicalRecord keeps the label and masks the identifier after it.
-	piiMedicalRecord = regexp.MustCompile(`(?i)\b(MRN|medical record(?: number| no\.?| #)?)([\s:#\-]*)[a-z]{0,4}-?\d[a-z0-9\-]{3,}`)
+	piiMedicalRecord = regexp.MustCompile(`(?i)\b(MRN|medical record(?: number| no\.?| #)?)([\s:#\-]*)[a-z]{0,4}-?\d[a-z0-9\-]{2,}`)
 )
 
 // maskPII masks personal identifiers in plain text. changed reports that
 // something was masked.
 func maskPII(text string) (string, bool) {
 	out := piiMedicalRecord.ReplaceAllString(text, "${1}${2}"+redactedMarker)
+	out = piiLabelledSSN.ReplaceAllString(out, "${1}${2}"+redactedMarker)
 	out = piiEmail.ReplaceAllString(out, redactedMarker)
 	out = piiSSN.ReplaceAllStringFunc(out, func(match string) string {
 		parts := piiSSN.FindStringSubmatch(match)

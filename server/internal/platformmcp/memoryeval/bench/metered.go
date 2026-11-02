@@ -2,6 +2,7 @@ package bench
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"sync"
 
@@ -15,6 +16,10 @@ type ModelSpend struct {
 	PromptTokens     int     `json:"prompt_tokens"`
 	CompletionTokens int     `json:"completion_tokens"`
 	CostUSD          float64 `json:"cost_usd"`
+
+	// Unpriced counts calls whose response reported no cost; CostUSD leaves
+	// them out, so a nonzero count means the cost is a lower bound.
+	Unpriced int `json:"unpriced_calls"`
 }
 
 // meteredClient counts tokens and reported cost per model for completions
@@ -36,11 +41,14 @@ func (m *meteredClient) GetCompletion(ctx context.Context, request openrouter.Co
 	if err != nil {
 		return nil, fmt.Errorf("metered completion: %w", err)
 	}
+	if response == nil {
+		return nil, errors.New("metered completion: empty response")
+	}
 	m.mu.Lock()
 	defer m.mu.Unlock()
 	s, ok := m.spend[request.Model]
 	if !ok {
-		s = &ModelSpend{Model: request.Model, Calls: 0, PromptTokens: 0, CompletionTokens: 0, CostUSD: 0}
+		s = &ModelSpend{Model: request.Model, Calls: 0, PromptTokens: 0, CompletionTokens: 0, CostUSD: 0, Unpriced: 0}
 		m.spend[request.Model] = s
 	}
 	s.Calls++
@@ -48,6 +56,8 @@ func (m *meteredClient) GetCompletion(ctx context.Context, request openrouter.Co
 	s.CompletionTokens += response.Usage.CompletionTokens
 	if response.Usage.Cost != nil {
 		s.CostUSD += *response.Usage.Cost
+	} else {
+		s.Unpriced++
 	}
 	return response, nil
 }
@@ -58,7 +68,7 @@ func (m *meteredClient) take(model string) ModelSpend {
 	defer m.mu.Unlock()
 	s, ok := m.spend[model]
 	if !ok {
-		return ModelSpend{Model: model, Calls: 0, PromptTokens: 0, CompletionTokens: 0, CostUSD: 0}
+		return ModelSpend{Model: model, Calls: 0, PromptTokens: 0, CompletionTokens: 0, CostUSD: 0, Unpriced: 0}
 	}
 	delete(m.spend, model)
 	return *s

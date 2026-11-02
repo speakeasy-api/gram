@@ -1611,13 +1611,23 @@ WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 -- Persist an LLM session summary. Project-scoped so a summarize write can
 -- never touch another project's chat. summary_redacted records whether the
 -- summary was built from the risk-redacted transcript; team memory reads only
--- redacted summaries. Returns the updated row timestamps.
+-- redacted summaries. covered_through is the newest message the summary read:
+-- when a newer message landed while the summary was generated, the summary is
+-- stamped with covered_through instead of NOW() so the chat still reads as
+-- changed and is summarized again. Otherwise summary_generated_at is the write
+-- time, which the sweep's daily cap counts. Returns the updated row timestamps.
 UPDATE chats
 SET summary = @summary,
-    summary_generated_at = NOW(),
+    summary_generated_at = CASE
+      WHEN sqlc.narg(covered_through)::timestamptz IS NOT NULL AND EXISTS (
+        SELECT 1 FROM chat_messages m
+        WHERE m.chat_id = chats.id AND m.created_at > sqlc.narg(covered_through)::timestamptz
+      ) THEN sqlc.narg(covered_through)::timestamptz
+      ELSE NOW()
+    END,
     summary_redacted = @summary_redacted,
     updated_at = NOW()
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+WHERE chats.id = @id AND chats.project_id = @project_id AND chats.deleted IS FALSE
 RETURNING summary, summary_generated_at;
 
 -- name: BackdateChatSummary :exec
@@ -2272,31 +2282,45 @@ FROM orgs
 WHERE orgs.organization_id IS NOT NULL;
 
 -- name: ListChatsDueForMemorySummary :many
--- Team memory summary sweep: an organization's chats that have been idle since
--- idle_before and changed since their last masked summary, newest first.
--- Personal-account sessions and chats excluded from memory are never returned.
-SELECT c.id, c.project_id
-FROM chats c
-LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
-WHERE c.organization_id = @organization_id
-  AND c.deleted IS FALSE
-  AND c.memory_excluded_at IS NULL
-  AND c.updated_at < @idle_before
-  AND c.updated_at > @since
+-- Team memory summary sweep: an organization's chats whose newest message is
+-- older than idle_before and newer than their last masked summary, newest
+-- first. Idleness is read from chat_messages because gateway turns do not bump
+-- chats.updated_at; updated_at only narrows candidates to chats started or
+-- touched within the lookback. Sessions of personal accounts, or of accounts
+-- whose type is not known yet, and chats excluded from memory are never
+-- returned.
+WITH candidates AS (
+  SELECT
+    c.id,
+    c.project_id,
+    c.summary_generated_at,
+    c.summary_redacted,
+    (SELECT MAX(m.created_at) FROM chat_messages m WHERE m.chat_id = c.id) AS last_at
+  FROM chats c
+  LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+  WHERE c.organization_id = @organization_id
+    AND c.deleted IS FALSE
+    AND c.memory_excluded_at IS NULL
+    AND c.updated_at > @since
+    AND (ua.id IS NULL OR ua.account_type <> 'personal')
+)
+SELECT candidates.id, candidates.project_id
+FROM candidates
+WHERE candidates.last_at IS NOT NULL
+  AND candidates.last_at < sqlc.arg(idle_before)::timestamptz
   AND (
-    c.summary_generated_at IS NULL
-    OR c.summary_redacted IS FALSE
-    OR c.summary_generated_at < c.updated_at
+    candidates.summary_generated_at IS NULL
+    OR candidates.summary_redacted IS FALSE
+    OR candidates.summary_generated_at < candidates.last_at
   )
-  AND (ua.account_type IS NULL OR ua.account_type <> 'personal')
-ORDER BY c.updated_at DESC
+ORDER BY candidates.last_at DESC
 LIMIT @max_chats;
 
 -- name: CountMemorySummariesSince :one
 -- Masked summaries written for an organization since a point in time; the
--- sweep uses it to enforce the per-organization daily cap. A summary write
--- bumps updated_at to the same instant, so the updated_at bound lets the
--- sweep index serve this.
+-- sweep uses it to enforce the per-organization daily cap. Empty markers cost
+-- no model call and do not count. A summary write bumps updated_at to the same
+-- instant, so the updated_at bound lets the sweep index serve this.
 SELECT COUNT(*)::bigint
 FROM chats c
 WHERE c.organization_id = @organization_id
@@ -2304,6 +2328,7 @@ WHERE c.organization_id = @organization_id
   AND c.memory_excluded_at IS NULL
   AND c.updated_at >= @since
   AND c.summary_redacted IS TRUE
+  AND c.summary IS NOT NULL
   AND c.summary_generated_at >= @since;
 
 -- name: MarkChatSummaryEmpty :exec

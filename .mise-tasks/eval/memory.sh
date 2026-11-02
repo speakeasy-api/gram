@@ -4,7 +4,7 @@
 #MISE dir="{{ config_root }}/server"
 
 #USAGE flag "--runs <n>" env="MEMORYEVAL_RUNS" default="3" help="Runs per arm"
-#USAGE flag "--models <list>" env="MEMORYEVAL_ANSWER_MODELS" help="Comma separated answering models to compare (default anthropic/claude-sonnet-5.5)"
+#USAGE flag "--models <list>" env="MEMORYEVAL_ANSWER_MODELS" help="Comma separated answering models to compare, at most 4 (default anthropic/claude-sonnet-5.5)"
 #USAGE flag "--summary-model <model>" env="MEMORYEVAL_SUMMARY_MODEL" help="Model that writes chat summaries before the memory arms run (default: the live summary model)"
 #USAGE flag "--digest-model <model>" env="MEMORYEVAL_DIGEST_MODEL" help="Model that writes day, week and month digests (default: the live digest model)"
 #USAGE flag "--out <file>" env="MEMORYEVAL_OUT" help="Also write the markdown report to this file"
@@ -19,6 +19,14 @@ fi
 export MEMORYEVAL_RUNS="${usage_runs:-${MEMORYEVAL_RUNS:-3}}"
 if [ -n "${usage_models:-}" ]; then
   export MEMORYEVAL_ANSWER_MODELS="$usage_models"
+fi
+# Spend grows with every model, so keep to the admin runner's limit.
+if [ -n "${MEMORYEVAL_ANSWER_MODELS:-}" ]; then
+  IFS=',' read -r -a answer_models <<<"$MEMORYEVAL_ANSWER_MODELS"
+  if [ "${#answer_models[@]}" -gt 4 ]; then
+    echo "--models takes at most 4 models, got ${#answer_models[@]}" >&2
+    exit 1
+  fi
 fi
 if [ -n "${usage_summary_model:-}" ]; then
   export MEMORYEVAL_SUMMARY_MODEL="$usage_summary_model"
