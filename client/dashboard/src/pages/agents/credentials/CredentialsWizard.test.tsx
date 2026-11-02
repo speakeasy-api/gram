@@ -627,7 +627,7 @@ describe("Provisioning a new agent", () => {
     expect(mocks.fetch).toHaveBeenCalledTimes(1);
   });
 
-  it("stops on its first step when the organization requires the sign-in grant its creator cannot give", async () => {
+  it("does not ask about the sign-in grant before a server is chosen", async () => {
     mocks.authEnforced = true;
     mocks.checkAuthGrant.mockResolvedValue({
       results: [{ allowed: false, limitedBy: "caller" }],
@@ -636,6 +636,22 @@ describe("Provisioning a new agent", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Release Bot" },
     });
+    await nameChecked();
+    expect(mocks.checkAuthGrant).not.toHaveBeenCalled();
+  });
+
+  it("stops on the server step when the organization requires the sign-in grant its creator cannot give", async () => {
+    mocks.authEnforced = true;
+    mocks.checkAuthGrant.mockResolvedValue({
+      results: [{ allowed: false, limitedBy: "caller" }],
+    });
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot" },
+    });
+    await nameChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
 
     expect(
       await screen.findByText(/You cannot give this agent mcp:auth/),
@@ -656,6 +672,9 @@ describe("Provisioning a new agent", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Release Bot" },
     });
+    await nameChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
 
     expect(
       await screen.findByText(

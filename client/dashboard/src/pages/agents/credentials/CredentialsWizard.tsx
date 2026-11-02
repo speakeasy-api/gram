@@ -696,15 +696,17 @@ export function CredentialsWizard({
             ? "Could not check that you can reach the servers you chose. Check again above the list."
             : "Checking that you can reach the servers you chose…"
           : null;
-  // The blanket sign-in grant is written when the agent is created, and on
-  // an edit only when the agent reaches a server and holds no mcp:auth yet:
-  // an agent that reaches nothing has no auth client to use. Whether the
-  // person saving may give it is asked once, up front.
+  // The blanket sign-in grant is written only for an agent that reaches a
+  // server: one that reaches nothing has no auth client to use. A new agent
+  // gets it when created, an edited one when it holds no mcp:auth yet.
+  // Whether the person saving may give it is asked as soon as the first
+  // server is chosen, so a refusal stops the flow on the server step.
   const reachesServers = allServers || selected.length > 0;
-  const writesAuthGrant = editing
-    ? reachesServers &&
-      (grants ?? []).every((grant) => grant.scope !== AUTH_GRANT.scope)
-    : !existing;
+  const writesAuthGrant =
+    reachesServers &&
+    (editing
+      ? (grants ?? []).every((grant) => grant.scope !== AUTH_GRANT.scope)
+      : !existing);
   const features = useProductFeatures(
     { organizationId: organization.id },
     undefined,
@@ -733,7 +735,7 @@ export function CredentialsWizard({
   const authEnforced = features.data?.upstreamAuthEnforced;
   // Where the organization enforces mcp:auth, an agent without it cannot sign
   // in to any upstream, so a refused grant stops the flow before anything is
-  // chosen. Elsewhere sign-in does not need it yet, so the grant is left out
+  // written. Elsewhere sign-in does not need it yet, so the grant is left out
   // instead of failing the save. An unknown answer keeps the grant, and the
   // server decides.
   // An edit writes grants one by one, so saving while the check is still out
@@ -882,7 +884,7 @@ export function CredentialsWizard({
         // hook events may name.
         policyGrants: [
           ...agentPolicyGrantsFromDraft(draft),
-          ...(includeAuthGrant ? [AUTH_GRANT] : []),
+          ...(includeAuthGrant && reachesServers ? [AUTH_GRANT] : []),
           ...(hookEvents
             ? [hooksIngestPolicyGrant(organization.id, projectID)]
             : []),
