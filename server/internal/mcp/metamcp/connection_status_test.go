@@ -75,3 +75,15 @@ func TestIsConnectionStatusResourceURI(t *testing.T) {
 		require.False(t, IsConnectionStatusResourceURI(uri), uri)
 	}
 }
+
+func TestConnectionStatusText_NeedsConsentClaimsNoVerification(t *testing.T) {
+	t.Parallel()
+	text := ConnectionStatusResult{ConnectURL: "https://example.com/connect", Servers: []ConnectionStatusServer{
+		{Slug: "source", Name: "Source", Status: SignInNeedsConsent, Detail: "Reconnect this gateway"},
+		{Slug: "other", Name: "Other", Status: SignInNotRequired},
+	}}.Text()
+	require.Contains(t, text, "1 of 2 servers ready.")
+	require.NotContains(t, text, "verified at consent")
+	require.Contains(t, text, "Start authorization again")
+	require.NotContains(t, text, "To sign in")
+}

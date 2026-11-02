@@ -104,9 +104,6 @@ func (r ConnectionStatusResult) Text() string {
 			verified++
 			consented = true
 		}
-		if s.Status == SignInNeedsConsent {
-			consented = true
-		}
 		if s.Status == SignInConnected || s.Status == SignInNotRequired {
 			connected++
 		}

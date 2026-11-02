@@ -58,7 +58,6 @@
         state.textContent = "Verified at consent · " + (s.detail || "Current sign-in has not been checked");
         li.append(state);
       } else if (s.status === "needs_consent") {
-        consented = true;
         needsConsent = true;
         state.className = "warn";
         state.textContent = s.detail || "Give consent again to review access";
@@ -107,7 +106,7 @@
     hint.textContent = needsConsent ? "Start authorization again in your AI client to review access."
       : consented ? "Current sign-in has not been checked. Tool calls check authorization."
       : "After signing in, ask again to refresh this list.";
-    hint.hidden = !consented && needs === 0;
+    hint.hidden = !consented && !needsConsent && needs === 0;
     reportSize();
   };
 
