@@ -12,8 +12,10 @@ import { useEffect, type JSX } from "react";
 /**
  * Which of a server's shared credentials the key uses there. A server with
  * none needs no choice, so nothing is shown. Otherwise the credential is
- * picked here: a key that names none is served a shared credential only on a
- * server that offers no other, and never instead of a connected account.
+ * picked here: a key that names none is never served a shared credential. A
+ * server that offers only shared credentials cannot be issued a key until one
+ * is picked; one that also offers accounts keeps using the connected account
+ * unless a shared credential is picked.
  *
  * It renders its own wrapper, so a caller's spacing appears only when there
  * is something to show: an empty padded box would grow the row it sits in.

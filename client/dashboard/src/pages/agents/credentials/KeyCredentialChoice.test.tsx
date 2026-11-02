@@ -23,7 +23,7 @@ describe("KeyCredentialChoice", () => {
         serverId="s"
         serverName="GitHub"
         value={undefined}
-        onChange={() => undefined}
+        onChange={() => {}}
       />,
     );
     expect(container.innerHTML).toBe("");
@@ -39,15 +39,21 @@ describe("KeyCredentialChoice", () => {
         serverId="s"
         serverName="GitHub"
         value={undefined}
-        onChange={onChange}
+        onChange={(id) => {
+          onChange(id);
+        }}
       />,
     );
-    expect(
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(
       screen.getByRole("combobox", {
         name: "Credential the key uses on GitHub",
       }),
-    ).toBeTruthy();
-    expect(onChange).not.toHaveBeenCalled();
+    );
+    fireEvent.click(
+      screen.getByRole("option", { name: /Token · Static credential/ }),
+    );
+    expect(onChange).toHaveBeenCalledWith("a");
   });
 
   it("asks which credential to use when a server offers several", () => {

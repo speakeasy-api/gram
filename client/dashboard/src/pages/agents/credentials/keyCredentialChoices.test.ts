@@ -1,15 +1,21 @@
 import type { Gram as SpeakeasySDK } from "@gram/client";
-import { describe, expect, it, vi } from "vitest";
+import { beforeEach, describe, expect, it, vi } from "vitest";
 import { keyCredentialChoices } from "./keyCredentialChoices";
 
 const server = { id: "server_one", name: "Example server", kind: "Remote" };
-function sdkWith(choices: string[], status?: string, accounts: string[] = []) {
+function sdkWith(
+  choices: string[],
+  status?: string,
+  accounts: { id: string; credentialOwner?: string }[] = [],
+) {
   return {
     remoteSessionClients: {
-      list: vi.fn().mockResolvedValue(
-        (async function* () {
-          yield { result: { items: accounts.map((id) => ({ id })) } };
-        })(),
+      list: listAccounts.mockImplementation(() =>
+        Promise.resolve(
+          (async function* () {
+            yield { result: { items: accounts } };
+          })(),
+        ),
       ),
     },
     authClients: {
@@ -21,6 +27,12 @@ function sdkWith(choices: string[], status?: string, accounts: string[] = []) {
     },
   } as unknown as SpeakeasySDK;
 }
+
+const listAccounts = vi.fn();
+
+beforeEach(() => {
+  listAccounts.mockReset();
+});
 
 describe("keyCredentialChoices", () => {
   it.each([[], ["client_a"], ["client_a", "client_b"]])(
@@ -86,13 +98,13 @@ describe("keyCredentialChoices", () => {
   });
 
   it("keeps the connected account when a server also offers accounts and nothing is picked", async () => {
-    const sdk = sdkWith(["client_a"], "configured", ["oauth_client"]);
+    const sdk = sdkWith(["client_a"], "configured", [{ id: "oauth_client" }]);
     await expect(
       keyCredentialChoices(sdk, [
         { ...server, projectSlug: "project", issuerId: "issuer" },
       ]),
     ).resolves.toEqual([]);
-    expect(sdk.remoteSessionClients.list).toHaveBeenCalledWith({
+    expect(listAccounts).toHaveBeenCalledWith({
       gramProject: "project",
       userSessionIssuerId: "issuer",
     });
@@ -101,7 +113,7 @@ describe("keyCredentialChoices", () => {
   it("records a shared credential picked on a server that also offers accounts", async () => {
     await expect(
       keyCredentialChoices(
-        sdkWith(["client_a"], "configured", ["oauth_client"]),
+        sdkWith(["client_a"], "configured", [{ id: "oauth_client" }]),
         [
           {
             ...server,
@@ -120,5 +132,35 @@ describe("keyCredentialChoices", () => {
         { ...server, projectSlug: "project", issuerId: "issuer" },
       ]),
     ).rejects.toThrow("Choose which credential");
+  });
+
+  it("requires a pick when the sign-in has only a self-owned service account", async () => {
+    await expect(
+      keyCredentialChoices(
+        sdkWith(["client_a"], "configured", [
+          { id: "service", credentialOwner: "self" },
+        ]),
+        [{ ...server, projectSlug: "project", issuerId: "issuer" }],
+      ),
+    ).rejects.toThrow("Choose which credential");
+  });
+
+  it("checks each server's accounts separately", async () => {
+    await expect(
+      keyCredentialChoices(
+        sdkWith(["client_a"], "configured", [{ id: "oauth_client" }]),
+        [
+          { ...server, projectSlug: "project", issuerId: "issuer" },
+          {
+            ...server,
+            id: "server_two",
+            name: "Second server",
+            projectSlug: "project",
+            issuerId: "issuer_two",
+          },
+        ],
+      ),
+    ).resolves.toEqual([]);
+    expect(listAccounts).toHaveBeenCalledTimes(2);
   });
 });

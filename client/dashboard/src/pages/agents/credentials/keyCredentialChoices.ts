@@ -80,8 +80,8 @@ export async function keyCredentialChoices(
 }
 
 /**
- * Whether the server's sign-in offers accounts an agent connects, the ones the
- * key's accounts step asks for. A server without a sign-in offers none.
+ * Whether the server's sign-in offers accounts an agent connects. A server
+ * without a sign-in offers none.
  */
 async function offersAccounts(
   sdk: Gram,
@@ -95,7 +95,9 @@ async function offersAccounts(
         userSessionIssuerId: pick.issuerId,
       }),
     );
-    return clients.length > 0;
+    // A service account the issuer signs in with itself is a shared
+    // credential, not an account anyone connects.
+    return clients.some((client) => client.credentialOwner !== "self");
   } catch {
     throw new Error(
       `The accounts ${pick.name} offers could not be loaded. Try again.`,
