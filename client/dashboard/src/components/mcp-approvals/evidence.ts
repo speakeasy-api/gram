@@ -126,7 +126,6 @@ export type EvidenceProvenance = {
   specifier?: string;
   catalogued: boolean;
   status?: string;
-  isLatest?: boolean;
   publishedAt?: string;
   updatedAt?: string;
   visitorsLastWeek?: number;
@@ -370,10 +369,6 @@ export function parseEvidenceDocument(
       specifier: str(provenanceRecord, "specifier"),
       catalogued: bool(provenanceRecord, "catalogued"),
       status: str(provenanceRecord, "status"),
-      isLatest:
-        typeof provenanceRecord["is_latest"] === "boolean"
-          ? provenanceRecord["is_latest"]
-          : undefined,
       publishedAt: str(provenanceRecord, "published_at"),
       updatedAt: str(provenanceRecord, "updated_at"),
       visitorsLastWeek: num(provenanceRecord, "visitors_last_week"),

@@ -128,7 +128,6 @@ func TestLookupMatchKeepsProvenanceAndToolPresence(t *testing.T) {
 			require.Equal(t, "matched", match.Specifier)
 			require.Equal(t, "Selected display", match.Registry)
 			require.True(t, match.Provenance.Catalogued)
-			require.Nil(t, match.Provenance.IsLatest)
 			require.Empty(t, match.Provenance.Status)
 			if tc.wantNil {
 				require.Nil(t, match.Tools)
@@ -174,7 +173,7 @@ func TestLookupUsesSelectedRetainedEvidenceReader(t *testing.T) {
 	require.Equal(t, 1, reader.retainedCalls)
 }
 
-func TestLookupPreservesNativeLifecycle(t *testing.T) {
+func TestLookupPreservesNativeLifecycleIgnoringLatest(t *testing.T) {
 	t.Parallel()
 	for _, latest := range []bool{false, true} {
 		t.Run(map[bool]string{false: "not latest", true: "latest"}[latest], func(t *testing.T) {
@@ -191,7 +190,6 @@ func TestLookupPreservesNativeLifecycle(t *testing.T) {
 			require.Equal(t, "matched", match.Specifier)
 			require.True(t, match.Provenance.Catalogued)
 			require.Equal(t, "deprecated", match.Provenance.Status)
-			require.Equal(t, new(latest), match.Provenance.IsLatest)
 		})
 	}
 }

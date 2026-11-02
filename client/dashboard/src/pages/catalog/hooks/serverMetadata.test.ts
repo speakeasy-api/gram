@@ -148,7 +148,6 @@ describe("native catalog metadata", () => {
       authType: "unknown",
       authTypeDisplay: "Unknown",
       setupType: "unknown",
-      isLatest: undefined,
       status: undefined,
       publishedAt: undefined,
       updatedAt: undefined,
@@ -170,7 +169,6 @@ describe("native catalog metadata", () => {
         "io.modelcontextprotocol.registry/official": {
           status: "active",
           updatedAt: "2026-10-01T00:00:00Z",
-          isLatest: true,
         },
       },
     };
@@ -212,3 +210,24 @@ describe("native catalog metadata", () => {
     ).toBe("unknown");
   });
 });
+
+it.each([false, true])(
+  "ignores upstream isLatest=%s in catalog facts",
+  (isLatest) => {
+    const native = server("example/native", false);
+    const lifecycle = { status: "active", updatedAt: "2026-10-01T00:00:00Z" };
+    const baseline = {
+      ...native,
+      meta: { "io.modelcontextprotocol.registry/official": lifecycle },
+    };
+    const upstream = {
+      ...native,
+      meta: {
+        "io.modelcontextprotocol.registry/official": { ...lifecycle, isLatest },
+      },
+    };
+    expect(parseServerMetadata(upstream)).toEqual(
+      parseServerMetadata(baseline),
+    );
+  },
+);

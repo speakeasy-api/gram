@@ -4,7 +4,6 @@ import type { SetupType } from "../filter-defaults";
 import type { FilterState } from "./useFilterState";
 
 export interface ParsedServerMetadata {
-  isLatest?: boolean;
   status?: string;
   authType: CatalogAuthType;
   authTypeDisplay: string;
@@ -71,7 +70,6 @@ export function parseServerMetadata(
   const lifecycle = server.meta?.["io.modelcontextprotocol.registry/official"];
   const authType = extractAuthType(server);
   return {
-    isLatest: lifecycle?.isLatest,
     status: lifecycle?.status,
     authType,
     authTypeDisplay: {

@@ -10,7 +10,6 @@ import (
 type Provenance struct {
 	Catalogued  bool
 	Status      string
-	IsLatest    *bool
 	PublishedAt time.Time
 	UpdatedAt   time.Time
 }
@@ -18,7 +17,6 @@ type Provenance struct {
 type metaDocument struct {
 	Version struct {
 		Status      string `json:"status"`
-		IsLatest    *bool  `json:"isLatest"`
 		PublishedAt string `json:"publishedAt"`
 		UpdatedAt   string `json:"updatedAt"`
 	} `json:"io.modelcontextprotocol.registry/official"`
@@ -45,7 +43,6 @@ func Read(meta any) Provenance {
 	return Provenance{
 		Catalogued:  false,
 		Status:      doc.Version.Status,
-		IsLatest:    doc.Version.IsLatest,
 		PublishedAt: published,
 		UpdatedAt:   parseTime(doc.Version.UpdatedAt),
 	}

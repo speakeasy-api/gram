@@ -277,9 +277,6 @@ export default function CatalogDetail(): JSX.Element {
                     className="mb-2"
                   >
                     <h1 className="text-display-sm font-thin">{displayName}</h1>
-                    {versionMeta?.isLatest && (
-                      <Badge variant="neutral">Latest</Badge>
-                    )}
                     <ManualSetupBadge server={server} />
                   </Stack>
                   {SERVER_WEBSITE_MAP[server.registrySpecifier] ? (

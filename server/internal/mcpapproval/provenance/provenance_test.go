@@ -15,8 +15,6 @@ func TestNativeLifecycle(t *testing.T) {
 	got := provenance.Read(meta)
 	require.False(t, got.Catalogued, "only actual matching establishes membership")
 	require.Equal(t, "deprecated", got.Status)
-	require.NotNil(t, got.IsLatest)
-	require.False(t, *got.IsLatest)
 	require.False(t, got.PublishedAt.IsZero())
 	_, known := got.StaleFor(time.Now())
 	require.True(t, known)
@@ -31,11 +29,19 @@ func TestAbsentEvidenceStaysUnknown(t *testing.T) {
 		require.NoError(t, json.Unmarshal([]byte(raw), &meta))
 		got := provenance.Read(meta)
 		require.False(t, got.Catalogued)
-		require.Nil(t, got.IsLatest)
 		require.Empty(t, got.Status)
 		require.True(t, got.PublishedAt.IsZero())
 		_, known := got.StaleFor(time.Now())
 		require.False(t, known)
 		require.False(t, got.Withdrawn())
+	}
+}
+
+func TestLatestMetadataDoesNotAffectFacts(t *testing.T) {
+	t.Parallel()
+	baseline := provenance.Read(map[string]any{"io.modelcontextprotocol.registry/official": map[string]any{"status": "active"}})
+	for _, latest := range []bool{false, true} {
+		got := provenance.Read(map[string]any{"io.modelcontextprotocol.registry/official": map[string]any{"status": "active", "isLatest": latest}})
+		require.Equal(t, baseline, got)
 	}
 }

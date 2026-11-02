@@ -20,7 +20,7 @@ it.each([1, 2])(
       version,
     );
     expect(document).not.toBeNull();
-    expect(document?.provenance?.isLatest).toBeUndefined();
+    expect(document?.provenance).not.toHaveProperty("isLatest");
     render(
       <TooltipProvider>
         <EvidencePanel document={document} />
@@ -34,3 +34,26 @@ it.each([1, 2])(
 it("keeps unsupported evidence versions unknown", () => {
   expect(parseEvidenceDocument({ identity: { kind: "remote" } }, 3)).toBeNull();
 });
+
+it.each([1, 2])(
+  "ignores historical latest flags without changing facts (v%s)",
+  (version) => {
+    const base = {
+      identity: { kind: "remote" },
+      provenance: {
+        catalogued: true,
+        status: "active",
+        updated_at: "2026-10-01T00:00:00Z",
+      },
+    };
+    const expected = parseEvidenceDocument(base, version);
+    for (const latest of [false, true]) {
+      const historical = {
+        ...base,
+        provenance: { ...base.provenance, is_latest: latest },
+      };
+      expect(parseEvidenceDocument(historical, version)).toEqual(expected);
+      expect(historical.provenance.is_latest).toBe(latest);
+    }
+  },
+);

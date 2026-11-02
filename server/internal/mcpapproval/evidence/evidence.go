@@ -272,7 +272,6 @@ type ProvenanceSection struct {
 	Specifier   string `json:"specifier,omitempty"`
 	Catalogued  bool   `json:"catalogued"`
 	Status      string `json:"status,omitempty"`
-	IsLatest    *bool  `json:"is_latest,omitempty"`
 	PublishedAt string `json:"published_at,omitempty"`
 	UpdatedAt   string `json:"updated_at,omitempty"`
 }
@@ -744,7 +743,6 @@ func (a *Assembler) lookupCatalog(ctx context.Context, projectID uuid.UUID, serv
 			Specifier:   "",
 			Catalogued:  false,
 			Status:      "",
-			IsLatest:    nil,
 			PublishedAt: "",
 			UpdatedAt:   "",
 		}
@@ -759,7 +757,6 @@ func (a *Assembler) lookupCatalog(ctx context.Context, projectID uuid.UUID, serv
 		Specifier:   match.Specifier,
 		Catalogued:  match.Provenance.Catalogued,
 		Status:      match.Provenance.Status,
-		IsLatest:    match.Provenance.IsLatest,
 		PublishedAt: formatTime(match.Provenance.PublishedAt),
 		UpdatedAt:   formatTime(match.Provenance.UpdatedAt),
 	}
@@ -812,9 +809,8 @@ func capabilityStrings(values []capability.Capability) []string {
 // here so a frozen version-1 snapshot stays decodable after the shape moves
 // on.
 func DecodeDocument(raw []byte, version int) (Document, error) {
-	// Version 1 used omitempty booleans for is_latest: an absent value cannot
-	// establish false, so decode it as unknown. Shared fields retain their JSON
-	// representation; retired official/visitor claims are intentionally ignored
+	// Shared fields retain their JSON representation in versions 1 and 2;
+	// retired latest/official/visitor claims are intentionally ignored
 	// in the current view, without rewriting the stored snapshot.
 	if version != 1 && version != Version {
 		return Document{}, fmt.Errorf("unsupported evidence version %d", version)

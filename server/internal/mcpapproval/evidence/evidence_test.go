@@ -1,6 +1,7 @@
 package evidence_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -402,7 +403,7 @@ func (declaringProbes) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) 
 		Registry:  "Test Registry",
 		Specifier: "com.example/server",
 		Provenance: provenance.Provenance{
-			Catalogued: true, Status: "active", IsLatest: new(true),
+			Catalogued: true, Status: "active",
 			PublishedAt: time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC), UpdatedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
 		},
 		Tools: nil,
@@ -427,7 +428,7 @@ func (cataloguedOnlyProbes) Lookup(_ context.Context, _ uuid.UUID, _ string, _ b
 		Registry:  "Test Registry",
 		Specifier: "com.example/server",
 		Provenance: provenance.Provenance{
-			Catalogued: true, Status: "active", IsLatest: new(true),
+			Catalogued: true, Status: "active",
 			PublishedAt: time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC), UpdatedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
 		},
 		Tools: []capability.Declaration{
@@ -494,7 +495,7 @@ func (cataloguedNoToolMetadata) Lookup(_ context.Context, _ uuid.UUID, _ string,
 		Registry:  "Test Registry",
 		Specifier: "com.example/server",
 		Provenance: provenance.Provenance{
-			Catalogued: true, Status: "active", IsLatest: new(true),
+			Catalogued: true, Status: "active",
 			PublishedAt: time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC), UpdatedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
 		},
 		Tools: nil,
@@ -964,11 +965,10 @@ func TestDecodeDocument_LegacyProvenance(t *testing.T) {
 	require.Equal(t, 2, evidence.Version)
 	for _, tc := range []struct {
 		name, provenance string
-		latest           *bool
 	}{
-		{"omitted legacy false is unknown", `{"registry":"historical","catalogued":true,"official":true,"visitors_total":123}`, nil},
-		{"recorded latest survives", `{"catalogued":true,"status":"active","is_latest":true}`, new(true)},
-		{"explicit false survives", `{"catalogued":true,"is_latest":false}`, new(false)},
+		{"omitted legacy false is unknown", `{"registry":"historical","catalogued":true,"official":true,"visitors_total":123}`},
+		{"recorded latest ignored", `{"catalogued":true,"status":"active","is_latest":true}`},
+		{"explicit false ignored", `{"catalogued":true,"is_latest":false}`},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -977,13 +977,26 @@ func TestDecodeDocument_LegacyProvenance(t *testing.T) {
 			require.Equal(t, "https://example.com/mcp", document.Identity.ArtifactRef)
 			require.NotNil(t, document.Provenance)
 			require.True(t, document.Provenance.Catalogued)
-			require.Equal(t, tc.latest, document.Provenance.IsLatest)
 			raw, err := json.Marshal(document.Provenance)
 			require.NoError(t, err)
+			require.NotContains(t, string(raw), "is_latest")
 			require.NotContains(t, string(raw), "official")
 			require.NotContains(t, string(raw), "visitors")
 		})
 	}
+	for _, version := range []int{1, 2} {
+		baseline := []byte(`{"identity":{"kind":"remote"},"provenance":{"catalogued":true,"status":"deprecated","published_at":"2026-07-01T00:00:00Z","updated_at":"2026-08-01T00:00:00Z"}}`)
+		expected, err := evidence.DecodeDocument(baseline, version)
+		require.NoError(t, err)
+		for _, latest := range []string{"false", "true"} {
+			historical := bytes.Replace(baseline, []byte(`"catalogued":true`), []byte(`"catalogued":true,"is_latest":`+latest), 1)
+			document, err := evidence.DecodeDocument(historical, version)
+			require.NoError(t, err)
+			require.Equal(t, expected, document)
+			require.Contains(t, string(historical), `"is_latest":`+latest)
+		}
+	}
+
 	_, err := evidence.DecodeDocument([]byte(`{`), 1)
 	require.ErrorContains(t, err, "decode evidence document")
 	_, err = evidence.DecodeDocument([]byte(`{}`), 0)

@@ -24,7 +24,6 @@ interface ServerMeta {
     status?: string;
     publishedAt?: string;
     updatedAt?: string;
-    isLatest?: boolean;
   };
 }
 
