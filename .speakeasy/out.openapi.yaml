@@ -107636,7 +107636,7 @@ components:
           description: Whether tool I/O logging is enabled
         upstream_auth_enforced:
           type: boolean
-          description: Whether staff turned on upstream auth enforcement, so using an auth client needs mcp:auth on it
+          description: Whether upstream auth enforcement is on for the organization. Absent when the state could not be read. Staff change it through the admin enforcement endpoint.
       required:
         - logs_enabled
         - tool_io_logs_enabled
@@ -107659,7 +107659,6 @@ components:
         - signals_intelligence_enabled
         - organization_gateway_disabled
         - code_mode_enabled
-        - upstream_auth_enforced
         - device_agent
     Project:
       type: object

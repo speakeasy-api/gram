@@ -237,6 +237,14 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 	}
 
 	snapshot := s.featureClient.Snapshot(ctx, orgID)
+	// Left absent when unreadable so a caller never presents an enforcing
+	// organization as unenforced.
+	var upstreamAuthEnforced *bool
+	if enforced, err := s.featureClient.IsFeatureEnabled(ctx, orgID, FeatureUpstreamAuthEnforced); err != nil {
+		s.logger.WarnContext(ctx, "failed to read upstream auth enforcement", attr.SlogError(err), attr.SlogOrganizationID(orgID))
+	} else {
+		upstreamAuthEnforced = &enforced
+	}
 	return &gen.ProductFeatures{
 		LogsEnabled:                             snapshot.LogsEnabled,
 		ToolIoLogsEnabled:                       snapshot.ToolIoLogsEnabled,
@@ -259,8 +267,8 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		SignalsIntelligenceEnabled:              snapshot.SignalsIntelligenceEnabled,
 		OrganizationGatewayDisabled:             snapshot.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         snapshot.CodeModeEnabled,
-		UpstreamAuthEnforced:                    snapshot.UpstreamAuthEnforced,
 		DeviceAgent:                             snapshot.DeviceAgent,
+		UpstreamAuthEnforced:                    upstreamAuthEnforced,
 	}, nil
 }
 

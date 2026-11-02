@@ -81,7 +81,7 @@ import { invalidateAllListAPIKeys } from "@gram/client/react-query/listAPIKeys.j
 import type { ExtendAgentKeyGrantForm } from "@gram/client/models/components/extendagentkeygrantform.js";
 import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js";
 import { useAgents } from "@gram/client/react-query/agents.js";
-import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
+import { useUpstreamAuthEnforcement } from "@/hooks/useUpstreamAuthEnforcement";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
 import type { AgentPolicyGrantCheck } from "@gram/client/models/components/agentpolicygrantcheck.js";
 import { useAgentAdmissions } from "@/pages/agents/agentAdmissions";
@@ -814,11 +814,7 @@ export function CredentialsWizard({
     (editing
       ? (grants ?? []).every((grant) => grant.scope !== AUTH_GRANT.scope)
       : !existing);
-  const features = useProductFeatures(
-    { organizationId: organization.id },
-    undefined,
-    { staleTime: 30_000, throwOnError: false },
-  );
+  const enforcement = useUpstreamAuthEnforcement();
   const authCheck = useQuery({
     queryKey: ["agent-auth-check", organization.id, user.id, agentId ?? null],
     queryFn: async ({ signal }) => {
@@ -839,28 +835,27 @@ export function CredentialsWizard({
     throwOnError: false,
   });
   const authRefused = writesAuthGrant && authCheck.data?.allowed === false;
-  const authEnforced = features.data?.upstreamAuthEnforced;
-  // Where the organization enforces mcp:auth, an agent without it cannot sign
-  // in to any upstream, so a refused grant stops the flow before anything is
-  // written. Elsewhere sign-in does not need it yet, so the grant is left out
-  // instead of failing the save. An unknown answer keeps the grant, and the
-  // server decides.
   // An edit writes grants one by one, so saving while the check is still out
   // could write the servers and then be refused the sign-in grant. Creating
   // sends every grant in one request, which the server accepts or refuses
   // whole, so it does not wait.
   const authPending = editing && writesAuthGrant && authCheck.isLoading;
   const authPendingNote = `Checking that you can give this agent ${AUTH_GRANT.scope}…`;
+  // Where the organization enforces mcp:auth, an agent without it cannot sign
+  // in to any upstream, so a refused grant stops the flow before anything is
+  // written. Elsewhere sign-in does not need it yet, so the grant is left out
+  // instead of failing the save. An unknown answer keeps the grant, and the
+  // server decides.
   const authStop = !authRefused
     ? null
-    : features.isLoading
+    : enforcement === "loading"
       ? "Checking whether this organization requires sign-in permission…"
-      : authEnforced !== true
+      : enforcement !== "enforced"
         ? null
         : authCheck.data?.limitedBy === "owner"
           ? `This agent's owner cannot give it ${AUTH_GRANT.scope}, which this organization requires to sign in to any server. Ask an administrator to review the owner's access.`
           : `You cannot give this agent ${AUTH_GRANT.scope}, which this organization requires to sign in to any server. Ask an administrator for access.`;
-  const includeAuthGrant = !(authRefused && authEnforced === false);
+  const includeAuthGrant = !(authRefused && enforcement === "legacy");
   // The rows the picker offers. Under "All servers" they are the ones those
   // wildcards reach, so an organization-wide one shows every project's;
   // otherwise it is the project the agent is bound to.

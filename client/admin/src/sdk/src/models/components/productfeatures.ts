@@ -98,9 +98,9 @@ export type ProductFeatures = {
    */
   toolIoLogsEnabled: boolean;
   /**
-   * Whether staff turned on upstream auth enforcement, so using an auth client needs mcp:auth on it
+   * Whether upstream auth enforcement is on for the organization. Absent when the state could not be read. Staff change it through the admin enforcement endpoint.
    */
-  upstreamAuthEnforced: boolean;
+  upstreamAuthEnforced?: boolean | undefined;
 };
 
 /** @internal */
@@ -131,7 +131,7 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
     skills_enabled: z.boolean(),
     sso_enabled: z.boolean(),
     tool_io_logs_enabled: z.boolean(),
-    upstream_auth_enforced: z.boolean(),
+    upstream_auth_enforced: z.optional(z.boolean()),
   }),
   z.transform((v) => {
     return remap$(v, {

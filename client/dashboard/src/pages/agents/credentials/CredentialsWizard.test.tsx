@@ -68,7 +68,7 @@ vi.mock("@gram/client/react-query/mcpServerAuthClientChoices.js", () => ({
 // Whether staff turned on upstream auth enforcement for the organization.
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: () => ({
-    isLoading: mocks.authEnforced === undefined,
+    isPending: mocks.authEnforced === undefined,
     data:
       mocks.authEnforced === undefined
         ? undefined
