@@ -468,7 +468,7 @@ func (s *Service) executeProxiedMemberTool(
 	dial, err := redial(ctx, gate, member)
 	if err != nil {
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
-			return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
+			return marshalMetaMemberFailure(ctx, logger, req.ID, err, memberErr.message)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "dial meta MCP member").LogError(ctx, logger)
 	}
@@ -485,7 +485,7 @@ func (s *Service) executeProxiedMemberTool(
 		upstreamResult, _, err = s.callOnMemberSession(ctx, logger, dial, redial, member, toolName, arguments)
 	}
 	if err != nil {
-		return marshalMetaToolError(ctx, logger, req.ID, err.Error())
+		return marshalMetaMemberFailure(ctx, logger, req.ID, err, err.Error())
 	}
 
 	bs, err := json.Marshal(&result[json.RawMessage]{

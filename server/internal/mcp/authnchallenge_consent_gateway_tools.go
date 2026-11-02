@@ -154,6 +154,7 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 		chainUpstream:       nil,
 		catalog:             nil,
 		consentDiagnostics:  nil,
+		catalogRecoveryOnly: false,
 		catalogRef:          nil,
 		authentication:      nil,
 		unapprovedMembers:   nil,
