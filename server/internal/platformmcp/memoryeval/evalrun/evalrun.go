@@ -11,6 +11,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"sync"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -95,27 +96,27 @@ func NewRunner(logger *slog.Logger, db *pgxpool.Pool, client openrouter.Completi
 }
 
 // Run claims a queued run, executes it and stores the outcome. A run that is
-// not queued (already claimed, finished or deleted) is left alone, so a
+// not queued (already claimed, finished or deleted) is not executed, so a
 // duplicate attempt never spends twice. Failures land on the row; the error
 // is returned only when the row itself could not be updated.
 func (r *Runner) Run(ctx context.Context, runID uuid.UUID) error {
 	run, err := r.repo.MarkRunRunning(ctx, runID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		r.logger.InfoContext(ctx, "memory eval run is not queued; skipping", attr.SlogMemoryEvalRunID(runID.String()))
-		return nil
+		return r.skip(ctx, runID)
 	case err != nil:
 		return fmt.Errorf("claim memory eval run: %w", err)
 	}
 
-	report, runErr := r.execute(ctx, run)
+	meter := &spendMeter{CompletionClient: r.client, mu: sync.Mutex{}, cost: 0}
+	report, runErr := r.execute(ctx, meter, run)
 	if runErr != nil {
 		r.logger.ErrorContext(ctx, "memory eval run failed", attr.SlogMemoryEvalRunID(runID.String()), attr.SlogError(runErr))
-		return r.fail(ctx, runID, runErr.Error())
+		return r.fail(ctx, runID, runErr.Error(), costNumeric(meter.total()))
 	}
 	encoded, err := json.Marshal(report)
 	if err != nil {
-		return r.fail(ctx, runID, "encode report: "+err.Error())
+		return r.fail(ctx, runID, "encode report: "+err.Error(), costNumeric(meter.total()))
 	}
 	if _, err := r.repo.CompleteRun(ctx, repo.CompleteRunParams{Report: encoded, CostUsd: costNumeric(TotalCost(report)), ID: runID}); err != nil {
 		return fmt.Errorf("store memory eval report: %w", err)
@@ -123,23 +124,43 @@ func (r *Runner) Run(ctx context.Context, runID uuid.UUID) error {
 	return nil
 }
 
-// MarkInterrupted fails a run whose activity died before it could record the
-// outcome. A no-op for runs that already resolved.
-func (r *Runner) MarkInterrupted(ctx context.Context, runID uuid.UUID) error {
-	return r.fail(ctx, runID, "the run stopped before it finished; start it again")
+// skip handles a claim that found no queued row. The workflow ID is keyed by
+// run and a duplicate start attaches to an in-flight execution, so a new
+// execution only starts after the previous one closed. A row still running
+// then was orphaned by an execution whose compensation also failed; resolve
+// it instead of leaving it running forever.
+func (r *Runner) skip(ctx context.Context, runID uuid.UUID) error {
+	status, err := r.repo.GetRunStatus(ctx, runID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+	case err != nil:
+		return fmt.Errorf("read memory eval run status: %w", err)
+	case status == "running":
+		r.logger.WarnContext(ctx, "memory eval run was left running by an earlier execution; marking it interrupted", attr.SlogMemoryEvalRunID(runID.String()))
+		return r.MarkInterrupted(ctx, runID)
+	}
+	r.logger.InfoContext(ctx, "memory eval run is not queued; skipping", attr.SlogMemoryEvalRunID(runID.String()))
+	return nil
 }
 
-func (r *Runner) fail(ctx context.Context, runID uuid.UUID, reason string) error {
+// MarkInterrupted fails a run whose activity died before it could record the
+// outcome. A no-op for runs that already resolved. The spend is unknown, so
+// cost stays empty.
+func (r *Runner) MarkInterrupted(ctx context.Context, runID uuid.UUID) error {
+	return r.fail(ctx, runID, "the run stopped before it finished; start it again", pgtype.Numeric{Int: nil, Exp: 0, NaN: false, InfinityModifier: pgtype.Finite, Valid: false})
+}
+
+func (r *Runner) fail(ctx context.Context, runID uuid.UUID, reason string, cost pgtype.Numeric) error {
 	if runes := []rune(reason); len(runes) > maxErrorRunes {
 		reason = string(runes[:maxErrorRunes])
 	}
-	if _, err := r.repo.FailRun(ctx, repo.FailRunParams{Error: pgtype.Text{String: reason, Valid: true}, CostUsd: pgtype.Numeric{Int: nil, Exp: 0, NaN: false, InfinityModifier: pgtype.Finite, Valid: false}, ID: runID}); err != nil {
+	if _, err := r.repo.FailRun(ctx, repo.FailRunParams{Error: pgtype.Text{String: reason, Valid: true}, CostUsd: cost, ID: runID}); err != nil {
 		return fmt.Errorf("mark memory eval run failed: %w", err)
 	}
 	return nil
 }
 
-func (r *Runner) execute(ctx context.Context, run repo.MemoryEvalRun) (*bench.Report, error) {
+func (r *Runner) execute(ctx context.Context, client openrouter.CompletionClient, run repo.MemoryEvalRun) (*bench.Report, error) {
 	var cfg Config
 	if err := json.Unmarshal(run.Config, &cfg); err != nil {
 		return nil, fmt.Errorf("decode run config: %w", err)
@@ -152,7 +173,7 @@ func (r *Runner) execute(ctx context.Context, run repo.MemoryEvalRun) (*bench.Re
 		return nil, err
 	}
 
-	prep, err := bench.Prepare(ctx, r.logger, r.client, target, bench.MemoryModels{Summary: cfg.SummaryModel, Digest: cfg.DigestModel}, concurrency)
+	prep, err := bench.Prepare(ctx, r.logger, client, target, bench.MemoryModels{Summary: cfg.SummaryModel, Digest: cfg.DigestModel}, concurrency)
 	if err != nil {
 		return nil, fmt.Errorf("write team memory: %w", err)
 	}
@@ -164,7 +185,7 @@ func (r *Runner) execute(ctx context.Context, run repo.MemoryEvalRun) (*bench.Re
 	if err != nil {
 		return nil, fmt.Errorf("build search_team_memory arm: %w", err)
 	}
-	report, err := bench.Run(ctx, r.client, target.Corpus, []bench.Arm{bench.NoMemoryArm(), searchArm, memoryArm}, cfg.benchConfig())
+	report, err := bench.Run(ctx, client, target.Corpus, []bench.Arm{bench.NoMemoryArm(), searchArm, memoryArm}, cfg.benchConfig())
 	if err != nil {
 		return nil, fmt.Errorf("score arms: %w", err)
 	}

@@ -76,8 +76,9 @@ func SearchTeamMemoryArm(logger *slog.Logger, target Target) (Arm, error) {
 		return result, nil
 	}
 	// Full-text search has no browse mode, so the sweep searches for every
-	// evidence term, canary, secret and chat title in the corpus: anything the
-	// tool could show for the main project.
+	// evidence term, canary, secret and chat title in the corpus. That covers
+	// everything the corpus plants, which is what the leak and isolation
+	// checks look for; it is not a scan of every stored row.
 	sweep := func(ctx context.Context) (ArmResult, error) {
 		queries := []string{}
 		for _, q := range target.Corpus.Questions {

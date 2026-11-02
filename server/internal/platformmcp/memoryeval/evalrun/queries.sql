@@ -16,10 +16,10 @@ ORDER BY created_at DESC, id DESC
 LIMIT @row_limit;
 
 -- name: CountRunsSince :one
--- Runs started since a time, for the daily cap. Failed runs count too: they
--- spent credits before failing.
+-- Runs started since a time, for the daily cap. Failed and deleted runs count
+-- too: they spent credits, and deleting a run must not refund the cap.
 SELECT count(*) FROM memory_eval_runs
-WHERE deleted IS FALSE AND created_at >= @since;
+WHERE created_at >= @since;
 
 -- name: MarkRunRunning :one
 -- Claims a queued run. Returns no row when the run is gone or was already
@@ -41,3 +41,14 @@ UPDATE memory_eval_runs
 SET status = 'failed', error = @error, cost_usd = sqlc.narg(cost_usd),
     finished_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE id = @id AND status IN ('queued', 'running');
+
+-- name: GetRunStatus :one
+-- A live run's status, so a claim that found nothing can tell an orphaned
+-- running row from one that is finished or gone.
+SELECT status FROM memory_eval_runs WHERE id = @id AND deleted IS FALSE;
+
+-- name: DeleteRun :execrows
+-- Soft-deletes a run. It still counts toward the daily cap.
+UPDATE memory_eval_runs
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = @id AND deleted IS FALSE;
