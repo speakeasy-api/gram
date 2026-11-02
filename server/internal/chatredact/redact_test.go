@@ -2,7 +2,6 @@ package chatredact_test
 
 import (
 	"context"
-	"errors"
 	"strings"
 	"testing"
 
@@ -55,18 +54,20 @@ func TestTextFailsClosedWhenScanIncomplete(t *testing.T) {
 	r := chatredact.NewWithScanner(wordScanner{word: "", failing: true})
 
 	_, _, err := r.Text(t.Context(), "anything")
-	require.True(t, errors.Is(err, chatredact.ErrScanFailed))
+	require.ErrorIs(t, err, chatredact.ErrScanFailed)
 }
 
 func TestTextRedactsSensitiveJSONKeysAndKeepsTokenCounts(t *testing.T) {
 	t.Parallel()
 	r := chatredact.NewWithScanner(wordScanner{word: "zzz-unused"})
 
-	safe, changed, err := r.Text(t.Context(), `{"api_key":"abc","prompt_tokens":12,"nested":{"password":"p"},"note":"ok"}`)
+	safe, changed, err := r.Text(t.Context(), `{"api_key":"abc","prompt_tokens":12,"nested":{"password":"p","db_passwd":"q","aws_credentials":"c"},"note":"ok"}`)
 	require.NoError(t, err)
 	require.True(t, changed)
 	require.Contains(t, safe, `"api_key":"[REDACTED]"`)
 	require.Contains(t, safe, `"password":"[REDACTED]"`)
+	require.Contains(t, safe, `"db_passwd":"[REDACTED]"`)
+	require.Contains(t, safe, `"aws_credentials":"[REDACTED]"`)
 	require.Contains(t, safe, `"prompt_tokens":12`)
 	require.Contains(t, safe, `"note":"ok"`)
 }
@@ -120,4 +121,14 @@ func TestTextMasksURLPasswords(t *testing.T) {
 	jsonSafe, _, err := r.Text(t.Context(), `{"dsn":"mysql://root:`+pw+`@localhost/x"}`)
 	require.NoError(t, err)
 	require.NotContains(t, jsonSafe, pw)
+}
+
+func TestTextMasksURLPasswordsWithoutUsername(t *testing.T) {
+	t.Parallel()
+	r := chatredact.NewWithScanner(wordScanner{word: "zzz-unused"})
+
+	safe, changed, err := r.Text(t.Context(), "cache at redis://:s3cretpass@cache.internal:6379/0")
+	require.NoError(t, err)
+	require.True(t, changed)
+	require.Equal(t, "cache at redis://:[REDACTED]@cache.internal:6379/0", safe)
 }

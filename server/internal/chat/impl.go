@@ -2651,6 +2651,7 @@ func (s *Service) Summarize(ctx context.Context, payload *gen.SummarizePayload) 
 	updated, err := s.repo.UpdateChatSummary(ctx, repo.UpdateChatSummaryParams{
 		Summary:         pgtype.Text{String: summary, Valid: true},
 		SummaryRedacted: false,
+		CoveredThrough:  pgtype.Timestamptz{},
 		ID:              chatID,
 		ProjectID:       *authCtx.ProjectID,
 	})

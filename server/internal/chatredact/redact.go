@@ -119,9 +119,9 @@ func decodeJSON(text string) (any, bool) {
 }
 
 // urlCredentials matches the password of a URL's userinfo, such as the
-// password in postgres://user:password@host/db. The secret scanner does not
-// flag these, so they are masked before the scan.
-var urlCredentials = regexp.MustCompile(`(?i)\b([a-z][a-z0-9+.\-]*://[^\s:/@?#]+:)[^\s@/?#]+@`)
+// password in postgres://user:password@host/db or redis://:password@host. The
+// secret scanner does not flag these, so they are masked before the scan.
+var urlCredentials = regexp.MustCompile(`(?i)\b([a-z][a-z0-9+.\-]*://[^\s:/@?#]*:)[^\s@/?#]+@`)
 
 func (r *Redactor) redactPlainText(ctx context.Context, text string, changed *bool) (string, error) {
 	if masked := urlCredentials.ReplaceAllString(text, "${1}[REDACTED]@"); masked != text {
@@ -204,6 +204,12 @@ func (r *Redactor) redactJSON(ctx context.Context, value any, depth int, changed
 		}
 	case string:
 		return r.redactValue(ctx, typed, depth, changed)
+	case json.Number:
+		// Card numbers travel as bare JSON numbers in payment payloads.
+		if _, masked := maskPII(typed.String()); masked {
+			*changed = true
+			return redactedMarker, nil
+		}
 	}
 	return value, nil
 }
@@ -218,7 +224,7 @@ func sensitiveKey(key string, value any) bool {
 			return false
 		}
 	}
-	for _, name := range []string{"password", "secret", "token", "authorization", "cookie", "apikey", "privatekey"} {
+	for _, name := range []string{"password", "passwd", "passphrase", "credential", "secret", "token", "authorization", "cookie", "apikey", "privatekey"} {
 		if strings.Contains(normalized, name) {
 			return true
 		}
