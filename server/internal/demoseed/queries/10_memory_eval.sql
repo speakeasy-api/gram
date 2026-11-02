@@ -3,15 +3,18 @@
 -- admins run the memory eval against these projects.
 
 -- name: MemoryEvalInsertProject :exec
-INSERT INTO projects (id, name, slug, organization_id)
-VALUES (@project_id::uuid, @name::text, @slug::text, @org_id::text);
+-- created_at is the seed's transaction time, the instant the corpus anchor
+-- comes from, so a runner rebuilding from it gets the same corpus.
+INSERT INTO projects (id, name, slug, organization_id, created_at)
+VALUES (@project_id::uuid, @name::text, @slug::text, @org_id::text, @created_at::timestamptz);
 
 -- name: MemoryEvalListPersonalAccounts :many
--- The roster's existing personal accounts for one user, so a private corpus
--- session reuses the account the demo already shows for its owner.
+-- The roster's existing personal Anthropic accounts for one user, so a
+-- private corpus session, a Claude Code session, reuses the account the demo
+-- already shows for its owner.
 SELECT id FROM user_accounts
 WHERE organization_id = @organization_id::text AND user_id = @user_id::text
-  AND account_type = 'personal'
+  AND account_type = 'personal' AND provider = 'anthropic'
 ORDER BY created_at, id;
 
 -- name: MemoryEvalInsertPersonalAccount :one
@@ -40,3 +43,12 @@ VALUES (@id, @chat_id, @project_id, @role, @content, @user_id,
 -- name: MemoryEvalCountChats :one
 SELECT count(*) FROM chats
 WHERE organization_id = @org_id::text AND project_id = ANY(@project_ids::uuid[]);
+
+-- name: MemoryEvalListChatIDs :many
+SELECT id FROM chats
+WHERE organization_id = @org_id::text AND project_id = @project_id::uuid
+ORDER BY id;
+
+-- name: MemoryEvalCountChatMessages :one
+SELECT count(*) FROM chat_messages
+WHERE project_id = @project_id::uuid;
