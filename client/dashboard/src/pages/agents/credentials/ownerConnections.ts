@@ -1,5 +1,7 @@
+import type { McpServerAuthentication } from "@gram/client/models/components/mcpserverauthentication.js";
 import type { RemoteSession } from "@gram/client/models/components/remotesession.js";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
+import type { AuthClients } from "@gram/client/sdk/authclients.js";
 import type { RemoteSessions } from "@gram/client/sdk/remotesessions.js";
 import type { RemoteSessionClients } from "@gram/client/sdk/remotesessionclients.js";
 import { collectPageItems } from "@/components/sessions/collectPageItems";
@@ -70,6 +72,25 @@ export function serverConnection(
   return { status: "ready", sessions: found };
 }
 
+/**
+ * Whether a server may ask each person to sign in upstream, read from the
+ * server's own auth clients rather than from its user session issuer. An
+ * issuer is often shared across the organization, so the personal sign-ins it
+ * lists can belong to other servers: a server that offers only shared
+ * credentials needs no person, whatever its issuer lists.
+ *
+ * While setup is incomplete the server has upstream credentials that no auth
+ * client records yet, so the issuer's sign-ins stay the only signal.
+ */
+export function offersPersonalSignIn(
+  auth: Pick<McpServerAuthentication, "status" | "clients">,
+): boolean {
+  if (auth.status === "setup_incomplete") return true;
+  return auth.clients.some(
+    (client) => client.enabled && client.clientType === "remote_session",
+  );
+}
+
 /** Whether a row can be chosen: the key will reach it without anyone signing in. */
 export function connectionSelectable(
   connection: ServerConnection | undefined,
@@ -80,11 +101,39 @@ export function connectionSelectable(
 }
 
 export interface ConnectionApi {
+  authClients: Pick<AuthClients, "getMcpServerAuthentication">;
   remoteSessions: Pick<
     RemoteSessions,
     "list" | "listBindings" | "attachBinding" | "detachBinding"
   >;
   remoteSessionClients: Pick<RemoteSessionClients, "list">;
+}
+
+/**
+ * The servers that may ask each person to sign in. One whose auth cannot be
+ * read stays in, so attaching behaves as it did before auth clients existed.
+ */
+async function personalServers(
+  api: ConnectionApi,
+  servers: InventoryServer[],
+  signal?: AbortSignal,
+): Promise<InventoryServer[]> {
+  const personal = await Promise.all(
+    servers.map(async (server) => {
+      if (!server.issuerId) return false;
+      try {
+        const auth = await api.authClients.getMcpServerAuthentication(
+          { mcpServerId: server.id },
+          undefined,
+          { signal },
+        );
+        return offersPersonalSignIn(auth);
+      } catch {
+        return true;
+      }
+    }),
+  );
+  return servers.filter((_, index) => personal[index]);
 }
 
 /**
@@ -101,9 +150,10 @@ export async function attachOwnerConnections(
 ): Promise<string[]> {
   const issuers = [
     ...new Map(
-      servers
-        .filter((server) => server.issuerId)
-        .map((server) => [`${server.projectId}:${server.issuerId}`, server]),
+      (await personalServers(api, servers, signal)).map((server) => [
+        `${server.projectId}:${server.issuerId}`,
+        server,
+      ]),
     ).values(),
   ];
   const missing = new Set<string>();
