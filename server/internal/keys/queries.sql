@@ -141,6 +141,22 @@ WHERE organization_id = @organization_id
 -- for. Callers must report these rather than their own requested deadline.
 RETURNING id, organization_id, project_id, name, key_prefix, scopes, expires_at;
 
+-- name: RevokeMemberClaudeWebHooksAPIKeys :many
+-- Retires a member's earlier Claude web observability keys once a newer one is
+-- minted, so repeated downloads leave one live key per member. Only keys
+-- created before the replacement are revoked: when two downloads race, the
+-- later one survives.
+UPDATE api_keys
+SET deleted_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND created_by_user_id = @created_by_user_id
+  AND deleted IS FALSE
+  AND key_hash <> @replacement_key_hash
+  AND created_at < @replacement_created_at
+  AND scopes @> ARRAY['hooks']::text[]
+  AND name ~ '^plugins-claude-web-hooks-[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
+RETURNING id, project_id, name;
+
 -- name: ListAPIKeysByOrganization :many
 -- Deliberately does NOT join users the way GetAPIKeyByKeyHash does. A key
 -- whose created_by_user_id is not a users.id is unusable (auth's join drops

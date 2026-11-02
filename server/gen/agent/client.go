@@ -9,47 +9,50 @@ package agent
 
 import (
 	"context"
+	"io"
 
 	goa "goa.design/goa/v3/pkg"
 )
 
 // Client is the "agent" service client.
 type Client struct {
-	GetPluginsEndpoint           goa.Endpoint
-	GetMyConnectionsEndpoint     goa.Endpoint
-	HideMcpServerEndpoint        goa.Endpoint
-	UnhideMcpServerEndpoint      goa.Endpoint
-	ListSyncedUsersEndpoint      goa.Endpoint
-	GetConfigurationEndpoint     goa.Endpoint
-	UpdateConfigurationEndpoint  goa.Endpoint
-	ListAiScanTargetsEndpoint    goa.Endpoint
-	UpsertAiScanTargetEndpoint   goa.Endpoint
-	DeleteAiScanTargetEndpoint   goa.Endpoint
-	GetSessionMetaEndpoint       goa.Endpoint
-	ReportSessionMovedEndpoint   goa.Endpoint
-	ReportAIScanEndpoint         goa.Endpoint
-	ReportStateEndpoint          goa.Endpoint
-	CreateSessionHandoffEndpoint goa.Endpoint
+	GetPluginsEndpoint                   goa.Endpoint
+	GetMyConnectionsEndpoint             goa.Endpoint
+	GetClaudeObservabilityPluginEndpoint goa.Endpoint
+	HideMcpServerEndpoint                goa.Endpoint
+	UnhideMcpServerEndpoint              goa.Endpoint
+	ListSyncedUsersEndpoint              goa.Endpoint
+	GetConfigurationEndpoint             goa.Endpoint
+	UpdateConfigurationEndpoint          goa.Endpoint
+	ListAiScanTargetsEndpoint            goa.Endpoint
+	UpsertAiScanTargetEndpoint           goa.Endpoint
+	DeleteAiScanTargetEndpoint           goa.Endpoint
+	GetSessionMetaEndpoint               goa.Endpoint
+	ReportSessionMovedEndpoint           goa.Endpoint
+	ReportAIScanEndpoint                 goa.Endpoint
+	ReportStateEndpoint                  goa.Endpoint
+	CreateSessionHandoffEndpoint         goa.Endpoint
 }
 
 // NewClient initializes a "agent" service client given the endpoints.
-func NewClient(getPlugins, getMyConnections, hideMcpServer, unhideMcpServer, listSyncedUsers, getConfiguration, updateConfiguration, listAiScanTargets, upsertAiScanTarget, deleteAiScanTarget, getSessionMeta, reportSessionMoved, reportAIScan, reportState, createSessionHandoff goa.Endpoint) *Client {
+func NewClient(getPlugins, getMyConnections, getClaudeObservabilityPlugin, hideMcpServer, unhideMcpServer, listSyncedUsers, getConfiguration, updateConfiguration, listAiScanTargets, upsertAiScanTarget, deleteAiScanTarget, getSessionMeta, reportSessionMoved, reportAIScan, reportState, createSessionHandoff goa.Endpoint) *Client {
 	return &Client{
-		GetPluginsEndpoint:           getPlugins,
-		GetMyConnectionsEndpoint:     getMyConnections,
-		HideMcpServerEndpoint:        hideMcpServer,
-		UnhideMcpServerEndpoint:      unhideMcpServer,
-		ListSyncedUsersEndpoint:      listSyncedUsers,
-		GetConfigurationEndpoint:     getConfiguration,
-		UpdateConfigurationEndpoint:  updateConfiguration,
-		ListAiScanTargetsEndpoint:    listAiScanTargets,
-		UpsertAiScanTargetEndpoint:   upsertAiScanTarget,
-		DeleteAiScanTargetEndpoint:   deleteAiScanTarget,
-		GetSessionMetaEndpoint:       getSessionMeta,
-		ReportSessionMovedEndpoint:   reportSessionMoved,
-		ReportAIScanEndpoint:         reportAIScan,
-		ReportStateEndpoint:          reportState,
-		CreateSessionHandoffEndpoint: createSessionHandoff,
+		GetPluginsEndpoint:                   getPlugins,
+		GetMyConnectionsEndpoint:             getMyConnections,
+		GetClaudeObservabilityPluginEndpoint: getClaudeObservabilityPlugin,
+		HideMcpServerEndpoint:                hideMcpServer,
+		UnhideMcpServerEndpoint:              unhideMcpServer,
+		ListSyncedUsersEndpoint:              listSyncedUsers,
+		GetConfigurationEndpoint:             getConfiguration,
+		UpdateConfigurationEndpoint:          updateConfiguration,
+		ListAiScanTargetsEndpoint:            listAiScanTargets,
+		UpsertAiScanTargetEndpoint:           upsertAiScanTarget,
+		DeleteAiScanTargetEndpoint:           deleteAiScanTarget,
+		GetSessionMetaEndpoint:               getSessionMeta,
+		ReportSessionMovedEndpoint:           reportSessionMoved,
+		ReportAIScanEndpoint:                 reportAIScan,
+		ReportStateEndpoint:                  reportState,
+		CreateSessionHandoffEndpoint:         createSessionHandoff,
 	}
 }
 
@@ -96,6 +99,30 @@ func (c *Client) GetMyConnections(ctx context.Context, p *GetMyConnectionsPayloa
 		return
 	}
 	return ires.(*GetMyConnectionsResult), nil
+}
+
+// GetClaudeObservabilityPlugin calls the "getClaudeObservabilityPlugin"
+// endpoint of the "agent" service.
+// GetClaudeObservabilityPlugin may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetClaudeObservabilityPlugin(ctx context.Context, p *GetClaudeObservabilityPluginPayload) (res *GetClaudeObservabilityPluginResult, resp io.ReadCloser, err error) {
+	var ires any
+	ires, err = c.GetClaudeObservabilityPluginEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	o := ires.(*GetClaudeObservabilityPluginResponseData)
+	return o.Result, o.Body, nil
 }
 
 // HideMcpServer calls the "hideMcpServer" endpoint of the "agent" service.

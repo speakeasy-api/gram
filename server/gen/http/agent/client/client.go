@@ -11,6 +11,7 @@ import (
 	"context"
 	"net/http"
 
+	agent "github.com/speakeasy-api/gram/server/gen/agent"
 	goahttp "goa.design/goa/v3/http"
 	goa "goa.design/goa/v3/pkg"
 )
@@ -24,6 +25,10 @@ type Client struct {
 	// GetMyConnections Doer is the HTTP client used to make requests to the
 	// getMyConnections endpoint.
 	GetMyConnectionsDoer goahttp.Doer
+
+	// GetClaudeObservabilityPlugin Doer is the HTTP client used to make requests
+	// to the getClaudeObservabilityPlugin endpoint.
+	GetClaudeObservabilityPluginDoer goahttp.Doer
 
 	// HideMcpServer Doer is the HTTP client used to make requests to the
 	// hideMcpServer endpoint.
@@ -97,26 +102,27 @@ func NewClient(
 	restoreBody bool,
 ) *Client {
 	return &Client{
-		GetPluginsDoer:           doer,
-		GetMyConnectionsDoer:     doer,
-		HideMcpServerDoer:        doer,
-		UnhideMcpServerDoer:      doer,
-		ListSyncedUsersDoer:      doer,
-		GetConfigurationDoer:     doer,
-		UpdateConfigurationDoer:  doer,
-		ListAiScanTargetsDoer:    doer,
-		UpsertAiScanTargetDoer:   doer,
-		DeleteAiScanTargetDoer:   doer,
-		GetSessionMetaDoer:       doer,
-		ReportSessionMovedDoer:   doer,
-		ReportAIScanDoer:         doer,
-		ReportStateDoer:          doer,
-		CreateSessionHandoffDoer: doer,
-		RestoreResponseBody:      restoreBody,
-		scheme:                   scheme,
-		host:                     host,
-		decoder:                  dec,
-		encoder:                  enc,
+		GetPluginsDoer:                   doer,
+		GetMyConnectionsDoer:             doer,
+		GetClaudeObservabilityPluginDoer: doer,
+		HideMcpServerDoer:                doer,
+		UnhideMcpServerDoer:              doer,
+		ListSyncedUsersDoer:              doer,
+		GetConfigurationDoer:             doer,
+		UpdateConfigurationDoer:          doer,
+		ListAiScanTargetsDoer:            doer,
+		UpsertAiScanTargetDoer:           doer,
+		DeleteAiScanTargetDoer:           doer,
+		GetSessionMetaDoer:               doer,
+		ReportSessionMovedDoer:           doer,
+		ReportAIScanDoer:                 doer,
+		ReportStateDoer:                  doer,
+		CreateSessionHandoffDoer:         doer,
+		RestoreResponseBody:              restoreBody,
+		scheme:                           scheme,
+		host:                             host,
+		decoder:                          dec,
+		encoder:                          enc,
 	}
 }
 
@@ -165,6 +171,35 @@ func (c *Client) GetMyConnections() goa.Endpoint {
 			return nil, goahttp.ErrRequestError("agent", "getMyConnections", err)
 		}
 		return decodeResponse(resp)
+	}
+}
+
+// GetClaudeObservabilityPlugin returns an endpoint that makes HTTP requests to
+// the agent service getClaudeObservabilityPlugin server.
+func (c *Client) GetClaudeObservabilityPlugin() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetClaudeObservabilityPluginRequest(c.encoder)
+		decodeResponse = DecodeGetClaudeObservabilityPluginResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetClaudeObservabilityPluginRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetClaudeObservabilityPluginDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("agent", "getClaudeObservabilityPlugin", err)
+		}
+		res, err := decodeResponse(resp)
+		if err != nil {
+			resp.Body.Close()
+			return nil, err
+		}
+		return &agent.GetClaudeObservabilityPluginResponseData{Result: res.(*agent.GetClaudeObservabilityPluginResult), Body: resp.Body}, nil
 	}
 }
 

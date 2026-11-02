@@ -96,6 +96,10 @@ type Service struct {
 	// it unlimited.
 	connectionsLimiter *ratelimit.Limiter
 
+	// claudePlugins renders getClaudeObservabilityPlugin's ZIP. Nil reports
+	// the plugin as unavailable.
+	claudePlugins ClaudeObservabilityPlugins
+
 	// stateReportLimiter bounds reportState writes per device. Nil leaves it
 	// unlimited.
 	stateReportLimiter *ratelimit.Limiter
@@ -151,6 +155,7 @@ func NewService(
 		agentVersions:         nil,
 		connectionStatuses:    nil,
 		connectionsLimiter:    nil,
+		claudePlugins:         nil,
 		stateReportLimiter:    nil,
 		newStateReportLimiter: nil,
 	}

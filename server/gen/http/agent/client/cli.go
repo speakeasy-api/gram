@@ -95,6 +95,28 @@ func BuildGetMyConnectionsPayload(agentGetMyConnectionsApikeyToken string, agent
 	return v, nil
 }
 
+// BuildGetClaudeObservabilityPluginPayload builds the payload for the agent
+// getClaudeObservabilityPlugin endpoint from CLI flags.
+func BuildGetClaudeObservabilityPluginPayload(agentGetClaudeObservabilityPluginApikeyToken string, agentGetClaudeObservabilityPluginEmail string) (*agent.GetClaudeObservabilityPluginPayload, error) {
+	var apikeyToken *string
+	{
+		if agentGetClaudeObservabilityPluginApikeyToken != "" {
+			apikeyToken = &agentGetClaudeObservabilityPluginApikeyToken
+		}
+	}
+	var email *string
+	{
+		if agentGetClaudeObservabilityPluginEmail != "" {
+			email = &agentGetClaudeObservabilityPluginEmail
+		}
+	}
+	v := &agent.GetClaudeObservabilityPluginPayload{}
+	v.ApikeyToken = apikeyToken
+	v.Email = email
+
+	return v, nil
+}
+
 // BuildHideMcpServerPayload builds the payload for the agent hideMcpServer
 // endpoint from CLI flags.
 func BuildHideMcpServerPayload(agentHideMcpServerBody string, agentHideMcpServerApikeyToken string, agentHideMcpServerEmail string) (*agent.HideMcpServerPayload, error) {

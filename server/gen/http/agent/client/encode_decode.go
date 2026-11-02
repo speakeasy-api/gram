@@ -18,6 +18,7 @@ import (
 	agent "github.com/speakeasy-api/gram/server/gen/agent"
 	types "github.com/speakeasy-api/gram/server/gen/types"
 	goahttp "goa.design/goa/v3/http"
+	goa "goa.design/goa/v3/pkg"
 )
 
 // BuildGetPluginsRequest instantiates a HTTP request object with method and
@@ -509,6 +510,245 @@ func DecodeGetMyConnectionsResponse(decoder func(*http.Response) goahttp.Decoder
 		default:
 			body, _ := io.ReadAll(resp.Body)
 			return nil, goahttp.ErrInvalidResponse("agent", "getMyConnections", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetClaudeObservabilityPluginRequest instantiates a HTTP request object
+// with method and path set to call the "agent" service
+// "getClaudeObservabilityPlugin" endpoint
+func (c *Client) BuildGetClaudeObservabilityPluginRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetClaudeObservabilityPluginAgentPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("agent", "getClaudeObservabilityPlugin", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetClaudeObservabilityPluginRequest returns an encoder for requests
+// sent to the agent getClaudeObservabilityPlugin server.
+func EncodeGetClaudeObservabilityPluginRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*agent.GetClaudeObservabilityPluginPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("agent", "getClaudeObservabilityPlugin", "*agent.GetClaudeObservabilityPluginPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.Email != nil {
+			head := *p.Email
+			req.Header.Set("Gram-User-Email", head)
+		}
+		return nil
+	}
+}
+
+// DecodeGetClaudeObservabilityPluginResponse returns a decoder for responses
+// returned by the agent getClaudeObservabilityPlugin endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetClaudeObservabilityPluginResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetClaudeObservabilityPluginResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				contentType        string
+				contentDisposition string
+				err                error
+			)
+			contentTypeRaw := resp.Header.Get("Content-Type")
+			if contentTypeRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("content_type", "header"))
+			}
+			contentType = contentTypeRaw
+			contentDispositionRaw := resp.Header.Get("Content-Disposition")
+			if contentDispositionRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("content_disposition", "header"))
+			}
+			contentDisposition = contentDispositionRaw
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getClaudeObservabilityPlugin", err)
+			}
+			res := NewGetClaudeObservabilityPluginResultOK(contentType, contentDisposition)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetClaudeObservabilityPluginUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getClaudeObservabilityPlugin", err)
+			}
+			err = ValidateGetClaudeObservabilityPluginUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getClaudeObservabilityPlugin", err)
+			}
+			return nil, NewGetClaudeObservabilityPluginUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetClaudeObservabilityPluginForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getClaudeObservabilityPlugin", err)
+			}
+			err = ValidateGetClaudeObservabilityPluginForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getClaudeObservabilityPlugin", err)
+			}
+			return nil, NewGetClaudeObservabilityPluginForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetClaudeObservabilityPluginBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getClaudeObservabilityPlugin", err)
+			}
+			err = ValidateGetClaudeObservabilityPluginBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getClaudeObservabilityPlugin", err)
+			}
+			return nil, NewGetClaudeObservabilityPluginBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetClaudeObservabilityPluginNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getClaudeObservabilityPlugin", err)
+			}
+			err = ValidateGetClaudeObservabilityPluginNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getClaudeObservabilityPlugin", err)
+			}
+			return nil, NewGetClaudeObservabilityPluginNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetClaudeObservabilityPluginConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getClaudeObservabilityPlugin", err)
+			}
+			err = ValidateGetClaudeObservabilityPluginConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getClaudeObservabilityPlugin", err)
+			}
+			return nil, NewGetClaudeObservabilityPluginConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetClaudeObservabilityPluginUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getClaudeObservabilityPlugin", err)
+			}
+			err = ValidateGetClaudeObservabilityPluginUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getClaudeObservabilityPlugin", err)
+			}
+			return nil, NewGetClaudeObservabilityPluginUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetClaudeObservabilityPluginInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getClaudeObservabilityPlugin", err)
+			}
+			err = ValidateGetClaudeObservabilityPluginInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getClaudeObservabilityPlugin", err)
+			}
+			return nil, NewGetClaudeObservabilityPluginInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetClaudeObservabilityPluginInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "getClaudeObservabilityPlugin", err)
+				}
+				err = ValidateGetClaudeObservabilityPluginInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "getClaudeObservabilityPlugin", err)
+				}
+				return nil, NewGetClaudeObservabilityPluginInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetClaudeObservabilityPluginUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("agent", "getClaudeObservabilityPlugin", err)
+				}
+				err = ValidateGetClaudeObservabilityPluginUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("agent", "getClaudeObservabilityPlugin", err)
+				}
+				return nil, NewGetClaudeObservabilityPluginUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("agent", "getClaudeObservabilityPlugin", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetClaudeObservabilityPluginGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("agent", "getClaudeObservabilityPlugin", err)
+			}
+			err = ValidateGetClaudeObservabilityPluginGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("agent", "getClaudeObservabilityPlugin", err)
+			}
+			return nil, NewGetClaudeObservabilityPluginGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("agent", "getClaudeObservabilityPlugin", resp.StatusCode, string(body))
 		}
 	}
 }

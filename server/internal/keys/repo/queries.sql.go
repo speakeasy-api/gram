@@ -815,6 +815,61 @@ func (q *Queries) RepairOrphanedAPIKeyCreators(ctx context.Context) (int64, erro
 	return result.RowsAffected(), nil
 }
 
+const revokeMemberClaudeWebHooksAPIKeys = `-- name: RevokeMemberClaudeWebHooksAPIKeys :many
+UPDATE api_keys
+SET deleted_at = clock_timestamp()
+WHERE organization_id = $1
+  AND created_by_user_id = $2
+  AND deleted IS FALSE
+  AND key_hash <> $3
+  AND created_at < $4
+  AND scopes @> ARRAY['hooks']::text[]
+  AND name ~ '^plugins-claude-web-hooks-[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
+RETURNING id, project_id, name
+`
+
+type RevokeMemberClaudeWebHooksAPIKeysParams struct {
+	OrganizationID       string
+	CreatedByUserID      string
+	ReplacementKeyHash   string
+	ReplacementCreatedAt pgtype.Timestamptz
+}
+
+type RevokeMemberClaudeWebHooksAPIKeysRow struct {
+	ID        uuid.UUID
+	ProjectID uuid.NullUUID
+	Name      string
+}
+
+// Retires a member's earlier Claude web observability keys once a newer one is
+// minted, so repeated downloads leave one live key per member. Only keys
+// created before the replacement are revoked: when two downloads race, the
+// later one survives.
+func (q *Queries) RevokeMemberClaudeWebHooksAPIKeys(ctx context.Context, arg RevokeMemberClaudeWebHooksAPIKeysParams) ([]RevokeMemberClaudeWebHooksAPIKeysRow, error) {
+	rows, err := q.db.Query(ctx, revokeMemberClaudeWebHooksAPIKeys,
+		arg.OrganizationID,
+		arg.CreatedByUserID,
+		arg.ReplacementKeyHash,
+		arg.ReplacementCreatedAt,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []RevokeMemberClaudeWebHooksAPIKeysRow
+	for rows.Next() {
+		var i RevokeMemberClaudeWebHooksAPIKeysRow
+		if err := rows.Scan(&i.ID, &i.ProjectID, &i.Name); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const revokePluginHooksAPIKeysByProject = `-- name: RevokePluginHooksAPIKeysByProject :many
 
 UPDATE api_keys

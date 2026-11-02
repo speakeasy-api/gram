@@ -589,6 +589,25 @@ func TestResolveCanonicalActor_SharedPluginKeyDoesNotUseOwnerIdentity(t *testing
 		"a legacy personal key with a formerly-unrestricted plugins-* name keeps owner attribution")
 }
 
+// The key in a plugin a member uploads to claude.ai is owned by that member,
+// and Claude's cloud environment reports no email, so events attribute to the
+// key owner.
+func TestResolveCanonicalActor_ClaudeWebKeyAttributesToOwner(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestHooksService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	payload := canonicalIngestPayload("claude", "prompt.submitted", "claude-web-actor-test")
+	keyCtx := *authCtx
+	keyCtx.APIKeyName = "plugins-claude-web-hooks-20261102-120102-abc123"
+	keyCtx.OrgWidePluginHooksKey = false
+	actor := ti.service.resolveCanonicalActor(ctx, payload, &keyCtx)
+	require.Equal(t, authCtx.UserID, actor.UserID)
+	require.Equal(t, conv.PtrValOr(authCtx.Email, ""), actor.Email)
+}
+
 func TestIngest_CachesSelfReportedActorForLaterSharedKeyEvents(t *testing.T) {
 	t.Parallel()
 
