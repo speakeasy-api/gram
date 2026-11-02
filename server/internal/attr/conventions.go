@@ -767,6 +767,12 @@ const (
 	DirectoryMembershipsOpenedKey     = attribute.Key("gram.directory_group.memberships_opened")
 	DirectoryMembershipsClosedKey     = attribute.Key("gram.directory_group.memberships_closed")
 	OutcomeKey                        = attribute.Key("gram.outcome")
+	ConnectionDropReasonKey           = attribute.Key("gram.connection.drop_reason")
+	ConnectionOutcomeKey              = attribute.Key("gram.connection.outcome")
+	ConnectionProviderHostKey         = attribute.Key("gram.connection.provider_host")
+	ConnectionReasonKey               = attribute.Key("gram.connection.reason")
+	ConnectionStepKey                 = attribute.Key("gram.connection.step")
+	ConnectionWhoFixesKey             = attribute.Key("gram.connection.who_fixes")
 	PackageNameKey                    = attribute.Key("gram.package.name")
 	PackageVersionKey                 = attribute.Key("gram.package.version")
 	PKCEMethodKey                     = attribute.Key("gram.pkce.method")
@@ -2928,6 +2934,19 @@ func PKCEMethod(v string) attribute.KeyValue { return PKCEMethodKey.String(v) }
 func SlogPKCEMethod(v string) slog.Attr      { return slog.String(string(PKCEMethodKey), v) }
 
 func PKCESupport[V ~string](v V) attribute.KeyValue { return PKCESupportKey.String(string(v)) }
+
+func ConnectionDropReason(v string) attribute.KeyValue { return ConnectionDropReasonKey.String(v) }
+func SlogConnectionDropReason(v string) slog.Attr {
+	return slog.String(string(ConnectionDropReasonKey), v)
+}
+
+func ConnectionOutcome(v string) attribute.KeyValue { return ConnectionOutcomeKey.String(v) }
+func ConnectionProviderHost(v string) attribute.KeyValue {
+	return ConnectionProviderHostKey.String(v)
+}
+func ConnectionReason(v string) attribute.KeyValue   { return ConnectionReasonKey.String(v) }
+func ConnectionStep(v string) attribute.KeyValue     { return ConnectionStepKey.String(v) }
+func ConnectionWhoFixes(v string) attribute.KeyValue { return ConnectionWhoFixesKey.String(v) }
 
 func ProductFeatureName(v string) attribute.KeyValue { return ProductFeatureNameKey.String(v) }
 func SlogProductFeatureName(v string) slog.Attr {
