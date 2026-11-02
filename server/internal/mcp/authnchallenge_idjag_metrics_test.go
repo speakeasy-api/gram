@@ -19,6 +19,7 @@ import (
 	"github.com/go-chi/chi/v5"
 	"github.com/go-jose/go-jose/v4"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
@@ -260,13 +261,13 @@ func TestTokenIDJAGExchangeForgedAlgorithmStaysInvalidGrant(t *testing.T) {
 	}, idJAGExchangeCounts(t, f.reader, f.issuerID))
 }
 
-// failingAuthzEngine reads a closed database, so it reaches no decision.
+// failingAuthzEngine reads a database that refuses connections, so it reaches no decision.
 func failingAuthzEngine(t *testing.T) *authz.Engine {
 	t.Helper()
-	closed, err := infra.CloneTestDatabase(t, "idjag_outage")
+	dead, err := pgxpool.New(t.Context(), "postgres://speakeasy@127.0.0.1:1/down?connect_timeout=1")
 	require.NoError(t, err)
-	closed.Close()
-	return authz.NewEngine(testenv.NewLogger(t), closed, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{})
+	t.Cleanup(dead.Close)
+	return authz.NewEngine(testenv.NewLogger(t), dead, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{})
 }
 
 // A failure past the reservation delivers no token, so it gives the identifier

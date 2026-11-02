@@ -68,6 +68,7 @@ var idJAGValidatorReasons = map[idjag.Reason]struct{}{
 	idjag.ReasonKeyUnresolvable:        {},
 	idjag.ReasonKeyStoreUnavailable:    {},
 	idjag.ReasonKeyUnusable:            {},
+	idjag.ReasonKeyBudgetExhausted:     {},
 	idjag.ReasonSignatureInvalid:       {},
 	idjag.ReasonClaimsMalformed:        {},
 	idjag.ReasonAudienceMismatch:       {},

@@ -13,6 +13,7 @@ import (
 	"github.com/go-jose/go-jose/v4"
 	"github.com/go-jose/go-jose/v4/jwt"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -174,17 +175,23 @@ func TestValidateAcceptsProvisionedIDJAGAndRejectsReplay(t *testing.T) {
 func TestIsOutage(t *testing.T) {
 	t.Parallel()
 
+	down := &pgconn.PgError{Code: "57P01"}
+	broken := &pgconn.PgError{Code: "42P01"}
 	for _, tc := range []struct {
 		name string
 		err  error
 		want bool
 	}{
-		{name: "directory down", err: reject(ReasonSubjectUnavailable, errors.New("db")), want: true},
-		{name: "replay store down", err: reject(ReasonReplayStoreUnavailable, errors.New("redis")), want: true},
+		{name: "directory down", err: reject(ReasonSubjectUnavailable, down), want: true},
+		{name: "directory query broken", err: reject(ReasonSubjectUnavailable, broken), want: false},
+		{name: "replay store down", err: reject(ReasonReplayStoreUnavailable, down), want: true},
 		{name: "keys down", err: reject(ReasonKeyUnresolvable, errors.New("jwks")), want: true},
-		{name: "key store down", err: reject(ReasonKeyStoreUnavailable, errors.New("redis")), want: true},
+		{name: "local key budget spent", err: reject(ReasonKeyBudgetExhausted, errors.New("budget")), want: true},
+		{name: "key store down", err: reject(ReasonKeyStoreUnavailable, down), want: true},
+		{name: "key store query broken", err: reject(ReasonKeyStoreUnavailable, broken), want: false},
 		{name: "unusable keys", err: reject(ReasonKeyUnusable, errors.New("alg mismatch")), want: false},
-		{name: "trust read down", err: reject(ReasonTrustUnavailable, errors.New("db")), want: true},
+		{name: "trust read down", err: reject(ReasonTrustUnavailable, down), want: true},
+		{name: "trust query broken", err: reject(ReasonTrustUnavailable, broken), want: false},
 		{name: "no trust link", err: reject(ReasonTrustUnavailable, ErrNoTrustedIssuer), want: false},
 		{name: "trust link has no keys", err: reject(ReasonTrustUnavailable, ErrTrustedIssuerHasNoJWKS), want: false},
 		{name: "replayed", err: reject(ReasonReplayed, errors.New("jti")), want: false},
@@ -197,6 +204,23 @@ func TestIsOutage(t *testing.T) {
 			require.Equal(t, tc.want, IsOutage(tc.err))
 		})
 	}
+}
+
+// Spending our own fetch budget isn't the customer's outage, so its reason stays apart from theirs.
+func TestValidateMapsFetchBudgetApartFromKeySetOutage(t *testing.T) {
+	t.Parallel()
+
+	require.NotEqual(t, ReasonKeyUnresolvable, ReasonKeyBudgetExhausted)
+	require.True(t, IsOutage(reject(ReasonKeyBudgetExhausted, jwks.ErrFetchRateLimited)))
+}
+
+func TestIsStoreFault(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, IsStoreFault(reject(ReasonSubjectUnavailable, &pgconn.PgError{Code: "42P01"})))
+	require.False(t, IsStoreFault(reject(ReasonSubjectUnavailable, &pgconn.PgError{Code: "57P01"})), "an outage")
+	require.False(t, IsStoreFault(reject(ReasonTrustUnavailable, ErrNoTrustedIssuer)), "configuration")
+	require.False(t, IsStoreFault(reject(ReasonSignatureInvalid, errors.New("sig"))), "the assertion")
 }
 
 func TestValidateChecksTypeBeforeKeys(t *testing.T) {

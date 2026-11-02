@@ -620,6 +620,10 @@ func (s *Service) handleTokenJWTBearerGrant(
 		}
 		return outageError(w, err, idJAGOutageMessage).LogError(ctx, logger)
 	}
+	if idjag.IsStoreFault(err) {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request failed", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, oautherr.CodeServerError, exchange.rejectAssertion(err)...)
+		return oops.E(oops.CodeUnexpected, err, "validate ID-JAG assertion").LogError(ctx, logger)
+	}
 	if err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "invalid_grant", exchange.rejectAssertion(err)...)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "assertion is invalid")
@@ -634,7 +638,6 @@ func (s *Service) handleTokenJWTBearerGrant(
 			logger.ErrorContext(ctx, "release ID-JAG assertion after failed exchange", attr.SlogError(rerr))
 			s.metrics.RecordIDJAGReleaseFailed(ctx, endpoint.UserSessionIssuerID.String())
 		}
-		retErr = outageError(w, retErr, idJAGOutageMessage)
 	}()
 
 	// The session does not exist yet, but authz treats an AuthContext without a

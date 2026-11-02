@@ -477,21 +477,7 @@ func issuerGateCheckUnavailable(err error) bool {
 	if oops.IsInfrastructureFailure(err) {
 		return true
 	}
-	for _, operational := range []error{
-		sessiontokens.ErrRevocationUnavailable,
-		errIssuerGateOrgLookup,
-		errIssuerGateIssuerLookup,
-		errIssuerGateCallerProfile,
-		errSessionPolicyStoreUnavailable,
-		errAgentSessionCredentialLoad,
-		errWorkloadSessionCredentialLoad,
-		errWorkloadSessionAdmissionLoad,
-	} {
-		if errors.Is(err, operational) {
-			return true
-		}
-	}
-	return false
+	return errors.Is(err, sessiontokens.ErrRevocationUnavailable)
 }
 
 // issuerGateReasonWorkloadSessionOutOfReach: a live workload session minted
@@ -1191,6 +1177,9 @@ func (s *Service) authenticateIssuerGate(
 		s.metrics.RecordMCPRequestRejected(ctx, reason, mcpURL, surface)
 		if issuerGateCheckUnavailable(valErr) {
 			return ctx, nil, nil, outageError(w, valErr, issuerGateCheckUnavailableMessage)
+		}
+		if !errors.Is(valErr, errCredentialRejected) && oops.IsStoreFailure(valErr) {
+			return ctx, nil, nil, oops.E(oops.CodeUnexpected, valErr, "check credential").LogError(ctx, s.logger)
 		}
 		if errors.Is(valErr, errWorkloadSessionOutOfReach) {
 			return ctx, nil, nil, writeInsufficientScopeChallenge(w, protectedResourceURL, "access token does not grant access to this MCP server")

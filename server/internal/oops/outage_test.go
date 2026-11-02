@@ -11,6 +11,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/constants"
@@ -35,6 +36,7 @@ func TestIsInfrastructureFailure(t *testing.T) {
 		{name: "serialization failure", err: &pgconn.PgError{Code: "40001"}, want: true},
 		{name: "deadlock", err: &pgconn.PgError{Code: "40P01"}, want: true},
 		{name: "pool wait ran out", err: fmt.Errorf("acquire: %w", context.DeadlineExceeded), want: true},
+		{name: "redis pool exhausted", err: fmt.Errorf("get: %w", redis.ErrPoolTimeout), want: true},
 		{name: "syntax error", err: &pgconn.PgError{Code: "42601"}, want: false},
 		{name: "missing table", err: &pgconn.PgError{Code: "42P01"}, want: false},
 		{name: "missing column", err: &pgconn.PgError{Code: "42703"}, want: false},

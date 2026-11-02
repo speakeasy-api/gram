@@ -67,14 +67,14 @@ func idJAGServerFault(err error) bool {
 	if !ok {
 		return true
 	}
-	return shareable.Code.IsTemporary()
+	return !errors.Is(err, oops.ErrPermanent) && shareable.Code.IsTemporary()
 }
 
 // idJAGInfrastructureReason reports a validator refusal caused by a
 // Speakeasy or identity provider failure rather than the assertion.
 func idJAGInfrastructureReason(reason idjag.Reason) bool {
 	switch reason {
-	case idjag.ReasonTrustUnavailable, idjag.ReasonKeyUnresolvable, idjag.ReasonKeyStoreUnavailable, idjag.ReasonSubjectUnavailable, idjag.ReasonReplayStoreUnavailable, idjag.ReasonVerifierMisconfigured:
+	case idjag.ReasonTrustUnavailable, idjag.ReasonKeyUnresolvable, idjag.ReasonKeyStoreUnavailable, idjag.ReasonKeyBudgetExhausted, idjag.ReasonSubjectUnavailable, idjag.ReasonReplayStoreUnavailable, idjag.ReasonVerifierMisconfigured:
 		return true
 	default:
 		return false

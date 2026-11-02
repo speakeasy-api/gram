@@ -13,6 +13,7 @@ import (
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
+	"github.com/redis/go-redis/v9"
 )
 
 // OutageRetryAfter is the Retry-After on a 503, matching the 30s key set and refresh hold-backs.
@@ -45,6 +46,9 @@ func IsInfrastructureFailure(err error) bool {
 		return slices.ContainsFunc(transientSQLStateClasses, func(class string) bool { return strings.HasPrefix(pgErr.Code, class) })
 	}
 	if _, ok := errors.AsType[*pgconn.ConnectError](err); ok {
+		return true
+	}
+	if errors.Is(err, redis.ErrClosed) || errors.Is(err, redis.ErrPoolTimeout) {
 		return true
 	}
 	if _, ok := errors.AsType[net.Error](err); ok {

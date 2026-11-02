@@ -37,9 +37,6 @@ var errToolSelectionResourceMismatch = errors.New("session tool selection is bou
 // distinguish this operational or stored-data failure from bad credentials.
 var errToolSelectionLoad = errors.New("load session tool selection")
 
-// errSessionPolicyStoreUnavailable marks the part of errToolSelectionLoad a retry can clear.
-var errSessionPolicyStoreUnavailable = errors.New("session policy store unavailable")
-
 // sessionPolicyEntry caches immutable issuance policy by issuer and JTI.
 type sessionPolicyEntry struct {
 	// IssuerID scopes this entry to the authorization server.
@@ -149,7 +146,7 @@ func (s *Service) loadSessionPolicy(ctx context.Context, endpoint *ResolvedMcpEn
 			if errors.Is(derr, pgx.ErrNoRows) {
 				return sessionPolicy{}, fmt.Errorf("user session row not found for jti")
 			}
-			return sessionPolicy{}, fmt.Errorf("load session policy: %w: %w", errSessionPolicyStoreUnavailable, derr)
+			return sessionPolicy{}, fmt.Errorf("load session policy: %w", derr)
 		}
 		entry = sessionPolicyEntry{
 			IssuerID:     issuerID,

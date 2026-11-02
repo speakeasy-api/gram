@@ -93,8 +93,10 @@ func (v *Validator) Validate(ctx context.Context, raw string, request Request) (
 			switch {
 			case errors.Is(err, jwks.ErrKeyNotFound), errors.Is(err, jwks.ErrRefreshRateLimited):
 				return nil, reject(ReasonKeyUnknown, err)
-			case errors.Is(err, jwks.ErrKeySetUnavailable), errors.Is(err, jwks.ErrFetchRateLimited):
+			case errors.Is(err, jwks.ErrKeySetUnavailable):
 				return nil, reject(ReasonKeyUnresolvable, err)
+			case errors.Is(err, jwks.ErrFetchRateLimited):
+				return nil, reject(ReasonKeyBudgetExhausted, err)
 			case errors.Is(err, jwks.ErrFetchLimiterUnavailable), errors.Is(err, jwks.ErrKeyStoreUnavailable):
 				return nil, reject(ReasonKeyStoreUnavailable, err)
 			}
