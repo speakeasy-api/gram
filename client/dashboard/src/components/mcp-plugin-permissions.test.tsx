@@ -178,7 +178,8 @@ vi.mock("@/lib/remote-identity", async (importOriginal) => ({
     isLoading: false,
     isError: false,
   }),
-  useUpstreamProbe: () => "idle",
+  useUpstreamProbe: (remoteMcpServerId: string, enabled: boolean) =>
+    identityGate.probe(remoteMcpServerId, enabled),
 }));
 vi.mock("@gram/client/react-query/remoteMcpServerHeaders.js", () => ({
   useRemoteMcpServerHeaders: () => ({
@@ -202,6 +203,7 @@ const identityGate = vi.hoisted(() => ({
     isError: false,
     data: { status: "configured" } as { status: string } | undefined,
   },
+  probe: vi.fn((_remoteMcpServerId: string, _enabled: boolean) => "idle"),
 }));
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: () => identityGate.features,
@@ -216,10 +218,20 @@ vi.mock("@/components/setup-guide/SetupGuideCard", () => ({
   SetupGuideCard: () => null,
 }));
 vi.mock("@/components/mcp-server-readiness-bar", () => ({
-  McpServerReadinessBar: ({ checks }: { checks: { label: string }[] }) => (
+  McpServerReadinessBar: ({
+    checks,
+  }: {
+    checks: { label: string; ready: boolean; description: string }[];
+  }) => (
     <>
       {checks.map((check) => (
-        <span key={check.label}>{check.label}</span>
+        <span
+          key={check.label}
+          data-ready={String(check.ready)}
+          title={check.description}
+        >
+          {check.label}
+        </span>
       ))}
     </>
   ),
@@ -563,4 +575,70 @@ describe("remote MCP server Identity summary", () => {
       expect(screen.queryByRole("link", { name: /^Identity:/ })).toBeNull();
     },
   );
+});
+
+describe("remote MCP server readiness under enforcement", () => {
+  const remote = {
+    id: "server-a",
+    name: "Server",
+    remoteMcpServerId: "remote-source-a",
+  };
+  afterEach(() => {
+    identityGate.features = {
+      isPending: false,
+      isError: false,
+      data: { upstreamAuthEnforced: false },
+    };
+    identityGate.authentication = {
+      isPending: false,
+      isError: false,
+      data: { status: "configured" },
+    };
+  });
+
+  function authenticationCheck(): HTMLElement {
+    return screen.getByText("Authentication");
+  }
+
+  it.each([
+    ["configured", "true", "Credentials are set up for the upstream service."],
+    [
+      "setup_incomplete",
+      "false",
+      "Add a credential so Speakeasy can sign in to the upstream service.",
+    ],
+  ])("reads %s from the credentials status", (status, ready, description) => {
+    state.mcpServer = remote;
+    identityGate.features = {
+      isPending: false,
+      isError: false,
+      data: { upstreamAuthEnforced: true },
+    };
+    identityGate.authentication = {
+      isPending: false,
+      isError: false,
+      data: { status },
+    };
+    render(<McpServerXSidebarNav />);
+    expect(authenticationCheck().getAttribute("data-ready")).toBe(ready);
+    expect(authenticationCheck().getAttribute("title")).toBe(description);
+  });
+
+  it("is not ready and does not probe the upstream while enforcement loads", () => {
+    state.mcpServer = remote;
+    identityGate.features = {
+      isPending: true,
+      isError: false,
+      data: undefined,
+    };
+    render(<McpServerXSidebarNav />);
+    expect(authenticationCheck().getAttribute("data-ready")).toBe("false");
+    expect(authenticationCheck().getAttribute("title")).toBe(
+      "The identity status is not available yet.",
+    );
+    expect(identityGate.probe).not.toHaveBeenCalledWith(
+      "remote-source-a",
+      true,
+    );
+  });
 });

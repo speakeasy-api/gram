@@ -515,7 +515,8 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     remoteMcpServerId,
     enforcedIdentity
       ? upstreamAuthQuery.data?.status === "no_auth_required"
-      : !identityUnavailable &&
+      : upstreamAuth === "legacy" &&
+          !identityUnavailable &&
           remoteIdentityMode === "none" &&
           !passThroughAuthorization &&
           !isLoadingRemoteSessionClients &&
@@ -597,16 +598,38 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
   // A Remote MCP server's identity is derived, so the readiness item reads the
   // same answer the pill does. Judging it on a bound client alone reported
   // every working Service Account as incomplete while the pill said Service Account.
+  // Under enforcement it reads the credentials status instead, and a remote
+  // server is not settled until the enforcement state is known.
+  const legacyRemoteIdentity = !isRemoteBacked || upstreamAuth === "legacy";
+  const enforcedStatus = upstreamAuthQuery.data?.status;
   const remoteIdentitySettled =
     isRemoteBacked &&
-    !identityUnavailable &&
-    (remoteIdentityMode !== "none" || identityProbeStatus === "available");
+    (enforcedIdentity
+      ? enforcedStatus === "configured" ||
+        (enforcedStatus === "no_auth_required" &&
+          identityProbeStatus === "available")
+      : legacyRemoteIdentity &&
+        !identityUnavailable &&
+        (remoteIdentityMode !== "none" || identityProbeStatus === "available"));
 
   let authenticationDescription =
     "Attach an authorization server so users can access the upstream service.";
   if (isUnproxied) {
     authenticationDescription =
       "Not applicable — the customer connects directly using the vendor's own credentials.";
+  } else if (enforcedIdentity) {
+    if (enforcedStatus === "configured") {
+      authenticationDescription =
+        "Credentials are set up for the upstream service.";
+    } else if (remoteIdentitySettled) {
+      authenticationDescription =
+        "The upstream service accepts requests without credentials.";
+    } else {
+      authenticationDescription =
+        "Add a credential so Speakeasy can sign in to the upstream service.";
+    }
+  } else if (!legacyRemoteIdentity) {
+    authenticationDescription = "The identity status is not available yet.";
   } else if (remoteIdentityMode === "user" && hasRemoteIdentityProvider) {
     authenticationDescription =
       "An authorization server is attached to this server.";
@@ -665,7 +688,7 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
           ready:
             isUnproxied ||
             remoteIdentitySettled ||
-            hasRemoteIdentityProvider ||
+            (legacyRemoteIdentity && hasRemoteIdentityProvider) ||
             (isTunneledBacked && !!userSessionIssuerId),
           href: `${mcpServerTabHref(routes, idOrSlug, "settings")}#${MCP_AUTHENTICATION_SECTION_ID}`,
         },
