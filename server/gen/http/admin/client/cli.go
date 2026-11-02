@@ -3594,3 +3594,128 @@ func BuildBackfillMcpAuthGrantsPayload(adminBackfillMcpAuthGrantsAdminSessionTok
 
 	return v, nil
 }
+
+// BuildGetMemoryEvalOptionsPayload builds the payload for the admin
+// getMemoryEvalOptions endpoint from CLI flags.
+func BuildGetMemoryEvalOptionsPayload(adminGetMemoryEvalOptionsAdminSessionToken string) (*admin.GetMemoryEvalOptionsPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminGetMemoryEvalOptionsAdminSessionToken != "" {
+			adminSessionToken = &adminGetMemoryEvalOptionsAdminSessionToken
+		}
+	}
+	v := &admin.GetMemoryEvalOptionsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildListMemoryEvalRunsPayload builds the payload for the admin
+// listMemoryEvalRuns endpoint from CLI flags.
+func BuildListMemoryEvalRunsPayload(adminListMemoryEvalRunsCursor string, adminListMemoryEvalRunsLimit string, adminListMemoryEvalRunsAdminSessionToken string) (*admin.ListMemoryEvalRunsPayload, error) {
+	var err error
+	var cursor *string
+	{
+		if adminListMemoryEvalRunsCursor != "" {
+			cursor = &adminListMemoryEvalRunsCursor
+			err = goa.MergeErrors(err, goa.ValidateFormat("cursor", *cursor, goa.FormatUUID))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var limit int
+	{
+		if adminListMemoryEvalRunsLimit != "" {
+			var v int64
+			v, err = strconv.ParseInt(adminListMemoryEvalRunsLimit, 10, strconv.IntSize)
+			limit = int(v)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for limit, must be INT")
+			}
+			if limit < 1 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 1, true))
+			}
+			if limit > 100 {
+				err = goa.MergeErrors(err, goa.InvalidRangeError("limit", limit, 100, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminListMemoryEvalRunsAdminSessionToken != "" {
+			adminSessionToken = &adminListMemoryEvalRunsAdminSessionToken
+		}
+	}
+	v := &admin.ListMemoryEvalRunsPayload{}
+	v.Cursor = cursor
+	v.Limit = limit
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildGetMemoryEvalRunPayload builds the payload for the admin
+// getMemoryEvalRun endpoint from CLI flags.
+func BuildGetMemoryEvalRunPayload(adminGetMemoryEvalRunID string, adminGetMemoryEvalRunAdminSessionToken string) (*admin.GetMemoryEvalRunPayload, error) {
+	var err error
+	var id string
+	{
+		id = adminGetMemoryEvalRunID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminGetMemoryEvalRunAdminSessionToken != "" {
+			adminSessionToken = &adminGetMemoryEvalRunAdminSessionToken
+		}
+	}
+	v := &admin.GetMemoryEvalRunPayload{}
+	v.ID = id
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildStartMemoryEvalRunPayload builds the payload for the admin
+// startMemoryEvalRun endpoint from CLI flags.
+func BuildStartMemoryEvalRunPayload(adminStartMemoryEvalRunBody string, adminStartMemoryEvalRunAdminSessionToken string) (*admin.StartMemoryEvalRunPayload, error) {
+	var err error
+	var body StartMemoryEvalRunRequestBody
+	{
+		err = json.Unmarshal([]byte(adminStartMemoryEvalRunBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"config\": {\n         \"answer_models\": [\n            \"abc123\",\n            \"abc123\"\n         ],\n         \"digest_model\": \"abc123\",\n         \"judge_model\": \"abc123\",\n         \"runs\": 2,\n         \"summary_model\": \"abc123\"\n      }\n   }'")
+		}
+		if body.Config == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("config", "body"))
+		}
+		if body.Config != nil {
+			if err2 := ValidateAdminMemoryEvalRunConfigRequestBody(body.Config); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminStartMemoryEvalRunAdminSessionToken != "" {
+			adminSessionToken = &adminStartMemoryEvalRunAdminSessionToken
+		}
+	}
+	v := &admin.StartMemoryEvalRunPayload{}
+	if body.Config != nil {
+		v.Config = marshalAdminMemoryEvalRunConfigRequestBodyToAdminAdminMemoryEvalRunConfig(body.Config)
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}

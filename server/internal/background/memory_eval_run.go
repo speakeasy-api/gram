@@ -154,3 +154,15 @@ func heartbeatEvery(ctx context.Context, interval time.Duration) func() {
 	}()
 	return func() { close(done) }
 }
+
+// TemporalMemoryEvalRunStarter starts MemoryEvalRunWorkflow for queued runs.
+type TemporalMemoryEvalRunStarter struct {
+	TemporalEnv *tenv.Environment
+}
+
+func (s *TemporalMemoryEvalRunStarter) StartMemoryEvalRun(ctx context.Context, runID uuid.UUID) error {
+	if _, err := ExecuteMemoryEvalRunWorkflow(ctx, s.TemporalEnv, MemoryEvalRunInput{RunID: runID}); err != nil {
+		return err
+	}
+	return nil
+}

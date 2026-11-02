@@ -104,6 +104,9 @@ type Service struct {
 	openRouterUsage      OpenRouterUsageReader
 	productFeatures      *productfeatures.Client
 	chatAnalysisSignaler analysis.Signaler
+	// memoryEvalStarter starts team memory eval runs. Nil leaves
+	// startMemoryEvalRun unavailable.
+	memoryEvalStarter MemoryEvalRunStarter
 
 	audit *audit.Logger
 
@@ -268,6 +271,7 @@ func NewService(
 		openRouterUsage:      openRouter,
 		productFeatures:      productFeatures,
 		chatAnalysisSignaler: chatAnalysisSignaler,
+		memoryEvalStarter:    nil,
 		audit:                audit.NewLogger(),
 		loginStates: cache.NewTypedObjectCache[LoginState](
 			logger.With(attr.SlogCacheNamespace("admin_login_state")),
@@ -465,6 +469,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.GetSpendBreakdown = service.preauthorizeAdmin(server.GetSpendBreakdown)
 	server.ListCustomerUsage = service.preauthorizeAdmin(server.ListCustomerUsage)
 	server.OpenOrganizationInDashboard = service.preauthorizeAdmin(server.OpenOrganizationInDashboard)
+	server.StartMemoryEvalRun = service.strictAdminJSON(server.StartMemoryEvalRun, func() any { return new(adminserver.StartMemoryEvalRunRequestBody) })
 	server.SetOrganizationFeature = service.strictAdminJSON(server.SetOrganizationFeature, func() any { return new(adminserver.SetOrganizationFeatureRequestBody) })
 	server.SetOrganizationChatAnalysisSettings = service.strictAdminJSON(server.SetOrganizationChatAnalysisSettings, func() any { return new(adminserver.SetOrganizationChatAnalysisSettingsRequestBody) })
 	server.SetStripeCustomer = service.strictAdminJSON(server.SetStripeCustomer, func() any { return new(adminserver.SetStripeCustomerRequestBody) })
