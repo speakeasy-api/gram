@@ -363,14 +363,49 @@ describe("attachOwnerConnections", () => {
     expect(attachBinding).not.toHaveBeenCalled();
   });
 
-  it("still attaches when a server's auth cannot be read", async () => {
+  it("attaches nothing to a server whose auth cannot be read", async () => {
     const { fake, attachBinding } = api({
       auth: () => Promise.reject(new Error("network down")),
       clients: [client("client_one")],
       candidates: [session({})],
       bindings: [],
     });
-    await attachOwnerConnections(fake, "agent_new", [server]);
+    await expect(
+      attachOwnerConnections(fake, "agent_new", [server]),
+    ).rejects.toThrow("Could not check how Linear signs in. Try again.");
+    expect(attachBinding).not.toHaveBeenCalled();
+  });
+
+  it("reports a server whose auth cannot be read as missing during bulk selection", async () => {
+    const { fake, attachBinding } = api({
+      auth: (id) =>
+        id === "server_linear"
+          ? Promise.reject(new Error("network down"))
+          : Promise.resolve(authentication([authClient("remote_session")])),
+      clients: [client("client_one")],
+      candidates: [session({})],
+      bindings: [],
+    });
+    await expect(
+      attachOwnerConnections(
+        fake,
+        "agent_new",
+        [
+          server,
+          {
+            ...server,
+            id: "server_other",
+            name: "GitHub",
+            issuerId: "issuer_two",
+          },
+        ],
+        undefined,
+        true,
+      ),
+    ).resolves.toEqual(["Linear"]);
     expect(attachBinding).toHaveBeenCalledTimes(1);
+    expect(attachBinding.mock.calls[0]?.[0]).toMatchObject({
+      attachBindingRequestBody: { userSessionIssuerId: "issuer_two" },
+    });
   });
 });

@@ -110,30 +110,37 @@ export interface ConnectionApi {
 }
 
 /**
- * The servers that may ask each person to sign in. One whose auth cannot be
- * read stays in, so attaching behaves as it did before auth clients existed.
+ * Sorts servers with an issuer by whether they may ask each person to sign
+ * in. One whose auth cannot be read gets nothing attached, as the wizard
+ * keeps its row locked: an unrelated sign-in is never attached on a guess.
  */
 async function personalServers(
   api: ConnectionApi,
   servers: InventoryServer[],
   signal?: AbortSignal,
-): Promise<InventoryServer[]> {
-  const personal = await Promise.all(
+): Promise<{ personal: InventoryServer[]; unreadable: InventoryServer[] }> {
+  const reads = await Promise.all(
     servers.map(async (server) => {
-      if (!server.issuerId) return false;
+      if (!server.issuerId) return "shared" as const;
       try {
         const auth = await api.authClients.getMcpServerAuthentication(
           { mcpServerId: server.id },
           undefined,
           { signal },
         );
-        return offersPersonalSignIn(auth);
-      } catch {
-        return true;
+        return offersPersonalSignIn(auth)
+          ? ("personal" as const)
+          : ("shared" as const);
+      } catch (failure) {
+        if (signal?.aborted) throw failure;
+        return "unreadable" as const;
       }
     }),
   );
-  return servers.filter((_, index) => personal[index]);
+  return {
+    personal: servers.filter((_, index) => reads[index] === "personal"),
+    unreadable: servers.filter((_, index) => reads[index] === "unreadable"),
+  };
 }
 
 /**
@@ -148,15 +155,20 @@ export async function attachOwnerConnections(
   signal?: AbortSignal,
   skipMissing = false,
 ): Promise<string[]> {
+  const { personal, unreadable } = await personalServers(api, servers, signal);
+  if (unreadable[0] && !skipMissing)
+    throw new Error(
+      `Could not check how ${unreadable[0].name} signs in. Try again.`,
+    );
   const issuers = [
     ...new Map(
-      (await personalServers(api, servers, signal)).map((server) => [
+      personal.map((server) => [
         `${server.projectId}:${server.issuerId}`,
         server,
       ]),
     ).values(),
   ];
-  const missing = new Set<string>();
+  const missing = new Set(unreadable.map((server) => server.name));
   for (const server of issuers) {
     const gramProject = server.projectSlug;
     const userSessionIssuerId = server.issuerId!;

@@ -69,10 +69,13 @@ export function useOwnerConnections(
       throwOnError: false,
     })),
   });
-  /** Whether a server's own auth clients settle that it needs no person. */
+  /**
+   * Whether a server's own auth clients settle that it needs no person. A
+   * failed re-read does not count, even with an earlier answer cached.
+   */
   const shared = (server: InventoryServer): boolean => {
     const read = auth[personal.indexOf(server)];
-    return !!read?.data && !offersPersonalSignIn(read.data);
+    return !!read?.data && !read.isError && !offersPersonalSignIn(read.data);
   };
   const sessions = useQueries({
     queries: projects.map((gramProject) => ({
@@ -181,7 +184,8 @@ export function useOwnerConnections(
     for (const server of personal) {
       // Shared needs no assignment, and until the server's auth is read its
       // checking or error state stands.
-      if (shared(server) || !auth[personal.indexOf(server)]?.data) continue;
+      const authRead = auth[personal.indexOf(server)];
+      if (shared(server) || !authRead?.data || authRead.isError) continue;
       const index = issuers.findIndex(
         (issuer) =>
           issuer.gramProject === server.projectSlug &&

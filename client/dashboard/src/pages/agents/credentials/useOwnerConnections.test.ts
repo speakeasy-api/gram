@@ -103,6 +103,21 @@ it("keeps a server locked while its auth is read or when the read fails", () => 
   );
 });
 
+it("does not trust a cached shared answer once its re-read fails", () => {
+  mocks.clients = [otherServersSignIn];
+  mocks.auth.set(server.id, {
+    data: { status: "configured", clients: [mocks.sharedClient] },
+    isError: true,
+  });
+  const { result } = renderHook(() =>
+    useOwnerConnections([server], true, "agent_example"),
+  );
+  expect(result.current.byServer.get(server.id)).toEqual({ status: "error" });
+  expect(result.current.assignedByServer?.get(server.id)).toEqual({
+    status: "error",
+  });
+});
+
 it("shows a shared server as needing no assignment when editing", () => {
   mocks.clients = [otherServersSignIn];
   mocks.auth.set(server.id, {
