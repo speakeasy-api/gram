@@ -140,7 +140,7 @@ export function PrivateNetworkSetupSheet({
             onClientSecretChange={setClientSecret}
           />
           <div className="space-y-2">
-            <Label>Private hostname</Label>
+            <Text variant="subheading">Private hostname</Text>
             <Text small>
               <code>speakeasy.&lt;your tailnet&gt;.ts.net</code>
             </Text>

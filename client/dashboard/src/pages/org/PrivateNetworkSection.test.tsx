@@ -270,6 +270,8 @@ describe("PrivateNetworkSection", () => {
     expect(
       screen.getByText(/"svc:speakeasy": \["tag:speakeasy"\]/),
     ).toBeTruthy();
+    expect(screen.getByText(/"dst": \["svc:speakeasy"\]/)).toBeTruthy();
+    expect(screen.getByText(/run Tailscale 1\.86 or later/)).toBeTruthy();
   });
 
   it("closes a setup draft when an unsupported provider arrives", () => {
