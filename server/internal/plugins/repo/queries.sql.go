@@ -223,21 +223,23 @@ func (q *Queries) CreateDefaultPlugin(ctx context.Context, arg CreateDefaultPlug
 
 const createPlugin = `-- name: CreatePlugin :one
 
-INSERT INTO plugins (organization_id, project_id, name, slug, description)
-VALUES ($1, $2, $3, $4, $5)
+INSERT INTO plugins (organization_id, project_id, name, slug, description, auto_sync_enabled)
+VALUES ($1, $2, $3, $4, $5, $6)
 RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type CreatePluginParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	Name           string
-	Slug           string
-	Description    pgtype.Text
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	Name            string
+	Slug            string
+	Description     pgtype.Text
+	AutoSyncEnabled pgtype.Bool
 }
 
 // Queries for managing plugins (project-scoped distributable MCP server bundles).
 // plugins is project-scoped; every query is scoped to project_id (and organization_id where needed).
+// A NULL auto_sync_enabled means the plugin's changes publish automatically.
 func (q *Queries) CreatePlugin(ctx context.Context, arg CreatePluginParams) (Plugin, error) {
 	row := q.db.QueryRow(ctx, createPlugin,
 		arg.OrganizationID,
@@ -245,6 +247,7 @@ func (q *Queries) CreatePlugin(ctx context.Context, arg CreatePluginParams) (Plu
 		arg.Name,
 		arg.Slug,
 		arg.Description,
+		arg.AutoSyncEnabled,
 	)
 	var i Plugin
 	err := row.Scan(
@@ -772,6 +775,44 @@ type GetPluginParams struct {
 
 func (q *Queries) GetPlugin(ctx context.Context, arg GetPluginParams) (Plugin, error) {
 	row := q.db.QueryRow(ctx, getPlugin, arg.ID, arg.OrganizationID, arg.ProjectID)
+	var i Plugin
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsDefault,
+		&i.AutoCreated,
+		&i.AutoSyncEnabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getPluginForUpdate = `-- name: GetPluginForUpdate :one
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
+FROM plugins
+WHERE id = $1
+  AND organization_id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type GetPluginForUpdateParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// GetPlugin that also locks the row for the rest of the transaction.
+func (q *Queries) GetPluginForUpdate(ctx context.Context, arg GetPluginForUpdateParams) (Plugin, error) {
+	row := q.db.QueryRow(ctx, getPluginForUpdate, arg.ID, arg.OrganizationID, arg.ProjectID)
 	var i Plugin
 	err := row.Scan(
 		&i.ID,
@@ -1404,6 +1445,38 @@ func (q *Queries) ListAgentPluginCompatibilityIssuesForProject(ctx context.Conte
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAutoSyncPausedPluginSlugs = `-- name: ListAutoSyncPausedPluginSlugs :many
+SELECT slug
+FROM plugins
+WHERE project_id = $1
+  AND deleted IS FALSE
+  AND auto_sync_enabled IS FALSE
+ORDER BY slug ASC
+`
+
+// Slugs of the project's plugins whose auto sync is off. An automatic publish
+// keeps each of them as it was last published; only a manual sync publishes
+// their pending changes.
+func (q *Queries) ListAutoSyncPausedPluginSlugs(ctx context.Context, projectID uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, listAutoSyncPausedPluginSlugs, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var slug string
+		if err := rows.Scan(&slug); err != nil {
+			return nil, err
+		}
+		items = append(items, slug)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -2763,6 +2836,28 @@ func (q *Queries) LockPlatformCleanupMemberships(ctx context.Context, arg LockPl
 	return items, nil
 }
 
+const lockPluginPackageContent = `-- name: LockPluginPackageContent :exec
+SELECT pg_advisory_xact_lock(hashtextextended('plugin-package-content:' || $1::text, 0))
+`
+
+// Waits out every in-flight package-affecting change in the project and holds
+// off new ones until the transaction ends.
+func (q *Queries) LockPluginPackageContent(ctx context.Context, projectID string) error {
+	_, err := q.db.Exec(ctx, lockPluginPackageContent, projectID)
+	return err
+}
+
+const lockPluginPackageContentShared = `-- name: LockPluginPackageContentShared :exec
+SELECT pg_advisory_xact_lock_shared(hashtextextended('plugin-package-content:' || $1::text, 0))
+`
+
+// Taken by every change that requests a publication of the project's plugin
+// packages; shared, so those changes only ever wait on LockPluginPackageContent.
+func (q *Queries) LockPluginPackageContentShared(ctx context.Context, projectID string) error {
+	_, err := q.db.Exec(ctx, lockPluginPackageContentShared, projectID)
+	return err
+}
+
 const lockRoleDeliveryPlugin = `-- name: LockRoleDeliveryPlugin :one
 SELECT id FROM plugins
 WHERE id = $1 AND organization_id = $2 AND project_id = $3 AND deleted IS FALSE
@@ -3435,28 +3530,32 @@ UPDATE plugins
 SET name = $1,
     slug = $2,
     description = $3,
+    auto_sync_enabled = COALESCE($4::boolean, auto_sync_enabled),
     updated_at = clock_timestamp()
-WHERE id = $4
-  AND organization_id = $5
-  AND project_id = $6
+WHERE id = $5
+  AND organization_id = $6
+  AND project_id = $7
   AND deleted IS FALSE
 RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdatePluginParams struct {
-	Name           string
-	Slug           string
-	Description    pgtype.Text
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.UUID
+	Name            string
+	Slug            string
+	Description     pgtype.Text
+	AutoSyncEnabled pgtype.Bool
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
 }
 
+// A NULL auto_sync_enabled argument keeps the plugin's current setting.
 func (q *Queries) UpdatePlugin(ctx context.Context, arg UpdatePluginParams) (Plugin, error) {
 	row := q.db.QueryRow(ctx, updatePlugin,
 		arg.Name,
 		arg.Slug,
 		arg.Description,
+		arg.AutoSyncEnabled,
 		arg.ID,
 		arg.OrganizationID,
 		arg.ProjectID,

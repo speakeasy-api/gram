@@ -79,11 +79,10 @@ func lockSource(ctx context.Context, tx pgx.Tx, organizationID, kind string, sou
 //     servers sit on more than one source with credential headers carries
 //     none of them.
 //
-// Newly linked servers whose need for upstream authentication is undecided
-// are marked as needing it. Grants, credential choices, administrator clients
-// and administrator links are left alone. A decision whose evidence changed
-// during the sync is an error, so the caller's write is rolled back rather
-// than left with records that do not match its configuration.
+// Grants, credential choices, administrator clients and administrator links
+// are left alone. A decision whose evidence changed during the sync is an
+// error, so the caller's write is rolled back rather than left with records
+// that do not match its configuration.
 //
 // This takes the source row lock, which every writer of a source takes before
 // touching its headers or its servers. A caller that locks one of the source's
@@ -160,13 +159,6 @@ func syncSource(ctx context.Context, tx pgx.Tx, organizationID, kind string, sou
 	}
 
 	if err := retireSourceClients(ctx, q, organizationID, kind, sourceID, want); err != nil {
-		return err
-	}
-
-	// Before the copies below, so this writer takes mcp_servers rows ahead of
-	// mcp_auth_client_headers rows, the order an association write takes them
-	// in. Neither step reads what the other writes.
-	if err := markLinkedServers(ctx, q, organizationID, want); err != nil {
 		return err
 	}
 
@@ -360,30 +352,6 @@ func retireSourceClients(ctx context.Context, q *Queries, organizationID, kind s
 		if _, err := q.RetireBackfillLink(ctx, RetireBackfillLinkParams{ID: link.ID, OrganizationID: organizationID}); err != nil {
 			return fmt.Errorf("retire server link %s: %w", link.ID, err)
 		}
-	}
-	return nil
-}
-
-// markLinkedServers records that the servers this sync linked a client to need
-// upstream authentication, where that is still undecided. It never overwrites
-// a decision.
-func markLinkedServers(ctx context.Context, q *Queries, organizationID string, want *expected) error {
-	linked := make([]uuid.UUID, 0, len(want.links))
-	for key := range want.links {
-		linked = append(linked, key.serverID)
-	}
-	if len(linked) == 0 {
-		return nil
-	}
-	undecided, err := q.ListUndecidedUpstreamAuthServers(ctx, ListUndecidedUpstreamAuthServersParams{OrganizationID: organizationID, McpServerIds: linked})
-	if err != nil {
-		return fmt.Errorf("list servers with undecided upstream auth: %w", err)
-	}
-	if len(undecided) == 0 {
-		return nil
-	}
-	if _, err := q.MarkServersRequiringUpstreamAuth(ctx, MarkServersRequiringUpstreamAuthParams{OrganizationID: organizationID, McpServerIds: undecided}); err != nil {
-		return fmt.Errorf("mark servers requiring upstream auth: %w", err)
 	}
 	return nil
 }

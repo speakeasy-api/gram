@@ -316,26 +316,25 @@ export function StepServers({
                       !allServers &&
                       (server.kind === "Remote" ||
                         server.kind === "Tunneled") && (
-                        <div className="w-full px-4 pb-3 pl-12">
-                          <KeyCredentialChoice
-                            serverId={server.id}
-                            serverName={server.name}
-                            value={
-                              selected.find(
-                                (entry) => entry.server.id === server.id,
-                              )?.authClientId
-                            }
-                            onChange={(authClientId) =>
-                              onChange(
-                                selected.map((entry) =>
-                                  entry.server.id === server.id
-                                    ? { ...entry, authClientId }
-                                    : entry,
-                                ),
-                              )
-                            }
-                          />
-                        </div>
+                        <KeyCredentialChoice
+                          className="w-full px-4 pb-3 pl-12"
+                          serverId={server.id}
+                          serverName={server.name}
+                          value={
+                            selected.find(
+                              (entry) => entry.server.id === server.id,
+                            )?.authClientId
+                          }
+                          onChange={(authClientId) =>
+                            onChange(
+                              selected.map((entry) =>
+                                entry.server.id === server.id
+                                  ? { ...entry, authClientId }
+                                  : entry,
+                              ),
+                            )
+                          }
+                        />
                       )}
                   </li>
                 );

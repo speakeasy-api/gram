@@ -121,8 +121,9 @@ type authClientResolution struct {
 	// headers are the client's own headers, loaded only when it serves.
 	headers []proxy.ConfiguredHeader
 
-	// noAuthAllowed is a server explicitly marked as needing no upstream
-	// authentication.
+	// noAuthAllowed is a server that needs no upstream authentication: it
+	// offers no enabled auth client and has no upstream credentials an auth
+	// client does not record yet.
 	noAuthAllowed bool
 
 	// attachedSession is the exact remote session an attached agent's
@@ -245,7 +246,7 @@ func decideAuthClient(row upstreamclientsrepo.GetAuthClientSelectionRow) authCli
 	res := gapResolution("")
 	res.serverName = row.ServerName.String
 	res.tunneled = row.Tunneled
-	res.noAuthAllowed = row.RequiresUpstreamAuth.Valid && !row.RequiresUpstreamAuth.Bool
+	res.noAuthAllowed = !row.RequiresUpstreamAuth && !row.UpstreamAuthPending
 	if row.Ambiguous {
 		res.reason = authClientReasonAmbiguous
 		return res
@@ -269,12 +270,14 @@ func decideAuthClient(row upstreamclientsrepo.GetAuthClientSelectionRow) authCli
 				// choice stays usable where nothing falls back to the old path.
 				res.reason = authClientReasonNoAuthDeclared
 			}
-		case row.RequiresUpstreamAuth.Valid && row.RequiresUpstreamAuth.Bool:
+		case row.RequiresUpstreamAuth:
 			res.reason = authClientReasonNoAuthForbidden
-		case !row.RequiresUpstreamAuth.Valid && row.ServerHasClients:
-			res.reason = authClientReasonNoAuthStale
 		case row.CredentialHeadersUncovered:
 			res.reason = authClientReasonSetup
+		case row.UpstreamAuthPending:
+			// The server has upstream credentials no auth client records
+			// yet, so no-auth is not known to be what it needs.
+			res.reason = authClientReasonNoAuthStale
 		default:
 			res.outcome = authClientNoAuth
 		}

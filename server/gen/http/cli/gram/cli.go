@@ -613,11 +613,12 @@ func ParseEndpoint(
 		agentsRenameBodyFlag         = agentsRenameFlags.String("body", "REQUIRED", "")
 		agentsRenameSessionTokenFlag = agentsRenameFlags.String("session-token", "", "")
 
-		agentsListDelegableGrantsFlags            = flag.NewFlagSet("list-delegable-grants", flag.ExitOnError)
-		agentsListDelegableGrantsAgentIDFlag      = agentsListDelegableGrantsFlags.String("agent-id", "REQUIRED", "")
-		agentsListDelegableGrantsToolsetIDFlag    = agentsListDelegableGrantsFlags.String("toolset-id", "", "")
-		agentsListDelegableGrantsToolsetIdsFlag   = agentsListDelegableGrantsFlags.String("toolset-ids", "", "")
-		agentsListDelegableGrantsSessionTokenFlag = agentsListDelegableGrantsFlags.String("session-token", "", "")
+		agentsListDelegableGrantsFlags               = flag.NewFlagSet("list-delegable-grants", flag.ExitOnError)
+		agentsListDelegableGrantsAgentIDFlag         = agentsListDelegableGrantsFlags.String("agent-id", "REQUIRED", "")
+		agentsListDelegableGrantsToolsetIDFlag       = agentsListDelegableGrantsFlags.String("toolset-id", "", "")
+		agentsListDelegableGrantsToolsetIdsFlag      = agentsListDelegableGrantsFlags.String("toolset-ids", "", "")
+		agentsListDelegableGrantsCarryExclusionsFlag = agentsListDelegableGrantsFlags.String("carry-exclusions", "", "")
+		agentsListDelegableGrantsSessionTokenFlag    = agentsListDelegableGrantsFlags.String("session-token", "", "")
 
 		agentsListPolicyGrantsFlags            = flag.NewFlagSet("list-policy-grants", flag.ExitOnError)
 		agentsListPolicyGrantsAgentIDFlag      = agentsListPolicyGrantsFlags.String("agent-id", "REQUIRED", "")
@@ -10368,7 +10369,7 @@ func ParseEndpoint(
 				data, err = agentsc.BuildRenamePayload(*agentsRenameBodyFlag, *agentsRenameSessionTokenFlag)
 			case "list-delegable-grants":
 				endpoint = c.ListDelegableGrants()
-				data, err = agentsc.BuildListDelegableGrantsPayload(*agentsListDelegableGrantsAgentIDFlag, *agentsListDelegableGrantsToolsetIDFlag, *agentsListDelegableGrantsToolsetIdsFlag, *agentsListDelegableGrantsSessionTokenFlag)
+				data, err = agentsc.BuildListDelegableGrantsPayload(*agentsListDelegableGrantsAgentIDFlag, *agentsListDelegableGrantsToolsetIDFlag, *agentsListDelegableGrantsToolsetIdsFlag, *agentsListDelegableGrantsCarryExclusionsFlag, *agentsListDelegableGrantsSessionTokenFlag)
 			case "list-policy-grants":
 				endpoint = c.ListPolicyGrants()
 				data, err = agentsc.BuildListPolicyGrantsPayload(*agentsListPolicyGrantsAgentIDFlag, *agentsListPolicyGrantsSessionTokenFlag)
@@ -15000,7 +15001,7 @@ func agentsUsage() {
 	fmt.Fprintln(os.Stderr, `    create: Create implements create.`)
 	fmt.Fprintln(os.Stderr, `    get: Get implements get.`)
 	fmt.Fprintln(os.Stderr, `    rename: Rename implements rename.`)
-	fmt.Fprintln(os.Stderr, `    list-delegable-grants: List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted. Issuance revalidates every grant.`)
+	fmt.Fprintln(os.Stderr, `    list-delegable-grants: List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted unless carry_exclusions is set. Issuance revalidates every grant.`)
 	fmt.Fprintln(os.Stderr, `    list-policy-grants: ListPolicyGrants implements listPolicyGrants.`)
 	fmt.Fprintln(os.Stderr, `    check-policy-grants: Check whether policy grants could be written without writing them: to agent_id, or to a new agent the caller would create for owner_user_id (the caller by default). Uses the authorization and containment rule of agents.create and agents.createPolicyGrant, which still check every write.`)
 	fmt.Fprintln(os.Stderr, `    create-policy-grant: CreatePolicyGrant implements createPolicyGrant.`)
@@ -15163,22 +15164,24 @@ func agentsListDelegableGrantsUsage() {
 	fmt.Fprint(os.Stderr, " -agent-id STRING")
 	fmt.Fprint(os.Stderr, " -toolset-id STRING")
 	fmt.Fprint(os.Stderr, " -toolset-ids JSON")
+	fmt.Fprint(os.Stderr, " -carry-exclusions BOOL")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted. Issuance revalidates every grant.`)
+	fmt.Fprintln(os.Stderr, `List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted unless carry_exclusions is set. Issuance revalidates every grant.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -agent-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -toolset-id STRING: `)
 	fmt.Fprintln(os.Stderr, `    -toolset-ids JSON: `)
+	fmt.Fprintln(os.Stderr, `    -carry-exclusions BOOL: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents list-delegable-grants --agent-id \"550e8400-e29b-41d4-a716-446655440000\" --toolset-id \"550e8400-e29b-41d4-a716-446655440000\" --toolset-ids '[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agents list-delegable-grants --agent-id \"550e8400-e29b-41d4-a716-446655440000\" --toolset-id \"550e8400-e29b-41d4-a716-446655440000\" --toolset-ids '[\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\",\n      \"550e8400-e29b-41d4-a716-446655440000\"\n   ]' --carry-exclusions false --session-token \"abc123\"")
 }
 
 func agentsListPolicyGrantsUsage() {
@@ -16866,7 +16869,9 @@ func authClientsUsage() {
 	fmt.Fprintln(os.Stderr, `    set-issuance-profile: Create or replace the issuance profile of one headless caller signing in through a sign-in: an OAuth client, or a workload issuer and subject. Each choice names a credential the server offers, or none for a server that needs no upstream authentication. A workload subject represents no person, so its profile names shared credentials only. Choices take effect on sessions issued afterwards; existing sessions keep theirs. Choosing a credential grants nothing: each issuance checks the caller may use it. Takes effect only where typed auth client resolution is enforced. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    delete-issuance-profile: Delete an issuance profile. Sessions already issued keep their choices; later sessions decide theirs without it. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr, `    get-mcp-server-authentication: Get how an MCP server authenticates to its upstream: whether authentication is required and which auth clients it offers. Requires org:read.`)
-	fmt.Fprintln(os.Stderr, `    set-mcp-server-upstream-auth-requirement: Declare whether an MCP server's upstream needs authentication. Where typed auth client resolution is enforced, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; elsewhere, including in shadow mode, the server's existing upstream configuration keeps serving. Not available for hosted toolsets. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    set-mcp-server-upstream-auth-requirement: Return how an MCP server authenticates to its upstream. The requested requirement is ignored: whether the upstream needs authentication follows from the enabled auth clients the server offers. Not available for hosted toolsets. Requires org:admin.
+	
+	Deprecated: read getMcpServerAuthentication, and attach, detach, enable or disable auth clients instead.`)
 	fmt.Fprintln(os.Stderr, `    get-auth-client-audience: List who may use an auth client: the rules naming it and the broader rules that reach it. Requires org:read.`)
 	fmt.Fprintln(os.Stderr, `    set-auth-client-audience: Replace the rules naming an auth client. Use grants mcp:auth on the client and Blocked writes mcp:blocked_auth; both apply on every server that offers the client. Server access is unchanged and still needs mcp:connect. Administering a client gives nobody permission to use it. Requires org:admin.`)
 	fmt.Fprintln(os.Stderr)
@@ -17153,7 +17158,9 @@ func authClientsSetMcpServerUpstreamAuthRequirementUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Declare whether an MCP server's upstream needs authentication. Where typed auth client resolution is enforced, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; elsewhere, including in shadow mode, the server's existing upstream configuration keeps serving. Not available for hosted toolsets. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `Return how an MCP server authenticates to its upstream. The requested requirement is ignored: whether the upstream needs authentication follows from the enabled auth clients the server offers. Not available for hosted toolsets. Requires org:admin.
+	
+	Deprecated: read getMcpServerAuthentication, and attach, detach, enable or disable auth clients instead.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -24398,7 +24405,7 @@ func pluginsCreatePluginUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins create-plugin --body '{\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins create-plugin --body '{\n      \"auto_sync_enabled\": false,\n      \"description\": \"abc123\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func pluginsUpdatePluginUsage() {
@@ -24420,7 +24427,7 @@ func pluginsUpdatePluginUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins update-plugin --body '{\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "plugins update-plugin --body '{\n      \"auto_sync_enabled\": false,\n      \"description\": \"abc123\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"abc123\",\n      \"slug\": \"abc123\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func pluginsDeletePluginUsage() {

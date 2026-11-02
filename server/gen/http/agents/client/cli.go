@@ -335,7 +335,7 @@ func BuildRenamePayload(agentsRenameBody string, agentsRenameSessionToken string
 
 // BuildListDelegableGrantsPayload builds the payload for the agents
 // listDelegableGrants endpoint from CLI flags.
-func BuildListDelegableGrantsPayload(agentsListDelegableGrantsAgentID string, agentsListDelegableGrantsToolsetID string, agentsListDelegableGrantsToolsetIds string, agentsListDelegableGrantsSessionToken string) (*agents.ListDelegableGrantsPayload, error) {
+func BuildListDelegableGrantsPayload(agentsListDelegableGrantsAgentID string, agentsListDelegableGrantsToolsetID string, agentsListDelegableGrantsToolsetIds string, agentsListDelegableGrantsCarryExclusions string, agentsListDelegableGrantsSessionToken string) (*agents.ListDelegableGrantsPayload, error) {
 	var err error
 	var agentID string
 	{
@@ -373,6 +373,15 @@ func BuildListDelegableGrantsPayload(agentsListDelegableGrantsAgentID string, ag
 			}
 		}
 	}
+	var carryExclusions bool
+	{
+		if agentsListDelegableGrantsCarryExclusions != "" {
+			carryExclusions, err = strconv.ParseBool(agentsListDelegableGrantsCarryExclusions)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for carryExclusions, must be BOOL")
+			}
+		}
+	}
 	var sessionToken *string
 	{
 		if agentsListDelegableGrantsSessionToken != "" {
@@ -383,6 +392,7 @@ func BuildListDelegableGrantsPayload(agentsListDelegableGrantsAgentID string, ag
 	v.AgentID = agentID
 	v.ToolsetID = toolsetID
 	v.ToolsetIds = toolsetIds
+	v.CarryExclusions = carryExclusions
 	v.SessionToken = sessionToken
 
 	return v, nil

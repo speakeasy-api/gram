@@ -26014,7 +26014,7 @@ func unmarshalAdminMcpServerHealthUpstreamAuthResponseBodyToAdminAdminMcpServerH
 	}
 	res := &admin.AdminMcpServerHealthUpstreamAuth{
 		Status:               *v.Status,
-		RequiresUpstreamAuth: v.RequiresUpstreamAuth,
+		RequiresUpstreamAuth: *v.RequiresUpstreamAuth,
 	}
 	res.AuthClients = make([]*admin.AdminMcpServerHealthAuthClient, len(v.AuthClients))
 	for i, val := range v.AuthClients {
