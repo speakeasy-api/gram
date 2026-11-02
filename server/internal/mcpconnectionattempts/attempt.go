@@ -71,7 +71,9 @@ func AppOf(clientID string) App {
 		return AppDCR
 	}
 	host := NormalizeProviderHost(clientID)
-	if host == "" {
+	switch (App{host}) {
+	case App{""}, AppDCR, AppFirstParty, AppUnverified, AppWorkload, AppCodeMode, AppRecoveryLink:
+		// A host spelled like a kind must not count as that kind.
 		return AppUnverified
 	}
 	return App{host}
@@ -92,12 +94,12 @@ type Scope struct {
 
 // ServerScope is an attempt on a project's MCP server.
 func ServerScope(organizationID string, projectID, serverID uuid.UUID, app App) Scope {
-	return Scope{organizationID, projectID, serverKindMCP, serverID, app.key}
+	return projectScope(organizationID, projectID, serverKindMCP, serverID, app)
 }
 
 // GatewayScope is an attempt on a project's gateway.
 func GatewayScope(organizationID string, projectID, gatewayID uuid.UUID, app App) Scope {
-	return Scope{organizationID, projectID, serverKindMeta, gatewayID, app.key}
+	return projectScope(organizationID, projectID, serverKindMeta, gatewayID, app)
 }
 
 // OrganizationGatewayScope is an attempt on an organization gateway, which
@@ -108,7 +110,7 @@ func OrganizationGatewayScope(organizationID string, gatewayID uuid.UUID, app Ap
 
 // ToolsetScope is an attempt on a toolset endpoint with no server row.
 func ToolsetScope(organizationID string, projectID, toolsetID uuid.UUID, app App) Scope {
-	return Scope{organizationID, projectID, serverKindToolset, toolsetID, app.key}
+	return projectScope(organizationID, projectID, serverKindToolset, toolsetID, app)
 }
 
 // ProviderSessionScope is an attempt that reaches a provider and no server,
@@ -121,6 +123,14 @@ func ProviderSessionScope(organizationID string, projectID uuid.UUID, app App) S
 // provider and no server or project, such as renewing a company sign-in.
 func IdentityProviderScope(organizationID string, app App) Scope {
 	return Scope{organizationID, uuid.Nil, serverKindIdentityProvider, uuid.Nil, app.key}
+}
+
+// projectScope refuses a nil project, so a row can't lose its project by mistake.
+func projectScope(organizationID string, projectID uuid.UUID, kind string, serverID uuid.UUID, app App) Scope {
+	if projectID == uuid.Nil {
+		return Scope{organizationID: "", projectID: uuid.Nil, serverKind: "", serverID: uuid.Nil, appKey: ""}
+	}
+	return Scope{organizationID, projectID, kind, serverID, app.key}
 }
 
 func (s Scope) valid() bool {

@@ -1499,7 +1499,7 @@ func (a AuthnChallengeState) connectionAttempt(endpoint *ResolvedMcpEndpoint) mc
 // to this endpoint.
 func connectionScope(endpoint *ResolvedMcpEndpoint, app mcpconnectionattempts.App) mcpconnectionattempts.Scope {
 	switch {
-	case endpoint.IsOrganizationGateway():
+	case endpoint.IsOrganizationGateway() && endpoint.ProjectID == uuid.Nil:
 		return mcpconnectionattempts.OrganizationGatewayScope(endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, app)
 	case endpoint.MetaMcpServerID.Valid:
 		return mcpconnectionattempts.GatewayScope(endpoint.OrganizationID, endpoint.ProjectID, endpoint.MetaMcpServerID.UUID, app)

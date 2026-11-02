@@ -144,6 +144,9 @@ func define(name string, outcome Outcome, who WhoFixes, what, todo string) Code 
 }
 
 func defineResult(name string, result Result, outcome Outcome, who WhoFixes, what, todo string) Code {
+	if _, duplicate := catalog[name]; duplicate {
+		panic("duplicate connection attempt code: " + name)
+	}
 	catalog[name] = Meaning{Outcome: outcome, WhoFixes: who, WhatHappened: what, WhatToDo: todo, result: result}
 	return Code{name}
 }

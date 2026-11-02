@@ -216,6 +216,29 @@ func TestConsentConnect_OrganizationGatewayMemberIsRecorded(t *testing.T) {
 	require.Equal(t, uuid.Nil, row.ProjectID)
 }
 
+// A project gateway shares the organization gateway's route, and keeps its project.
+func TestConnectionAttempt_GatewayRoutesStampTheRightProject(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	gateway := seedOrganizationGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	state := mcp.AuthnChallengeState{FlowID: uuid.NewString(), CreatedAt: time.Now()}
+	projectFor := func(slug string) uuid.UUID {
+		t.Helper()
+		endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, testenv.NewLogger(t), slug, "mcp/gateway")
+		require.NoError(t, err)
+		row, err := mcpconnectionattempts.RowAt(state.ConnectionAttempt(endpoint), mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted, false, time.Now())
+		require.NoError(t, err)
+		require.Equal(t, endpoint.MetaMcpServerID.UUID.String(), row.ServerID)
+		return row.ProjectID
+	}
+
+	require.Equal(t, uuid.Nil, projectFor(gateway.organizationSlug))
+	require.Equal(t, *authCtx.ProjectID, projectFor(gateway.organizationSlug+"/projects/"+gateway.projectSlug))
+}
+
 // A dashboard connect and its return to consent stay on one attempt, however
 // many times the person clicks Connect.
 func TestConsentConnect_KeepsOneAttemptAcrossTheConsentReturn(t *testing.T) {
