@@ -4,7 +4,6 @@ package memoryeval_test
 
 import (
 	"context"
-	"fmt"
 	"os"
 	"strconv"
 	"testing"
@@ -102,18 +101,23 @@ func TestMemoryEvalJudged(t *testing.T) { //nolint:paralleltest // one long run 
 	}
 }
 
-// boundArm makes an arm's tool calls run with its own context, which carries
-// that arm's grants and principal, while still stopping when the eval's
-// context is cancelled.
+// boundArm makes an arm's tool calls see its own context values (that arm's
+// grants and principal) while keeping the eval's deadline and cancellation.
 func boundArm(bound context.Context, a arm) arm {
 	if a.call != nil {
 		call := a.call
 		a.call = func(ctx context.Context, tool, arguments string) (string, error) {
-			if err := ctx.Err(); err != nil {
-				return "", fmt.Errorf("eval cancelled: %w", err)
-			}
-			return call(bound, tool, arguments)
+			return call(valuesFrom{Context: ctx, values: bound}, tool, arguments)
 		}
 	}
 	return a
 }
+
+// valuesFrom takes deadline and cancellation from the embedded context and
+// values from another one.
+type valuesFrom struct {
+	context.Context //nolint:containedctx // merges two contexts for one call
+	values          context.Context
+}
+
+func (c valuesFrom) Value(key any) any { return c.values.Value(key) }
