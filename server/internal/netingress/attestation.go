@@ -38,6 +38,7 @@ type TokenReviewer interface {
 
 type AttestorIngressLookup interface {
 	ByAttestor(context.Context, string, string) (Ingress, error)
+	ByDNSName(context.Context, string) (Ingress, error)
 	Recheck(context.Context, Ingress) error
 }
 
@@ -54,6 +55,12 @@ type AttestationVerifier struct {
 	audience string
 	maxTTL   time.Duration
 	now      func() time.Time
+
+	// gatewayNamespace and gatewayServiceAccount identify the shared tailnet
+	// gateway. Its requests resolve the ingress from the Host header instead of
+	// from a per-ingress attestor identity. Empty disables the gateway path.
+	gatewayNamespace      string
+	gatewayServiceAccount string
 
 	mu             sync.Mutex
 	cache          map[[32]byte]cacheEntry
@@ -76,22 +83,42 @@ func NewAttestationVerifier(reviewer TokenReviewer, lookup AttestorIngressLookup
 		metrics = telemetry[0]
 	}
 	return &AttestationVerifier{
-		reviewer:       reviewer,
-		lookup:         lookup,
-		audience:       audience,
-		maxTTL:         maxTTL,
-		now:            time.Now,
-		mu:             sync.Mutex{},
-		cache:          make(map[[32]byte]cacheEntry),
-		sourceLimiters: make(map[string]*rate.Limiter),
-		globalLimiter:  rate.NewLimiter(globalReviewRate, globalReviewBurst),
-		rechecks:       singleflight.Group{},
-		recheckJoined:  nil,
-		telemetry:      metrics,
+		reviewer:              reviewer,
+		lookup:                lookup,
+		audience:              audience,
+		maxTTL:                maxTTL,
+		now:                   time.Now,
+		gatewayNamespace:      "",
+		gatewayServiceAccount: "",
+		mu:                    sync.Mutex{},
+		cache:                 make(map[[32]byte]cacheEntry),
+		sourceLimiters:        make(map[string]*rate.Limiter),
+		globalLimiter:         rate.NewLimiter(globalReviewRate, globalReviewBurst),
+		rechecks:              singleflight.Group{},
+		recheckJoined:         nil,
+		telemetry:             metrics,
 	}
 }
 
-func (v *AttestationVerifier) Verify(ctx context.Context, token, source string) (ingress Ingress, err error) {
+// UseGatewayPrincipal accepts the tailnet gateway's service account as an
+// attestor for any gateway-hosted ingress, resolved by request host.
+func (v *AttestationVerifier) UseGatewayPrincipal(namespace, serviceAccount string) error {
+	if namespace == "" || serviceAccount == "" {
+		return errors.New("tailnet gateway principal requires a namespace and service account")
+	}
+	v.gatewayNamespace = namespace
+	v.gatewayServiceAccount = serviceAccount
+	return nil
+}
+
+func (v *AttestationVerifier) isGatewayPrincipal(namespace, serviceAccount string) bool {
+	return v.gatewayNamespace != "" && namespace == v.gatewayNamespace && serviceAccount == v.gatewayServiceAccount
+}
+
+// Verify authenticates an attestation token for a request to host. Per-ingress
+// attestors are resolved from their service account; the shared tailnet
+// gateway is resolved from host, so cache entries are keyed by both.
+func (v *AttestationVerifier) Verify(ctx context.Context, token, source, host string) (ingress Ingress, err error) {
 	started := time.Now()
 	result, reason, provider := ResultError, ReasonDependencyFailed, ""
 	defer func() {
@@ -112,7 +139,7 @@ func (v *AttestationVerifier) Verify(ctx context.Context, token, source string) 
 		return Ingress{}, fmt.Errorf("%w: invalid bearer token", ErrAttestationRejected)
 	}
 
-	hash := sha256.Sum256([]byte(token))
+	hash := sha256.Sum256([]byte(token + "\x00" + host))
 	now := v.now()
 	if cached, ok := v.cached(hash, now); ok {
 		if cached.rejected {
@@ -169,7 +196,11 @@ func (v *AttestationVerifier) Verify(ctx context.Context, token, source string) 
 		return Ingress{}, fmt.Errorf("%w: token expiry is invalid", ErrAttestationRejected)
 	}
 
-	ingress, err = v.lookup.ByAttestor(ctx, namespace, serviceAccount)
+	if v.isGatewayPrincipal(namespace, serviceAccount) {
+		ingress, err = v.lookup.ByDNSName(ctx, host)
+	} else {
+		ingress, err = v.lookup.ByAttestor(ctx, namespace, serviceAccount)
+	}
 	if errors.Is(err, ErrIngressUnavailable) {
 		reason = ReasonAuthorityRejected
 		v.storeRejected(hash, now)

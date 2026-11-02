@@ -52,6 +52,64 @@ func (q *Queries) GetActiveIngressByAttestor(ctx context.Context, arg GetActiveI
 	return i, err
 }
 
+const getActiveIngressesByDNSName = `-- name: GetActiveIngressesByDNSName :many
+SELECT
+    id,
+    organization_id,
+    provider,
+    dns_name,
+    identity_required,
+    attestor_namespace,
+    attestor_service_account
+FROM network_ingresses
+WHERE dns_name = $1::text
+  AND runtime = 'gateway'
+  AND enabled IS TRUE
+  AND deleted IS FALSE
+LIMIT 2
+`
+
+type GetActiveIngressesByDNSNameRow struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	Provider               string
+	DnsName                pgtype.Text
+	IdentityRequired       bool
+	AttestorNamespace      string
+	AttestorServiceAccount string
+}
+
+// Resolves the ingress a tailnet gateway pod is proxying for from the request
+// Host. Only gateway-runtime ingresses are eligible; callers fail closed
+// unless exactly one row matches.
+func (q *Queries) GetActiveIngressesByDNSName(ctx context.Context, dnsName string) ([]GetActiveIngressesByDNSNameRow, error) {
+	rows, err := q.db.Query(ctx, getActiveIngressesByDNSName, dnsName)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []GetActiveIngressesByDNSNameRow
+	for rows.Next() {
+		var i GetActiveIngressesByDNSNameRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.Provider,
+			&i.DnsName,
+			&i.IdentityRequired,
+			&i.AttestorNamespace,
+			&i.AttestorServiceAccount,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getIngressServingState = `-- name: GetIngressServingState :one
 SELECT
     organization_id,
