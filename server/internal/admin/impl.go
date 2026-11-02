@@ -104,6 +104,9 @@ type Service struct {
 	openRouterUsage      OpenRouterUsageReader
 	productFeatures      *productfeatures.Client
 	chatAnalysisSignaler analysis.Signaler
+	// memoryEvalStarter starts team memory eval runs. Nil leaves
+	// startMemoryEvalRun unavailable.
+	memoryEvalStarter MemoryEvalRunStarter
 
 	audit *audit.Logger
 
@@ -272,6 +275,7 @@ func NewService(
 		openRouterUsage:      openRouter,
 		productFeatures:      productFeatures,
 		chatAnalysisSignaler: chatAnalysisSignaler,
+		memoryEvalStarter:    nil,
 		audit:                audit.NewLogger(),
 		loginStates: cache.NewTypedObjectCache[LoginState](
 			logger.With(attr.SlogCacheNamespace("admin_login_state")),

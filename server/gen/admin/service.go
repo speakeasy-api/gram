@@ -335,6 +335,16 @@ type Service interface {
 	// Edit, enable or disable a signup offer. Existing accepted promotion
 	// applications are unchanged.
 	UpdateSignupOffer(context.Context, *UpdateSignupOfferPayload) (res *AdminSignupOffer, err error)
+	// Default team memory eval config, the models a run may pick from, and the
+	// daily run budget.
+	GetMemoryEvalOptions(context.Context, *GetMemoryEvalOptionsPayload) (res *AdminMemoryEvalOptions, err error)
+	// Team memory eval runs, newest first, without their reports.
+	ListMemoryEvalRuns(context.Context, *ListMemoryEvalRunsPayload) (res *ListMemoryEvalRunsResult, err error)
+	// One team memory eval run with its report.
+	GetMemoryEvalRun(context.Context, *GetMemoryEvalRunPayload) (res *AdminMemoryEvalRun, err error)
+	// Queue a team memory eval run against the demo organization's synthetic
+	// corpus. Spends model credits; one run at a time and a daily limit.
+	StartMemoryEvalRun(context.Context, *StartMemoryEvalRunPayload) (res *AdminMemoryEvalRun, err error)
 	// Returns live Stripe subscription details for confirmation before recording
 	// the subscription on a PAYG organization that has a customer and no
 	// subscription.
@@ -400,7 +410,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [104]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listExternalMcpMigrationCandidates", "previewExternalMcpMigration", "migrateExternalMcpServers", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants"}
+var MethodNames = [108]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listExternalMcpMigrationCandidates", "previewExternalMcpMigration", "migrateExternalMcpServers", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getMemoryEvalOptions", "listMemoryEvalRuns", "getMemoryEvalRun", "startMemoryEvalRun", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants"}
 
 // AdminBackfillMCPAuthGrantsResult is the result type of the admin service
 // backfillMcpAuthGrants method.
@@ -1051,6 +1061,54 @@ type AdminMcpServerToolCalls struct {
 type AdminMdmVendorOption struct {
 	Slug string
 	Name string
+}
+
+// AdminMemoryEvalOptions is the result type of the admin service
+// getMemoryEvalOptions method.
+type AdminMemoryEvalOptions struct {
+	Defaults *AdminMemoryEvalRunConfig
+	// Models a run may use.
+	AllowedModels []string
+	// Runs allowed per rolling 24 hours, across all staff.
+	DailyRunLimit int
+	// Runs started in the last 24 hours.
+	RunsToday int
+}
+
+// AdminMemoryEvalRun is the result type of the admin service getMemoryEvalRun
+// method.
+type AdminMemoryEvalRun struct {
+	// Run ID.
+	ID string
+	// Where the run is.
+	Status string
+	Config *AdminMemoryEvalRunConfig
+	// Model spend the run reported across preparation, answers and grading.
+	CostUsd *float64
+	// Why a failed run stopped.
+	Error *string
+	// Email of the staff member who started the run.
+	RequestedBy string
+	// The scored report as JSON: scores per answer model and arm, preparation
+	// spend, judge spend. Set on get only, once the run succeeded.
+	ReportJSON *string
+	StartedAt  *string
+	FinishedAt *string
+	CreatedAt  string
+}
+
+// The models and repeats one team memory eval run compares.
+type AdminMemoryEvalRunConfig struct {
+	// Models that answer the eval questions; each is scored in every arm.
+	AnswerModels []string
+	// Model that grades answers. Pick a different family from the answer models.
+	JudgeModel string
+	// Model that writes the masked chat summaries team memory reads.
+	SummaryModel string
+	// Model that writes day, week and month digests.
+	DigestModel string
+	// Repeats per answer model and arm.
+	Runs int
 }
 
 type AdminMeterUsageBucket struct {
@@ -2368,6 +2426,20 @@ type GetMcpServerToolCallsPayload struct {
 	WindowDays int
 }
 
+// GetMemoryEvalOptionsPayload is the payload type of the admin service
+// getMemoryEvalOptions method.
+type GetMemoryEvalOptionsPayload struct {
+	AdminSessionToken *string
+}
+
+// GetMemoryEvalRunPayload is the payload type of the admin service
+// getMemoryEvalRun method.
+type GetMemoryEvalRunPayload struct {
+	AdminSessionToken *string
+	// Run ID.
+	ID string
+}
+
 // GetMeterUsagePayload is the payload type of the admin service getMeterUsage
 // method.
 type GetMeterUsagePayload struct {
@@ -2672,6 +2744,24 @@ type ListGlobalRemoteSessionIssuersResult struct {
 type ListIssuerConvergenceCandidatesResult struct {
 	Items []*IssuerConvergenceCandidate
 	// Cursor for the next page; empty when exhausted.
+	NextCursor *string
+}
+
+// ListMemoryEvalRunsPayload is the payload type of the admin service
+// listMemoryEvalRuns method.
+type ListMemoryEvalRunsPayload struct {
+	AdminSessionToken *string
+	// ID of the last run on the previous page.
+	Cursor *string
+	// Runs per page.
+	Limit int
+}
+
+// ListMemoryEvalRunsResult is the result type of the admin service
+// listMemoryEvalRuns method.
+type ListMemoryEvalRunsResult struct {
+	Runs []*AdminMemoryEvalRun
+	// Pass as cursor for the next page; absent on the last page.
 	NextCursor *string
 }
 
@@ -3226,6 +3316,13 @@ type SpendProduct struct {
 	CostUsd string
 	// Dense UTC daily product buckets, including in-progress and future days
 	Buckets []*SpendBucket
+}
+
+// StartMemoryEvalRunPayload is the payload type of the admin service
+// startMemoryEvalRun method.
+type StartMemoryEvalRunPayload struct {
+	AdminSessionToken *string
+	Config            *AdminMemoryEvalRunConfig
 }
 
 // StartTrialPayload is the payload type of the admin service startTrial method.

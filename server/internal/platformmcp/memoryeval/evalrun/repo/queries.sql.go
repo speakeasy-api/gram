@@ -33,6 +33,20 @@ func (q *Queries) CompleteRun(ctx context.Context, arg CompleteRunParams) (int64
 	return result.RowsAffected(), nil
 }
 
+const countActiveRuns = `-- name: CountActiveRuns :one
+SELECT count(*) FROM memory_eval_runs
+WHERE deleted IS FALSE AND status IN ('queued', 'running')
+`
+
+// Runs that may still write team memory. Two at once would overwrite each
+// other's summaries and digests in the shared eval projects.
+func (q *Queries) CountActiveRuns(ctx context.Context) (int64, error) {
+	row := q.db.QueryRow(ctx, countActiveRuns)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const countRunsSince = `-- name: CountRunsSince :one
 SELECT count(*) FROM memory_eval_runs
 WHERE deleted IS FALSE AND created_at >= $1
@@ -178,6 +192,17 @@ func (q *Queries) ListRuns(ctx context.Context, arg ListRunsParams) ([]MemoryEva
 		return nil, err
 	}
 	return items, nil
+}
+
+const lockRunStarts = `-- name: LockRunStarts :exec
+SELECT pg_advisory_xact_lock(hashtext('memory_eval_runs.start'))
+`
+
+// Serializes run starts for the transaction, so the daily cap and the
+// one-active-run rule hold under concurrent starts.
+func (q *Queries) LockRunStarts(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockRunStarts)
+	return err
 }
 
 const markRunRunning = `-- name: MarkRunRunning :one
