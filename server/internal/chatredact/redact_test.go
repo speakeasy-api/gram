@@ -132,3 +132,26 @@ func TestTextMasksURLPasswordsWithoutUsername(t *testing.T) {
 	require.True(t, changed)
 	require.Equal(t, "cache at redis://:[REDACTED]@cache.internal:6379/0", safe)
 }
+
+func TestTextMasksBareProviderKeys(t *testing.T) {
+	t.Parallel()
+	r := chatredact.NewWithScanner(wordScanner{word: "\x00"})
+	for _, key := range []string{
+		"sk-test-" + strings.Repeat("a", 24),
+		"sk-test-4f9Kq2LmZ8xR1vB7nT3cW6yH",
+		"sk-proj-4f9Kq2LmZ8xR1vB7nT3cW6yH0pQs9dEe",
+		"sk-ant-api03-4f9Kq2LmZ8xR1vB7nT3cW6yH0pQs9dEe_x-Y",
+	} {
+		safe, changed, err := r.Text(t.Context(), "Use "+key+" for the eval run.")
+		require.NoError(t, err, key)
+		require.True(t, changed, key)
+		require.Equal(t, "Use [REDACTED] for the eval run.", safe, key)
+	}
+
+	// Hyphenated words that merely start with sk- are not keys.
+	input := "We use sk-learn-style-pipelines-for-everything here."
+	safe, changed, err := r.Text(t.Context(), input)
+	require.NoError(t, err)
+	require.False(t, changed)
+	require.Equal(t, input, safe)
+}

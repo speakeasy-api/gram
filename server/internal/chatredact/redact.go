@@ -123,8 +123,35 @@ func decodeJSON(text string) (any, bool) {
 // secret scanner does not flag these, so they are masked before the scan.
 var urlCredentials = regexp.MustCompile(`(?i)\b([a-z][a-z0-9+.\-]*://[^\s:/@?#]*:)[^\s@/?#]+@`)
 
+// providerKey matches sk- style model provider keys (OpenAI, Anthropic and
+// compatible gateways), including sk-proj-, sk-ant- and sk-test- forms. The
+// secret scanner only flags them next to a label or a provider marker, so a
+// bare key in prose would get through. The body must hold a digit or a
+// 16-character run without separators, so long hyphenated words starting with
+// sk- survive.
+var providerKey = regexp.MustCompile(`\bsk-[A-Za-z0-9_\-]{20,}`)
+
+func maskProviderKeys(text string) string {
+	return providerKey.ReplaceAllStringFunc(text, func(match string) string {
+		body := match[3:]
+		if strings.ContainsAny(body, "0123456789") {
+			return redactedMarker
+		}
+		for _, segment := range strings.FieldsFunc(body, func(r rune) bool { return r == '-' || r == '_' }) {
+			if len(segment) >= 16 {
+				return redactedMarker
+			}
+		}
+		return match
+	})
+}
+
 func (r *Redactor) redactPlainText(ctx context.Context, text string, changed *bool) (string, error) {
 	if masked := urlCredentials.ReplaceAllString(text, "${1}[REDACTED]@"); masked != text {
+		*changed = true
+		text = masked
+	}
+	if masked := maskProviderKeys(text); masked != text {
 		*changed = true
 		text = masked
 	}
