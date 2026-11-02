@@ -253,26 +253,29 @@ describe("PrivateNetworkSection", () => {
     },
   );
 
-  it("explains that the private hostname is shared across the organization", () => {
+  it("explains that the private hostname is fixed and shared across the organization", () => {
     render(<PrivateNetworkSection />);
     fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
 
-    expect(
-      screen.getByRole("textbox", { name: "Organization private hostname" }),
-    ).toBeTruthy();
+    expect(screen.queryByRole("textbox", { name: /hostname/i })).toBeNull();
+    expect(screen.getByText("speakeasy.<your tailnet>.ts.net")).toBeTruthy();
     expect(
       screen.getByText(
         /MCP servers opt in separately and keep their own endpoint paths/,
       ),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/"tag:speakeasy": \["autogroup:admin"\]/),
+    ).toBeTruthy();
+    expect(
+      screen.getByText(/"svc:speakeasy": \["tag:speakeasy"\]/),
     ).toBeTruthy();
   });
 
   it("closes a setup draft when an unsupported provider arrives", () => {
     const { rerender } = render(<PrivateNetworkSection />);
     fireEvent.click(screen.getByRole("button", { name: "Connect Tailscale" }));
-    expect(
-      screen.getByRole("textbox", { name: "Organization private hostname" }),
-    ).toBeTruthy();
+    expect(screen.getByText("speakeasy.<your tailnet>.ts.net")).toBeTruthy();
     state.ingress = {
       id: "ingress-1",
       organizationId: "org-1",
@@ -287,9 +290,7 @@ describe("PrivateNetworkSection", () => {
       updatedAt: new Date(0),
     };
     rerender(<PrivateNetworkSection />);
-    expect(
-      screen.queryByRole("textbox", { name: "Organization private hostname" }),
-    ).toBeNull();
+    expect(screen.queryByText("speakeasy.<your tailnet>.ts.net")).toBeNull();
   });
 
   it.each([
