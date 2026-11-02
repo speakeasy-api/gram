@@ -43,6 +43,7 @@ const mocks = vi.hoisted(() => ({
   nameCheckFails: false,
   sessions: vi.fn(),
   sessionClients: vi.fn(),
+  serverAuth: vi.fn(),
   bindings: vi.fn(),
   attach: vi.fn(),
   detach: vi.fn(),
@@ -111,7 +112,11 @@ vi.mock("@/contexts/Sdk", () => ({
       checkPolicyGrants: mocks.checkPolicyGrants,
     },
     keys: { create: mocks.createKey, list: mocks.listKeys },
-    authClients: { listMcpServerChoices: async () => ({ choices: [] }) },
+    authClients: {
+      listMcpServerChoices: async () => ({ choices: [] }),
+      // How each server signs in upstream, read from its own auth clients.
+      getMcpServerAuthentication: mocks.serverAuth,
+    },
     // A person's own connections, read once per project before the agent
     // exists and as the agent's candidates once it does.
     remoteSessions: {
@@ -388,6 +393,12 @@ beforeEach(() => {
   mocks.toolsets.mockResolvedValue({ toolsets: [] });
   mocks.sessions.mockResolvedValue([]);
   mocks.sessionClients.mockResolvedValue([]);
+  mocks.serverAuth.mockResolvedValue({
+    status: "configured",
+    clients: [
+      { id: "auth_personal", clientType: "remote_session", enabled: true },
+    ],
+  });
   mocks.bindings.mockResolvedValue([]);
   mocks.attach.mockResolvedValue({});
   mocks.createAgent.mockResolvedValue({ id: "agent_new", name: "Release Bot" });
@@ -2965,6 +2976,57 @@ describe("Servers that sign in as a person", () => {
       open.mockRestore();
     },
   );
+
+  it("treats a server whose own auth is a shared credential as shared, whatever its issuer lists", async () => {
+    // The issuer is shared across the organization: its personal sign-in
+    // belongs to another server, not this one.
+    mocks.serverAuth.mockResolvedValue({
+      status: "configured",
+      clients: [
+        { id: "auth_token", clientType: "static_credential", enabled: true },
+      ],
+    });
+    await reachServers();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "MCP sign-in" });
+    expect(
+      await screen.findByRole("button", { name: /Linear.*Shared credential/ }),
+    ).toBeTruthy();
+    expect(screen.queryByText("Requires connection")).toBeNull();
+    // The summary does not claim an assigned connection for it either.
+    expect(
+      screen.queryByText("all tools, using an assigned connection"),
+    ).toBeNull();
+    await continueFromAuthentication();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create agent" }),
+    );
+    await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+    expect(mocks.serverAuth).toHaveBeenCalledWith(
+      { mcpServerId: "server_linear" },
+      undefined,
+      expect.anything(),
+    );
+    expect(mocks.attach).not.toHaveBeenCalled();
+  });
+
+  it("keeps Continue locked when a server's auth cannot be read", async () => {
+    mocks.sessions.mockResolvedValue([mine]);
+    mocks.serverAuth.mockRejectedValue(new Error("network down"));
+    await reachServers();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "MCP sign-in" });
+    expect(
+      await screen.findByRole("button", {
+        name: /Linear.*Could not check connection/,
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
+    ).toBe(true);
+  });
 
   it("removes a selected server from authentication without backtracking", async () => {
     await reachServers();
