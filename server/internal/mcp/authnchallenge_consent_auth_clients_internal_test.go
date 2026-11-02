@@ -186,3 +186,22 @@ func TestPersonalReadinessOfIdentityProviderClients(t *testing.T) {
 	require.Equal(t, consentClientReconnect, state)
 	require.Equal(t, registration.String(), connect)
 }
+
+// An outage leaves the connection in place, so the picker doesn't ask to connect first.
+func TestPersonalReadinessOfAConnectionInAnOutage(t *testing.T) {
+	t.Parallel()
+
+	registration := uuid.New()
+	card := remoteSessionCard{ClientID: registration.String(), Connected: true, Unavailable: true}
+	state, connect := personalReadiness(authClientTypeRemoteSession, validUUID(registration), []remoteSessionCard{card})
+	require.Equal(t, consentClientReady, state)
+	require.Empty(t, connect)
+}
+
+func TestCardPanelHidesLiveDetailsDuringAnOutage(t *testing.T) {
+	t.Parallel()
+
+	panel := remoteSessionCard{Connected: true, Unavailable: true, TokenActive: true}.Panel()
+	require.False(t, panel.GrantLive)
+	require.False(t, panel.ShowToken)
+}

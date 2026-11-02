@@ -878,6 +878,7 @@
         <div class="flex flex-col gap-4 px-6 py-6 sm:px-8" data-gateway-focus-footer>
           <p class="text-sm text-muted-foreground">
             {{if .Gateway.Focus.NotSetUp}}{{.Gateway.Focus.Name}} signs people in through a service that isn't set up on this gateway yet, so it can't be connected here. Ask an administrator to set up sign-in for it.
+            {{else if .Gateway.Focus.ConnectionUnavailable}}{{.Gateway.Focus.Name}} can't be reached right now. Try again shortly.
             {{else if .Gateway.Focus.NeedsSignIn}}Connecting is all {{.Gateway.Focus.Name}} needs. As soon as a service above is connected, it works through this gateway, with nothing else to approve.
             {{if .FirstParty}}Go back to your AI client and try again. You can close this tab.{{else}}Go back to all servers to finish giving {{.ClientName}} access.{{end}}{{else}}{{.Gateway.Focus.Name}} needs no sign-in, so it works through this gateway with nothing to connect.{{end}}
           </p>
@@ -1036,12 +1037,12 @@
           {{if .NeedsAttention}}Reconnect{{else}}Connect{{end}}
         </button>
       </form>
-      {{else if .NeedsSignIn}}
+      {{else if or .NeedsSignIn .ConnectionUnavailable}}
       <a
         href="{{.ConsentPath}}?state={{.State}}&server={{.Slug}}"
         class="text-muted-foreground interact:text-foreground shrink-0 text-xs"
         data-gateway-server-page
-        >{{if .Ready}}Manage{{else}}Connect{{end}} &rsaquo;</a
+        >{{if or .Ready .ConnectionUnavailable}}Manage{{else}}Connect{{end}} &rsaquo;</a
       >
       {{else if .NotSetUp}}
       <a

@@ -33,6 +33,14 @@ func TestConnectionRouteFailure(t *testing.T) {
 	}
 }
 
+func TestConnectionRouteFailureSelfCredentialOffersNoConnect(t *testing.T) {
+	t.Parallel()
+
+	got, instructions := connectionRouteFailure(metaMemberClientCredentialError(metaMember{slug: "m"}, remotesessions.ErrClientCredentialUnavailable))
+	require.Equal(t, "unreachable", got)
+	require.NotContains(t, instructions, "tools.connect")
+}
+
 func TestCodeVerificationLimiterFailureIsNotAThrottle(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()

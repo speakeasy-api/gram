@@ -240,6 +240,8 @@ func TestServeConsent_TunnelOutageOffersNoReconnect(t *testing.T) {
 		require.NotContains(t, strings.ToLower(page), "tunnel is", "the provider behind it may be what failed")
 		require.NotContains(t, strings.ToLower(page), "your tunnel")
 	}
+	_, listPage, _ := render(t, list)
+	require.Contains(t, listPage, "data-gateway-server-page", "Refresh stays one page away")
 }
 
 // A tunnel with no live route reads as down from the route table, with no record and no POST.

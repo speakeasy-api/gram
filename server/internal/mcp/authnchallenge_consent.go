@@ -396,7 +396,7 @@ type cardPanel struct {
 
 // Panel decides the detail lines from the card's state.
 func (c remoteSessionCard) Panel() cardPanel {
-	reconnect := c.Rejected || c.Inactive || c.Expired || c.Unroutable || c.IdentityReconnect || c.AttachmentReconnect
+	reconnect := c.Unavailable || c.Rejected || c.Inactive || c.Expired || c.Unroutable || c.IdentityReconnect || c.AttachmentReconnect
 	hasGrant := c.Connected || c.Expired || c.Unroutable
 	p := cardPanel{
 		GrantLive:            c.Connected && !reconnect,

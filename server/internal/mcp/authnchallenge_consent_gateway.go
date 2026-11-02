@@ -83,6 +83,9 @@ type gatewayServer struct {
 	// connectionOutage marks a service of this server a provider outage stopped, which reconnecting may repair.
 	connectionOutage bool
 
+	// connectionDown marks a service of this server any recorded outage stopped.
+	connectionDown bool
+
 	// Auth is the server's upstream credential choice, where typed auth
 	// client resolution is enforced.
 	Auth *consentServerAuth
@@ -129,6 +132,11 @@ func (g gatewayServer) NeedsAttention() bool {
 	return g.Status == gatewayServerReconnect || g.Status == gatewayServerNotSetUp || g.reconnectsOutage()
 }
 
+// ConnectionUnavailable reports a server a recorded outage stopped; its page keeps Refresh in reach.
+func (g gatewayServer) ConnectionUnavailable() bool {
+	return g.Status == gatewayServerUnavailable && g.connectionDown
+}
+
 // reconnectsOutage reports an unavailable server whose connection a person can try replacing.
 func (g gatewayServer) reconnectsOutage() bool {
 	return g.Status == gatewayServerUnavailable && g.connectionOutage
@@ -137,7 +145,7 @@ func (g gatewayServer) reconnectsOutage() bool {
 // NeedsSignIn reports whether the server signs in through a service the
 // person can connect.
 func (g gatewayServer) NeedsSignIn() bool {
-	return len(g.cardIDs) > 0 && (g.reconnectsOutage() || g.Status == gatewayServerNotConnected || g.Status == gatewayServerReconnect || g.Status == gatewayServerConnected || g.Status == gatewayServerChained || g.Status == gatewayServerChainPending)
+	return len(g.cardIDs) > 0 && (g.Status == gatewayServerNotConnected || g.Status == gatewayServerReconnect || g.Status == gatewayServerConnected || g.Status == gatewayServerChained || g.Status == gatewayServerChainPending)
 }
 
 // NotSetUp reports whether no service the person can connect signs in to
@@ -305,12 +313,13 @@ func (s *Service) gatewayConsent(
 func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewayConsentView {
 	view := &gatewayConsentView{Servers: make([]gatewayServer, 0, len(members)), ReadyCount: 0, ListOpen: false, Focus: nil, FocusUnavailable: false, CanHide: false, members: members, cards: cards, auth: nil}
 	for _, member := range members {
-		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", ServerID: member.serverID.String(), Hidden: false, cardIDs: nil, connectionOutage: false, Auth: nil}
+		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", ServerID: member.serverID.String(), Hidden: false, cardIDs: nil, connectionOutage: false, connectionDown: false, Auth: nil}
 		for _, card := range cards {
 			if cardServesMember(card, member) {
 				server.cardIDs = append(server.cardIDs, card.ClientID)
 				server.Status = strongerStatus(server.Status, cardStatus(card))
 				server.connectionOutage = server.connectionOutage || (card.Unavailable && !card.UnavailableTunnel)
+				server.connectionDown = server.connectionDown || card.Unavailable
 			}
 		}
 		if memberNeedsSignIn(member) && len(server.cardIDs) == 0 {

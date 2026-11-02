@@ -869,6 +869,8 @@ func (c *memberChoices) tokens(ctx context.Context, member metaMember) (map[uuid
 		err = &metaMemberError{message: fmt.Sprintf("server %q needs this gateway to be signed in to again to choose its connection", member.slug)}
 	case errors.Is(err, remotesessions.ErrNoValidToken):
 		err = &metaMemberError{message: fmt.Sprintf("server %q's attached connection is no longer available; it must be attached again", member.slug)}
+	case oops.IsInfrastructureFailure(err):
+		err = memberUnavailableError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug)}, session: nil}
 	case err != nil:
 		err = &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug)}
 	}

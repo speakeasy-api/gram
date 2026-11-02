@@ -7,6 +7,7 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -316,6 +317,25 @@ func TestRouteUpstreamToken_LiveMatchOutranksOutage(t *testing.T) {
 
 	_, err = routeUpstreamToken(t.Context(), testenv.NewLogger(t), map[uuid.UUID]remotesessions.UpstreamToken{uuid.New(): outage}, upstream, false, none)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+}
+
+func TestMemberTokens_StoreOutageReadsAsUnavailable(t *testing.T) {
+	t.Parallel()
+
+	gate := func(err error) metaGateContext {
+		return metaGateContext{projectTokens: &projectTokenCache{resolve: func(context.Context, uuid.UUID) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+			return nil, err
+		}, byProject: map[uuid.UUID]map[uuid.UUID]remotesessions.UpstreamToken{}}}
+	}
+	outageGate, brokenGate := gate(&pgconn.PgError{Code: "57P01"}), gate(&pgconn.PgError{Code: "42P01"})
+
+	_, err := outageGate.memberTokens(t.Context(), metaMember{slug: "m"})
+	_, unavailable := errors.AsType[memberUnavailableError](err)
+	require.True(t, unavailable, "error: %v", err)
+
+	_, err = brokenGate.memberTokens(t.Context(), metaMember{slug: "m"})
+	_, unavailable = errors.AsType[memberUnavailableError](err)
+	require.False(t, unavailable, "a broken query is not an outage: %v", err)
 }
 
 func TestChainMetaMember_ChainingServesAnOutage(t *testing.T) {

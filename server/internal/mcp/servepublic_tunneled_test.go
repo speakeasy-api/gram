@@ -494,6 +494,10 @@ func TestServePublic_Tunneled_OfflineTunnelIsRetryable(t *testing.T) {
 	require.Equal(t, "1", w.Header().Get(constants.HeaderProxiedResponse), "the customer's tunnel being down doesn't alert on-call")
 	require.NotContains(t, oopsErr.Error(), "tunnel", "public message must not expose tunnel internals")
 	require.Contains(t, oopsErr.Error(), "Retry shortly")
+
+	answered := httptest.NewRecorder()
+	oops.MCPErrHandle(testenv.NewLogger(t), ti.service.ServePublic).ServeHTTP(answered, newTunneledPublicRequest(fixture.endpointSlug, http.MethodPost, makeInitializeBody(), ""))
+	require.Equal(t, http.StatusServiceUnavailable, answered.Code, answered.Body.String())
 	require.Zero(t, gateway.forwardCount(), "an offline tunnel has nothing to forward to")
 }
 
@@ -877,9 +881,9 @@ func TestServePublic_Tunneled_StoredRateLimitsOverrideDefaults(t *testing.T) {
 	require.Equal(t, oops.CodeRateLimitExceeded, oopsErr.Code)
 }
 
-// The authenticated path answers a down tunnel the same way, and the session
-// stays good.
-func TestServePublic_Tunneled_AuthenticatedOfflineTunnelIsRetryable(t *testing.T) {
+// The authenticated path answers a down tunnel the same way, and a session
+// started before the outage keeps working once the tunnel is back.
+func TestServePublic_Tunneled_AuthenticatedOfflineTunnelKeepsTheSession(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -891,16 +895,30 @@ func TestServePublic_Tunneled_AuthenticatedOfflineTunnelIsRetryable(t *testing.T
 		TunneledMcpServerID: fixture.server.TunneledMcpServerID, Visibility: mcpservers.VisibilityPrivate,
 	})
 	require.NoError(t, err)
-	require.NoError(t, ti.tunnelRoutes.Delete(ctx, fixture.tunnelID.String()))
 	subject := createTestUser(t, ctx, ti, "offline-tunnel-user-"+uuid.NewString())
 	bearer := mintMetaIssuerBearer(t, ti, fixture.endpointSlug, fixture.issuerID, subject)
 
-	w, err := servePublicHTTP(t, ctx, ti, fixture.endpointSlug, makeInitializeBody(), bearer, nil)
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeUnavailable, oopsErr.Code, err)
-	require.NotEmpty(t, w.Header().Get("Retry-After"))
-	require.Equal(t, "1", w.Header().Get(constants.HeaderProxiedResponse))
+	post := func(body []byte, sessionID string) *httptest.ResponseRecorder {
+		req := newTunneledPublicRequest(fixture.endpointSlug, http.MethodPost, body, sessionID)
+		req.Header.Set("Authorization", "Bearer "+bearer)
+		w := httptest.NewRecorder()
+		oops.MCPErrHandle(testenv.NewLogger(t), ti.service.ServePublic).ServeHTTP(w, req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, chi.RouteContext(req.Context()))))
+		return w
+	}
+	initialized := post(makeInitializeBody(), "")
+	require.Equal(t, http.StatusOK, initialized.Code, initialized.Body.String())
+	sessionID := initialized.Header().Get("Mcp-Session-Id")
+	require.NotEmpty(t, sessionID)
+
+	require.NoError(t, ti.tunnelRoutes.Delete(ctx, fixture.tunnelID.String()))
+	down := post(makeToolsListBody(), sessionID)
+	require.Equal(t, http.StatusServiceUnavailable, down.Code, down.Body.String())
+	require.NotEmpty(t, down.Header().Get("Retry-After"))
+	require.Equal(t, "1", down.Header().Get(constants.HeaderProxiedResponse))
+
+	require.NoError(t, ti.tunnelRoutes.Publish(ctx, fixture.tunnelID.String(), fixture.gatewayServer.URL, time.Hour))
+	up := post(makeToolsListBody(), sessionID)
+	require.Equal(t, http.StatusOK, up.Code, up.Body.String())
 }
 
 func TestTunnelOutageRetryAfter(t *testing.T) {

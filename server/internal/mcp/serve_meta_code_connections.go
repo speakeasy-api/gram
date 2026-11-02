@@ -173,6 +173,9 @@ func connectionRouteFailure(err error) (authentication, instructions string) {
 		if remotesessions.OutageKindOf(outage.session) == remotesessions.RefreshOutageTunnel {
 			return "unreachable", "This server can't be reached right now. Try again later. If it keeps happening, ask your administrator to check that it's running."
 		}
+		if outage.session == nil {
+			return "unreachable", "This server can't be reached right now. Try again later. If it keeps happening, ask your administrator."
+		}
 		return "unreachable", "This server's provider isn't responding. Retry shortly. If it keeps happening, call tools.connect(server=...) to reconnect."
 	}
 	_, needsSignIn := errors.AsType[memberCredentialError](err)

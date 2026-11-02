@@ -191,7 +191,7 @@ var (
 	ErrTunnelNoRoute       = errTunnelNoRoute
 )
 
-// SetDB swaps the database this service reads, to take it down.
+// SetDB swaps only the pool the service reads endpoints through, to fail that first read.
 func (s *Service) SetDB(db *pgxpool.Pool) {
 	s.db = db
 }
