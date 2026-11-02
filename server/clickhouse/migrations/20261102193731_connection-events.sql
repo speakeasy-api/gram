@@ -2,11 +2,11 @@
 CREATE TABLE `gram`.`mcp_connection_attempt_summaries` (
   `organization_id` String COMMENT 'Organization the attempt belongs to. Readers always filter on it.
 @access: confidential',
-  `project_id` UUID COMMENT 'Project the attempt belongs to, nil for organization gateways. Must be the same on every step of an attempt. Readers always filter on organization_id.
+  `project_id` UUID COMMENT 'Project the attempt belongs to, nil when it belongs to none, such as an organization gateway or an identity provider renewal. Must be the same on every step of an attempt. Readers always filter on organization_id.
 @access: confidential',
-  `server_kind` LowCardinality(String) COMMENT 'Kind of server the attempt reached, such as mcp or meta.
+  `server_kind` LowCardinality(String) COMMENT 'Kind of server the attempt reached, such as mcp or meta, or provider_session or identity_provider when it reached no server.
 @access: confidential',
-  `server_id` String COMMENT 'ID of the MCP server or gateway the attempt reached.
+  `server_id` String COMMENT 'ID of the MCP server or gateway the attempt reached, empty when it reached none.
 @access: confidential',
   `bucket` DateTime('UTC') COMMENT 'UTC 30-minute bucket containing the start of the attempt, not the time of the step.
 @access: confidential',
@@ -26,7 +26,7 @@ CREATE TABLE `gram`.`mcp_connection_attempt_summaries` (
 @access: confidential',
   `provider_host` String COMMENT 'Normalized issuer host of the provider. A tenant host can name the customer.
 @access: restricted',
-  `app_key` String COMMENT 'Client metadata URL of the app, or the client kind for dynamically registered apps. A URL can name the customer.
+  `app_key` String COMMENT 'Host of the client metadata URL of the app, or the client kind for apps without one. A host can name the customer.
 @access: restricted',
   `step_events` SimpleAggregateFunction(sum, UInt64) COMMENT 'Step rows observed. An attempt can count more than once, so this is not a number of attempts.
 @access: confidential',
@@ -48,7 +48,7 @@ PRIMARY KEY (`organization_id`, `project_id`, `server_kind`, `server_id`, `bucke
 CREATE TABLE `gram`.`mcp_connection_events` (
   `organization_id` String COMMENT 'Organization the attempt belongs to. Readers always filter on it.
 @access: confidential' CODEC(ZSTD(1)),
-  `project_id` UUID COMMENT 'Project the attempt belongs to, nil for organization gateways. Must be the same on every step of an attempt. Readers always filter on organization_id.
+  `project_id` UUID COMMENT 'Project the attempt belongs to, nil when it belongs to none, such as an organization gateway or an identity provider renewal. Must be the same on every step of an attempt. Readers always filter on organization_id.
 @access: confidential',
   `attempt_id` UUID COMMENT 'Shared by every step of one connection attempt.
 @access: confidential',
@@ -56,9 +56,9 @@ CREATE TABLE `gram`.`mcp_connection_events` (
 @access: confidential' CODEC(DoubleDelta, ZSTD(1)),
   `event_time` DateTime64(9, 'UTC') COMMENT 'Time this step ended.
 @access: confidential' CODEC(DoubleDelta, ZSTD(1)),
-  `server_kind` LowCardinality(String) COMMENT 'Kind of server the attempt reached, such as mcp or meta.
+  `server_kind` LowCardinality(String) COMMENT 'Kind of server the attempt reached, such as mcp or meta, or provider_session or identity_provider when it reached no server.
 @access: confidential',
-  `server_id` String COMMENT 'ID of the MCP server or gateway the attempt reached. Must be the same on every step of an attempt.
+  `server_id` String COMMENT 'ID of the MCP server or gateway the attempt reached, empty when it reached none. Must be the same on every step of an attempt.
 @access: confidential' CODEC(ZSTD(1)),
   `member_id` String COMMENT 'Gateway member MCP server ID for member-level steps, empty otherwise.
 @access: confidential' CODEC(ZSTD(1)),
@@ -100,7 +100,7 @@ CREATE TABLE `gram`.`mcp_connection_events` (
 @access: confidential' CODEC(ZSTD(1)),
   `provider_host` String COMMENT 'Normalized issuer host of the provider, shared across orgs. A tenant host can name the customer.
 @access: restricted',
-  `app_key` String COMMENT 'Client metadata URL of the app, or the client kind for dynamically registered apps. A URL can name the customer.
+  `app_key` String COMMENT 'Host of the client metadata URL of the app, or the client kind for apps without one. A host can name the customer.
 @access: restricted',
   INDEX `idx_mcp_connection_events_attempt_id` ((attempt_id)) TYPE bloom_filter(0.01),
   INDEX `idx_mcp_connection_events_subject_urn` ((subject_urn)) TYPE bloom_filter(0.01)
@@ -145,6 +145,6 @@ CREATE TABLE `gram`.`mcp_connection_outcomes_daily_staging` (
   `attempts` UInt64 COMMENT 'Attempts counted.
 @access: confidential'
 ) ENGINE = MergeTree
-PRIMARY KEY (`provider`, `app`, `step`, `day`, `outcome`, `reason`, `fixed_by`) ORDER BY (`provider`, `app`, `step`, `day`, `outcome`, `reason`, `fixed_by`) PARTITION BY (`day`) TTL day + toIntervalMonth(13) SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1 COMMENT 'Holds one day of mcp_connection_outcomes_daily while the daily job builds it. Never read directly. Its TTL must match the main table because REPLACE PARTITION copies TTL info onto the main table, so a shorter TTL here deletes main table rows.';
+PRIMARY KEY (`provider`, `app`, `step`, `day`, `outcome`, `reason`, `fixed_by`) ORDER BY (`provider`, `app`, `step`, `day`, `outcome`, `reason`, `fixed_by`) PARTITION BY (`day`) TTL day + toIntervalMonth(13) SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1 COMMENT 'Holds one day of mcp_connection_outcomes_daily while the daily job builds it. Only that job reads it. Its TTL must match the main table because REPLACE PARTITION copies TTL info onto the main table, so a shorter TTL here deletes main table rows.';
 -- Create "mcp_connection_attempt_summaries_mv" view
 CREATE MATERIALIZED VIEW `gram`.`mcp_connection_attempt_summaries_mv` TO `gram`.`mcp_connection_attempt_summaries` AS SELECT organization_id, project_id, server_kind, server_id, toStartOfInterval(toDateTime(attempt_started_at, 'UTC'), toIntervalMinute(30)) AS bucket, step, step_result, outcome, reason, who_fixes, grant_type, member_id, provider_host, app_key, toUInt64(count()) AS step_events, uniqExactState(attempt_id) AS attempts_seen, uniqExactStateIf(attempt_id, is_final) AS attempts_ended, sum(toUInt64(mcp_connection_events.retries)) AS retries, toUInt64(countIf((step = 'discovery_member') AND (step_result = 'listed') AND (mcp_connection_events.retries > 0))) AS recovered, min(event_time) AS first_seen, max(event_time) AS last_seen FROM gram.mcp_connection_events GROUP BY organization_id, project_id, server_kind, server_id, bucket, step, step_result, outcome, reason, who_fixes, grant_type, member_id, provider_host, app_key;
