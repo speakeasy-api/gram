@@ -2415,3 +2415,18 @@ UPDATE api_keys
 SET created_by_user_id = @created_by_user_id
 WHERE id = @id
   AND organization_id = @organization_id;
+
+-- name: SetChatMemorySweepFixture :exec
+-- Test-only fixture: backdates a chat and, when given, its summary and
+-- memory-exclusion timestamps so the team memory sweep sees it as idle,
+-- excluded or stale.
+UPDATE chats
+SET updated_at = @updated_at,
+    summary_generated_at = COALESCE(sqlc.narg(summary_generated_at), summary_generated_at),
+    memory_excluded_at = COALESCE(sqlc.narg(memory_excluded_at), memory_excluded_at)
+WHERE id = @id;
+
+-- name: SetChatMessagesCreatedAtFixture :exec
+-- Test-only fixture: backdates every message in a chat so the team memory
+-- sweep reads the chat's last activity as created_at.
+UPDATE chat_messages SET created_at = @created_at WHERE chat_id = @chat_id;

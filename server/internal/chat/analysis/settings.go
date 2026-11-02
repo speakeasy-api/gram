@@ -50,7 +50,11 @@ func settingsForProject(ctx context.Context, queries *repo.Queries, judges *Judg
 	}
 
 	settings := Settings{OrganizationID: "", JudgeDailyCaps: make(map[string]int32)}
+	configured := make(map[string]bool, len(rows))
 	for _, row := range rows {
+		if row.Judge.Valid {
+			configured[row.Judge.String] = true
+		}
 		settings.OrganizationID = row.OrganizationID
 		if only, ok := projectOnlyOrgs[row.OrganizationID]; ok && only != projectID {
 			continue
@@ -66,6 +70,7 @@ func settingsForProject(ctx context.Context, queries *repo.Queries, judges *Judg
 		// carries its stored cap.
 		settings.JudgeDailyCaps[row.Judge.String] = row.DailyCap.Int32
 	}
+	settings.applySharedOptIns(judges, configured)
 
 	return settings, nil
 }
@@ -89,4 +94,18 @@ func (s Settings) enabledJudges() []string {
 		}
 	}
 	return names
+}
+
+// applySharedOptIns enables each SharedOptInJudge whose source judge is
+// enabled, with the source's cap, unless the judge has its own settings row.
+func (s Settings) applySharedOptIns(judges *Judges, configured map[string]bool) {
+	for _, judge := range judges.ordered {
+		shared, ok := judge.(SharedOptInJudge)
+		if !ok || configured[judge.Name()] {
+			continue
+		}
+		if dailyCap, enabled := s.JudgeDailyCaps[shared.OptInWith()]; enabled {
+			s.JudgeDailyCaps[judge.Name()] = dailyCap
+		}
+	}
 }
