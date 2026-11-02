@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -72,7 +73,7 @@ func TestResolveAccessTokens_UpstreamServerErrorIsUnavailable(t *testing.T) {
 	// Once the cooldown ends the next request tries the provider again.
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
-	require.NoError(t, cache.NewRedisCacheAdapter(redisClient).Delete(ctx, remotesessions.RefreshCooldownKey(env.subject, env.clientID)))
+	require.NoError(t, cache.NewRedisCacheAdapter(redisClient).Delete(ctx, remotesessions.RefreshCooldownKey(active)))
 	_, err = env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	require.EqualValues(t, 2, refreshAttempts.Load())
@@ -89,6 +90,63 @@ func TestResolveAccessTokens_ProviderRetryAfterExtendsTheCooldown(t *testing.T) 
 	_, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	require.Equal(t, 2*time.Minute, remotesessions.RetryAfter(err))
+}
+
+// An old grant's long Retry-After never holds back the grant that replaced it,
+// even when a late failure from the old grant's snapshot lands after the reconnect.
+func TestResolveAccessTokens_ReconnectEscapesTheOldGrantsCooldown(t *testing.T) {
+	t.Parallel()
+
+	var down atomic.Bool
+	down.Store(true)
+	var refreshAttempts atomic.Int32
+	ctx, env := newExpiredRefreshEnv(t, "refresh-reconnect-cooldown", func(w http.ResponseWriter, _ *http.Request) {
+		refreshAttempts.Add(1)
+		if down.Load() {
+			w.Header().Set("Retry-After", "300")
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"recovered-access","refresh_token":"rotated-refresh","expires_in":3600}`))
+	})
+
+	_, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+	require.Equal(t, 5*time.Minute, remotesessions.RetryAfter(err))
+	old, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+
+	reconnected, err := env.q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{
+		SubjectUrn:            env.subject,
+		UserSessionIssuerID:   old.UserSessionIssuerID,
+		RemoteSessionClientID: env.clientID,
+		AccessTokenEncrypted:  old.AccessTokenEncrypted,
+		AccessExpiresAt:       conv.ToPGTimestamptz(time.Now().Add(-time.Second)),
+		RefreshTokenEncrypted: old.RefreshTokenEncrypted,
+		Scopes:                []string{},
+	})
+	require.NoError(t, err)
+	require.Greater(t, reconnected.GrantGeneration, old.GrantGeneration)
+
+	// A late failure from the old grant's snapshot paces only that grant.
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	require.NoError(t, cache.NewRedisCacheAdapter(redisClient).Delete(ctx, remotesessions.RefreshCooldownKey(old)))
+	before := refreshAttempts.Load()
+	_, err = env.refresher.RefreshNow(ctx, old, "", remotesessionmetrics.RefreshTriggerRequest)
+	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+	attempts := refreshAttempts.Load()
+	require.Equal(t, before+1, attempts, "the late failure did reach the provider")
+
+	down.Store(false)
+	tokens, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	require.NoError(t, err)
+	require.Len(t, tokens, 1)
+	for _, token := range tokens {
+		require.Equal(t, "recovered-access", token.Token)
+	}
+	require.Equal(t, attempts+1, refreshAttempts.Load(), "the replacement grant reached the recovered provider")
 }
 
 func TestResolveAccessToken_UpstreamServerErrorIsNoToken(t *testing.T) {

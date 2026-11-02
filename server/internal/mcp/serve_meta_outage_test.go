@@ -47,7 +47,9 @@ func (f memberRefreshOutageFixture) endCooldown(t *testing.T, ctx context.Contex
 	t.Helper()
 	client, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
-	require.NoError(t, cache.NewRedisCacheAdapter(client).Delete(ctx, remotesessions.RefreshCooldownKey(f.subject, f.clientID)))
+	active, err := remotesessions_repo.New(f.ti.conn).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: f.subject, RemoteSessionClientID: f.clientID})
+	require.NoError(t, err)
+	require.NoError(t, cache.NewRedisCacheAdapter(client).Delete(ctx, remotesessions.RefreshCooldownKey(active)))
 }
 
 func newMemberRefreshOutageFixture(t *testing.T, ctx context.Context, ti *testInstance, resource func(upstreamURL string) string) memberRefreshOutageFixture {

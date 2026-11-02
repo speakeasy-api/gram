@@ -328,9 +328,9 @@ func refreshLockKey(subject urn.SessionSubject, clientID uuid.UUID) string {
 	return "remotesession:refresh:" + subject.String() + ":" + clientID.String()
 }
 
-// RefreshCooldownKey is the cache key pacing refreshes of one binding after an outage.
-func RefreshCooldownKey(subject urn.SessionSubject, clientID uuid.UUID) string {
-	return "remotesession:refresh-cooldown:" + subject.String() + ":" + clientID.String()
+// RefreshCooldownKey paces one grant after an outage, so a replacement grant starts fresh.
+func RefreshCooldownKey(sess remotesessions_repo.RemoteSession) string {
+	return "remotesession:refresh-cooldown:" + sess.ID.String() + ":" + strconv.FormatInt(sess.GrantGeneration, 10)
 }
 
 // refreshDeferredError is a refresh that made no upstream call; retry after wait.
@@ -354,7 +354,7 @@ func parseRetryAfter(value string, now time.Time) time.Duration {
 // refreshCooldownRemaining is how long an outage still paces this binding; fails open.
 func (s *RefreshService) refreshCooldownRemaining(ctx context.Context, sess remotesessions_repo.RemoteSession) time.Duration {
 	var until time.Time
-	err := s.locks.Get(ctx, RefreshCooldownKey(sess.SubjectUrn, sess.RemoteSessionClientID), &until)
+	err := s.locks.Get(ctx, RefreshCooldownKey(sess), &until)
 	if err != nil {
 		if !errors.Is(err, redisCache.ErrCacheMiss) {
 			s.logger.WarnContext(ctx, "remote session refresh cooldown unavailable; refreshing", attr.SlogError(err))
@@ -372,7 +372,7 @@ func (s *RefreshService) startRefreshCooldown(ctx context.Context, sess remotese
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
 	defer cancel()
-	if err := s.locks.Set(ctx, RefreshCooldownKey(sess.SubjectUrn, sess.RemoteSessionClientID), time.Now().Add(wait), wait); err != nil {
+	if err := s.locks.Set(ctx, RefreshCooldownKey(sess), time.Now().Add(wait), wait); err != nil {
 		s.logger.WarnContext(ctx, "remote session refresh cooldown not stored", attr.SlogError(err))
 		return 0
 	}
@@ -383,7 +383,7 @@ func (s *RefreshService) startRefreshCooldown(ctx context.Context, sess remotese
 func (s *RefreshService) clearRefreshCooldown(ctx context.Context, sess remotesessions_repo.RemoteSession) {
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
 	defer cancel()
-	if err := s.locks.Delete(ctx, RefreshCooldownKey(sess.SubjectUrn, sess.RemoteSessionClientID)); err != nil {
+	if err := s.locks.Delete(ctx, RefreshCooldownKey(sess)); err != nil {
 		s.logger.WarnContext(ctx, "remote session refresh cooldown not cleared", attr.SlogError(err))
 	}
 }
