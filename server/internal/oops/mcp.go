@@ -26,6 +26,7 @@ func MCPErrHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.R
 		if err == nil {
 			return
 		}
+		err = answerOutage(r.Context(), logger, w, err)
 
 		mcpID := mcpjsonrpc.NullID()
 		if rpcCtx, ok := contextvalues.GetRPCContext(r.Context()); ok && rpcCtx.ID.IsSet() {

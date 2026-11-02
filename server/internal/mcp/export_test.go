@@ -191,6 +191,11 @@ var (
 	ErrTunnelNoRoute       = errTunnelNoRoute
 )
 
+// SetDB swaps the database this service reads, to take it down.
+func (s *Service) SetDB(db *pgxpool.Pool) {
+	s.db = db
+}
+
 // SetAuthzEngine swaps the authorization engine, to make it fail.
 func (s *Service) SetAuthzEngine(engine *authz.Engine) {
 	s.authz = engine

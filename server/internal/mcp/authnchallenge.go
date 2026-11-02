@@ -437,9 +437,6 @@ const (
 	remoteSessionUnavailableMessage = "The upstream authorization server for this MCP server is temporarily unavailable. Retry shortly."
 )
 
-// outageRetryAfter matches the 30s key set and refresh hold-backs, so a sooner retry can't succeed.
-const outageRetryAfter = 30 * time.Second
-
 func issuerGateFailureReason(err error) string {
 	switch {
 	case errors.Is(err, errTokenHostMismatch), errors.Is(err, errSharedTokenIssuerMismatch):
@@ -476,6 +473,9 @@ const issuerGateCheckUnavailableMessage = "Speakeasy can't check your sign-in ri
 func issuerGateCheckUnavailable(err error) bool {
 	if errors.Is(err, errCredentialRejected) || errors.Is(err, pgx.ErrNoRows) {
 		return false
+	}
+	if oops.IsInfrastructureFailure(err) {
+		return true
 	}
 	for _, operational := range []error{
 		sessiontokens.ErrRevocationUnavailable,
@@ -1154,6 +1154,8 @@ func (s *Service) authenticateIssuerGate(
 			// provenance stays KindAssistant and must never be treated as an
 			// authoritative acting user.
 			newCtx, subject = s.identityValidator.StampAssistant(assistCtx), &ssubj
+		} else if oops.IsInfrastructureFailure(aerr) {
+			valErr = aerr
 		}
 	}
 	if subject == nil && !organizationGateway && strings.HasPrefix(authToken, "gram_") {
@@ -1318,7 +1320,7 @@ func clientCredentialMisconfiguredError(err error) *oops.ShareableError {
 // path that hits one tells the client the same thing and paces its retries.
 func remoteSessionUnavailableError(w http.ResponseWriter, err error) *oops.ShareableError {
 	outage := outageError(w, err, remoteSessionUnavailableMessage)
-	if wait := remotesessions.RetryAfter(err); wait > outageRetryAfter {
+	if wait := remotesessions.RetryAfter(err); wait > oops.OutageRetryAfter {
 		w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())))
 	}
 	return outage
@@ -1331,7 +1333,7 @@ func outageError(w http.ResponseWriter, err error, message string) *oops.Shareab
 }
 
 func setOutageRetryAfter(w http.ResponseWriter) {
-	w.Header().Set("Retry-After", strconv.Itoa(int(outageRetryAfter.Seconds())))
+	w.Header().Set("Retry-After", strconv.Itoa(int(oops.OutageRetryAfter.Seconds())))
 }
 
 // recordRemoteSessionRejection logs and counts an issuer-gate rejection whose

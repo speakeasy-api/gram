@@ -6,12 +6,16 @@ import (
 	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
@@ -213,4 +217,54 @@ func TestServePublic_RevocationCheckOutageIsRetryableThenRecovers(t *testing.T) 
 	w, err = servePublicHTTP(t, ctx, ti, f.metaSlug, body, f.bearer, nil)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+}
+
+// A database that can't answer reads as an outage on every surface an app
+// restarts sign-in from, and the same bearer works once it's back.
+func TestDatabaseOutageAnswersRetryably(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := newMemberRefreshOutageFixture(t, ctx, ti, func(upstream string) string { return upstream })
+	dead, err := pgxpool.New(ctx, "postgres://speakeasy@127.0.0.1:1/down?connect_timeout=1")
+	require.NoError(t, err)
+	t.Cleanup(dead.Close)
+	ti.service.SetDB(dead)
+
+	resource := func() *httptest.ResponseRecorder {
+		req := newTunneledPublicRequest(f.metaSlug, http.MethodPost, makeMetaRPCBody(t, "tools/list", map[string]any{}), "")
+		req.Header.Set("Authorization", "Bearer "+f.bearer)
+		w := httptest.NewRecorder()
+		oops.MCPErrHandle(testenv.NewLogger(t), ti.service.ServePublic).ServeHTTP(w, req)
+		return w
+	}
+	down := resource()
+	require.Equal(t, http.StatusServiceUnavailable, down.Code, down.Body.String())
+	require.NotEmpty(t, down.Header().Get("Retry-After"))
+	require.Empty(t, down.Header().Get("WWW-Authenticate"))
+	require.Empty(t, down.Header().Get(constants.HeaderProxiedResponse), "our own failure keeps alerting")
+
+	form := url.Values{"grant_type": {"refresh_token"}, "client_id": {"any"}, "refresh_token": {"any"}}
+	tokenReq := httptest.NewRequestWithContext(ctx, http.MethodPost, "/mcp/"+f.metaSlug+"/token", strings.NewReader(form.Encode()))
+	tokenReq.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("mcpSlug", f.metaSlug)
+	token := httptest.NewRecorder()
+	oops.OAuthErrHandle(testenv.NewLogger(t), ti.service.HandleToken).ServeHTTP(token, tokenReq.WithContext(context.WithValue(ctx, chi.RouteCtxKey, routeCtx)))
+	require.Equal(t, http.StatusServiceUnavailable, token.Code, token.Body.String())
+	require.NotEmpty(t, token.Header().Get("Retry-After"))
+	require.Contains(t, token.Body.String(), "temporarily_unavailable")
+
+	shared := httptest.NewRecorder()
+	oops.OAuthErrHandle(testenv.NewLogger(t), ti.service.HandleSharedToken).ServeHTTP(shared, sharedRequest(ctx, http.MethodPost, "/oauth/usi/"+uuid.NewString()+"/token", uuid.NewString(), strings.NewReader(form.Encode())))
+	require.Equal(t, http.StatusServiceUnavailable, shared.Code, shared.Body.String())
+	require.Contains(t, shared.Body.String(), "temporarily_unavailable")
+
+	ti.service.SetDB(ti.conn)
+	up := resource()
+	require.Equal(t, http.StatusOK, up.Code, up.Body.String())
+
+	missing := httptest.NewRecorder()
+	oops.OAuthErrHandle(testenv.NewLogger(t), ti.service.HandleSharedToken).ServeHTTP(missing, sharedRequest(ctx, http.MethodPost, "/oauth/usi/"+uuid.NewString()+"/token", uuid.NewString(), strings.NewReader(form.Encode())))
+	require.NotEqual(t, http.StatusServiceUnavailable, missing.Code, "a missing row stays as it was: %s", missing.Body.String())
 }

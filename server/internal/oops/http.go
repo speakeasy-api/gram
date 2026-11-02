@@ -40,6 +40,7 @@ func errHandle(logger *slog.Logger, handler func(http.ResponseWriter, *http.Requ
 		if err == nil {
 			return
 		}
+		err = answerOutage(r.Context(), logger, w, err)
 
 		code := http.StatusInternalServerError
 		payload := goa.NewServiceError(
