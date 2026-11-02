@@ -5,7 +5,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/provenance"
 	"github.com/stretchr/testify/require"
 	"testing"
-	"time"
 )
 
 func TestNativeLifecycle(t *testing.T) {
@@ -13,13 +12,9 @@ func TestNativeLifecycle(t *testing.T) {
 	var meta any
 	require.NoError(t, json.Unmarshal([]byte(`{"io.modelcontextprotocol.registry/official":{"status":"deprecated","isLatest":false,"updatedAt":"2026-08-01T00:00:00Z"},"com.speakeasy.ai/registry":{"publishedAt":"2026-07-01T00:00:00Z"}}`), &meta))
 	got := provenance.Read(meta)
-	require.False(t, got.Catalogued, "only actual matching establishes membership")
 	require.Equal(t, "deprecated", got.Status)
 	require.False(t, got.PublishedAt.IsZero())
-	_, known := got.StaleFor(time.Now())
-	require.True(t, known)
-	got.Catalogued = true
-	require.True(t, got.Withdrawn())
+	require.False(t, got.UpdatedAt.IsZero())
 }
 
 func TestAbsentEvidenceStaysUnknown(t *testing.T) {
@@ -28,12 +23,9 @@ func TestAbsentEvidenceStaysUnknown(t *testing.T) {
 		var meta any
 		require.NoError(t, json.Unmarshal([]byte(raw), &meta))
 		got := provenance.Read(meta)
-		require.False(t, got.Catalogued)
 		require.Empty(t, got.Status)
 		require.True(t, got.PublishedAt.IsZero())
-		_, known := got.StaleFor(time.Now())
-		require.False(t, known)
-		require.False(t, got.Withdrawn())
+		require.True(t, got.UpdatedAt.IsZero())
 	}
 }
 

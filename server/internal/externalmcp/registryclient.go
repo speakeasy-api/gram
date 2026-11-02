@@ -321,13 +321,6 @@ type serverDetailsJSON struct {
 	Remotes     []serverRemoteJSON `json:"remotes"`
 }
 
-type serverTool struct {
-	Name        string          `json:"name"`
-	Description string          `json:"description"`
-	InputSchema json.RawMessage `json:"inputSchema"`
-	Annotations map[string]any  `json:"annotations"`
-}
-
 // toCacheSafeAny round-trips v through JSON so the resulting value is built
 // from plain Go types (map[string]any, []any, primitives). This is required
 // because the cache serializes with msgpack: concrete struct types stored in
@@ -702,7 +695,6 @@ type ServerDetails struct {
 	Version       string
 	RemoteURL     string
 	TransportType externalmcptypes.TransportType
-	Tools         []serverTool
 	Headers       []RemoteHeader
 	Variables     map[string]RemoteVariable
 }
@@ -796,7 +788,6 @@ func projectServerDetails(record serverDetailsEntry, allowedRemoteURLs []string)
 		Version:       record.Server.Version,
 		RemoteURL:     "",
 		TransportType: "",
-		Tools:         nil,
 		Headers:       nil,
 		Variables:     nil,
 	}

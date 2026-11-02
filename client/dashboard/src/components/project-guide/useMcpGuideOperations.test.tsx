@@ -337,12 +337,7 @@ describe("useMcpGuideOperations", () => {
     const publicServer = catalogServer({
       title: "Linear",
       supportsDcr: false,
-      meta: {
-        "com.speakeasy.ai/catalog": {
-          authSetup: "none",
-          authDiscoveryStatus: "not_required",
-        },
-      },
+      authSetup: "none",
     });
     const sparse = catalogServer({
       title: "Notion",

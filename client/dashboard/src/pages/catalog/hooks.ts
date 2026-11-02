@@ -2,7 +2,6 @@ import { useCallback, useMemo } from "react";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 
 import { ExternalMCPServerEntry } from "@gram/client/models/components/externalmcpserverentry.js";
-import { ExternalMCPTool } from "@gram/client/models/components/externalmcptool.js";
 import { normalizeRemoteUrl } from "@/pages/catalog/remotes";
 import { queryKeyListMCPCatalog } from "@gram/client/react-query/listMCPCatalog.js";
 import { useQuery } from "@tanstack/react-query";
@@ -10,29 +9,19 @@ import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.j
 
 interface ServerMeta {
   [namespace: string]: unknown;
-  "com.speakeasy.ai/catalog"?: {
-    supportsDcr?: boolean;
-    supportsCimd?: boolean;
-    authSetup?: "none" | "dcr" | "cimd" | "manual" | "unknown";
-    authDiscoveryStatus?:
-      | "complete"
-      | "partial"
-      | "unavailable"
-      | "not_required";
-  };
   "io.modelcontextprotocol.registry/official"?: {
     status?: string;
     publishedAt?: string;
     updatedAt?: string;
   };
+  /** Backend-owned publication time for native catalog records. */
+  "com.speakeasy.ai/registry"?: {
+    publishedAt?: string;
+  };
 }
 
-// The catalog list returns `ExternalMCPServerEntry` (no tools). `tools` is
-// optional and populated client-side by enrichment (getServerDetails) for the
-// add/release flow that needs per-tool URNs.
 export type CatalogServer = Omit<ExternalMCPServerEntry, "meta"> & {
   meta?: ServerMeta;
-  tools?: ExternalMCPTool[];
 };
 
 // The catalog is small and the backend returns the full list in a single

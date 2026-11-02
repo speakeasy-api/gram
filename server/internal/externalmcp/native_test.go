@@ -127,13 +127,12 @@ func TestNativeListSupportsDcr(t *testing.T) {
 func TestNativeDetailsRetainedRemoteSelection(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name       string
-		allowed    []string
-		url        string
-		emptyTools bool
+		name    string
+		allowed []string
+		url     string
 	}{
 		{name: "http preferred", url: "https://example.com/mcp"},
-		{name: "last SSE wins", allowed: []string{"https://example.com/first", "https://example.com/last"}, url: "https://example.com/last", emptyTools: true},
+		{name: "last SSE wins", allowed: []string{"https://example.com/first", "https://example.com/last"}, url: "https://example.com/last"},
 		{name: "no allowed match", allowed: []string{"https://example.com/none"}},
 		{name: "first tools", allowed: []string{"https://example.com/first"}, url: "https://example.com/first"},
 	} {
@@ -144,7 +143,6 @@ func TestNativeDetailsRetainedRemoteSelection(t *testing.T) {
 			require.NoError(t, err)
 			require.Equal(t, "io.example/native", source.name)
 			require.Equal(t, tc.url, details.RemoteURL)
-			require.Nil(t, details.Tools)
 			if tc.url == "https://example.com/mcp" {
 				require.Len(t, details.Headers, 1)
 				require.Contains(t, details.Variables, "tenant")
@@ -356,7 +354,6 @@ func TestNativeSparsePublication(t *testing.T) {
 			require.NotContains(t, nativeTestMap(t, row.Meta), "io.modelcontextprotocol.registry/official")
 			details, err := reader.GetServerDetails(t.Context(), Registry{}, "io.example/sparse", nil)
 			require.NoError(t, err)
-			require.Nil(t, details.Tools)
 			require.Equal(t, *row.AuthSetup, details.AuthSetup)
 			require.Equal(t, row.SupportsDcr, details.SupportsDCR)
 			require.Equal(t, *row.SupportsCimd, details.SupportsCIMD)

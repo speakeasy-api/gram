@@ -14,25 +14,15 @@ import {
   useIsCatalogServerInstalled,
   useListMCPCatalog,
 } from "@/pages/catalog/hooks";
+import { parseServerMetadata } from "@/pages/catalog/hooks/serverMetadata";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
-import { useMcpRegistriesGetServerDetails } from "@gram/client/react-query/mcpRegistriesGetServerDetails.js";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Stack } from "@/components/ui/Stack";
 import { useMutation } from "@tanstack/react-query";
-import {
-  ChevronDown,
-  ChevronUp,
-  Loader2,
-  Minus,
-  Plus,
-  Server as ServerIcon,
-  Wrench,
-} from "lucide-react";
-import { AnimatePresence, motion } from "motion/react";
+import { Loader2, Minus, Plus, Server as ServerIcon } from "lucide-react";
 import { ReactNode, useMemo, useState } from "react";
 import { Outlet, useParams } from "react-router";
 
@@ -88,28 +78,6 @@ export default function CatalogDetail(): JSX.Element {
     );
   }, [data, decodedSpecifier]);
 
-  // The catalog list omits per-tool definitions to stay small, so fetch the
-  // full tool list for the detail view separately (cached server-side).
-  const { data: serverDetails } = useMcpRegistriesGetServerDetails(
-    {
-      registryId: server?.registryId ?? "",
-      serverSpecifier: decodedSpecifier,
-    },
-    undefined,
-    { enabled: !!server?.registryId && !!decodedSpecifier },
-  );
-  const detailTools: Tool[] = useMemo(
-    () =>
-      (serverDetails?.tools ?? [])
-        .filter((tool) => !!tool.name)
-        .map((tool) => ({
-          name: tool.name as string,
-          description: tool.description ?? undefined,
-          annotations: tool.annotations as Tool["annotations"],
-        })),
-    [serverDetails],
-  );
-
   const removeServerMutation = useMutation({
     mutationFn: async (slug: string) => {
       const toolUrn = `tools:externalmcp:${slug}:proxy`;
@@ -140,8 +108,7 @@ export default function CatalogDetail(): JSX.Element {
     },
   });
 
-  const versionMeta =
-    server?.meta?.["io.modelcontextprotocol.registry/official"];
+  const versionMeta = server ? parseServerMetadata(server) : undefined;
   const serverUrl = server ? primaryRemoteUrl(server) : undefined;
   const displayName =
     server?.title ??
@@ -354,9 +321,6 @@ export default function CatalogDetail(): JSX.Element {
                   </Text>
                 </Card.Content>
               </Card>
-
-              {/* Available Tools */}
-              {detailTools.length > 0 && <ToolsSection tools={detailTools} />}
             </div>
 
             {/* Right Column - Info */}
@@ -378,18 +342,14 @@ export default function CatalogDetail(): JSX.Element {
                       {versionMeta?.publishedAt && (
                         <DetailRow label="Published">
                           <Text>
-                            {new Date(
-                              versionMeta.publishedAt,
-                            ).toLocaleDateString()}
+                            {versionMeta.publishedAt.toLocaleDateString()}
                           </Text>
                         </DetailRow>
                       )}
                       {versionMeta?.updatedAt && (
                         <DetailRow label="Last Updated">
                           <Text>
-                            {new Date(
-                              versionMeta.updatedAt,
-                            ).toLocaleDateString()}
+                            {versionMeta.updatedAt.toLocaleDateString()}
                           </Text>
                         </DetailRow>
                       )}
@@ -481,193 +441,5 @@ function DetailRow({
       </Text>
       {children}
     </div>
-  );
-}
-
-const INITIAL_TOOLS_SHOWN = 5;
-
-type Tool = {
-  name: string;
-  description?: string;
-  annotations?: {
-    title?: string;
-    readOnlyHint?: boolean;
-    destructiveHint?: boolean;
-    idempotentHint?: boolean;
-    openWorldHint?: boolean;
-  };
-};
-
-// Registry descriptions are often markdown; strip the common inline syntax
-// (heading #s, bold markers, backticks) so the collapsed one-line summary
-// reads as plain text.
-function stripMarkdown(text: string): string {
-  return text
-    .replace(/^#{1,6}\s+/gm, "")
-    .replace(/\*\*([^*]+)\*\*/g, "$1")
-    .replace(/`([^`]+)`/g, "$1")
-    .trim();
-}
-
-function getFirstSentence(text: string): string {
-  // Find the first period followed by a space or end of string
-  const match = text.match(/^[^.]*\./);
-  if (match) {
-    return match[0];
-  }
-  // If no period, return first 100 chars
-  return text.length > 100 ? text.slice(0, 100) + "..." : text;
-}
-
-function ToolCard({ tool }: { tool: Tool }) {
-  const [isExpanded, setIsExpanded] = useState(false);
-  const hasDescription = !!tool.description;
-  const plainDescription = tool.description
-    ? stripMarkdown(tool.description)
-    : "";
-  const firstSentence = plainDescription
-    ? getFirstSentence(plainDescription)
-    : "";
-  const hasMoreContent =
-    !!plainDescription && plainDescription.length > firstSentence.length;
-
-  return (
-    <div className="bg-muted/50 flex flex-col gap-1 overflow-hidden p-3">
-      <button
-        onClick={() => {
-          void (hasMoreContent && setIsExpanded(!isExpanded));
-        }}
-        className={`flex w-full flex-col gap-1 text-left ${hasMoreContent ? "cursor-pointer" : "cursor-default"}`}
-      >
-        <Stack
-          direction="horizontal"
-          gap={2}
-          align="center"
-          justify="space-between"
-          className="w-full"
-        >
-          <Stack
-            direction="horizontal"
-            gap={2}
-            align="center"
-            className="flex-wrap"
-          >
-            <Text className="font-mono text-sm font-medium">
-              {tool.annotations?.title || tool.name}
-            </Text>
-            {tool.annotations?.readOnlyHint && (
-              <Badge variant="neutral" background className="text-xs">
-                Read-only
-              </Badge>
-            )}
-            {tool.annotations?.destructiveHint &&
-              !tool.annotations?.readOnlyHint && (
-                <Badge variant="warning" className="text-xs">
-                  Destructive
-                </Badge>
-              )}
-            {tool.annotations?.idempotentHint &&
-              !tool.annotations?.readOnlyHint && (
-                <Badge variant="information" className="text-xs">
-                  Idempotent
-                </Badge>
-              )}
-            {!tool.annotations?.readOnlyHint &&
-              !tool.annotations?.destructiveHint &&
-              !tool.annotations?.idempotentHint && (
-                <Badge variant="information" background className="text-xs">
-                  Write
-                </Badge>
-              )}
-          </Stack>
-          {hasMoreContent && (
-            <motion.div
-              animate={{ rotate: isExpanded ? 180 : 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <ChevronDown className="text-muted-foreground h-4 w-4" />
-            </motion.div>
-          )}
-        </Stack>
-        <AnimatePresence mode="wait">
-          {hasDescription && !isExpanded && (
-            <motion.div
-              key="collapsed"
-              initial={{ opacity: 0, height: 0 }}
-              animate={{ opacity: 1, height: "auto" }}
-              exit={{ opacity: 0, height: 0 }}
-              transition={{ duration: 0.2 }}
-            >
-              <Text small muted>
-                {firstSentence}
-              </Text>
-            </motion.div>
-          )}
-        </AnimatePresence>
-      </button>
-      <AnimatePresence>
-        {isExpanded && tool.description && (
-          <motion.div
-            initial={{ opacity: 0, height: 0 }}
-            animate={{ opacity: 1, height: "auto" }}
-            exit={{ opacity: 0, height: 0 }}
-            transition={{ duration: 0.2 }}
-            className="overflow-hidden"
-          >
-            <div className="mt-2 border-t pt-2">
-              <Text
-                small
-                className="prose prose-sm max-w-none whitespace-pre-wrap"
-              >
-                {tool.description}
-              </Text>
-            </div>
-          </motion.div>
-        )}
-      </AnimatePresence>
-    </div>
-  );
-}
-
-function ToolsSection({ tools }: { tools: Tool[] }) {
-  const [showAll, setShowAll] = useState(false);
-  const hasMore = tools.length > INITIAL_TOOLS_SHOWN;
-  const visibleTools = showAll ? tools : tools.slice(0, INITIAL_TOOLS_SHOWN);
-
-  return (
-    <Card>
-      <Card.Header>
-        <Card.Title>
-          <Stack direction="horizontal" gap={2} align="center">
-            <Wrench className="h-4 w-4" />
-            Available Tools ({tools.length})
-          </Stack>
-        </Card.Title>
-      </Card.Header>
-      <Card.Content>
-        <div className="space-y-3">
-          {visibleTools.map((tool) => (
-            <ToolCard key={tool.name} tool={tool} />
-          ))}
-        </div>
-        {hasMore && (
-          <button
-            onClick={() => setShowAll(!showAll)}
-            className="text-muted-foreground hover:text-foreground mt-4 flex w-full items-center justify-center gap-1 text-sm transition-colors"
-          >
-            {showAll ? (
-              <>
-                Show less <ChevronUp className="h-4 w-4" />
-              </>
-            ) : (
-              <>
-                Show {tools.length - INITIAL_TOOLS_SHOWN} more tools{" "}
-                <ChevronDown className="h-4 w-4" />
-              </>
-            )}
-          </button>
-        )}
-      </Card.Content>
-    </Card>
   );
 }

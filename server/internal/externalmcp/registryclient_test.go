@@ -992,11 +992,9 @@ func TestProjectServerDetailsRemoteSelection(t *testing.T) {
 			require.Equal(t, "1", details.Version)
 			require.Equal(t, tc.url, details.RemoteURL)
 			if tc.emptySlices {
-				require.Nil(t, details.Tools)
 				require.NotNil(t, details.Headers)
 				require.Empty(t, details.Headers)
 			} else {
-				require.Nil(t, details.Tools)
 				require.Nil(t, details.Headers)
 			}
 		})

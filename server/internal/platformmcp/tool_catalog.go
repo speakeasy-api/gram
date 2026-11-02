@@ -176,7 +176,7 @@ func registerCandidateInspectionTool(reg *Registrar, catalog Catalog, directRemo
 			}
 			return nil, CandidateInspection{}, ErrCatalogUnavailable
 		}
-		return nil, CandidateInspection{ProviderKey: details.ProviderKey, CatalogRef: details.CatalogRef, Name: details.Name, Description: details.Description, Version: details.Version, Transport: details.Transport, ToolNames: details.ToolNames, ToolCount: details.ToolCount, Configuration: details.Configuration, RequiresDashboardSetup: details.RequiresDashboardSetup, Trust: "reviewed_catalog", SupportsDCR: new(details.SupportsDCR), SupportsCIMD: new(details.SupportsCIMD), AuthSetup: details.AuthSetup, SetupIntent: details.SetupIntent}, nil
+		return nil, CandidateInspection{ProviderKey: details.ProviderKey, CatalogRef: details.CatalogRef, Name: details.Name, Description: details.Description, Version: details.Version, Transport: details.Transport, Configuration: details.Configuration, RequiresDashboardSetup: details.RequiresDashboardSetup, Trust: "reviewed_catalog", SupportsDCR: new(details.SupportsDCR), SupportsCIMD: new(details.SupportsCIMD), AuthSetup: details.AuthSetup, SetupIntent: details.SetupIntent}, nil
 	})
 }
 

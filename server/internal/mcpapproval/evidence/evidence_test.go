@@ -85,7 +85,7 @@ func (quietProbes) ListToolDeclarations(_ context.Context, _ string) ([]capabili
 	return nil, nil
 }
 
-func (quietProbes) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
+func (quietProbes) Lookup(_ context.Context, _ uuid.UUID, _ string) (*catalog.Match, error) {
 	return nil, nil
 }
 
@@ -364,7 +364,7 @@ func (failingProbes) ListToolDeclarations(_ context.Context, _ string) ([]capabi
 	return nil, errors.New("server refused unauthenticated tools/list")
 }
 
-func (failingProbes) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
+func (failingProbes) Lookup(_ context.Context, _ uuid.UUID, _ string) (*catalog.Match, error) {
 	return nil, errors.New("registry unreachable")
 }
 
@@ -398,88 +398,20 @@ func (declaringProbes) ListToolDeclarations(_ context.Context, _ string) ([]capa
 	}, nil
 }
 
-func (declaringProbes) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
+func (declaringProbes) Lookup(_ context.Context, _ uuid.UUID, _ string) (*catalog.Match, error) {
 	return &catalog.Match{
 		Registry:  "Test Registry",
 		Specifier: "com.example/server",
 		Provenance: provenance.Provenance{
-			Catalogued: true, Status: "active",
+			Status:      "active",
 			PublishedAt: time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC), UpdatedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
 		},
-		Tools: nil,
 	}, nil
-}
-
-// cataloguedOnlyProbes stands in for an OAuth-protected server that refuses
-// unauthenticated tools/list while its registry entry carries the tool list.
-type cataloguedOnlyProbes struct{}
-
-func (cataloguedOnlyProbes) DiscoverAuthority(_ context.Context, _ string) (*authority.Declaration, error) {
-	return nil, nil
-}
-
-func (cataloguedOnlyProbes) ListToolDeclarations(_ context.Context, _ string) ([]capability.Declaration, error) {
-	return nil, errors.New("server refused unauthenticated tools/list")
-}
-
-func (cataloguedOnlyProbes) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
-	readOnly := true
-	return &catalog.Match{
-		Registry:  "Test Registry",
-		Specifier: "com.example/server",
-		Provenance: provenance.Provenance{
-			Catalogued: true, Status: "active",
-			PublishedAt: time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC), UpdatedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
-		},
-		Tools: []capability.Declaration{
-			{
-				Name: "search_docs", Description: "Search documentation", InputSchema: "",
-				ReadOnly: &readOnly, Destructive: nil, Idempotent: nil, OpenWorld: nil,
-			},
-		},
-	}, nil
-}
-
-// A server that refuses unauthenticated tools/list but is catalogued gets its
-// capability section from the registry's copy, labeled as such, with no
-// tool-declarations gap: the declarations were consulted, one step removed.
-func TestAssemble_RegistryCopyFillsCapabilitiesWhenServerRefuses(t *testing.T) {
-	t.Parallel()
-
-	assembler := evidence.NewAssembler(
-		&fakePackages{metadata: nil, err: nil},
-		quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
-		cataloguedOnlyProbes{},
-		cataloguedOnlyProbes{},
-		cataloguedOnlyProbes{},
-	)
-
-	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("https://mcp.example.com/mcp"))
-	require.NoError(t, err)
-	doc := decode(t, raw)
-
-	require.Equal(t, "registry", doc["capabilities_source"])
-	capabilities, ok := doc["capabilities"].([]any)
-	require.True(t, ok)
-	require.Len(t, capabilities, 1)
-	first, ok := capabilities[0].(map[string]any)
-	require.True(t, ok)
-	require.Equal(t, "search_docs", first["tool"])
-
-	prov, ok := doc["provenance"].(map[string]any)
-	require.True(t, ok)
-	require.Equal(t, true, prov["catalogued"])
-	require.NotContains(t, prov, "official")
-	require.NotContains(t, prov, "visitors_total")
-	require.Equal(t, "Test Registry", prov["registry"])
-
-	gaps, _ := doc["gaps"].([]any)
-	require.NotContains(t, gaps, "tool_declarations_probe_failed")
 }
 
 // cataloguedNoToolMetadata stands in for a server that refuses
-// unauthenticated tools/list and whose registry entry matched but carried no
-// tool metadata: the details fetch succeeded, Tools stayed nil.
+// unauthenticated tools/list and whose registry entry matched; catalog entries
+// carry no tool declarations.
 type cataloguedNoToolMetadata struct{}
 
 func (cataloguedNoToolMetadata) DiscoverAuthority(_ context.Context, _ string) (*authority.Declaration, error) {
@@ -490,15 +422,14 @@ func (cataloguedNoToolMetadata) ListToolDeclarations(_ context.Context, _ string
 	return nil, errors.New("server refused unauthenticated tools/list")
 }
 
-func (cataloguedNoToolMetadata) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
+func (cataloguedNoToolMetadata) Lookup(_ context.Context, _ uuid.UUID, _ string) (*catalog.Match, error) {
 	return &catalog.Match{
 		Registry:  "Test Registry",
 		Specifier: "com.example/server",
 		Provenance: provenance.Provenance{
-			Catalogued: true, Status: "active",
+			Status:      "active",
 			PublishedAt: time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC), UpdatedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
 		},
-		Tools: nil,
 	}, nil
 }
 
@@ -580,7 +511,7 @@ func TestAssemble_RemoteProbesFillAuthorityAndCapabilities(t *testing.T) {
 	require.Equal(t, "oauth", authoritySection["mode"])
 	require.Equal(t, true, authoritySection["dynamic_registration"])
 
-	require.Equal(t, "server", doc["capabilities_source"], "a direct answer outranks the registry's copy")
+	require.Equal(t, "server", doc["capabilities_source"], "declarations come from the server's own listing")
 	capabilities, ok := doc["capabilities"].([]any)
 	require.True(t, ok)
 	require.Len(t, capabilities, 2)
@@ -639,7 +570,7 @@ func (authorityFailsToolsAnswer) ListToolDeclarations(_ context.Context, _ strin
 	}}, nil
 }
 
-func (authorityFailsToolsAnswer) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
+func (authorityFailsToolsAnswer) Lookup(_ context.Context, _ uuid.UUID, _ string) (*catalog.Match, error) {
 	return nil, nil
 }
 
@@ -945,7 +876,7 @@ func TestAssemble_DomainFailureIsAGap(t *testing.T) {
 
 type projectCatalogProbe struct{ projectID uuid.UUID }
 
-func (p *projectCatalogProbe) Lookup(_ context.Context, projectID uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
+func (p *projectCatalogProbe) Lookup(_ context.Context, projectID uuid.UUID, _ string) (*catalog.Match, error) {
 	p.projectID = projectID
 	return nil, nil
 }

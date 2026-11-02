@@ -286,19 +286,6 @@ func projectCatalogDetails(descriptor CatalogDescriptor, catalogRef string, deta
 	if details.RemoteURL == "" || !validCatalogRemoteTemplate(details.RemoteURL) || details.TransportType != externalmcptypes.TransportTypeStreamableHTTP {
 		return CatalogDetails{}, ErrCatalogRejected
 	}
-	var toolNames []string
-	var toolCount *int
-	for _, tool := range details.Tools {
-		if tool.Name != "" {
-			toolNames = append(toolNames, tool.Name)
-		}
-	}
-	sort.Strings(toolNames)
-	// An incomplete declaration list cannot establish a total. A genuinely
-	// empty list still establishes zero; nil means no declarations are known.
-	if details.Tools != nil && len(toolNames) == len(details.Tools) {
-		toolCount = new(len(toolNames))
-	}
 	configuration := catalogConfiguration(details.Headers, details.Variables)
 	return CatalogDetails{
 		CatalogCandidate: CatalogCandidate{
@@ -307,12 +294,10 @@ func projectCatalogDetails(descriptor CatalogDescriptor, catalogRef string, deta
 			Name:        details.Name,
 			Description: details.Description,
 			Version:     details.Version,
-			ToolCount:   toolCount,
 			SupportsDCR: details.SupportsDCR, SupportsCIMD: details.SupportsCIMD, AuthSetup: details.AuthSetup,
 			SetupIntent: descriptor.SetupIntent,
 		},
 		Transport:              string(details.TransportType),
-		ToolNames:              toolNames,
 		Configuration:          configuration,
 		RequiresDashboardSetup: catalogRequiresDashboardSetup(configuration),
 		remoteURLTemplate:      details.RemoteURL,
@@ -437,7 +422,6 @@ func catalogCandidateFromEntry(descriptor CatalogDescriptor, entry *types.Extern
 		Name:        name,
 		Description: entry.Description,
 		Version:     entry.Version,
-		ToolCount:   entry.ToolCount,
 		SupportsDCR: entry.SupportsDcr, SupportsCIMD: conv.PtrValOr(entry.SupportsCimd, false), AuthSetup: conv.PtrValOr(entry.AuthSetup, "unknown"),
 		SetupIntent: descriptor.SetupIntent,
 	}

@@ -11,27 +11,18 @@ export interface ParsedServerMetadata {
   updatedAt?: Date;
 }
 
-function authSetup(server: CatalogServer) {
-  return (
-    server.authSetup ?? server.meta?.["com.speakeasy.ai/catalog"]?.authSetup
-  );
-}
-
 /** Automatic OAuth setup still verifies the live issuer during installation. */
 export function supportsAutomaticOAuth(server: CatalogServer): boolean {
-  const metadata = server.meta?.["com.speakeasy.ai/catalog"];
   return (
     server.supportsDcr ||
     server.supportsCimd === true ||
-    metadata?.supportsDcr === true ||
-    metadata?.supportsCimd === true ||
-    authSetup(server) === "dcr" ||
-    authSetup(server) === "cimd"
+    server.authSetup === "dcr" ||
+    server.authSetup === "cimd"
   );
 }
 
 export function serverSetupType(server: CatalogServer): SetupType {
-  const setup = authSetup(server);
+  const setup = server.authSetup;
   if (setup === "none" || setup === "dcr" || setup === "cimd") return "auto";
   if (setup === "manual") return "manual";
   return supportsAutomaticOAuth(server) ? "auto" : "unknown";
@@ -44,8 +35,8 @@ export function requiresManualSetup(server: CatalogServer): boolean {
 export type CatalogAuthType = "none" | "oauth" | "unknown";
 
 export function extractAuthType(server: CatalogServer): CatalogAuthType {
-  if (authSetup(server) === "none") return "none";
-  if (authSetup(server) === "manual" || supportsAutomaticOAuth(server))
+  if (server.authSetup === "none") return "none";
+  if (server.authSetup === "manual" || supportsAutomaticOAuth(server))
     return "oauth";
   return "unknown";
 }
@@ -70,7 +61,11 @@ export function parseServerMetadata(
       unknown: "Unknown",
     }[authType],
     setupType: serverSetupType(server),
-    publishedAt: suppliedDate(lifecycle?.publishedAt),
+    // Same precedence as the backend's provenance reader: the registry's own
+    // publication time, then the backend-owned native publication time.
+    publishedAt:
+      suppliedDate(lifecycle?.publishedAt) ??
+      suppliedDate(server.meta?.["com.speakeasy.ai/registry"]?.publishedAt),
     updatedAt: suppliedDate(lifecycle?.updatedAt),
   };
 }

@@ -12,5 +12,4 @@ func TestDashboardIgnoresLegacyToolDeclarations(t *testing.T) {
 	details, err := decodeDashboardDetails(body)
 	require.NoError(t, err)
 	require.Len(t, details.Remotes, 2)
-	require.Nil(t, details.Tools)
 }

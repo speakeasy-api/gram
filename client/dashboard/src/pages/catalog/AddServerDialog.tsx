@@ -138,11 +138,7 @@ function useEnrichedServers(
                 return current;
               })
             : details.remotes;
-          return filterToHttpRemotes({
-            ...server,
-            tools: details.tools,
-            remotes,
-          });
+          return filterToHttpRemotes({ ...server, remotes });
         }),
       ),
   });

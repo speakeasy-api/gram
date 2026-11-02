@@ -230,21 +230,17 @@ describe("AddServerDialog guardrails", () => {
     expect(mocks.startInstall).not.toHaveBeenCalled();
   });
 
-  function guardrailsPhase(tools: { name: string; destructive: boolean }[]) {
+  function guardrailsPhase() {
     return {
       phase: "guardrails",
       projectSlug: "default",
-      guardrail: catalogPresetState(tools),
+      guardrail: catalogPresetState([]),
       updateGuardrail: vi.fn(),
       servers: [
         {
           key: "test/server",
           name: "Test Server",
           registrySpecifier: "test/server",
-          toolCount: tools.length,
-          destructiveTools: tools
-            .filter((t) => t.destructive)
-            .map((t) => t.name),
           oauth: true,
         },
       ],
@@ -258,23 +254,15 @@ describe("AddServerDialog guardrails", () => {
   }
 
   it("summarizes the recommended guardrail and installs with it", async () => {
-    mocks.workflow.mockReturnValue(
-      guardrailsPhase([
-        { name: "create_issue", destructive: false },
-        { name: "delete_issue", destructive: true },
-      ]),
-    );
+    mocks.workflow.mockReturnValue(guardrailsPhase());
     renderDialog();
 
     expect(await screen.findByText("Guardrails for Test Server")).toBeDefined();
-    expect(screen.getByText("2 tools · 1 destructive · OAuth")).toBeDefined();
+    expect(screen.getByText("OAuth")).toBeDefined();
     expect(
       screen.getByText("Create a risk policy for this server"),
     ).toBeDefined();
-    expect(screen.getByText("delete_issue")).toBeDefined();
-    expect(
-      screen.getByText(/Destructive tool detection supports logging only/),
-    ).toBeDefined();
+    expect(screen.getByText("All tools")).toBeDefined();
 
     fireEvent.click(screen.getByRole("button", { name: "Add to Project" }));
     expect(mocks.installWithGuardrail).toHaveBeenCalledTimes(1);
@@ -282,9 +270,7 @@ describe("AddServerDialog guardrails", () => {
   });
 
   it("logs by default and installs without a policy when switched off", async () => {
-    mocks.workflow.mockReturnValue(
-      guardrailsPhase([{ name: "search", destructive: false }]),
-    );
+    mocks.workflow.mockReturnValue(guardrailsPhase());
     renderDialog();
 
     expect(await screen.findByText("Log for review · Severity")).toBeDefined();
@@ -298,9 +284,7 @@ describe("AddServerDialog guardrails", () => {
 
   it("installs, then opens the full editor pre-filled, on customize now", async () => {
     mocks.installForCustomizing.mockResolvedValue(["srv-1"]);
-    mocks.workflow.mockReturnValue(
-      guardrailsPhase([{ name: "search", destructive: false }]),
-    );
+    mocks.workflow.mockReturnValue(guardrailsPhase());
     renderDialog();
 
     fireEvent.click(

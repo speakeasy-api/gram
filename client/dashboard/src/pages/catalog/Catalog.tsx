@@ -105,10 +105,9 @@ function CatalogInner() {
     }
   };
 
-  // Category + sort stay page state (no UI to change category today; sort is the
-  // SortDropdown). The five granular filters now run through the unified filter
-  // system, which reads/writes the same URL params, so existing links keep
-  // working. We bridge its value object back to the catalog's `FilterValues`
+  // Sort stays page state (the SortDropdown). The granular filters run through
+  // the unified filter system, which reads/writes the same URL params, so
+  // existing links keep working. We bridge its value object back to the catalog's `FilterValues`
   // shape so `filterAndSortServers` is reused unchanged.
   const pageState = useFilterState();
   const dimensionFilters = useDimensionFilters(CATALOG_FILTERS);
@@ -117,8 +116,8 @@ function CatalogInner() {
     [dimensionFilters.values],
   );
   const filterState = useMemo(
-    () => ({ category: pageState.category, sort: pageState.sort, filters }),
-    [pageState.category, pageState.sort, filters],
+    () => ({ sort: pageState.sort, filters }),
+    [pageState.sort, filters],
   );
 
   const [viewMode, setViewMode] = useViewMode();
@@ -271,16 +270,11 @@ function CatalogInner() {
         {/* Empty state */}
         {!isLoading && filteredServers.length === 0 && (
           <EmptySearchResult
-            hasFilters={
-              hasActiveFilters ||
-              filterState.category !== "all" ||
-              searchQuery !== ""
-            }
+            hasFilters={hasActiveFilters || searchQuery !== ""}
             onClear={() => {
               setSearchQuery("");
-              // clearFilters resets category + sort + every filter param in
-              // a single URL update (the unified state re-reads from it),
-              // so a category-filtered empty state isn't left stuck.
+              // clearFilters resets sort + every filter param in a single
+              // URL update (the unified state re-reads from it).
               pageState.clearFilters();
             }}
           />

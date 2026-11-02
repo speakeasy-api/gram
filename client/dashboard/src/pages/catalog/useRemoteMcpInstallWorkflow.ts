@@ -48,9 +48,7 @@ import { useDetectorMode } from "@/pages/security/use-detector-mode";
 import {
   buildServerGuardrailRequest,
   catalogPresetState,
-  isDestructiveTool,
   type ServerGuardrailState,
-  type ServerTool,
 } from "@/pages/security/server-guardrails/server-guardrail-policy";
 
 export const ISSUER_LOOKUP_FAILED_MESSAGE =
@@ -181,14 +179,12 @@ export interface GuardrailServerSummary {
   name: string;
   registrySpecifier: string;
   iconUrl?: string;
-  toolCount?: number;
-  destructiveTools: string[];
   oauth: boolean;
 }
 
 export interface GuardrailsPhase extends WorkflowBase {
   phase: "guardrails";
-  /** The guardrail being drafted, pre-filled from the servers' tool annotations. */
+  /** The guardrail being drafted, pre-filled with the catalog preset. */
   guardrail: ServerGuardrailState;
   updateGuardrail: (
     update: (state: ServerGuardrailState) => ServerGuardrailState,
@@ -1093,16 +1089,10 @@ export function useRemoteMcpInstallWorkflow({
     (options?: { configureSkipped?: boolean }) => {
       if (!canInstall || phaseRef.current !== "configure") return;
       setConfigureSkipped(options?.configureSkipped === true);
-      setGuardrail(
-        catalogPresetState(
-          serverConfigs
-            .filter((config) => !isFigmaCatalogServer(config.server))
-            .flatMap((config) => serverToolsForPreset(config.server)),
-        ),
-      );
+      setGuardrail(catalogPresetState([]));
       setPhase("guardrails");
     },
-    [canInstall, serverConfigs],
+    [canInstall],
   );
 
   const backToConfigure = useCallback(() => {
@@ -1181,37 +1171,13 @@ export function useRemoteMcpInstallWorkflow({
 }
 
 function guardrailServerSummary(config: ServerConfig): GuardrailServerSummary {
-  const tools = serverToolsForPreset(config.server);
   return {
     key: config.server.registrySpecifier,
     name: config.name,
     registrySpecifier: config.server.registrySpecifier,
     ...(config.server.iconUrl ? { iconUrl: config.server.iconUrl } : {}),
-    toolCount: tools.length || undefined,
-    destructiveTools: tools
-      .filter((tool) => tool.destructive)
-      .map((tool) => tool.name),
     oauth: supportsAutomaticOAuth(config.server),
   };
-}
-
-/** The annotated tools of a catalog server, for pre-filling its guardrail.
- *  Empty until the catalog detail enrichment has loaded them. */
-function serverToolsForPreset(server: CatalogServer): ServerTool[] {
-  return (server.tools ?? []).flatMap((tool) =>
-    tool.name
-      ? [
-          {
-            name: tool.name,
-            destructive: isDestructiveTool(
-              tool.annotations as
-                | { destructiveHint?: boolean; readOnlyHint?: boolean }
-                | undefined,
-            ),
-          },
-        ]
-      : [],
-  );
 }
 
 /** One guardrail covers every server in the install, so the name names the

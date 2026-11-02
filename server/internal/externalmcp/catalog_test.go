@@ -95,7 +95,6 @@ func TestDashboardDetailsRetainEveryRemote(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, result.Remotes, 2)
 	require.Len(t, result.Remotes[1].Headers, 1)
-	require.Nil(t, result.Tools)
 	require.Equal(t, "Full title", *result.Title)
 	require.Equal(t, "https://example.test/icon.png", *result.IconURL)
 	require.Contains(t, result.Meta, "com.pulsemcp/server-version")

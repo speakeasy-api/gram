@@ -205,7 +205,6 @@ func (a *OfficialRegistryAdapter) GetServerDetails(ctx context.Context, registry
 			Version:       detail.Server.Version,
 			RemoteURL:     "",
 			TransportType: "",
-			Tools:         nil,
 			Headers:       nil,
 			Variables:     nil,
 		}, nil
@@ -216,7 +215,6 @@ func (a *OfficialRegistryAdapter) GetServerDetails(ctx context.Context, registry
 		Version:       detail.Server.Version,
 		RemoteURL:     remote.URL,
 		TransportType: externalmcptypes.TransportType(remote.Type),
-		Tools:         nil,
 		Headers:       remote.Headers,
 		Variables:     remote.Variables,
 	}, nil

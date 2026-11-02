@@ -118,11 +118,7 @@ export function CatalogGuardrailsPhase({
 
       {enabled ? (
         <>
-          <GuardrailSummary
-            releaseState={releaseState}
-            single={single}
-            mode={mode}
-          />
+          <GuardrailSummary releaseState={releaseState} mode={mode} />
           <Text small muted>
             Adjust detectors, tools or action later on the server&apos;s{" "}
             <span className="text-foreground font-medium">Guardrails</span> tab,
@@ -171,15 +167,6 @@ function ServerSummaryRow({
 }: {
   server: GuardrailServerSummary;
 }): JSX.Element {
-  const facts = [
-    ...(server.toolCount !== undefined
-      ? [`${server.toolCount} ${server.toolCount === 1 ? "tool" : "tools"}`]
-      : []),
-    ...(server.destructiveTools.length > 0
-      ? [`${server.destructiveTools.length} destructive`]
-      : []),
-    ...(server.oauth ? ["OAuth"] : []),
-  ];
   return (
     <div className="flex items-center gap-3">
       <div className="bg-muted flex size-10 shrink-0 items-center justify-center border">
@@ -198,9 +185,11 @@ function ServerSummaryRow({
       </div>
       <div className="min-w-0">
         <div className="truncate text-sm font-medium">{server.name}</div>
-        <Text small muted>
-          {facts.join(" · ")}
-        </Text>
+        {server.oauth ? (
+          <Text small muted>
+            OAuth
+          </Text>
+        ) : null}
       </div>
     </div>
   );
@@ -208,20 +197,13 @@ function ServerSummaryRow({
 
 function GuardrailSummary({
   releaseState,
-  single,
   mode,
 }: {
   releaseState: GuardrailsPhase;
-  single: GuardrailServerSummary | undefined;
   mode: ReturnType<typeof useDetectorMode>;
 }): JSX.Element {
-  const { guardrail, servers } = releaseState;
+  const { guardrail } = releaseState;
   const action = ACTION_LABELS[effectiveAction(guardrail)];
-  const destructive = [
-    ...new Set(servers.flatMap((server) => server.destructiveTools)),
-  ];
-  const inspectsDestructive = guardrail.categories.has("destructive_tool");
-  const toolCount = single?.toolCount;
 
   return (
     <dl className="divide-border divide-y border px-3">
@@ -240,19 +222,7 @@ function GuardrailSummary({
         )}
       </SummaryRow>
       <SummaryRow label="Tools">
-        <span className="text-sm">
-          {toolCount ? `All ${toolCount} tools` : "All tools"}
-          {inspectsDestructive && destructive.length > 0
-            ? " · destructive:"
-            : ""}
-        </span>
-        {inspectsDestructive
-          ? destructive.map((tool) => (
-              <Badge key={tool} variant="warning" className="normal-case">
-                {tool}
-              </Badge>
-            ))
-          : null}
+        <span className="text-sm">All tools</span>
       </SummaryRow>
       <SummaryRow label="Inspects">
         <span className="text-sm">Tool requests · Tool responses</span>

@@ -250,7 +250,7 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		Title:             details.Title,
 		IconURL:           details.IconURL,
 		Meta:              details.Meta,
-		Tools:             details.Tools,
+		Tools:             nil,
 		Remotes:           details.Remotes,
 	}, nil
 }
@@ -296,7 +296,6 @@ type serverDetailsResult struct {
 	Name        string
 	Description string
 	Version     string
-	Tools       []*types.ExternalMCPTool
 	Remotes     []*types.ExternalMCPRemote
 }
 
@@ -345,7 +344,6 @@ func decodeDashboardDetails(body []byte) (*serverDetailsResult, error) {
 		Name:        serverResp.Server.Name,
 		Description: serverResp.Server.Description,
 		Version:     serverResp.Server.Version,
-		Tools:       nil,
 		Remotes:     remotes,
 	}, nil
 }

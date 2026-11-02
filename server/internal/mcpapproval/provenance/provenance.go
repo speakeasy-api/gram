@@ -8,7 +8,6 @@ import (
 )
 
 type Provenance struct {
-	Catalogued  bool
 	Status      string
 	PublishedAt time.Time
 	UpdatedAt   time.Time
@@ -41,31 +40,10 @@ func Read(meta any) Provenance {
 		published = parseTime(doc.Publication.PublishedAt)
 	}
 	return Provenance{
-		Catalogued:  false,
 		Status:      doc.Version.Status,
 		PublishedAt: published,
 		UpdatedAt:   parseTime(doc.Version.UpdatedAt),
 	}
-}
-
-// Withdrawn reports that the registry no longer lists this version as active.
-//
-// A server withdrawn from the catalogue after someone started using it is
-// worth an approver's attention, and it is the one status value that changes a
-// decision on its own.
-func (p Provenance) Withdrawn() bool {
-	return p.Catalogued && p.Status != "" && p.Status != "active"
-}
-
-// StaleFor reports how long since the entry last changed, and whether that is
-// knowable. Callers render the duration; deciding what counts as stale is a
-// judgement for the person approving, not for this package.
-func (p Provenance) StaleFor(now time.Time) (time.Duration, bool) {
-	if p.UpdatedAt.IsZero() {
-		return 0, false
-	}
-
-	return now.Sub(p.UpdatedAt), true
 }
 
 func parseTime(raw string) time.Time {

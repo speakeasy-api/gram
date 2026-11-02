@@ -31,7 +31,6 @@ const NO_FILTERS: FilterValues = {
 
 function filterState(filters: Partial<FilterValues>): FilterState {
   return {
-    category: "all",
     sort: "alphabetical",
     filters: { ...NO_FILTERS, ...filters },
   };
@@ -155,15 +154,12 @@ describe("native catalog metadata", () => {
     ).toEqual([]);
   });
 
-  it("reads native auth capabilities and standard lifecycle, not vendor verification", () => {
+  it("reads projected auth capabilities and standard lifecycle, not vendor verification", () => {
     const native = {
       ...server("example/native", false),
+      supportsCimd: true,
+      authSetup: "cimd" as const,
       meta: {
-        "com.speakeasy.ai/catalog": {
-          supportsCimd: true,
-          authSetup: "cimd" as const,
-          authDiscoveryStatus: "complete" as const,
-        },
         "io.modelcontextprotocol.registry/official": {
           status: "active",
           updatedAt: "2026-10-01T00:00:00Z",
@@ -182,30 +178,46 @@ describe("native catalog metadata", () => {
 
   it("accepts explicit native no-auth but not unavailable discovery", () => {
     const native = server("example/native", false);
+    expect(extractAuthType({ ...native, authSetup: "none" })).toBe("none");
     expect(
       extractAuthType({
         ...native,
-        meta: {
-          "com.speakeasy.ai/catalog": {
-            authSetup: "none",
-            authDiscoveryStatus: "not_required",
-          },
-        },
-      }),
-    ).toBe("none");
-    expect(
-      extractAuthType({
-        ...native,
-        meta: {
-          "com.speakeasy.ai/catalog": {
-            supportsDcr: false,
-            supportsCimd: false,
-            authSetup: "unknown",
-            authDiscoveryStatus: "unavailable",
-          },
-        },
+        supportsCimd: false,
+        authSetup: "unknown",
       }),
     ).toBe("unknown");
+  });
+
+  it("prefers the registry publication time, then the backend-owned one", () => {
+    const native = server("example/native", false);
+    const owned = {
+      "com.speakeasy.ai/registry": { publishedAt: "2026-09-01T00:00:00Z" },
+    };
+    expect(parseServerMetadata({ ...native, meta: owned }).publishedAt).toEqual(
+      new Date("2026-09-01T00:00:00Z"),
+    );
+    expect(
+      parseServerMetadata({
+        ...native,
+        meta: {
+          ...owned,
+          "io.modelcontextprotocol.registry/official": {
+            publishedAt: "2026-10-01T00:00:00Z",
+          },
+        },
+      }).publishedAt,
+    ).toEqual(new Date("2026-10-01T00:00:00Z"));
+    expect(
+      parseServerMetadata({
+        ...native,
+        meta: {
+          ...owned,
+          "io.modelcontextprotocol.registry/official": {
+            publishedAt: "not a date",
+          },
+        },
+      }).publishedAt,
+    ).toEqual(new Date("2026-09-01T00:00:00Z"));
   });
 });
 
