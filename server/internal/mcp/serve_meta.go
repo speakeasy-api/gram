@@ -558,8 +558,11 @@ func (s *Service) callMetaServerTool(
 	if !served {
 		return nil, oops.E(oops.CodeNotFound, nil, "tool %q is not available on this connection; the gateway's tools may have changed, so reconnect to refresh the tool list", params.Name).LogWarn(ctx, logger)
 	}
-	// connection_status reads the live choice so it agrees with a call.
+	// connection_status reads the live choice so it agrees with a call, and writes nothing.
 	gate.execute = gate.discoveryMode == metamcp.DiscoveryModeDirect || params.Name == metamcp.ToolExecuteTool || params.Name == metamcp.ToolConnectionStatus
+	if params.Name == metamcp.ToolConnectionStatus && gate.memberChoices != nil {
+		gate.memberChoices.readOnly = true
+	}
 	start := time.Now()
 
 	// One snapshot per request: every meta MCP tool answers from the same

@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -430,4 +431,30 @@ func TestStaleNoAuthEnforcedRealPermitAllowsReconnect(t *testing.T) {
 	_, err = accessrepo.New(g.ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{OrganizationID: g.org, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), Scope: string(authz.ScopeMCPAuth), Selectors: selectors})
 	require.NoError(t, err)
 	requireStaleError(t, g.call(t, connection.token, "source--tool_000"), staleReconnectCopy)
+}
+
+func TestConnectionStatusWritesNoChoiceUnderEnforcement(t *testing.T) {
+	t.Parallel()
+	ctx, g := newStaleChoiceGateway(t, toolfilter.CatalogModeCached, metamcp.DiscoveryModeProgressive)
+	g.enforce(t, ctx)
+	connection := g.approve(t, ctx)
+	token := g.sessionWithoutCatalog(t, ctx, connection, true)
+	late := newCatalogUpstream(t, 1)
+	lateServer := seedMetaMemberWithUpstream(t, ctx, g.ti.conn, g.project, g.gateway, "Late", "late", 3, late.url)
+	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(connection.token, urn.NewUserSessionIssuer(g.issuer).String())
+	require.NoError(t, err)
+	queries := usersessionsrepo.New(g.ti.conn)
+	session, err := queries.GetUserSessionByJTI(ctx, usersessionsrepo.GetUserSessionByJTIParams{UserSessionIssuerID: g.issuer, Jti: claims.ID})
+	require.NoError(t, err)
+	choices := func() int {
+		rows, err := queries.ListUpstreamClientSelections(ctx, usersessionsrepo.ListUpstreamClientSelectionsParams{UserSessionIssuerID: g.issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: session.ID, McpServerIds: []uuid.UUID{lateServer}, OrganizationID: g.org})
+		require.NoError(t, err)
+		return len(rows)
+	}
+	require.Zero(t, choices())
+	w := g.post(t, token, metamcp.ToolConnectionStatus, map[string]any{})
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	require.Zero(t, choices(), "a status check writes no choice")
+	requireExecuted(t, g.call(t, token, "late--tool_000"))
+	require.Equal(t, 1, choices(), "a call still records the new member's choice")
 }

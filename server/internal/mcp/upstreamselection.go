@@ -472,6 +472,9 @@ type memberChoices struct {
 	// choices for some servers at most.
 	onlyChosen bool
 
+	// readOnly stops apply recording new members' choices.
+	readOnly bool
+
 	// chosen are the members apply found a choice for, when onlyChosen.
 	chosen map[uuid.UUID]bool
 
@@ -518,6 +521,7 @@ func (s *Service) newMemberChoices(ctx context.Context, authentication *issuerGa
 		profile:      profile,
 		metaServerID: endpoint.MetaMcpServerID,
 		onlyChosen:   false,
+		readOnly:     false,
 		chosen:       nil,
 		resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
 			return s.resolveChosenMemberTokens(ctx, endpoint, authentication.subject, enforced, member)
@@ -596,7 +600,7 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 	var err error
 	if typed {
 		resolved, err = c.selector.resolveAuthClients(ctx, ids)
-		if err == nil && c.enforced && !c.profile && c.recordNewMemberChoices(ctx, logger, members, resolved) {
+		if err == nil && c.enforced && !c.profile && !c.readOnly && c.recordNewMemberChoices(ctx, logger, members, resolved) {
 			resolved, err = c.selector.resolveAuthClients(ctx, ids)
 		}
 		ids = ids[:0]
@@ -1028,6 +1032,7 @@ func (s *Service) agentKeyMemberChoices(ctx context.Context, organizationID stri
 		enforced:     true,
 		profile:      false,
 		metaServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		readOnly:     false,
 		onlyChosen:   true,
 		chosen:       map[uuid.UUID]bool{},
 		resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
