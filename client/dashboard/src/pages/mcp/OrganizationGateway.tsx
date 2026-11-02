@@ -261,8 +261,8 @@ function GatewayBody({
     return (
       <Alert variant="warning">
         <AlertDescription>
-          Organization Gateway is off. An organization admin must review MCP
-          assignments before enabling this endpoint for the team.
+          Organization Gateway is off. An organization admin can turn it on for
+          the team. Reviewing MCP assignments first is recommended.
         </AlertDescription>
       </Alert>
     );

@@ -81,9 +81,7 @@ export function OrganizationGatewaySwitch({
         confirmLabel="Turn off"
         pendingLabel="Turning off…"
         isPending={isPending}
-        onConfirm={() =>
-          setOn(false, { onSuccess: () => setConfirming(null) })
-        }
+        onConfirm={() => setOn(false, { onSuccess: () => setConfirming(null) })}
       />
     </>
   );
