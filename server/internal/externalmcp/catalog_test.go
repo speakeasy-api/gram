@@ -31,7 +31,6 @@ func TestCatalogSourceFromRowAdmitsOnlyCertifiedReviewedSources(t *testing.T) {
 	source, ok := catalogSourceFromRow(base)
 	require.True(t, ok)
 	require.Equal(t, "reviewed-pulse", source.SourceKey)
-	require.False(t, source.Legacy)
 
 	for _, mutate := range []func(*repo.ListMCPRegistriesRow){
 		func(row *repo.ListMCPRegistriesRow) { row.Enabled.Bool = false },
@@ -91,7 +90,7 @@ func TestCatalogSelectsExactlyOneSource(t *testing.T) {
 
 func TestDashboardDetailsRetainEveryRemote(t *testing.T) {
 	t.Parallel()
-	result, err := decodeDashboardDetails([]byte(`{"server":{"name":"example/server","version":"1","description":"full","title":"Full title","icons":[{"src":"https://example.test/icon.png"}],"remotes":[{"type":"sse","url":"https://example.test/sse"},{"type":"streamable-http","url":"https://example.test/mcp","headers":[{"name":"X-Token","description":"token","isRequired":true}]}]},"_meta":{"com.pulsemcp/server-version":{"remotes[1]":{"tools":[{"name":"search","description":"find","inputSchema":{"type":"object"}}]}}}}`), true)
+	result, err := decodeDashboardDetails([]byte(`{"server":{"name":"example/server","version":"1","description":"full","title":"Full title","icons":[{"src":"https://example.test/icon.png"}],"remotes":[{"type":"sse","url":"https://example.test/sse"},{"type":"streamable-http","url":"https://example.test/mcp","headers":[{"name":"X-Token","description":"token","isRequired":true}]}]},"_meta":{"com.pulsemcp/server-version":{"remotes[1]":{"tools":[{"name":"search","description":"find","inputSchema":{"type":"object"}}]}}}}`))
 	require.NoError(t, err)
 	require.Len(t, result.Remotes, 2)
 	require.Len(t, result.Remotes[1].Headers, 1)
@@ -113,7 +112,7 @@ func (r *failedCatalogReader) GetServerDetails(context.Context, Registry, string
 }
 func TestCatalogSelectedFailureNeverFallsBack(t *testing.T) {
 	t.Parallel()
-	legacy, native := &failedCatalogReader{}, &failedCatalogReader{}
+	native := &failedCatalogReader{}
 	s := NewCatalogService(nil, native)
 	s.repo = routingRepo{rows: []repo.ListMCPRegistriesRow{
 		{ID: uuid.New(), Url: "https://api.pulsemcp.com"},
@@ -123,11 +122,9 @@ func TestCatalogSelectedFailureNeverFallsBack(t *testing.T) {
 	_, err := s.List(ctx, nil, nil)
 	require.ErrorContains(t, err, "selected source failed")
 	require.Equal(t, 1, native.calls)
-	require.Zero(t, legacy.calls)
 	_, err = s.IdentityDetails(t.Context(), NativeCatalogRegistryID, "example/server", nil)
 	require.ErrorContains(t, err, "selected source failed")
 	require.Equal(t, 2, native.calls)
-	require.Zero(t, legacy.calls)
 }
 
 func TestCatalogUnsupportedIdentity(t *testing.T) {

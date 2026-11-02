@@ -230,7 +230,7 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		if lookupErr != nil {
 			err = lookupErr
 		} else {
-			details, err = decodeDashboardDetails(entry.Data, true)
+			details, err = decodeDashboardDetails(entry.Data)
 		}
 	} else {
 		err = ErrUnknownRegistrySource
@@ -308,7 +308,7 @@ func (s *Service) clearRegistryCache(ctx context.Context, registryURL string) er
 	return client.ClearCache(ctx, registryURL)
 }
 
-func decodeDashboardDetails(body []byte, nativeSelection bool) (*serverDetailsResult, error) {
+func decodeDashboardDetails(body []byte) (*serverDetailsResult, error) {
 	var enrichment struct {
 		Server struct {
 			Title *string `json:"title"`
@@ -366,12 +366,12 @@ func decodeDashboardDetails(body []byte, nativeSelection bool) (*serverDetailsRe
 			Headers:       toExternalMCPRemoteHeaders(r.Headers),
 			Variables:     toExternalMCPRemoteVariables(r.Variables),
 		})
-		// Prefer first streamable-http; native falls back to last SSE, the legacy catalog to first.
+		// Prefer the first streamable-http remote, falling back to the last SSE remote.
 		// Can't break early because we need all remotes in the slice.
 		if r.Type == "streamable-http" && !foundStreamable {
 			preferredIndex = i
 			foundStreamable = true
-		} else if r.Type == "sse" && !foundStreamable && (nativeSelection || preferredIndex == -1) {
+		} else if r.Type == "sse" && !foundStreamable {
 			preferredIndex = i
 		}
 	}

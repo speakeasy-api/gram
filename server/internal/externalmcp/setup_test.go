@@ -16,7 +16,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -50,7 +49,6 @@ func TestMain(m *testing.M) {
 }
 
 type testInstance struct {
-	feature        *feature.InMemory
 	service        *externalmcp.Service
 	conn           *pgxpool.Pool
 	sessionManager *sessions.Manager
@@ -81,13 +79,11 @@ func newTestExternalMCPService(t *testing.T) (context.Context, *testInstance) {
 
 	validator, err := mcpregistry.LoadValidator()
 	require.NoError(t, err)
-	f := &feature.InMemory{}
 	catalog := externalmcp.NewCatalogService(conn, externalmcp.NewNativeRegistryReader(mcpregistry.New(conn, validator)))
 	svc := externalmcp.NewService(logger, tracerProvider, conn, sessionManager, cache.NoopCache, catalog, authzEngine, serverURL)
 
 	return ctx, &testInstance{
 		service:        svc,
-		feature:        f,
 		conn:           conn,
 		sessionManager: sessionManager,
 	}
