@@ -538,6 +538,9 @@ func newAdminCommand() *cli.Command {
 			adminService.SetCatalogPromotionService(catalogpromotion.New(db, registryService, productFeatures, telemetry.NewMCPServerHealth(db, chDB), nil, guardianPolicy))
 			adminService.SetMCPServerURL(mcpServerURL)
 			adminService.SetHookClients(telemetry.NewHookClients(chDB))
+			if temporalEnv != nil {
+				adminService.SetMemoryEvalRunStarter(&background.TemporalMemoryEvalRunStarter{TemporalEnv: temporalEnv})
+			}
 			adminService.SetDeviceAgentVersions(deviceagentversions.NewStore(redisClient))
 			latestHooksVersion, err := semver.NewVersion(plugins.LatestHooksVersion())
 			if err != nil {

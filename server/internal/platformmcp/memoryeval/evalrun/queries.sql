@@ -42,6 +42,17 @@ SET status = 'failed', error = @error, cost_usd = sqlc.narg(cost_usd),
     finished_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE id = @id AND status IN ('queued', 'running');
 
+-- name: LockRunStarts :exec
+-- Serializes run starts for the transaction, so the daily cap and the
+-- one-active-run rule hold under concurrent starts.
+SELECT pg_advisory_xact_lock(hashtext('memory_eval_runs.start'));
+
+-- name: CountActiveRuns :one
+-- Runs that may still write team memory. Two at once would overwrite each
+-- other's summaries and digests in the shared eval projects.
+SELECT count(*) FROM memory_eval_runs
+WHERE deleted IS FALSE AND status IN ('queued', 'running');
+
 -- name: GetRunStatus :one
 -- A live run's status, so a claim that found nothing can tell an orphaned
 -- running row from one that is finished or gone.
@@ -52,3 +63,10 @@ SELECT status FROM memory_eval_runs WHERE id = @id AND deleted IS FALSE;
 UPDATE memory_eval_runs
 SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE id = @id AND deleted IS FALSE;
+
+-- name: FailQueuedRun :execrows
+-- Fails a run whose workflow never started. Only a still-queued row matches,
+-- so a run a workflow already claimed is never failed under it.
+UPDATE memory_eval_runs
+SET status = 'failed', error = @error, finished_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE id = @id AND status = 'queued';
