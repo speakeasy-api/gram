@@ -157,6 +157,7 @@ func (g *SummaryGenerator) Generate(ctx context.Context, orgID string, projectID
 	updated, err := g.repo.UpdateChatSummary(ctx, repo.UpdateChatSummaryParams{
 		Summary:         pgtype.Text{String: summary, Valid: true},
 		SummaryRedacted: true,
+		CoveredThrough:  newestMessageAt(messages),
 		ID:              chatID,
 		ProjectID:       projectID,
 	})
@@ -169,6 +170,18 @@ func (g *SummaryGenerator) Generate(ctx context.Context, orgID string, projectID
 	return GeneratedSummary{Summary: updated.Summary.String, GeneratedAt: updated.SummaryGeneratedAt.Time}, nil
 }
 
+// newestMessageAt returns the latest created_at among messages, or an invalid
+// timestamp when there are none.
+func newestMessageAt(messages []repo.ChatMessage) pgtype.Timestamptz {
+	var newest pgtype.Timestamptz
+	for _, m := range messages {
+		if m.CreatedAt.Valid && (!newest.Valid || m.CreatedAt.Time.After(newest.Time)) {
+			newest = m.CreatedAt
+		}
+	}
+	return newest
+}
+
 // TeamMemoryEnabled reports whether the team-memory rollout flag is on for an
 // organization. Lookup failures read as disabled so a PostHog outage never
 // switches an organization onto the new summary path.
@@ -176,14 +189,12 @@ func TeamMemoryEnabled(ctx context.Context, logger *slog.Logger, db *pgxpool.Poo
 	if flags == nil || db == nil {
 		return false
 	}
-	var groups map[string]string
 	org, err := orgrepo.New(db).GetOrganizationMetadata(ctx, organizationID)
 	if err != nil {
-		logger.WarnContext(ctx, "resolve organization slug for team memory flag", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
-	} else {
-		groups = feature.OrgProjectGroups(org.Slug, "")
+		logger.WarnContext(ctx, "resolve organization slug for team memory flag; treating as disabled", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		return false
 	}
-	on, err := flags.IsFlagEnabled(ctx, feature.FlagTeamMemory, organizationID, groups)
+	on, err := flags.IsFlagEnabled(ctx, feature.FlagTeamMemory, organizationID, feature.OrgProjectGroups(org.Slug, ""))
 	if err != nil {
 		logger.WarnContext(ctx, "team memory flag check failed; treating as disabled", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
 		return false
