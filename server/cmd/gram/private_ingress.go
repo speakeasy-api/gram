@@ -69,6 +69,9 @@ func newNetworkIngressServerCommand() *cli.Command {
 			); err != nil {
 				return err
 			}
+			if err := validatePrivateGatewayPrincipal(c.String("netingress-gateway-namespace"), c.String("netingress-gateway-service-account")); err != nil {
+				return err
+			}
 
 			ctx, cancel := context.WithCancel(c.Context)
 			defer cancel()
@@ -114,6 +117,7 @@ func newNetworkIngressServerCommand() *cli.Command {
 			return servePrivateIngress(ctx, privateIngressServerDependencies{
 				Logger: logger, MeterProvider: otel.GetMeterProvider(), DB: deps.DB,
 				Kubernetes: deps.Kubernetes, Runtime: deps.Runtime,
+				GatewayNamespace: c.String("netingress-gateway-namespace"), GatewayServiceAccount: c.String("netingress-gateway-service-account"),
 			}, c.String("netingress-address"), c.String("netingress-tls-cert-file"), c.String("netingress-tls-key-file"))
 		},
 		Before: func(ctx *cli.Context) error {
@@ -140,7 +144,24 @@ func privateIngressServerFlags() []cli.Flag {
 			Usage:   "TLS private key file for the private network ingress listener",
 			EnvVars: []string{"GRAM_NETINGRESS_TLS_KEY_FILE"},
 		},
+		&cli.StringFlag{
+			Name:    "netingress-gateway-namespace",
+			Usage:   "Namespace of the tailnet gateway service account accepted for any gateway-hosted ingress",
+			EnvVars: []string{"GRAM_NETINGRESS_GATEWAY_NAMESPACE"},
+		},
+		&cli.StringFlag{
+			Name:    "netingress-gateway-service-account",
+			Usage:   "Tailnet gateway service account accepted for any gateway-hosted ingress",
+			EnvVars: []string{"GRAM_NETINGRESS_GATEWAY_SERVICE_ACCOUNT"},
+		},
 	)
+}
+
+func validatePrivateGatewayPrincipal(namespace, serviceAccount string) error {
+	if (namespace == "") != (serviceAccount == "") {
+		return errors.New("private network ingress gateway namespace and service account must be configured together")
+	}
+	return nil
 }
 
 func validatePrivateServerConfig(enabled bool, address, certFile, keyFile string, devSingleProcess bool) error {
@@ -165,6 +186,11 @@ type privateIngressServerDependencies struct {
 	DB            *pgxpool.Pool
 	Kubernetes    *k8s.KubernetesClients
 	Runtime       *mcpServerRuntime
+
+	// GatewayNamespace and GatewayServiceAccount identify the tailnet gateway
+	// whose requests resolve their ingress by host. Both empty disables it.
+	GatewayNamespace      string
+	GatewayServiceAccount string
 }
 
 func servePrivateIngress(
@@ -200,14 +226,20 @@ func servePrivateIngress(
 	mux.Use(middleware.MCPProtocolVersionTelemetry)
 	mux.Use(middleware.NewHTTPLoggingMiddleware(deps.Logger))
 	mux.Use(middleware.NewRecovery(deps.Logger))
+	verifier := netingress.NewAttestationVerifier(
+		deps.Kubernetes.Clientset.AuthenticationV1().TokenReviews(),
+		netingress.NewIngressLookup(deps.DB),
+		netingress.DefaultTokenAudience,
+		30*time.Second,
+		telemetry,
+	)
+	if deps.GatewayNamespace != "" || deps.GatewayServiceAccount != "" {
+		if err := verifier.UseGatewayPrincipal(deps.GatewayNamespace, deps.GatewayServiceAccount); err != nil {
+			return fmt.Errorf("configure tailnet gateway principal: %w", err)
+		}
+	}
 	mux.Use(netingress.Middleware(
-		netingress.NewAttestationVerifier(
-			deps.Kubernetes.Clientset.AuthenticationV1().TokenReviews(),
-			netingress.NewIngressLookup(deps.DB),
-			netingress.DefaultTokenAudience,
-			30*time.Second,
-			telemetry,
-		),
+		verifier,
 		netingress.IdentityParsers{netingress.ProviderTailscale: netingress.TailscaleIdentityParser{}},
 		telemetry,
 	))
