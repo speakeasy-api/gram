@@ -99,7 +99,7 @@ func (r *TsnetRuntime) Start(ctx context.Context, spec NodeSpec) (Node, error) {
 		_ = srv.Close()
 		return nil, fmt.Errorf("tsnet local client: %w", err)
 	}
-	return &tsnetNode{srv: srv, ln: ln, lc: lc, fqdn: ln.FQDN, server: nil, once: sync.Once{}}, nil
+	return &tsnetNode{srv: srv, ln: ln, lc: lc, fqdn: ln.FQDN, logger: r.Logger, server: nil, once: sync.Once{}, mu: sync.Mutex{}, serveErr: nil}, nil
 }
 
 type tsnetNode struct {
@@ -107,8 +107,13 @@ type tsnetNode struct {
 	ln     *tsnet.ServiceListener
 	lc     *local.Client
 	fqdn   string
+	logger *slog.Logger
 	server *http.Server
 	once   sync.Once
+
+	// mu guards serveErr, written by the serve goroutine and read by Status.
+	mu       sync.Mutex
+	serveErr error
 }
 
 func (n *tsnetNode) Serve(handler http.Handler) error {
@@ -123,14 +128,29 @@ func (n *tsnetNode) Serve(handler http.Handler) error {
 		BaseContext:       func(net.Listener) context.Context { return context.Background() },
 	}
 	go func() {
-		if err := n.server.Serve(n.ln); err != nil && !errors.Is(err, http.ErrServerClosed) {
-			_ = err
+		err := n.server.Serve(n.ln)
+		if err == nil || errors.Is(err, http.ErrServerClosed) {
+			return
+		}
+		// The node stays connected, but nothing answers the service. Status
+		// reports it so the gateway marks the host errored on its next poll.
+		n.mu.Lock()
+		n.serveErr = err
+		n.mu.Unlock()
+		if n.logger != nil {
+			n.logger.ErrorContext(context.Background(), "tailnet service listener stopped", attr.SlogError(err), attr.SlogHostName(n.fqdn))
 		}
 	}()
 	return nil
 }
 
 func (n *tsnetNode) Status(ctx context.Context) (NodeState, error) {
+	n.mu.Lock()
+	serveErr := n.serveErr
+	n.mu.Unlock()
+	if serveErr != nil {
+		return NodeState{Online: false, BackendState: "", NodeID: "", FQDN: n.fqdn}, fmt.Errorf("service listener stopped: %w", serveErr)
+	}
 	st, err := n.lc.Status(ctx)
 	if err != nil {
 		return NodeState{Online: false, BackendState: "", NodeID: "", FQDN: n.fqdn}, fmt.Errorf("tsnet status: %w", err)

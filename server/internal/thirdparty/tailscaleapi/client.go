@@ -6,12 +6,14 @@ package tailscaleapi
 
 import (
 	"context"
+	"crypto/sha256"
 	"errors"
 	"fmt"
 	"net"
 	"net/http"
 	"net/url"
 	"strings"
+	"sync"
 	"time"
 
 	tailscale "tailscale.com/client/tailscale/v2"
@@ -94,11 +96,28 @@ type Client interface {
 	DeleteService(ctx context.Context, creds Credentials, name string) error
 }
 
-// HTTPClient talks to the Tailscale API over HTTPS.
+// HTTPClient talks to the Tailscale API over HTTPS. One configured API client
+// is kept per OAuth client so its access token is reused until it expires
+// instead of being exchanged on every call.
 type HTTPClient struct {
 	baseURL *url.URL
 	http    *guardian.HTTPClient
+
+	mu      sync.Mutex
+	clients map[credentialKey]*tailscale.Client
 }
+
+// credentialKey identifies an OAuth client without holding its secret in a
+// map key; the secret is folded in as a digest.
+type credentialKey struct {
+	clientID string
+	secret   [32]byte
+}
+
+// maxCachedClients bounds cached API clients. Each private network customer
+// has one OAuth client, so this only matters if the reconciler churns through
+// far more credentials than that.
+const maxCachedClients = 1024
 
 var _ Client = (*HTTPClient)(nil)
 
@@ -120,7 +139,7 @@ func New(policy *guardian.Policy, baseURL string) (*HTTPClient, error) {
 	}
 	httpClient := policy.PooledClient()
 	httpClient.Timeout = requestTimeout
-	return &HTTPClient{baseURL: parsed, http: httpClient}, nil
+	return &HTTPClient{baseURL: parsed, http: httpClient, mu: sync.Mutex{}, clients: make(map[credentialKey]*tailscale.Client)}, nil
 }
 
 // RequireTLS rejects a base URL that would carry the customer's OAuth client
@@ -144,13 +163,27 @@ func (c *HTTPClient) api(creds Credentials) (*tailscale.Client, error) {
 	if creds.ClientID == "" || creds.ClientSecret == "" {
 		return nil, fmt.Errorf("%w: oauth client is incomplete", ErrUnauthorized)
 	}
+	key := credentialKey{clientID: creds.ClientID, secret: sha256.Sum256([]byte(creds.ClientSecret))}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if client, ok := c.clients[key]; ok {
+		return client, nil
+	}
+	if len(c.clients) >= maxCachedClients {
+		for stale := range c.clients {
+			delete(c.clients, stale)
+			break
+		}
+	}
 	//nolint:exhaustruct // APIKey and Tailnet take their documented defaults.
-	return &tailscale.Client{
+	client := &tailscale.Client{
 		BaseURL:   c.baseURL,
 		UserAgent: userAgent,
 		Auth:      &tailscale.OAuth{ClientID: creds.ClientID, ClientSecret: creds.ClientSecret, Scopes: nil},
 		HTTP:      c.http,
-	}, nil
+	}
+	c.clients[key] = client
+	return client, nil
 }
 
 // CreateAuthKey mints a single-use, preauthorized, non-ephemeral key scoped to
@@ -160,8 +193,8 @@ func (c *HTTPClient) CreateAuthKey(ctx context.Context, creds Credentials, req A
 	if err != nil {
 		return AuthKey{}, err
 	}
-	if req.Tag == "" || req.TTL <= 0 {
-		return AuthKey{}, errors.New("auth key request requires a tag and a ttl")
+	if req.Tag == "" || req.TTL < time.Second {
+		return AuthKey{}, errors.New("auth key request requires a tag and a ttl of at least one second")
 	}
 
 	var capabilities tailscale.KeyCapabilities
