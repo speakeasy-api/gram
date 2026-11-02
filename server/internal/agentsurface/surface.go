@@ -44,10 +44,11 @@ var bySource = map[string]Surface{
 	// Claude-in-Slack, which runs the Claude Code runtime.
 	"claude-tag": SurfaceClaudeCode,
 
-	"claude-chat":     SurfaceClaudeChat,
-	"claude-chat-web": SurfaceClaudeChat,
-	"claude-desktop":  SurfaceClaudeChat,
-	"claude-web":      SurfaceClaudeChat,
+	"claude-chat":        SurfaceClaudeChat,
+	"claude-chat-web":    SurfaceClaudeChat,
+	"claude-chat-mobile": SurfaceClaudeChat,
+	"claude-desktop":     SurfaceClaudeChat,
+	"claude-web":         SurfaceClaudeChat,
 
 	"cowork":         SurfaceCowork,
 	"claude-cowork":  SurfaceCowork,
