@@ -115,7 +115,7 @@ const PRODUCT_FEATURES = {
     enabledKey: "skillsOverMcpEnabled",
     label: "Skills over MCP",
     description:
-      "Serves this organization's managed skills over MCP from its hosted MCP servers, gateways and Platform MCP, and shows skill links in the dashboard. Also on for organizations in the skills-over-mcp rollout flag.",
+      "Enables Skills over MCP for this organization: linked skills on hosted MCP servers and gateways, the Platform MCP skill surface, and skill links in the dashboard. Also on for organizations in the skills-over-mcp rollout flag.",
   },
   sso: {
     kind: "toggle",

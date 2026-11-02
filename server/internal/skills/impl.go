@@ -73,8 +73,9 @@ type Service struct {
 	// is a no-op then.
 	publisher PluginPublishSignaler
 	siteURL   *url.URL
-	// flags gates the skill link methods behind the skills-over-mcp rollout.
-	// Nil refuses them; see WithFeatureProvider.
+	// flags evaluates the skills-over-mcp rollout flag for the skill link
+	// methods. Nil leaves only the skills_over_mcp product feature; see
+	// WithFeatureProvider.
 	flags feature.Provider
 }
 

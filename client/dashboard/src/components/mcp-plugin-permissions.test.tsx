@@ -47,6 +47,7 @@ const state = vi.hoisted(() => ({
     isError: false,
   })),
   skillsOverMcp: false,
+  skillsOverMcpProductFeature: false,
 }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: (flag: string) => ({
@@ -57,7 +58,9 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
   }),
 }));
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
-  useProductFeatures: () => ({ data: undefined }),
+  useProductFeatures: () => ({
+    data: { skillsOverMcpEnabled: state.skillsOverMcpProductFeature },
+  }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-a" }),
@@ -217,6 +220,7 @@ beforeEach(() => {
   state.grants = [];
   state.mcpServer = { id: "server-a", name: "Server" };
   state.skillsOverMcp = false;
+  state.skillsOverMcpProductFeature = false;
   state.tunnelConnections.mockReturnValue({
     data: undefined,
     isLoading: false,
@@ -389,6 +393,14 @@ describe("remote MCP server Skills tab", () => {
 
   it("shows for a remote server with the flag on and project skill read", () => {
     state.skillsOverMcp = true;
+    state.mcpServer = remote;
+    state.grants = [{ scope: "skill:read" }];
+    render(<McpServerXSidebarNav />);
+    expect(screen.getByText("Skills")).toBeTruthy();
+  });
+
+  it("shows with only the skills_over_mcp product feature on", () => {
+    state.skillsOverMcpProductFeature = true;
     state.mcpServer = remote;
     state.grants = [{ scope: "skill:read" }];
     render(<McpServerXSidebarNav />);

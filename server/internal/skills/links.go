@@ -30,9 +30,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// WithFeatureProvider sets the flag provider that gates the skill link
-// methods behind the skills-over-mcp rollout. Without one those methods
-// refuse every request.
+// WithFeatureProvider sets the flag provider for the skills-over-mcp rollout
+// flag, one of the two sources that admit the skill link methods. Without one
+// only the skills_over_mcp product feature can admit a request.
 func (s *Service) WithFeatureProvider(flags feature.Provider) *Service {
 	s.flags = flags
 	return s
@@ -45,8 +45,8 @@ var ErrSkillsOverMCPDisabled = errors.New("skills over mcp is not enabled for th
 
 // requireSkillsOverMCP refuses the request unless the organization is in the
 // skills-over-mcp rollout: the PostHog flag or the staff-managed
-// skills_over_mcp product feature. It fails closed: a missing provider or an
-// evaluation error reads as off.
+// skills_over_mcp product feature. It fails closed: a missing source or an
+// evaluation error reads as off for that source.
 func (s *Service) requireSkillsOverMCP(ctx context.Context, authCtx *contextvalues.AuthContext, logger *slog.Logger) error {
 	disabled := oops.E(oops.CodeForbidden, ErrSkillsOverMCPDisabled, "serving skills over MCP is not enabled for this organization")
 	if s.skillsOverMCPFlagEnabled(ctx, authCtx, logger) || s.skillsOverMCPEntitled(ctx, authCtx.ActiveOrganizationID, logger) {
