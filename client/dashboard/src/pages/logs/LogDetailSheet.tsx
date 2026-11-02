@@ -205,9 +205,13 @@ function LogDetailContent({
     : "";
   // How Speakeasy signed the call in upstream. It replaces "on behalf of" the
   // key's authorizer: a shared credential acted for nobody. The raw values
-  // stay in the attributes below.
+  // stay in the attributes below. Only a gateway tool-call row is trusted to
+  // name it: a hook row's attributes are self-reported by the client.
   const signedInWith = (() => {
     if (!attrs) return undefined;
+    if (getNestedValue(attrs, "gram.event.source") !== "tool_call") {
+      return undefined;
+    }
     const type = getNestedValue(attrs, "gram.auth_client.type");
     if (!type) return undefined;
     const ownerUserId = getNestedValue(

@@ -316,8 +316,7 @@ func (s *Service) authorizeAgentMemberClient(ctx context.Context, gate *metaGate
 	if mode != feature.AuthClientResolverEnforced && !registration.Valid && (rows[0].CredentialHeadersUncovered || (rows[0].ServerHasHeaderClients && !rows[0].ServerHasOauthClients && !rows[0].HeadersStale)) {
 		// The proxy serves the server's own headers; name the header client
 		// the catalog resolved for them, when it resolved one.
-		credential, _ := res.servedCredential()
-		return none, credential, nil
+		return none, res.servedCredential(), nil
 	}
 	if (res.outcome == authClientGap && (mode == feature.AuthClientResolverEnforced || !registration.Valid)) || (res.outcome == authClientLegacy && res.clientID == uuid.Nil && mode == feature.AuthClientResolverEnforced) {
 		return none, noCredential, agentMemberCredentialError(member)
@@ -359,5 +358,11 @@ func (s *Service) authorizeAgentMemberClient(ctx context.Context, gate *metaGate
 			return none, noCredential, agentMemberCredentialError(member)
 		}
 	}
-	return connection, servedCredential(res.clientID, permit.ClientType, connection.owner), nil
+	// A gap leaves the registration serving its token without the auth client
+	// it named, so that client did not sign the call in.
+	servedClientID := res.clientID
+	if res.outcome == authClientGap {
+		servedClientID = uuid.Nil
+	}
+	return connection, servedCredential(servedClientID, permit.ClientType, connection.owner), nil
 }

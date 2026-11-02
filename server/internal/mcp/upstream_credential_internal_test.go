@@ -53,9 +53,9 @@ func TestAuthClientResolutionServesACredentialOnlyWhenAClientServes(t *testing.T
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			got, ok := tc.res.servedCredential()
-			require.Equal(t, tc.serves, ok)
+			got := tc.res.servedCredential()
 			if !tc.serves {
+				require.Equal(t, contextvalues.UpstreamCredential{AuthClientID: "", AuthClientType: "", ConnectionOwnerUserID: ""}, got)
 				return
 			}
 			require.Equal(t, clientID.String(), got.AuthClientID)
@@ -96,7 +96,6 @@ func TestRouteMetaMemberNamesTheChosenAuthClient(t *testing.T) {
 			dial, backend, err := f.service.routeMetaMember(t.Context(), f.service.logger, metaGateContext{agentID: uuid.New(), organizationID: f.orgID, memberChoices: choices}, member, "")
 			require.NoError(t, err)
 			require.Equal(t, "remote", backend)
-			require.True(t, dial.hasCredential)
 			require.Equal(t, contextvalues.UpstreamCredential{AuthClientID: clientID.String(), AuthClientType: tc.clientType, ConnectionOwnerUserID: tc.wantOwner}, dial.credential)
 		})
 	}

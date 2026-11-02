@@ -132,9 +132,8 @@ type memberDial struct {
 	sessionKey string
 
 	// credential names the auth client the build signs the member in
-	// upstream with; hasCredential is false when routing recorded none.
-	credential    contextvalues.UpstreamCredential
-	hasCredential bool
+	// upstream with; the zero value when routing recorded none.
+	credential contextvalues.UpstreamCredential
 }
 
 func memberSessionKey(route any, token string) string {
@@ -255,8 +254,7 @@ func (s *Service) routeMetaMember(
 		if member.authClient != nil && member.authClient.outcome != authClientLegacy {
 			authHeaders = member.authClient.headers
 		}
-		credential, hasCredential := memberServedCredential(gate, member, routed)
-		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, connectURL: "", sessionKey: memberSessionKey([]any{remoteServer.Url, remoteServer.TransportType, headers, authHeaders}, upstreamToken), credential: credential, hasCredential: hasCredential, build: func(context.Context) (*proxy.Proxy, error) {
+		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, connectURL: "", sessionKey: memberSessionKey([]any{remoteServer.Url, remoteServer.TransportType, headers, authHeaders}, upstreamToken), credential: memberServedCredential(gate, member, routed), build: func(context.Context) (*proxy.Proxy, error) {
 			// No WWW-Authenticate relay: a member's auth challenge must not
 			// invite the client to re-authenticate against the meta MCP.
 			p := s.remoteProxyManager.Build(logger, &remoteServer, member.serverID.String(), headers, member.visibility, gate.organizationID, member.projectID.String(), upstreamToken, "", nil, options...)
@@ -285,8 +283,7 @@ func (s *Service) routeMetaMember(
 		// Per-member namespace so one caller's handshake, calls, and DELETE
 		// land on one tunnel gateway.
 		affinity := tunnelrouting.HashedClientAffinityKey("meta:"+member.serverID.String(), callerIdentity)
-		credential, hasCredential := memberServedCredential(gate, member, routed)
-		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, connectURL: "", sessionKey: memberSessionKey([]any{member.tunneledResourceIdentifier, affinity}, upstreamToken), credential: credential, hasCredential: hasCredential, build: func(ctx context.Context) (*proxy.Proxy, error) {
+		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, connectURL: "", sessionKey: memberSessionKey([]any{member.tunneledResourceIdentifier, affinity}, upstreamToken), credential: memberServedCredential(gate, member, routed), build: func(ctx context.Context) (*proxy.Proxy, error) {
 			p, berr := s.tunnelManager.buildProxy(ctx, logger, buildProxyParams{
 				ClientAffinityKey:  affinity,
 				ProjectID:          member.projectID,
@@ -475,11 +472,6 @@ func (s *Service) executeProxiedMemberTool(
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "dial meta MCP member").LogError(ctx, logger)
 	}
-	// The remotemcp interceptor writes this call's log row and never sees the
-	// gate, so carry down which auth client signs the member in.
-	if dial.hasCredential {
-		ctx = contextvalues.SetUpstreamCredential(ctx, dial.credential)
-	}
 
 	// The caller's _meta stays on our side of the wire: WireMeta is a lossy
 	// observability parse (re-serializing it emits empty/null fields that
@@ -517,6 +509,12 @@ func (s *Service) callOnMemberSession(ctx context.Context, logger *slog.Logger, 
 		return nil, false, err
 	}
 	defer ms.release(ctx, logger)
+	// The remotemcp interceptor writes this call's log row and never sees the
+	// gate, so carry down which auth client signs the member in. A recheck
+	// while waiting for a pooled session may have routed the member to another
+	// credential, so name the route the session was opened on; a route that
+	// recorded none clears any credential named before.
+	ctx = contextvalues.SetUpstreamCredential(ctx, ms.dial.credential)
 	upstreamResult, err := callMemberTool(ctx, ms.session, &mcp.CallToolParams{
 		Name: toolName, Arguments: arguments, Meta: nil, InputResponses: nil, RequestState: "",
 	})

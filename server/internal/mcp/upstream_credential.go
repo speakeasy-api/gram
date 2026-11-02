@@ -24,23 +24,24 @@ func servedCredential(clientID uuid.UUID, clientType, connectionOwner string) co
 
 // servedCredential is the credential a member resolution serves a call with:
 // a resolved client, or a named client that hands serving back to the
-// upstream client choice. No-auth, gaps and refusals serve none.
-func (r *authClientResolution) servedCredential() (contextvalues.UpstreamCredential, bool) {
+// upstream client choice. No-auth, gaps and refusals serve none, the zero
+// value.
+func (r *authClientResolution) servedCredential() contextvalues.UpstreamCredential {
 	var none contextvalues.UpstreamCredential
 	if r == nil || r.clientType == "" {
-		return none, false
+		return none
 	}
 	if r.outcome != authClientResolved && (r.outcome != authClientLegacy || r.clientID == uuid.Nil) {
-		return none, false
+		return none
 	}
-	return servedCredential(r.clientID, r.clientType, r.connectionOwner), true
+	return servedCredential(r.clientID, r.clientType, r.connectionOwner)
 }
 
 // memberServedCredential is the credential a routed member call is signed in
 // with: the member's resolved auth client when the credential's choices serve
 // it, otherwise what an agent's member authorization recorded for the
-// registration the routed token belongs to.
-func memberServedCredential(gate metaGateContext, member metaMember, routed remotesessions.UpstreamToken) (contextvalues.UpstreamCredential, bool) {
+// registration the routed token belongs to. The zero value names none.
+func memberServedCredential(gate metaGateContext, member metaMember, routed remotesessions.UpstreamToken) contextvalues.UpstreamCredential {
 	if gate.memberChoices != nil && member.backend == metaMemberBackendProxied && gate.memberChoices.serves(member) {
 		return member.authClient.servedCredential()
 	}
@@ -50,11 +51,7 @@ func memberServedCredential(gate metaGateContext, member metaMember, routed remo
 	if routed.Token == "" {
 		registration = uuid.Nil
 	}
-	credential, ok := gate.servedCredentials[registration]
-	if !ok || credential.AuthClientType == "" {
-		return contextvalues.UpstreamCredential{AuthClientID: "", AuthClientType: "", ConnectionOwnerUserID: ""}, false
-	}
-	return credential, true
+	return gate.servedCredentials[registration]
 }
 
 // recordServedCredential notes, during a member dial that collects them, the

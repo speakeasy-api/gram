@@ -1,6 +1,7 @@
 package mcp_test
 
 import (
+	"context"
 	"testing"
 
 	"github.com/google/uuid"
@@ -14,6 +15,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
@@ -74,6 +76,7 @@ func TestServeAgentGateway_ExecuteToolLogsTheCredentialUsed(t *testing.T) {
 					require.NoError(t, err)
 				}
 				require.NoError(t, upstreamclients.Reconcile(ctx, ti.conn, ac.ActiveOrganizationID, projectID, []uuid.UUID{issuerID}))
+				wantClientID := serverAuthClientID(t, ctx, ti, ac.ActiveOrganizationID, serverID, credential)
 				fx.token = issueMemberAuthRegressionKey(t, ctx, ti, fx, serverID)
 
 				response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, makeMetaRPCBody(t, "tools/call", map[string]any{
@@ -91,9 +94,26 @@ func TestServeAgentGateway_ExecuteToolLogsTheCredentialUsed(t *testing.T) {
 		   AND toString(attributes.gram.authorization.actor.type) = 'agent'
 		   AND toString(attributes.gram.authorization.actor.id) = ?
 		   AND toString(attributes.gram.auth_client.type) = ?
+		   AND toString(attributes.gram.auth_client.id) = ?
 		   AND toString(attributes.gram.auth_client.connection_owner_user_id) = ?`,
-					1, projectID.String(), serverID.String(), fx.agent.ID.String(), credential, wantOwner)
+					1, projectID.String(), serverID.String(), fx.agent.ID.String(), credential, wantClientID.String(), wantOwner)
 			})
 		}
 	}
+}
+
+// serverAuthClientID is the one enabled auth client of clientType the server
+// offers.
+func serverAuthClientID(t *testing.T, ctx context.Context, ti *testInstance, orgID string, serverID uuid.UUID, clientType string) uuid.UUID {
+	t.Helper()
+	rows, err := upstreamclientsrepo.New(ti.conn).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: orgID, McpServerIds: []uuid.UUID{serverID}})
+	require.NoError(t, err)
+	var ids []uuid.UUID
+	for _, row := range rows {
+		if row.AuthClientID.Valid && row.ClientType.String == clientType {
+			ids = append(ids, row.AuthClientID.UUID)
+		}
+	}
+	require.Len(t, ids, 1)
+	return ids[0]
 }

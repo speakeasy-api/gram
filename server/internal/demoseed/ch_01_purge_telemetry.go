@@ -465,14 +465,15 @@ func (s *seeder) chToolCallRows() []chTelemetryRow {
 					attrs += `,"gram.authorization.authorizer_user_id":"` + s.userID(u.handle) + `"`
 				}
 				// How the gateway signed the call in upstream: the person's
-				// own connection, a shared service account, or nothing for
-				// calls recorded before the gateway named it, so the Tool
-				// Logs row shows all three renderings.
+				// own Linear connection, the shared engineering token, or
+				// nothing for calls recorded before the gateway named it, so
+				// the Tool Logs row shows all three renderings. The ids are
+				// seeded auth clients, so the id a row names resolves to one.
 				switch hash64("upstreamcred", i) % 3 {
 				case 1:
-					attrs += `,"gram.auth_client.type":"remote_session","gram.auth_client.id":"` + s.det("authclient-personal").String() + `","gram.auth_client.connection_owner_user_id":"` + s.userID(u.handle) + `"`
+					attrs += `,"gram.auth_client.type":"remote_session","gram.auth_client.id":"` + s.det("auth-client-linear").String() + `","gram.auth_client.connection_owner_user_id":"` + s.userID(u.handle) + `"`
 				case 2:
-					attrs += `,"gram.auth_client.type":"service_account","gram.auth_client.id":"` + s.det("authclient-shared").String() + `"`
+					attrs += `,"gram.auth_client.type":"static_credential","gram.auth_client.id":"` + s.det("auth-client-github-token").String() + `"`
 				}
 			}
 			attrs += `,"gram.toolset.slug":"` + chIf(i%5 == 0, "acme-ops", "acme-support-tools") + `"`

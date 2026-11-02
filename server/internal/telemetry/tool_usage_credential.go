@@ -7,7 +7,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
-	usersRepo "github.com/speakeasy-api/gram/server/internal/users/repo"
 )
 
 // toolCallCredentialLag bounds how long after a trace starts its gateway
@@ -55,28 +54,16 @@ func (s *Service) toolCallCredentials(ctx context.Context, orgID, projectID stri
 }
 
 // connectedUserNames resolves user ids to a name for display: the person's
-// display name, or their email when they have none. Scoped to the
-// organization, and soft-deleted users resolve to nobody, as the authorizer
-// labels do.
+// display name, or their email when they have none. Resolved as the authorizer
+// labels are, and best effort like them.
 func (s *Service) connectedUserNames(ctx context.Context, orgID string, ids []string) map[string]string {
-	ids = conv.DedupeNonEmpty(ids)
-	if len(ids) == 0 || orgID == "" {
-		return nil
-	}
-
-	users, err := usersRepo.New(s.db).GetConnectedUsersByIDs(ctx, usersRepo.GetConnectedUsersByIDsParams{
-		Ids:            ids,
-		OrganizationID: orgID,
-	})
+	users, err := s.organizationUsers(ctx, orgID, ids)
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to resolve tool call connection owners", attr.SlogError(err))
 		return nil
 	}
 	names := make(map[string]string, len(users))
 	for _, user := range users {
-		if user.DeletedAt.Valid {
-			continue
-		}
 		names[user.ID] = conv.Default(user.DisplayName, user.Email)
 	}
 	return names
