@@ -135,6 +135,7 @@ type Activities struct {
 	promoteStagedTelemetry           *activities.PromoteStagedTelemetry
 	listStagedTelemetryProjects      *activities.ListStagedTelemetryProjects
 	generateChatTitle                *activities.GenerateChatTitle
+	memoryDigests                    *activities.MemoryDigests
 	processDeployment                *activities.ProcessDeployment
 	provisionFunctionsAccess         *activities.ProvisionFunctionsAccess
 	deployFunctionRunners            *activities.DeployFunctionRunners
@@ -416,6 +417,7 @@ func NewActivities(
 		promoteStagedTelemetry:           activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter, telemetryLogPublisher),
 		listStagedTelemetryProjects:      activities.NewListStagedTelemetryProjects(logger, chConn),
 		generateChatTitle:                activities.NewGenerateChatTitle(logger, db, chatClient),
+		memoryDigests:                    activities.NewMemoryDigests(logger, db, chatClient, features),
 		processDeployment:                activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpCatalog),
 		provisionFunctionsAccess:         activities.NewProvisionFunctionsAccess(logger, db, encryption),
 		deployFunctionRunners:            activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
@@ -807,6 +809,21 @@ func (a *Activities) ListProjectsForToolsetIndexing(ctx context.Context, input a
 
 func (a *Activities) ReapFlyApps(ctx context.Context, req activities.ReapFlyAppsRequest) (*activities.ReapFlyAppsResult, error) {
 	return a.reapFlyApps.Do(ctx, req)
+}
+
+func (a *Activities) BuildMemoryDigests(ctx context.Context, args activities.BuildMemoryDigestsArgs) (activities.BuildMemoryDigestsResult, error) {
+	result, err := a.memoryDigests.Build(ctx, args)
+	if err != nil {
+		return result, fmt.Errorf("build memory digests: %w", err)
+	}
+	return result, nil
+}
+
+func (a *Activities) InvalidateMemoryDigests(ctx context.Context) error {
+	if err := a.memoryDigests.Invalidate(ctx); err != nil {
+		return fmt.Errorf("invalidate memory digests: %w", err)
+	}
+	return nil
 }
 
 func (a *Activities) GenerateChatTitle(ctx context.Context, input activities.GenerateChatTitleArgs) error {
