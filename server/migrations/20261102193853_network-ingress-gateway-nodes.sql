@@ -56,7 +56,7 @@ CREATE TABLE "network_ingress_nodes" (
   "updated_at" timestamptz NOT NULL DEFAULT clock_timestamp(),
   PRIMARY KEY ("id"),
   CONSTRAINT "network_ingress_nodes_network_ingress_id_fkey" FOREIGN KEY ("network_ingress_id") REFERENCES "network_ingresses" ("id") ON UPDATE NO ACTION ON DELETE NO ACTION
-);
+) WITH (fillfactor = 70);
 -- Create index "network_ingress_nodes_network_ingress_id_slot_key" to table: "network_ingress_nodes"
 CREATE UNIQUE INDEX "network_ingress_nodes_network_ingress_id_slot_key" ON "network_ingress_nodes" ("network_ingress_id", "slot");
 -- Create index "network_ingress_nodes_organization_id_idx" to table: "network_ingress_nodes"

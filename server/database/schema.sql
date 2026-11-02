@@ -2832,6 +2832,12 @@ WHERE deleted IS FALSE AND custom_domain_id IS NOT NULL;
 -- (hostname speakeasy-gw-<slot>) hosted by the tailnet gateway pod whose
 -- StatefulSet ordinal equals the slot. The reconciler creates slot rows and
 -- one-shot auth keys; gateway pods write the heartbeat columns.
+--
+-- Every hosted slot is rewritten by a heartbeat every few seconds, so the
+-- table relies on HOT updates: no heartbeat column is indexed, and the
+-- reduced fillfactor leaves room on each page for new row versions so they
+-- are pruned in place instead of waiting for autovacuum. Keep status,
+-- last_seen_at and the other heartbeat columns out of any index.
 CREATE TABLE IF NOT EXISTS network_ingress_nodes (
   id uuid NOT NULL DEFAULT generate_uuidv7(),
   network_ingress_id uuid NOT NULL,
@@ -2861,7 +2867,7 @@ CREATE TABLE IF NOT EXISTS network_ingress_nodes (
 
   CONSTRAINT network_ingress_nodes_pkey PRIMARY KEY (id),
   CONSTRAINT network_ingress_nodes_network_ingress_id_fkey FOREIGN KEY (network_ingress_id) REFERENCES network_ingresses (id) ON DELETE NO ACTION
-);
+) WITH (fillfactor = 70);
 
 COMMENT ON COLUMN network_ingress_nodes.id IS '@access: confidential';
 COMMENT ON COLUMN network_ingress_nodes.network_ingress_id IS '@access: confidential';
