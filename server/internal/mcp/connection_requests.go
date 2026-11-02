@@ -8,7 +8,6 @@ import (
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
 
-	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -41,18 +40,19 @@ func requestApp(ctx context.Context) mcpconnectionattempts.App {
 	return mcpconnectionattempts.AppUnverified
 }
 
-// recordGateRejection records a bearer the gate refused. Three cases write nothing:
-// no bearer and an expired bearer are how a healthy client learns to sign in or
-// refresh, and a failed refresh has its own row. A bearer that is none of ours
-// names no one, so it would only let a scanner write rows into an organization.
+// recordGateRejection records a bearer the gate refused, once it proves a real
+// flow on this server. No bearer and an expired one are how a healthy client
+// learns to sign in or refresh, and a failed refresh has its own row. A bearer
+// that is not ours, or was minted for another server, could come from anyone,
+// and would let them write rows into this organization.
 func (s *Service) recordGateRejection(ctx context.Context, endpoint *ResolvedMcpEndpoint, token, reason string, valErr error) {
-	if valErr == nil || errors.Is(valErr, jwt.ErrTokenExpired) {
+	if valErr == nil || errors.Is(valErr, jwt.ErrTokenExpired) || errors.Is(valErr, jwt.ErrTokenInvalidAudience) {
 		return
 	}
 	code := gateHappened(reason)
 	subject, verifyErr := s.userSessionSigner.VerifiedSubject(token)
 	if verifyErr != nil {
-		if code == mcpconnectionattempts.CodeInvalidBearerToken && !strings.HasPrefix(token, "gram_") && !principalcredential.IsToken(token) {
+		if code == mcpconnectionattempts.CodeInvalidBearerToken {
 			return
 		}
 		s.connections.Once(ctx, connectionScope(endpoint, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepMCPRequest, code, mcpconnectionattempts.Detail(reason))
@@ -75,8 +75,10 @@ func gateHappened(reason string) mcpconnectionattempts.Code {
 		return mcpconnectionattempts.CodeAuthCheckUnavailable
 	case issuerGateReasonWorkloadSessionOutOfReach:
 		return mcpconnectionattempts.CodeNoServerAccess
-	default:
+	case issuerGateReasonInvalidBearerToken, issuerGateReasonIssuerMismatch, "tool_selection_resource_mismatch":
 		return mcpconnectionattempts.CodeInvalidBearerToken
+	default:
+		return mcpconnectionattempts.CodeAuthCheckUnavailable
 	}
 }
 
@@ -87,8 +89,10 @@ func remoteSessionHappened(reason string) mcpconnectionattempts.Code {
 		return mcpconnectionattempts.CodeRemoteSessionUnavailable
 	case issuerGateReasonRemoteSessionMisconfigured, issuerGateReasonClientCredentialMisconfigured:
 		return mcpconnectionattempts.CodeCredentialMisconfigured
-	default:
+	case issuerGateReasonInvalidRemoteSession, issuerGateReasonUpstreamSelectionUnavailable:
 		return mcpconnectionattempts.CodeInvalidRemoteSession
+	default:
+		return mcpconnectionattempts.CodeInternalError
 	}
 }
 
@@ -171,6 +175,14 @@ func toolsCallRefusal(err error) (mcpconnectionattempts.Code, bool) {
 	return none, false
 }
 
+// agentAdmissionRejection tells a refused agent from an admission check that could not run.
+func agentAdmissionRejection(err error) string {
+	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && (shareable.Code == oops.CodeUnauthorized || shareable.Code == oops.CodeForbidden) {
+		return "agent_admission_denied"
+	}
+	return "agent_admission_unavailable"
+}
+
 func killswitchHappened(err error) mcpconnectionattempts.Code {
 	if mcpErr, ok := errors.AsType[*oops.MCPError](err); ok && mcpErr.Data != nil && mcpErr.Data.Code == oops.MCPErrorDataCodeToolCallsPaused {
 		return mcpconnectionattempts.CodeMCPToolCallsPaused
@@ -232,13 +244,14 @@ func (s *Service) recordInboundRefreshRejection(ctx context.Context, endpoint *R
 	s.connections.Once(ctx, connectionScope(endpoint, mcpconnectionattempts.AppOf(client.ClientID)), mcpconnectionattempts.StepInboundToken, code, opts...)
 }
 
+// inboundRefreshHappened leaves out what proves no real session: a malformed
+// request, one naming another server, and a token no live session holds, which
+// looks the same whether it is spent or made up.
 func inboundRefreshHappened(reason string) (mcpconnectionattempts.Code, bool) {
 	switch reason {
-	case "invalid_request":
-		return mcpconnectionattempts.CodeInvalidRequest, true
-	case "resource_mismatch", "refresh_token_resource_mismatch":
+	case "refresh_token_resource_mismatch":
 		return mcpconnectionattempts.CodeResourceMismatch, true
-	case "refresh_token_unknown_or_already_used", "refresh_token_client_mismatch":
+	case "refresh_token_client_mismatch":
 		return mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed, true
 	case "refresh_token_expired":
 		return mcpconnectionattempts.CodeRefreshTokenExpired, true
@@ -248,6 +261,8 @@ func inboundRefreshHappened(reason string) (mcpconnectionattempts.Code, bool) {
 		return mcpconnectionattempts.CodeRefreshTokenRevoked, true
 	case "agent_admission_denied":
 		return mcpconnectionattempts.CodeNoServerAccess, true
+	case "agent_admission_unavailable":
+		return mcpconnectionattempts.CodeInternalError, true
 	case string(upstreamRefreshReconnect):
 		return mcpconnectionattempts.CodeUpstreamReconnectRequired, true
 	case string(upstreamRefreshEMARefused):

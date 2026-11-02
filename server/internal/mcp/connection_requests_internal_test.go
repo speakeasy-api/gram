@@ -26,6 +26,7 @@ func TestGateHappened_OutagesAreNotThePersonsFault(t *testing.T) {
 	require.Equal(t, mcpconnectionattempts.CodeNoServerAccess, gateHappened(issuerGateReasonWorkloadSessionOutOfReach))
 	require.Equal(t, mcpconnectionattempts.CodeInvalidBearerToken, gateHappened(issuerGateReasonInvalidBearerToken))
 	require.Equal(t, mcpconnectionattempts.CodeInvalidBearerToken, gateHappened(issuerGateReasonIssuerMismatch))
+	require.Equal(t, mcpconnectionattempts.CodeAuthCheckUnavailable, gateHappened("a_reason_added_later"))
 }
 
 func TestRemoteSessionHappened(t *testing.T) {
@@ -36,6 +37,7 @@ func TestRemoteSessionHappened(t *testing.T) {
 	require.Equal(t, mcpconnectionattempts.CodeCredentialMisconfigured, remoteSessionHappened(issuerGateReasonClientCredentialMisconfigured))
 	require.Equal(t, mcpconnectionattempts.CodeInvalidRemoteSession, remoteSessionHappened(issuerGateReasonInvalidRemoteSession))
 	require.Equal(t, mcpconnectionattempts.CodeInvalidRemoteSession, remoteSessionHappened(issuerGateReasonUpstreamSelectionUnavailable))
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, remoteSessionHappened("a_reason_added_later"))
 }
 
 func TestToolsCallRefusal(t *testing.T) {
@@ -79,15 +81,13 @@ func TestInboundRefreshHappened(t *testing.T) {
 	t.Parallel()
 
 	for reason, want := range map[string]mcpconnectionattempts.Code{
-		"invalid_request":                       mcpconnectionattempts.CodeInvalidRequest,
-		"resource_mismatch":                     mcpconnectionattempts.CodeResourceMismatch,
 		"refresh_token_resource_mismatch":       mcpconnectionattempts.CodeResourceMismatch,
-		"refresh_token_unknown_or_already_used": mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed,
 		"refresh_token_client_mismatch":         mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed,
 		"refresh_token_expired":                 mcpconnectionattempts.CodeRefreshTokenExpired,
 		"sign_in_revoked":                       mcpconnectionattempts.CodeSignInRevoked,
 		"refresh_token_revoked":                 mcpconnectionattempts.CodeRefreshTokenRevoked,
 		"agent_admission_denied":                mcpconnectionattempts.CodeNoServerAccess,
+		"agent_admission_unavailable":           mcpconnectionattempts.CodeInternalError,
 		"upstream_reconnect_required":           mcpconnectionattempts.CodeUpstreamReconnectRequired,
 		"upstream_ema_refused":                  mcpconnectionattempts.CodeUpstreamEMARefused,
 	} {
@@ -95,8 +95,10 @@ func TestInboundRefreshHappened(t *testing.T) {
 		require.True(t, ok, reason)
 		require.Equal(t, want, code, reason)
 	}
-	_, ok := inboundRefreshHappened("refresh_token_replay_context_cancelled")
-	require.False(t, ok, "rotation in progress is not an end state")
+	for _, reason := range []string{"refresh_token_replay_context_cancelled", "invalid_request", "resource_mismatch", "refresh_token_unknown_or_already_used"} {
+		_, ok := inboundRefreshHappened(reason)
+		require.False(t, ok, reason)
+	}
 }
 
 // The wrapper carries a code without changing what the gateway answers or how it is matched.
@@ -138,7 +140,8 @@ func TestMemberClientFailure_CarriesWhatHappened(t *testing.T) {
 		{name: "no credential to send", outcome: stubMemberOutcome{rejected: http.StatusUnauthorized}, dial: memberDial{anonymous: true}, want: mcpconnectionattempts.CodeInvalidRemoteSession},
 		{name: "server's own credential rejected", outcome: stubMemberOutcome{rejected: http.StatusForbidden}, dial: memberDial{clientCredential: true}, want: mcpconnectionattempts.CodeCredentialMisconfigured},
 		{name: "no answer", outcome: stubMemberOutcome{err: errors.New("dial failed")}, want: mcpconnectionattempts.CodeProviderUnreachable},
-		{name: "no route", outcome: stubMemberOutcome{err: errMemberUnroutable}, want: mcpconnectionattempts.CodeTunnelUnavailable},
+		{name: "no route", outcome: stubMemberOutcome{err: fmt.Errorf("%w: %w", errMemberUnroutable, errTunnelNoLiveRoute)}, want: mcpconnectionattempts.CodeTunnelUnavailable},
+		{name: "route store down", outcome: stubMemberOutcome{err: fmt.Errorf("%w: store unavailable", errMemberUnroutable)}, want: mcpconnectionattempts.CodeInternalError},
 		{name: "rate limited", outcome: stubMemberOutcome{code: http.StatusTooManyRequests}, want: mcpconnectionattempts.CodeProviderRateLimited},
 		{name: "server error", outcome: stubMemberOutcome{code: http.StatusInternalServerError}, want: mcpconnectionattempts.CodeProviderServerError},
 	} {

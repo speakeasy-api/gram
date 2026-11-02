@@ -1223,7 +1223,7 @@ func (s *Service) rotateRefreshToken(
 					return true, admissionErr
 				}
 				logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
-				s.recordInboundRefreshRejection(ctx, endpoint, clientRow, "agent_admission_denied", mcpconnectionattempts.Subject(&refreshSession.SubjectUrn))
+				s.recordInboundRefreshRejection(ctx, endpoint, clientRow, agentAdmissionRejection(admissionErr), mcpconnectionattempts.Subject(&refreshSession.SubjectUrn))
 				return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
 			}
 			admittedAgentSessionID = refreshSession.ID
@@ -1438,7 +1438,7 @@ func (s *Service) rotateRefreshToken(
 		}
 		if admissionErr != nil {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
-			s.recordInboundRefreshRejection(ctx, endpoint, clientRow, "agent_admission_denied", mcpconnectionattempts.Subject(&oldSession.SubjectUrn))
+			s.recordInboundRefreshRejection(ctx, endpoint, clientRow, agentAdmissionRejection(admissionErr), mcpconnectionattempts.Subject(&oldSession.SubjectUrn))
 			return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
 		}
 		ctx = admittedAgentContext
@@ -1754,7 +1754,7 @@ func (s *Service) writeRefreshTokenReplay(
 					return cerr
 				}
 				logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
-				s.recordInboundRefreshRejection(ctx, endpoint, clientRow, "agent_admission_denied", mcpconnectionattempts.Subject(payload.Subject))
+				s.recordInboundRefreshRejection(ctx, endpoint, clientRow, agentAdmissionRejection(cerr), mcpconnectionattempts.Subject(payload.Subject))
 				return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
 			}
 		}

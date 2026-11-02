@@ -1176,7 +1176,7 @@ func (s *Service) authenticateIssuerGate(
 	if err := s.refuseForeignCaller(newCtx, endpoint.OrganizationID); err != nil {
 		s.metrics.RecordMCPRequestRejected(ctx, issuerGateReasonOrganizationMismatch, mcpURL, surface)
 		s.connections.Once(ctx, connectionScope(endpoint, requestApp(newCtx)), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess,
-			mcpconnectionattempts.Detail(issuerGateReasonOrganizationMismatch), mcpconnectionattempts.Subject(subject))
+			mcpconnectionattempts.Detail(issuerGateReasonOrganizationMismatch))
 		return ctx, nil, nil, err
 	}
 	newCtx = remotesessions.WithConnectionScope(newCtx, connectionScope(endpoint, requestApp(newCtx)))

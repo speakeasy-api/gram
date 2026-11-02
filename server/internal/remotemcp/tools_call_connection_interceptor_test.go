@@ -136,7 +136,7 @@ func TestToolsCallConnections_FailureHappenedOnUnanswered(t *testing.T) {
 	connections.tunneled = true
 	code, ok = connections.failureHappened(&proxy.ToolsCallFailure{Request: nil, StatusCode: 0, Err: errors.New("dial failed")})
 	require.True(t, ok)
-	require.Equal(t, mcpconnectionattempts.CodeTunnelUnavailable, code)
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, code)
 }
 
 func TestToolsCallConnections_KillswitchRefusals(t *testing.T) {

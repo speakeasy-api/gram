@@ -84,8 +84,11 @@ func (c *toolsCallConnections) failureHappened(failure *proxy.ToolsCallFailure) 
 	switch {
 	case proxy.IsShutdownInterrupt(failure.Err):
 		return none, false
-	case c.tunneled && (status == 0 || status == http.StatusBadGateway):
+	case c.tunneled && status == http.StatusBadGateway:
 		return mcpconnectionattempts.CodeTunnelUnavailable, true
+	case c.tunneled && status == 0:
+		// Our own tunnel gateway did not answer, so this is not the tunnel owner's to fix.
+		return mcpconnectionattempts.CodeInternalError, true
 	case status == 0:
 		return mcpconnectionattempts.CodeProviderUnreachable, true
 	case status == http.StatusUnauthorized || status == http.StatusForbidden:

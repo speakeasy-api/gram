@@ -339,7 +339,11 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		return &metaMemberError{message: fmt.Sprintf("server %q returned a response too large for the meta MCP", member.slug)}
 	case errors.Is(err, errMemberUnroutable) || errors.Is(exchangeErr, errMemberUnroutable):
 		// A tunnel with no live route is a member outage, not a meta MCP bug.
-		return memberConnectionError{&metaMemberError{message: fmt.Sprintf("server %q is not reachable right now", member.slug)}, mcpconnectionattempts.CodeTunnelUnavailable}
+		code := mcpconnectionattempts.CodeInternalError
+		if errors.Is(err, errTunnelNoLiveRoute) || errors.Is(exchangeErr, errTunnelNoLiveRoute) {
+			code = mcpconnectionattempts.CodeTunnelUnavailable
+		}
+		return memberConnectionError{&metaMemberError{message: fmt.Sprintf("server %q is not reachable right now", member.slug)}, code}
 	case exchangeErr != nil:
 		return memberConnectionError{&metaMemberError{message: fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug)}, mcpconnectionattempts.CodeProviderUnreachable}
 	}

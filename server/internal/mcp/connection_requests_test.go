@@ -112,11 +112,23 @@ func TestRejectedBearer(t *testing.T) {
 	require.Error(t, err)
 	rec.RequireNothing()
 
+	// Ours, but minted for another server: it proves nothing about this one.
 	subject := urn.NewUserSubject("rejected-user")
-	token, _, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
+	elsewhere, _, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
 		Subject:  subject,
 		Audience: "urn:some-other-server",
 		Issuer:   ti.serverURL.String() + "/mcp/" + fixture.Toolset.McpSlug.String,
+		Lifetime: time.Hour,
+	})
+	require.NoError(t, err)
+	_, err = servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), elsewhere, nil)
+	require.Error(t, err)
+	rec.RequireNothing()
+
+	token, _, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
+		Subject:  subject,
+		Audience: urn.NewToolset(fixture.Toolset.ID).String(),
+		Issuer:   "https://another-host.example.com/mcp/" + fixture.Toolset.McpSlug.String,
 		Lifetime: time.Hour,
 	})
 	require.NoError(t, err)
@@ -208,7 +220,8 @@ func TestInboundRefresh_Expired(t *testing.T) {
 	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
 }
 
-func TestInboundRefresh_Unknown(t *testing.T) {
+// A token no live session holds proves nothing: it may be spent or made up.
+func TestInboundRefresh_UnknownTokenRecordsNothing(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -219,7 +232,7 @@ func TestInboundRefresh_Unknown(t *testing.T) {
 	refused := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, "refresh-"+uuid.NewString())
 	require.NoError(t, refused.err)
 	require.Equal(t, http.StatusBadRequest, refused.code, refused.body)
-	rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed)
+	rec.RequireNothing()
 }
 
 func TestInboundRefresh_ReplayIsNotAFailure(t *testing.T) {
