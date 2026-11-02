@@ -1649,6 +1649,10 @@ function ChatDetailPanel({
     : false;
   const userLabelOverride =
     chat && !readableTag && ownerNamed ? userLabel : undefined;
+  // A session that ran as an agent identity names that agent on its assistant
+  // turns, matching the header. A deleted agent has no name and keeps the
+  // neutral "Assistant".
+  const assistantLabel = chat?.agentId ? chat.agentName : undefined;
   // The same key ChatOwnerLabel uses: a chat carries the Speakeasy user when the
   // owner is a member and the reported agent id otherwise. Memoized because a
   // fresh object each render would invalidate the row context below on every
@@ -1673,6 +1677,7 @@ function ChatDetailPanel({
       searchQuery: searchActive ? searchQuery : undefined,
       userLabel: chat?.externalUserId,
       userLabelOverride,
+      assistantLabel,
       ownerIdentifier: readableTag ? null : ownerIdentifier,
       openClawSession,
     }),
@@ -1686,6 +1691,7 @@ function ChatDetailPanel({
       searchQuery,
       chat?.externalUserId,
       userLabelOverride,
+      assistantLabel,
       ownerIdentifier,
       readableTag,
       openClawSession,

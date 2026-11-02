@@ -279,3 +279,34 @@ describe("OpenClaw context wrapper", () => {
     expect(screen.getByText(/openclaw:ctx/)).toBeTruthy();
   });
 });
+
+describe("Assistant turn header", () => {
+  function showAssistantTurn(assistantLabel?: string) {
+    const items: DisplayItem[] = [
+      {
+        type: "turnHeader",
+        id: "turn",
+        author: "assistant",
+        messageIds: ["reply"],
+      },
+    ];
+    return render(
+      <ChatTranscript
+        items={items}
+        ctx={{ dimNonRisk: false, assistantLabel }}
+        pagination={pagination}
+      />,
+    );
+  }
+
+  it("names the agent the session ran as", () => {
+    showAssistantTurn("Release bot");
+    expect(screen.getByText("Release bot")).toBeTruthy();
+    expect(screen.queryByText("Assistant")).toBeNull();
+  });
+
+  it("reads Assistant when the session has no agent", () => {
+    showAssistantTurn();
+    expect(screen.getByText("Assistant")).toBeTruthy();
+  });
+});

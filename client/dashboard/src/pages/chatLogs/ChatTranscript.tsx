@@ -116,6 +116,9 @@ interface RowContext {
    * session ran on a personal AI account, whose email should label the turns
    * instead of the attributed employee's work email. */
   userLabelOverride?: string;
+  /** Names the assistant turns. Set to the agent's name when the session ran
+   * as an agent identity; turns read "Assistant" without it. */
+  assistantLabel?: string;
   /** The chat owner's identity, resolved once by the panel. The turn's own
    * userId is a display label as often as an id (userLabelOverride replaces
    * it wholesale), so it cannot be keyed on. */
@@ -280,6 +283,7 @@ function TurnHeader({
   author,
   userId,
   userLabel,
+  assistantLabel,
   ownerIdentifier,
   createdAt,
   results,
@@ -287,6 +291,7 @@ function TurnHeader({
   author: TurnAuthor;
   userId?: string;
   userLabel?: string;
+  assistantLabel?: string;
   ownerIdentifier?: IdentityRef | null;
   createdAt?: Date;
   results?: RiskResult[];
@@ -358,7 +363,7 @@ function TurnHeader({
                 {userDisplayName(userName)}
               </IdentityLink>
             ) : (
-              "Assistant"
+              assistantLabel || "Assistant"
             )}
           </span>
         </div>
@@ -1233,6 +1238,7 @@ function DisplayItemView({
               : (ctx.userLabelOverride ?? item.userId)
           }
           userLabel={ctx.userLabel}
+          assistantLabel={ctx.assistantLabel}
           // The header links whatever name it shows. On a session run from a
           // personal AI account the override is that account's address, which
           // is a different subject from the chat's attributed owner, so the

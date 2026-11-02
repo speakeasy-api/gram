@@ -226,17 +226,13 @@ function openSessionDetails(): HTMLElement {
   return screen.getByText("Session details").parentElement!;
 }
 
-/** The name on the user turn's header in the transcript. */
-function userTurnName(): string | null {
-  // Both turn headers style their name the same way, and the assistant's
-  // reads "Assistant": the other one is the user's.
-  const assistantName = screen.getByText("Assistant", { selector: "span" });
-  const userName = Array.from(document.body.querySelectorAll("span")).find(
-    (element) =>
-      element !== assistantName &&
-      element.className === assistantName.className,
+/** The names on the transcript's turn headers, in order: the user turn's,
+ * then the assistant turn's. Each name sits right after its turn's avatar. */
+function turnNames(): string[] {
+  return Array.from(
+    document.body.querySelectorAll('[data-slot="avatar"] + span'),
+    (element) => element.textContent ?? "",
   );
-  return userName?.textContent ?? null;
 }
 
 function expectAgentLink(name: string) {
@@ -285,8 +281,9 @@ describe("ChatDetailSheet session actor", () => {
     expect(within(details).queryByText("On behalf of")).toBeNull();
     expect(within(details).queryByText("User")).toBeNull();
 
-    // The user turn carries a neutral label, not a person.
-    expect(userTurnName()).toBe("User");
+    // The user turn carries a neutral label, not a person, and the assistant
+    // turn names the agent.
+    expect(turnNames()).toEqual(["User", "Release bot"]);
     expect(document.body.textContent).not.toMatch(/anonymous/i);
   });
 
@@ -307,7 +304,13 @@ describe("ChatDetailSheet session actor", () => {
     expect(within(details).getByText("On behalf of")).toBeTruthy();
     expect(within(details).getByText("Ada Lovelace")).toBeTruthy();
 
-    expect(userTurnName()).toBe("Ada Lovelace");
+    expect(turnNames()).toEqual(["Ada Lovelace", "Release bot"]);
+  });
+
+  it("keeps the neutral assistant label when the agent has been deleted", () => {
+    renderPanel(makeChat({ agentId: "agent-1" }));
+
+    expect(turnNames()).toEqual(["User", "Assistant"]);
   });
 
   it("keeps a hosted assistant session acting for its person", () => {
@@ -328,7 +331,7 @@ describe("ChatDetailSheet session actor", () => {
     expect(within(details).getByText("On behalf of")).toBeTruthy();
     expect(within(details).getByText("Ada Lovelace")).toBeTruthy();
 
-    expect(userTurnName()).toBe("Ada Lovelace");
+    expect(turnNames()).toEqual(["Ada Lovelace", "Assistant"]);
   });
 
   it("keeps a person's own session naming them", () => {
@@ -341,6 +344,7 @@ describe("ChatDetailSheet session actor", () => {
     expect(within(details).getByText("User")).toBeTruthy();
     expect(within(details).getByText("Ada Lovelace")).toBeTruthy();
 
-    expect(userTurnName()).toBe("Ada Lovelace");
+    // No agent, so the assistant turn keeps its neutral label.
+    expect(turnNames()).toEqual(["Ada Lovelace", "Assistant"]);
   });
 });
