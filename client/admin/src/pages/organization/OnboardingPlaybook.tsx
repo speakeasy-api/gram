@@ -4,18 +4,14 @@ import type { JSX } from "react";
 
 import { Button } from "@/components/ui/button";
 import { organizationOnboardingPlaybookQuery } from "@/lib/gramAdminClient";
-import { cn } from "@/lib/utils";
 
-/**
- * The organization's assigned playbook, which the setup wizard walks, as a
- * Details row value on the Overview page: its name, linking to the Use Cases
- * & Playbooks page scoped to the organization, where staff write or assign
- * one.
- */
+// Fetch by canonical ID, but preserve the address used to visit the record.
 export function OnboardingPlaybook({
   organizationId,
+  idOrSlug,
 }: {
   organizationId: string;
+  idOrSlug?: string;
 }): JSX.Element {
   const assigned = useQuery({
     ...organizationOnboardingPlaybookQuery(organizationId),
@@ -28,7 +24,7 @@ export function OnboardingPlaybook({
       </span>
     );
   }
-  // A failed refresh hides the stale name too: the row is the truth about
+  // A failed refresh hides the stale name too: the status is the truth about
   // what the wizard walks, so it offers the retry instead.
   if (!assigned.data || assigned.isError) {
     return (
@@ -50,18 +46,18 @@ export function OnboardingPlaybook({
     );
   }
   const current = assigned.data.playbook;
-  // The name is the link: it opens the Playbooks page scoped to this
-  // organization, which is where the playbook is read and changed.
   return (
-    <Link
-      to="/onboarding-playbooks"
-      search={{ organization: organizationId }}
-      className={cn(
-        "text-sm underline underline-offset-4 hover:no-underline",
-        !current && "text-muted-foreground",
-      )}
-    >
-      {current ? current.name : "Not assigned"}
-    </Link>
+    <div className="flex flex-wrap items-center gap-x-4 gap-y-2 text-sm">
+      <span className="text-muted-foreground">
+        {current ? `Playbook: ${current.name}` : "No playbook assigned"}
+      </span>
+      <Link
+        to="/organizations/$idOrSlug/onboarding"
+        params={{ idOrSlug: idOrSlug ?? organizationId }}
+        className="underline underline-offset-4 hover:no-underline"
+      >
+        Customize onboarding
+      </Link>
+    </div>
   );
 }

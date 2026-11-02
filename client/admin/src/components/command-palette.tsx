@@ -7,6 +7,7 @@ import {
 import { useMatchRoute, useNavigate } from "@tanstack/react-router";
 import {
   BuildingIcon,
+  ListChecksIcon,
   CreditCardIcon,
   ExternalLinkIcon,
   FolderIcon,
@@ -58,6 +59,12 @@ const NO_ORGS: AdminOrganization[] = [];
 // one thing the palette supplies per render.
 const RECORD_PAGES = [
   { to: "/organizations/$idOrSlug", label: "Overview", icon: BuildingIcon },
+  {
+    to: "/organizations/$idOrSlug/onboarding",
+    label: "Onboarding",
+    icon: ListChecksIcon,
+    keywords: "setup wizard playbook stack customize",
+  },
   {
     to: "/organizations/$idOrSlug/activity",
     label: "Activity",
@@ -259,7 +266,10 @@ export function CommandPalette(): JSX.Element {
 
   const recordPages = org
     ? RECORD_PAGES.filter((page) =>
-        matches(lowered, `${page.label} ${org.name}`),
+        matches(
+          lowered,
+          `${page.label} ${"keywords" in page ? page.keywords : ""} ${org.name}`,
+        ),
       )
     : [];
 

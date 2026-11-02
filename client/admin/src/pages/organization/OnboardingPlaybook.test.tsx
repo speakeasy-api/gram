@@ -51,7 +51,7 @@ afterEach(() => {
 });
 
 describe("OnboardingPlaybook", () => {
-  it("links the assigned playbook by name", async () => {
+  it("shows the assigned playbook with an explicit customization link", async () => {
     assigned = {
       organization_id: "org_pb_test",
       playbook: {
@@ -75,22 +75,47 @@ describe("OnboardingPlaybook", () => {
       ],
     };
     await renderWithApp(<OnboardingPlaybook organizationId="org_pb_test" />);
-    // Just the name, and the name is the link out.
-    const link = await screen.findByRole("link", { name: "Ours" });
+    await screen.findByText("Playbook: Ours");
+    const link = await screen.findByRole("link", {
+      name: "Customize onboarding",
+    });
     expect(link.getAttribute("href")).toBe(
-      "/onboarding-playbooks?organization=org_pb_test",
+      "/organizations/org_pb_test/onboarding",
     );
     expect(screen.queryByText(/Identity/)).toBeNull();
     expect(screen.queryByText("Verify your domain")).toBeNull();
     expect(screen.queryByRole("button")).toBeNull();
   });
 
-  it("links out even when nothing is assigned", async () => {
+  it("shows unassigned status and an explicit customization link", async () => {
     await renderWithApp(<OnboardingPlaybook organizationId="org_pb_test" />);
-    const link = await screen.findByRole("link", { name: "Not assigned" });
+    await screen.findByText("No playbook assigned");
+    const link = await screen.findByRole("link", {
+      name: "Customize onboarding",
+    });
     expect(link.getAttribute("href")).toBe(
-      "/onboarding-playbooks?organization=org_pb_test",
+      "/organizations/org_pb_test/onboarding",
     );
+  });
+
+  it("preserves a visited slug while fetching by canonical ID", async () => {
+    await renderWithApp(
+      <OnboardingPlaybook
+        organizationId="org_pb_test"
+        idOrSlug="test-tenant"
+      />,
+    );
+    const link = await screen.findByRole("link", {
+      name: "Customize onboarding",
+    });
+    expect(link.getAttribute("href")).toBe(
+      "/organizations/test-tenant/onboarding",
+    );
+    expect(
+      new URL(fetchMock.mock.calls[0]![0].url).searchParams.get(
+        "organization_id",
+      ),
+    ).toBe("org_pb_test");
   });
 
   it("reports load failures and retries", async () => {
@@ -98,7 +123,7 @@ describe("OnboardingPlaybook", () => {
     await renderWithApp(<OnboardingPlaybook organizationId="org_pb_test" />);
     await screen.findByText("Unable to load the playbook.");
     fireEvent.click(screen.getByRole("button", { name: "Retry playbook" }));
-    await screen.findByText("Not assigned");
+    await screen.findByText("No playbook assigned");
   });
 
   it("hides a stale name when a refresh fails and retries", async () => {
@@ -108,12 +133,12 @@ describe("OnboardingPlaybook", () => {
     await renderWithApp(<OnboardingPlaybook organizationId="org_pb_test" />, {
       queryClient: client,
     });
-    await screen.findByRole("link", { name: "Not assigned" });
+    await screen.findByRole("link", { name: "Customize onboarding" });
     failures = 1;
     await act(() => client.invalidateQueries());
     await screen.findByText("Unable to load the playbook.");
     expect(screen.queryByRole("link")).toBeNull();
     fireEvent.click(screen.getByRole("button", { name: "Retry playbook" }));
-    await screen.findByRole("link", { name: "Not assigned" });
+    await screen.findByRole("link", { name: "Customize onboarding" });
   });
 });

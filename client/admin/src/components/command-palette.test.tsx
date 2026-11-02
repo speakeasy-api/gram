@@ -45,6 +45,10 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
   };
 });
 
+vi.mock("@/pages/organization/Onboarding", () => ({
+  OnboardingRoute: () => <h1>Tenant onboarding</h1>,
+}));
+
 const ORG = anOrganization({
   id: "org_01JQ",
   name: "Northwind Logistics",
@@ -600,6 +604,28 @@ describe("CommandPalette", () => {
     });
   });
 
+  it.each([ORG.id, ORG.slug])(
+    "finds onboarding by wizard keywords and preserves %s",
+    async (idOrSlug) => {
+      const { router } = await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${idOrSlug}`,
+      });
+      await screen.findByText(ORG.name);
+      pressTheShortcut();
+      await screen.findByRole("dialog");
+      type("wizard");
+      fireEvent.click(
+        await within(palette()).findByRole("option", { name: "Onboarding" }),
+      );
+      await waitFor(() => {
+        expect(router.state.location.pathname).toBe(
+          `/organizations/${idOrSlug}/onboarding`,
+        );
+      });
+      await screen.findByRole("heading", { name: "Tenant onboarding" });
+    },
+  );
+
   it("offers no record views off a record", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
@@ -608,6 +634,9 @@ describe("CommandPalette", () => {
 
     expect(
       within(palette()).queryByRole("option", { name: "Billing" }),
+    ).toBeNull();
+    expect(
+      within(palette()).queryByRole("option", { name: "Onboarding" }),
     ).toBeNull();
   });
 

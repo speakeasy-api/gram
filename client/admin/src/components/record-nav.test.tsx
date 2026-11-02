@@ -1,3 +1,4 @@
+import { createRootRoute, createRoute } from "@tanstack/react-router";
 import { QueryClient } from "@tanstack/react-query";
 import { cleanup, screen } from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -11,7 +12,7 @@ import type {
   TrialState,
 } from "@/lib/gramAdminApi";
 import { anOrganization, aProject } from "@/test/fixtures";
-import { renderWithApp } from "@/test/harness";
+import { renderRouteTree, renderWithApp } from "@/test/harness";
 
 const mocks = vi.hoisted(() => ({
   listOrganizationProjects: vi.fn(),
@@ -84,6 +85,33 @@ function navItem(label: string): HTMLElement {
 }
 
 describe("RecordNav", () => {
+  it.each([ORG.id, ORG.slug])(
+    "marks only onboarding current when reached by %s",
+    async (idOrSlug) => {
+      mocks.listOrganizationProjects.mockResolvedValue({ projects: [] });
+      const root = createRootRoute();
+      const onboarding = createRoute({
+        getParentRoute: () => root,
+        path: "/organizations/$idOrSlug/onboarding",
+        component: () => (
+          <SidebarProvider>
+            <RecordNav idOrSlug={idOrSlug} org={ORG} />
+          </SidebarProvider>
+        ),
+      });
+      await renderRouteTree(root.addChildren([onboarding]), {
+        initialPath: `/organizations/${idOrSlug}/onboarding`,
+      });
+      const current = screen
+        .getAllByRole("link")
+        .filter((link) => link.getAttribute("aria-current") === "page");
+      expect(current.map((link) => link.textContent)).toEqual(["Onboarding"]);
+      expect(
+        screen.getByRole("link", { name: "Onboarding" }).getAttribute("href"),
+      ).toBe(`/organizations/${idOrSlug}/onboarding`);
+    },
+  );
+
   it("shows the member count from the record, with no query", async () => {
     await mount();
 
@@ -139,12 +167,15 @@ describe("RecordNav", () => {
     expect(item.textContent).toContain("0");
   });
 
-  it("preserves the organization slug in the Activity href", async () => {
+  it("preserves the organization slug in the onboarding and Activity hrefs", async () => {
     await mount([]);
 
     expect(
       screen.getByRole("link", { name: "Activity" }).getAttribute("href"),
     ).toBe("/organizations/test-org/activity");
+    expect(
+      screen.getByRole("link", { name: "Onboarding" }).getAttribute("href"),
+    ).toBe("/organizations/test-org/onboarding");
   });
 
   it("points Projects at the list when the organization has two projects", async () => {
@@ -178,6 +209,9 @@ describe("RecordNav", () => {
     expect(
       screen.getByRole("link", { name: "Activity" }).getAttribute("href"),
     ).toBe("/organizations/org_1/activity");
+    expect(
+      screen.getByRole("link", { name: "Onboarding" }).getAttribute("href"),
+    ).toBe("/organizations/org_1/onboarding");
     expect(
       screen.getByRole("link", { name: "Members" }).getAttribute("href"),
     ).toBe("/organizations/org_1/members");

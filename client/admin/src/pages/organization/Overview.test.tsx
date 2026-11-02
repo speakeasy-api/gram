@@ -40,7 +40,17 @@ vi.mock("@/pages/organization/OnboardingStack", () => ({
   OnboardingStack: () => <p>Stack form</p>,
 }));
 vi.mock("@/pages/organization/OnboardingPlaybook", () => ({
-  OnboardingPlaybook: () => <p>Playbook view</p>,
+  OnboardingPlaybook: ({
+    organizationId,
+    idOrSlug,
+  }: {
+    organizationId: string;
+    idOrSlug?: string;
+  }) => (
+    <p data-organization-id={organizationId} data-id-or-slug={idOrSlug}>
+      Playbook view
+    </p>
+  ),
 }));
 
 vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
@@ -325,28 +335,40 @@ describe("Overview", () => {
     expect(screen.queryByRole("link", { name: /in Stripe$/ })).toBeNull();
   });
 
-  it("holds the playbook as a details row and the stack between the details and the danger zone", async () => {
+  it("shows onboarding status in its own panel without the stack form", async () => {
     await renderRouteTree(routeTree, {
       initialPath: `/organizations/${ORG.slug}`,
     });
 
     await screen.findByRole("heading", { name: "Details" });
-    const stack = panelNamed("Stack");
-    expect(within(stack).getByText("Stack form")).toBeTruthy();
-    // The playbook is a row under Whitelisted, not a panel of its own.
-    expect(valueBeside("Playbook").textContent).toBe("Playbook view");
-    const labels = Array.from(
-      panelNamed("Details").querySelectorAll('[data-slot="field-label"]'),
-    ).map((label) => label.textContent);
-    expect(labels.indexOf("Playbook")).toBe(labels.indexOf("Whitelisted") + 1);
+    expect(
+      within(panelNamed("Onboarding")).getByText("Playbook view"),
+    ).toBeTruthy();
+    expect(
+      within(panelNamed("Onboarding")).getByText(/setup wizard cards/),
+    ).toBeTruthy();
+    expect(screen.queryByText("Stack form")).toBeNull();
+    expect(screen.queryByRole("heading", { name: "Stack" })).toBeNull();
     const order = screen
       .getAllByRole("heading", { level: 5 })
       .map((heading) => heading.textContent)
       .filter((name) =>
-        ["Details", "Playbook", "Stack", "Danger zone"].includes(name ?? ""),
+        ["Details", "Onboarding", "Danger zone"].includes(name ?? ""),
       );
-    expect(order).toEqual(["Details", "Stack", "Danger zone"]);
+    expect(order).toEqual(["Details", "Onboarding", "Danger zone"]);
   });
+
+  it.each([ORG.id, ORG.slug])(
+    "passes the canonical ID and visited %s to onboarding status",
+    async (idOrSlug) => {
+      await renderRouteTree(routeTree, {
+        initialPath: `/organizations/${idOrSlug}`,
+      });
+      const status = await screen.findByText("Playbook view");
+      expect(status.getAttribute("data-organization-id")).toBe(ORG.id);
+      expect(status.getAttribute("data-id-or-slug")).toBe(idOrSlug);
+    },
+  );
 
   it("marks an organization a platform admin created", async () => {
     mocks.getOrganization.mockResolvedValue({
