@@ -447,6 +447,11 @@ const (
 	NetworkIngressResultKey             = attribute.Key("gram.network_ingress.result")
 	NetworkIngressReasonKey             = attribute.Key("gram.network_ingress.reason")
 	NetworkIngressErrorCodeKey          = attribute.Key("gram.network_ingress.error_code")
+	TailnetGatewaySlotKey               = attribute.Key("gram.tailnet_gateway.slot")
+	TailnetGatewayNodeStatusKey         = attribute.Key("gram.tailnet_gateway.node_status")
+	TailnetGatewayOperationKey          = attribute.Key("gram.tailnet_gateway.operation")
+	TailnetGatewayResultKey             = attribute.Key("gram.tailnet_gateway.result")
+	TailnetGatewayIdentityKindKey       = attribute.Key("gram.tailnet_gateway.identity_kind")
 	NetworkIngressDurationKey           = attribute.Key("gram.network_ingress.operation.duration")
 
 	CustomDomainHealthStatusKey         = attribute.Key("gram.custom_domain.health.status")
@@ -2291,6 +2296,30 @@ func NetworkIngressErrorCode[V ~string](v V) attribute.KeyValue {
 
 func SlogNetworkIngressErrorCode[V ~string](v V) slog.Attr {
 	return slog.String(string(NetworkIngressErrorCodeKey), string(v))
+}
+
+func TailnetGatewaySlot(v int32) attribute.KeyValue { return TailnetGatewaySlotKey.Int(int(v)) }
+func SlogTailnetGatewaySlot(v int32) slog.Attr {
+	return slog.Int(string(TailnetGatewaySlotKey), int(v))
+}
+
+func TailnetGatewayNodeStatus[V ~string](v V) attribute.KeyValue {
+	return TailnetGatewayNodeStatusKey.String(string(v))
+}
+func SlogTailnetGatewayNodeStatus[V ~string](v V) slog.Attr {
+	return slog.String(string(TailnetGatewayNodeStatusKey), string(v))
+}
+
+func TailnetGatewayOperation[V ~string](v V) attribute.KeyValue {
+	return TailnetGatewayOperationKey.String(string(v))
+}
+
+func TailnetGatewayResult[V ~string](v V) attribute.KeyValue {
+	return TailnetGatewayResultKey.String(string(v))
+}
+
+func TailnetGatewayIdentityKind[V ~string](v V) attribute.KeyValue {
+	return TailnetGatewayIdentityKindKey.String(string(v))
 }
 
 func SlogNetworkIngressDuration(v time.Duration) slog.Attr {
