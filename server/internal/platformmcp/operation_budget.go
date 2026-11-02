@@ -28,6 +28,8 @@ const (
 	LifecycleOrganizationLimitName     = "platform-mcp-lifecycle-organization"
 	SessionRecallConnectionLimitName   = "platform-mcp-session-recall-connection"
 	SessionRecallOrganizationLimitName = "platform-mcp-session-recall-organization"
+	TeamMemoryConnectionLimitName      = "platform-mcp-team-memory-connection"
+	TeamMemoryOrganizationLimitName    = "platform-mcp-team-memory-organization"
 	RiskMutationConnectionLimitName    = "platform-mcp-risk-mutation-connection"
 	RiskMutationOrganizationLimitName  = "platform-mcp-risk-mutation-organization"
 	ReviewRequestConnectionLimitName   = "platform-mcp-review-request-connection"
@@ -189,6 +191,12 @@ const (
 	// transcript content; metadata and aggregate reads cannot fund them.
 	SessionRecallsPerConnectionPerMinute   = 10
 	SessionRecallsPerOrganizationPerMinute = 100
+
+	// TeamMemoryCallsPer* bound search_team_memory and remember. They return
+	// masked summaries and memos, not transcripts, so they get their own
+	// allowance instead of competing with session recall.
+	TeamMemoryCallsPerConnectionPerMinute   = 20
+	TeamMemoryCallsPerOrganizationPerMinute = 200
 )
 
 // DrilldownVolumeWindow is the interval the drill-down volume caps refill over.
@@ -330,6 +338,9 @@ type OperationBudgets struct {
 	// SensitiveSessionRecall meters continue_session, search_chats and read_chat
 	// together on a low allowance for transcript content.
 	SensitiveSessionRecall OperationBudget
+	// TeamMemory meters the team memory tools on their own allowance, so memory
+	// traffic and session recall cannot throttle each other.
+	TeamMemory OperationBudget
 	// RiskMutations is shared by policy and exclusion writes. Connection-less
 	// assistant calls consume only its organization bucket.
 	RiskMutations OperationBudget
