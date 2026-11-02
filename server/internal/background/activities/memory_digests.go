@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.temporal.io/sdk/activity"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -28,10 +29,10 @@ import (
 )
 
 const (
-	// memoryDigestModel writes day, week and month digests. Digests are a
+	// MemoryDigestModel writes day, week and month digests. Digests are a
 	// few calls per active project per day that synthesize many summaries,
 	// so a mid-tier model fits; the memory eval confirms or replaces it.
-	memoryDigestModel = "anthropic/claude-sonnet-5.5"
+	MemoryDigestModel = "anthropic/claude-sonnet-5.5"
 
 	// memoryDigestMaxOutputTokens caps one digest. The longest word budget
 	// is 250 words, about 330 tokens; the cap leaves room for a model that
@@ -70,6 +71,7 @@ type MemoryDigests struct {
 	repo       *repo.Queries
 	chatClient openrouter.CompletionClient
 	flags      feature.Provider
+	model      string
 }
 
 func NewMemoryDigests(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter.CompletionClient, flags feature.Provider) *MemoryDigests {
@@ -79,7 +81,17 @@ func NewMemoryDigests(logger *slog.Logger, db *pgxpool.Pool, chatClient openrout
 		repo:       repo.New(db),
 		chatClient: chatClient,
 		flags:      flags,
+		model:      MemoryDigestModel,
 	}
+}
+
+// WithModel returns a copy that writes digests with model. The team memory
+// eval uses it to compare digest models; the scheduled job always uses
+// MemoryDigestModel.
+func (m *MemoryDigests) WithModel(model string) *MemoryDigests {
+	copied := *m
+	copied.model = model
+	return &copied
 }
 
 // BuildMemoryDigestsArgs selects one level of one rollup run.
@@ -90,6 +102,11 @@ type BuildMemoryDigestsArgs struct {
 	// Now is the run's anchor time, so every batch of a run agrees on which
 	// periods are closed.
 	Now time.Time
+
+	// ProjectIDs limits the run to these projects; empty means every project.
+	// The scheduled workflow leaves it empty; the memory eval passes its own
+	// projects so it never writes digests for the rest of the organization.
+	ProjectIDs []uuid.UUID
 }
 
 // BuildMemoryDigestsResult counts what one batch did.
@@ -126,8 +143,12 @@ func (m *MemoryDigests) Build(ctx context.Context, args BuildMemoryDigestsArgs) 
 		return result, fmt.Errorf("parse digest level: %w", err)
 	}
 
-	stopHeartbeat := startActivityHeartbeat(ctx)
-	defer stopHeartbeat()
+	// The memory eval calls Build outside an activity, where there is no
+	// heartbeat to record.
+	if activity.IsActivity(ctx) {
+		stopHeartbeat := startActivityHeartbeat(ctx)
+		defer stopHeartbeat()
+	}
 
 	now := args.Now.UTC()
 	orgIDs, err := m.enabledOrganizations(ctx, now)
@@ -138,7 +159,7 @@ func (m *MemoryDigests) Build(ctx context.Context, args BuildMemoryDigestsArgs) 
 		return result, nil
 	}
 
-	candidates, err := m.listCandidates(ctx, level, now, orgIDs)
+	candidates, err := m.listCandidates(ctx, level, now, orgIDs, args.ProjectIDs)
 	if err != nil {
 		return result, err
 	}
@@ -212,7 +233,10 @@ func (m *MemoryDigests) Invalidate(ctx context.Context) error {
 	return nil
 }
 
-func (m *MemoryDigests) listCandidates(ctx context.Context, level memorydigest.Level, now time.Time, orgIDs []string) ([]memoryDigestCandidate, error) {
+func (m *MemoryDigests) listCandidates(ctx context.Context, level memorydigest.Level, now time.Time, orgIDs []string, projectIDs []uuid.UUID) ([]memoryDigestCandidate, error) {
+	if projectIDs == nil {
+		projectIDs = []uuid.UUID{}
+	}
 	since := level.PeriodStart(now.Add(-MemoryDigestLookback))
 	// One extra row tells the caller another batch is waiting.
 	limit := int32(memoryDigestBatchSize + 1)
@@ -221,6 +245,7 @@ func (m *MemoryDigests) listCandidates(ctx context.Context, level memorydigest.L
 	if level == memorydigest.LevelDay {
 		rows, err := m.repo.ListDayDigestCandidates(ctx, repo.ListDayDigestCandidatesParams{
 			OrganizationIds: orgIDs,
+			ProjectIds:      projectIDs,
 			Since:           pgtype.Timestamptz{Time: since, Valid: true, InfinityModifier: pgtype.Finite},
 			Until:           pgtype.Timestamptz{Time: level.PeriodStart(now), Valid: true, InfinityModifier: pgtype.Finite},
 			RowLimit:        limit,
@@ -239,6 +264,7 @@ func (m *MemoryDigests) listCandidates(ctx context.Context, level memorydigest.L
 		ParentLevel:     string(level),
 		ChildLevel:      string(child),
 		OrganizationIds: orgIDs,
+		ProjectIds:      projectIDs,
 		Since:           pgDate(since),
 		// Children of the current, open period are excluded here; a month
 		// can still be open after its own start has passed, which the
@@ -304,7 +330,7 @@ func (m *MemoryDigests) buildOne(ctx context.Context, level memorydigest.Level, 
 		ChatIds:        []uuid.UUID{},
 		MemoIds:        []uuid.UUID{},
 		ChildDigestIds: []uuid.UUID{},
-		Model:          conv.ToPGText(memoryDigestModel),
+		Model:          conv.ToPGText(m.model),
 		InputTokens:    pgtype.Int4{Int32: 0, Valid: false},
 		OutputTokens:   pgtype.Int4{Int32: 0, Valid: false},
 	}
@@ -441,7 +467,7 @@ func (m *MemoryDigests) complete(ctx context.Context, c memoryDigestCandidate, s
 		Tools:                     nil,
 		ToolChoice:                nil,
 		Temperature:               nil,
-		Model:                     memoryDigestModel,
+		Model:                     m.model,
 		Stream:                    false,
 		UsageSource:               billing.ModelUsageSourceGram,
 		KeyType:                   openrouter.KeyTypeInternal,
