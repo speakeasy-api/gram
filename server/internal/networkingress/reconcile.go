@@ -266,19 +266,21 @@ func (e *Executor) cleanup(ctx context.Context, conn *pgxpool.Conn, row repo.Net
 }
 
 // deleteProviderResources hands the saved credentials to providers whose
-// teardown calls the customer's provider API. Credentials that are missing or
-// no longer decrypt fall back to the credential-free path, which surfaces the
-// blocker through the provider's own error.
+// teardown calls the customer's provider API. Such a provider always receives
+// the credentialed call, with nil credentials when none are saved or they no
+// longer decrypt, so it decides whether cleanup can finish without them.
 func (e *Executor) deleteProviderResources(ctx context.Context, provider k8s.NetworkIngressProvisioner, row repo.NetworkIngress, resources k8s.NetworkIngressResourceNames) error {
 	deleter, ok := provider.(k8s.NetworkIngressCredentialedDeleter)
-	if !ok || e.enc == nil || !row.CredentialsEncrypted.Valid || row.CredentialsEncrypted.String == "" {
+	if !ok {
 		return provider.Delete(ctx, resources) //nolint:wrapcheck // provider errors are classified by providerFailure
 	}
-	credentials, err := e.enc.Decrypt(row.CredentialsEncrypted.String)
-	if err != nil || credentials == "" {
-		return provider.Delete(ctx, resources) //nolint:wrapcheck // provider errors are classified by providerFailure
+	var credentials []byte
+	if e.enc != nil && row.CredentialsEncrypted.Valid && row.CredentialsEncrypted.String != "" {
+		if plaintext, err := e.enc.Decrypt(row.CredentialsEncrypted.String); err == nil && plaintext != "" {
+			credentials = []byte(plaintext)
+		}
 	}
-	return deleter.DeleteWithCredentials(ctx, resources, []byte(credentials)) //nolint:wrapcheck // provider errors are classified by providerFailure
+	return deleter.DeleteWithCredentials(ctx, resources, credentials) //nolint:wrapcheck // provider errors are classified by providerFailure
 }
 
 // recordCleanupBlocker exposes why a tombstone cannot finish cleanup, or clears

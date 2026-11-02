@@ -351,15 +351,16 @@ func TestNetworkIngressExecutorHandsCredentialsToProviderTeardown(t *testing.T) 
 	require.Zero(t, plainDeletes)
 	require.JSONEq(t, `{"client_id":"client-id","client_secret":"client-secret"}`, string(received))
 
-	// Without an encryption client the credential-free path is used.
-	received = nil
+	// Without an encryption client the provider still gets the credentialed
+	// call, with nothing in it, and decides whether cleanup can proceed.
+	received = []byte("sentinel")
 	id = uuid.MustParse(ti.create(t, ctx).ID)
 	require.NoError(t, ti.service.DeleteIngress(ctx, &gen.DeleteIngressPayload{}))
 	executor = networkingress.NewExecutor(ti.conn, nil, registry, networkingress.ExecutorOptions{})
 	_, err = executor.Reconcile(ctx, ti.orgID, id)
 	require.NoError(t, err)
 	require.Nil(t, received)
-	require.Equal(t, 1, plainDeletes)
+	require.Zero(t, plainDeletes, "a credentialed provider never takes the credential-free path")
 }
 
 func TestNetworkIngressExecutorApplyGateSkipsAttestorSettingsForGateway(t *testing.T) {
