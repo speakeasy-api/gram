@@ -24,7 +24,11 @@ import {
   invalidateAgentPolicy,
   type AgentPolicyDraft,
 } from "../agent-policy-grants";
-import { buildRequestedGrants } from "../agent-api-key-grants";
+import {
+  buildRequestedGrants,
+  delegableGrantKey,
+  requestNarrowsPolicy,
+} from "../agent-api-key-grants";
 import {
   discoverKeyServerGrants,
   discoverWildcardKeyGrants,
@@ -52,6 +56,15 @@ import { CredentialPicker } from "./CredentialPicker";
 import { SignInPath } from "./SignInPath";
 import { StepWorkload } from "./StepWorkload";
 import { useWorkloadSetup } from "./useWorkloadSetup";
+import { hasPlatformSetup, platformSetup } from "./platformSetups";
+import {
+  DEVICE_AGENT_SYNC_SCOPE,
+  GITHUB_ACTIONS_KEY,
+  jobScope,
+  repositoryName,
+  type JobScope,
+} from "./githubActions";
+import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import { CUSTOM_PLATFORM_KEY } from "./CustomSetupInstructions";
 import {
   CONNECT_SCOPE,
@@ -160,6 +173,85 @@ function freeName(base: string, taken: Set<string>): string {
   let suffix = 2;
   while (taken.has(numbered(suffix))) suffix++;
   return numbered(suffix);
+}
+
+/**
+ * Why some of these grants cannot be written, from checkPolicyGrants' answers
+ * in the same order, or null when every one can.
+ */
+function grantRefusal(
+  grants: AgentPolicyGrantForm[],
+  answers: AgentPolicyGrantCheck[],
+): string | null {
+  const refused = grants.filter((_, index) => answers[index]?.allowed !== true);
+  if (refused.length === 0) return null;
+  const scopes = [...new Set(refused.map((grant) => grant.scope))].join(
+    " and ",
+  );
+  return answers.some(
+    (answer) => answer.allowed !== true && answer.limitedBy === "owner",
+  )
+    ? `This agent's owner does not hold ${scopes}, so the agent cannot be given it. Ask an organization administrator to give the owner that permission, or to run this setup.`
+    : `You do not hold ${scopes}, so you cannot give it to this agent. Ask an organization administrator to run this setup.`;
+}
+
+/**
+ * The summary row a platform's field fills in, so typing into the field lights
+ * up the row it changes. Fields with no row of their own light nothing.
+ */
+const SUMMARY_ROW_FOR_FIELD = new Map<string, string>([
+  ["org_id", "Anthropic organization"],
+  ["owner", "Repository"],
+  ["repo", "Repository"],
+  ["branch", "Branch"],
+  ["environment", "Environment"],
+  ["project", "Cluster"],
+  ["location", "Cluster"],
+  ["cluster", "Cluster"],
+  ["namespace", "Service account"],
+  ["service_account", "Service account"],
+  ["name", "Platform"],
+  ["issuer", "Issuer"],
+]);
+
+/**
+ * The rail's row for the branch or environment a GitHub Actions rule is
+ * narrowed to, once it is named. None for the whole repository.
+ */
+function githubActionsScopeRow(
+  scope: JobScope,
+): { label: string; value: ReactNode }[] {
+  if (scope.kind === "repository" || scope.name === "") return [];
+  return [
+    {
+      label: scope.kind === "branch" ? "Branch" : "Environment",
+      value: <code className="text-xs break-all">{scope.name}</code>,
+    },
+  ];
+}
+
+/**
+ * Whether a grant the agent holds already covers one it would be given, by
+ * the rule the server's selector matching applies.
+ */
+function grantCovers(
+  held: AgentPolicyGrant,
+  wanted: AgentPolicyGrantForm,
+): boolean {
+  return (
+    held.effect === "allow" &&
+    held.scope === wanted.scope &&
+    requestNarrowsPolicy(held.selector, wanted.selector)
+  );
+}
+
+/** Grants with each one kept once, in their first order. */
+function uniqueGrants(grants: AgentPolicyGrantForm[]): AgentPolicyGrantForm[] {
+  return [
+    ...new Map(
+      grants.map((grant) => [delegableGrantKey(grant), grant]),
+    ).values(),
+  ];
 }
 
 /**
@@ -371,10 +463,15 @@ export function CredentialsWizard({
   // The credential the agent already holds, when one is being edited: an
   // agent that signs in with a platform's tokens must not open on "API key".
   const admitted = useAgentAdmissions(agent?.id ?? "").admissions[0];
+  // An issuer whose catalog entry this wizard cannot set up, such as one not
+  // offered yet, is edited as the custom issuer it would otherwise be.
   const admittedEntry =
     admitted === undefined
       ? undefined
-      : catalogEntryForIssuer(catalog.entries, admitted.issuer);
+      : catalogEntryForIssuer(
+          catalog.entries.filter(hasPlatformSetup),
+          admitted.issuer,
+        );
   const [credential, setCredential] = useState<Credential>(
     initialPlatformKey === undefined ? "api-key" : "workload",
   );
@@ -726,6 +823,77 @@ export function CredentialsWizard({
 
   const gatewayURL = agentID ? agentGatewayURL(agentID) : "";
   const platform = catalog.entries.find((entry) => entry.key === platformKey);
+  // What the platform's runtime needs beyond the servers, such as a device
+  // agent's polling and hook events. Empty for an API key and for platforms
+  // that only call MCP.
+  const platformGrants = useMemo<AgentPolicyGrantForm[]>(
+    () =>
+      credential === "workload" && platform !== undefined && project.id
+        ? (platformSetup(platform)?.agentGrants?.(
+            organization.id,
+            project.id,
+          ) ?? [])
+        : [],
+    [credential, platform, organization.id, project.id],
+  );
+  // The platform grants the agent still lacks, each checked by the rule
+  // agents.create and agents.createPolicyGrant apply, so a grant the caller or
+  // the owner could not give is named before anything is written. A new agent
+  // lacks them all; one that exists is asked only for what it does not hold.
+  const platformGrantCheck = useQuery({
+    queryKey: [
+      "agent-platform-grant-check",
+      organization.id,
+      user.id,
+      agent?.id ?? null,
+      platformGrants,
+    ],
+    queryFn: async ({ signal }) => {
+      const held = agent
+        ? await sdk.agents.listPolicyGrants({ agentId: agent.id }, undefined, {
+            signal,
+          })
+        : [];
+      const missing = platformGrants.filter(
+        (grant) => !held.some((existing) => grantCovers(existing, grant)),
+      );
+      if (missing.length === 0) return { missing, refusal: null };
+      const { results } = await sdk.agents.checkPolicyGrants(
+        {
+          checkAgentPolicyGrantsForm: {
+            ...(agent ? { agentId: agent.id } : {}),
+            policyGrants: missing,
+          },
+        },
+        undefined,
+        { signal },
+      );
+      return { missing, refusal: grantRefusal(missing, results) };
+    },
+    enabled: platformGrants.length > 0 && !editing,
+    retry: false,
+    throwOnError: false,
+  });
+  /**
+   * The platform grants to write, once every one has been checked; throws
+   * with the reason when one would be refused or the check could not run.
+   */
+  const checkedPlatformGrants = async (): Promise<AgentPolicyGrantForm[]> => {
+    if (platformGrants.length === 0 || editing) return [];
+    // Asked again rather than read from the cache: the answer shown while the
+    // wizard was open may predate a grant written or withdrawn since, and a
+    // stale list of what is missing is the partial write this check prevents.
+    // A failed refetch keeps the last data, so the error is checked first.
+    const result = await platformGrantCheck.refetch();
+    const answer = result.isError ? undefined : result.data;
+    if (answer === undefined) {
+      throw new Error(
+        "Could not check that this agent can be given the permissions its platform needs. Try again.",
+      );
+    }
+    if (answer.refusal !== null) throw new Error(answer.refusal);
+    return answer.missing;
+  };
 
   // The verify step reads the key itself: a key with an access time is a
   // runtime that reached the gateway and was admitted.
@@ -831,14 +999,16 @@ export function CredentialsWizard({
         name: name.trim(),
         projectId: projectID,
         // Hook ingestion is bounded to the agent's project, the only one its
-        // hook events may name.
-        policyGrants: [
+        // hook events may name. A platform's own grants may repeat it, and
+        // the server refuses a request that names a grant twice.
+        policyGrants: uniqueGrants([
           ...agentPolicyGrantsFromDraft(draft),
           AUTH_GRANT,
           ...(hookEvents
             ? [hooksIngestPolicyGrant(organization.id, projectID)]
             : []),
-        ],
+          ...platformGrants,
+        ]),
       },
     });
     setAgentID(created.id);
@@ -853,6 +1023,31 @@ export function CredentialsWizard({
       queryKey: ["managed-agents", organization.id],
     });
     return created.id;
+  };
+
+  /**
+   * Gives an agent that already exists the platform grants it lacks, already
+   * checked by checkedPlatformGrants: each is its own write, so all are
+   * checked before the first is made.
+   */
+  const addPlatformGrants = async (
+    agentId: string,
+    missing: AgentPolicyGrantForm[],
+  ): Promise<void> => {
+    if (missing.length === 0) return;
+    for (const grant of missing) {
+      await createGrant.mutateAsync({
+        request: {
+          createAgentPolicyGrantForm: {
+            agentId,
+            effect: "allow",
+            scope: grant.scope,
+            selector: grant.selector,
+          },
+        },
+      });
+    }
+    void invalidateAgentPolicy(queryClient, organization.id, user.id, agentId);
   };
 
   /**
@@ -1157,11 +1352,23 @@ export function CredentialsWizard({
     agentName: name.trim(),
     servers: connectionReach().flatMap((server) =>
       server.mcpUrl
-        ? [{ id: server.id, name: server.name, mcpUrl: server.mcpUrl }]
+        ? [
+            {
+              id: server.id,
+              resourceId: server.resourceId,
+              name: server.name,
+              mcpUrl: server.mcpUrl,
+            },
+          ]
         : [],
     ),
     ensureAgent: async () => {
+      // Editing an agent's rule leaves its policy as it is; otherwise every
+      // grant the platform needs is checked before anything is written.
+      const missing = await checkedPlatformGrants();
       const targetId = await ensureAgent();
+      // A new agent was created with them; one that exists gets what it lacks.
+      if (agent !== undefined) await addPlatformGrants(agent.id, missing);
       await attachSelectedConnections(targetId, connectionReach());
       return targetId;
     },
@@ -1179,7 +1386,7 @@ export function CredentialsWizard({
         : admittedEntry !== undefined
           ? {
               ...valuesFromIssuer(admittedEntry, admitted.issuer),
-              ...valuesFromSubject(admittedEntry, admitted.subject),
+              ...valuesFromSubject(admittedEntry, admitted),
             }
           : // A custom issuer: the issuer picked from the trusted list, and
             // the subject as typed, without the `*` the match kind adds.
@@ -1192,19 +1399,7 @@ export function CredentialsWizard({
               match_kind: admitted.matchKind,
             },
     onValueChange: (key) =>
-      setHighlight(
-        key === "org_id"
-          ? "Anthropic organization"
-          : ["project", "location", "cluster"].includes(key)
-            ? "Cluster"
-            : ["namespace", "service_account"].includes(key)
-              ? "Service account"
-              : key === "name"
-                ? "Platform"
-                : key === "issuer"
-                  ? "Issuer"
-                  : null,
-      ),
+      setHighlight(SUMMARY_ROW_FOR_FIELD.get(key) ?? null),
   });
   // A platform's own setup steps are steps of this wizard, not a wizard of
   // their own: one stepper, one Back and one Continue throughout.
@@ -1393,6 +1588,14 @@ export function CredentialsWizard({
     }
   };
 
+  // A platform's own grants can add hook events, and a device agent's plugin
+  // sync, to what the agent can do.
+  const recordsSessions =
+    hookEvents ||
+    platformGrants.some((grant) => grant.scope === HOOKS_INGEST_SCOPE);
+  const fetchesPlugins = platformGrants.some(
+    (grant) => grant.scope === DEVICE_AGENT_SYNC_SCOPE,
+  );
   const summary = (
     <WizardSummary
       step={step + 1}
@@ -1421,16 +1624,23 @@ export function CredentialsWizard({
                 value: (
                   <GrantedScopes
                     scopes={[
-                      allServers
-                        ? `${CONNECT_SCOPE} on all servers in the project`
-                        : `${CONNECT_SCOPE} on the selected servers`,
-                      `${AUTH_GRANT.scope} on all auth clients`,
-                      ...(hookEvents ? [HOOKS_INGEST_SCOPE] : []),
+                      ...new Set([
+                        allServers
+                          ? `${CONNECT_SCOPE} on all servers in the project`
+                          : `${CONNECT_SCOPE} on the selected servers`,
+                        `${AUTH_GRANT.scope} on all auth clients`,
+                        ...(recordsSessions ? [HOOKS_INGEST_SCOPE] : []),
+                        // What the platform's runtime needs beyond the
+                        // servers, such as a device agent's plugin sync.
+                        ...platformGrants.map((grant) => grant.scope),
+                      ]),
                     ]}
                   >
-                    {hookEvents
-                      ? "Call its servers, record its sessions"
-                      : "Call its servers"}
+                    {[
+                      "Call its servers",
+                      ...(fetchesPlugins ? ["fetch its plugins"] : []),
+                      ...(recordsSessions ? ["record its sessions"] : []),
+                    ].join(", ")}
                   </GrantedScopes>
                 ),
               },
@@ -1465,6 +1675,25 @@ export function CredentialsWizard({
                 ),
               },
             ]
+          : []),
+        ...(credential === "workload" &&
+        platformKey === GITHUB_ACTIONS_KEY &&
+        (workload.values["owner"] ?? "").trim() !== "" &&
+        (workload.values["repo"] ?? "").trim() !== ""
+          ? [
+              {
+                label: "Repository",
+                value: (
+                  <code className="text-xs break-all">
+                    {repositoryName(workload.values)}
+                  </code>
+                ),
+              },
+            ]
+          : []),
+        // The one branch or environment the rule narrows the repository to.
+        ...(credential === "workload" && platformKey === GITHUB_ACTIONS_KEY
+          ? githubActionsScopeRow(jobScope(workload.values))
           : []),
         // A GKE cluster by its name alone: the project and location are on
         // the step that asked for them, and the rail is too narrow for all

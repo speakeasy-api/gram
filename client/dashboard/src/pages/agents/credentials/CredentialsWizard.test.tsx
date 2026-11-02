@@ -33,6 +33,7 @@ const mocks = vi.hoisted(() => ({
   withdrawSubject: vi.fn(),
   workloadIssuers: vi.fn(),
   workloadAdmissions: vi.fn(),
+  workloadList: vi.fn(),
   projectId: "project_one",
   canFederate: true,
   canReadWorkloads: true,
@@ -49,6 +50,9 @@ const mocks = vi.hoisted(() => ({
   bindings: vi.fn(),
   attach: vi.fn(),
   detach: vi.fn(),
+  plugins: vi.fn(),
+  getPlugin: vi.fn(),
+  listPolicyGrants: vi.fn(),
 }));
 
 vi.mock("@gram/client/react-query/mcpServerAuthClientChoices.js", () => ({
@@ -111,6 +115,7 @@ vi.mock("@/contexts/Sdk", () => ({
       },
       create: mocks.createAgent,
       listDelegableGrants: mocks.listDelegableGrants,
+      listPolicyGrants: mocks.listPolicyGrants,
       checkPolicyGrants: mocks.checkPolicyGrants,
     },
     keys: {
@@ -118,6 +123,10 @@ vi.mock("@/contexts/Sdk", () => ({
       list: mocks.listKeys,
       extendAgentKeys: mocks.extendAgentKeys,
     },
+    plugins: { getPlugin: mocks.getPlugin },
+    // Read per project, for the projects that trust a platform on their own.
+    // Each project sees its own rows among every issuer listed.
+    workloadIdentities: { list: mocks.workloadList },
     authClients: {
       listMcpServerChoices: async () => ({ choices: [] }),
       // How each server signs in upstream, read from its own auth clients.
@@ -228,6 +237,14 @@ vi.mock("@gram/client/react-query/agentsCreatePolicyGrant.js", () => ({
 vi.mock("@gram/client/react-query/agentsDeletePolicyGrant.js", () => ({
   useAgentsDeletePolicyGrantMutation: () => ({
     mutateAsync: mocks.deleteGrant,
+  }),
+}));
+// The GitHub Actions setup lists the plugins the job will receive.
+vi.mock("@gram/client/react-query/plugins.js", () => ({
+  usePlugins: () => ({
+    data: { plugins: mocks.plugins() },
+    isPending: false,
+    isError: false,
   }),
 }));
 // Only read to keep a prefilled name from colliding with one in use.
@@ -381,6 +398,10 @@ beforeEach(() => {
   mocks.withdrawSubject.mockResolvedValue({});
   mocks.workloadIssuers.mockReturnValue([]);
   mocks.workloadAdmissions.mockReturnValue([]);
+  mocks.workloadList.mockImplementation(async () => ({
+    issuers: mocks.workloadIssuers(),
+    admissions: mocks.workloadAdmissions(),
+  }));
   vi.stubGlobal("fetch", mocks.fetch);
   mocks.mcpServers.mockResolvedValue({
     mcpServers: [
@@ -408,6 +429,9 @@ beforeEach(() => {
   });
   mocks.bindings.mockResolvedValue([]);
   mocks.attach.mockResolvedValue({});
+  mocks.plugins.mockReturnValue([]);
+  mocks.getPlugin.mockReset();
+  mocks.listPolicyGrants.mockResolvedValue([]);
   mocks.createAgent.mockResolvedValue({ id: "agent_new", name: "Release Bot" });
   mocks.listDelegableGrants.mockResolvedValue([grant]);
   mocks.checkPolicyGrants.mockImplementation(answerChecks());
@@ -707,6 +731,7 @@ const platform = {
       patternMessage: "",
     },
   ],
+  // No label or alternatives, as a server that predates them sends.
   subject: {
     template: "spiffe://example/org/{org_id}/agent/",
     wildcard: true,
@@ -732,6 +757,27 @@ async function reachPlatformSetup() {
   return screen.findByRole("heading", {
     name: "Anthropic organization",
   });
+}
+
+/** Opens the wizard on a preselected catalog entry's credential step. */
+async function reachPreselectedCredentialStep(entry: typeof platform) {
+  mocks.platforms.mockReturnValue([entry]);
+  setup(entry.key);
+  fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  await continueFromAuthentication();
+}
+
+/** The preset offers no radio, Continue goes nowhere, and nothing is written. */
+function expectNoPresetSetup() {
+  expect(screen.queryByRole("radio", { name: /Claude Tag/ })).toBeNull();
+  const next = screen.getByRole("button", { name: "Continue" });
+  expect(next.hasAttribute("disabled")).toBe(true);
+  fireEvent.click(next);
+  expect(screen.queryByLabelText("Anthropic organization ID")).toBeNull();
+  expect(mocks.createAgent).not.toHaveBeenCalled();
+  expect(mocks.registerIssuer).not.toHaveBeenCalled();
+  expect(mocks.admitSubject).not.toHaveBeenCalled();
 }
 
 describe("Federating a platform's own tokens", () => {
@@ -771,27 +817,14 @@ describe("Federating a platform's own tokens", () => {
         })),
       },
     ],
-    ["disabled platform", { ...platform, enabled: false }],
     ["unknown platform", { ...platform, key: "constructor" }],
   ])(
     "keeps %s visible without allowing preselected setup",
     async (_case, unavailable) => {
-      mocks.platforms.mockReturnValue([unavailable]);
-      setup(unavailable.key);
-      fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
-      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-
-      await continueFromAuthentication();
+      await reachPreselectedCredentialStep(unavailable);
       expect(await screen.findByText("Unavailable")).toBeTruthy();
       expect(screen.getByText(platform.description)).toBeTruthy();
-      expect(screen.queryByRole("radio", { name: /Claude Tag/ })).toBeNull();
-      const next = screen.getByRole("button", { name: "Continue" });
-      expect(next.hasAttribute("disabled")).toBe(true);
-      fireEvent.click(next);
-      expect(screen.queryByLabelText("Anthropic organization ID")).toBeNull();
-      expect(mocks.createAgent).not.toHaveBeenCalled();
-      expect(mocks.registerIssuer).not.toHaveBeenCalled();
-      expect(mocks.admitSubject).not.toHaveBeenCalled();
+      expectNoPresetSetup();
 
       // The independent custom flow remains an available recovery path,
       // under the advanced options.
@@ -806,6 +839,17 @@ describe("Federating a platform's own tokens", () => {
       ).toBe(false);
     },
   );
+
+  // A platform listed but not offered yet, such as one waiting on a release,
+  // is named among the platforms coming soon rather than shown as a setup
+  // that cannot be finished.
+  it("names a disabled platform as coming soon without allowing preselected setup", async () => {
+    await reachPreselectedCredentialStep({ ...platform, enabled: false });
+    expect(await screen.findByText(/Coming soon: .*Claude Tag\./)).toBeTruthy();
+    expect(screen.queryByText("Unavailable")).toBeNull();
+    expect(screen.queryByText(platform.description)).toBeNull();
+    expectNoPresetSetup();
+  });
 
   it("keeps the credential to API keys without permission to trust a platform", async () => {
     mocks.canFederate = false;
@@ -846,12 +890,21 @@ describe("Federating a platform's own tokens", () => {
   });
 
   it("names the platforms still to come once the catalog has answered", async () => {
-    mocks.platforms.mockReturnValue([platform]);
+    // GitHub Actions is in the catalog but not offered yet.
+    mocks.platforms.mockReturnValue([
+      platform,
+      {
+        ...platform,
+        key: "github-actions",
+        displayName: "GitHub Actions",
+        enabled: false,
+      },
+    ]);
     await reachCredentialStep();
 
     expect(
       screen.getByText(
-        /Coming soon: GitHub Actions, Kubernetes, SPIFFE, Google Cloud\./,
+        /Coming soon: Kubernetes, SPIFFE, Google Cloud, GitHub Actions\./,
       ),
     ).toBeTruthy();
   });
@@ -999,6 +1052,8 @@ const gke = {
   subject: {
     template: "system:serviceaccount:{namespace}:{service_account}",
     wildcard: false,
+    label: "",
+    alternatives: [],
   },
 };
 
@@ -2701,6 +2756,33 @@ describe("Editing an agent that already exists", () => {
       });
     });
 
+    // An issuer registered through the custom flow stays editable there when
+    // the catalog later lists its platform but does not offer it yet.
+    it("edits a rule under a platform not offered yet as a custom issuer's", async () => {
+      mocks.platforms.mockReturnValue([{ ...platform, enabled: false }]);
+      trust("issuer_tag", "https://issuer.example");
+      mocks.workloadAdmissions.mockReturnValue([
+        {
+          ...base,
+          id: "admission_tag",
+          issuer: "https://issuer.example",
+          issuerName: "Trusted platform",
+          matchKind: "exact",
+          subject: "spiffe://example/org/org-123/agent/one",
+          workloadIssuerId: "issuer_tag",
+        },
+      ]);
+      editing();
+      fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Identity provider" });
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Which workloads" });
+      expect((screen.getByLabelText("Subject") as HTMLInputElement).value).toBe(
+        "spiffe://example/org/org-123/agent/one",
+      );
+    });
+
     it("keeps a custom rule with its project under an organization issuer", async () => {
       trust("issuer_custom", "https://idp.example");
       mocks.workloadAdmissions.mockReturnValue([
@@ -3141,5 +3223,620 @@ describe("Servers that sign in as a person", () => {
       "The agent was created, but it could not use your connection. attachment refused",
     );
     expect(mocks.createKey).not.toHaveBeenCalled();
+  });
+});
+
+const githubActions = {
+  key: "github-actions",
+  displayName: "GitHub Actions",
+  description: "Jobs in one repository.",
+  icon: "",
+  enabled: true,
+  issuer: {
+    value: "https://token.actions.githubusercontent.com",
+    visibility: "read-only",
+  },
+  jwksUri: {
+    value: "https://token.actions.githubusercontent.com/.well-known/jwks",
+    visibility: "hidden",
+  },
+  variables: [
+    ["owner", "Owner", "[A-Za-z0-9][A-Za-z0-9-]{0,38}(?:@[0-9]+)?"],
+    ["repo", "Repository", "[A-Za-z0-9._-]{1,100}(?:@[0-9]+)?"],
+    [
+      "branch",
+      "Branch",
+      "[^\\x00-\\x20\\x7f/:*?\\[\\\\^~]+(?:/[^\\x00-\\x20\\x7f/:*?\\[\\\\^~]+)*",
+    ],
+    ["environment", "Environment", "[^:*\\x00-\\x1f\\x7f]{1,255}"],
+  ].map(([key, label, pattern]) => ({
+    key,
+    tier: "rule",
+    label,
+    help: "",
+    placeholder: "",
+    pattern,
+    patternMessage: "",
+  })),
+  subject: {
+    template: "repo:{owner}/{repo}:",
+    wildcard: true,
+    label: "Whole repository",
+    alternatives: [
+      {
+        key: "branch",
+        label: "One branch",
+        template: "repo:{owner}/{repo}:ref:refs/heads/{branch}",
+        wildcard: false,
+      },
+      {
+        key: "environment",
+        label: "One environment",
+        template: "repo:{owner}/{repo}:environment:{environment}",
+        wildcard: false,
+      },
+    ],
+  },
+};
+
+describe("Connecting a GitHub repository", () => {
+  /** Names acme/payments-api on the repository step. */
+  function fillRepository() {
+    fireEvent.change(screen.getByLabelText("Owner"), {
+      target: { value: "acme" },
+    });
+    fireEvent.change(screen.getByLabelText("Repository"), {
+      target: { value: "payments-api" },
+    });
+  }
+
+  /** Chooses GitHub Actions for a new agent and fills in the repository. */
+  async function reachRepositoryStep({ fill = true } = {}) {
+    mocks.platforms.mockReturnValue([githubActions]);
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot" },
+    });
+    await nameChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(
+      await screen.findByRole("radio", { name: /GitHub Actions/ }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "Your repository" });
+    if (fill) fillRepository();
+  }
+
+  /** Sets up GitHub Actions for an agent that already exists. */
+  async function reachRepositoryStepForExistingAgent() {
+    mocks.platforms.mockReturnValue([githubActions]);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={client}>
+          <CredentialsWizard
+            agent={
+              {
+                id: "agent_one",
+                name: "Release Bot",
+                lifecycle: "active",
+                projectId: "project_one",
+                ownerUserId: "user_owner",
+                permissions: { write: true, authorize: true },
+              } as never
+            }
+            initialPlatformKey="github-actions"
+            onDone={() => {}}
+            verifyPollMs={20}
+          />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "Your repository" });
+    fillRepository();
+  }
+
+  it("checks every grant an existing agent lacks before writing any of them", async () => {
+    // The agent already polls; it lacks only the hooks grant.
+    mocks.listPolicyGrants.mockResolvedValue([
+      {
+        id: "grant_sync",
+        effect: "allow",
+        scope: "org:device_agent_sync",
+        selector: { resourceKind: "org", resourceId: "*" },
+      },
+    ]);
+    await reachRepositoryStepForExistingAgent();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+    await waitFor(() => expect(mocks.createGrant).toHaveBeenCalledTimes(1));
+    const lastCheck = mocks.checkPolicyGrants.mock.calls.at(-1)?.[0];
+    expect(lastCheck?.checkAgentPolicyGrantsForm).toEqual({
+      agentId: "agent_one",
+      policyGrants: [
+        {
+          effect: "allow",
+          scope: "org:hooks_ingest",
+          selector: {
+            resourceKind: "org",
+            resourceId: "org_example",
+            projectId: "project_one",
+          },
+        },
+      ],
+    });
+    expect(
+      mocks.createGrant.mock.calls[0]?.[0]?.request?.createAgentPolicyGrantForm
+        ?.scope,
+    ).toBe("org:hooks_ingest");
+  });
+
+  it("asks again on connect what an existing agent lacks, rather than trusting what it lacked on opening", async () => {
+    // On opening, the agent lacks both grants; by the time Connect is
+    // pressed, something else has given it both.
+    mocks.listPolicyGrants.mockResolvedValue([]);
+    await reachRepositoryStepForExistingAgent();
+    await waitFor(() => expect(mocks.checkPolicyGrants).toHaveBeenCalled());
+    mocks.listPolicyGrants.mockResolvedValue([
+      {
+        id: "grant_sync",
+        effect: "allow",
+        scope: "org:device_agent_sync",
+        selector: { resourceKind: "org", resourceId: "*" },
+      },
+      {
+        id: "grant_hooks",
+        effect: "allow",
+        scope: "org:hooks_ingest",
+        selector: {
+          resourceKind: "org",
+          resourceId: "org_example",
+          projectId: "project_one",
+        },
+      },
+    ]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+    await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
+    expect(mocks.createGrant).not.toHaveBeenCalled();
+  });
+
+  it("writes no grant to an existing agent when one of them would be refused", async () => {
+    mocks.checkPolicyGrants.mockImplementation(
+      (request: {
+        checkAgentPolicyGrantsForm: { policyGrants: { scope: string }[] };
+      }) =>
+        Promise.resolve({
+          results: request.checkAgentPolicyGrantsForm.policyGrants.map(
+            (grant) =>
+              grant.scope === "org:hooks_ingest"
+                ? { allowed: false, limitedBy: "owner" }
+                : { allowed: true },
+          ),
+        }),
+    );
+    await reachRepositoryStepForExistingAgent();
+    await waitFor(() => expect(mocks.checkPolicyGrants).toHaveBeenCalled());
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+    expect(
+      await screen.findByText(/owner does not hold org:hooks_ingest/),
+    ).toBeTruthy();
+    expect(mocks.createGrant).not.toHaveBeenCalled();
+    expect(mocks.admitSubject).not.toHaveBeenCalled();
+  });
+
+  it("trusts GitHub for the organization and gives the agent what the device agent needs", async () => {
+    await reachRepositoryStep();
+    expect(screen.getByText("repo:acme/payments-api:*")).toBeTruthy();
+    // The summary says what the device agent's grants add, with their scopes
+    // one focus away like the agent's own.
+    const can = screen.getByText(
+      "Call its servers, fetch its plugins, record its sessions",
+    );
+    fireEvent.focus(can);
+    expect(
+      (await screen.findAllByText("org:device_agent_sync")).length,
+    ).toBeGreaterThan(0);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+
+    await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
+    // The device-agent endpoint reads organization-tier rules only, so
+    // neither write names a project.
+    expect(mocks.registerIssuer.mock.calls[0]?.[0]?.request).toEqual({
+      registerWorkloadIssuerForm: expect.objectContaining({
+        issuer: "https://token.actions.githubusercontent.com",
+        jwksUri: "https://token.actions.githubusercontent.com/.well-known/jwks",
+      }),
+    });
+    expect(mocks.admitSubject.mock.calls[0]?.[0]?.request).toEqual({
+      admitWorkloadSubjectForm: {
+        issuer: "https://token.actions.githubusercontent.com",
+        subject: "repo:acme/payments-api:*",
+        matchKind: "wildcard",
+        agentId: "agent_new",
+        tags: [],
+      },
+    });
+    expect(
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants,
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          effect: "allow",
+          scope: "org:device_agent_sync",
+          selector: { resourceKind: "org", resourceId: "*" },
+        },
+        {
+          effect: "allow",
+          scope: "org:hooks_ingest",
+          selector: {
+            resourceKind: "org",
+            resourceId: "org_example",
+            projectId: "project_one",
+          },
+        },
+      ]),
+    );
+    // The hook grant every new agent gets and the one the platform needs are
+    // the same grant, sent once.
+    expect(
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants.filter(
+        (grant: { scope: string }) => grant.scope === "org:hooks_ingest",
+      ),
+    ).toHaveLength(1);
+    await screen.findByRole("heading", { name: "What the job gets" });
+  });
+
+  it("admits one environment's jobs alone, and runs the workflow in it", async () => {
+    await reachRepositoryStep();
+    const connect = screen.getByRole("button", {
+      name: "Connect GitHub Actions",
+    });
+    fireEvent.click(screen.getByRole("radio", { name: "One environment" }));
+    // The environment is now part of the rule, so it must be named first.
+    expect(connect.hasAttribute("disabled")).toBe(true);
+    fireEvent.change(screen.getByLabelText("Environment"), {
+      target: { value: "production" },
+    });
+    expect(
+      screen.getByText("repo:acme/payments-api:environment:production"),
+    ).toBeTruthy();
+    expect(screen.getByText(/protection rules pass/)).toBeTruthy();
+    fireEvent.click(connect);
+
+    await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.admitSubject.mock.calls[0]?.[0]?.request?.admitWorkloadSubjectForm,
+    ).toMatchObject({
+      subject: "repo:acme/payments-api:environment:production",
+      matchKind: "exact",
+    });
+    await screen.findByRole("heading", { name: "What the job gets" });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const workflow = await screen.findByLabelText(
+      ".github/workflows/speakeasy.yml",
+    );
+    expect(workflow.textContent).toMatch(/^ {4}environment: "production" #/m);
+    expect(workflow.textContent).not.toContain("pull_request");
+  });
+
+  it("admits one branch's jobs alone with an exact rule", async () => {
+    await reachRepositoryStep();
+    fireEvent.click(screen.getByRole("radio", { name: "One branch" }));
+    fireEvent.change(screen.getByLabelText("Branch"), {
+      target: { value: "release/v2" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+    await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.admitSubject.mock.calls[0]?.[0]?.request?.admitWorkloadSubjectForm,
+    ).toMatchObject({
+      subject: "repo:acme/payments-api:ref:refs/heads/release/v2",
+      matchKind: "exact",
+    });
+  });
+
+  it("registers its own issuer when only a project trusts GitHub, and says that project's servers read the project's", async () => {
+    mocks.workloadIssuers.mockReturnValue([
+      {
+        id: "issuer_project",
+        organizationId: "org_example",
+        projectId: "project_one",
+        name: "Project GitHub",
+        issuer: "https://token.actions.githubusercontent.com",
+        jwksUri: "https://token.actions.githubusercontent.com/.well-known/jwks",
+      },
+    ]);
+    await reachRepositoryStep();
+    expect(
+      (await screen.findByText(/also trusts GitHub Actions on its own/))
+        .textContent,
+    ).toBe(
+      "The project Project one also trusts GitHub Actions on its own, at the same issuer URL. Its MCP servers check a job against the project's own issuer instead of the rule saved here, so the job reaches them as another identity, or not at all. Projects you cannot open were not checked.",
+    );
+    // The remedy is withdrawing the project's own issuer, not an agent's
+    // access, which would leave the issuer shadowing the rule. The call that
+    // does it is under the technical details.
+    expect(
+      screen.getByText(/the project's own issuer has to be withdrawn/),
+    ).toBeTruthy();
+    expect(screen.getByText("Technical details")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "DELETE /rpc/workloadIdentities.withdrawIssuer?id=issuer_project",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+    await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
+    expect(mocks.registerIssuer).toHaveBeenCalledTimes(1);
+  });
+
+  // The rule is organization-wide, so a project the setup is not running in
+  // overrides it for that project's servers all the same.
+  it("names every project that trusts GitHub on its own, not only this one", async () => {
+    const own = (id: string, projectId: string) => ({
+      id,
+      organizationId: "org_example",
+      projectId,
+      name: "Project GitHub",
+      issuer: "https://token.actions.githubusercontent.com",
+      jwksUri: "https://token.actions.githubusercontent.com/.well-known/jwks",
+    });
+    mocks.workloadIssuers.mockReturnValue([
+      own("issuer_one", "project_one"),
+      own("issuer_two", "project_two"),
+      // Another platform's issuer in a project is no concern of this rule.
+      { ...own("issuer_other", "project_two"), issuer: "https://idp.example" },
+    ]);
+    await reachRepositoryStep();
+    expect(
+      (await screen.findByText(/also trust GitHub Actions on their own/))
+        .textContent,
+    ).toMatch(/^The projects Project one, Project two also trust/);
+    for (const [id, slug] of [
+      ["issuer_one", "project-one"],
+      ["issuer_two", "project-two"],
+    ]) {
+      const call = screen.getByText(
+        `DELETE /rpc/workloadIdentities.withdrawIssuer?id=${id}`,
+      );
+      expect(call.parentElement?.textContent).toContain(
+        `Gram-Project: ${slug}`,
+      );
+    }
+    expect(screen.queryByText(/issuer_other/)).toBeNull();
+  });
+
+  // Nothing can shadow a rule that does not exist yet, so no project is read
+  // until the repository makes one.
+  it("reads no project's issuers until the setup makes a rule", async () => {
+    await reachRepositoryStep({ fill: false });
+    expect(mocks.workloadList).not.toHaveBeenCalled();
+    fillRepository();
+    await waitFor(() => expect(mocks.workloadList).toHaveBeenCalledTimes(2));
+  });
+
+  it("says which projects it could not check for an issuer of their own", async () => {
+    mocks.workloadList.mockImplementation(
+      async (request: { gramProject: string }) => {
+        if (request.gramProject === "project-two") throw new Error("denied");
+        return { issuers: [], admissions: [] };
+      },
+    );
+    await reachRepositoryStep();
+    expect(
+      await screen.findByText(
+        "Speakeasy could not check whether Project two also trusts GitHub Actions on its own, nor any project you cannot open.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText(/also trusts GitHub Actions on its own, at/),
+    ).toBeNull();
+  });
+
+  it("creates nothing when the device agent's permissions cannot be given", async () => {
+    mocks.checkPolicyGrants.mockImplementation(
+      (request: {
+        checkAgentPolicyGrantsForm: { policyGrants: { scope: string }[] };
+      }) =>
+        Promise.resolve({
+          results: request.checkAgentPolicyGrantsForm.policyGrants.map(
+            (grant) =>
+              grant.scope === "org:hooks_ingest"
+                ? { allowed: false, limitedBy: "caller" }
+                : { allowed: true },
+          ),
+        }),
+    );
+    await reachRepositoryStep();
+    const connect = screen.getByRole("button", {
+      name: "Connect GitHub Actions",
+    });
+    await waitFor(() => expect(mocks.checkPolicyGrants).toHaveBeenCalled());
+    fireEvent.click(connect);
+    expect(
+      await screen.findByText(/You do not hold org:hooks_ingest/),
+    ).toBeTruthy();
+    expect(mocks.createAgent).not.toHaveBeenCalled();
+    expect(mocks.admitSubject).not.toHaveBeenCalled();
+  });
+
+  it("lists the plugins the job receives and the servers it cannot use", async () => {
+    const everyone = {
+      id: "plugin_ci",
+      name: "CI tools",
+      assignmentCount: 1,
+      agentPluginsV1Compatible: true,
+      autoCreated: false,
+      createdAt: new Date(0),
+    };
+    mocks.plugins.mockReturnValue([
+      everyone,
+      {
+        ...everyone,
+        id: "plugin_none",
+        name: "Unassigned",
+        assignmentCount: 0,
+      },
+    ]);
+    const servers = [
+      {
+        id: "s1",
+        displayName: "GitHub",
+        toolsetId: "toolset_one",
+        policy: "required",
+        sortOrder: 0,
+        createdAt: new Date(0),
+      },
+      {
+        id: "s2",
+        displayName: "Billing",
+        toolsetId: "toolset_billing",
+        policy: "required",
+        sortOrder: 1,
+        createdAt: new Date(0),
+      },
+    ];
+    // GitHub signs in through Speakeasy; Billing's own row has no
+    // authorization server, so the job skips it whether or not it is given.
+    mocks.mcpServers.mockResolvedValue({
+      mcpServers: [
+        {
+          id: "server_one",
+          name: "GitHub",
+          slug: "github",
+          projectId: "project_one",
+          toolsetId: "toolset_one",
+          userSessionIssuerId: "issuer_one",
+          visibility: "private",
+          networkAccessMode: "dual",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: "server_billing",
+          name: "Billing",
+          slug: "billing",
+          projectId: "project_one",
+          toolsetId: "toolset_billing",
+          toolset: { hostingMcpServerId: "server_billing" },
+          visibility: "private",
+          networkAccessMode: "dual",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+    });
+    mocks.getPlugin.mockResolvedValue({
+      ...everyone,
+      assignments: [
+        {
+          id: "a",
+          principalUrn: "*",
+          installMode: "required",
+          createdAt: new Date(0),
+        },
+      ],
+      servers: [
+        ...servers,
+        {
+          id: "s3",
+          displayName: "Analytics",
+          toolsetId: "toolset_analytics",
+          policy: "required",
+          sortOrder: 2,
+          createdAt: new Date(0),
+        },
+      ],
+    });
+    await reachRepositoryStep();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+    await screen.findByRole("heading", { name: "What the job gets" });
+    expect(await screen.findByText("CI tools")).toBeTruthy();
+    expect(mocks.getPlugin).toHaveBeenCalledTimes(1);
+    expect((await screen.findByText(/The job skips Billing/)).textContent).toBe(
+      "The job skips Billing: a job gets its token from a Speakeasy authorization server, and that server has none.",
+    );
+    expect(
+      await screen.findByText(/Release Bot cannot use Analytics,/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/cannot use .*Billing/)).toBeNull();
+  });
+
+  it("fills the workflow with the organization and the hook events project", async () => {
+    mocks.plugins.mockReturnValue([]);
+    await reachRepositoryStep();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+    await screen.findByRole("heading", { name: "What the job gets" });
+    expect(
+      screen.getByText(/No plugin in this project is installed for Everyone/),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const workflow = await screen.findByLabelText(
+      ".github/workflows/speakeasy.yml",
+    );
+    expect(workflow.textContent).toContain("organization-id: org_example");
+    expect(workflow.textContent).toContain("project: project-one");
+    expect(workflow.textContent).toMatch(
+      /anthropics\/claude-code-action@[0-9a-f]{40}/,
+    );
+    // The agents are tabs, like the ways to connect an agent with a key, each
+    // labelled with the product's logo and name; the workflow is the panel.
+    const tabs = screen.getByRole("tablist", { name: "Workflow agent" });
+    const claude = screen.getByRole("tab", { name: "Claude Code" });
+    expect(claude.getAttribute("aria-selected")).toBe("true");
+    expect(claude.querySelector("svg")).toBeTruthy();
+    expect(tabs.contains(claude)).toBe(true);
+    expect(screen.getByRole("tabpanel").contains(workflow)).toBe(true);
+
+    const codex = screen.getByRole("tab", { name: "OpenAI Codex" });
+    expect(codex.querySelector("svg")).toBeTruthy();
+    // Radix tabs select on mouse down, as a pointer press does.
+    fireEvent.mouseDown(codex);
+    expect(codex.getAttribute("aria-selected")).toBe("true");
+    expect(workflow.textContent).toMatch(/openai\/codex-action@[0-9a-f]{40}/);
+    expect(workflow.textContent).toContain(
+      "openai-api-key: ${{ secrets.OPENAI_API_KEY }}",
+    );
+    expect(workflow.textContent).toContain("codex-home: ${{ env.CODEX_HOME }}");
+    expect(workflow.textContent).not.toContain("anthropics/claude-code-action");
+    expect(
+      screen.getByRole("link", { name: "Codex action" }).getAttribute("href"),
+    ).toBe("https://learn.chatgpt.com/docs/github-action");
+
+    // Arrow keys move between the agents, as in any tab list.
+    codex.focus();
+    fireEvent.keyDown(codex, { key: "ArrowLeft" });
+    await waitFor(() => expect(document.activeElement).toBe(claude));
+    await waitFor(() =>
+      expect(claude.getAttribute("aria-selected")).toBe("true"),
+    );
+    expect(workflow.textContent).toMatch(
+      /anthropics\/claude-code-action@[0-9a-f]{40}/,
+    );
+    expect(workflow.textContent).not.toContain("openai/codex-action");
   });
 });
