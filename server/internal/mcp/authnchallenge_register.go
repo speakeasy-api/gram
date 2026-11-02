@@ -93,7 +93,7 @@ func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint
 // serveRegister registers a client with the issuer. Clients belong to the
 // issuer, not to an MCP server, so per-endpoint and shared authorization
 // servers share it.
-// refused records a rejected registration where a server is known.
+// refused records registration metadata that parsed but was rejected, where a server is known.
 func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *slog.Logger, issuerID uuid.UUID, refused func(ctx context.Context, code string)) error {
 	ctx := r.Context()
 	refuse := func(code, description string) error {
@@ -104,7 +104,7 @@ func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *
 	if ct := r.Header.Get("Content-Type"); ct != "" {
 		mediaType, _, err := mime.ParseMediaType(ct)
 		if err != nil || mediaType != "application/json" {
-			return refuse("invalid_client_metadata", "Content-Type must be application/json")
+			return writeDCRError(ctx, w, logger, "invalid_client_metadata", "Content-Type must be application/json")
 		}
 	}
 
@@ -113,9 +113,9 @@ func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *
 	var req usersessions.RegistrationRequest
 	if err := json.NewDecoder(r.Body).Decode(&req); err != nil {
 		if _, ok := errors.AsType[*http.MaxBytesError](err); ok {
-			return refuse("invalid_client_metadata", fmt.Sprintf("request body exceeds %d bytes", dcrMaxBodyBytes))
+			return writeDCRError(ctx, w, logger, "invalid_client_metadata", fmt.Sprintf("request body exceeds %d bytes", dcrMaxBodyBytes))
 		}
-		return refuse("invalid_client_metadata", "request body is not valid JSON")
+		return writeDCRError(ctx, w, logger, "invalid_client_metadata", "request body is not valid JSON")
 	}
 
 	req.SetDefaults()

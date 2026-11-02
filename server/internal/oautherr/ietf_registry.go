@@ -45,3 +45,12 @@ func IsIETFRegisteredCode(code string) bool {
 	_, ok := ietfRegisteredCodes[code]
 	return ok
 }
+
+// RegisteredCodeLabel is code if the IETF registers it, else "unregistered", so a
+// value a caller can choose never reaches a label.
+func RegisteredCodeLabel(code string) string {
+	if IsIETFRegisteredCode(code) {
+		return code
+	}
+	return "unregistered"
+}

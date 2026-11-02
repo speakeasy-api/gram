@@ -77,7 +77,6 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 
 	codeReconnect, err := s.codeReconnectTicket(r, endpoint, false)
 	if err != nil {
-		s.connections.Once(ctx, connectionScope(endpoint, mcpconnectionattempts.AppCodeMode), mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeExpired)
 		return err
 	}
 	focusServer := r.URL.Query().Get("server")

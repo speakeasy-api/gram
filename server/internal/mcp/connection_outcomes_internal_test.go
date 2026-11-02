@@ -1,7 +1,6 @@
 package mcp
 
 import (
-	"context"
 	"errors"
 	"testing"
 	"time"
@@ -84,6 +83,8 @@ func TestFirstPartyConnected(t *testing.T) {
 
 	require.True(t, firstPartyConnected(nil, nil), "nothing to connect")
 	require.True(t, firstPartyConnected(nil, []remoteSessionCard{done}))
+	require.True(t, firstPartyConnected(nil, []remoteSessionCard{{Chained: true, ChainCheck: chainCheckConnected}}), "a chained service connects with no sign-in")
+	require.False(t, firstPartyConnected(nil, []remoteSessionCard{{Chained: true, ChainCheck: chainCheckPending}}))
 	require.False(t, firstPartyConnected(nil, []remoteSessionCard{done, open}))
 	require.False(t, firstPartyConnected(nil, []remoteSessionCard{{Connected: true, Rejected: true}}), "a rejected sign-in can still be redone")
 	require.True(t, firstPartyConnected(&gatewayConsentView{Servers: []gatewayServer{ready}}, nil))
@@ -97,10 +98,11 @@ func TestFirstPartyConnected(t *testing.T) {
 func TestVerdictHappened(t *testing.T) {
 	t.Parallel()
 
-	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.ResultAllowed), verdictHappened(remotesessions.ValidationOutcomeValid))
-	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeRejectedByMember), verdictHappened(remotesessions.ValidationOutcomeRejectedByMember))
-	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeProviderTokenInactive), verdictHappened(remotesessions.ValidationOutcomeInactive))
-	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeProviderUnreachable), verdictHappened(remotesessions.ValidationOutcomeUnknown))
+	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.ResultAllowed), verdictHappened(remotesessions.ValidationOutcomeValid, false))
+	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeRejectedByMember), verdictHappened(remotesessions.ValidationOutcomeRejectedByMember, false))
+	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeProviderRejected), verdictHappened(remotesessions.ValidationOutcomeInactive, false))
+	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeMemberToolsMissing), verdictHappened(remotesessions.ValidationOutcomeUnknown, false))
+	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeTunnelUnavailable), verdictHappened(remotesessions.ValidationOutcomeUnknown, true))
 }
 
 func TestRecordRemoteSessionVerdict_KeepaliveBelongsToNoAttempt(t *testing.T) {
@@ -108,7 +110,7 @@ func TestRecordRemoteSessionVerdict_KeepaliveBelongsToNoAttempt(t *testing.T) {
 
 	rec := mcpconnectionattemptstest.New(t)
 	service := &Service{connections: rec.Recorder}
-	service.recordRemoteSessionVerdict(t.Context(), directEndpoint(), openState(), remotesessions.Client{}, uuid.Nil, uuid.New(), remotesessions.ValidationOutcomeRejectedByMember, remotesessionmetrics.ValidationTriggerKeepalive)
+	service.recordRemoteSessionVerdict(t.Context(), directEndpoint(), openState(), remotesessions.Client{}, validationTarget{}, uuid.New(), remotesessions.ValidationOutcomeRejectedByMember, remotesessionmetrics.ValidationTriggerKeepalive)
 	rec.RequireNothing()
 }
 
@@ -116,12 +118,16 @@ func TestTokenClientRefusal(t *testing.T) {
 	t.Parallel()
 
 	for reason, what := range map[string]mcpconnectionattempts.Code{
-		"cimd_admission_denied":     mcpconnectionattempts.CodeCIMDAdmissionDenied,
-		"cimd_admission_disabled":   mcpconnectionattempts.CodeCIMDAdmissionDenied,
-		"cimd_metadata_invalid":     mcpconnectionattempts.CodeCIMDMetadataInvalid,
-		"ai_tool_blocked":           mcpconnectionattempts.CodeAIToolBlocked,
-		"unknown_client_id":         mcpconnectionattempts.CodeUnknownClientID,
-		clientIDNamesEndpointReason: mcpconnectionattempts.CodeCIMDMetadataInvalid,
+		"cimd_admission_denied":               mcpconnectionattempts.CodeCIMDAdmissionDenied,
+		"cimd_admission_disabled":             mcpconnectionattempts.CodeCIMDAdmissionDenied,
+		"ai_tool_blocked":                     mcpconnectionattempts.CodeAIToolBlocked,
+		"client_secret_mismatch":              mcpconnectionattempts.CodeClientAuthFailed,
+		"public_client_presented_credentials": mcpconnectionattempts.CodeClientAuthFailed,
+		"assertion_client_presented_secret":   mcpconnectionattempts.CodeClientAuthFailed,
+		"assertion_verifier_unavailable":      mcpconnectionattempts.CodeAssertionVerifierMisconfigured,
+		"assertion_replay_store_unavailable":  mcpconnectionattempts.CodeAssertionCheckUnavailable,
+		"assertion_signature_invalid":         mcpconnectionattempts.CodeAssertionInvalid,
+		"client_method_unreadable":            mcpconnectionattempts.CodeInternalError,
 	} {
 		rec := mcpconnectionattemptstest.New(t)
 		service := &Service{connections: rec.Recorder}
@@ -131,86 +137,80 @@ func TestTokenClientRefusal(t *testing.T) {
 
 	rec := mcpconnectionattemptstest.New(t)
 	service := &Service{connections: rec.Recorder}
-	service.recordTokenClientRefusal(t.Context(), directEndpoint(), oauthwire.GrantTypeRefreshToken, "client", "unknown_client_id")
-	service.recordTokenClientFailure(t.Context(), directEndpoint(), oauthwire.GrantTypeRefreshToken, mcpmetrics.IDJAGRejectionClientMetadataUnavailable)
+	code := oauthwire.GrantTypeAuthorizationCode
+	for _, reason := range []string{"missing_client_id", "unknown_client_id", "cimd_metadata_invalid", clientIDNamesEndpointReason} {
+		service.recordTokenClientRefusal(t.Context(), directEndpoint(), code, "client", reason)
+	}
+	service.recordTokenClientRefusal(t.Context(), directEndpoint(), code, "", "assertion_malformed")
+	service.recordTokenClientRefusal(t.Context(), directEndpoint(), oauthwire.GrantTypeRefreshToken, "client", "client_secret_mismatch")
+	service.recordTokenClientFailure(t.Context(), directEndpoint(), code, mcpmetrics.IDJAGRejectionClientMetadataUnavailable)
+	service.recordTokenClientFailure(t.Context(), directEndpoint(), oauthwire.GrantTypeRefreshToken, mcpmetrics.IDJAGRejectionClientCheckUnavailable)
 	rec.RequireNothing()
 
-	service.recordTokenClientFailure(t.Context(), directEndpoint(), oauthwire.GrantTypeAuthorizationCode, mcpmetrics.IDJAGRejectionClientMetadataUnavailable)
-	rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeCIMDFetchFailed)
+	service.recordTokenClientFailure(t.Context(), directEndpoint(), code, mcpmetrics.IDJAGRejectionClientCheckUnavailable)
+	rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeAIToolCheckUnavailable)
 }
 
-func TestRecordMemberListing(t *testing.T) {
+func TestRecordListingFailures(t *testing.T) {
 	t.Parallel()
 
-	listed, signIn, broken, unapproved := uuid.New(), uuid.New(), uuid.New(), uuid.New()
-	gate := &metaGateContext{organizationID: "org-test", projectID: uuid.New(), metaServerID: uuid.New(), unapprovedMembers: []metaMember{{serverID: unapproved}}}
-	members := []metaMember{{serverID: listed}, {serverID: signIn}}
-	results := []memberDescribeResult{
-		{catalog: &memberCatalog{}},
-		{err: memberCredentialError{&metaMemberError{message: "sign in"}}},
+	gate := &metaGateContext{organizationID: "org-test", projectID: uuid.New(), metaServerID: uuid.New()}
+	broken, denied := uuid.New(), uuid.New()
+	unavailable := []unavailableMember{
+		{member: metaMember{serverID: uuid.New()}, err: memberCredentialError{&metaMemberError{message: "sign in"}}},
+		{member: metaMember{serverID: broken}, err: errors.New("down")},
+		{member: metaMember{serverID: denied}, err: oops.E(oops.CodeForbidden, nil, "no")},
 	}
 
-	t.Run("a member needing sign-in leaves the listing Connected", func(t *testing.T) {
-		t.Parallel()
-		rec := mcpconnectionattemptstest.New(t)
-		service := &Service{connections: rec.Recorder}
-		service.recordMemberListing(t.Context(), gate, members, results)
+	rec := mcpconnectionattemptstest.New(t)
+	service := &Service{connections: rec.Recorder}
+	service.recordListingFailures(t.Context(), gate, unavailable)
+	require.Len(t, rec.Rows(), 2, "waiting on sign-in is not a failure")
+	require.Equal(t, broken.String(), rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeMemberToolsMissing).MemberID)
+	require.Equal(t, denied.String(), rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeNoServerAccess).MemberID)
 
-		require.Equal(t, listed.String(), rec.RequireStep(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.ResultListed).MemberID)
-		require.Equal(t, signIn.String(), rec.RequireStep(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeNeedsSignIn).MemberID)
-		require.Equal(t, unapproved.String(), rec.RequireStep(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeConsentNotApproved).MemberID)
-		row := rec.RequireEnded(mcpconnectionattempts.StepDiscoveryListing, mcpconnectionattempts.ResultComplete)
-		require.Equal(t, string(mcpconnectionattempts.OutcomeConnected), row.Outcome)
-		rec.RequireOneAttempt()
-	})
-	t.Run("a broken member marks the listing partial", func(t *testing.T) {
-		t.Parallel()
-		rec := mcpconnectionattemptstest.New(t)
-		service := &Service{connections: rec.Recorder}
-		service.recordMemberListing(t.Context(), gate, append(members, metaMember{serverID: broken}), append(results, memberDescribeResult{err: errors.New("down")}))
-		require.Equal(t, broken.String(), rec.RequireStep(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeMemberToolsMissing).MemberID)
-		rec.RequireEnded(mcpconnectionattempts.StepDiscoveryListing, mcpconnectionattempts.CodeMemberToolsMissing)
-	})
-	t.Run("a canceled request records nothing", func(t *testing.T) {
-		t.Parallel()
-		ctx, cancel := context.WithCancel(t.Context())
-		cancel()
-		rec := mcpconnectionattemptstest.New(t)
-		service := &Service{connections: rec.Recorder}
-		service.recordMemberListing(ctx, gate, members, results)
-		rec.RequireNothing()
-	})
-	t.Run("a project gateway on the organization route keeps its project", func(t *testing.T) {
-		t.Parallel()
-		projectGate := *gate
-		projectGate.organizationGateway = true
-		rec := mcpconnectionattemptstest.New(t)
-		service := &Service{connections: rec.Recorder}
-		service.recordMemberListing(t.Context(), &projectGate, members, results)
-		require.Equal(t, gate.projectID, rec.RequireEnded(mcpconnectionattempts.StepDiscoveryListing, mcpconnectionattempts.ResultComplete).ProjectID)
-	})
-	t.Run("the organization gateway has no project", func(t *testing.T) {
-		t.Parallel()
-		orgGate := *gate
-		orgGate.organizationGateway = true
-		orgGate.projectID = uuid.Nil
-		rec := mcpconnectionattemptstest.New(t)
-		service := &Service{connections: rec.Recorder}
-		service.recordMemberListing(t.Context(), &orgGate, members, results)
-		require.Equal(t, uuid.Nil, rec.RequireEnded(mcpconnectionattempts.StepDiscoveryListing, mcpconnectionattempts.ResultComplete).ProjectID)
-	})
+	orgGate := *gate
+	orgGate.projectID = uuid.Nil
+	orgRec := mcpconnectionattemptstest.New(t)
+	orgService := &Service{connections: orgRec.Recorder}
+	orgService.recordListingFailures(t.Context(), &orgGate, unavailable[1:2])
+	require.Equal(t, uuid.Nil, orgRec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeMemberToolsMissing).ProjectID)
 }
 
-func TestMemberDescribeHappened_NoAccess(t *testing.T) {
+func TestAccessHappened(t *testing.T) {
 	t.Parallel()
 
-	got := memberDescribeHappened(memberDescribeResult{err: oops.E(oops.CodeForbidden, nil, "no")})
-	require.Equal(t, mcpconnectionattempts.Happened(mcpconnectionattempts.CodeNoServerAccess), got)
+	require.Equal(t, mcpconnectionattempts.CodeNoServerAccess, accessHappened(errConsentAgentDenied))
+	require.Equal(t, mcpconnectionattempts.CodeNoServerAccess, accessHappened(oops.E(oops.CodeForbidden, nil, "no")))
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, accessHappened(errors.New("database down")))
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, accessHappened(oops.E(oops.CodeUnavailable, nil, "down")))
+}
+
+func TestNoReadyServerHappened(t *testing.T) {
+	t.Parallel()
+
+	waiting := &gatewayConsentView{Servers: []gatewayServer{{Status: gatewayServerNotConnected}, {Status: gatewayServerReconnect}}}
+	require.Equal(t, mcpconnectionattempts.CodeNeedsSignIn, noReadyServerHappened(waiting), "a first-time gateway connect blames nobody")
+	broken := &gatewayConsentView{Servers: []gatewayServer{{Status: gatewayServerNotConnected}, {Status: gatewayServerUnavailable}}}
+	require.Equal(t, mcpconnectionattempts.CodeMemberToolsMissing, noReadyServerHappened(broken))
+}
+
+func TestRemoteLoginRefusalHappened(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, mcpconnectionattempts.CodeSessionChanged, remoteLoginRefusalHappened(oops.E(oops.CodeUnauthorized, nil, "wrong browser")))
+	require.Equal(t, mcpconnectionattempts.CodeSessionChanged, remoteLoginRefusalHappened(errors.New("connection login does not match its link")))
+	require.Equal(t, mcpconnectionattempts.CodeNoServerAccess, remoteLoginRefusalHappened(errRecoveryNoAccess))
+	require.Equal(t, mcpconnectionattempts.CodeNoServerAccess, remoteLoginRefusalHappened(oops.E(oops.CodeForbidden, nil, "no")))
+	require.Equal(t, mcpconnectionattempts.CodeConnectionChanged, remoteLoginRefusalHappened(errRecoveryUnavailable))
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, remoteLoginRefusalHappened(oops.E(oops.CodeUnavailable, nil, "redis down")))
 }
 
 func TestFederatedHappened(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, mcpconnectionattempts.CodeConnectionChanged, federatedHappened(remotesessions.ErrFederatedConfiguration))
-	require.Equal(t, mcpconnectionattempts.CodeIDPUnavailable, federatedHappened(remotesessions.ErrFederatedUnavailable))
+	require.Equal(t, mcpconnectionattempts.CodeIDPTransientFailure, federatedHappened(remotesessions.ErrFederatedUnavailable))
+	require.Equal(t, mcpconnectionattempts.CodeSignInProviderError, federatedHappened(remotesessions.ErrFederatedIdentity))
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, federatedHappened(remotesessions.ErrFederatedSigning))
 }

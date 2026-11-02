@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -66,6 +67,9 @@ func (s *Service) consumeWorkloadReconnect(r *http.Request, endpoint *ResolvedMc
 	}
 	b := state.WorkloadReconnect
 	if b == nil || !b.Ticket || b.ClientID == uuid.Nil || b.OwnerUserID == "" || !time.Now().Before(b.ExpiresAt) {
+		if b != nil {
+			s.recordTicketExpired(r.Context(), endpoint, state, mcpconnectionattempts.AppWorkload)
+		}
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid or expired connection request")
 	}
 	if err := endpoint.ValidateChallenge(r.Context(), state.Endpoint, state.UserSessionIssuerID); err != nil {

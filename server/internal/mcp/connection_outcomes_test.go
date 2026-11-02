@@ -4,10 +4,13 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
+	"encoding/json"
+	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync"
 	"testing"
 	"time"
 
@@ -16,13 +19,18 @@ import (
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
+	"github.com/speakeasy-api/gram/server/internal/auth/identity"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -119,21 +127,6 @@ func TestConnectionOutcome_ConsentDeclinedEndsCanceled(t *testing.T) {
 	require.Equal(t, string(mcpconnectionattempts.OutcomeDeclined), row.Outcome)
 }
 
-func TestConnectionOutcome_ConsentAfterExpiryIsOneRow(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
-	rec := recordConnections(t, ti)
-	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
-
-	req := httptest.NewRequest(http.MethodGet, "/mcp/"+toolset.McpSlug.String+"/connect?state="+uuid.NewString(), nil)
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
-	require.Error(t, ti.service.HandleConsent(httptest.NewRecorder(), req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))))
-
-	rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeExpired)
-}
-
 // A code misused at /token is burned, so it ends the attempt it belongs to.
 func TestConnectionOutcome_BurnedCodeEndsItsAttempt(t *testing.T) {
 	t.Parallel()
@@ -163,26 +156,6 @@ func TestConnectionOutcome_BurnedCodeEndsItsAttempt(t *testing.T) {
 			rec.RequireOneAttempt()
 		})
 	}
-}
-
-// A second redemption has no grant left, so it cannot end the attempt again.
-func TestConnectionOutcome_ReplayedCodeIsItsOwnAttempt(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
-	rec := recordConnections(t, ti)
-	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	verifier := "verifier-" + uuid.NewString()
-	stateID := seedAttemptChallenge(t, ctx, ti, toolset, client, verifier)
-	loc := postConsentAction(t, ctx, ti, toolset.McpSlug.String, stateID, "approve")
-
-	form := codeGrantForm(client, loc.Query().Get("code"), verifier)
-	require.Equal(t, http.StatusOK, postForm(t, ti, toolset.McpSlug.String, "token", form).Code)
-	require.Equal(t, http.StatusBadRequest, postForm(t, ti, toolset.McpSlug.String, "token", form).Code)
-
-	rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued)
-	replay := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeCodeNotFoundOrExpired)
-	require.Equal(t, string(mcpconnectionattempts.WhoApp), replay.WhoFixes)
 }
 
 // A wrong endpoint leaves the code usable, so the real redemption still ends the attempt once.
@@ -226,7 +199,6 @@ func TestConnectionOutcome_AuthorizeRefusals(t *testing.T) {
 		what   mcpconnectionattempts.Code
 		status int
 	}{
-		"unknown client":    {func(q url.Values) { q.Set("client_id", "client_missing") }, mcpconnectionattempts.CodeUnknownClientID, http.StatusBadRequest},
 		"redirect mismatch": {func(q url.Values) { q.Set("redirect_uri", "http://other.example/cb") }, mcpconnectionattempts.CodeRedirectURIMismatch, http.StatusBadRequest},
 		"resource mismatch": {func(q url.Values) { q.Set("resource", "https://other.example/mcp") }, mcpconnectionattempts.CodeResourceMismatch, http.StatusBadRequest},
 		"missing pkce":      {func(q url.Values) { q.Del("code_challenge") }, mcpconnectionattempts.CodeInvalidRequest, http.StatusBadRequest},
@@ -314,8 +286,28 @@ func TestConnectionOutcome_SignIn(t *testing.T) {
 	t.Run("sign-in service error", func(t *testing.T) {
 		t.Parallel()
 		rec := serve(t, memberMock(), url.Values{"error": {"server_error"}})
-		row := rec.RequireEnded(mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeIDPUnavailable)
+		row := rec.RequireEnded(mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeSignInProviderError)
 		require.Equal(t, "server_error", row.SubReason)
+	})
+	t.Run("an error the query made up is neither stored nor an outage", func(t *testing.T) {
+		t.Parallel()
+		rec := serve(t, memberMock(), url.Values{"error": {"made_up_by_caller"}})
+		row := rec.RequireEnded(mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeSignInProviderError)
+		require.Equal(t, "unregistered", row.SubReason)
+	})
+	t.Run("a rejected code is not an outage", func(t *testing.T) {
+		t.Parallel()
+		mock := memberMock()
+		mock.exchangeErr = identity.ErrCodeRejected
+		rec := serve(t, mock, url.Values{"code": {"garbage"}})
+		rec.RequireEnded(mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeSignInProviderError)
+	})
+	t.Run("a real exchange outage", func(t *testing.T) {
+		t.Parallel()
+		mock := memberMock()
+		mock.exchangeErr = context.DeadlineExceeded
+		rec := serve(t, mock, url.Values{"code": {"c"}})
+		rec.RequireEnded(mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeIDPUnavailable)
 	})
 	t.Run("membership check down", func(t *testing.T) {
 		t.Parallel()
@@ -436,41 +428,6 @@ func TestConnectionOutcome_RecoveryLinkEndsAtTheProvider(t *testing.T) {
 	rec.RequireOneAttempt()
 }
 
-// An expired or foreign code mode ticket is a row on the server, not a silent 4xx.
-func TestConnectionOutcome_CodeModeLinkThatCannotBeUsed(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{buildAuthURLResult: &url.URL{Scheme: "https", Host: "idp.example.com"}})
-	rec := recordConnections(t, ti)
-	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	slug := toolset.McpSlug.String
-	rctx := chi.NewRouteContext()
-	rctx.URLParams.Add("mcpSlug", slug)
-	req := httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/connect/first-party?code_reconnect="+uuid.NewString(), nil)
-	require.Error(t, ti.service.HandleFirstPartyConnect(httptest.NewRecorder(), req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))))
-
-	row := rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeExpired)
-	require.Equal(t, mcpconnectionattempts.AppCodeMode.String(), row.AppKey)
-}
-
-func TestConnectionOutcome_RegistrationRefused(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
-	rec := recordConnections(t, ti)
-	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	router := goahttp.NewMuxer()
-	mcp.Attach(router, ti.service.Service, nil)
-	w := httptest.NewRecorder()
-	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/register", strings.NewReader("not json"))
-	req.Header.Set("Content-Type", "application/json")
-	router.ServeHTTP(w, req)
-	require.Equal(t, http.StatusBadRequest, w.Code)
-
-	row := rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeRegistrationInvalid)
-	require.Equal(t, string(mcpconnectionattempts.WhoApp), row.WhoFixes)
-}
-
 func TestConnectionOutcome_AuthorizeSignInServiceDownEndsTheAttempt(t *testing.T) {
 	t.Parallel()
 
@@ -488,33 +445,410 @@ func TestConnectionOutcome_AuthorizeSignInServiceDownEndsTheAttempt(t *testing.T
 	rec.RequireOneAttempt()
 }
 
-func TestConnectionOutcome_AuthorizeClientMetadataFailures(t *testing.T) {
+// Nothing proves a flow behind these, so anyone could otherwise write final rows into an organization.
+func TestConnectionOutcome_AnonymousRequestsWriteNothing(t *testing.T) {
 	t.Parallel()
 
-	for name, tc := range map[string]struct {
-		mutate func(ds *cimdDocServer)
-		what   mcpconnectionattempts.Code
-	}{
-		"metadata invalid": {func(ds *cimdDocServer) { ds.doc["client_id"] = ds.srv.URL + "/oauth/other.json" }, mcpconnectionattempts.CodeCIMDMetadataInvalid},
-		"fetch failed":     {func(ds *cimdDocServer) { ds.status = http.StatusInternalServerError }, mcpconnectionattempts.CodeCIMDFetchFailed},
+	serve := func(t *testing.T, build func(slug, clientID, redirect string) *http.Request) {
+		t.Helper()
+		ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+		rec := recordConnections(t, ti)
+		toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+		router := goahttp.NewMuxer()
+		mcp.Attach(router, ti.service.Service, nil)
+		router.ServeHTTP(httptest.NewRecorder(), build(toolset.McpSlug.String, client.ClientID, client.RedirectUris[0]).WithContext(ctx))
+		rec.RequireNothing()
+	}
+	get := func(target string) *http.Request { return httptest.NewRequest(http.MethodGet, target, nil) }
+	form := func(target string, values url.Values) *http.Request {
+		req := httptest.NewRequest(http.MethodPost, target, strings.NewReader(values.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		return req
+	}
+	for name, build := range map[string]func(slug, clientID, redirect string) *http.Request{
+		"consent state that never existed": func(slug, _, _ string) *http.Request {
+			return get("/mcp/" + slug + "/connect?state=" + uuid.NewString())
+		},
+		"unknown client at authorize": func(slug, _, redirect string) *http.Request {
+			return get("/mcp/" + slug + "/authorize?" + url.Values{"response_type": {"code"}, "client_id": {"client_missing"}, "redirect_uri": {redirect}, "code_challenge": {"c"}, "code_challenge_method": {"S256"}}.Encode())
+		},
+		"unreachable metadata document at authorize": func(slug, _, redirect string) *http.Request {
+			return get("/mcp/" + slug + "/authorize?" + url.Values{"response_type": {"code"}, "client_id": {"https://nothing.invalid/client.json"}, "redirect_uri": {redirect}, "code_challenge": {"c"}, "code_challenge_method": {"S256"}}.Encode())
+		},
+		"code mode ticket that never existed": func(slug, _, _ string) *http.Request {
+			return get("/mcp/" + slug + "/connect/first-party?code_reconnect=" + uuid.NewString())
+		},
+		"code mode ticket that is not an id": func(slug, _, _ string) *http.Request {
+			return get("/mcp/" + slug + "/connect/first-party?code_reconnect=garbage")
+		},
+		"registration body that does not parse": func(slug, _, _ string) *http.Request {
+			req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/register", strings.NewReader("not json"))
+			req.Header.Set("Content-Type", "application/json")
+			return req
+		},
+		"unknown client at token": func(slug, _, _ string) *http.Request {
+			return form("/mcp/"+slug+"/token", url.Values{"grant_type": {"authorization_code"}, "client_id": {"client_missing"}, "code": {"c"}, "code_verifier": {"v"}, "redirect_uri": {"http://x/cb"}})
+		},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-
-			ctx, ti, ds, toolset := newTestCIMDService(t)
-			rec := recordConnections(t, ti)
-			ds.set(t, tc.mutate)
-			router := goahttp.NewMuxer()
-			mcp.Attach(router, ti.service.Service, nil)
-			q := url.Values{"response_type": {"code"}, "client_id": {ds.clientID}, "redirect_uri": {ds.srv.URL + "/callback"}, "state": {"s"}, "code_challenge": {"challenge"}, "code_challenge_method": {"S256"}}
-			w := httptest.NewRecorder()
-			router.ServeHTTP(w, httptest.NewRequestWithContext(ctx, http.MethodGet, "/mcp/"+toolset.McpSlug.String+"/authorize?"+q.Encode(), nil))
-			require.Contains(t, []int{http.StatusBadRequest, http.StatusServiceUnavailable}, w.Code, w.Body.String())
-
-			row := rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, tc.what)
-			require.Equal(t, string(mcpconnectionattempts.WhoApp), row.WhoFixes)
-			require.Equal(t, mcpconnectionattempts.AppUnverified.String(), row.AppKey, "the client was never validated")
-			require.Len(t, rec.Rows(), 1)
+			serve(t, build)
 		})
+	}
+}
+
+func TestConnectionOutcome_RegistrationMetadataRefused(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	rec := recordConnections(t, ti)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, ti.service.Service, nil)
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/register", strings.NewReader(`{"client_name":"x","redirect_uris":[]}`))
+	req.Header.Set("Content-Type", "application/json")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeRegistrationInvalid)
+	require.Equal(t, string(mcpconnectionattempts.WhoApp), row.WhoFixes)
+}
+
+// A live ticket past its time is proof of a real flow, on the server it names.
+func TestConnectionOutcome_ExpiredCodeModeTicket(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	rec := recordConnections(t, ti)
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+	slug := "expired-ticket-" + uuid.NewString()
+	createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer)
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "mcp")
+	require.NoError(t, err)
+	ref, err := endpoint.EndpointRef(ctx, ti.conn, ti.serverURL.String())
+	require.NoError(t, err)
+	ticket := mcp.AuthnChallengeState{ID: uuid.NewString(), FirstParty: true, CreatedAt: time.Now(), Endpoint: ref, UserSessionIssuerID: issuer, CodeReconnect: &mcp.CodeReconnectBinding{UserID: auth.UserID, Server: "tracker", ServerID: uuid.New(), Ticket: true, ExpiresAt: time.Now().Add(-time.Minute)}}
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, ticket))
+
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/connect/first-party?code_reconnect="+ticket.ID, nil).WithContext(ctx)
+	require.Error(t, ti.service.ServeFirstPartyConnect(httptest.NewRecorder(), req, endpoint))
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeExpired)
+	require.Equal(t, mcpconnectionattempts.AppCodeMode.String(), row.AppKey)
+}
+
+// The endpoint comes from the route, so a state from elsewhere must not write into it.
+func TestConnectionOutcome_ForeignStateWritesNothingOnThisServer(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	rec := recordConnections(t, ti)
+	mine, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	victim, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	stateID := seedAttemptChallenge(t, ctx, ti, mine, client, "v")
+	state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+	require.NoError(t, err)
+	state.Browser = &mcp.ChallengeBrowserBinding{CookieID: "cookie", OriginHash: "hash", CallbackHash: "hash"}
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
+	slug := victim.McpSlug.String
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "mcp")
+	require.NoError(t, err)
+
+	form := url.Values{"state": {stateID}, "csrf_token": {"csrf-token"}, "action": {"approve"}}
+	post := func() *http.Request {
+		req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(form.Encode())).WithContext(ctx)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		return req
+	}
+	require.Error(t, ti.service.ServeConsent(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/connect?state="+stateID, nil).WithContext(ctx), endpoint))
+	require.Error(t, ti.service.ServeConsent(httptest.NewRecorder(), post(), endpoint))
+	require.Error(t, ti.service.ServeConsentAction(httptest.NewRecorder(), post(), endpoint))
+	rec.RequireNothing()
+
+	// Without the browser binding the state reaches the endpoint check, and still writes nothing here.
+	state.Browser = nil
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
+	require.Error(t, ti.service.ServeConsent(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/connect?state="+stateID, nil).WithContext(ctx), endpoint))
+	rec.RequireNothing()
+}
+
+func TestConnectionOutcome_WrongBrowserOnItsOwnServerIsAStep(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	rec := recordConnections(t, ti)
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	stateID := seedAttemptChallenge(t, ctx, ti, toolset, client, "v")
+	state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+	require.NoError(t, err)
+	state.Browser = &mcp.ChallengeBrowserBinding{CookieID: "cookie", OriginHash: "hash", CallbackHash: "hash"}
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, toolset.McpSlug.String, "mcp")
+	require.NoError(t, err)
+
+	require.Error(t, ti.service.ServeConsent(httptest.NewRecorder(), httptest.NewRequest(http.MethodGet, "/mcp/x/connect?state="+stateID, nil).WithContext(ctx), endpoint))
+
+	rec.RequireStep(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeSessionChanged)
+	rec.RequireNotEnded()
+}
+
+// Back, reload or a second tab after approving is not a failure.
+func TestConnectionOutcome_ReloadAfterApproveRecordsNothingMore(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	rec := recordConnections(t, ti)
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	stateID := seedAttemptChallenge(t, ctx, ti, toolset, client, "v")
+	postConsentAction(t, ctx, ti, toolset.McpSlug.String, stateID, "approve")
+	before := len(rec.Rows())
+
+	slug := toolset.McpSlug.String
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", slug)
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/connect?state="+stateID, nil)
+	require.Error(t, ti.service.HandleConsent(httptest.NewRecorder(), req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))))
+
+	require.Len(t, rec.Rows(), before)
+	rec.RequireNotEnded()
+}
+
+// A second redemption has no grant left: the first connected, and nothing failed.
+func TestConnectionOutcome_ReplayedCodeWritesNoSecondEnding(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	rec := recordConnections(t, ti)
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	verifier := "verifier-" + uuid.NewString()
+	stateID := seedAttemptChallenge(t, ctx, ti, toolset, client, verifier)
+	loc := postConsentAction(t, ctx, ti, toolset.McpSlug.String, stateID, "approve")
+
+	form := codeGrantForm(client, loc.Query().Get("code"), verifier)
+	require.Equal(t, http.StatusOK, postForm(t, ti, toolset.McpSlug.String, "token", form).Code)
+	require.Equal(t, http.StatusBadRequest, postForm(t, ti, toolset.McpSlug.String, "token", form).Code)
+
+	rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued)
+	rec.RequireOneAttempt()
+}
+
+func TestConnectionOutcome_ConcurrentRequestsEndOnce(t *testing.T) {
+	t.Parallel()
+
+	race := func(n int, call func()) {
+		var group sync.WaitGroup
+		for range n {
+			group.Go(call)
+		}
+		group.Wait()
+	}
+
+	t.Run("double submit of a decline", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+		rec := recordConnections(t, ti)
+		toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+		stateID := seedAttemptChallenge(t, ctx, ti, toolset, client, "v")
+		slug := toolset.McpSlug.String
+		race(4, func() {
+			form := url.Values{"state": {stateID}, "csrf_token": {"csrf-token"}, "action": {"deny"}}
+			req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			rctx := chi.NewRouteContext()
+			rctx.URLParams.Add("mcpSlug", slug)
+			_ = ti.service.HandleConsent(httptest.NewRecorder(), req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx)))
+		})
+		rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeCanceled)
+		rec.RequireOneAttempt()
+	})
+	t.Run("double submit of an approval", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+		rec := recordConnections(t, ti)
+		toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+		stateID := seedAttemptChallenge(t, ctx, ti, toolset, client, "v")
+		slug := toolset.McpSlug.String
+		race(4, func() {
+			form := url.Values{"state": {stateID}, "csrf_token": {"csrf-token"}, "action": {"approve"}}
+			req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			rctx := chi.NewRouteContext()
+			rctx.URLParams.Add("mcpSlug", slug)
+			_ = ti.service.HandleConsent(httptest.NewRecorder(), req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx)))
+		})
+		rec.RequireStep(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultAccepted)
+		rec.RequireNotEnded()
+	})
+	t.Run("double token", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+		rec := recordConnections(t, ti)
+		toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+		verifier := "verifier-" + uuid.NewString()
+		stateID := seedAttemptChallenge(t, ctx, ti, toolset, client, verifier)
+		loc := postConsentAction(t, ctx, ti, toolset.McpSlug.String, stateID, "approve")
+		form := codeGrantForm(client, loc.Query().Get("code"), verifier)
+		race(4, func() { postForm(t, ti, toolset.McpSlug.String, "token", form) })
+		rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued)
+		rec.RequireOneAttempt()
+	})
+}
+
+// A chained first-party connect has no provider callback: its check is the ending.
+func TestConnectionOutcome_ChainedFirstPartyEnds(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx, issuer := seedChainedConsentEndpoint(t, "attempt-chain-"+uuid.NewString()[:6])
+	g := setConsentGovernor(t, fx, issuer, consentChainedUpstream)
+	g.acquire = func(context.Context, identitychaining.Request) identitychaining.Outcome {
+		return identitychaining.Outcome{Stage: identitychaining.StageComplete, Reason: identitychaining.ReasonSuccess, Confidence: identitychaining.ConfidenceVerified, Retryable: false, Cached: false, Provider: ""}
+	}
+	rec := recordConnections(t, fx.ti)
+	state, err := fx.ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
+	require.NoError(t, err)
+	state.FlowID = uuid.NewString()
+	state.FirstParty = true
+	require.NoError(t, fx.ti.authnChallengeCache.Store(ctx, state))
+
+	for range 2 {
+		w, err := postChainCheck(t, fx, nil)
+		require.NoError(t, err)
+		require.Equal(t, "connected", chainCheckResult(t, w)["status"])
+	}
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete)
+	require.Equal(t, state.FlowID, row.AttemptID.String())
+}
+
+// A provider callback whose sign-in has gone ends that attempt once, however many callbacks follow.
+func TestConnectionOutcome_ParentGoneDuringProviderSignIn(t *testing.T) {
+	t.Parallel()
+
+	setup := func(t *testing.T) (context.Context, consentActionFixture, *mcpconnectionattemptstest.Recording, mcp.AuthnChallengeState, string) {
+		t.Helper()
+		ctx, fx := seedMultiClientConsentEndpoint(t)
+		rec := recordConnections(t, fx.ti)
+		state, err := fx.ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
+		require.NoError(t, err)
+		state.FlowID = uuid.NewString()
+		require.NoError(t, fx.ti.authnChallengeCache.Store(ctx, state))
+		return ctx, fx, rec, state, postConnectAction(t, fx, fx.clientA).Query().Get("state")
+	}
+	callback := func(ctx context.Context, fx consentActionFixture, login string) error {
+		req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/mcp/remote_login_callback?code=c&state="+url.QueryEscape(login), nil)
+		return fx.ti.service.HandleRemoteLoginCallback(httptest.NewRecorder(), req)
+	}
+
+	t.Run("expired", func(t *testing.T) {
+		t.Parallel()
+		ctx, fx, rec, _, login := setup(t)
+		_, err := fx.ti.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+fx.stateID)
+		require.NoError(t, err)
+		require.Error(t, callback(ctx, fx, login))
+		require.Error(t, callback(ctx, fx, login))
+		row := rec.RequireEnded(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeExpired)
+		require.NotEmpty(t, row.ProviderHost)
+		rec.RequireOneAttempt()
+	})
+	t.Run("decided in another tab is not an expiry", func(t *testing.T) {
+		t.Parallel()
+		ctx, fx, rec, _, login := setup(t)
+		form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"deny"}}
+		req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect", strings.NewReader(form.Encode())).WithContext(ctx)
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		require.NoError(t, fx.ti.service.ServeConsent(httptest.NewRecorder(), req, fx.endpoint))
+		require.Error(t, callback(ctx, fx, login))
+		rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeCanceled)
+	})
+}
+
+// Direct tools/list writes only real failures, on the first page, after the inventory is built.
+func TestConnectionOutcome_DirectListingWritesOnlyFailures(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := recordConnections(t, ti)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	slug := "gateway-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	names := make([]string, 101)
+	for i := range names {
+		names[i] = fmt.Sprintf("tool_%03d", i)
+	}
+	seedHostedMetaMember(t, ctx, ti, gateway.ID, "Paged tools", 1, mcpservers.VisibilityPublic, names...)
+	downSlug := "down-" + uuid.NewString()[:8]
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Down", downSlug, 2, newListingUpstream(t, nil, func() bool { return false }))
+	down, err := mcpserversrepo.New(ti.conn).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: conv.ToPGText(downSlug), ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
+
+	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
+	require.NoError(t, err)
+	var page struct {
+		Result struct {
+			NextCursor string `json:"nextCursor"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &page))
+	require.NotEmpty(t, page.Result.NextCursor)
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeMemberToolsMissing)
+	require.Equal(t, down.ID.String(), row.MemberID)
+	require.Len(t, rec.Rows(), 1, "no Connected listing and no row for a healthy member")
+
+	_, err = servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{"cursor": page.Result.NextCursor}), "", nil)
+	require.NoError(t, err)
+	require.Len(t, rec.Rows(), 1, "a later page repeats nothing")
+}
+
+func TestConnectionOutcome_FailedDirectListingWritesNothing(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := recordConnections(t, ti)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	slug := "gateway-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	upstream := newListingUpstream(t, []any{map[string]any{"description": "missing name", "inputSchema": map[string]any{"type": "object"}}}, nil)
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Catalog member", "catalog-member", 1, upstream)
+	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
+	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
+	require.NoError(t, err)
+	require.Contains(t, w.Body.String(), "invalid definitions")
+	rec.RequireNothing()
+}
+
+// A consent capture records each member on the sign-in's attempt, with no listing rows.
+func TestConnectionOutcome_ConsentCaptureRecordsMembers(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	rec := recordConnections(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := "gateway-consent-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, issuer.ID)
+	docsSlug := "docs-" + uuid.NewString()[:8]
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Docs", docsSlug, 1, newRecordingUpstream(t, "search_docs").url)
+	docs, err := mcpserversrepo.New(ti.conn).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: conv.ToPGText(docsSlug), ProjectID: *authCtx.ProjectID})
+	require.NoError(t, err)
+	stateID, _ := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)
+	state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+	require.NoError(t, err)
+	state.FlowID = uuid.NewString()
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
+
+	consentGetPageWithContext(t, ctx, ti, slug, stateID)
+
+	row := rec.RequireStep(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.ResultAllowed)
+	require.Equal(t, docs.ID.String(), row.MemberID)
+	require.Equal(t, state.FlowID, row.AttemptID.String())
+	rec.RequireNotEnded()
+	for _, got := range rec.Rows() {
+		require.NotEqual(t, mcpconnectionattempts.StepDiscoveryListing.String(), got.Step)
 	}
 }

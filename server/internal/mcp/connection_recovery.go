@@ -78,9 +78,10 @@ func (c connectionRecovery) expired() bool {
 }
 
 var (
-	errRecoveryNotSignedIn = errors.New("connection recovery requires a signed-in user")
-	errRecoveryOtherUser   = errors.New("connection recovery link belongs to another user")
-	errRecoveryNoAccess    = errors.New("connection recovery user may not use the client")
+	errRecoveryLoginExpired = errors.New("connection login expired")
+	errRecoveryNotSignedIn  = errors.New("connection recovery requires a signed-in user")
+	errRecoveryOtherUser    = errors.New("connection recovery link belongs to another user")
+	errRecoveryNoAccess     = errors.New("connection recovery user may not use the client")
 	// errRecoveryUnavailable: the server no longer offers the link's client
 	// on the same registration, or the client cannot be used.
 	errRecoveryUnavailable = errors.New("connection recovery client is no longer available")
@@ -164,8 +165,8 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 		return renderConnectionRecoveryPage(w, http.StatusNotFound, connectionRecoveryExpiredPage)
 	}
 	if _, err := s.verifyConnectionRecoveryUser(ctx, r, recovery); err != nil {
-		if errors.Is(err, errRecoveryNoAccess) {
-			s.connections.Once(ctx, mcpconnectionattempts.ServerScope(recovery.OrganizationID, recovery.ProjectID, recovery.McpServerID, mcpconnectionattempts.AppRecoveryLink), mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeNoServerAccess)
+		if !errors.Is(err, errRecoveryNotSignedIn) {
+			s.connections.Once(ctx, recoveryScope(recovery), mcpconnectionattempts.StepProviderSignIn, recoveryHappened(err))
 		}
 		return s.answerConnectionRecoveryRefusal(w, r, recovery, err)
 	}
@@ -177,9 +178,11 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 
 	clients, err := s.remoteChallengeMgr.ListAuthClientRegistrations(ctx, recovery.ProjectID, recovery.OrganizationID, []uuid.UUID{recovery.RegistrationID})
 	if err != nil {
+		s.connections.Once(ctx, recoveryScope(recovery), mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "load connection client").LogError(ctx, s.logger)
 	}
 	if len(clients) != 1 || clients[0].CredentialOwner == remotesessions.CredentialOwnerSelf {
+		s.connections.Once(ctx, recoveryScope(recovery), mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeConnectionChanged)
 		return renderConnectionRecoveryPage(w, http.StatusConflict, connectionRecoveryUnavailablePage)
 	}
 	login := recovery
@@ -204,7 +207,7 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 		return oops.E(oops.CodeUnexpected, err, "store connection login").LogError(ctx, s.logger)
 	}
 	subject := urn.NewUserSubject(recovery.UserID)
-	attempt := mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope(recovery.OrganizationID, recovery.ProjectID, recovery.McpServerID, mcpconnectionattempts.AppRecoveryLink))
+	attempt := mcpconnectionattempts.Begin(recoveryScope(recovery))
 	authorizationURL, err := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
 		ConnectionPopup:     false,
 		ID:                  login.ID,
@@ -329,7 +332,7 @@ func (s *Service) verifyConnectionRecoveryCompletion(r *http.Request, remote rem
 	key := "connectionRecovery:" + remote.ParentChallengeID
 	login, err := s.connectionRecoveryCache.Get(ctx, key)
 	if err != nil || login.expired() || login.ID != remote.ParentChallengeID {
-		return true, errors.New("connection login expired")
+		return true, errRecoveryLoginExpired
 	}
 	if remote.Subject == nil || remote.Subject.Kind != urn.SessionSubjectKindUser || remote.Subject.ID != login.UserID ||
 		remote.RemoteSessionClientID != login.RegistrationID || remote.OrganizationID != login.OrganizationID {
@@ -354,8 +357,10 @@ func (s *Service) verifyConnectionRecoveryCompletion(r *http.Request, remote rem
 	}
 	// Used up only once it has passed, so a stray callback cannot spend it.
 	if _, err := s.connectionRecoveryCache.GetAndDelete(ctx, key); err != nil {
-		return true, errors.New("connection login expired")
+		return true, errRecoveryLoginExpired
 	}
+	// A late second callback finds the login gone; this one still ends the attempt.
+	s.claimAttemptEnding(ctx, s.logger, remote.Attempt)
 	return true, nil
 }
 

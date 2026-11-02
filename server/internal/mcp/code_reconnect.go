@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -72,6 +73,9 @@ func (s *Service) codeReconnectTicket(r *http.Request, endpoint *ResolvedMcpEndp
 	}
 	b := state.CodeReconnect
 	if b == nil || !b.Ticket || b.UserID == "" || b.Server == "" || b.ServerID == uuid.Nil || !time.Now().Before(b.ExpiresAt) {
+		if b != nil && !claim {
+			s.recordTicketExpired(r.Context(), endpoint, state, mcpconnectionattempts.AppCodeMode)
+		}
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid or expired connection request")
 	}
 	if err := endpoint.ValidateChallenge(r.Context(), state.Endpoint, state.UserSessionIssuerID); err != nil {

@@ -190,6 +190,8 @@ var (
 	CodeServerNotFound         = define("server_not_found", OutcomeFailed, WhoPerson, "We could not find a server at this address.", "Check the address. If it looks right, ask your admin.")
 	CodeExpired                = define("expired", OutcomeFailed, WhoPerson, "The sign-in took longer than 10 minutes and expired.", "Start connecting again.")
 	CodeSessionChanged         = define("session_changed", OutcomeFailed, WhoPerson, "Sign-in finished in a different browser than it started in.", "Start again, and finish in the same browser.")
+	CodeClientAuthFailed       = define("client_authentication_failed", OutcomeFailed, WhoApp, "The app could not prove its identity.", "Update the app, or report the problem to its makers.")
+	CodeSignInProviderError    = define("sign_in_provider_error", OutcomeFailed, WhoProvider, "The sign-in service sent back an error.", "Try again. If it keeps happening, check the sign-in service.")
 	CodeCanceled               = define("canceled", OutcomeDeclined, WhoPerson, "The sign-in was canceled.", "Connect again if you still want access.")
 
 	// Enterprise-managed sign-in to Speakeasy.
@@ -222,7 +224,6 @@ var (
 	CodeProviderUnreachable        = define("provider_unreachable", OutcomeFailed, WhoProvider, "We could not reach the service.", "Wait a few minutes and try again.")
 	CodeLoginExpired               = define("login_expired", OutcomeFailed, WhoPerson, "A newer sign-in replaced this one.", "Finish the most recent sign-in, or start again.")
 	CodeSharedCredentialRejected   = define("shared_credential_rejected", OutcomeFailed, WhoAdmin, "The server rejected your organization's shared sign-in.", "Update the shared credential for this server.")
-	CodeProviderTokenInactive      = define("provider_token_inactive", OutcomeFailed, WhoProvider, "The service says this sign-in is not active.", "Sign in again. If it keeps happening, ask your admin to check with the service.")
 	CodeStaticKeyRejected          = define("static_key_rejected", OutcomeFailed, WhoAdmin, "The server rejected the saved key.", "Update the key for this server.")
 
 	// Upstream enterprise-managed sign-in.

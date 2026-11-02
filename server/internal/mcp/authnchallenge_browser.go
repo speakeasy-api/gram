@@ -11,7 +11,6 @@ import (
 
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
-	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -122,16 +121,10 @@ func (s *Service) validateRemoteLoginBrowser(r *http.Request) (retErr error) {
 	if err != nil {
 		return fmt.Errorf("validate remote login browser: %w", s.remoteLoginStateError(r.Context(), err))
 	}
-	// The login state is not spent here, so the right browser can still finish.
 	defer func() {
-		if retErr == nil {
-			return
+		if retErr != nil {
+			s.recordRemoteLoginRefusal(r.Context(), remote, retErr)
 		}
-		what := mcpconnectionattempts.CodeSessionChanged
-		if errors.Is(retErr, redisCache.ErrCacheMiss) {
-			what = mcpconnectionattempts.CodeExpired
-		}
-		s.connections.Step(r.Context(), remote.Attempt, mcpconnectionattempts.StepProviderSignIn, what, mcpconnectionattempts.Provider(remote.ProviderHost), mcpconnectionattempts.Subject(remote.Subject))
 	}()
 	if recovery, err := s.verifyConnectionRecoveryCompletion(r, remote); recovery {
 		return err

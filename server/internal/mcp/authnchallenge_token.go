@@ -762,7 +762,6 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	grant, err := s.userSessionGrantCache.Get(ctx, grantKey)
 	if err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth authorization_code token request rejected", clientRow.ClientID, presentedAuthMethod, "authorization_code", "code_not_found_or_expired")
-		refused(mcpconnectionattempts.CodeCodeNotFoundOrExpired)
 		// Deliberately NOT counted as a flow failure: a missing/expired code is
 		// ambiguous. An expired code is closer to abandonment than an errant
 		// config, and a replayed or retried code would double-count an outcome
@@ -791,10 +790,12 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 			s.recordPrivateOAuthAuthority(ctx, grant.Endpoint.Authority, authorityStarted, err)
 			if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
 				s.metrics.RecordOAuthAuthorityUnavailable(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
-				s.connections.Step(ctx, grant.Attempt, mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail("endpoint_authority_unavailable"))
+				code, detail := remotesessions.AuthorityHappened(err)
+				s.connections.Step(ctx, grant.Attempt, mcpconnectionattempts.StepInboundToken, code, detail)
 				return oops.E(oops.CodeUnavailable, err, "private OAuth authority lookup is unavailable").LogError(ctx, logger)
 			}
-			refused(mcpconnectionattempts.CodeConnectionChanged, mcpconnectionattempts.Detail("endpoint_authority"))
+			code, detail := remotesessions.AuthorityHappened(err)
+			refused(code, detail)
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageToken)
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code not found or expired")
 		}
@@ -820,7 +821,6 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	rejectGrant := func(what mcpconnectionattempts.Code, description string, opts ...mcpconnectionattempts.Option) error {
 		if err := consumeGrant(); err != nil {
 			description = "code not found or expired"
-			refused(mcpconnectionattempts.CodeCodeNotFoundOrExpired)
 		} else {
 			endGrant(what, opts...)
 		}
@@ -992,7 +992,6 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	// Consume only after retryable preflight work. Exactly one exchange wins,
 	// and the consumed value must be the immutable grant we just validated.
 	if err := consumeGrant(); err != nil {
-		refused(mcpconnectionattempts.CodeCodeNotFoundOrExpired)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "code not found or expired")
 	}
 

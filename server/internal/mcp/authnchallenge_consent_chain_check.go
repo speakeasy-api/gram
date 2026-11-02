@@ -127,6 +127,9 @@ func (s *Service) serveIdentityChainingCheck(w http.ResponseWriter, r *http.Requ
 	if err := json.NewEncoder(w).Encode(result); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "encode identity chaining check").LogError(ctx, logger)
 	}
+	if challengeState.FirstParty && result.Status == chainCheckConnected {
+		s.endChainedFirstParty(ctx, logger, endpoint, challengeState, clientID)
+	}
 	return nil
 }
 

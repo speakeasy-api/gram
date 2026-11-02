@@ -72,7 +72,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	app := mcpconnectionattempts.AppUnverified
 	attempt := mcpconnectionattempts.NoAttempt
 	ending := mcpconnectionattempts.CodeInternalError
-	recorded := false
+	recorded, clientResolved := false, false
 	refuse := func(what mcpconnectionattempts.Code, opts ...mcpconnectionattempts.Option) {
 		recorded = true
 		s.connections.Once(ctx, connectionScope(endpoint, app), mcpconnectionattempts.StepInboundAuthorize, what, opts...)
@@ -81,7 +81,9 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		switch {
 		case retErr == nil || recorded:
 		case attempt.IsZero():
-			refuse(ending)
+			if clientResolved {
+				refuse(ending)
+			}
 		default:
 			s.connections.End(ctx, attempt, mcpconnectionattempts.StepInboundAuthorize, ending)
 		}
@@ -105,7 +107,6 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// otherwise. That motivates the two-phase split: validate the fields
 	// needed to match the URI first, then validate the rest.
 	if err := req.ValidateRedirectableFields(); err != nil {
-		refuse(mcpconnectionattempts.CodeInvalidRequest)
 		return writeAuthorizeOAuthError(ctx, w, logger, http.StatusBadRequest, page, err)
 	}
 
@@ -127,7 +128,6 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	}
 	if namesEndpoint {
 		logger.InfoContext(ctx, "oauth authorize rejected client_id naming this endpoint", attr.SlogOAuthFailureReason(clientIDNamesEndpointReason))
-		refuse(mcpconnectionattempts.CodeCIMDMetadataInvalid, mcpconnectionattempts.Detail(clientIDNamesEndpointReason))
 		return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, page, oautherr.CodeInvalidClient, clientIDNamesEndpointDescription)
 	}
 
@@ -149,7 +149,6 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, page, oautherr.CodeInvalidClient, admissionErr.Description())
 		}
 		if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
-			refuse(mcpconnectionattempts.CodeCIMDMetadataInvalid)
 			code := oauthErr.Code
 			if code == oautherr.CodeInvalidClientMetadata || code == oautherr.CodeInvalidRedirectURI {
 				code = oautherr.CodeInvalidClient
@@ -165,17 +164,16 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			// rather than a permanent invalid_client that would make SDKs
 			// stop retrying.
 			logger.InfoContext(ctx, "cimd document fetch failed", attr.SlogError(err))
-			refuse(mcpconnectionattempts.CodeCIMDFetchFailed)
 			return writeAuthorizeError(ctx, w, logger, http.StatusServiceUnavailable, page, "temporarily_unavailable", "failed to fetch client metadata document")
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
-			refuse(mcpconnectionattempts.CodeUnknownClientID)
 			return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, page, oautherr.CodeInvalidClient, "unknown client_id")
 		}
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
 	}
 	page = authorizationErrorPage(client, req.ClientID, endpoint.Slug)
 	app = mcpconnectionattempts.AppOf(req.ClientID)
+	clientResolved = true
 	if !redirectURIMatches(client, req.RedirectURI) {
 		refuse(mcpconnectionattempts.CodeRedirectURIMismatch, mcpconnectionattempts.UserSessionClient(client.ID))
 		page.Reason = oauthui.ReasonInvalidClient

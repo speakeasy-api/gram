@@ -282,6 +282,25 @@ func TestCompleteRemoteLogin_ProviderErrorsAreRecorded(t *testing.T) {
 	}
 }
 
+// A value from the query never reaches a stored label.
+func TestCompleteRemoteLogin_UnregisteredProviderErrorIsNotStored(t *testing.T) {
+	t.Parallel()
+
+	var spy upstreamSpy
+	ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-unregistered", &spy)
+	rec := mcpconnectionattemptstest.New(t)
+	remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
+	parent := fx.parent
+	parent.Attempt = mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope(fx.parent.OrganizationID, fx.parent.ProjectID, uuid.New(), mcpconnectionattempts.AppDCR))
+	authURL, err := fx.mgr.BuildAuthorizationUrl(ctx, parent, fx.clients[0])
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?error=made_up&state="+url.QueryEscape(loginState(t, authURL)), nil)
+	_, err = fx.mgr.CompleteRemoteLogin(req.WithContext(ctx))
+	require.Error(t, err)
+
+	require.Equal(t, "unregistered", rowFor(t, rec, mcpconnectionattempts.CodeSignInProviderError).SubReason)
+}
+
 func rowFor(t *testing.T, rec *mcpconnectionattemptstest.Recording, what mcpconnectionattempts.Code) mcpconnectionattempts.Row {
 	t.Helper()
 	for _, row := range rec.Rows() {

@@ -10,6 +10,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 )
 
@@ -22,7 +23,7 @@ func TestProviderErrorHappened(t *testing.T) {
 		oautherr.CodeInvalidClient:          mcpconnectionattempts.CodeProviderOAuthInvalidClient,
 		oautherr.CodeTemporarilyUnavailable: mcpconnectionattempts.CodeProviderUnavailable,
 		oautherr.CodeServerError:            mcpconnectionattempts.CodeProviderServerError,
-		"something_else":                    mcpconnectionattempts.CodeProviderOAuthInvalidGrant,
+		"something_else":                    mcpconnectionattempts.CodeSignInProviderError,
 	} {
 		require.Equal(t, want, providerErrorHappened(code), code)
 	}
@@ -44,6 +45,8 @@ func TestExchangeHappened(t *testing.T) {
 		"invalid_scope":   {oauth(http.StatusBadRequest, oautherr.CodeInvalidScope), false, mcpconnectionattempts.CodeProviderOAuthInvalidScope},
 		"invalid_grant":   {oauth(http.StatusBadRequest, oautherr.CodeInvalidGrant), false, mcpconnectionattempts.CodeProviderOAuthInvalidGrant},
 		"rate limited":    {oauth(http.StatusTooManyRequests, ""), false, mcpconnectionattempts.CodeProviderRateLimited},
+		"invalid_request": {oauth(http.StatusBadRequest, oautherr.CodeInvalidRequest), false, mcpconnectionattempts.CodeProviderOAuthInvalidClient},
+		"bare 400":        {oauth(http.StatusBadRequest, ""), false, mcpconnectionattempts.CodeProviderOAuthInvalidClient},
 		"503":             {oauth(http.StatusServiceUnavailable, ""), false, mcpconnectionattempts.CodeProviderUnavailable},
 		"500":             {oauth(http.StatusInternalServerError, ""), false, mcpconnectionattempts.CodeProviderServerError},
 		"unreachable":     {&tokenExchangeUnavailableError{err: errors.New("dial")}, false, mcpconnectionattempts.CodeProviderUnreachable},
@@ -53,4 +56,13 @@ func TestExchangeHappened(t *testing.T) {
 	} {
 		require.Equal(t, tc.want, exchangeHappened(tc.err, tc.tunneled), name)
 	}
+}
+
+func TestAuthorityHappened(t *testing.T) {
+	t.Parallel()
+
+	code, _ := AuthorityHappened(networkingress.ErrAuthorityUnavailable)
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, code, "an outage says nothing about the connection")
+	code, _ = AuthorityHappened(errors.New("authority rejected"))
+	require.Equal(t, mcpconnectionattempts.CodeConnectionChanged, code)
 }

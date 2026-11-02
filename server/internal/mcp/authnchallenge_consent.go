@@ -539,21 +539,15 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
-		s.recordConsentStateGone(ctx, endpoint, err)
 		return consentChallengeCacheError(ctx, logger, err)
 	}
 	if challengeState.FirstParty {
 		defer func() { retErr = s.firstPartyBrowserError(retErr) }()
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
-		s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeSessionChanged, mcpconnectionattempts.Subject(challengeState.Subject))
+		s.recordWrongConsentBrowser(ctx, endpoint, challengeState)
 		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))
 	}
-	defer func() {
-		if retErr != nil {
-			s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Subject(challengeState.Subject))
-		}
-	}()
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
 	if err := endpoint.ValidateChallenge(ctx, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
 		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
@@ -561,6 +555,12 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 		return oauthAuthorityError(err).LogError(ctx, logger)
 	}
+	pageFailure := mcpconnectionattempts.CodeInternalError
+	defer func() {
+		if retErr != nil {
+			s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundConsent, pageFailure, mcpconnectionattempts.Subject(challengeState.Subject))
+		}
+	}()
 
 	if challengeState.Federation != nil {
 		return s.completeFederatedBrowserHandoff(w, r, challengeState)
@@ -578,6 +578,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		client, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
+				pageFailure = mcpconnectionattempts.CodeUnknownClientID
 				return oops.E(oops.CodeBadRequest, err, "user session client revoked").LogWarn(ctx, logger)
 			}
 			return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
@@ -850,11 +851,12 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 					approvalError.Message = "Tool definitions are too large to approve here. Ask an administrator to reduce the tool inventory."
 				}
 				if errors.Is(err, errConsentCaptureSuperseded) {
+					consentProblem = nil
 					approvalError.Message = "This page was replaced by a newer one. Reload the page to continue."
 				}
 			} else if !gateway.AnyReady() {
 				approvalError = &consentApprovalError{Message: "No servers could be verified. Resolve the server statuses above before approving access.", ActionURL: "", ActionLabel: ""}
-				consentProblem = mcpconnectionattempts.CodeMemberToolsMissing
+				consentProblem = noReadyServerHappened(gateway)
 			}
 		}
 	} else if showToolsIsland {
@@ -1018,14 +1020,13 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// against the consumed value, which stays the single-use authority.
 	challengeState, err := s.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 	if err != nil {
-		s.recordConsentStateGone(ctx, endpoint, err)
 		return consentChallengeCacheError(ctx, logger, err)
 	}
 	if challengeState.FirstParty {
 		defer func() { retErr = s.firstPartyBrowserError(retErr) }()
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
-		s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeSessionChanged, mcpconnectionattempts.Subject(challengeState.Subject))
+		s.recordWrongConsentBrowser(ctx, endpoint, challengeState)
 		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
@@ -1101,6 +1102,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 			return consentChallengeCacheError(ctx, logger, err)
 		}
 		consumed = true
+		s.claimAttemptEnding(ctx, logger, attempt)
 		s.evictConsentToolInventory(ctx, stateID)
 		s.retireDeniedConsentCredentials(ctx, logger, endpoint, challengeState)
 		denyURL, err := buildClientRedirect(clientRedirectParams{
@@ -1157,7 +1159,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	if selectedAgentID != "" {
 		selectedAgent, err := s.authorizeConsentAgent(ctx, challengeState, endpoint, selectedAgentID)
 		if err != nil {
-			ending = mcpconnectionattempts.CodeNoServerAccess
+			ending = accessHappened(err)
 			return consentAgentAuthorizationError(err, "selected agent is not eligible").LogWarn(ctx, logger)
 		}
 		// Keep the challenge retryable while the human connects and attaches
@@ -1170,14 +1172,17 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}
 		if err := s.remoteChallengeMgr.CheckAccessTokens(agentCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject); err != nil {
 			if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
+				ending = mcpconnectionattempts.CodeRemoteSessionUnavailable
 				return remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
 			}
 			if errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
+				ending = mcpconnectionattempts.CodeCredentialMisconfigured
 				return oops.E(oops.CodeFailedPrecondition, err, "%s", remoteSessionMisconfiguredDescription).LogWarn(ctx, logger)
 			}
 			if !errors.Is(err, remotesessions.ErrNoValidToken) {
 				return oops.E(oops.CodeUnavailable, err, "check agent connections").LogError(ctx, logger)
 			}
+			ending = mcpconnectionattempts.CodeInvalidRemoteSession
 			return oops.E(oops.CodeConflict, err, "connect and attach the required services before authorizing this agent").LogWarn(ctx, logger)
 		}
 	}
@@ -1215,6 +1220,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}
 		boundInventory = &inventory
 		if materializeGateway && len(inventory.MemberBindings) == 0 {
+			ending = mcpconnectionattempts.CodeMemberToolsMissing
 			return oops.E(oops.CodeFailedPrecondition, nil, "No servers could be verified. Resolve the server statuses before approving access.")
 		}
 	}
@@ -1265,6 +1271,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		// approved flow can't complete.
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 		if errors.Is(err, pgx.ErrNoRows) {
+			ending = mcpconnectionattempts.CodeUnknownClientID
 			return oops.E(oops.CodeBadRequest, err, "user session client revoked").LogWarn(ctx, logger)
 		}
 		return oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
@@ -1321,6 +1328,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	authClientPicks, err := s.consentDirectAuthClientPick(ctx, endpoint, pickState, r.PostForm.Get("auth_client"), upstreamPicks, cards)
 	if err != nil {
 		if errors.Is(err, errConsentConfigurationChanged) {
+			ending = mcpconnectionattempts.CodeConnectionChanged
 			return oops.E(oops.CodeFailedPrecondition, err, "The credential you chose can no longer be used. Reload this page to choose again.").LogWarn(ctx, logger)
 		}
 		return oops.E(oops.CodeUnavailable, err, "read upstream credential choice").LogError(ctx, logger)
@@ -1333,6 +1341,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 				return oops.E(oops.CodeInvalid, err, "Selected tool definitions are too large to approve. Choose fewer tools or contact an administrator.").LogWarn(ctx, logger)
 			}
 			if errors.Is(err, errConsentConfigurationChanged) {
+				ending = mcpconnectionattempts.CodeConnectionChanged
 				return oops.E(oops.CodeFailedPrecondition, err, "Server configuration changed. Reload consent to review access.").LogWarn(ctx, logger)
 			}
 			return oops.E(oops.CodeUnavailable, err, "could not save the approved tool catalog; retry consent").LogError(ctx, logger)
@@ -1363,10 +1372,12 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return consentChallengeCacheError(ctx, logger, err)
 	}
 	consumed = true
+	s.claimAttemptEnding(ctx, logger, attempt)
 	if err := s.validateConsentChallenge(ctx, endpoint, &challengeState, r.PostForm.Get("csrf_token")); err != nil {
 		return err.LogError(ctx, logger)
 	}
 	if reuse && !consentBrowserMatches(r, challengeState, time.Now()) {
+		ending = mcpconnectionattempts.CodeSessionChanged
 		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "invalid consent browser binding").LogWarn(ctx, logger), oauthui.ReasonSessionChanged))
 	}
 	subject := *challengeState.Subject
@@ -1375,13 +1386,12 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	if selectedAgentID != "" {
 		finalEndpoint, ferr := s.loadResolvedMcpEndpointByRef(ctx, challengeState.Endpoint)
 		if ferr != nil {
-			ending = mcpconnectionattempts.CodeNoServerAccess
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 			return oops.E(oops.CodeForbidden, ferr, "selected agent is not eligible").LogWarn(ctx, logger)
 		}
 		agentAuthorization, ferr = s.authorizeConsentAgent(ctx, challengeState, finalEndpoint, selectedAgentID)
 		if ferr != nil {
-			ending = mcpconnectionattempts.CodeNoServerAccess
+			ending = accessHappened(ferr)
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageConsent)
 			return consumedConsentAgentAuthorizationError(ferr).LogWarn(ctx, logger)
 		}
@@ -1620,6 +1630,11 @@ func isUniqueViolation(err error) bool {
 	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation
 }
 
+// needsAction reports a card with a reconnect or verification still open.
+func (c remoteSessionCard) needsAction() bool {
+	return c.IdentityReconnect || c.AttachmentReconnect || c.Rejected || c.Inactive || c.Pending || (c.CanValidate && !c.Verified)
+}
+
 // shouldAutoCloseFirstParty reports whether a first-party connect tab is fully
 // terminal and safe to auto-close: every bound remote_session_client is
 // connected and each probe-capable connection is verified. The runtime gate
@@ -1634,7 +1649,7 @@ func shouldAutoCloseFirstParty(firstParty bool, cards []remoteSessionCard) bool 
 	for _, c := range cards {
 		// Keep actionable reconnect and verification states visible instead of
 		// closing the tab before the person can act on them.
-		if !c.Connected || c.IdentityReconnect || c.AttachmentReconnect || c.Rejected || c.Inactive || c.Pending || (c.CanValidate && !c.Verified) {
+		if !c.Connected || c.needsAction() {
 			return false
 		}
 	}

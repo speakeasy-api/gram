@@ -180,7 +180,7 @@ func (s *Service) probeRemoteSession(
 	verdict, reason = combineUpstreamVerdict(verdict, reason, upstream, issuerDisplay)
 	logger = logger.With(attr.SlogRemoteSessionID(entry.RemoteSessionID.String()), attr.SlogOutcome(string(verdict)), attr.SlogOAuthValidationTrigger(string(trigger)))
 	s.validationMetrics.Record(ctx, client.IssuerURL, trigger, string(verdict))
-	s.recordRemoteSessionVerdict(ctx, endpoint, challengeState, client, target.memberID, entry.RemoteSessionID, verdict, trigger)
+	s.recordRemoteSessionVerdict(ctx, endpoint, challengeState, client, target, entry.RemoteSessionID, verdict, trigger)
 
 	written, err := s.remoteChallengeMgr.RecordRemoteSessionValidation(ctx, ref, remotesessions.RemoteSessionValidation{
 		Status: verdict,

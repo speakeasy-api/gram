@@ -87,39 +87,32 @@ type gatewayTool struct {
 // other member failure fails the whole inventory, unless unavailable is
 // non-nil: then a member that cannot be listed right now is skipped and
 // appended there with its failure.
-func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember, unavailable *[]unavailableMember, captured map[string]*memberCatalog) ([]gatewayTool, error) {
+func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember, tolerant bool, captured map[string]*memberCatalog) ([]gatewayTool, []unavailableMember, error) {
 	tools := make([]gatewayTool, 0)
 	names := map[string]bool{}
+	unavailable := []unavailableMember{}
 	described := s.describeMetaMembers(ctx, logger, gate, members)
-	// A consent capture records its members on the sign-in's own attempt.
-	if unavailable == nil {
-		s.recordMemberListing(ctx, gate, members, described)
-	}
 	for i, member := range members {
 		catalog, err := described[i].catalog, described[i].err
 		if err != nil {
 			var denied *oops.ShareableError
 			if errors.As(err, &denied) && (denied.Code == oops.CodeNotFound || denied.Code == oops.CodeForbidden) {
-				if unavailable != nil {
-					*unavailable = append(*unavailable, unavailableMember{member: member, err: err})
-				}
+				unavailable = append(unavailable, unavailableMember{member: member, err: err})
 				continue
 			}
-			if _, memberErr := errors.AsType[*metaMemberError](err); memberErr || unavailable != nil {
+			if _, memberErr := errors.AsType[*metaMemberError](err); memberErr || tolerant {
 				logger.WarnContext(ctx, "gateway member tools unavailable", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
-				if unavailable != nil {
-					*unavailable = append(*unavailable, unavailableMember{member: member, err: err})
-				}
+				unavailable = append(unavailable, unavailableMember{member: member, err: err})
 				continue
 			}
-			return nil, oops.E(oops.CodeUnavailable, err, "gateway tool inventory is incomplete; try again").LogWarn(ctx, logger)
+			return nil, nil, oops.E(oops.CodeUnavailable, err, "gateway tool inventory is incomplete; try again").LogWarn(ctx, logger)
 		}
 		if catalog.incomplete {
-			if unavailable != nil {
-				*unavailable = append(*unavailable, unavailableMember{member: member, err: nil})
+			if tolerant {
+				unavailable = append(unavailable, unavailableMember{member: member, err: nil})
 				continue
 			}
-			return nil, oops.E(oops.CodeUnavailable, nil, "gateway tool inventory contains invalid definitions; try again").LogWarn(ctx, logger)
+			return nil, nil, oops.E(oops.CodeUnavailable, nil, "gateway tool inventory contains invalid definitions; try again").LogWarn(ctx, logger)
 		}
 		if captured != nil {
 			captured[member.slug] = catalog
@@ -128,16 +121,16 @@ func (s *Service) collectGatewayTools(ctx context.Context, logger *slog.Logger, 
 			qualified := *entry
 			qualified.Name = metamcp.QualifyName(member.slug, entry.Name)
 			if names[qualified.Name] {
-				return nil, oops.E(oops.CodeConflict, nil, "gateway contains an ambiguous tool name")
+				return nil, nil, oops.E(oops.CodeConflict, nil, "gateway contains an ambiguous tool name")
 			}
 			names[qualified.Name] = true
 			tools = append(tools, gatewayTool{entry: &qualified, member: member})
 			if len(tools) > 10000 {
-				return nil, oops.E(oops.CodeRequestTooLarge, nil, "gateway inventory exceeds 10000 tools")
+				return nil, nil, oops.E(oops.CodeRequestTooLarge, nil, "gateway inventory exceeds 10000 tools")
 			}
 		}
 	}
-	return tools, nil
+	return tools, unavailable, nil
 }
 
 // listDirectGatewayTools exposes qualified member tools through the same
@@ -158,9 +151,12 @@ func (s *Service) listDirectGatewayTools(ctx context.Context, logger *slog.Logge
 	if err != nil {
 		return nil, err
 	}
-	inventory, err := s.collectGatewayTools(ctx, logger, gate, members, nil, nil)
+	inventory, unavailable, err := s.collectGatewayTools(ctx, logger, gate, members, false, nil)
 	if err != nil {
 		return nil, err
+	}
+	if params.Cursor == "" {
+		s.recordListingFailures(ctx, gate, unavailable)
 	}
 	tools := make([]*toolListEntry, 0, len(inventory))
 	for _, tool := range inventory {
