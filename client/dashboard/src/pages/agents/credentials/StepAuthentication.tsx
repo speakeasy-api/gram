@@ -35,8 +35,6 @@ export function StepAuthentication({
 }): JSX.Element {
   const { user } = useSession();
   const oauth = useOAuthPopup(connections.refetch);
-  // Controlled so the first row opens even when the server list arrives after
-  // mount; until someone toggles a row, the default tracks the list.
   const [openRows, setOpenRows] = useState<string[]>([]);
   // Editing shows the agent's assigned connection, unless it no longer works
   // and the editor has a usable one: saving assigns that in its place,
