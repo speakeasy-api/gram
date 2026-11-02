@@ -1,6 +1,8 @@
 package memorydigest_test
 
 import (
+	"math/rand/v2"
+	"slices"
 	"strings"
 	"testing"
 	"time"
@@ -61,13 +63,16 @@ func TestPromptKeepsNewestWhenOverLong(t *testing.T) {
 	}
 	inputs[0].Title = "oldest"
 	inputs[79].Title = "newest"
+	ordered := slices.Clone(inputs)
+	// Shuffle so capping before sorting would keep the wrong items.
+	rand.New(rand.NewPCG(1, 2)).Shuffle(len(inputs), func(i, j int) { inputs[i], inputs[j] = inputs[j], inputs[i] })
 
 	_, user, used := memorydigest.LevelDay.Prompt(date(2026, 10, 29), inputs)
 	// Only the inputs the prompt holds count as covered: the newest ones.
 	require.NotEmpty(t, used)
 	require.Less(t, len(used), len(inputs))
-	require.Equal(t, inputs[len(inputs)-len(used):], used)
-	require.LessOrEqual(t, len([]rune(user)), 120_000)
+	require.Equal(t, ordered[len(ordered)-len(used):], used)
+	require.LessOrEqual(t, memorydigest.EstimateTokens(user), 30_000)
 	require.Contains(t, user, "newest")
 	require.NotContains(t, user, "oldest")
 	require.True(t, strings.HasSuffix(user, strings.Repeat(string(rune('a'+79%26)), 2_400)))
@@ -86,4 +91,21 @@ func TestPromptOrdersByAtAndCapsTitle(t *testing.T) {
 	require.Contains(t, user, "later")
 	require.Less(t, strings.Index(user, "earlier"), strings.Index(user, "later"))
 	require.NotContains(t, user, strings.Repeat("a", 201))
+}
+
+func TestPromptCapsNonASCIIByTokens(t *testing.T) {
+	t.Parallel()
+
+	var inputs []memorydigest.Input
+	for i := range 40 {
+		inputs = append(inputs, memorydigest.Input{
+			Kind: memorydigest.SourceChat,
+			ID:   uuid.New(),
+			At:   date(2026, 10, 29).Add(time.Duration(i) * time.Minute),
+			Text: strings.Repeat("記", 2_400),
+		})
+	}
+	_, user, used := memorydigest.LevelDay.Prompt(date(2026, 10, 29), inputs)
+	require.Less(t, len(used), len(inputs))
+	require.LessOrEqual(t, memorydigest.EstimateTokens(user), 30_000)
 }

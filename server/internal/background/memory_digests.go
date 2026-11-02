@@ -28,7 +28,10 @@ const (
 	// skipped tick only delays digests.
 	memoryDigestsCatchupWindow = 23 * time.Hour
 
-	memoryDigestsRunTimeout = 2 * time.Hour
+	// memoryDigestsRunTimeout covers a full backfill run: up to
+	// maxMemoryDigestBatchesPerLevel batches for each of the three levels.
+	// It stays under a day so a run never overlaps the next tick.
+	memoryDigestsRunTimeout = 20 * time.Hour
 
 	// maxMemoryDigestBatchesPerLevel bounds one run's work per level. Each
 	// batch writes up to 40 digests; the first run after an org enables

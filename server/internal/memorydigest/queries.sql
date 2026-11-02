@@ -25,6 +25,7 @@ WHERE m.deleted IS FALSE
 WITH sources AS (
   SELECT c.organization_id, c.project_id, (c.summary_generated_at AT TIME ZONE 'UTC')::date AS day
   FROM chats c
+  JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
   LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
   WHERE c.summary_redacted IS TRUE
     AND c.summary IS NOT NULL
@@ -37,6 +38,7 @@ WITH sources AS (
   UNION
   SELECT m.organization_id, m.project_id, (m.created_at AT TIME ZONE 'UTC')::date AS day
   FROM memory_memos m
+  JOIN projects p ON p.id = m.project_id AND p.deleted IS FALSE
   LEFT JOIN chats c ON c.id = m.chat_id
   LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
   WHERE m.deleted IS FALSE
@@ -56,6 +58,50 @@ WHERE NOT EXISTS (
 ORDER BY s.day, s.project_id
 LIMIT @row_limit;
 
+-- name: DeleteStaleDayDigests :many
+-- Day digests that folded a chat or memo which is no longer eligible:
+-- excluded from memory, deleted, moved to a personal account, or gone.
+-- Their text may still carry what was removed, so they are deleted and the
+-- job rebuilds the day from the sources still eligible. Parents that folded
+-- them go next, through DeleteOrphanedRollups.
+DELETE FROM memory_digests d
+WHERE d.level = 'day'
+  AND d.organization_id = ANY(@organization_ids::text[])
+  AND (
+    cardinality(d.chat_ids) > (
+      SELECT count(*)
+      FROM chats c
+      LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+      WHERE c.id = ANY(d.chat_ids)
+        AND c.summary_redacted IS TRUE
+        AND c.memory_excluded_at IS NULL
+        AND c.deleted IS FALSE
+        AND (ua.id IS NULL OR ua.account_type <> 'personal')
+    )
+    OR cardinality(d.memo_ids) > (
+      SELECT count(*)
+      FROM memory_memos m
+      LEFT JOIN chats c ON c.id = m.chat_id
+      LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+      WHERE m.id = ANY(d.memo_ids)
+        AND m.deleted IS FALSE
+        AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+    )
+  )
+RETURNING d.id;
+
+-- name: DeleteOrphanedRollups :many
+-- Week or month digests that folded a child digest which no longer exists,
+-- because DeleteStaleDayDigests (or an earlier pass of this query) removed
+-- it. They are rebuilt from the replacement children.
+DELETE FROM memory_digests d
+WHERE d.level = @level::text
+  AND d.organization_id = ANY(@organization_ids::text[])
+  AND cardinality(d.child_digest_ids) > (
+    SELECT count(*) FROM memory_digests c WHERE c.id = ANY(d.child_digest_ids)
+  )
+RETURNING d.id;
+
 -- name: ListRollupDigestCandidates :many
 -- Parent periods (week or month) that have child digests starting in
 -- [@since, @until) and no digest of their own yet. A week rolls into the
@@ -66,6 +112,7 @@ WHERE d.level = @child_level::text
   AND d.organization_id = ANY(@organization_ids::text[])
   AND d.period_start >= @since::date
   AND d.period_start < @until::date
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = d.project_id AND p.deleted IS FALSE)
   AND NOT EXISTS (
     SELECT 1 FROM memory_digests p
     WHERE p.project_id = d.project_id
@@ -136,7 +183,7 @@ RETURNING id;
 -- name: ListRecallDigests :many
 -- Every digest of the project whose period starts at or after @since. The
 -- caller drops digests a parent already folded.
-SELECT d.id, d.level, d.period_start, d.content, d.chat_ids, d.child_digest_ids
+SELECT d.id, d.level, d.period_start, d.content, d.chat_ids, d.memo_ids, d.child_digest_ids
 FROM memory_digests d
 WHERE d.project_id = @project_id
   AND d.organization_id = @organization_id
@@ -164,6 +211,28 @@ WHERE c.project_id = @project_id
       AND d.chat_ids @> ARRAY[c.id]
   )
 ORDER BY c.summary_generated_at DESC
+LIMIT @row_limit;
+
+-- name: ListRecallMemos :many
+-- Eligible memos saved since @since that no day digest has folded yet:
+-- today's memos, and any a capped day digest left out. Newest first so
+-- @row_limit keeps the most recent.
+SELECT m.id, m.content, m.created_at
+FROM memory_memos m
+LEFT JOIN chats c ON c.id = m.chat_id
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE m.project_id = @project_id
+  AND m.organization_id = @organization_id
+  AND m.deleted IS FALSE
+  AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+  AND m.created_at >= @since::timestamptz
+  AND NOT EXISTS (
+    SELECT 1 FROM memory_digests d
+    WHERE d.project_id = m.project_id
+      AND d.level = 'day'
+      AND d.memo_ids @> ARRAY[m.id]
+  )
+ORDER BY m.created_at DESC
 LIMIT @row_limit;
 
 -- name: GetDigest :one

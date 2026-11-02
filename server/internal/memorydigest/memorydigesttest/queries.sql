@@ -19,3 +19,6 @@ FROM memory_digests
 WHERE project_id = @project_id
   AND level = @level
   AND period_start = @period_start;
+
+-- name: DeleteDigestFixture :exec
+DELETE FROM memory_digests WHERE id = @id;

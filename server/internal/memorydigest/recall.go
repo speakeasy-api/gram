@@ -8,6 +8,8 @@ import (
 	"unicode/utf8"
 
 	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 const (
@@ -47,6 +49,21 @@ type Digest struct {
 
 	// ChatIDs lists the chats a day digest folded.
 	ChatIDs []uuid.UUID
+
+	// MemoIDs lists the memos a day digest folded.
+	MemoIDs []uuid.UUID
+}
+
+// MemoNote is a memo not yet folded into a digest.
+type MemoNote struct {
+	// ID is the memo id, cited as a memo source.
+	ID uuid.UUID
+
+	// CreatedAt is when the memo was saved.
+	CreatedAt time.Time
+
+	// Content is the memo text.
+	Content string
 }
 
 // ChatNote is a chat whose masked summary is not yet folded into a digest.
@@ -63,10 +80,10 @@ type ChatNote struct {
 
 // Entry is one section of the recall block.
 type Entry struct {
-	// Kind is SourceDigest or SourceChat.
+	// Kind is SourceDigest, SourceChat or SourceMemo.
 	Kind SourceKind
 
-	// ID is the digest or chat id to cite or zoom into.
+	// ID is the digest, chat or memo id to cite or zoom into.
 	ID uuid.UUID
 
 	// Heading names the period or chat, for example "October 2026 (month digest)".
@@ -81,16 +98,19 @@ type Entry struct {
 
 // Uncovered picks the recall entries for a project: every month digest, then
 // the week digests no month digest folded, the day digests no week digest
-// folded, and the chats no day digest folded. Older history therefore shows
-// at its most compressed level, and nothing appears twice. Entries come back
-// oldest first.
-func Uncovered(digests []Digest, chats []ChatNote) []Entry {
+// folded, and the chats and memos no day digest folded. Older history
+// therefore shows at its most compressed level, and nothing appears twice.
+// Entries come back oldest first.
+func Uncovered(digests []Digest, chats []ChatNote, memos []MemoNote) []Entry {
 	covered := map[uuid.UUID]bool{}
 	for _, d := range digests {
 		for _, id := range d.ChildDigestIDs {
 			covered[id] = true
 		}
 		for _, id := range d.ChatIDs {
+			covered[id] = true
+		}
+		for _, id := range d.MemoIDs {
 			covered[id] = true
 		}
 	}
@@ -134,6 +154,19 @@ func Uncovered(digests []Digest, chats []ChatNote) []Entry {
 			Heading: "Chat " + c.SummarizedAt.UTC().Format(time.DateOnly),
 			At:      c.SummarizedAt,
 			Text:    firstParagraph(c.Summary, maxChatSnippetRunes),
+		})
+	}
+
+	for _, m := range memos {
+		if covered[m.ID] {
+			continue
+		}
+		entries = append(entries, Entry{
+			Kind:    SourceMemo,
+			ID:      m.ID,
+			Heading: "Memo " + m.CreatedAt.UTC().Format(time.DateOnly),
+			At:      m.CreatedAt,
+			Text:    conv.TruncateString(strings.TrimSpace(m.Content), maxChatSnippetRunes),
 		})
 	}
 

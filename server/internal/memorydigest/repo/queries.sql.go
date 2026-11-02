@@ -12,6 +12,97 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteOrphanedRollups = `-- name: DeleteOrphanedRollups :many
+DELETE FROM memory_digests d
+WHERE d.level = $1::text
+  AND d.organization_id = ANY($2::text[])
+  AND cardinality(d.child_digest_ids) > (
+    SELECT count(*) FROM memory_digests c WHERE c.id = ANY(d.child_digest_ids)
+  )
+RETURNING d.id
+`
+
+type DeleteOrphanedRollupsParams struct {
+	Level           string
+	OrganizationIds []string
+}
+
+// Week or month digests that folded a child digest which no longer exists,
+// because DeleteStaleDayDigests (or an earlier pass of this query) removed
+// it. They are rebuilt from the replacement children.
+func (q *Queries) DeleteOrphanedRollups(ctx context.Context, arg DeleteOrphanedRollupsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, deleteOrphanedRollups, arg.Level, arg.OrganizationIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const deleteStaleDayDigests = `-- name: DeleteStaleDayDigests :many
+DELETE FROM memory_digests d
+WHERE d.level = 'day'
+  AND d.organization_id = ANY($1::text[])
+  AND (
+    cardinality(d.chat_ids) > (
+      SELECT count(*)
+      FROM chats c
+      LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+      WHERE c.id = ANY(d.chat_ids)
+        AND c.summary_redacted IS TRUE
+        AND c.memory_excluded_at IS NULL
+        AND c.deleted IS FALSE
+        AND (ua.id IS NULL OR ua.account_type <> 'personal')
+    )
+    OR cardinality(d.memo_ids) > (
+      SELECT count(*)
+      FROM memory_memos m
+      LEFT JOIN chats c ON c.id = m.chat_id
+      LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+      WHERE m.id = ANY(d.memo_ids)
+        AND m.deleted IS FALSE
+        AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+    )
+  )
+RETURNING d.id
+`
+
+// Day digests that folded a chat or memo which is no longer eligible:
+// excluded from memory, deleted, moved to a personal account, or gone.
+// Their text may still carry what was removed, so they are deleted and the
+// job rebuilds the day from the sources still eligible. Parents that folded
+// them go next, through DeleteOrphanedRollups.
+func (q *Queries) DeleteStaleDayDigests(ctx context.Context, organizationIds []string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, deleteStaleDayDigests, organizationIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const getDigest = `-- name: GetDigest :one
 SELECT d.id, d.level, d.period_start, d.period_end, d.content, d.chat_ids, d.memo_ids, d.child_digest_ids
 FROM memory_digests d
@@ -157,6 +248,7 @@ const listDayDigestCandidates = `-- name: ListDayDigestCandidates :many
 WITH sources AS (
   SELECT c.organization_id, c.project_id, (c.summary_generated_at AT TIME ZONE 'UTC')::date AS day
   FROM chats c
+  JOIN projects p ON p.id = c.project_id AND p.deleted IS FALSE
   LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
   WHERE c.summary_redacted IS TRUE
     AND c.summary IS NOT NULL
@@ -169,6 +261,7 @@ WITH sources AS (
   UNION
   SELECT m.organization_id, m.project_id, (m.created_at AT TIME ZONE 'UTC')::date AS day
   FROM memory_memos m
+  JOIN projects p ON p.id = m.project_id AND p.deleted IS FALSE
   LEFT JOIN chats c ON c.id = m.chat_id
   LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
   WHERE m.deleted IS FALSE
@@ -497,7 +590,7 @@ func (q *Queries) ListRecallChats(ctx context.Context, arg ListRecallChatsParams
 }
 
 const listRecallDigests = `-- name: ListRecallDigests :many
-SELECT d.id, d.level, d.period_start, d.content, d.chat_ids, d.child_digest_ids
+SELECT d.id, d.level, d.period_start, d.content, d.chat_ids, d.memo_ids, d.child_digest_ids
 FROM memory_digests d
 WHERE d.project_id = $1
   AND d.organization_id = $2
@@ -517,6 +610,7 @@ type ListRecallDigestsRow struct {
 	PeriodStart    pgtype.Date
 	Content        string
 	ChatIds        []uuid.UUID
+	MemoIds        []uuid.UUID
 	ChildDigestIds []uuid.UUID
 }
 
@@ -537,8 +631,70 @@ func (q *Queries) ListRecallDigests(ctx context.Context, arg ListRecallDigestsPa
 			&i.PeriodStart,
 			&i.Content,
 			&i.ChatIds,
+			&i.MemoIds,
 			&i.ChildDigestIds,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listRecallMemos = `-- name: ListRecallMemos :many
+SELECT m.id, m.content, m.created_at
+FROM memory_memos m
+LEFT JOIN chats c ON c.id = m.chat_id
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE m.project_id = $1
+  AND m.organization_id = $2
+  AND m.deleted IS FALSE
+  AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+  AND m.created_at >= $3::timestamptz
+  AND NOT EXISTS (
+    SELECT 1 FROM memory_digests d
+    WHERE d.project_id = m.project_id
+      AND d.level = 'day'
+      AND d.memo_ids @> ARRAY[m.id]
+  )
+ORDER BY m.created_at DESC
+LIMIT $4
+`
+
+type ListRecallMemosParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	Since          pgtype.Timestamptz
+	RowLimit       int32
+}
+
+type ListRecallMemosRow struct {
+	ID        uuid.UUID
+	Content   string
+	CreatedAt pgtype.Timestamptz
+}
+
+// Eligible memos saved since @since that no day digest has folded yet:
+// today's memos, and any a capped day digest left out. Newest first so
+// @row_limit keeps the most recent.
+func (q *Queries) ListRecallMemos(ctx context.Context, arg ListRecallMemosParams) ([]ListRecallMemosRow, error) {
+	rows, err := q.db.Query(ctx, listRecallMemos,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.Since,
+		arg.RowLimit,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListRecallMemosRow
+	for rows.Next() {
+		var i ListRecallMemosRow
+		if err := rows.Scan(&i.ID, &i.Content, &i.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -556,6 +712,7 @@ WHERE d.level = $2::text
   AND d.organization_id = ANY($3::text[])
   AND d.period_start >= $4::date
   AND d.period_start < $5::date
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = d.project_id AND p.deleted IS FALSE)
   AND NOT EXISTS (
     SELECT 1 FROM memory_digests p
     WHERE p.project_id = d.project_id

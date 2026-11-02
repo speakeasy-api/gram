@@ -5,7 +5,6 @@ import (
 	"slices"
 	"strings"
 	"time"
-	"unicode/utf8"
 
 	"github.com/google/uuid"
 
@@ -28,10 +27,11 @@ const (
 	// the cap keeps one runaway summary from crowding out the rest.
 	maxInputItemRunes = 2_400
 
-	// maxPromptRunes caps the whole rollup input at about 30k tokens, well
-	// inside the context window of every candidate digest model. A busy
-	// project day that exceeds it keeps its newest items.
-	maxPromptRunes = 120_000
+	// maxPromptTokens caps the whole rollup input, measured with
+	// EstimateTokens so non-ASCII text counts high, well inside the context
+	// window of every candidate digest model. A busy project day that
+	// exceeds it keeps its newest items.
+	maxPromptTokens = 30_000
 
 	// maxTitleRunes caps an input title in the prompt.
 	maxTitleRunes = 200
@@ -111,11 +111,11 @@ func (l Level) Prompt(start time.Time, inputs []Input) (system, user string, use
 	// then restore chronological order for the model.
 	for i := len(ordered) - 1; i >= 0; i-- {
 		block := formatInput(ordered[i])
-		n := utf8.RuneCountInString(block)
+		n := EstimateTokens(block)
 		if len(blocks) > 0 {
-			n += utf8.RuneCountInString(inputSeparator)
+			n += EstimateTokens(inputSeparator)
 		}
-		if total+n > maxPromptRunes {
+		if total+n > maxPromptTokens {
 			break
 		}
 		total += n
