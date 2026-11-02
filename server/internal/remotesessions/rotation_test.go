@@ -173,7 +173,7 @@ func TestRefreshNow_InvalidClient_MarksClientAndClearsGrant(t *testing.T) {
 	upstream := &rotationUpstream{refreshStatus: http.StatusUnauthorized, refreshBody: invalidClientBody}
 	ctx, env := newSyntheticExpiryEnv(t, "refresh-invalid-client", upstream.handler())
 
-	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled)
+	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
 	require.Error(t, err)
 	var failure *remotesessions.RefreshError
 	require.ErrorAs(t, err, &failure)
@@ -445,7 +445,7 @@ func TestRefreshNow_SuccessClearsUpstreamRejection(t *testing.T) {
 	rejectedAt := time.Now().Add(-time.Hour)
 	stageRegistration(t, env, "", &rejectedAt, nil)
 
-	result, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled)
+	result, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
 	require.NoError(t, err)
 	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 

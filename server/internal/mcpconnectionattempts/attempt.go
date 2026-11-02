@@ -56,6 +56,9 @@ var (
 
 	// AppRecoveryLink is a sign-in started from a link an assistant was given.
 	AppRecoveryLink = App{"recovery_link"}
+
+	// AppBackground is work Speakeasy started with no app involved, such as a scheduled refresh.
+	AppBackground = App{"background"}
 )
 
 // AppOf returns the App of a validated client_id: the host of its client

@@ -1163,6 +1163,7 @@ func (s *Service) authenticateIssuerGate(
 			)
 		}
 		s.metrics.RecordMCPRequestRejected(ctx, reason, mcpURL, surface)
+		s.recordGateRejection(ctx, endpoint, authToken, reason, valErr)
 		if errors.Is(valErr, errWorkloadSessionOutOfReach) {
 			return ctx, nil, nil, writeInsufficientScopeChallenge(w, protectedResourceURL, "access token does not grant access to this MCP server")
 		}
@@ -1174,8 +1175,11 @@ func (s *Service) authenticateIssuerGate(
 	}
 	if err := s.refuseForeignCaller(newCtx, endpoint.OrganizationID); err != nil {
 		s.metrics.RecordMCPRequestRejected(ctx, issuerGateReasonOrganizationMismatch, mcpURL, surface)
+		s.connections.Once(ctx, connectionScope(endpoint, requestApp(newCtx)), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess,
+			mcpconnectionattempts.Detail(issuerGateReasonOrganizationMismatch), mcpconnectionattempts.Subject(subject))
 		return ctx, nil, nil, err
 	}
+	newCtx = remotesessions.WithConnectionScope(newCtx, connectionScope(endpoint, requestApp(newCtx)))
 
 	return newCtx, &issuerGateAuthentication{
 		endpoint:             endpoint,
@@ -1306,6 +1310,8 @@ func (s *Service) recordRemoteSessionRejection(ctx context.Context, authenticati
 		attr.SlogOAuthFailureReason(reason),
 	)
 	s.metrics.RecordMCPRequestRejected(ctx, reason, authentication.mcpURL, authentication.surface)
+	s.connections.Once(ctx, connectionScope(endpoint, requestApp(ctx)), mcpconnectionattempts.StepMCPRequest, remoteSessionHappened(reason),
+		mcpconnectionattempts.Detail(reason), mcpconnectionattempts.Subject(&authentication.subject))
 }
 
 // writeRemoteSessionReconnectChallenge answers a request whose required

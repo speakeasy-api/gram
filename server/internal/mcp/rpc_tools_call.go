@@ -524,7 +524,7 @@ func handleToolsCall(
 		return marshalToolErrorResult(ctx, logger, req.ID, decision.UserMessage, identity)
 	}
 	if decision.Denied() {
-		failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
+		failure := oops.E(oops.CodeForbidden, errRiskPolicyDenied, "%s", decision.UserMessage)
 		recordToolCallErrorStatus(ctx, rw, failure)
 		return nil, failure
 	}
@@ -598,7 +598,7 @@ func handleToolsCall(
 		decision = scan.Scan(ctx, mcpriskscan.NewResponse(requestSubject, responsePayload))
 		if decision.Denied() {
 			discardWithheldBody(rw.body)
-			failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
+			failure := oops.E(oops.CodeForbidden, errRiskPolicyDenied, "%s", decision.UserMessage)
 			recordToolCallErrorStatus(ctx, rw, failure)
 			return nil, failure
 		}
@@ -633,7 +633,7 @@ func handleToolsCall(
 		decision = scan.Scan(ctx, mcpriskscan.NewResponse(requestSubject, responsePayload))
 		if decision.Denied() {
 			discardWithheldBody(rw.body)
-			failure := oops.E(oops.CodeForbidden, nil, "%s", decision.UserMessage)
+			failure := oops.E(oops.CodeForbidden, errRiskPolicyDenied, "%s", decision.UserMessage)
 			recordToolCallErrorStatus(ctx, rw, failure)
 			return nil, failure
 		}
@@ -768,7 +768,7 @@ func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string
 	}
 
 	if periodUsage.ToolCalls >= hardToolCallsLimit {
-		return oops.E(oops.CodeForbidden, errors.New("tool usage limit reached"), "tool usage limit reached").LogError(ctx, logger)
+		return oops.E(oops.CodeForbidden, errToolUsageLimitReached, "tool usage limit reached").LogError(ctx, logger)
 	}
 
 	return nil

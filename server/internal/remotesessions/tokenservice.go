@@ -928,7 +928,7 @@ func (m *ChallengeManager) validateAndRefresh(
 		return "", sess, sess.UpdatedAt.Time, ErrNoValidToken
 	}
 
-	res, err := m.refresher.RefreshNow(ctx, sess, resource, remotesessionmetrics.RefreshTriggerRequest)
+	res, err := m.refresher.RefreshNow(ctx, sess, resource, remotesessionmetrics.RefreshTriggerRequest, connectionScopeFrom(ctx))
 	if err != nil {
 		// Inside the skew window the stored token is still within its stated
 		// lifetime, so a refresh that fails there — an upstream 5xx or 429, a

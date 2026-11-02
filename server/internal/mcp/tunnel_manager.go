@@ -117,7 +117,7 @@ func (m *tunnelManager) buildProxy(
 		// explicit monitoring, ideally alerting the customer instead of using
 		// the platform 5xx error budget which alerts platform administrators.
 		m.observeNoRoute(tunnelID, mcpServer.ID.String(), params.Request)
-		return nil, oops.E(oops.CodeNotFound, nil, "not found").LogWarn(ctx, logger.With(attr.SlogErrorMessage("tunnel has no live route")))
+		return nil, oops.E(oops.CodeNotFound, errTunnelNoLiveRoute, "not found").LogWarn(ctx, logger.With(attr.SlogErrorMessage("tunnel has no live route")))
 	}
 
 	gatewayURL, err := tunnelrouting.GatewayURL(addr)

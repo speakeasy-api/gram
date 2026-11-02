@@ -76,7 +76,7 @@ func TestRefreshNow_ReconnectNeverAdoptsReplacement(t *testing.T) {
 				done := make(chan struct{})
 				go func() {
 					defer close(done)
-					result, refreshErr = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled)
+					result, refreshErr = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
 				}()
 				select {
 				case <-arrived:
@@ -94,7 +94,7 @@ func TestRefreshNow_ReconnectNeverAdoptsReplacement(t *testing.T) {
 				require.EqualValues(t, 1, attempts.Load())
 			} else {
 				replacement = reconnect()
-				result, refreshErr = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled)
+				result, refreshErr = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
 				require.Zero(t, attempts.Load(), "replacement credentials must never reach the token endpoint")
 			}
 			require.NoError(t, refreshErr)

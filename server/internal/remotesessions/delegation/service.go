@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -129,6 +130,7 @@ type Service struct {
 	loadBinding     func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error)
 	loadProvider    func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error)
 	refreshIdentity func(context.Context, Provider, string, string, string) (*RefreshResult, error)
+	connections     *mcpconnectionattempts.Recorder
 }
 
 func New(db *pgxpool.Pool, enc *encryption.Client, dependencies Dependencies) *Service {
@@ -136,7 +138,7 @@ func New(db *pgxpool.Pool, enc *encryption.Client, dependencies Dependencies) *S
 	if now == nil {
 		now = time.Now
 	}
-	return &Service{store: &delegationRepository{db: db}, enc: enc, now: now, loadBinding: dependencies.LoadBinding, loadProvider: dependencies.LoadProvider, refreshIdentity: dependencies.RefreshIdentity}
+	return &Service{store: &delegationRepository{db: db}, enc: enc, now: now, loadBinding: dependencies.LoadBinding, loadProvider: dependencies.LoadProvider, refreshIdentity: dependencies.RefreshIdentity, connections: dependencies.Connections}
 }
 func delegationBinding(p Provider, humanID string) Binding { return p.Binding(humanID) }
 func validDelegationBinding(b Binding) bool {
@@ -362,6 +364,7 @@ func (s *Service) RecordOfflineRefusal(ctx context.Context, p Provider, humanID 
 			return ErrTemporary
 		}
 		if ok {
+			s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalRefused)
 			return nil
 		}
 	}
@@ -650,14 +653,18 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		return Assertion{}, ErrTemporary
 	}
 	if quarantined {
+		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeRenewalRetryable)
 		return Assertion{}, ErrTemporary
 	}
 	if next.status == "configuration_failure" {
+		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 		return Assertion{}, ErrConfiguration
 	}
 	if next.assertion == "" || !next.assertionExpiry.After(s.now().Add(time.Minute)) {
+		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeReauthenticationRequired)
 		return Assertion{}, ErrReauthentication
 	}
+	s.recordRenewal(persistCtx, b, mcpconnectionattempts.ResultRenewed)
 	return s.assertion(next)
 }
 
@@ -714,6 +721,7 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 	if !errors.As(cause, &failure) {
 		failure = &RefreshError{Kind: RefreshAmbiguous}
 	}
+	s.recordRenewal(ctx, b, renewalHappened(failure.Kind))
 	next := c
 	next.observedAt = s.now()
 	next.claim = uuid.Nil
@@ -754,6 +762,30 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 		return ErrTemporary
 	}
 	return outcome
+}
+
+// recordRenewal runs only where a renewal changed state. A tool call served from
+// the held assertion, or refused from a state already recorded, writes nothing.
+func (s *Service) recordRenewal(ctx context.Context, b Binding, what mcpconnectionattempts.Happened) {
+	human := urn.NewUserSubject(b.HumanID)
+	s.connections.Once(ctx, mcpconnectionattempts.IdentityProviderScope(b.OrganizationID, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepSignInRenewal, what,
+		mcpconnectionattempts.RemoteSessionIssuer(b.IssuerID), mcpconnectionattempts.RemoteSessionClient(b.ClientID), mcpconnectionattempts.Subject(&human))
+}
+
+func renewalHappened(kind RefreshFailure) mcpconnectionattempts.Code {
+	switch kind {
+	case RefreshInvalidGrant:
+		return mcpconnectionattempts.CodeInvalidGrant
+	case RefreshConfiguration:
+		return mcpconnectionattempts.CodeRenewalMisconfigured
+	case RefreshInvalidIdentity:
+		return mcpconnectionattempts.CodeInvalidIdentity
+	case RefreshRetryable:
+		return mcpconnectionattempts.CodeRenewalRetryable
+	case RefreshAmbiguous:
+		return mcpconnectionattempts.CodeRenewalAmbiguous
+	}
+	return mcpconnectionattempts.CodeRenewalAmbiguous
 }
 
 // Revoke explicitly erases secrets. The caller must authorize administrative

@@ -8,6 +8,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 )
 
 // Provider exposes only binding and policy facts, never registration secrets.
@@ -60,6 +62,9 @@ type Dependencies struct {
 	LoadBinding     func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error)
 	LoadProvider    func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error)
 	RefreshIdentity func(context.Context, Provider, string, string, string) (*RefreshResult, error)
+
+	// Connections records renewal outcomes; nil records nothing.
+	Connections *mcpconnectionattempts.Recorder
 }
 
 type RefreshFailure string

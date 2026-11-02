@@ -177,7 +177,7 @@ func TestRefreshNow_TokenEndpointMissing_RefreshesIssuerMetadataOnce(t *testing.
 			session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 			require.NoError(t, err)
 
-			_, refreshErr := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest)
+			_, refreshErr := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, mcpconnectionattempts.Scope{})
 			var tokenErr *remotesessions.TokenRefreshError
 			require.ErrorAs(t, refreshErr, &tokenErr, "the caller's error is unchanged")
 			env.issuerMetadata.Wait()
@@ -194,7 +194,7 @@ func TestRefreshNow_TokenEndpointMissing_RefreshesIssuerMetadataOnce(t *testing.
 			// The discovered endpoint answers 404 too; inside the interval nothing starts.
 			session, err = env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 			require.NoError(t, err)
-			_, refreshErr = env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest)
+			_, refreshErr = env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, mcpconnectionattempts.Scope{})
 			require.ErrorAs(t, refreshErr, &tokenErr)
 			env.issuerMetadata.Wait()
 
@@ -238,7 +238,7 @@ func TestRefreshNow_UpstreamRejection_DoesNotRefreshIssuerMetadata(t *testing.T)
 
 			session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 			require.NoError(t, err)
-			_, refreshErr := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest)
+			_, refreshErr := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, mcpconnectionattempts.Scope{})
 			require.Error(t, refreshErr)
 			env.issuerMetadata.Wait()
 

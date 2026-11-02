@@ -50,7 +50,7 @@ func TestRefreshNow_RecordsInvalidGrantThenNoGrant(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerScheduled)
+	_, err = env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
 	var failure *remotesessions.RefreshError
 	require.ErrorAs(t, err, &failure)
 	require.Equal(t, "https://idp.example.com", failure.IssuerURL)
@@ -65,7 +65,7 @@ func TestRefreshNow_RecordsInvalidGrantThenNoGrant(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, cleared.RefreshTokenEncrypted.Valid)
 
-	_, err = env.refresher.RefreshNow(ctx, cleared, "", remotesessionmetrics.RefreshTriggerManual)
+	_, err = env.refresher.RefreshNow(ctx, cleared, "", remotesessionmetrics.RefreshTriggerManual, mcpconnectionattempts.Scope{})
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "the typed failure must not hide the no-grant sentinel")
 	require.ErrorAs(t, err, &failure)
 	require.Equal(t, "https://idp.example.com", failure.IssuerURL)
@@ -121,7 +121,7 @@ func TestRefreshNow_RecordsRefreshed(t *testing.T) {
 		ProjectID:       conv.ToNullUUID(env.projectID),
 	}))
 
-	result, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
+	result, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest, mcpconnectionattempts.Scope{})
 	require.NoError(t, err)
 	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, replacementUpdatedAt, result.SourceUpdatedAt)

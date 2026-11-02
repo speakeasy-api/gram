@@ -1201,7 +1201,7 @@ func TestRefreshNeedsAuthClientReconnectUnderEnforcement(t *testing.T) {
 	_, decided, err = f.service.refreshNeedsAuthClientReconnect(ctx, endpoint, workload, "jti")
 	require.ErrorIs(t, err, remotesessions.ErrInvalidAuthorizationRequest)
 	require.False(t, decided)
-	require.False(t, f.service.refreshNeedsUpstreamReconnect(ctx, testenv.NewLogger(t), endpoint, workload, "jti"), "a failed check fails open")
+	require.False(t, f.service.refreshNeedsUpstreamReconnect(ctx, testenv.NewLogger(t), endpoint, workload, "jti").reconnect(), "a failed check fails open")
 }
 
 func TestResolveAuthClientsBatchesMemberChoices(t *testing.T) {

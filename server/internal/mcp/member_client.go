@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
@@ -312,27 +313,48 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 	// exchange before reducing a credential failure to an upstream status.
 	exchangeErr := rt.failure()
 	if errors.Is(exchangeErr, remotesessions.ErrClientCredentialUnavailable) || errors.Is(exchangeErr, remotesessions.ErrClientCredentialMisconfigured) {
-		return metaMemberClientCredentialError(member, exchangeErr)
+		code := mcpconnectionattempts.CodeCredentialMisconfigured
+		if errors.Is(exchangeErr, remotesessions.ErrRemoteSessionUnavailable) {
+			code = mcpconnectionattempts.CodeRemoteSessionUnavailable
+		}
+		return memberConnectionFailure{metaMemberClientCredentialError(member, exchangeErr), code}
 	}
 	if _, rejected := rt.rejection(); rejected {
-		return memberAuthFailure(member, dial)
+		code := mcpconnectionattempts.CodeProviderRejected
+		switch {
+		case dial.anonymous:
+			code = mcpconnectionattempts.CodeInvalidRemoteSession
+		case dial.clientCredential:
+			code = mcpconnectionattempts.CodeCredentialMisconfigured
+		}
+		return memberConnectionFailure{memberAuthFailure(member, dial), code}
 	}
 	switch {
-	case ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded):
+	case errors.Is(ctx.Err(), context.Canceled):
+		// The caller went away, so this says nothing about the member.
 		return &metaMemberError{message: fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug)}
+	case ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded):
+		return memberConnectionFailure{&metaMemberError{message: fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug)}, mcpconnectionattempts.CodeProviderUnreachable}
 	case errors.Is(err, errMemberResponseTooLarge) || errors.Is(exchangeErr, errMemberResponseTooLarge):
 		return &metaMemberError{message: fmt.Sprintf("server %q returned a response too large for the meta MCP", member.slug)}
 	case errors.Is(err, errMemberUnroutable) || errors.Is(exchangeErr, errMemberUnroutable):
 		// A tunnel with no live route is a member outage, not a meta MCP bug.
-		return &metaMemberError{message: fmt.Sprintf("server %q is not reachable right now", member.slug)}
+		return memberConnectionFailure{&metaMemberError{message: fmt.Sprintf("server %q is not reachable right now", member.slug)}, mcpconnectionattempts.CodeTunnelUnavailable}
 	case exchangeErr != nil:
-		return &metaMemberError{message: fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug)}
+		return memberConnectionFailure{&metaMemberError{message: fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug)}, mcpconnectionattempts.CodeProviderUnreachable}
 	}
 	if rpcErr, ok := errors.AsType[*jsonrpc.Error](err); ok {
 		return &metaMemberError{message: fmt.Sprintf("server %q rejected the call: %s", member.slug, rpcErr.Message)}
 	}
 	if status := rt.status(); status != 0 && !upstreamStatusOK(status) {
-		return &metaMemberError{message: fmt.Sprintf("server %q upstream call failed with status %d", member.slug, status)}
+		failure := &metaMemberError{message: fmt.Sprintf("server %q upstream call failed with status %d", member.slug, status)}
+		switch {
+		case status == http.StatusTooManyRequests:
+			return memberConnectionFailure{failure, mcpconnectionattempts.CodeProviderRateLimited}
+		case status >= http.StatusInternalServerError:
+			return memberConnectionFailure{failure, mcpconnectionattempts.CodeProviderServerError}
+		}
+		return failure
 	}
 	logger.WarnContext(ctx, "unclassified meta MCP member failure", attr.SlogError(err), attr.SlogMcpServerID(member.serverID.String()))
 	return &metaMemberError{message: fmt.Sprintf("server %q returned a response the meta MCP could not read", member.slug)}

@@ -52,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/killswitches"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpapprovaladvisories "github.com/speakeasy-api/gram/server/internal/mcpapproval/advisories"
 	mcpapprovalcatalog "github.com/speakeasy-api/gram/server/internal/mcpapproval/catalog"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/domainmeta"
@@ -251,6 +252,7 @@ func NewActivities(
 	issuerMetadataRefresher *remotesessions.IssuerMetadataRefresher,
 	remoteSessionEnricher *remotesessions.SessionEnricher,
 	remoteSessionAssertionSigner remotesessions.TokenEndpointAssertionSigner,
+	connections *mcpconnectionattempts.Recorder,
 	startupSeeds []activities.StartupSeed,
 	signInEpochs signins.EpochRaiser,
 ) *Activities {
@@ -315,6 +317,7 @@ func NewActivities(
 				remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher),
 				remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher),
 				remotesessions.WithRefreshTokenEndpointAssertionSigner(remoteSessionAssertionSigner),
+				remotesessions.WithRefreshConnectionRecorder(connections),
 			),
 		)
 	}

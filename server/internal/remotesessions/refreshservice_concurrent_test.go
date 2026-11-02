@@ -56,7 +56,7 @@ func TestRefreshNow_RacingLazyResolves_SingleUpstreamCall(t *testing.T) {
 	for i := range scheduled {
 		wg.Go(func() {
 			<-start
-			result, err := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerScheduled)
+			result, err := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
 			tokens[lazy+i], errs[lazy+i] = result.AccessToken, err
 			outcomes[i] = result.Outcome
 		})

@@ -31,6 +31,11 @@ const upstreamCancelTimeout = 2 * time.Second
 // the drain interrupted because the remote MCP server had not responded.
 var errShutdownInterrupt = errors.New("interrupted by server shutdown")
 
+// IsShutdownInterrupt reports an upstream call the shutdown drain interrupted.
+func IsShutdownInterrupt(err error) bool {
+	return errors.Is(err, errShutdownInterrupt)
+}
+
 // forwardInterrupted reports whether the drain interrupted the upstream call
 // running under forwardCtx.
 func forwardInterrupted(forwardCtx context.Context) bool {

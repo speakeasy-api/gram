@@ -27,6 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -239,6 +240,7 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 			}
 		}
 		if !found {
+			s.connections.Once(ctx, gate.connectionScope(ctx), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeToolNotApproved, gate.connectionSubject(ctx))
 			return marshalMetaToolError(ctx, logger, req.ID, remotemcp.ToolNotApprovedMessage)
 		}
 	}
@@ -305,6 +307,9 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 		s.telemLogger, s.toolCallLogger, s.vectorToolStore, s.mcpMetadataRepo, s.auditLogger,
 		s.platformExtras, s.sessionClientInfo, s.scanEvaluator)
 	if err != nil {
+		if code, ok := toolsCallRefusal(err); ok {
+			s.recordMemberFailure(ctx, gate, member, code)
+		}
 		// A member's execution failure must degrade that member, not the
 		// call: on a multi-member gateway an aborted JSON-RPC call reads as
 		// a gateway fault. Internal faults — unexpected errors and server

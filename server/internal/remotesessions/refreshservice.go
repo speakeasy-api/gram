@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -149,6 +150,9 @@ type RefreshService struct {
 
 	// restatements tracks identity restatements detached from request-path refreshes.
 	restatements sync.WaitGroup
+
+	// connections records each refresh's outcome; nil records nothing.
+	connections *mcpconnectionattempts.Recorder
 }
 
 // identityRestatement carries a refresh response out of the lease so identity is written after release.
@@ -188,6 +192,11 @@ func WithRefreshTokenEndpointAssertionSigner(signer TokenEndpointAssertionSigner
 	return func(s *RefreshService) { s.assertions = signer }
 }
 
+// WithRefreshConnectionRecorder records each refresh's outcome.
+func WithRefreshConnectionRecorder(recorder *mcpconnectionattempts.Recorder) RefreshOption {
+	return func(s *RefreshService) { s.connections = recorder }
+}
+
 // NewRefreshService builds the service; without a guardian policy no enricher
 // is wired and a refresh restates nothing from the access token.
 func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, locks cache.Cache, opts ...RefreshOption) *RefreshService {
@@ -204,6 +213,7 @@ func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, 
 		enricher:       nil,
 		assertions:     unavailableTokenEndpointAssertionSigner{},
 		restatements:   sync.WaitGroup{},
+		connections:    nil,
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -327,7 +337,8 @@ func refreshLockKey(subject urn.SessionSubject, clientID uuid.UUID) string {
 // binding when one was captured at code exchange. Rows minted before the
 // resource column existed fall back to callerResource, and then to the
 // client's own derivation — one derivation rule for every refresh path.
-// trigger names the caller on the upstream-refresh metric.
+// trigger names the caller on the upstream-refresh metric. scope is what the
+// connection row is filed under; a zero scope files it under the client's owner.
 //
 // Every call records exactly one upstream-refresh metric sample. A non-nil
 // error is always a *RefreshError wrapping either an operator-actionable
@@ -335,7 +346,7 @@ func refreshLockKey(subject urn.SessionSubject, clientID uuid.UUID) string {
 // A definitive invalid_grant clears only the refresh grant: the existing
 // access token remains usable until its own known expiry. This keeps
 // proactive refresh failure from forcing a reconnect.
-func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_repo.RemoteSession, callerResource string, trigger remotesessionmetrics.RefreshTrigger) (RefreshResult, error) {
+func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_repo.RemoteSession, callerResource string, trigger remotesessionmetrics.RefreshTrigger, scope mcpconnectionattempts.Scope) (RefreshResult, error) {
 	var zero RefreshResult
 	q := remotesessions_repo.New(s.db)
 
@@ -351,6 +362,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 		err = refreshClientLoadError(err)
 		outcome := refreshOutcomeForError(ctx, err)
 		s.metrics.Record(ctx, "", trigger, outcome)
+		s.recordRefresh(ctx, scope, sess, client, trigger, outcome, err)
 		return zero, &RefreshError{IssuerURL: "", Outcome: outcome, err: err}
 	}
 	s.issuerMetadata.NoteUse(ctx, issuerUseFromClientRow(client))
@@ -359,10 +371,12 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 	issuerURL := client.IssuerUrl
 	if postLockClient != nil {
 		issuerURL = postLockClient.IssuerUrl
+		client = *postLockClient
 	}
 	if err != nil {
 		outcome := refreshOutcomeForError(ctx, err)
 		s.metrics.Record(ctx, issuerURL, trigger, outcome)
+		s.recordRefresh(ctx, scope, sess, client, trigger, outcome, err)
 		var tokenErr *TokenRefreshError
 		if postLockClient != nil && errors.As(err, &tokenErr) {
 			noteTokenEndpointMissing(ctx, s.issuerMetadata, *postLockClient, tokenErr.statusCode, tokenErr.code != "")
@@ -383,6 +397,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 	}
 	result.IssuerURL = issuerURL
 	s.metrics.Record(ctx, issuerURL, trigger, result.Outcome)
+	s.recordRefresh(ctx, scope, sess, client, trigger, result.Outcome, nil)
 	return result, nil
 }
 

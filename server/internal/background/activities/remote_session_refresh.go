@@ -16,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -125,7 +126,8 @@ func (r *RemoteSessionRefresh) Do(ctx context.Context, input RefreshRemoteSessio
 	}
 	sess := candidate.RemoteSession
 
-	result, err := r.refresher.RefreshNow(ctx, sess, "", remotesessionmetrics.RefreshTriggerScheduled)
+	scope := mcpconnectionattempts.ProviderSessionScope(input.OrganizationID, candidate.ClientProjectID.UUID, mcpconnectionattempts.AppBackground)
+	result, err := r.refresher.RefreshNow(ctx, sess, "", remotesessionmetrics.RefreshTriggerScheduled, scope)
 	if err != nil {
 		// The issuer URL and outcome are the ones the upstream-refresh metric
 		// recorded, so these lines join to its series; the error code is the

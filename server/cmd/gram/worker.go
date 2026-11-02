@@ -43,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
@@ -600,6 +601,7 @@ func newWorkerCommand() *cli.Command {
 				return fmt.Errorf("failed to connect to clickhouse database: %w", err)
 			}
 			shutdownFuncs = append(shutdownFuncs, chShutdown)
+			connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled)
 
 			meterReadConn, meterReadShutdown, err := newClickhouseReadClient(ctx, logger, c)
 			if err != nil {
@@ -908,6 +910,7 @@ func newWorkerCommand() *cli.Command {
 				CacheAdapter:                   remoteSessionsCache,
 				IssuerMetadataRefresher:        issuerMetadataRefresher,
 				RemoteSessionAssertionSigner:   clientAssertionSigner,
+				Connections:                    connectionRecorder,
 				IssuerKeySweeper:               issuerKeySweeper(issuerProvisioner),
 				StartupSeeds:                   startupSeeds(logger, db, siteURL),
 				AssistantsCore:                 assistantsCore,
@@ -943,6 +946,10 @@ func newWorkerCommand() *cli.Command {
 				}
 				if ferr := spendUsageTrigger.Shutdown(ctx); ferr != nil {
 					logger.ErrorContext(ctx, "flush pending spend rule usage signals", attr.SlogError(ferr))
+				}
+				// Before the After hook, which closes the ClickHouse client this drains to.
+				if ferr := connectionRecorder.Shutdown(ctx); ferr != nil {
+					logger.ErrorContext(ctx, "flush pending connection attempts", attr.SlogError(ferr))
 				}
 			}()
 

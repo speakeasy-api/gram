@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -246,7 +247,7 @@ func (s *Service) routeMetaMember(
 		if terr != nil {
 			return memberDial{}, "remote", terr
 		}
-		options := []remotemcp.BuildOption{remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String())}
+		options := []remotemcp.BuildOption{remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String()), memberConnectionOption(ctx, &gate, member)}
 		if member.authClient != nil && (member.authClient.outcome != authClientLegacy || member.authClient.sendsClientHeaders()) {
 			options = append(options, remotemcp.WithAuthClientHeaders(member.authClient.headers))
 		}
@@ -294,7 +295,7 @@ func (s *Service) routeMetaMember(
 				WWWAuthenticate:    "",
 				Selection:          nil,
 				Request:            nil,
-			}, remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String()))
+			}, remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String()), memberConnectionOption(ctx, &gate, member))
 			if berr != nil {
 				return nil, fmt.Errorf("build tunnel proxy: %w", berr)
 			}
@@ -467,6 +468,9 @@ func (s *Service) executeProxiedMemberTool(
 	}
 	dial, err := redial(ctx, gate, member)
 	if err != nil {
+		if _, credential := errors.AsType[memberCredentialError](err); credential {
+			s.recordMemberFailure(ctx, gate, member, mcpconnectionattempts.CodeInvalidRemoteSession)
+		}
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 			return marshalMetaMemberFailure(ctx, logger, req.ID, err, memberErr.message)
 		}
@@ -485,6 +489,9 @@ func (s *Service) executeProxiedMemberTool(
 		upstreamResult, _, err = s.callOnMemberSession(ctx, logger, dial, redial, member, toolName, arguments)
 	}
 	if err != nil {
+		if failure, ok := errors.AsType[memberConnectionFailure](err); ok {
+			s.recordMemberFailure(ctx, gate, member, failure.code)
+		}
 		return marshalMetaMemberFailure(ctx, logger, req.ID, err, err.Error())
 	}
 

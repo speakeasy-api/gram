@@ -54,7 +54,7 @@ func TestRefreshNow_InvalidGrant_ClearsRefreshGrantWhenCacheUnavailable(t *testi
 	})
 	require.NoError(t, err)
 
-	result, err := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerScheduled)
+	result, err := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
 	require.Error(t, err)
 	require.Empty(t, result.Outcome)
 	require.Empty(t, result.AccessToken)
@@ -209,7 +209,7 @@ func refreshNowAgainstUpstreamError(t *testing.T, slugSuffix string, status int,
 	})
 	require.NoError(t, err)
 
-	result, refreshErr := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerScheduled)
+	result, refreshErr := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
 	require.Error(t, refreshErr)
 	require.Empty(t, result.Outcome)
 	require.Empty(t, result.AccessToken)

@@ -30,7 +30,9 @@ var (
 type DelegationService struct{ service *delegation.Service }
 
 func NewDelegationService(db *pgxpool.Pool, enc *encryption.Client, manager *ChallengeManager) *DelegationService {
-	return &DelegationService{service: delegation.New(db, enc, delegationDependencies(manager.LoadFederatedDelegationProvider, manager.LoadFederatedProvider, manager.RefreshFederatedIdentity, nil))}
+	dependencies := delegationDependencies(manager.LoadFederatedDelegationProvider, manager.LoadFederatedProvider, manager.RefreshFederatedIdentity, nil)
+	dependencies.Connections = manager.connections
+	return &DelegationService{service: delegation.New(db, enc, dependencies)}
 }
 
 func delegationDependencies(binding, provider func(context.Context, string, uuid.UUID, uuid.UUID) (*FederatedProvider, error), refresh func(context.Context, *FederatedProvider, string, string, string) (*FederatedRefreshResult, error), now func() time.Time) delegation.Dependencies {
@@ -46,7 +48,7 @@ func delegationDependencies(binding, provider func(context.Context, string, uuid
 			return delegationProvider{p}, nil
 		}
 	}
-	return delegation.Dependencies{Now: now, LoadBinding: adaptLoader(binding), LoadProvider: adaptLoader(provider), RefreshIdentity: func(ctx context.Context, provider delegation.Provider, token, subject, nonce string) (*delegation.RefreshResult, error) {
+	return delegation.Dependencies{Connections: nil, Now: now, LoadBinding: adaptLoader(binding), LoadProvider: adaptLoader(provider), RefreshIdentity: func(ctx context.Context, provider delegation.Provider, token, subject, nonce string) (*delegation.RefreshResult, error) {
 		p, ok := provider.(delegationProvider)
 		if !ok {
 			return nil, &delegation.RefreshError{Kind: delegation.RefreshConfiguration}

@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
@@ -50,10 +51,13 @@ type proxyBuildOptions struct {
 	// client's headers; the server's credential headers are not sent.
 	authClientHeaders  []proxy.ConfiguredHeader
 	authClientSelected bool
+
+	// connections, when set, records refused and failed tools/call requests.
+	connections *toolsCallConnections
 }
 
 func newProxyBuildOptions(buildOptions []BuildOption) proxyBuildOptions {
-	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", headerPolicy: proxy.HeaderPolicyRemote, authClientHeaders: nil, authClientSelected: false, anonymousCaller: false}
+	options := proxyBuildOptions{recordIdentityCoverage: true, metaMCPServerID: "", headerPolicy: proxy.HeaderPolicyRemote, authClientHeaders: nil, authClientSelected: false, anonymousCaller: false, connections: nil}
 	for _, option := range buildOptions {
 		if option.apply != nil {
 			option.apply(&options)
@@ -102,6 +106,27 @@ func WithHeaderPolicy(policy proxy.HeaderPolicy) BuildOption {
 	}}
 }
 
+// WithConnectionScope files this proxy's refused tools/call requests under scope.
+func WithConnectionScope(scope mcpconnectionattempts.Scope, details ...mcpconnectionattempts.Option) BuildOption {
+	return BuildOption{apply: func(options *proxyBuildOptions) {
+		if options.connections == nil {
+			options.connections = &toolsCallConnections{recorder: nil, scope: scope, details: details, recordFailures: false, selfCredential: false, tunneled: false, upstreamAuth: false, provider: ""}
+		}
+	}}
+}
+
+// WithConnectionUpstreamFailures also records tools/call requests the upstream
+// failed. A gateway leaves this off: it records a member's failures from its
+// own classification, which also covers the member's handshake.
+func WithConnectionUpstreamFailures(selfCredential bool) BuildOption {
+	return BuildOption{apply: func(options *proxyBuildOptions) {
+		if options.connections != nil {
+			options.connections.recordFailures = true
+			options.connections.selfCredential = selfCredential
+		}
+	}}
+}
+
 // WithAnonymousCaller marks the caller as admitted without a Speakeasy credential.
 // It has no effect on a private server.
 func WithAnonymousCaller() BuildOption {
@@ -112,6 +137,10 @@ func WithAnonymousCaller() BuildOption {
 
 type ProxyManager struct {
 	TunnelMetrics  *metrics.Collector
+
+	// Connections records refused and failed tools/call requests; nil records nothing.
+	Connections *mcpconnectionattempts.Recorder
+
 	logger         *slog.Logger
 	tracer         trace.Tracer
 	db             *pgxpool.Pool
@@ -189,6 +218,7 @@ func NewProxyManager(
 
 	return &ProxyManager{
 		TunnelMetrics:                         nil,
+		Connections:                           nil,
 		logger:                                logger,
 		tracer:                                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/remotemcp"),
 		db:                                    db,
@@ -342,6 +372,15 @@ func (f *ProxyManager) BuildTarget(
 	// private — because the property is Speakeasy's own envelope rather than
 	// anything scoped to an identity or a risk policy. It is a no-op for
 	// the arguments that don't carry it.
+	connections := options.connections
+	if connections != nil {
+		connections.recorder = f.Connections
+		connections.tunneled = identity.TunneledMCPServerID != ""
+		connections.upstreamAuth = upstreamAuth != ""
+		if !connections.tunneled {
+			connections.provider = upstreamURL
+		}
+	}
 	toolsCallPreForwardInterceptors := []proxy.ToolsCallRequestInterceptor(nil)
 	if visibility == mcpservers.VisibilityPrivate {
 		// Private calls use a method-level preflight so even malformed params
@@ -353,17 +392,17 @@ func (f *ProxyManager) BuildTarget(
 			checkpoint = checkpoint.WithIdentityCoverageRecorder(f.mcpMetrics)
 		}
 		toolsCallPreForwardInterceptors = []proxy.ToolsCallRequestInterceptor{
-			NewToolsCallKillswitchInterceptor(checkpoint, organizationID, identity.McpServerID, logger),
+			connections.watch(NewToolsCallKillswitchInterceptor(checkpoint, organizationID, identity.McpServerID, logger), killswitchRefusal),
 		}
 	}
 	toolsCallReqInterceptors := []proxy.ToolsCallRequestInterceptor{
-		f.toolsCallUsageLimitsInterceptor,
+		connections.watch(f.toolsCallUsageLimitsInterceptor, usageLimitRefusal),
 		NewToolsCallStripToolsetIDInterceptor(logger),
 		clickHouseLogInterceptor,
 	}
 	if visibility == mcpservers.VisibilityPrivate {
 		toolsCallReqInterceptors = append(toolsCallReqInterceptors,
-			NewToolsCallAuthzInterceptor(f.authz, f.toolDispositions, identity.McpServerID, projectID, logger),
+			connections.watch(NewToolsCallAuthzInterceptor(f.authz, f.toolDispositions, identity.McpServerID, projectID, logger), toolPermissionRefusal),
 		)
 	}
 
@@ -378,7 +417,7 @@ func (f *ProxyManager) BuildTarget(
 	// the effective catalog is the intersection of RBAC and consent.
 	if selection != nil {
 		selectionInterceptor := NewSessionSelectionInterceptor(selection, f.witnessStore)
-		toolsCallReqInterceptors = append(toolsCallReqInterceptors, selectionInterceptor)
+		toolsCallReqInterceptors = append(toolsCallReqInterceptors, connections.watch(selectionInterceptor, toolNotApprovedRefusal))
 		toolsListRespInterceptors = append(toolsListRespInterceptors, selectionInterceptor)
 	}
 	riskScanInterceptor := NewToolsCallRiskScanInterceptor(
@@ -398,7 +437,7 @@ func (f *ProxyManager) BuildTarget(
 			ToolAnnotations: nil,
 		},
 	)
-	toolsCallReqInterceptors = append(toolsCallReqInterceptors, riskScanInterceptor)
+	toolsCallReqInterceptors = append(toolsCallReqInterceptors, connections.watch(riskScanInterceptor, riskPolicyRefusal))
 
 	// Resources request chain: free-tier ToolCalls usage limits apply to
 	// resources/read invocations alongside tools/call. Per-resource RBAC
@@ -424,7 +463,7 @@ func (f *ProxyManager) BuildTarget(
 	toolsCallResponseInterceptors := []proxy.ToolsCallResponseInterceptor{
 		usageTracking,
 		clickHouseLogInterceptor,
-		riskScanInterceptor,
+		connections.watchResponse(riskScanInterceptor),
 	}
 	if f.platformMCPSelectedUseRecorder != nil && identity.RemoteMCPServerID != "" {
 		toolsCallResponseInterceptors = append(toolsCallResponseInterceptors, NewPlatformMCPSelectedUseInterceptor(f.platformMCPSelectedUseRecorder, identity))
@@ -474,7 +513,7 @@ func (f *ProxyManager) BuildTarget(
 		ToolsCallResponseInterceptors:   toolsCallResponseInterceptors,
 		// Only the log row: a call that never got a reply has nothing to
 		// bill, scan, or record as a selected use.
-		ToolsCallFailureInterceptors: []proxy.ToolsCallFailureInterceptor{clickHouseLogInterceptor},
+		ToolsCallFailureInterceptors: connections.withFailures([]proxy.ToolsCallFailureInterceptor{clickHouseLogInterceptor}),
 		ToolsListRequestInterceptors: []proxy.ToolsListRequestInterceptor{
 			NewToolsListPostHogEventInterceptor(f.posthog, identity, logger),
 		},
