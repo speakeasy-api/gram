@@ -30,7 +30,7 @@ CREATE TABLE `gram`.`mcp_connection_attempt_summaries` (
 @access: restricted',
   `step_events` SimpleAggregateFunction(sum, UInt64) COMMENT 'Step rows observed. An attempt can count more than once, so this is not a number of attempts.
 @access: confidential',
-  `attempts_seen` AggregateFunction(uniqExact, UUID) COMMENT 'Distinct attempts with a step here. Abandoned is seen minus ended, exact only per org, project, server and bucket. Per provider, step or person comes from mcp_connection_events at attempt level, for 30 days. A browser attempt can stay live about 50 minutes because each store restarts the 10-minute clock, so readers wait at least 90 minutes past the bucket start before calling an attempt abandoned.
+  `attempts_seen` AggregateFunction(uniqExact, UUID) COMMENT 'Distinct attempts with a step here. Abandoned is seen minus ended, exact only per org, project, server and bucket. Per provider, step or person comes from mcp_connection_events at attempt level, for 30 days. A browser attempt can stay live about 60 minutes because each store restarts the 10-minute clock and the code lasts 10 more, so readers wait at least 120 minutes past the bucket start before calling an attempt abandoned.
 @access: confidential',
   `attempts_ended` AggregateFunction(uniqExact, UUID) COMMENT 'Distinct attempts with a final step here, however late it arrived. See attempts_seen for how to read abandoned. A lost final row reads as abandoned.
 @access: confidential',
