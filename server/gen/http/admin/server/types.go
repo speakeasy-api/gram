@@ -23411,6 +23411,25 @@ type GetMemoryEvalRunGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// StartMemoryEvalRunRateLimitExceededResponseBody is the type of the "admin"
+// service "startMemoryEvalRun" endpoint HTTP response body for the
+// "rate_limit_exceeded" error.
+type StartMemoryEvalRunRateLimitExceededResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // StartMemoryEvalRunUnauthorizedResponseBody is the type of the "admin"
 // service "startMemoryEvalRun" endpoint HTTP response body for the
 // "unauthorized" error.
@@ -43905,6 +43924,21 @@ func NewGetMemoryEvalRunUnexpectedResponseBody(res *goa.ServiceError) *GetMemory
 // from the result of the "getMemoryEvalRun" endpoint of the "admin" service.
 func NewGetMemoryEvalRunGatewayErrorResponseBody(res *goa.ServiceError) *GetMemoryEvalRunGatewayErrorResponseBody {
 	body := &GetMemoryEvalRunGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartMemoryEvalRunRateLimitExceededResponseBody builds the HTTP response
+// body from the result of the "startMemoryEvalRun" endpoint of the "admin"
+// service.
+func NewStartMemoryEvalRunRateLimitExceededResponseBody(res *goa.ServiceError) *StartMemoryEvalRunRateLimitExceededResponseBody {
+	body := &StartMemoryEvalRunRateLimitExceededResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,

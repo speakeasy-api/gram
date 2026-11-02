@@ -25723,6 +25723,7 @@ func EncodeStartMemoryEvalRunRequest(encoder func(*http.Request) goahttp.Encoder
 // the admin startMemoryEvalRun endpoint. restoreBody controls whether the
 // response body should be restored after having been read.
 // DecodeStartMemoryEvalRunResponse may return the following errors:
+//   - "rate_limit_exceeded" (type *goa.ServiceError): http.StatusTooManyRequests
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -25764,6 +25765,20 @@ func DecodeStartMemoryEvalRunResponse(decoder func(*http.Response) goahttp.Decod
 			}
 			res := NewStartMemoryEvalRunAdminMemoryEvalRunOK(&body)
 			return res, nil
+		case http.StatusTooManyRequests:
+			var (
+				body StartMemoryEvalRunRateLimitExceededResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "startMemoryEvalRun", err)
+			}
+			err = ValidateStartMemoryEvalRunRateLimitExceededResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "startMemoryEvalRun", err)
+			}
+			return nil, NewStartMemoryEvalRunRateLimitExceeded(&body)
 		case http.StatusUnauthorized:
 			var (
 				body StartMemoryEvalRunUnauthorizedResponseBody

@@ -3642,6 +3642,11 @@ func MakeUnavailable(err error) *goa.ServiceError {
 	return goa.NewServiceError(err, "unavailable", false, false, true)
 }
 
+// MakeRateLimitExceeded builds a goa.ServiceError from an error.
+func MakeRateLimitExceeded(err error) *goa.ServiceError {
+	return goa.NewServiceError(err, "rate_limit_exceeded", false, false, false)
+}
+
 // NewProductFeatures initializes result type ProductFeatures from viewed
 // result type ProductFeatures.
 func NewProductFeatures(vres *adminviews.ProductFeatures) *ProductFeatures {

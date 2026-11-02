@@ -5,6 +5,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/design/security"
 	"github.com/speakeasy-api/gram/server/design/shared"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 var AdminMemoryEvalRunConfig = Type("AdminMemoryEvalRunConfig", func() {
@@ -108,9 +109,15 @@ func memoryEvalMethods() {
 			Required("config")
 		})
 		Result(AdminMemoryEvalRun)
+		Error(string(oops.CodeRateLimitExceeded), func() {
+			Description(oops.CodeRateLimitExceeded.UserMessage())
+		})
 		HTTP(func() {
 			POST("/admin/memoryEval.start")
 			Response(StatusOK)
+			Response(string(oops.CodeRateLimitExceeded), StatusTooManyRequests, func() {
+				ContentType("application/json")
+			})
 		})
 	})
 }
