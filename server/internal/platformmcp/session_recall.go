@@ -116,13 +116,14 @@ func NewSessionRecallService(
 	budget OperationBudget,
 ) *SessionRecallService {
 	return &SessionRecallService{
-		logger:      logger,
-		db:          db,
-		repo:        repo,
-		auditor:     auditor,
-		portability: portability,
-		findings:    findings,
-		budget:      budget,
+		logger:        logger,
+		db:            db,
+		repo:          repo,
+		auditor:       auditor,
+		portability:   portability,
+		findings:      findings,
+		budget:        budget,
+		handoffMinter: nil,
 	}
 }
 
@@ -136,7 +137,7 @@ func (s *SessionRecallService) valid() bool {
 }
 
 type ListMySessionsInput struct {
-	Limit int `json:"limit,omitempty" jsonschema:"maximum sessions to return for a numbered user chooser; server clamps this to 100; show each returned session_id, title, and summary as its description rather than asking the user to remember or type an id"`
+	Limit int `json:"limit,omitempty" jsonschema:"maximum sessions to return for a numbered chooser; server clamps to 100; show session_id and title, compose description only from project_name/project_slug and last_active with a generic fallback, and ignore raw summary because it may be transcript-derived"`
 }
 
 // RecallableSession is one captured session the caller owns — metadata only,
@@ -200,10 +201,11 @@ func (s *SessionRecallService) ListMySessions(ctx context.Context, principal Pri
 	sessions := make([]RecallableSession, 0, len(rows))
 	for _, row := range rows {
 		sessions = append(sessions, RecallableSession{
-			SessionID:   sessionIDForChat(row.ExternalChatID, row.ID),
-			ChatID:      row.ID.String(),
-			Title:       conv.FromPGTextOrEmpty[string](row.Title),
-			Summary:     conv.FromPGTextOrEmpty[string](row.Summary),
+			SessionID: sessionIDForChat(row.ExternalChatID, row.ID),
+			ChatID:    row.ID.String(),
+			Title:     conv.FromPGTextOrEmpty[string](row.Title),
+			// Stored summaries can be transcript-derived and are deliberately not exposed.
+			Summary:     "",
 			ProjectName: row.ProjectName,
 			ProjectSlug: row.ProjectSlug,
 			Cwd:         conv.FromPGTextOrEmpty[string](row.Cwd),
@@ -257,7 +259,7 @@ type ownedSessionDigest struct {
 // recall and capability-link export. Callers perform confirmation, feature,
 // and budget checks before invoking it.
 func (s *SessionRecallService) renderOwnedSessionDigest(ctx context.Context, principal Principal, rawSessionID string) (ownedSessionDigest, error) {
-	empty := ownedSessionDigest{}
+	var empty ownedSessionDigest
 	sessionID := strings.TrimSpace(rawSessionID)
 	if sessionID == "" {
 		return empty, fmt.Errorf("session_id is required")
@@ -360,7 +362,7 @@ func (s *SessionRecallService) ContinueSession(ctx context.Context, principal Pr
 }
 
 func (s *SessionRecallService) CreateSessionHandoffLink(ctx context.Context, principal Principal, input CreateSessionHandoffLinkInput) (CreateSessionHandoffLinkOutput, error) {
-	empty := CreateSessionHandoffLinkOutput{}
+	var empty CreateSessionHandoffLinkOutput
 	if !input.Confirmed {
 		ttlSeconds := int(sessionhandoff.ClampHandoffTTL(input.TTLSeconds) / time.Second)
 		return empty, &sessionHandoffConfirmationError{ttlSeconds: ttlSeconds}
@@ -383,6 +385,7 @@ func (s *SessionRecallService) CreateSessionHandoffLink(ctx context.Context, pri
 		OrganizationID: principal.OrganizationID, ProjectID: rendered.row.ProjectID, UserID: principal.UserID,
 		ChatID: rendered.chatID, SessionID: rendered.sourceSessionID, ChatTitle: conv.FromPGTextOrEmpty[string](rendered.row.Title),
 		Content: rendered.digest, TTLSeconds: &ttlSeconds, SourceSurface: string(principal.surface()),
+		ActorEmail: nil, DeviceSerial: "", DeviceHostname: "",
 	})
 	if err != nil {
 		return empty, fmt.Errorf("mint session handoff: %w", err)

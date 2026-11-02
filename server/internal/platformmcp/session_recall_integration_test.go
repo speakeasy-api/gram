@@ -186,6 +186,15 @@ func TestSessionRecallListReturnsOnlyOwnedSessions(t *testing.T) {
 
 	ownedSession := "ses_" + uuid.NewString()
 	ownedChatID := seedRecallChat(t, ctx, conn, project.ID, principal.OrganizationID, principal.UserID, ownedSession, "fix flaky auth test", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	require.NoError(t, testrepo.New(conn).SetCapturedAgentChatSummaryFixture(ctx, testrepo.SetCapturedAgentChatSummaryFixtureParams{
+		Summary:   conv.ToPGText("sensitive transcript-derived summary"),
+		ID:        ownedChatID,
+		ProjectID: project.ID,
+	}))
+	require.NoError(t, testrepo.New(conn).SetCapturedAgentChatSummaryFixture(ctx, testrepo.SetCapturedAgentChatSummaryFixtureParams{
+		Summary: conv.ToPGText("sensitive transcript-derived summary"),
+		ID:      ownedChatID, ProjectID: project.ID,
+	}))
 
 	teamAccountID := seedRecallUserAccount(t, ctx, conn, principal.OrganizationID, conv.ToPGText("team"))
 	personalAccountID := seedRecallUserAccount(t, ctx, conn, principal.OrganizationID, conv.ToPGText("personal"))
@@ -220,6 +229,8 @@ func TestSessionRecallListReturnsOnlyOwnedSessions(t *testing.T) {
 	require.Contains(t, byChatID, teamChatID.String())
 	require.Equal(t, ownedSession, byChatID[ownedChatID.String()].SessionID, "the harness-native session id is served, not the chat uuid")
 	require.Equal(t, "fix flaky auth test", byChatID[ownedChatID.String()].Title)
+	require.Empty(t, byChatID[ownedChatID.String()].Summary, "stored transcript-derived summaries must not be returned")
+	require.Empty(t, byChatID[ownedChatID.String()].Summary, "stored transcript-derived summaries must not be returned")
 	require.Equal(t, project.Slug, byChatID[ownedChatID.String()].ProjectSlug)
 	require.NotContains(t, byChatID, deletedChatID.String())
 

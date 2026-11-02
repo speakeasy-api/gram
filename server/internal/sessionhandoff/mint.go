@@ -7,6 +7,7 @@ import (
 	"errors"
 	"io"
 	"log/slog"
+	"net/url"
 	"strings"
 	"time"
 
@@ -28,7 +29,6 @@ const (
 	MinHandoffTTL     = time.Minute
 	DefaultHandoffTTL = 15 * time.Minute
 	MaxHandoffTTL     = time.Hour
-	handoffTokenBytes = 32
 )
 
 type SessionHandoffMintInput struct {
@@ -66,7 +66,19 @@ func NewSessionHandoffMinter(logger *slog.Logger, db *pgxpool.Pool, blobStore as
 }
 
 func (m *SessionHandoffMinter) Valid() bool {
-	return m != nil && m.logger != nil && m.db != nil && m.blobStore != nil && strings.TrimSpace(m.serverURL) != "" && m.audit != nil
+	if m == nil || m.logger == nil || m.db == nil || m.blobStore == nil || m.audit == nil {
+		return false
+	}
+	_, ok := validHTTPSBaseURL(m.serverURL)
+	return ok
+}
+
+func validHTTPSBaseURL(raw string) (*url.URL, bool) {
+	parsed, err := url.ParseRequestURI(strings.TrimSpace(raw))
+	if err != nil || parsed.Scheme != "https" || parsed.Host == "" || parsed.User != nil || parsed.RawQuery != "" || parsed.Fragment != "" {
+		return nil, false
+	}
+	return parsed, true
 }
 
 func ClampHandoffTTL(seconds *int) time.Duration {
@@ -81,7 +93,11 @@ func (m *SessionHandoffMinter) Mint(ctx context.Context, input SessionHandoffMin
 		return SessionHandoffMintResult{}, oops.E(oops.CodeUnexpected, nil, "session handoff unavailable")
 	}
 	ttl := ClampHandoffTTL(input.TTLSeconds)
-	tokenBytes := make([]byte, handoffTokenBytes)
+	baseURL, ok := validHTTPSBaseURL(m.serverURL)
+	if !ok {
+		return SessionHandoffMintResult{}, oops.E(oops.CodeUnexpected, nil, "session handoff requires a valid HTTPS server URL")
+	}
+	tokenBytes := make([]byte, TokenBytes)
 	if _, err := rand.Read(tokenBytes); err != nil {
 		return SessionHandoffMintResult{}, oops.E(oops.CodeUnexpected, err, "mint handoff token").LogError(ctx, m.logger)
 	}
@@ -142,5 +158,5 @@ func (m *SessionHandoffMinter) Mint(ctx context.Context, input SessionHandoffMin
 	if err := dbtx.Commit(ctx); err != nil {
 		return SessionHandoffMintResult{}, oops.E(oops.CodeUnexpected, err, "store handoff").LogError(ctx, m.logger)
 	}
-	return SessionHandoffMintResult{URL: strings.TrimRight(m.serverURL, "/") + "/shared/handoffs/" + token, ExpiresAt: row.ExpiresAt.Time.UTC().Format(time.RFC3339)}, nil
+	return SessionHandoffMintResult{URL: (&url.URL{Scheme: baseURL.Scheme, Host: baseURL.Host, Path: PublicRoutePrefix + token}).String(), ExpiresAt: row.ExpiresAt.Time.UTC().Format(time.RFC3339)}, nil
 }

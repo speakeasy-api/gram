@@ -2,8 +2,8 @@ package agent
 
 import (
 	"context"
-	"encoding/hex"
 	"errors"
+	"fmt"
 	"io"
 	"net/http"
 	"net/url"
@@ -25,21 +25,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/sessionhandoff"
 )
 
-// handoffRoutePrefix is the public serving path. Links are minted against
-// serverURL (the primary app domain). That host splits traffic: the
-// dashboard SPA is the default backend, so this prefix must appear on the
-// gram-infra helm ingress path list and on the dashboard vite dev proxy.
-// It is deliberately absent from the custom-domain ingress allowlist in
-// k8s/ingress_provisioner.go — customer domains serve skill share pages,
-// not handoff documents. Must stay in lockstep with the route attached in
-// Attach and with the token-redaction prefixes in middleware.logSafeURL.
-const handoffRoutePrefix = "/shared/handoffs/"
-
 // maxHandoffContentBytes caps uploaded documents in bytes.
-const (
-	maxHandoffContentBytes = 262144
-	handoffTokenBytes      = 32
-)
+const maxHandoffContentBytes = 262144
 
 // CreateSessionHandoff mints a burn-after-read capability URL for an uploaded
 // handoff document. This is the one place session CONTENT transits the server
@@ -81,6 +68,7 @@ func (s *Service) CreateSessionHandoff(ctx context.Context, payload *gen.CreateS
 		ActorEmail:     authCtx.Email,
 		ChatID:         chat.SessionIDToChatID(sessionID),
 		SessionID:      sessionID,
+		ChatTitle:      "",
 		Content:        payload.Content,
 		TTLSeconds:     ttlSeconds,
 		SourceSurface:  strings.TrimSpace(conv.PtrValOr(payload.SourceSurface, "")),
@@ -88,7 +76,7 @@ func (s *Service) CreateSessionHandoff(ctx context.Context, payload *gen.CreateS
 		DeviceHostname: strings.TrimSpace(conv.PtrValOr(payload.Hostname, "")),
 	})
 	if err != nil {
-		return nil, err
+		return nil, fmt.Errorf("mint session handoff: %w", err)
 	}
 	return &gen.CreateSessionHandoffResult{URL: result.URL, ExpiresAt: result.ExpiresAt}, nil
 }
@@ -104,11 +92,7 @@ func (s *Service) ServeSessionHandoff(w http.ResponseWriter, r *http.Request) er
 	// segment is rejected before hex.DecodeString allocates for it, then the
 	// now-fixed-size decode. Only hex of exactly the minted length can name a
 	// link, so malformed probes never reach Postgres.
-	if len(token) != hex.EncodedLen(handoffTokenBytes) {
-		http.NotFound(w, r)
-		return nil
-	}
-	if _, err := hex.DecodeString(token); err != nil {
+	if !sessionhandoff.ValidToken(token) {
 		http.NotFound(w, r)
 		return nil
 	}

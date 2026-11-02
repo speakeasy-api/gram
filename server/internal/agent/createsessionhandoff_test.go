@@ -125,9 +125,9 @@ func TestSessionHandoffMinterSeparatesCanonicalChatAndProductSessionIDs(t *testi
 	})
 	require.NoError(t, err)
 	token := result.URL[strings.LastIndex(result.URL, "/")+1:]
-	var persistedSessionID string
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT session_id FROM session_handoff_links WHERE token = $1`, token).Scan(&persistedSessionID))
-	require.Equal(t, externalSessionID, persistedSessionID)
+	persisted, err := testrepo.New(ti.conn).GetSessionHandoffLinkFixture(ctx, token)
+	require.NoError(t, err)
+	require.Equal(t, externalSessionID, persisted.SessionID)
 	record, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionChatSessionHandoffExport)
 	require.NoError(t, err)
 	require.Equal(t, canonicalChatID.String(), record.SubjectID)
