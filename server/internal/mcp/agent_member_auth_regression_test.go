@@ -340,7 +340,9 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 						}
 					}
 				}
-				if state == "live" || state == "owner_block" || state == "credential_block" {
+				// Before enforcement the direct endpoint keeps the issuer-wide
+				// resolution, which a sibling server's client still constrains.
+				if state == "live" || state == "owner_block" || state == "credential_block" || (state == "sibling_issuer_client" && mode == "enforced") {
 					// The same key on the server's own endpoint must reach the
 					// gateway's decision: a block the gateway enforces cannot be
 					// bypassed by calling the server directly.
@@ -371,7 +373,7 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 					} else {
 						require.Zero(t, attempts.Load(), "direct: a blocked agent key must not reach upstream: %d %s", direct.Code, direct.Body.String())
 						require.Empty(t, directCredentials, "direct")
-						require.NotEqual(t, http.StatusOK, direct.Code, "direct: %s", direct.Body.String())
+						require.Equal(t, http.StatusForbidden, direct.Code, "direct: %s", direct.Body.String())
 					}
 				}
 				require.Equal(t, before, snapshot(), "serving must not repair attachment authority")
