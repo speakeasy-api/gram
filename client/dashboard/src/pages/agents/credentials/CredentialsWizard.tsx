@@ -64,6 +64,8 @@ import {
 } from "@/pages/agents/agentPolicyEdit";
 import { useAgentsCreatePolicyGrantMutation } from "@gram/client/react-query/agentsCreatePolicyGrant.js";
 import { useAgentsDeletePolicyGrantMutation } from "@gram/client/react-query/agentsDeletePolicyGrant.js";
+import { invalidateAllListAPIKeys } from "@gram/client/react-query/listAPIKeys.js";
+import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js";
 import { useAgents } from "@gram/client/react-query/agents.js";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
@@ -419,6 +421,11 @@ export function CredentialsWizard({
   // the answer the query gave before the save started, so a retry reading it
   // would create a second wildcard or ask for an id that is already gone.
   const appliedWildcard = useRef<WildcardConnectGrant | undefined>(undefined);
+  // Server grants this edit gave the agent that its keys do not hold yet. A
+  // key stores the grants it was issued with, so without passing these on the
+  // agent's gateway never lists the servers just added. Kept across a retry,
+  // because the grants a failed save already wrote are not in the next diff.
+  const keysMissing = useRef<AgentPolicyGrantForm[]>([]);
   useEffect(() => {
     if (reconciled || grants === undefined) return;
     if (inventory.isLoading || inventory.isError) return;
@@ -895,49 +902,51 @@ export function CredentialsWizard({
       // so no moment of this save leaves the agent reaching less than both the
       // old policy and the new one allow.
       if (allServers && appliedWildcard.current === undefined) {
+        const form = {
+          effect: "allow" as const,
+          scope: CONNECT_SCOPE,
+          selector: {
+            resourceKind: "mcp" as const,
+            resourceId: "*",
+            // Scoped where the agent is, so "all servers" means all the
+            // ones this agent could ever be pointed at, not the whole
+            // organization's.
+            ...(scopedProjectID ? { projectId: scopedProjectID } : {}),
+          },
+        };
         const created = await createGrant.mutateAsync({
           request: {
-            createAgentPolicyGrantForm: {
-              agentId: agent.id,
-              effect: "allow",
-              scope: CONNECT_SCOPE,
-              selector: {
-                resourceKind: "mcp",
-                resourceId: "*",
-                // Scoped where the agent is, so "all servers" means all the
-                // ones this agent could ever be pointed at, not the whole
-                // organization's.
-                ...(scopedProjectID ? { projectId: scopedProjectID } : {}),
-              },
-            },
+            createAgentPolicyGrantForm: { agentId: agent.id, ...form },
           },
         });
         // Recorded as the write lands, so a failure further down this save
         // does not make the next attempt create a second wildcard.
         appliedPolicies.current.set(created.id, created);
+        keysMissing.current.push(form);
         appliedWildcard.current = {
           projectIds: scopedProjectID ? [scopedProjectID] : [],
           grantIds: [created.id],
         };
       }
       for (const server of changes.add) {
+        const form = {
+          effect: "allow" as const,
+          scope: CONNECT_SCOPE,
+          selector: {
+            resourceKind: "mcp" as const,
+            resourceId: server.resourceId,
+            projectId: server.projectId,
+          },
+        };
         const created = await createGrant.mutateAsync({
           request: {
-            createAgentPolicyGrantForm: {
-              agentId: agent.id,
-              effect: "allow",
-              scope: CONNECT_SCOPE,
-              selector: {
-                resourceKind: "mcp",
-                resourceId: server.resourceId,
-                projectId: server.projectId,
-              },
-            },
+            createAgentPolicyGrantForm: { agentId: agent.id, ...form },
           },
         });
         // Recorded as each write lands, so a later failure does not send the
         // whole diff again on the next attempt.
         appliedPolicies.current.set(created.id, created);
+        keysMissing.current.push(form);
         applied.current.set(server.resourceId, {
           grantIds: [created.id],
           resourceId: server.resourceId,
@@ -995,6 +1004,26 @@ export function CredentialsWizard({
           const left = wildcard.grantIds.filter((id) => id !== grantId);
           appliedWildcard.current =
             left.length === 0 ? undefined : { ...wildcard, grantIds: left };
+        }
+      }
+      // After every write, so the agent already holds each grant its keys are
+      // given. Removals need nothing here: a key only ever reaches what the
+      // agent still allows. The edit itself is saved by now, so a key that
+      // could not follow is reported rather than undoing it.
+      if (keysMissing.current.length > 0) {
+        try {
+          await sdk.keys.extendAgentKeys({
+            extendAgentKeysForm: {
+              agentId: agent.id,
+              requestedGrants: keysMissing.current,
+            },
+          });
+          keysMissing.current = [];
+          void invalidateAllListAPIKeys(queryClient);
+        } catch (failure) {
+          toast.warning(
+            `Saved, but the agent's existing keys still reach only their old servers: ${failure instanceof Error ? failure.message : String(failure)}. Issue a new key from the agent's page to use the new ones.`,
+          );
         }
       }
       // The agent's own page reads its servers from these, and it is where

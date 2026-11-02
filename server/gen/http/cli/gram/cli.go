@@ -158,7 +158,7 @@ func UsageCommands() []string {
 		"integrations (get|list)",
 		"internal-session-issuers (get|set-enabled|rotate)",
 		"json-web-key-sets (create-set|update-set|list-sets|get-set|get-set-delete-preflight|delete-set|list-keys|publish-key|activate-key|retire-key|revoke-key)",
-		"keys (create-key|rotate-key|list-keys|revoke-key|update-key-policy|verify-key)",
+		"keys (create-key|rotate-key|extend-agent-keys|list-keys|revoke-key|update-key-policy|verify-key)",
 		"launcher judge",
 		"litellm (create-instance|list-instances|rotate-instance-key|revoke-instance|ingest|traces)",
 		"mcp-approval (list-requests|get-request|ensure-server-review|create-request|promote|refresh-evidence|start-research|record-decision)",
@@ -1910,6 +1910,10 @@ func ParseEndpoint(
 		keysRotateKeyFlags            = flag.NewFlagSet("rotate-key", flag.ExitOnError)
 		keysRotateKeyBodyFlag         = keysRotateKeyFlags.String("body", "REQUIRED", "")
 		keysRotateKeySessionTokenFlag = keysRotateKeyFlags.String("session-token", "", "")
+
+		keysExtendAgentKeysFlags            = flag.NewFlagSet("extend-agent-keys", flag.ExitOnError)
+		keysExtendAgentKeysBodyFlag         = keysExtendAgentKeysFlags.String("body", "REQUIRED", "")
+		keysExtendAgentKeysSessionTokenFlag = keysExtendAgentKeysFlags.String("session-token", "", "")
 
 		keysListKeysFlags            = flag.NewFlagSet("list-keys", flag.ExitOnError)
 		keysListKeysAgentIDFlag      = keysListKeysFlags.String("agent-id", "", "")
@@ -5851,6 +5855,7 @@ func ParseEndpoint(
 	keysFlags.Usage = keysUsage
 	keysCreateKeyFlags.Usage = keysCreateKeyUsage
 	keysRotateKeyFlags.Usage = keysRotateKeyUsage
+	keysExtendAgentKeysFlags.Usage = keysExtendAgentKeysUsage
 	keysListKeysFlags.Usage = keysListKeysUsage
 	keysRevokeKeyFlags.Usage = keysRevokeKeyUsage
 	keysUpdateKeyPolicyFlags.Usage = keysUpdateKeyPolicyUsage
@@ -7935,6 +7940,9 @@ func ParseEndpoint(
 
 			case "rotate-key":
 				epf = keysRotateKeyFlags
+
+			case "extend-agent-keys":
+				epf = keysExtendAgentKeysFlags
 
 			case "list-keys":
 				epf = keysListKeysFlags
@@ -11240,6 +11248,9 @@ func ParseEndpoint(
 			case "rotate-key":
 				endpoint = c.RotateKey()
 				data, err = keysc.BuildRotateKeyPayload(*keysRotateKeyBodyFlag, *keysRotateKeySessionTokenFlag)
+			case "extend-agent-keys":
+				endpoint = c.ExtendAgentKeys()
+				data, err = keysc.BuildExtendAgentKeysPayload(*keysExtendAgentKeysBodyFlag, *keysExtendAgentKeysSessionTokenFlag)
 			case "list-keys":
 				endpoint = c.ListKeys()
 				data, err = keysc.BuildListKeysPayload(*keysListKeysAgentIDFlag, *keysListKeysSessionTokenFlag)
@@ -21035,6 +21046,7 @@ func keysUsage() {
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    create-key: Create a new api key`)
 	fmt.Fprintln(os.Stderr, `    rotate-key: Rotate an API key. Agent-key rotation replaces immutable delegation and directly revokes the old row.`)
+	fmt.Fprintln(os.Stderr, `    extend-agent-keys: Add mcp:connect grants to every live key the caller issued for an agent, so servers the agent is given reach the keys it already runs with. Each key's new policy is checked like issuance: the agent, its owner and the caller must all allow it. Keys issued by someone else are left as they are.`)
 	fmt.Fprintln(os.Stderr, `    list-keys: List all api keys for an organization`)
 	fmt.Fprintln(os.Stderr, `    revoke-key: Revoke a api key`)
 	fmt.Fprintln(os.Stderr, `    update-key-policy: Replace an ordinary key's own policy: the mcp:connect and mcp:auth grants, and their blocks, its server and auth client access is evaluated against. Agent keys keep their delegated grants. Requires org admin.`)
@@ -21081,6 +21093,26 @@ func keysRotateKeyUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys rotate-key --body '{\n      \"delegated_grants_version\": 2,\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"name\": \"aaa\",\n      \"requested_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ],\n      \"scopes\": [\n         \"abc123\"\n      ]\n   }' --session-token \"abc123\"")
+}
+
+func keysExtendAgentKeysUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] keys extend-agent-keys", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Add mcp:connect grants to every live key the caller issued for an agent, so servers the agent is given reach the keys it already runs with. Each key's new policy is checked like issuance: the agent, its owner and the caller must all allow it. Keys issued by someone else are left as they are.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "keys extend-agent-keys --body '{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"requested_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         },\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ]\n   }' --session-token \"abc123\"")
 }
 
 func keysListKeysUsage() {

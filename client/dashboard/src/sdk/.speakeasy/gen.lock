@@ -365,6 +365,7 @@ trackedFiles:
   src/funcs/jsonWebKeySetsRevokeKey.ts: {}
   src/funcs/jsonWebKeySetsUpdate.ts: {}
   src/funcs/keysCreate.ts: {}
+  src/funcs/keysExtendAgentKeys.ts: {}
   src/funcs/keysList.ts: {}
   src/funcs/keysRevokeById.ts: {}
   src/funcs/keysRotate.ts: {}
@@ -1245,6 +1246,7 @@ trackedFiles:
   src/models/components/explainresourceaccessresult.ts: {}
   src/models/components/exportmcpmetadatarequestbody.ts: {}
   src/models/components/exprcompileresult.ts: {}
+  src/models/components/extendagentkeysform.ts: {}
   src/models/components/externalcredentialsummary.ts: {}
   src/models/components/externalkeysummary.ts: {}
   src/models/components/externalmcpheaderdefinition.ts: {}
@@ -2458,6 +2460,7 @@ trackedFiles:
   src/models/operations/evolvedeployment.ts: {}
   src/models/operations/explainresourceaccess.ts: {}
   src/models/operations/exportmcpmetadata.ts: {}
+  src/models/operations/extendagentapikeys.ts: {}
   src/models/operations/fetchglobalremotesessionissuermetadata.ts: {}
   src/models/operations/fetchimagefromurl.ts: {}
   src/models/operations/fetchopenapiv3fromurl.ts: {}
@@ -3595,6 +3598,7 @@ trackedFiles:
   src/react-query/issuanceProfiles.ts: {}
   src/react-query/jsonWebKeySetDeletePreflight.core.ts: {}
   src/react-query/jsonWebKeySetDeletePreflight.ts: {}
+  src/react-query/keysExtendAgentKeys.ts: {}
   src/react-query/keysRotate.ts: {}
   src/react-query/killswitch.core.ts: {}
   src/react-query/killswitch.ts: {}
@@ -7122,6 +7126,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  extendAgentAPIKeys:
+    speakeasy-default-extend-agent-API-keys:
+      requestBody:
+        application/json: {"agent_id": "16412b7c-ff76-47a4-aefb-d2800f86cf11", "requested_grants": [{"effect": "allow", "scope": "<value>", "selector": {"resource_id": "<id>", "resource_kind": "project"}}]}
+      responses:
+        "200":
+          application/json: {"keys": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   fetchGlobalRemoteSessionIssuerMetadata:
     speakeasy-default-fetch-global-remote-session-issuer-metadata:
       requestBody:

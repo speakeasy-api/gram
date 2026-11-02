@@ -54,6 +54,26 @@ var _ = Service("keys", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "rotate")
 	})
 
+	Method("extendAgentKeys", func() {
+		Description("Add mcp:connect grants to every live key the caller issued for an agent, so servers the agent is given reach the keys it already runs with. Each key's new policy is checked like issuance: the agent, its owner and the caller must all allow it. Keys issued by someone else are left as they are.")
+
+		Payload(func() {
+			Extend(ExtendAgentKeysForm)
+			security.SessionPayload()
+		})
+
+		Result(ListKeysResult)
+
+		HTTP(func() {
+			POST("/rpc/keys.extendAgentKeys")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "extendAgentAPIKeys")
+		Meta("openapi:extension:x-speakeasy-name-override", "extendAgentKeys")
+	})
+
 	Method("listKeys", func() {
 		Description("List all api keys for an organization")
 
@@ -173,6 +193,15 @@ var RotateKeyForm = Type("RotateKeyForm", func() {
 	Attribute("delegated_grants_version", Int, "Delegated policy format version", func() { Minimum(1) })
 	Attribute("requested_grants", ArrayOf(agentsdesign.PolicyGrantForm), "New exact allow grants approved for the replacement credential")
 	Attribute("expires_at", String, "Replacement expiry; defaults to 90 days and cannot exceed one year", func() { Format(FormatDateTime) })
+})
+
+var ExtendAgentKeysForm = Type("ExtendAgentKeysForm", func() {
+	Required("agent_id", "requested_grants")
+	Attribute("agent_id", String, "The agent whose keys gain the grants", func() { Format(FormatUUID) })
+	Attribute("requested_grants", ArrayOf(agentsdesign.PolicyGrantForm), "mcp:connect allow grants to add to each key", func() {
+		MinLength(1)
+		MaxLength(100)
+	})
 })
 
 var APIKeyPolicySelector = Type("APIKeyPolicySelector", func() {

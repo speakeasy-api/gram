@@ -21,6 +21,11 @@ type Service interface {
 	// Rotate an API key. Agent-key rotation replaces immutable delegation and
 	// directly revokes the old row.
 	RotateKey(context.Context, *RotateKeyPayload) (res *Key, err error)
+	// Add mcp:connect grants to every live key the caller issued for an agent, so
+	// servers the agent is given reach the keys it already runs with. Each key's
+	// new policy is checked like issuance: the agent, its owner and the caller
+	// must all allow it. Keys issued by someone else are left as they are.
+	ExtendAgentKeys(context.Context, *ExtendAgentKeysPayload) (res *ListKeysResult, err error)
 	// List all api keys for an organization
 	ListKeys(context.Context, *ListKeysPayload) (res *ListKeysResult, err error)
 	// Revoke a api key
@@ -53,7 +58,7 @@ const ServiceName = "keys"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [6]string{"createKey", "rotateKey", "listKeys", "revokeKey", "updateKeyPolicy", "verifyKey"}
+var MethodNames = [7]string{"createKey", "rotateKey", "extendAgentKeys", "listKeys", "revokeKey", "updateKeyPolicy", "verifyKey"}
 
 type APIKeyPolicyGrant struct {
 	// mcp:connect, mcp:auth, or a block: mcp:blocked_connect, mcp:blocked_auth
@@ -162,6 +167,16 @@ type CreateKeyPayload struct {
 	AuthClientChoices []*AgentKeyAuthClientChoice
 }
 
+// ExtendAgentKeysPayload is the payload type of the keys service
+// extendAgentKeys method.
+type ExtendAgentKeysPayload struct {
+	SessionToken *string
+	// The agent whose keys gain the grants
+	AgentID string
+	// mcp:connect allow grants to add to each key
+	RequestedGrants []*AgentPolicyGrantForm
+}
+
 // Key is the result type of the keys service createKey method.
 type Key struct {
 	// The ID of the key
@@ -205,7 +220,7 @@ type ListKeysPayload struct {
 	SessionToken *string
 }
 
-// ListKeysResult is the result type of the keys service listKeys method.
+// ListKeysResult is the result type of the keys service extendAgentKeys method.
 type ListKeysResult struct {
 	Keys []*Key
 }

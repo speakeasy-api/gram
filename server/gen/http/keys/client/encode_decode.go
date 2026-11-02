@@ -486,6 +486,240 @@ func DecodeRotateKeyResponse(decoder func(*http.Response) goahttp.Decoder, resto
 	}
 }
 
+// BuildExtendAgentKeysRequest instantiates a HTTP request object with method
+// and path set to call the "keys" service "extendAgentKeys" endpoint
+func (c *Client) BuildExtendAgentKeysRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ExtendAgentKeysKeysPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("keys", "extendAgentKeys", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeExtendAgentKeysRequest returns an encoder for requests sent to the
+// keys extendAgentKeys server.
+func EncodeExtendAgentKeysRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*keys.ExtendAgentKeysPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("keys", "extendAgentKeys", "*keys.ExtendAgentKeysPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewExtendAgentKeysRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("keys", "extendAgentKeys", err)
+		}
+		return nil
+	}
+}
+
+// DecodeExtendAgentKeysResponse returns a decoder for responses returned by
+// the keys extendAgentKeys endpoint. restoreBody controls whether the response
+// body should be restored after having been read.
+// DecodeExtendAgentKeysResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeExtendAgentKeysResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ExtendAgentKeysResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "extendAgentKeys", err)
+			}
+			err = ValidateExtendAgentKeysResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "extendAgentKeys", err)
+			}
+			res := NewExtendAgentKeysListKeysResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ExtendAgentKeysUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "extendAgentKeys", err)
+			}
+			err = ValidateExtendAgentKeysUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "extendAgentKeys", err)
+			}
+			return nil, NewExtendAgentKeysUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ExtendAgentKeysForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "extendAgentKeys", err)
+			}
+			err = ValidateExtendAgentKeysForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "extendAgentKeys", err)
+			}
+			return nil, NewExtendAgentKeysForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ExtendAgentKeysBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "extendAgentKeys", err)
+			}
+			err = ValidateExtendAgentKeysBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "extendAgentKeys", err)
+			}
+			return nil, NewExtendAgentKeysBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ExtendAgentKeysNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "extendAgentKeys", err)
+			}
+			err = ValidateExtendAgentKeysNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "extendAgentKeys", err)
+			}
+			return nil, NewExtendAgentKeysNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ExtendAgentKeysConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "extendAgentKeys", err)
+			}
+			err = ValidateExtendAgentKeysConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "extendAgentKeys", err)
+			}
+			return nil, NewExtendAgentKeysConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ExtendAgentKeysUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "extendAgentKeys", err)
+			}
+			err = ValidateExtendAgentKeysUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "extendAgentKeys", err)
+			}
+			return nil, NewExtendAgentKeysUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ExtendAgentKeysInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "extendAgentKeys", err)
+			}
+			err = ValidateExtendAgentKeysInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "extendAgentKeys", err)
+			}
+			return nil, NewExtendAgentKeysInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ExtendAgentKeysInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "extendAgentKeys", err)
+				}
+				err = ValidateExtendAgentKeysInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "extendAgentKeys", err)
+				}
+				return nil, NewExtendAgentKeysInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ExtendAgentKeysUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("keys", "extendAgentKeys", err)
+				}
+				err = ValidateExtendAgentKeysUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("keys", "extendAgentKeys", err)
+				}
+				return nil, NewExtendAgentKeysUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("keys", "extendAgentKeys", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ExtendAgentKeysGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("keys", "extendAgentKeys", err)
+			}
+			err = ValidateExtendAgentKeysGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("keys", "extendAgentKeys", err)
+			}
+			return nil, NewExtendAgentKeysGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("keys", "extendAgentKeys", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildListKeysRequest instantiates a HTTP request object with method and path
 // set to call the "keys" service "listKeys" endpoint
 func (c *Client) BuildListKeysRequest(ctx context.Context, v any) (*http.Request, error) {

@@ -197,6 +197,63 @@ func BuildRotateKeyPayload(keysRotateKeyBody string, keysRotateKeySessionToken s
 	return v, nil
 }
 
+// BuildExtendAgentKeysPayload builds the payload for the keys extendAgentKeys
+// endpoint from CLI flags.
+func BuildExtendAgentKeysPayload(keysExtendAgentKeysBody string, keysExtendAgentKeysSessionToken string) (*keys.ExtendAgentKeysPayload, error) {
+	var err error
+	var body ExtendAgentKeysRequestBody
+	{
+		err = json.Unmarshal([]byte(keysExtendAgentKeysBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"requested_grants\": [\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         },\n         {\n            \"effect\": \"allow\",\n            \"scope\": \"aa\",\n            \"selector\": {\n               \"client_type\": \"service_account\",\n               \"connection_owner\": \"abc123\",\n               \"disposition\": \"destructive\",\n               \"project_id\": \"abc123\",\n               \"resource_id\": \"abc123\",\n               \"resource_kind\": \"mcp\",\n               \"server_identity\": \"abc123\",\n               \"server_url\": \"https://example.com/foo\",\n               \"tool\": \"abc123\",\n               \"upstream_client\": \"abc123\"\n            }\n         }\n      ]\n   }'")
+		}
+		if body.RequestedGrants == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("requested_grants", "body"))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", body.AgentID, goa.FormatUUID))
+		if len(body.RequestedGrants) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.requested_grants", body.RequestedGrants, len(body.RequestedGrants), 1, true))
+		}
+		if len(body.RequestedGrants) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.requested_grants", body.RequestedGrants, len(body.RequestedGrants), 100, false))
+		}
+		for _, e := range body.RequestedGrants {
+			if e != nil {
+				if err2 := ValidateAgentPolicyGrantFormRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if keysExtendAgentKeysSessionToken != "" {
+			sessionToken = &keysExtendAgentKeysSessionToken
+		}
+	}
+	v := &keys.ExtendAgentKeysPayload{
+		AgentID: body.AgentID,
+	}
+	if body.RequestedGrants != nil {
+		v.RequestedGrants = make([]*keys.AgentPolicyGrantForm, len(body.RequestedGrants))
+		for i, val := range body.RequestedGrants {
+			if val == nil {
+				v.RequestedGrants[i] = nil
+				continue
+			}
+			v.RequestedGrants[i] = marshalAgentPolicyGrantFormRequestBodyToKeysAgentPolicyGrantForm(val)
+		}
+	} else {
+		v.RequestedGrants = []*keys.AgentPolicyGrantForm{}
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
 // BuildListKeysPayload builds the payload for the keys listKeys endpoint from
 // CLI flags.
 func BuildListKeysPayload(keysListKeysAgentID string, keysListKeysSessionToken string) (*keys.ListKeysPayload, error) {

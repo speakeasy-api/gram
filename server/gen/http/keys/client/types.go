@@ -62,6 +62,15 @@ type RotateKeyRequestBody struct {
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 }
 
+// ExtendAgentKeysRequestBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP request body.
+type ExtendAgentKeysRequestBody struct {
+	// The agent whose keys gain the grants
+	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
+	// mcp:connect allow grants to add to each key
+	RequestedGrants []*AgentPolicyGrantFormRequestBody `form:"requested_grants" json:"requested_grants" xml:"requested_grants"`
+}
+
 // UpdateKeyPolicyRequestBody is the type of the "keys" service
 // "updateKeyPolicy" endpoint HTTP request body.
 type UpdateKeyPolicyRequestBody struct {
@@ -143,6 +152,12 @@ type RotateKeyResponseBody struct {
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
 	// When the key was last accessed.
 	LastAccessedAt *string `form:"last_accessed_at,omitempty" json:"last_accessed_at,omitempty" xml:"last_accessed_at,omitempty"`
+}
+
+// ExtendAgentKeysResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body.
+type ExtendAgentKeysResponseBody struct {
+	Keys []*KeyResponseBody `form:"keys,omitempty" json:"keys,omitempty" xml:"keys,omitempty"`
 }
 
 // ListKeysResponseBody is the type of the "keys" service "listKeys" endpoint
@@ -544,6 +559,188 @@ type RotateKeyUnexpectedResponseBody struct {
 // RotateKeyGatewayErrorResponseBody is the type of the "keys" service
 // "rotateKey" endpoint HTTP response body for the "gateway_error" error.
 type RotateKeyGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ExtendAgentKeysUnauthorizedResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body for the "unauthorized" error.
+type ExtendAgentKeysUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ExtendAgentKeysForbiddenResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body for the "forbidden" error.
+type ExtendAgentKeysForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ExtendAgentKeysBadRequestResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body for the "bad_request" error.
+type ExtendAgentKeysBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ExtendAgentKeysNotFoundResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body for the "not_found" error.
+type ExtendAgentKeysNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ExtendAgentKeysConflictResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body for the "conflict" error.
+type ExtendAgentKeysConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ExtendAgentKeysUnsupportedMediaResponseBody is the type of the "keys"
+// service "extendAgentKeys" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ExtendAgentKeysUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ExtendAgentKeysInvalidResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body for the "invalid" error.
+type ExtendAgentKeysInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ExtendAgentKeysInvariantViolationResponseBody is the type of the "keys"
+// service "extendAgentKeys" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ExtendAgentKeysInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ExtendAgentKeysUnexpectedResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body for the "unexpected" error.
+type ExtendAgentKeysUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// ExtendAgentKeysGatewayErrorResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body for the "gateway_error" error.
+type ExtendAgentKeysGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -1555,6 +1752,27 @@ func NewRotateKeyRequestBody(p *keys.RotateKeyPayload) *RotateKeyRequestBody {
 	return body
 }
 
+// NewExtendAgentKeysRequestBody builds the HTTP request body from the payload
+// of the "extendAgentKeys" endpoint of the "keys" service.
+func NewExtendAgentKeysRequestBody(p *keys.ExtendAgentKeysPayload) *ExtendAgentKeysRequestBody {
+	body := &ExtendAgentKeysRequestBody{
+		AgentID: p.AgentID,
+	}
+	if p.RequestedGrants != nil {
+		body.RequestedGrants = make([]*AgentPolicyGrantFormRequestBody, len(p.RequestedGrants))
+		for i, val := range p.RequestedGrants {
+			if val == nil {
+				body.RequestedGrants[i] = nil
+				continue
+			}
+			body.RequestedGrants[i] = marshalKeysAgentPolicyGrantFormToAgentPolicyGrantFormRequestBody(val)
+		}
+	} else {
+		body.RequestedGrants = []*AgentPolicyGrantFormRequestBody{}
+	}
+	return body
+}
+
 // NewUpdateKeyPolicyRequestBody builds the HTTP request body from the payload
 // of the "updateKeyPolicy" endpoint of the "keys" service.
 func NewUpdateKeyPolicyRequestBody(p *keys.UpdateKeyPolicyPayload) *UpdateKeyPolicyRequestBody {
@@ -1938,6 +2156,172 @@ func NewRotateKeyUnexpected(body *RotateKeyUnexpectedResponseBody) *goa.ServiceE
 // NewRotateKeyGatewayError builds a keys service rotateKey endpoint
 // gateway_error error.
 func NewRotateKeyGatewayError(body *RotateKeyGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewExtendAgentKeysListKeysResultOK builds a "keys" service "extendAgentKeys"
+// endpoint result from a HTTP "OK" response.
+func NewExtendAgentKeysListKeysResultOK(body *ExtendAgentKeysResponseBody) *keys.ListKeysResult {
+	v := &keys.ListKeysResult{}
+	v.Keys = make([]*keys.Key, len(body.Keys))
+	for i, val := range body.Keys {
+		if val == nil {
+			v.Keys[i] = nil
+			continue
+		}
+		v.Keys[i] = unmarshalKeyResponseBodyToKeysKey(val)
+	}
+
+	return v
+}
+
+// NewExtendAgentKeysUnauthorized builds a keys service extendAgentKeys
+// endpoint unauthorized error.
+func NewExtendAgentKeysUnauthorized(body *ExtendAgentKeysUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewExtendAgentKeysForbidden builds a keys service extendAgentKeys endpoint
+// forbidden error.
+func NewExtendAgentKeysForbidden(body *ExtendAgentKeysForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewExtendAgentKeysBadRequest builds a keys service extendAgentKeys endpoint
+// bad_request error.
+func NewExtendAgentKeysBadRequest(body *ExtendAgentKeysBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewExtendAgentKeysNotFound builds a keys service extendAgentKeys endpoint
+// not_found error.
+func NewExtendAgentKeysNotFound(body *ExtendAgentKeysNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewExtendAgentKeysConflict builds a keys service extendAgentKeys endpoint
+// conflict error.
+func NewExtendAgentKeysConflict(body *ExtendAgentKeysConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewExtendAgentKeysUnsupportedMedia builds a keys service extendAgentKeys
+// endpoint unsupported_media error.
+func NewExtendAgentKeysUnsupportedMedia(body *ExtendAgentKeysUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewExtendAgentKeysInvalid builds a keys service extendAgentKeys endpoint
+// invalid error.
+func NewExtendAgentKeysInvalid(body *ExtendAgentKeysInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewExtendAgentKeysInvariantViolation builds a keys service extendAgentKeys
+// endpoint invariant_violation error.
+func NewExtendAgentKeysInvariantViolation(body *ExtendAgentKeysInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewExtendAgentKeysUnexpected builds a keys service extendAgentKeys endpoint
+// unexpected error.
+func NewExtendAgentKeysUnexpected(body *ExtendAgentKeysUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewExtendAgentKeysGatewayError builds a keys service extendAgentKeys
+// endpoint gateway_error error.
+func NewExtendAgentKeysGatewayError(body *ExtendAgentKeysGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -2726,6 +3110,22 @@ func ValidateRotateKeyResponseBody(body *RotateKeyResponseBody) (err error) {
 	return
 }
 
+// ValidateExtendAgentKeysResponseBody runs the validations defined on
+// ExtendAgentKeysResponseBody
+func ValidateExtendAgentKeysResponseBody(body *ExtendAgentKeysResponseBody) (err error) {
+	if body.Keys == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("keys", "body"))
+	}
+	for _, e := range body.Keys {
+		if e != nil {
+			if err2 := ValidateKeyResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateListKeysResponseBody runs the validations defined on
 // ListKeysResponseBody
 func ValidateListKeysResponseBody(body *ListKeysResponseBody) (err error) {
@@ -3282,6 +3682,246 @@ func ValidateRotateKeyUnexpectedResponseBody(body *RotateKeyUnexpectedResponseBo
 // ValidateRotateKeyGatewayErrorResponseBody runs the validations defined on
 // rotateKey_gateway_error_response_body
 func ValidateRotateKeyGatewayErrorResponseBody(body *RotateKeyGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateExtendAgentKeysUnauthorizedResponseBody runs the validations defined
+// on extendAgentKeys_unauthorized_response_body
+func ValidateExtendAgentKeysUnauthorizedResponseBody(body *ExtendAgentKeysUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateExtendAgentKeysForbiddenResponseBody runs the validations defined on
+// extendAgentKeys_forbidden_response_body
+func ValidateExtendAgentKeysForbiddenResponseBody(body *ExtendAgentKeysForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateExtendAgentKeysBadRequestResponseBody runs the validations defined
+// on extendAgentKeys_bad_request_response_body
+func ValidateExtendAgentKeysBadRequestResponseBody(body *ExtendAgentKeysBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateExtendAgentKeysNotFoundResponseBody runs the validations defined on
+// extendAgentKeys_not_found_response_body
+func ValidateExtendAgentKeysNotFoundResponseBody(body *ExtendAgentKeysNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateExtendAgentKeysConflictResponseBody runs the validations defined on
+// extendAgentKeys_conflict_response_body
+func ValidateExtendAgentKeysConflictResponseBody(body *ExtendAgentKeysConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateExtendAgentKeysUnsupportedMediaResponseBody runs the validations
+// defined on extendAgentKeys_unsupported_media_response_body
+func ValidateExtendAgentKeysUnsupportedMediaResponseBody(body *ExtendAgentKeysUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateExtendAgentKeysInvalidResponseBody runs the validations defined on
+// extendAgentKeys_invalid_response_body
+func ValidateExtendAgentKeysInvalidResponseBody(body *ExtendAgentKeysInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateExtendAgentKeysInvariantViolationResponseBody runs the validations
+// defined on extendAgentKeys_invariant_violation_response_body
+func ValidateExtendAgentKeysInvariantViolationResponseBody(body *ExtendAgentKeysInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateExtendAgentKeysUnexpectedResponseBody runs the validations defined
+// on extendAgentKeys_unexpected_response_body
+func ValidateExtendAgentKeysUnexpectedResponseBody(body *ExtendAgentKeysUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateExtendAgentKeysGatewayErrorResponseBody runs the validations defined
+// on extendAgentKeys_gateway_error_response_body
+func ValidateExtendAgentKeysGatewayErrorResponseBody(body *ExtendAgentKeysGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

@@ -3,6 +3,7 @@
  */
 
 import { keysCreate } from "../funcs/keysCreate.js";
+import { keysExtendAgentKeys } from "../funcs/keysExtendAgentKeys.js";
 import { keysList } from "../funcs/keysList.js";
 import { keysRevokeById } from "../funcs/keysRevokeById.js";
 import { keysRotate } from "../funcs/keysRotate.js";
@@ -16,6 +17,10 @@ import {
   CreateAPIKeyRequest,
   CreateAPIKeySecurity,
 } from "../models/operations/createapikey.js";
+import {
+  ExtendAgentAPIKeysRequest,
+  ExtendAgentAPIKeysSecurity,
+} from "../models/operations/extendagentapikeys.js";
 import {
   ListAPIKeysRequest,
   ListAPIKeysSecurity,
@@ -51,6 +56,25 @@ export class Keys extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Key> {
     return unwrapAsync(keysCreate(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * extendAgentKeys keys
+   *
+   * @remarks
+   * Add mcp:connect grants to every live key the caller issued for an agent, so servers the agent is given reach the keys it already runs with. Each key's new policy is checked like issuance: the agent, its owner and the caller must all allow it. Keys issued by someone else are left as they are.
+   */
+  async extendAgentKeys(
+    request: ExtendAgentAPIKeysRequest,
+    security?: ExtendAgentAPIKeysSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ListKeysResult> {
+    return unwrapAsync(keysExtendAgentKeys(
       this,
       request,
       security,
