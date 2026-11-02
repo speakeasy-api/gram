@@ -46,7 +46,7 @@ func TestHostedPlatformTool_ProjectContext(t *testing.T) {
 				}
 
 				toolsets := toolsetsrepo.New(ti.conn)
-				toolset := createPublicMCPToolset(t, ctx, toolsets, &target, "project-context")
+				toolset := createPublicMCPToolset(t, ctx, ti, &target, "project-context")
 				descriptor := platformusersessions.NewListUserSessionsTool(ti.conn).Descriptor()
 				_, err := toolsets.CreateToolsetVersion(ctx, toolsetsrepo.CreateToolsetVersionParams{
 					ToolsetID: toolset.ID, Version: 1,

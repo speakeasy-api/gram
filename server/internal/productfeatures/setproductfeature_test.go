@@ -260,6 +260,29 @@ func TestProductFeaturesService_SetProductFeatureSSOAllowedForPlatformAdmin(t *t
 	require.True(t, enabled)
 }
 
+func TestProductFeaturesService_SetProductFeatureRefusesUpstreamAuthEnforcement(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestProductFeaturesService(t)
+	ctx = withPlatformAdmin(t, ctx)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx)
+
+	err := ti.service.SetProductFeature(ctx, &gen.SetProductFeaturePayload{
+		OrganizationID: requestedOrganizationID(ctx),
+		FeatureName:    gen.ProductFeatureName(productfeatures.FeatureUpstreamAuthEnforced),
+		Enabled:        true,
+	})
+	requireOopsCode(t, err, oops.CodeInvalid)
+
+	enabled, err := repo.New(ti.conn).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+		OrganizationID: authCtx.ActiveOrganizationID,
+		FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
+	})
+	require.NoError(t, err)
+	require.False(t, enabled, "refused toggle must not write the feature row")
+}
+
 // Org admins keep self-serve control of the logs toggle even with the
 // platform-admin bit set — staff toggling logs must keep working too.
 func TestProductFeaturesService_SetProductFeatureLogsAllowedForPlatformAdmin(t *testing.T) {

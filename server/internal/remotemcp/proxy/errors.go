@@ -3,6 +3,7 @@ package proxy
 import (
 	"context"
 	"errors"
+	"fmt"
 
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -36,6 +37,10 @@ var ErrBatchRequest = errors.New("batch requests are not supported")
 // error chain so the caller distinguishes via the timer's Stop() return.
 func (p *Proxy) classifyForwardError(ctx context.Context, err error, timedOut bool) error {
 	switch {
+	case forwardInterrupted(ctx):
+		// The shutdown drain gave up on this call. The caller answers the
+		// request itself, so this is not logged as a failure here.
+		return fmt.Errorf("forward request: %w", errShutdownInterrupt)
 	case timedOut:
 		return oops.E(oops.CodeGatewayError, err, "remote mcp server timed out").LogError(ctx, p.Logger)
 	case errors.Is(err, context.DeadlineExceeded):

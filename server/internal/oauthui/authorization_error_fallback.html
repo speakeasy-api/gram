@@ -1,0 +1,36 @@
+{{define "start" -}}
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="UTF-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1.0" />
+    <meta name="robots" content="noindex, nofollow" />
+    <title>Request could not be completed · Speakeasy</title>
+    <style>{{.}}</style>
+  </head>
+  <body class="bg-background text-foreground min-h-screen">
+    <main class="mx-auto flex min-h-screen w-full max-w-[52rem] flex-col gap-6 px-4 py-12 sm:py-16">
+      <div class="text-foreground">{{template "speakeasyWordmark"}}</div>
+      <section class="bg-card border" aria-labelledby="page-title">
+        <header class="flex flex-col gap-2 border-b px-6 py-6 sm:px-8">
+          <p class="text-eyebrow text-default-destructive">Something went wrong</p>
+          <h1 id="page-title" class="text-display-xs">Request could not be completed</h1>
+        </header>
+        <p class="text-sm border-b px-6 py-6 sm:px-8">Close this tab and start again from your MCP client.</p>
+        <details class="group">
+          <summary class="interact:bg-accent group-open:border-b flex cursor-pointer list-none items-center justify-between gap-3 px-6 py-4 sm:px-8">
+            <span class="text-xs text-muted-foreground">Technical details</span>
+            <span class="text-eyebrow shrink-0 group-open:hidden" aria-hidden="true">Show</span>
+            <span class="text-eyebrow hidden shrink-0 group-open:inline" aria-hidden="true">Hide</span>
+          </summary>
+          <div class="flex flex-col gap-4 px-6 pt-5 pb-6 sm:px-8">
+{{- end}}
+{{define "end" -}}
+          </div>
+        </details>
+      </section>
+      <p class="text-xs text-muted-foreground">Secured by Speakeasy.</p>
+    </main>
+  </body>
+</html>
+{{- end}}

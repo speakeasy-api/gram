@@ -10,6 +10,37 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+type PrincipalRemoteSessionBinding struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.UUID
+	// @access: confidential
+	OrganizationID string
+	// @access: confidential
+	PrincipalID uuid.UUID
+	// @access: confidential
+	UserSessionIssuerID uuid.UUID
+	// @access: confidential
+	RemoteSessionClientID uuid.UUID
+	// @access: confidential
+	RemoteSessionID uuid.UUID
+	// @access: confidential
+	IssuerAttachmentScope string
+	// @access: confidential
+	ClientAttachmentScope string
+	// @access: confidential
+	GrantGeneration int64
+	// @access: confidential
+	AttachedBySubjectID string
+	// @access: confidential
+	RevokedAt pgtype.Timestamptz
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type RemoteSession struct {
 	// @access: confidential
 	ID uuid.UUID
@@ -120,6 +151,8 @@ type RemoteSessionClient struct {
 	IdentityProviderConnectionID uuid.NullUUID
 	// @access: confidential
 	CredentialOwner string
+	// @access: opaque-confidential
+	DisplayName pgtype.Text
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

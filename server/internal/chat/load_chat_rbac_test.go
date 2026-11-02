@@ -4,9 +4,12 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	gen "github.com/speakeasy-api/gram/server/gen/chat"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -14,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	hooksrepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -194,6 +198,142 @@ func TestLoadChat_ImpersonatingAdminAllowedForDemoOrg(t *testing.T) {
 	after, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionChatSessionAccess)
 	require.NoError(t, err)
 	require.Equal(t, before+1, after, "demo transcript opens must record an access audit event")
+}
+
+func TestLoadChat_LegacyImpersonationAllowedForDemoOrg(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	authCtx.IsAdmin = true
+	authCtx.ActiveOrganizationID = constants.DemoOrganizationID
+	authCtx.SupportOrganizationID = constants.DemoOrganizationID
+	ctx = contextvalues.WithValidatedGramSession(ctx, authCtx, true)
+
+	// The audit log FK requires the demo org row to exist.
+	err := testrepo.New(ti.conn).CreateOrganizationMetadataFixture(t.Context(), testrepo.CreateOrganizationMetadataFixtureParams{
+		ID:                 constants.DemoOrganizationID,
+		Name:               "Acme Demo Workspace",
+		Slug:               "acme-demo",
+		GramAccountType:    "demo",
+		WorkosID:           pgtype.Text{String: "", Valid: false},
+		Whitelisted:        true,
+		FreeTrialStartedAt: conv.ToPGTimestamptz(time.Now().UTC()),
+		FreeTrialEndsAt:    conv.ToPGTimestamptz(time.Now().UTC().Add(14 * 24 * time.Hour)),
+		DisabledAt:         pgtype.Timestamptz{Time: time.Time{}, InfinityModifier: 0, Valid: false},
+	})
+	require.NoError(t, err)
+
+	other := seedChat(t, ctx, ti, "someone-else", "", "demo session")
+
+	adminCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource))
+
+	before, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionChatSessionAccess)
+	require.NoError(t, err)
+
+	res, err := ti.service.LoadChat(adminCtx, loadPayload(other.String()))
+	require.NoError(t, err)
+	require.Equal(t, other.String(), res.ID)
+
+	after, err := audittest.AuditLogCountByAction(t.Context(), ti.conn, audit.ActionChatSessionAccess)
+	require.NoError(t, err)
+	require.Equal(t, before+1, after, "demo transcript opens must record an access audit event")
+}
+
+// An agent's session has no user owner; the agent's owner stands in for one,
+// so a member without chat:read can open what their agent did — but not
+// another owner's agent's session.
+func TestLoadChat_RBAC_AgentOwnerReadsAgentSession(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	owned := seedAgentChat(t, ctx, ti, seedAgent(t, ctx, ti, authCtx.UserID, "My Agent"), "my agent's session")
+	foreign := seedAgentChat(t, ctx, ti, seedAgent(t, ctx, ti, "other-owner", "Their Agent"), "their agent's session")
+	selfCtx := authztest.WithExactGrants(t, ctx)
+
+	res, err := ti.service.LoadChat(selfCtx, loadPayload(owned.String()))
+	require.NoError(t, err)
+	require.Equal(t, owned.String(), res.ID)
+
+	overview, err := ti.service.LoadChatOverview(selfCtx, &gen.LoadChatOverviewPayload{ID: owned.String()})
+	require.NoError(t, err)
+	require.Equal(t, owned.String(), overview.ID)
+
+	_, err = ti.service.LoadChat(selfCtx, loadPayload(foreign.String()))
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// A session that carries a human identity stays that human's even when an
+// agent the caller owns was stamped onto it: owning the agent does not open it.
+func TestLoadChat_RBAC_AgentOwnerCannotReadHumanSession(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	agentID := seedAgent(t, ctx, ti, authCtx.UserID, "My Agent")
+	selfCtx := authztest.WithExactGrants(t, ctx)
+	for name, chatID := range map[string]uuid.UUID{
+		"user_id":          seedChat(t, ctx, ti, "other-user-id", "", "human session"),
+		"external_user_id": seedChat(t, ctx, ti, "", "someone@example.com", "external session"),
+	} {
+		linked, err := hooksrepo.New(ti.conn).LinkChatActingAgent(ctx, hooksrepo.LinkChatActingAgentParams{
+			AgentID:   uuid.NullUUID{UUID: agentID, Valid: true},
+			ID:        chatID,
+			ProjectID: ti.projectID,
+		})
+		require.NoError(t, err, name)
+		require.Equal(t, int64(1), linked, name)
+
+		_, err = ti.service.LoadChat(selfCtx, loadPayload(chatID.String()))
+		requireOopsCode(t, err, oops.CodeForbidden)
+	}
+}
+
+// An owner whose agent is latched for reassignment no longer answers for it,
+// so its sessions stop opening for them on the load path too.
+func TestLoadChat_RBAC_LatchedAgentOwnerCannotReadAgentSession(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	chatID := seedAgentChat(t, ctx, ti, seedAgent(t, ctx, ti, authCtx.UserID, "Latched Agent"), "latched agent's session")
+	_, err := agentrepo.New(ti.conn).LatchAgentsForOwnerLossByMembership(ctx, agentrepo.LatchAgentsForOwnerLossByMembershipParams{
+		OwnerReassignmentReason: conv.ToPGText("membership_loss"),
+		OrganizationID:          ti.orgID,
+		OwnerUserID:             authCtx.UserID,
+	})
+	require.NoError(t, err)
+
+	_, err = ti.service.LoadChat(authztest.WithExactGrants(t, ctx), loadPayload(chatID.String()))
+	requireOopsCode(t, err, oops.CodeForbidden)
+}
+
+// Standing in for the owner covers reading only: deleting an agent's session
+// still needs chat:write.
+func TestDeleteChat_RBAC_AgentOwnerCannotDeleteAgentSession(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := initSessionCtx(t, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	owned := seedAgentChat(t, ctx, ti, seedAgent(t, ctx, ti, authCtx.UserID, "My Agent"), "my agent's session")
+	selfCtx := authztest.WithExactGrants(t, ctx)
+
+	err := ti.service.DeleteChat(selfCtx, &gen.DeleteChatPayload{ID: owned.String()})
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	res, err := ti.service.LoadChat(selfCtx, loadPayload(owned.String()))
+	require.NoError(t, err)
+	require.Equal(t, owned.String(), res.ID)
 }
 
 // A non-admin can load their own chat with the ordinary user grant.

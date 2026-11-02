@@ -158,8 +158,8 @@ func TestConsentChainCheck_RejectsBadRequests(t *testing.T) {
 		edit func(url.Values)
 		code oops.Code
 	}{
-		{"bad csrf", func(f url.Values) { f.Set("csrf_token", "forged") }, oops.CodeUnauthorized},
-		{"unknown state", func(f url.Values) { f.Set("state", uuid.NewString()) }, oops.CodeUnauthorized},
+		{"bad csrf", func(f url.Values) { f.Set("csrf_token", "forged") }, oops.CodeBadRequest},
+		{"unknown state", func(f url.Values) { f.Set("state", uuid.NewString()) }, oops.CodeBadRequest},
 		{"malformed client", func(f url.Values) { f.Set("client_id", "nope") }, oops.CodeBadRequest},
 		{"foreign client", func(f url.Values) { f.Set("client_id", uuid.NewString()) }, oops.CodeBadRequest},
 	} {
@@ -181,7 +181,7 @@ func TestConsentChainCheck_UnresolvedSubjectIsRejected(t *testing.T) {
 	require.NoError(t, fx.ti.authnChallengeCache.Store(ctx, state))
 
 	_, err = postChainCheck(t, fx, func(f url.Values) { f.Set("state", state.ID) })
-	requireOopsCode(t, err, oops.CodeUnauthorized)
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 func TestConsentChainCheck_UnchainedServiceIsRejected(t *testing.T) {

@@ -1,6 +1,17 @@
 -- Preflight isolation asserts, org metadata and onboarding, the scoped purge,
 -- the project, features, users, and memberships.
 
+-- name: OrgDeleteSigintDefinitionSnapshots :exec
+DELETE FROM sigint_definition_snapshots
+WHERE project_id IN (SELECT id FROM projects WHERE organization_id = @org_id::text);
+
+-- name: OrgInsertSigintDefinitionSnapshot :exec
+INSERT INTO sigint_definition_snapshots (project_id, sensor_id, definition_hash, definition)
+VALUES (@project_id::uuid, @sensor_id::uuid, @definition_hash, @definition::jsonb);
+
+-- name: OrgCountSigintDefinitionSnapshots :one
+SELECT count(*) FROM sigint_definition_snapshots WHERE project_id = @project_id::uuid;
+
 -- name: OrgForeignOrgExists :one
 -- workos_id is compared against this tenant's expected link rather than merely
 -- tested for NULL: the shared demo org never links to WorkOS (its constant is
@@ -59,6 +70,9 @@ VALUES
 
 -- name: OrgDeleteKillswitchOperations :exec
 DELETE FROM killswitch_operations WHERE organization_id = @org_id::text;
+
+-- name: OrgDeleteRegistryPromotionCandidates :exec
+DELETE FROM registry_promotion_candidates WHERE organization_id = @org_id::text;
 
 -- name: OrgDeleteKillswitchPrescriptions :exec
 DELETE FROM killswitch_prescriptions WHERE organization_id = @org_id::text;
@@ -339,6 +353,17 @@ DELETE FROM principal_grants
 WHERE organization_id = @org_id::text
   AND principal_urn LIKE 'agent:%';
 
+-- name: OrgDeleteAuthPermissionProvisions :exec
+-- The default auth permission ledger keeps every grant the backfill ever
+-- provisioned, so it never re-grants one an admin removed. The seed deletes
+-- and recreates agent and custom role grants, so it resets their ledger rows
+-- with them; otherwise a reseed would leave the recreated principals without
+-- their default mcp:auth grants. Human grants survive a reseed, and so do
+-- their ledger rows.
+DELETE FROM auth_permission_provisions
+WHERE organization_id = @org_id::text
+  AND (principal_urn LIKE 'agent:%' OR principal_urn LIKE 'role:organization:%');
+
 -- name: OrgDeleteAgents :exec
 -- Agents RESTRICT owner membership deletion and are not project children.
 DELETE FROM agents WHERE organization_id = @org_id::text;
@@ -371,7 +396,7 @@ VALUES
    'Support triage', now() - interval '2 days', NULL),
   (@agent3::uuid, @org_id::text, @owner3::text,
    'Retired documentation bot', NULL, now() - interval '5 days'),
-  (@agent4::uuid, @org_id::text, @owner1::text,
+  (@agent4::uuid, @org_id::text, @owner2::text,
    'Release notes assistant', NULL, NULL);
 
 -- name: OrgGlobalRoleURN :one

@@ -16,6 +16,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -258,9 +259,35 @@ func TestMemberClientResultCaptureHonorsRejection(t *testing.T) {
 	defer cancel()
 	session, _, err := service.connectMetaMember(ctx, testenv.NewLogger(t), guardedBuild, time.Second)
 	require.NoError(t, err)
-	raw, err := callMemberTool(ctx, session, &sdk.CallToolParams{Name: "ping"})
+	invocation := &metaCodeInvocation{dispatched: false, rejected: false, message: ""}
+	raw, err := callMemberTool(context.WithValue(ctx, metaCodeInvocationKey{}, invocation), session, &sdk.CallToolParams{Name: "ping"})
 	require.Error(t, err)
+	rpcErr, ok := errors.AsType[*jsonrpc.Error](err)
+	require.True(t, ok)
+	require.EqualValues(t, jsonrpc.CodeInvalidParams, rpcErr.Code, "the withheld response looks like an invalid-params refusal")
 	require.Empty(t, raw)
+	require.True(t, invocation.dispatched)
+	require.False(t, invocation.rejected, "a response withheld after the tool ran is not the member's refusal")
+	require.NoError(t, session.Close())
+}
+
+func TestMemberClientMarksMembersOwnRefusal(t *testing.T) {
+	t.Parallel()
+	server := sdk.NewServer(&sdk.Implementation{Name: "fixture", Version: "1"}, nil)
+	server.AddTool(&sdk.Tool{Name: "ping", InputSchema: map[string]any{"type": "object"}}, func(context.Context, *sdk.CallToolRequest) (*sdk.CallToolResult, error) {
+		return &sdk.CallToolResult{Content: []sdk.Content{&sdk.TextContent{Text: "pong"}}}, nil
+	})
+	upstream := httptest.NewServer(sdk.NewStreamableHTTPHandler(func(*http.Request) *sdk.Server { return server }, nil))
+	t.Cleanup(upstream.Close)
+	service, build := memberClientFixture(t, upstream.URL)
+	ctx, cancel := context.WithTimeout(t.Context(), 5*time.Second)
+	defer cancel()
+	session, _, err := service.connectMetaMember(ctx, testenv.NewLogger(t), build, time.Second)
+	require.NoError(t, err)
+	invocation := &metaCodeInvocation{dispatched: false, rejected: false, message: ""}
+	_, err = callMemberTool(context.WithValue(ctx, metaCodeInvocationKey{}, invocation), session, &sdk.CallToolParams{Name: "missing"})
+	require.Error(t, err)
+	require.True(t, invocation.rejected)
 	require.NoError(t, session.Close())
 }
 
@@ -269,7 +296,7 @@ type rejectMemberResult struct{}
 func (rejectMemberResult) Name() string { return "reject_member_result" }
 
 func (rejectMemberResult) InterceptToolsCallResponse(context.Context, *proxy.ToolsCallResponse) error {
-	return fmt.Errorf("response refused by policy")
+	return oops.E(oops.CodeInvalid, nil, "response refused by policy")
 }
 
 // The SDK re-sends tools/call after an input_required answer on the same

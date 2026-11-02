@@ -1,6 +1,9 @@
 import { afterEach, expect, it, vi } from "vitest";
 
-import { fetchConsentInventory } from "./consentInventory";
+import {
+  fetchConsentInventory,
+  parseGatewayInventoryBootstrap,
+} from "./consentInventory";
 
 afterEach(() => vi.unstubAllGlobals());
 
@@ -70,7 +73,75 @@ it.each(["tools/list", "DELETE"])(
     if (stalledMethod === "tools/list") expect(result).toHaveProperty("error");
     else
       expect(result).toEqual({
-        value: { tools: [], roleHiddenTools: { count: 0, names: [] } },
+        value: {
+          tools: [],
+          roleHiddenTools: { count: 0, names: [] },
+        },
       });
   },
 );
+
+it("accepts a well-formed gateway capture", () => {
+  expect(
+    parseGatewayInventoryBootstrap(
+      JSON.stringify({
+        attempt: "attempt",
+        tools: [
+          { name: "docs--search", annotations: ["read_only"], source: "Docs" },
+          { name: "wiki--edit", annotations: [] },
+        ],
+      }),
+    ),
+  ).toEqual({
+    attempt: "attempt",
+    tools: [
+      { name: "docs--search", annotations: ["read_only"], source: "Docs" },
+      { name: "wiki--edit", annotations: [] },
+    ],
+    roleHiddenTools: { count: 0, names: [] },
+  });
+});
+
+it.each([
+  ["not JSON", "{"],
+  ["missing attempt", JSON.stringify({ tools: [] })],
+  ["non-array tools", JSON.stringify({ attempt: "a", tools: {} })],
+  [
+    "non-object tool",
+    JSON.stringify({ attempt: "a", tools: ["docs--search"] }),
+  ],
+  [
+    "blank name",
+    JSON.stringify({ attempt: "a", tools: [{ name: "", annotations: [] }] }),
+  ],
+  [
+    "null annotations",
+    JSON.stringify({ attempt: "a", tools: [{ name: "t", annotations: null }] }),
+  ],
+  [
+    "unknown annotation",
+    JSON.stringify({
+      attempt: "a",
+      tools: [{ name: "t", annotations: ["sneaky"] }],
+    }),
+  ],
+  [
+    "non-string source",
+    JSON.stringify({
+      attempt: "a",
+      tools: [{ name: "t", annotations: [], source: 7 }],
+    }),
+  ],
+  [
+    "duplicate names",
+    JSON.stringify({
+      attempt: "a",
+      tools: [
+        { name: "t", annotations: [] },
+        { name: "t", annotations: [] },
+      ],
+    }),
+  ],
+])("rejects a gateway capture with %s", (_case, raw) => {
+  expect(parseGatewayInventoryBootstrap(raw)).toBeNull();
+});

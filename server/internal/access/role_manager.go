@@ -63,6 +63,7 @@ type RoleManager struct {
 	audit                   *audit.Logger
 	roleDeliveryPublication plugins.PublicationRequests
 	roleDeliveryGuard       *admission.Guard
+	publisher               plugins.PluginPublishSignaler
 }
 
 // NewRoleManager wires the role manager to the local DB, the WorkOS role client, and the audit logger.
@@ -74,7 +75,16 @@ func NewRoleManager(logger *slog.Logger, db *pgxpool.Pool, roles RoleProvider, a
 		logger:                  logger.With(attr.SlogComponent("access.role_manager")),
 		roles:                   roles,
 		audit:                   auditLogger,
+		publisher:               nil,
 	}
+}
+
+// WithPluginPublisher signals a debounced republish of every project whose
+// role plugins a committed role change touched. A nil signaler leaves only the
+// durable publication request, which may wait for the hourly rollout sweep.
+func (r *RoleManager) WithPluginPublisher(publisher plugins.PluginPublishSignaler) *RoleManager {
+	r.publisher = publisher
+	return r
 }
 
 // MutationReady reports whether this manager has every dependency required for
@@ -283,7 +293,16 @@ type workosSync func(context.Context)
 // a transactional role mutation. Call ReconcileRole only after committing the
 // transaction passed to CreateRoleTx or UpdateRoleTx.
 type RoleReconciliation struct {
-	syncs []workosSync
+	syncs    []workosSync
+	delivery roleDeliveryPublish
+}
+
+// roleDeliveryPublish names the projects whose role plugins a committed
+// transaction changed, so they can be republished without waiting on the
+// outbox consumer or the hourly rollout sweep.
+type roleDeliveryPublish struct {
+	projectIDs []uuid.UUID
+	actorID    string
 }
 
 // RoleAuditActor identifies the principal responsible for an access role mutation.
@@ -426,7 +445,7 @@ func (r *RoleManager) CreateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 	return RoleCreateResult{
 		Role: roleViewFromLocalRoleAndGrants(createdRole, roleGrants),
 		Slug: roleSlug,
-	}, RoleReconciliation{syncs: workosSyncs}, nil
+	}, RoleReconciliation{syncs: workosSyncs, delivery: roleDeliveryPublish{projectIDs: nil, actorID: ""}}, nil
 }
 
 type localRole struct {
@@ -548,6 +567,7 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 
 	updatedRole := currentRole
 	var workosSyncs []workosSync
+	var delivery roleDeliveryPublish
 	updatedGrants := existingGrants
 	if !sysRole {
 		localRecord := currentRole
@@ -629,6 +649,7 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 				return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "request role delivery publication").LogError(ctx, r.logger)
 			}
 		}
+		delivery = roleDeliveryPublish{projectIDs: changedProjectIDs, actorID: actorID}
 		updatedGrants = make([]*gen.RoleGrant, 0, len(syncedGrants))
 		for _, grant := range syncedGrants {
 			updatedGrants = append(updatedGrants, scopedGrantToGenRoleGrant(grant))
@@ -674,7 +695,7 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 		Before: existingRole,
 		After:  updatedRoleView,
 		Slug:   updatedRole.Slug,
-	}, RoleReconciliation{syncs: workosSyncs}, nil
+	}, RoleReconciliation{syncs: workosSyncs, delivery: delivery}, nil
 }
 
 // DeleteRole deletes a custom local role, reassignment records, grants, and audit entry atomically, then best-effort syncs WorkOS after commit.
@@ -1718,6 +1739,30 @@ func (r *RoleManager) assignMembersToRoleTx(ctx context.Context, dbtx repo.DBTX,
 // transaction. The caller must invoke it only after that transaction commits.
 func (r *RoleManager) ReconcileRole(ctx context.Context, reconciliation RoleReconciliation) {
 	r.runWorkOSSyncs(ctx, reconciliation.syncs)
+	r.ReconcileRoleDelivery(ctx, reconciliation)
+}
+
+// ReconcileRoleDelivery republishes the role plugins a committed role
+// transaction changed, without the WorkOS writes. Platform MCP calls it
+// directly because it reapplies role identity separately.
+func (r *RoleManager) ReconcileRoleDelivery(ctx context.Context, reconciliation RoleReconciliation) {
+	r.signalRoleDeliveryPublish(ctx, reconciliation.delivery.projectIDs, reconciliation.delivery.actorID)
+}
+
+// signalRoleDeliveryPublish enqueues a republish for each project whose role
+// plugins changed. Best-effort: the durable publication request and the
+// rollout sweep still cover a failed enqueue, and duplicate signals are
+// debounced per project. Must only be called after the transaction commits.
+func (r *RoleManager) signalRoleDeliveryPublish(ctx context.Context, projectIDs []uuid.UUID, actorID string) {
+	if r == nil || r.publisher == nil {
+		return
+	}
+	for _, projectID := range projectIDs {
+		if err := r.publisher.SignalPluginPublish(context.WithoutCancel(ctx), projectID, actorID); err != nil {
+			r.logger.WarnContext(ctx, "failed to signal role delivery plugin publish",
+				attr.SlogProjectID(projectID.String()), attr.SlogError(err))
+		}
+	}
 }
 
 // ReconcileRoleIdentity reapplies one role's desired WorkOS identity after the

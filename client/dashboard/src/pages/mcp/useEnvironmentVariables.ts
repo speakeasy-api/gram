@@ -27,7 +27,7 @@ interface McpMetadata {
 }
 
 export function useEnvironmentVariables(
-  toolset: Toolset,
+  toolset: Toolset | undefined,
   environments: Environment[],
   mcpMetadata?: McpMetadata,
 ): EnvironmentVariable[] {
@@ -60,7 +60,7 @@ export function useEnvironmentVariables(
       });
 
     // Get env vars from security variables (these are required auth credentials)
-    toolset.securityVariables?.forEach((secVar) => {
+    toolset?.securityVariables?.forEach((secVar) => {
       secVar.envVariables.forEach((envVar) => {
         if (!envVar.toLowerCase().includes("token_url")) {
           requiredVarNames.add(envVar);
@@ -88,7 +88,7 @@ export function useEnvironmentVariables(
     });
 
     // Get env vars from server variables (these are required server config)
-    toolset.serverVariables?.forEach((serverVar) => {
+    toolset?.serverVariables?.forEach((serverVar) => {
       serverVar.envVariables.forEach((envVar) => {
         requiredVarNames.add(envVar);
         const environmentValues = getEnvironmentValues(envVar);
@@ -114,7 +114,7 @@ export function useEnvironmentVariables(
     });
 
     // Get env vars from function environment variables (these are required for functions)
-    toolset.functionEnvironmentVariables?.forEach((funcVar) => {
+    toolset?.functionEnvironmentVariables?.forEach((funcVar) => {
       requiredVarNames.add(funcVar.name);
       const environmentValues = getEnvironmentValues(funcVar.name);
       const id = `func-${funcVar.name}`;
@@ -138,7 +138,7 @@ export function useEnvironmentVariables(
     });
 
     // Get env   vars from external MCP header definitions (these are required for external MCP servers)
-    toolset.externalMcpHeaderDefinitions?.forEach((headerDef) => {
+    toolset?.externalMcpHeaderDefinitions?.forEach((headerDef) => {
       requiredVarNames.add(headerDef.name);
       const environmentValues = getEnvironmentValues(headerDef.name);
       const id = `ext-${headerDef.name}`;
@@ -228,10 +228,10 @@ export function useEnvironmentVariables(
 
     return existingVars;
   }, [
-    toolset.securityVariables,
-    toolset.serverVariables,
-    toolset.functionEnvironmentVariables,
-    toolset.externalMcpHeaderDefinitions,
+    toolset?.securityVariables,
+    toolset?.serverVariables,
+    toolset?.functionEnvironmentVariables,
+    toolset?.externalMcpHeaderDefinitions,
     environments,
     mcpMetadata,
   ]);

@@ -30,8 +30,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/stokens"
 )
 
-// SourcePresidio is the source label written on every risk_results row
-// produced by the Presidio path, including dead-letter sentinels.
+// SourcePresidio is the source label on every Presidio finding, including
+// dead-letter sentinels.
 const SourcePresidio = "presidio"
 
 // DeadLetterRuleID was moved to rules.go to live alongside the other

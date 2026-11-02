@@ -13,8 +13,14 @@ vi.mock("@/hooks/useRBAC", () => ({
     isLoading: false,
   }),
 }));
-vi.mock("@/contexts/Auth", () => ({ useIsSpeakeasyStaff: () => false }));
-vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => ({}) }));
+vi.mock("@/contexts/Auth", () => ({
+  useIsSpeakeasyStaff: () => false,
+  useUser: () => ({ id: "user-1" }),
+}));
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => ({}),
+  useSlugs: () => ({ orgSlug: "acme", projectSlug: "default" }),
+}));
 vi.mock("@/routes", () => ({ useRoutes: () => ({}) }));
 vi.mock("@gram/client/react-query/deleteMcpServer.js", () => ({
   useDeleteMcpServerMutation: () => ({ isPending: false, mutate: vi.fn() }),
@@ -77,7 +83,7 @@ describe("DangerZoneSection availability", () => {
 });
 
 describe("DangerZoneSection delete", () => {
-  it("offers no delete for a hosted server", () => {
+  it("offers no server-row delete for a hosted server without its toolset", () => {
     renderSection({
       ...base,
       id: "hosted-1",

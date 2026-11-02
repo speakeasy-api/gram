@@ -1,11 +1,15 @@
 package deviceintegrations
 
 import (
+	"context"
+	"encoding/json"
+	"log/slog"
 	"time"
 
 	"github.com/jackc/pgx/v5/pgtype"
 
 	gen "github.com/speakeasy-api/gram/server/gen/device_integrations"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/providers"
 	"github.com/speakeasy-api/gram/server/internal/deviceintegrations/repo"
@@ -170,7 +174,7 @@ func pgTextPtr(t pgtype.Text) *string {
 	return v
 }
 
-func deviceView(row repo.ListManagedDevicesRow) *gen.ManagedDevice {
+func deviceView(ctx context.Context, logger *slog.Logger, row repo.ListManagedDevicesRow) *gen.ManagedDevice {
 	return &gen.ManagedDevice{
 		ID:               row.ID.String(),
 		Provider:         row.Provider,
@@ -184,8 +188,92 @@ func deviceView(row repo.ListManagedDevicesRow) *gen.ManagedDevice {
 		MdmLastCheckInAt: conv.PtrEmpty(conv.FromPGTimestamptz(row.MdmLastCheckInAt)),
 		AgentLastSeenAt:  conv.PtrEmpty(conv.FromPGTimestamptz(row.AgentLastSeenAt)),
 		CoverageBucket:   row.CoverageBucket,
+		PolicyState:      conv.PtrEmpty(row.PolicyState),
+		AgentState:       agentStateView(ctx, logger, row),
 		MissingSince:     conv.PtrEmpty(conv.FromPGTimestamptz(row.MissingSince)),
 		FirstSeenAt:      row.FirstSeenAt.Time.UTC().Format(time.RFC3339),
 		LastSeenAt:       row.LastSeenAt.Time.UTC().Format(time.RFC3339),
+	}
+}
+
+// reportedTool is one entry of device_agent_state_reports.tools, as the
+// agent service stores it.
+type reportedTool struct {
+	Tool             string `json:"tool"`
+	Layer            string `json:"layer"`
+	Outcome          string `json:"outcome"`
+	PendingReason    string `json:"pending_reason,omitempty"`
+	ErrorKind        string `json:"error_kind,omitempty"`
+	RestartRequired  bool   `json:"restart_required"`
+	ActionRequired   bool   `json:"action_required"`
+	DriftCorrections *int   `json:"drift_corrections,omitempty"`
+}
+
+func agentStateView(ctx context.Context, logger *slog.Logger, row repo.ListManagedDevicesRow) *gen.ManagedDeviceAgentState {
+	if !row.HasReport {
+		return nil
+	}
+	var reported []reportedTool
+	if len(row.ReportTools) > 0 {
+		if err := json.Unmarshal(row.ReportTools, &reported); err != nil {
+			// The agent service wrote this column, so this is a bug, not bad
+			// input. The rest of the row is still true, so the page renders it
+			// without the tools rather than failing.
+			logger.ErrorContext(ctx, "decode stored agent state tools", attr.SlogError(err), attr.SlogOrganizationID(row.OrganizationID))
+			reported = nil
+		}
+	}
+	tools := make([]*gen.ManagedDeviceTool, 0, len(reported))
+	for _, t := range reported {
+		tools = append(tools, &gen.ManagedDeviceTool{
+			Tool:             t.Tool,
+			Layer:            t.Layer,
+			Outcome:          t.Outcome,
+			PendingReason:    conv.PtrEmpty(t.PendingReason),
+			ErrorKind:        conv.PtrEmpty(t.ErrorKind),
+			RestartRequired:  t.RestartRequired,
+			ActionRequired:   t.ActionRequired,
+			DriftCorrections: t.DriftCorrections,
+		})
+	}
+	return &gen.ManagedDeviceAgentState{
+		ReportedAt:         row.ReportReportedAt.Time.UTC().Format(time.RFC3339),
+		Attestation:        reportAttestation(row.ReportBySerial),
+		AppliedEtag:        pgTextPtr(row.ReportAppliedEtag),
+		AppliedAt:          conv.PtrEmpty(conv.FromPGTimestamptz(row.ReportAppliedAt)),
+		EnforcementHalted:  row.ReportEnforcementHalted,
+		CurrentBlocked:     row.ReportCurrentBlocked,
+		SpeakeasydVersion:  pgTextPtr(row.ReportSpeakeasydVersion),
+		SpeakeasyVersion:   pgTextPtr(row.ReportSpeakeasyVersion),
+		SpeakeasyUIVersion: pgTextPtr(row.ReportSpeakeasyUiVersion),
+		Os:                 pgTextPtr(row.ReportOs),
+		Arch:               pgTextPtr(row.ReportArch),
+		Tools:              tools,
+		DriftCountingSince: conv.PtrEmpty(conv.FromPGTimestamptz(row.ReportDriftCountingSince)),
+		AutoUpdate:         pgTextPtr(row.ReportAutoUpdate),
+		UpdateChannel:      pgTextPtr(row.ReportUpdateChannel),
+		PinnedTarget:       pgTextPtr(row.ReportPinnedTarget),
+		LastRollback:       rollbackView(row),
+	}
+}
+
+// reportAttestation says whose agent sent the report: this machine's, or the
+// assigned user's, which may run elsewhere.
+func reportAttestation(bySerial bool) string {
+	if bySerial {
+		return "device"
+	}
+	return "user"
+}
+
+// rollbackView is nil until the agent has rolled itself back.
+func rollbackView(row repo.ListManagedDevicesRow) *gen.ManagedDeviceRollback {
+	if !row.ReportLastRollbackAt.Valid {
+		return nil
+	}
+	return &gen.ManagedDeviceRollback{
+		At:   row.ReportLastRollbackAt.Time.UTC().Format(time.RFC3339),
+		From: pgTextPtr(row.ReportLastRollbackFrom),
+		To:   pgTextPtr(row.ReportLastRollbackTo),
 	}
 }

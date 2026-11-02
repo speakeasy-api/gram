@@ -5,7 +5,6 @@ package mcp
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/uuid"
 )
@@ -16,17 +15,25 @@ import (
 // pick, and the credential's choice for it is left to a reconnection unless
 // the server has only one client. Interactive and chained cards are picked
 // alike, so this is the one place a person's choice is decided.
-func (s *Service) consentUpstreamClientPicks(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) (map[uuid.UUID]uuid.UUID, error) {
-	cards, err := s.buildRemoteSessionCards(ctx, endpoint, challengeState, s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID))
-	if err != nil {
-		return nil, fmt.Errorf("build remote session cards: %w", err)
+func (s *Service) consentUpstreamClientPicks(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, cards []remoteSessionCard) (map[uuid.UUID]uuid.UUID, error) {
+	var members []metaMember
+	var err error
+	if endpoint.MetaMcpServerID.Valid {
+		members, err = s.consentSubjectMembers(ctx, endpoint, challengeState)
+		if err != nil {
+			return nil, err
+		}
 	}
+	return chooseConsentUpstreamClientPicks(endpoint, members, cards), nil
+}
+
+func chooseConsentUpstreamClientPicks(endpoint *ResolvedMcpEndpoint, members []metaMember, cards []remoteSessionCard) map[uuid.UUID]uuid.UUID {
 	var usable []remoteSessionCard
 	for _, card := range cards {
 		switch cardStatus(card) {
 		case gatewayServerConnected, gatewayServerChained, gatewayServerChainPending:
 			usable = append(usable, card)
-		case gatewayServerNoSignIn, gatewayServerNotSetUp, gatewayServerNotConnected, gatewayServerReconnect:
+		case gatewayServerNoSignIn, gatewayServerNotSetUp, gatewayServerNotConnected, gatewayServerReconnect, gatewayServerUnavailable, gatewayServerNoAccess:
 		}
 	}
 	picks := map[uuid.UUID]uuid.UUID{}
@@ -40,10 +47,6 @@ func (s *Service) consentUpstreamClientPicks(ctx context.Context, endpoint *Reso
 	}
 	switch {
 	case endpoint.MetaMcpServerID.Valid:
-		members, err := s.consentSubjectMembers(ctx, endpoint, challengeState)
-		if err != nil {
-			return nil, err
-		}
 		for _, member := range members {
 			var candidates []remoteSessionCard
 			for _, card := range usable {
@@ -56,5 +59,5 @@ func (s *Service) consentUpstreamClientPicks(ctx context.Context, endpoint *Reso
 	case endpoint.McpServerID.Valid:
 		pick(endpoint.McpServerID.UUID, usable)
 	}
-	return picks, nil
+	return picks
 }

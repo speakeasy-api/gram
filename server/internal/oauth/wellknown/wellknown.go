@@ -128,14 +128,12 @@ type OAuthServerMetadataResultKind string
 const (
 	OAuthServerMetadataResultKindStatic OAuthServerMetadataResultKind = "static"
 	OAuthServerMetadataResultKindRaw    OAuthServerMetadataResultKind = "raw"
-	OAuthServerMetadataResultKindProxy  OAuthServerMetadataResultKind = "proxy"
 )
 
 type OAuthServerMetadataResult struct {
-	Kind     OAuthServerMetadataResultKind
-	Static   *OAuthServerMetadata
-	Raw      json.RawMessage
-	ProxyURL string
+	Kind   OAuthServerMetadataResultKind
+	Static *OAuthServerMetadata
+	Raw    json.RawMessage
 }
 
 type OAuthRepo interface {
@@ -156,7 +154,7 @@ type OAuthRepo interface {
 // also advertises this value as its authorization server, so it becomes the
 // served document's `issuer` so the metadata satisfies RFC 8414 §3.3 (the
 // served `issuer` must equal the issuer identifier the client fetched it
-// under); the proxy case ignores it and keys its issuer off oauthSlug.
+// under).
 func ResolveOAuthServerMetadataFromToolset(
 	ctx context.Context,
 	logger *slog.Logger,
@@ -199,10 +197,9 @@ func ResolveOAuthServerMetadataFromToolset(
 		}
 
 		return &OAuthServerMetadataResult{
-			Kind:     OAuthServerMetadataResultKindRaw,
-			Static:   nil,
-			Raw:      rewritten,
-			ProxyURL: "",
+			Kind:   OAuthServerMetadataResultKindRaw,
+			Static: nil,
+			Raw:    rewritten,
 		}, nil
 	}
 

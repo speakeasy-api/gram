@@ -29,7 +29,12 @@ type apiKeyAdmission struct {
 var mcpTransportScopes = []string{"consumer", "producer", "chat"}
 
 func (a apiKeyAdmission) reachesMCP() bool {
-	return slices.ContainsFunc(a.Scopes, func(scope string) bool { return slices.Contains(mcpTransportScopes, scope) })
+	return APIKeyReachesMCP(a.Scopes)
+}
+
+// APIKeyReachesMCP reports whether a key's transport scopes reach MCP servers.
+func APIKeyReachesMCP(scopes []string) bool {
+	return slices.ContainsFunc(scopes, func(scope string) bool { return slices.Contains(mcpTransportScopes, scope) })
 }
 
 // admitAPIKey admits a legacy API key as its own principal: its live row must

@@ -68,6 +68,7 @@ var AdminRegistryOktaUnmapped = Type("AdminRegistryOktaUnmapped", func() {
 })
 
 func registryDesign() {
+	registryPromotionDesign()
 	Method("getRegistryOktaCandidates", func() {
 		Description("Staff-only registry administration: Okta application names observed across synced tenants that plausibly belong to the entry, for confirmation in the editor.")
 		Payload(func() {

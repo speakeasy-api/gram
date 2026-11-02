@@ -466,3 +466,89 @@ func BuildEnsureManagedAssistantPayload(assistantsEnsureManagedAssistantSessionT
 
 	return v, nil
 }
+
+// BuildListExecutionProfilesPayload builds the payload for the assistants
+// listExecutionProfiles endpoint from CLI flags.
+func BuildListExecutionProfilesPayload(assistantsListExecutionProfilesAssistantID string, assistantsListExecutionProfilesSessionToken string, assistantsListExecutionProfilesProjectSlugInput string) (*assistants.ListExecutionProfilesPayload, error) {
+	var err error
+	var assistantID string
+	{
+		assistantID = assistantsListExecutionProfilesAssistantID
+		err = goa.MergeErrors(err, goa.ValidateFormat("assistant_id", assistantID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if assistantsListExecutionProfilesSessionToken != "" {
+			sessionToken = &assistantsListExecutionProfilesSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if assistantsListExecutionProfilesProjectSlugInput != "" {
+			projectSlugInput = &assistantsListExecutionProfilesProjectSlugInput
+		}
+	}
+	v := &assistants.ListExecutionProfilesPayload{}
+	v.AssistantID = assistantID
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSetExecutionProfileChoicePayload builds the payload for the assistants
+// setExecutionProfileChoice endpoint from CLI flags.
+func BuildSetExecutionProfileChoicePayload(assistantsSetExecutionProfileChoiceBody string, assistantsSetExecutionProfileChoiceSessionToken string, assistantsSetExecutionProfileChoiceProjectSlugInput string) (*assistants.SetExecutionProfileChoicePayload, error) {
+	var err error
+	var body SetExecutionProfileChoiceRequestBody
+	{
+		err = json.Unmarshal([]byte(assistantsSetExecutionProfileChoiceBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"assistant_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"auth_client_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"automatic\": false,\n      \"execution_context\": \"userless\",\n      \"expected_version\": 1,\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\",\n      \"no_auth\": false,\n      \"trigger_instance_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.assistant_id", body.AssistantID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.trigger_instance_id", body.TriggerInstanceID, goa.FormatUUID))
+		if !(body.ExecutionContext == "user_backed" || body.ExecutionContext == "userless") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.execution_context", body.ExecutionContext, []any{"user_backed", "userless"}))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if body.AuthClientID != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
+		}
+		if body.ExpectedVersion < 0 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.expected_version", body.ExpectedVersion, 0, true))
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if assistantsSetExecutionProfileChoiceSessionToken != "" {
+			sessionToken = &assistantsSetExecutionProfileChoiceSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if assistantsSetExecutionProfileChoiceProjectSlugInput != "" {
+			projectSlugInput = &assistantsSetExecutionProfileChoiceProjectSlugInput
+		}
+	}
+	v := &assistants.SetExecutionProfileChoicePayload{
+		AssistantID:       body.AssistantID,
+		TriggerInstanceID: body.TriggerInstanceID,
+		ExecutionContext:  body.ExecutionContext,
+		McpServerID:       body.McpServerID,
+		AuthClientID:      body.AuthClientID,
+		NoAuth:            body.NoAuth,
+		Automatic:         body.Automatic,
+		ExpectedVersion:   body.ExpectedVersion,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

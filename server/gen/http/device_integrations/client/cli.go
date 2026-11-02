@@ -274,7 +274,7 @@ func BuildRetrySchedulePayload(deviceIntegrationsRetryScheduleBody string, devic
 
 // BuildListManagedDevicesPayload builds the payload for the deviceIntegrations
 // listManagedDevices endpoint from CLI flags.
-func BuildListManagedDevicesPayload(deviceIntegrationsListManagedDevicesProvider string, deviceIntegrationsListManagedDevicesCoverageBucket string, deviceIntegrationsListManagedDevicesUserIds string, deviceIntegrationsListManagedDevicesUserEmails string, deviceIntegrationsListManagedDevicesCursor string, deviceIntegrationsListManagedDevicesLimit string, deviceIntegrationsListManagedDevicesApikeyToken string, deviceIntegrationsListManagedDevicesSessionToken string) (*deviceintegrations.ListManagedDevicesPayload, error) {
+func BuildListManagedDevicesPayload(deviceIntegrationsListManagedDevicesProvider string, deviceIntegrationsListManagedDevicesCoverageBucket string, deviceIntegrationsListManagedDevicesPolicyState string, deviceIntegrationsListManagedDevicesUserIds string, deviceIntegrationsListManagedDevicesUserEmails string, deviceIntegrationsListManagedDevicesCursor string, deviceIntegrationsListManagedDevicesLimit string, deviceIntegrationsListManagedDevicesApikeyToken string, deviceIntegrationsListManagedDevicesSessionToken string) (*deviceintegrations.ListManagedDevicesPayload, error) {
 	var err error
 	var provider *string
 	{
@@ -288,6 +288,18 @@ func BuildListManagedDevicesPayload(deviceIntegrationsListManagedDevicesProvider
 			coverageBucket = &deviceIntegrationsListManagedDevicesCoverageBucket
 			if !(*coverageBucket == "agent_active" || *coverageBucket == "agent_stale" || *coverageBucket == "agent_other_device" || *coverageBucket == "no_agent" || *coverageBucket == "no_email" || *coverageBucket == "unresolved_email" || *coverageBucket == "missing") {
 				err = goa.MergeErrors(err, goa.InvalidEnumValueError("coverage_bucket", *coverageBucket, []any{"agent_active", "agent_stale", "agent_other_device", "no_agent", "no_email", "unresolved_email", "missing"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var policyState *string
+	{
+		if deviceIntegrationsListManagedDevicesPolicyState != "" {
+			policyState = &deviceIntegrationsListManagedDevicesPolicyState
+			if !(*policyState == "attested" || *policyState == "outdated" || *policyState == "unreported" || *policyState == "halted") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("policy_state", *policyState, []any{"attested", "outdated", "unreported", "halted"}))
 			}
 			if err != nil {
 				return nil, err
@@ -353,6 +365,7 @@ func BuildListManagedDevicesPayload(deviceIntegrationsListManagedDevicesProvider
 	v := &deviceintegrations.ListManagedDevicesPayload{}
 	v.Provider = provider
 	v.CoverageBucket = coverageBucket
+	v.PolicyState = policyState
 	v.UserIds = userIds
 	v.UserEmails = userEmails
 	v.Cursor = cursor

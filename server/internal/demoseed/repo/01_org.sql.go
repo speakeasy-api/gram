@@ -12,6 +12,17 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const orgCountSigintDefinitionSnapshots = `-- name: OrgCountSigintDefinitionSnapshots :one
+SELECT count(*) FROM sigint_definition_snapshots WHERE project_id = $1::uuid
+`
+
+func (q *Queries) OrgCountSigintDefinitionSnapshots(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, orgCountSigintDefinitionSnapshots, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const orgDeleteAPIKeys = `-- name: OrgDeleteAPIKeys :exec
 DELETE FROM api_keys WHERE organization_id = $1::text
 `
@@ -74,6 +85,23 @@ DELETE FROM assistant_mcp_servers WHERE project_id IN (SELECT id FROM projects W
 
 func (q *Queries) OrgDeleteAssistantMCPServers(ctx context.Context, orgID string) error {
 	_, err := q.db.Exec(ctx, orgDeleteAssistantMCPServers, orgID)
+	return err
+}
+
+const orgDeleteAuthPermissionProvisions = `-- name: OrgDeleteAuthPermissionProvisions :exec
+DELETE FROM auth_permission_provisions
+WHERE organization_id = $1::text
+  AND (principal_urn LIKE 'agent:%' OR principal_urn LIKE 'role:organization:%')
+`
+
+// The default auth permission ledger keeps every grant the backfill ever
+// provisioned, so it never re-grants one an admin removed. The seed deletes
+// and recreates agent and custom role grants, so it resets their ledger rows
+// with them; otherwise a reseed would leave the recreated principals without
+// their default mcp:auth grants. Human grants survive a reseed, and so do
+// their ledger rows.
+func (q *Queries) OrgDeleteAuthPermissionProvisions(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeleteAuthPermissionProvisions, orgID)
 	return err
 }
 
@@ -393,6 +421,15 @@ func (q *Queries) OrgDeleteProjects(ctx context.Context, orgID string) error {
 	return err
 }
 
+const orgDeleteRegistryPromotionCandidates = `-- name: OrgDeleteRegistryPromotionCandidates :exec
+DELETE FROM registry_promotion_candidates WHERE organization_id = $1::text
+`
+
+func (q *Queries) OrgDeleteRegistryPromotionCandidates(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeleteRegistryPromotionCandidates, orgID)
+	return err
+}
+
 const orgDeleteRemoteProtectedResources = `-- name: OrgDeleteRemoteProtectedResources :exec
 DELETE FROM remote_protected_resources WHERE project_id = $1::uuid
 `
@@ -506,6 +543,19 @@ func (q *Queries) OrgDeleteSigintCustomSignals(ctx context.Context, orgID string
 	return err
 }
 
+const orgDeleteSigintDefinitionSnapshots = `-- name: OrgDeleteSigintDefinitionSnapshots :exec
+
+DELETE FROM sigint_definition_snapshots
+WHERE project_id IN (SELECT id FROM projects WHERE organization_id = $1::text)
+`
+
+// Preflight isolation asserts, org metadata and onboarding, the scoped purge,
+// the project, features, users, and memberships.
+func (q *Queries) OrgDeleteSigintDefinitionSnapshots(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeleteSigintDefinitionSnapshots, orgID)
+	return err
+}
+
 const orgDeleteSigintSensorSignals = `-- name: OrgDeleteSigintSensorSignals :exec
 DELETE FROM sigint_sensor_signals
 WHERE project_id IN (SELECT id FROM projects WHERE organization_id = $1::text)
@@ -610,7 +660,6 @@ func (q *Queries) OrgDeleteWorkloadIssuers(ctx context.Context, orgID string) er
 }
 
 const orgForeignOrgExists = `-- name: OrgForeignOrgExists :one
-
 SELECT EXISTS (
   SELECT 1 FROM organization_metadata
   WHERE id = $1::text
@@ -624,8 +673,6 @@ type OrgForeignOrgExistsParams struct {
 	OrgSlug  string
 }
 
-// Preflight isolation asserts, org metadata and onboarding, the scoped purge,
-// the project, features, users, and memberships.
 // workos_id is compared against this tenant's expected link rather than merely
 // tested for NULL: the shared demo org never links to WorkOS (its constant is
 // an inert placeholder that matches nothing), but the local development tenant
@@ -733,7 +780,7 @@ VALUES
    'Support triage', now() - interval '2 days', NULL),
   ($6::uuid, $2::text, $7::text,
    'Retired documentation bot', NULL, now() - interval '5 days'),
-  ($8::uuid, $2::text, $3::text,
+  ($8::uuid, $2::text, $5::text,
    'Release notes assistant', NULL, NULL)
 `
 
@@ -905,6 +952,28 @@ func (q *Queries) OrgInsertSigintCustomSignal(ctx context.Context, arg OrgInsert
 		arg.Slug,
 		arg.Description,
 		arg.ClassifierCriteria,
+	)
+	return err
+}
+
+const orgInsertSigintDefinitionSnapshot = `-- name: OrgInsertSigintDefinitionSnapshot :exec
+INSERT INTO sigint_definition_snapshots (project_id, sensor_id, definition_hash, definition)
+VALUES ($1::uuid, $2::uuid, $3, $4::jsonb)
+`
+
+type OrgInsertSigintDefinitionSnapshotParams struct {
+	ProjectID      uuid.UUID
+	SensorID       uuid.UUID
+	DefinitionHash string
+	Definition     []byte
+}
+
+func (q *Queries) OrgInsertSigintDefinitionSnapshot(ctx context.Context, arg OrgInsertSigintDefinitionSnapshotParams) error {
+	_, err := q.db.Exec(ctx, orgInsertSigintDefinitionSnapshot,
+		arg.ProjectID,
+		arg.SensorID,
+		arg.DefinitionHash,
+		arg.Definition,
 	)
 	return err
 }

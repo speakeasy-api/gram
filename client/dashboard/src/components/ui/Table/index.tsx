@@ -755,14 +755,16 @@ function RowExpandable<T extends object>({
         renderRow={renderRow}
       />
       {/* This grid stuff is a cute way to make the height animate smoothly when expanding/collapsing */}
-      <div
+      <tr
         className={cn(
           "[grid-column:1/-1] grid overflow-hidden transition-[grid-template-rows] duration-300",
           isExpanded ? "grid-rows-[1fr]" : "grid-rows-[0fr]",
         )}
       >
-        <div className="min-h-0 overflow-auto">{content}</div>
-      </div>
+        <td colSpan={columns.length} className="min-h-0 overflow-auto p-0">
+          {content}
+        </td>
+      </tr>
     </>
   );
 }

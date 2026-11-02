@@ -199,6 +199,16 @@ afterEach(() => {
 });
 
 describe("CommandPalette", () => {
+  it("offers the MCP Registry page for staff promotion reviews", async () => {
+    await renderRouteTree(routeTree, { initialPath: "/organizations" });
+    pressTheShortcut();
+    await screen.findByRole("dialog");
+    type("MCP Registry");
+    expect(
+      await within(palette()).findByRole("option", { name: /MCP Registry/ }),
+    ).toBeTruthy();
+  });
+
   it("opens on the shortcut and closes on the same press", async () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
     expect(screen.queryByRole("dialog")).toBeNull();

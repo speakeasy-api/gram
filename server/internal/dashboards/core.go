@@ -128,7 +128,9 @@ func (s *Service) cardWidgets(ctx context.Context, queries *repo.Queries, projec
 	return widgets, nil
 }
 
-// BuiltInDashboard returns the built-in dashboard with this slug.
+// BuiltInDashboard returns the built-in dashboard with this slug, whoever
+// asks. A surface that shows it reads it through Service.ReadBuiltInDashboard,
+// which holds the caller to the datasets its cards ask.
 func BuiltInDashboard(slug string) (*gen.BuiltInDashboard, bool) {
 	page, ok := builtInBySlug(slug)
 	if !ok {

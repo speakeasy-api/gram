@@ -13,6 +13,97 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const copyServerHeadersFixture = `-- name: CopyServerHeadersFixture :exec
+INSERT INTO mcp_auth_client_headers (auth_client_id, organization_id, name, is_required, is_secret, value, value_from_request_header)
+SELECT $1, $2, h.name, h.is_required, h.is_secret, h.value, h.value_from_request_header
+FROM mcp_servers AS s
+JOIN remote_mcp_server_headers AS h
+  ON h.remote_mcp_server_id = s.remote_mcp_server_id
+ AND h.deleted IS FALSE
+WHERE s.id = $3
+`
+
+type CopyServerHeadersFixtureParams struct {
+	AuthClientID   uuid.UUID
+	OrganizationID string
+	McpServerID    uuid.UUID
+}
+
+func (q *Queries) CopyServerHeadersFixture(ctx context.Context, arg CopyServerHeadersFixtureParams) error {
+	_, err := q.db.Exec(ctx, copyServerHeadersFixture, arg.AuthClientID, arg.OrganizationID, arg.McpServerID)
+	return err
+}
+
+const forwardServerHeaderFixture = `-- name: ForwardServerHeaderFixture :exec
+UPDATE remote_mcp_server_headers
+SET value = NULL, is_secret = FALSE, value_from_request_header = $1
+WHERE id = $2
+`
+
+type ForwardServerHeaderFixtureParams struct {
+	ValueFromRequestHeader pgtype.Text
+	ID                     uuid.UUID
+}
+
+func (q *Queries) ForwardServerHeaderFixture(ctx context.Context, arg ForwardServerHeaderFixtureParams) error {
+	_, err := q.db.Exec(ctx, forwardServerHeaderFixture, arg.ValueFromRequestHeader, arg.ID)
+	return err
+}
+
+const getSelectionAuthClientFixture = `-- name: GetSelectionAuthClientFixture :one
+SELECT auth_client_id, no_auth
+FROM upstream_client_selections
+WHERE credential_kind = $1
+  AND credential_id = $2
+  AND mcp_server_id = $3
+  AND deleted IS FALSE
+`
+
+type GetSelectionAuthClientFixtureParams struct {
+	CredentialKind string
+	CredentialID   uuid.UUID
+	McpServerID    uuid.UUID
+}
+
+type GetSelectionAuthClientFixtureRow struct {
+	AuthClientID uuid.NullUUID
+	NoAuth       bool
+}
+
+func (q *Queries) GetSelectionAuthClientFixture(ctx context.Context, arg GetSelectionAuthClientFixtureParams) (GetSelectionAuthClientFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getSelectionAuthClientFixture, arg.CredentialKind, arg.CredentialID, arg.McpServerID)
+	var i GetSelectionAuthClientFixtureRow
+	err := row.Scan(&i.AuthClientID, &i.NoAuth)
+	return i, err
+}
+
+const linkAuthClientFixture = `-- name: LinkAuthClientFixture :execrows
+INSERT INTO mcp_server_auth_clients (project_id, organization_id, mcp_server_id, auth_client_id, client_attachment_scope, source)
+SELECT $1, $2, $3, ac.id, ac.attachment_scope, 'admin'
+FROM mcp_auth_clients AS ac
+WHERE ac.id = $4
+`
+
+type LinkAuthClientFixtureParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+	McpServerID    uuid.UUID
+	AuthClientID   uuid.UUID
+}
+
+func (q *Queries) LinkAuthClientFixture(ctx context.Context, arg LinkAuthClientFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, linkAuthClientFixture,
+		arg.ProjectID,
+		arg.OrganizationID,
+		arg.McpServerID,
+		arg.AuthClientID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const listLiveUserSessionCredentials = `-- name: ListLiveUserSessionCredentials :many
 SELECT DISTINCT ON (COALESCE(s.credential_id, s.id))
        COALESCE(s.credential_id, s.id)::uuid AS credential_id,
@@ -153,12 +244,18 @@ SELECT r.id AS mcp_server_id,
        EXISTS (
          SELECT 1
          FROM upstream_client_selections AS sel
+         LEFT JOIN mcp_auth_clients AS headers_only
+           ON headers_only.id = sel.auth_client_id
+          AND sel.remote_session_client_id IS NULL
+          AND headers_only.organization_id = sel.organization_id
+          AND (headers_only.project_id IS NULL OR headers_only.project_id = sel.project_id)
+          AND headers_only.client_type IN ('static_credential', 'pass_through')
          WHERE sel.credential_kind = $1::text
            AND sel.credential_id = $2::uuid
            AND sel.mcp_server_id = r.id
            AND sel.deleted IS FALSE
            AND CASE
-             WHEN sel.no_auth THEN NOT EXISTS (
+             WHEN sel.no_auth OR headers_only.id IS NOT NULL THEN NOT EXISTS (
                SELECT 1
                FROM mcp_server_remote_session_clients AS a
                WHERE a.mcp_server_id = r.id
@@ -183,7 +280,8 @@ SELECT r.id AS mcp_server_id,
        -- by another client, so one that is not also selected is resolved only
        -- by a reconnection. A no-auth choice is not one: when unusable,
        -- RecordUpstreamClientSelections replaces it once a client is decided,
-       -- so it is classified like a missing choice.
+       -- so it is classified like a missing choice. A header-only auth client
+       -- choice is never replaced either, so it counts as a client choice.
        EXISTS (
          SELECT 1
          FROM upstream_client_selections AS sel
@@ -259,6 +357,29 @@ func (q *Queries) ListUpstreamClientSelectionCoverage(ctx context.Context, arg L
 	return items, nil
 }
 
+const nameAuthClientOnSelectionFixture = `-- name: NameAuthClientOnSelectionFixture :exec
+UPDATE upstream_client_selections AS sel
+SET auth_client_id = ac.id,
+    auth_client_attachment_scope = ac.attachment_scope,
+    no_auth = FALSE
+FROM mcp_auth_clients AS ac
+WHERE ac.id = $1
+  AND sel.credential_id = $2
+  AND sel.mcp_server_id = $3
+  AND sel.deleted IS FALSE
+`
+
+type NameAuthClientOnSelectionFixtureParams struct {
+	AuthClientID uuid.UUID
+	CredentialID uuid.UUID
+	McpServerID  uuid.UUID
+}
+
+func (q *Queries) NameAuthClientOnSelectionFixture(ctx context.Context, arg NameAuthClientOnSelectionFixtureParams) error {
+	_, err := q.db.Exec(ctx, nameAuthClientOnSelectionFixture, arg.AuthClientID, arg.CredentialID, arg.McpServerID)
+	return err
+}
+
 const removeAssociationFixture = `-- name: RemoveAssociationFixture :exec
 UPDATE mcp_server_remote_session_clients SET deleted_at = clock_timestamp()
 WHERE mcp_server_id = $1 AND remote_session_client_id = $2 AND deleted IS FALSE
@@ -311,6 +432,53 @@ type SeedClientBindingFixtureParams struct {
 
 func (q *Queries) SeedClientBindingFixture(ctx context.Context, arg SeedClientBindingFixtureParams) error {
 	_, err := q.db.Exec(ctx, seedClientBindingFixture, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
+	return err
+}
+
+const seedHeaderAuthClientFixture = `-- name: SeedHeaderAuthClientFixture :one
+INSERT INTO mcp_auth_clients (organization_id, project_id, client_type, source, name)
+VALUES ($1, $2, 'static_credential', 'backfill', 'headers')
+RETURNING id
+`
+
+type SeedHeaderAuthClientFixtureParams struct {
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+}
+
+func (q *Queries) SeedHeaderAuthClientFixture(ctx context.Context, arg SeedHeaderAuthClientFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedHeaderAuthClientFixture, arg.OrganizationID, arg.ProjectID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedLinkedHeaderAuthClientFixture = `-- name: SeedLinkedHeaderAuthClientFixture :exec
+WITH client AS (
+    INSERT INTO mcp_auth_clients (id, organization_id, project_id, client_type, source, name)
+    VALUES ($2, $3, $4, 'static_credential', 'admin', 'headers')
+    RETURNING id, organization_id, project_id, attachment_scope
+)
+INSERT INTO mcp_server_auth_clients (project_id, organization_id, mcp_server_id, auth_client_id, client_attachment_scope, source)
+SELECT client.project_id, client.organization_id, $1, client.id, client.attachment_scope, 'admin'
+FROM client
+`
+
+type SeedLinkedHeaderAuthClientFixtureParams struct {
+	McpServerID    uuid.UUID
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.NullUUID
+}
+
+// A static-credential auth client in the project, linked to one server.
+func (q *Queries) SeedLinkedHeaderAuthClientFixture(ctx context.Context, arg SeedLinkedHeaderAuthClientFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedLinkedHeaderAuthClientFixture,
+		arg.McpServerID,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
 	return err
 }
 
@@ -375,6 +543,33 @@ type SeedMetaMCPServerMemberFixtureParams struct {
 func (q *Queries) SeedMetaMCPServerMemberFixture(ctx context.Context, arg SeedMetaMCPServerMemberFixtureParams) error {
 	_, err := q.db.Exec(ctx, seedMetaMCPServerMemberFixture, arg.ProjectID, arg.MetaMcpServerID, arg.McpServerID)
 	return err
+}
+
+const seedOAuthAuthClientFixture = `-- name: SeedOAuthAuthClientFixture :one
+INSERT INTO mcp_auth_clients (organization_id, project_id, client_type, source, name, remote_session_client_id, client_attachment_scope)
+SELECT $1, $2, $3, 'admin', 'oauth', c.id, c.attachment_scope
+FROM remote_session_clients AS c
+WHERE c.id = $4
+RETURNING id
+`
+
+type SeedOAuthAuthClientFixtureParams struct {
+	OrganizationID        string
+	ProjectID             uuid.NullUUID
+	ClientType            string
+	RemoteSessionClientID uuid.UUID
+}
+
+func (q *Queries) SeedOAuthAuthClientFixture(ctx context.Context, arg SeedOAuthAuthClientFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedOAuthAuthClientFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ClientType,
+		arg.RemoteSessionClientID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const seedOrganizationFixture = `-- name: SeedOrganizationFixture :exec
@@ -460,6 +655,35 @@ func (q *Queries) SeedRemoteSessionIssuerFixture(ctx context.Context, arg SeedRe
 		arg.Issuer,
 	)
 	return err
+}
+
+const seedServerHeaderFixture = `-- name: SeedServerHeaderFixture :one
+INSERT INTO remote_mcp_server_headers (remote_mcp_server_id, name, is_secret, value, value_from_request_header)
+SELECT s.remote_mcp_server_id, $1, $2, $3, $4
+FROM mcp_servers AS s
+WHERE s.id = $5
+RETURNING id
+`
+
+type SeedServerHeaderFixtureParams struct {
+	Name                   string
+	IsSecret               bool
+	Value                  pgtype.Text
+	ValueFromRequestHeader pgtype.Text
+	McpServerID            uuid.UUID
+}
+
+func (q *Queries) SeedServerHeaderFixture(ctx context.Context, arg SeedServerHeaderFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedServerHeaderFixture,
+		arg.Name,
+		arg.IsSecret,
+		arg.Value,
+		arg.ValueFromRequestHeader,
+		arg.McpServerID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const seedUnproxiedMCPServerFixture = `-- name: SeedUnproxiedMCPServerFixture :exec

@@ -262,7 +262,7 @@ func TestSummaryIdentityParams_ExcludesOtherServersPreservingLegacyHostedRows(t 
 	require.Empty(t, params.ToolsetSlug)
 	require.Empty(t, params.ToolsetSlugServerID)
 	require.Equal(t, "mcp-1", params.MCPServerID)
-	require.Equal(t, "project-1", params.GramProjectID)
+	require.Equal(t, []string{"project-1"}, params.GramProjectIDs)
 }
 
 func TestValidOutcomeClass_IsAClosedSet(t *testing.T) {

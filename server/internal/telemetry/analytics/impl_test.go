@@ -19,7 +19,8 @@ func TestDescribe(t *testing.T) {
 
 	result, err := ti.service.Describe(ctx, &gen.DescribePayload{SessionToken: nil, ProjectSlugInput: nil})
 	require.NoError(t, err)
-	require.Len(t, result.Datasets, 2)
+	require.Len(t, result.Datasets, 3, "an org admin reads every dataset")
+	require.Empty(t, result.RestrictedDatasets)
 
 	toolCalls := datasetNamed(t, result.Datasets, "tool_calls")
 	require.Equal(t, "event", toolCalls.Kind)
@@ -56,6 +57,13 @@ func TestDescribe(t *testing.T) {
 	require.Equal(t, "dimension", skillFields["tool_call"].Role, "the invocation's call id tells repeated invocations apart in rows mode")
 	require.Equal(t, []string{"count_distinct"}, skillFields["user"].Aggregations)
 
+	riskFindings := datasetNamed(t, result.Datasets, "risk_findings")
+	require.Equal(t, "metric", riskFindings.Kind, "describe says the dataset answers aggregates only")
+	require.Equal(t, []string{"category"}, defaultFields(riskFindings))
+	riskFields := fieldsByName(riskFindings)
+	require.Equal(t, RiskPolicySeveritiesLookup, riskFields["severity"].Lookup.Name)
+	require.Equal(t, RiskPolicyNamesLookup, riskFields["policy"].Lookup.Name)
+
 	t.Run("it requires an authenticated project", func(t *testing.T) {
 		t.Parallel()
 		_, err := ti.service.Describe(t.Context(), &gen.DescribePayload{SessionToken: nil, ProjectSlugInput: nil})
@@ -68,18 +76,20 @@ func TestDescribe(t *testing.T) {
 func TestDescribeDatasetsCarriesFieldDescriptions(t *testing.T) {
 	t.Parallel()
 
-	described := describeDatasets(MustCatalog(nil, &Dataset{
+	catalog := MustCatalog(nil, &Dataset{
 		Name:        "things",
 		Kind:        KindEvent,
 		Grain:       "thing",
 		Description: "things",
 		TimeExpr:    "started_at",
+		Access:      AccessProject,
 		Fields: []Field{
 			{Name: "kind", Type: TypeString, Role: RoleDimension, Default: true, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "kind", Description: "Which producers fill it.", Lookup: ""},
 			{Name: "thing", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "thing_id", Description: "", Lookup: ""},
 		},
 		Source: toolCallsSource,
-	}))
+	})
+	described := describeDatasets(catalog, catalog.Datasets())
 	require.Len(t, described, 1)
 	require.NotNil(t, described[0].Fields[0].Description)
 	require.Equal(t, "Which producers fill it.", *described[0].Fields[0].Description)

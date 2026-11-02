@@ -73,6 +73,100 @@ func BuildGetPluginsPayload(agentGetPluginsLegacyEmail string, agentGetPluginsDe
 	return v, nil
 }
 
+// BuildGetMyConnectionsPayload builds the payload for the agent
+// getMyConnections endpoint from CLI flags.
+func BuildGetMyConnectionsPayload(agentGetMyConnectionsApikeyToken string, agentGetMyConnectionsEmail string) (*agent.GetMyConnectionsPayload, error) {
+	var apikeyToken *string
+	{
+		if agentGetMyConnectionsApikeyToken != "" {
+			apikeyToken = &agentGetMyConnectionsApikeyToken
+		}
+	}
+	var email *string
+	{
+		if agentGetMyConnectionsEmail != "" {
+			email = &agentGetMyConnectionsEmail
+		}
+	}
+	v := &agent.GetMyConnectionsPayload{}
+	v.ApikeyToken = apikeyToken
+	v.Email = email
+
+	return v, nil
+}
+
+// BuildHideMcpServerPayload builds the payload for the agent hideMcpServer
+// endpoint from CLI flags.
+func BuildHideMcpServerPayload(agentHideMcpServerBody string, agentHideMcpServerApikeyToken string, agentHideMcpServerEmail string) (*agent.HideMcpServerPayload, error) {
+	var err error
+	var body HideMcpServerRequestBody
+	{
+		err = json.Unmarshal([]byte(agentHideMcpServerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if agentHideMcpServerApikeyToken != "" {
+			apikeyToken = &agentHideMcpServerApikeyToken
+		}
+	}
+	var email *string
+	{
+		if agentHideMcpServerEmail != "" {
+			email = &agentHideMcpServerEmail
+		}
+	}
+	v := &agent.HideMcpServerPayload{
+		McpServerID: body.McpServerID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.Email = email
+
+	return v, nil
+}
+
+// BuildUnhideMcpServerPayload builds the payload for the agent unhideMcpServer
+// endpoint from CLI flags.
+func BuildUnhideMcpServerPayload(agentUnhideMcpServerBody string, agentUnhideMcpServerApikeyToken string, agentUnhideMcpServerEmail string) (*agent.UnhideMcpServerPayload, error) {
+	var err error
+	var body UnhideMcpServerRequestBody
+	{
+		err = json.Unmarshal([]byte(agentUnhideMcpServerBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"mcp_server_id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", body.McpServerID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if agentUnhideMcpServerApikeyToken != "" {
+			apikeyToken = &agentUnhideMcpServerApikeyToken
+		}
+	}
+	var email *string
+	{
+		if agentUnhideMcpServerEmail != "" {
+			email = &agentUnhideMcpServerEmail
+		}
+	}
+	v := &agent.UnhideMcpServerPayload{
+		McpServerID: body.McpServerID,
+	}
+	v.ApikeyToken = apikeyToken
+	v.Email = email
+
+	return v, nil
+}
+
 // BuildListSyncedUsersPayload builds the payload for the agent listSyncedUsers
 // endpoint from CLI flags.
 func BuildListSyncedUsersPayload(agentListSyncedUsersSessionToken string) (*agent.ListSyncedUsersPayload, error) {
@@ -419,6 +513,130 @@ func BuildReportAIScanPayload(agentReportAIScanBody string, agentReportAIScanApi
 	v.Email = email
 	v.SerialNumber = serialNumber
 	v.Hostname = hostname
+
+	return v, nil
+}
+
+// BuildReportStatePayload builds the payload for the agent reportState
+// endpoint from CLI flags.
+func BuildReportStatePayload(agentReportStateBody string, agentReportStateApikeyToken string, agentReportStateEmail string, agentReportStateSerialNumber string, agentReportStateHostname string, agentReportStateEnvironment string) (*agent.ReportStatePayload, error) {
+	var err error
+	var body ReportStateRequestBody
+	{
+		err = json.Unmarshal([]byte(agentReportStateBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"agent\": {\n         \"arch\": \"aaa\",\n         \"os\": \"aaa\",\n         \"speakeasy\": \"aaa\",\n         \"speakeasy_ui\": \"aaa\",\n         \"speakeasyd\": \"aaa\"\n      },\n      \"drift_counting_since\": \"1970-01-01T00:00:01Z\",\n      \"enforcement_halted\": false,\n      \"generated_at\": \"1970-01-01T00:00:01Z\",\n      \"policy\": {\n         \"applied_at\": \"1970-01-01T00:00:01Z\",\n         \"applied_etag\": \"aaa\",\n         \"remote_config_etag\": \"aaa\",\n         \"remote_config_failed\": false,\n         \"withheld_plugins\": [\n            {\n               \"marketplace\": \"aaa\",\n               \"reason\": \"aaa\",\n               \"slug\": \"aa\"\n            },\n            {\n               \"marketplace\": \"aaa\",\n               \"reason\": \"aaa\",\n               \"slug\": \"aa\"\n            },\n            {\n               \"marketplace\": \"aaa\",\n               \"reason\": \"aaa\",\n               \"slug\": \"aa\"\n            }\n         ]\n      },\n      \"schema_version\": 2,\n      \"tools\": [\n         {\n            \"action_required\": false,\n            \"drift_corrections\": 1,\n            \"error_kind\": \"aaa\",\n            \"layer\": \"aaa\",\n            \"outcome\": \"aaa\",\n            \"pending_reason\": \"aaa\",\n            \"restart_required\": false,\n            \"tool\": \"aa\"\n         },\n         {\n            \"action_required\": false,\n            \"drift_corrections\": 1,\n            \"error_kind\": \"aaa\",\n            \"layer\": \"aaa\",\n            \"outcome\": \"aaa\",\n            \"pending_reason\": \"aaa\",\n            \"restart_required\": false,\n            \"tool\": \"aa\"\n         },\n         {\n            \"action_required\": false,\n            \"drift_corrections\": 1,\n            \"error_kind\": \"aaa\",\n            \"layer\": \"aaa\",\n            \"outcome\": \"aaa\",\n            \"pending_reason\": \"aaa\",\n            \"restart_required\": false,\n            \"tool\": \"aa\"\n         }\n      ],\n      \"update\": {\n         \"auto_update\": \"aaa\",\n         \"channel\": \"aaa\",\n         \"current_blocked\": false,\n         \"last_rollback\": {\n            \"at\": \"1970-01-01T00:00:01Z\",\n            \"from\": \"aaa\",\n            \"to\": \"aaa\"\n         },\n         \"pinned_target\": \"aaa\"\n      }\n   }'")
+		}
+		if body.Agent == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("agent", "body"))
+		}
+		if body.Policy == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("policy", "body"))
+		}
+		if body.Tools == nil {
+			err = goa.MergeErrors(err, goa.MissingFieldError("tools", "body"))
+		}
+		if body.SchemaVersion < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.schema_version", body.SchemaVersion, 1, true))
+		}
+		if body.SchemaVersion > 2.147483647e+09 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.schema_version", body.SchemaVersion, 2.147483647e+09, false))
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.generated_at", body.GeneratedAt, goa.FormatDateTime))
+		if body.Agent != nil {
+			if err2 := ValidateAgentStateVersionsRequestBody(body.Agent); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if body.Policy != nil {
+			if err2 := ValidateAgentStatePolicyRequestBody(body.Policy); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if len(body.Tools) > 32 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.tools", body.Tools, len(body.Tools), 32, false))
+		}
+		for _, e := range body.Tools {
+			if e != nil {
+				if err2 := ValidateAgentStateToolRequestBody(e); err2 != nil {
+					err = goa.MergeErrors(err, err2)
+				}
+			}
+		}
+		if body.DriftCountingSince != nil {
+			err = goa.MergeErrors(err, goa.ValidateFormat("body.drift_counting_since", *body.DriftCountingSince, goa.FormatDateTime))
+		}
+		if body.Update != nil {
+			if err2 := ValidateAgentStateUpdateRequestBody(body.Update); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var apikeyToken *string
+	{
+		if agentReportStateApikeyToken != "" {
+			apikeyToken = &agentReportStateApikeyToken
+		}
+	}
+	var email *string
+	{
+		if agentReportStateEmail != "" {
+			email = &agentReportStateEmail
+		}
+	}
+	var serialNumber *string
+	{
+		if agentReportStateSerialNumber != "" {
+			serialNumber = &agentReportStateSerialNumber
+		}
+	}
+	var hostname *string
+	{
+		if agentReportStateHostname != "" {
+			hostname = &agentReportStateHostname
+		}
+	}
+	var environment *string
+	{
+		if agentReportStateEnvironment != "" {
+			environment = &agentReportStateEnvironment
+		}
+	}
+	v := &agent.ReportStatePayload{
+		SchemaVersion:      body.SchemaVersion,
+		GeneratedAt:        body.GeneratedAt,
+		EnforcementHalted:  body.EnforcementHalted,
+		DriftCountingSince: body.DriftCountingSince,
+	}
+	if body.Agent != nil {
+		v.Agent = marshalAgentStateVersionsRequestBodyToAgentAgentStateVersions(body.Agent)
+	}
+	if body.Policy != nil {
+		v.Policy = marshalAgentStatePolicyRequestBodyToAgentAgentStatePolicy(body.Policy)
+	}
+	if body.Tools != nil {
+		v.Tools = make([]*agent.AgentStateTool, len(body.Tools))
+		for i, val := range body.Tools {
+			if val == nil {
+				v.Tools[i] = nil
+				continue
+			}
+			v.Tools[i] = marshalAgentStateToolRequestBodyToAgentAgentStateTool(val)
+		}
+	} else {
+		v.Tools = []*agent.AgentStateTool{}
+	}
+	if body.Update != nil {
+		v.Update = marshalAgentStateUpdateRequestBodyToAgentAgentStateUpdate(body.Update)
+	}
+	v.ApikeyToken = apikeyToken
+	v.Email = email
+	v.SerialNumber = serialNumber
+	v.Hostname = hostname
+	v.Environment = environment
 
 	return v, nil
 }

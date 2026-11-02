@@ -3,11 +3,13 @@ import { StreamableHTTPClientTransport } from "@modelcontextprotocol/sdk/client/
 import { CfWorkerJsonSchemaValidator } from "@modelcontextprotocol/sdk/validation/cfworker";
 
 import type { ToolAnnotation } from "@/components/tool-selection/annotations";
-import { isRecord } from "./prefill";
+import { isRecord, isToolAnnotation } from "./prefill";
 
 export interface ConsentTool {
   name: string;
   annotations: ToolAnnotation[];
+  /** The gateway member server the tool comes from; absent on single servers. */
+  source?: string;
 }
 
 export interface RoleHiddenTools {
@@ -20,6 +22,50 @@ export interface RoleHiddenTools {
 export interface ConsentInventory {
   tools: ConsentTool[];
   roleHiddenTools: RoleHiddenTools;
+}
+
+/**
+ * Parses the server-rendered gateway capture. Every tool is validated, so a
+ * malformed bootstrap fails initialization (approval stays disabled and the
+ * page offers a reload) instead of reaching the picker and crashing it.
+ */
+export function parseGatewayInventoryBootstrap(
+  raw: string | undefined,
+): (ConsentInventory & { attempt: string }) | null {
+  let value: unknown;
+  try {
+    value = JSON.parse(raw ?? "");
+  } catch {
+    return null;
+  }
+  if (
+    !isRecord(value) ||
+    typeof value.attempt !== "string" ||
+    value.attempt === "" ||
+    !Array.isArray(value.tools)
+  )
+    return null;
+  const tools: ConsentTool[] = [];
+  const seen = new Set<string>();
+  for (const entry of value.tools) {
+    if (!isRecord(entry)) return null;
+    const { name, annotations, source } = entry;
+    if (typeof name !== "string" || name === "" || seen.has(name)) return null;
+    if (!Array.isArray(annotations) || !annotations.every(isToolAnnotation))
+      return null;
+    if (source !== undefined && typeof source !== "string") return null;
+    seen.add(name);
+    tools.push({
+      name,
+      annotations,
+      ...(source ? { source } : {}),
+    });
+  }
+  return {
+    attempt: value.attempt,
+    tools,
+    roleHiddenTools: { count: 0, names: [] },
+  };
 }
 
 /**

@@ -61,6 +61,10 @@ func deriveEventURN(legacyURN string, attrs map[attr.Key]any) string {
 		return urn.NewTelemetryEvent(urn.TelemetryEventOriginProviderAPI, urn.TelemetryEventKindMetric, eventTypeUsage).String()
 	case EventSourceHook:
 		return deriveHookEventURN(legacyURN, attrs)
+	case EventSourceHookDiagnostic:
+		// A hook sender reporting on its own delivery (client.delivery_failed):
+		// observed by the device-side hook, typed by the canonical event name.
+		return urn.NewTelemetryEvent(urn.TelemetryEventOriginAgentHook, urn.TelemetryEventKindLog, getString(attrs, attr.HookEventKey)).String()
 	default:
 		return urn.NewTelemetryEvent(urn.TelemetryEventOriginUnknown, urn.TelemetryEventKindLog, eventSource).String()
 	}

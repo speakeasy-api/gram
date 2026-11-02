@@ -154,6 +154,9 @@ type serverEntry struct {
 }
 
 type pulseMCPServerMeta struct {
+	// Catalog contains only staff-curated public capabilities.
+	Catalog *catalogCapabilities `json:"com.speakeasy.ai/catalog,omitempty"`
+
 	Server  serverMetaServer  `json:"com.pulsemcp/server"`
 	Version serverMetaVersion `json:"com.pulsemcp/server-version"`
 }
@@ -291,6 +294,35 @@ type RemoteVariable struct {
 	IsRequired  bool     `json:"isRequired"`
 	Default     *string  `json:"default,omitempty"`
 	Choices     []string `json:"choices,omitempty"`
+}
+
+type catalogCapabilities struct {
+	// SupportsDCR overrides legacy metadata only when explicitly present.
+	SupportsDCR *bool `json:"supportsDcr,omitempty"`
+	// SupportsCIMD records compatible public-client metadata support.
+	SupportsCIMD bool `json:"supportsCimd,omitempty"`
+	// AuthSetup records complete evidence for manual setup or explicit no-auth selection.
+	AuthSetup string `json:"authSetup,omitempty"`
+}
+
+func projectCatalogAuth(catalog *catalogCapabilities, dcr bool) (bool, bool, string) {
+	cimd := false
+	setup := "unknown"
+	if catalog != nil {
+		if catalog.SupportsDCR != nil {
+			dcr = *catalog.SupportsDCR
+		}
+		cimd = catalog.SupportsCIMD
+		if catalog.AuthSetup == "none" || catalog.AuthSetup == "manual" {
+			setup = catalog.AuthSetup
+		}
+	}
+	if dcr {
+		setup = "dcr"
+	} else if cimd {
+		setup = "cimd"
+	}
+	return dcr, cimd, setup
 }
 
 type serverRemoteMeta struct {
@@ -644,6 +676,7 @@ func projectListServer(registryUUID uuid.UUID, s serverEntry) (*types.ExternalMC
 		return nil, fmt.Errorf("convert meta: %w", err)
 	}
 
+	supportsDCR, supportsCIMD, authSetup := projectCatalogAuth(s.Meta.Catalog, supportsDCR)
 	return &types.ExternalMCPServerEntry{
 		Repository:        toExternalMCPRepository(s.Server.Repository),
 		Packages:          toExternalMCPPackages(s.Server.Packages),
@@ -659,7 +692,8 @@ func projectListServer(registryUUID uuid.UUID, s serverEntry) (*types.ExternalMC
 		ToolCount:         toolCount,
 		IsReadOnly:        isReadOnly,
 		SupportsDcr:       supportsDCR,
-		Remotes:           remotes,
+		SupportsCimd:      new(supportsCIMD), AuthSetup: new(authSetup),
+		Remotes: remotes,
 	}, nil
 }
 
@@ -732,6 +766,13 @@ func reviewedRegistryDetailsURL(rawURL string) (*url.URL, error) {
 // must still validate configuration values against these declarations; they must
 // never treat the registry response as permission to accept arbitrary endpoints.
 type ServerDetails struct {
+	// SupportsDCR records advertised dynamic registration support.
+	SupportsDCR bool
+	// SupportsCIMD records compatible metadata document support.
+	SupportsCIMD bool
+	// AuthSetup distinguishes unknown evidence from manual setup.
+	AuthSetup string
+
 	Name          string
 	Description   string
 	Version       string
@@ -825,7 +866,7 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 
 // projectServerDetails selects the first allowed HTTP remote, or the last allowed SSE remote.
 func projectServerDetails(record serverDetailsEntry, allowedRemoteURLs []string) *ServerDetails {
-	details := &ServerDetails{
+	details := &ServerDetails{SupportsDCR: false, SupportsCIMD: false, AuthSetup: "unknown",
 		Name:          record.Server.Name,
 		Description:   record.Server.Description,
 		Version:       record.Server.Version,
@@ -853,6 +894,7 @@ func projectServerDetails(record serverDetailsEntry, allowedRemoteURLs []string)
 		}
 	}
 	if selected < 0 {
+		details.SupportsDCR, details.SupportsCIMD, details.AuthSetup = projectCatalogAuth(record.Meta.Catalog, false)
 		return details
 	}
 	remote := record.Server.Remotes[selected]
@@ -863,6 +905,10 @@ func projectServerDetails(record serverDetailsEntry, allowedRemoteURLs []string)
 	remotes := []serverRemoteMeta{record.Meta.Version.FirstRemote, record.Meta.Version.SecondRemote, record.Meta.Version.ThirdRemote, record.Meta.Version.FourthRemote, record.Meta.Version.FifthRemote}
 	if selected < len(remotes) {
 		details.Tools = remotes[selected].Tools
+		for _, auth := range remotes[selected].AuthOptions {
+			details.SupportsDCR = details.SupportsDCR || auth.Detail.AuthorizationServerMetadata.RegistrationEndpoint != ""
+		}
 	}
+	details.SupportsDCR, details.SupportsCIMD, details.AuthSetup = projectCatalogAuth(record.Meta.Catalog, details.SupportsDCR)
 	return details
 }

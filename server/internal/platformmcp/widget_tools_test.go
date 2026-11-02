@@ -503,6 +503,40 @@ func TestWidgetWritesRefuseANonCreatorWithoutProjectWrite(t *testing.T) {
 	require.Equal(t, &other.UserID, copied.Widget.CreatedByUserID)
 }
 
+// TestRiskFindingsWidgetsAreRefusedToNonAdmins: a save over a dataset only
+// organization administrators may read is refused by name, not as the
+// creator-or-write rule, and an admin saves it.
+func TestRiskFindingsWidgetsAreRefusedToNonAdmins(t *testing.T) {
+	t.Parallel()
+	ctx, f := newWidgetToolsFixture(t)
+
+	arguments := saveArguments(f.project.ID.String(), "Findings by category")
+	arguments["dataset"] = "risk_findings"
+	arguments["query"] = map[string]any{"window": "7d", "grain": "none", "dimensions": []any{"category"}, "measures": []any{map[string]any{"op": "count"}}}
+	arguments["visualization"] = map[string]any{"type": "ranked", "options": map[string]any{}}
+
+	_, err := f.invoke(t, ctx, saveWidgetToolName, arguments)
+	refusal := requireWidgetRefusal(t, err)
+	require.Equal(t, widgetDatasetRestricted, refusal.Code)
+	require.Equal(t, "dataset", refusal.Field)
+	require.Contains(t, refusal.Message, "organization administrators")
+
+	admin := authz.GrantsToContext(ctx, []authz.Grant{
+		authz.NewGrant(authz.ScopeProjectRead, f.project.ID.String()),
+		authz.NewGrant(authz.ScopeProjectWrite, f.project.ID.String()),
+		authz.NewGrant(authz.ScopeOrgAdmin, f.principal.OrganizationID),
+	})
+	preview := f.write(t, admin, saveWidgetToolName, arguments)
+	require.Equal(t, operationCreateWidget, preview.Operation)
+	created := f.write(t, admin, saveWidgetToolName, confirmed(arguments, preview, "admin-risk-widget"))
+
+	// Copying the admin's widget is refused at the preview, as its
+	// confirmation would be.
+	duplicate := map[string]any{"project_id": f.project.ID.String(), "widget_id": created.Widget.ID, "confirmed": false}
+	_, err = f.invoke(t, ctx, duplicateWidgetToolName, duplicate)
+	require.Equal(t, widgetDatasetRestricted, requireWidgetRefusal(t, err).Code)
+}
+
 func TestDeleteWidgetReportsTheDashboardsThatLostIt(t *testing.T) {
 	t.Parallel()
 	ctx, f := newWidgetToolsFixture(t)

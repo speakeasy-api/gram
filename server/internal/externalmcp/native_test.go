@@ -34,7 +34,7 @@ func (s *nativeTestSource) GetByName(_ context.Context, name string) (mcpregistr
 	return s.entry, s.err
 }
 
-const nativeRecord = `{"server":{"name":"io.example/native","title":"Native","description":"Synthetic registry server","version":"1","repository":{"url":"https://example.com/repo"},"remotes":[{"type":"sse","url":"https://example.com/first"},{"type":"sse","url":"https://example.com/last"},{"type":"streamable-http","url":"https://example.com/mcp","headers":[{"name":"X-Key","isSecret":true}],"variables":{"tenant":{"description":"Tenant"}}}]},"_meta":{"custom.example/metadata":{"keep":true},"io.modelcontextprotocol.registry/official":{"status":"deprecated"},"com.pulsemcp/server-version":{"remotes[0]":{"tools":[{"name":"read","annotations":{"readOnlyHint":true}}]},"remotes[1]":{"tools":[]}}}}`
+const nativeRecord = `{"server":{"name":"io.example/native","title":"Native","description":"Synthetic registry server","version":"1","repository":{"url":"https://example.com/repo"},"remotes":[{"type":"sse","url":"https://example.com/first"},{"type":"sse","url":"https://example.com/last"},{"type":"streamable-http","url":"https://example.com/mcp","headers":[{"name":"X-Key","isSecret":true}],"variables":{"tenant":{"description":"Tenant"}}}]},"_meta":{"com.speakeasy.ai/icons":{"default":{"src":"https://assets.example/rpc/assets.serveImage?id=00000000-0000-4000-8000-000000000001","mimeType":"image/svg+xml","sizes":["any"]}},"custom.example/metadata":{"keep":true},"io.modelcontextprotocol.registry/official":{"status":"deprecated"},"com.pulsemcp/server-version":{"remotes[0]":{"tools":[{"name":"read","annotations":{"readOnlyHint":true}}]},"remotes[1]":{"tools":[]}}}}`
 
 func TestNativeList(t *testing.T) {
 	t.Parallel()
@@ -52,6 +52,7 @@ func TestNativeList(t *testing.T) {
 	require.Equal(t, 1, row.ToolCount)
 	require.True(t, row.IsReadOnly)
 	require.Equal(t, map[string]any{"keep": true}, nativeTestMap(t, row.Meta)["custom.example/metadata"])
+	require.Equal(t, map[string]any{"default": map[string]any{"src": "https://assets.example/rpc/assets.serveImage?id=00000000-0000-4000-8000-000000000001", "mimeType": "image/svg+xml", "sizes": []any{"any"}}}, nativeTestMap(t, row.Meta)[mcpregistry.IconsNamespace])
 	require.Equal(t, "next", source.options[1].Cursor)
 	require.False(t, source.options[0].IncludeDeleted)
 }
@@ -60,10 +61,12 @@ func TestNativeList(t *testing.T) {
 func TestNativeListSupportsDcr(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name    string
-		catalog map[string]any
-		pulse   bool
-		want    bool
+		name     string
+		catalog  map[string]any
+		pulse    bool
+		want     bool
+		wantCIMD bool
+		setup    string
 	}{
 		{name: "native true", catalog: map[string]any{"supportsDcr": true}, want: true},
 		{name: "native false", catalog: map[string]any{"supportsDcr": false}},
@@ -71,6 +74,9 @@ func TestNativeListSupportsDcr(t *testing.T) {
 		{name: "missing native metadata falls back to Pulse", pulse: true, want: true},
 		{name: "missing native field falls back to Pulse", catalog: map[string]any{}, pulse: true, want: true},
 		{name: "no capability metadata"},
+		{name: "CIMD", catalog: map[string]any{"supportsCimd": true}, wantCIMD: true, setup: "cimd"},
+		{name: "complete manual", catalog: map[string]any{"supportsDcr": false, "supportsCimd": false, "authSetup": "manual"}, setup: "manual"},
+		{name: "explicit no auth", catalog: map[string]any{"authSetup": "none"}, setup: "none"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -82,7 +88,8 @@ func TestNativeListSupportsDcr(t *testing.T) {
 			}
 			if tc.pulse {
 				version := nativeTestMap(t, meta["com.pulsemcp/server-version"])
-				remote := nativeTestMap(t, version["remotes[0]"])
+				remote := map[string]any{}
+				version["remotes[2]"] = remote
 				remote["authOptions"] = []any{map[string]any{
 					"type": "oauth",
 					"detail": map[string]any{
@@ -97,6 +104,21 @@ func TestNativeListSupportsDcr(t *testing.T) {
 			require.NoError(t, err)
 			require.Len(t, result.Servers, 1)
 			require.Equal(t, tc.want, result.Servers[0].SupportsDcr)
+			require.Equal(t, tc.wantCIMD, *result.Servers[0].SupportsCimd)
+			expectedSetup := tc.setup
+			if expectedSetup == "" {
+				expectedSetup = "unknown"
+				if tc.want {
+					expectedSetup = "dcr"
+				}
+			}
+			require.Equal(t, expectedSetup, *result.Servers[0].AuthSetup)
+			var detail serverDetailsEntry
+			require.NoError(t, json.Unmarshal(raw, &detail))
+			projected := projectServerDetails(detail, nil)
+			require.Equal(t, tc.wantCIMD, projected.SupportsCIMD)
+			require.Equal(t, tc.want, projected.SupportsDCR)
+			require.Equal(t, expectedSetup, projected.AuthSetup)
 		})
 	}
 }
@@ -294,4 +316,24 @@ func nativeTestMap(t *testing.T, value any) map[string]any {
 	result, ok := value.(map[string]any)
 	require.True(t, ok)
 	return result
+}
+
+func TestNativeDetailsPreservesCatalogAuthWithoutAllowedRemote(t *testing.T) {
+	t.Parallel()
+	for _, setup := range []string{"none", "manual", "cimd"} {
+		t.Run(setup, func(t *testing.T) {
+			t.Parallel()
+			var record map[string]any
+			require.NoError(t, json.Unmarshal([]byte(nativeRecord), &record))
+			nativeTestMap(t, record["_meta"])["com.speakeasy.ai/catalog"] = map[string]any{"authSetup": setup, "supportsCimd": setup == "cimd"}
+			raw, err := json.Marshal(record)
+			require.NoError(t, err)
+			var detail serverDetailsEntry
+			require.NoError(t, json.Unmarshal(raw, &detail))
+			projected := projectServerDetails(detail, []string{"https://other.example.test/mcp"})
+			require.Empty(t, projected.RemoteURL)
+			require.Equal(t, setup, projected.AuthSetup)
+			require.Equal(t, setup == "cimd", projected.SupportsCIMD)
+		})
+	}
 }

@@ -87,11 +87,10 @@ func TestRunSwitchesServerInPlace(t *testing.T) {
 	require.False(t, pluginServer.Deleted)
 	require.Equal(t, conv.ToNullUUID(server.toolset.ID), pluginServer.McpServerID)
 
-	// The toolset is disabled but kept, so the switch can be undone.
-	state, err := repo.New(ti.conn).GetToolsetStateFixture(ctx, server.toolset.ID)
+	// The toolset is kept, so the switch can be undone.
+	deleted, err := repo.New(ti.conn).GetToolsetStateFixture(ctx, server.toolset.ID)
 	require.NoError(t, err)
-	require.False(t, state.McpEnabled)
-	require.False(t, state.Deleted)
+	require.False(t, deleted)
 
 	resource, err := repo.New(ti.conn).GetRemoteSessionResourceFixture(ctx, sessionID)
 	require.NoError(t, err)
@@ -106,8 +105,8 @@ func TestRunSwitchesServerInPlace(t *testing.T) {
 	leftover := findCandidate(t, ctx, ti, server)
 	require.Equal(t, migration.ActionDelete, leftover.Action)
 	require.True(t, containsSubstring(leftover.DeleteReasons, "already migrated"), "delete reasons %q", leftover.DeleteReasons)
-	deleted := migrate(t, ctx, ti, false, server)
-	require.Equal(t, migration.StatusDeleted, deleted[0].Status, deleted[0].Reason)
+	deletedOutcomes := migrate(t, ctx, ti, false, server)
+	require.Equal(t, migration.StatusDeleted, deletedOutcomes[0].Status, deletedOutcomes[0].Reason)
 	require.Equal(t, switched, readServer(t, ctx, ti, server))
 }
 
@@ -204,7 +203,7 @@ func TestRunMigratesServersWithoutUpstreamSignIn(t *testing.T) {
 			switched := readServer(t, ctx, ti, server)
 			require.False(t, switched.ToolsetID.Valid)
 			require.Equal(t, conv.ToNullUUID(outcomes[0].RemoteMcpServerID), switched.RemoteMcpServerID)
-			require.Equal(t, server.toolset.UserSessionIssuerID, switched.UserSessionIssuerID)
+			require.Equal(t, uuid.NullUUID{UUID: server.issuerID, Valid: server.issuerID != uuid.Nil}, switched.UserSessionIssuerID)
 			if !tc.opts.otherTool {
 				require.False(t, switched.RemoteSessionIssuerID.Valid)
 			}
@@ -231,10 +230,6 @@ func TestListCandidatesBlocksIneligibleServers(t *testing.T) {
 		blocker string
 		seed    func(t *testing.T, ctx context.Context, ti *testInstance) fixtureServer
 	}{
-		{name: "no server row", blocker: "no server row", seed: func(t *testing.T, ctx context.Context, ti *testInstance) fixtureServer {
-			t.Helper()
-			return seedServer(t, ctx, ti, serverOptions{slug: "legacy-only", remoteURL: "https://mcp.example.com/mcp", noWrapper: true})
-		}},
 		{name: "enterprise-managed bindings", blocker: "enterprise-managed", seed: func(t *testing.T, ctx context.Context, ti *testInstance) fixtureServer {
 			t.Helper()
 			server := seedServer(t, ctx, ti, serverOptions{slug: "ema", remoteURL: "https://mcp.example.com/mcp"})
@@ -268,7 +263,7 @@ func TestListCandidatesBlocksIneligibleServers(t *testing.T) {
 		{name: "issuer shared with an enabled toolset", blocker: "another enabled toolset", seed: func(t *testing.T, ctx context.Context, ti *testInstance) fixtureServer {
 			t.Helper()
 			server := seedServer(t, ctx, ti, serverOptions{slug: "toolset-a", remoteURL: "https://mcp.example.com/mcp"})
-			seedServer(t, ctx, ti, serverOptions{slug: "toolset-b", remoteURL: "https://mcp.example.com/mcp", sharedIssuer: &server, noWrapper: true})
+			seedServer(t, ctx, ti, serverOptions{slug: "toolset-b", remoteURL: "https://mcp.example.com/mcp", sharedIssuer: &server})
 			return server
 		}},
 	}
@@ -291,9 +286,7 @@ func TestListCandidatesBlocksIneligibleServers(t *testing.T) {
 
 			outcomes := migrate(t, ctx, ti, false, server)
 			require.Equal(t, migration.StatusFailed, outcomes[0].Status)
-			state, err := repo.New(ti.conn).GetToolsetStateFixture(ctx, server.toolset.ID)
-			require.NoError(t, err)
-			require.True(t, state.McpEnabled)
+			require.Equal(t, conv.ToNullUUID(server.toolset.ID), readServer(t, ctx, ti, server).ToolsetID)
 		})
 	}
 }
@@ -311,16 +304,15 @@ func TestPreviewRollsBack(t *testing.T) {
 	unchanged := readServer(t, ctx, ti, server)
 	require.Equal(t, conv.ToNullUUID(server.toolset.ID), unchanged.ToolsetID)
 	require.False(t, unchanged.RemoteMcpServerID.Valid)
-	state, err := repo.New(ti.conn).GetToolsetStateFixture(ctx, server.toolset.ID)
-	require.NoError(t, err)
-	require.True(t, state.McpEnabled)
+	require.Equal(t, "private", unchanged.Visibility)
 }
 
 func TestRunStopsAtFirstFailure(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMigrator(t)
-	blocked := seedServer(t, ctx, ti, serverOptions{slug: "blocked", remoteURL: "https://mcp.example.com/mcp", noWrapper: true})
+	blocked := seedServer(t, ctx, ti, serverOptions{slug: "blocked", remoteURL: "https://mcp.example.com/mcp"})
+	require.NoError(t, repo.New(ti.conn).MakeClientSelfOwnedFixture(ctx, blocked.clientID))
 	ready := seedServer(t, ctx, ti, serverOptions{slug: "ready", remoteURL: "https://mcp.example.com/mcp"})
 
 	outcomes := migrate(t, ctx, ti, false, blocked, ready)
@@ -389,16 +381,16 @@ func TestRunDeletesToolsetsLeftWithNothingToMigrate(t *testing.T) {
 			previewed := migrate(t, ctx, ti, true, server)
 			require.Equal(t, migration.StatusPreviewed, previewed[0].Status, previewed[0].Reason)
 			require.Equal(t, migration.ActionDelete, previewed[0].Action)
-			state, err := repo.New(ti.conn).GetToolsetStateFixture(ctx, server.toolset.ID)
+			deleted, err := repo.New(ti.conn).GetToolsetStateFixture(ctx, server.toolset.ID)
 			require.NoError(t, err)
-			require.False(t, state.Deleted)
+			require.False(t, deleted)
 
 			outcomes := migrate(t, ctx, ti, false, server)
 			require.Equal(t, migration.StatusDeleted, outcomes[0].Status, outcomes[0].Reason)
 			require.True(t, containsSubstring(outcomes[0].Actions, "Delete the toolset"), "actions %q", outcomes[0].Actions)
-			state, err = repo.New(ti.conn).GetToolsetStateFixture(ctx, server.toolset.ID)
+			deleted, err = repo.New(ti.conn).GetToolsetStateFixture(ctx, server.toolset.ID)
 			require.NoError(t, err)
-			require.True(t, state.Deleted)
+			require.True(t, deleted)
 
 			// The toolset's server and its address go with it.
 			_, err = mcpserversrepo.New(ti.conn).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: server.toolset.ID, ProjectID: ti.projectID})

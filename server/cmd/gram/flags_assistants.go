@@ -190,7 +190,7 @@ func newAssistantRuntime(
 		if err != nil {
 			return nil, fmt.Errorf("decode --assistant-runtime-gke-cluster-ca: %w", err)
 		}
-		dynamicClient, err := k8s.NewRemoteDynamicClient(ctx, endpoint, caCert)
+		dynamicClient, err := k8s.NewRemoteDynamicClient(ctx, endpoint, caCert, k8s.RemoteClientOptions{QPS: 0, Burst: 0})
 		if err != nil {
 			return nil, fmt.Errorf("build assistant cluster client: %w", err)
 		}

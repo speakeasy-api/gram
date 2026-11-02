@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/dashboards"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/widgets"
 )
 
 func dashboardRefusalOf(t *testing.T, result *mcp.CallToolResult) dashboardRefusal {
@@ -47,6 +48,7 @@ func TestDashboardToolErrorsAreReadable(t *testing.T) {
 		"forbidden":          {ErrForbidden, "permission_denied", "", "An authorized external user with project:read on the exact project is required."},
 		"layout rule":        {oops.E(oops.CodeBadRequest, nil, "operations[0] overlaps card x"), "invalid_request", "operations[0] overlaps card x", "Correct what the reason names and preview again."},
 		"not creator":        {oops.C(oops.CodeForbidden), widgetOwnerOrWriteRequired, "", "Only the dashboard's creator, or someone with project:write, may change it."},
+		"dataset restricted": {oops.E(oops.CodeForbidden, widgets.ErrDatasetRestricted, "only organization administrators can save widgets over risk_findings"), widgetDatasetRestricted, "", "This dashboard has widgets over a dataset only organization administrators can read, so only they can copy it."},
 		"not found":          {oops.E(oops.CodeNotFound, nil, "dashboard not found"), "not_found", "dashboard not found", "Use the ids list_dashboards and get_dashboard return."},
 		"unavailable":        {ErrUnavailable, unavailableCode, "", unavailable},
 		"unexpected failure": {fmt.Errorf("query dashboards: %w", errors.New("connection reset by 10.0.0.7")), unavailableCode, "", unavailable},

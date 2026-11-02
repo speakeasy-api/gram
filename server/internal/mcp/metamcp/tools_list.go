@@ -51,7 +51,7 @@ func Tools(executeToolSchema json.RawMessage) []Tool {
 	return []Tool{
 		{
 			Name:        ToolListServers,
-			Description: "List the member MCP servers this gateway fronts: which systems are reachable, their ordering, and their connection state. Start here to orient before drilling into a specific server.",
+			Description: "List the member MCP servers this gateway fronts: which systems are reachable, their ordering, and their connection state. Status \"unknown\" means not checked, not broken: this list does not contact remote servers; call connection_status to check sign-in. Start here to orient before drilling into a specific server.",
 			InputSchema: listServersSchema,
 		},
 		{
@@ -71,7 +71,7 @@ func Tools(executeToolSchema json.RawMessage) []Tool {
 		},
 		{
 			Name:        ToolConnectionStatus,
-			Description: "Show which member servers the user is signed in to, with a link to sign in to the rest when this gateway has a sign-in page. Call it when a server reports it needs authentication, or when the user asks what they are connected to. Call it again after the user signs in to refresh.",
+			Description: "Show member connection status. Live connections check current sign-in; cached connections report verification at consent without a new probe. Tool calls check current authorization. Follow the result’s directions to sign in or give consent again.",
 			InputSchema: connectionStatusSchema,
 		},
 	}

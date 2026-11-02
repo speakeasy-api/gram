@@ -89,6 +89,9 @@ export function grantsFromRole(
 
   for (const g of role.grants) {
     const scope = g.scope as Scope;
+    // Auth client permissions are provisioned and not edited here; leaving
+    // them out of the form means a save never touches them.
+    if (scope === "mcp:auth" || scope === "mcp:blocked_auth") continue;
     const baseScope = baseScopeByBlocklist.get(scope) ?? scope;
     const effect: PolicyEffect = baseScopeByBlocklist.has(scope)
       ? "deny"
@@ -276,6 +279,23 @@ export function diffGrants(
     addGrants: grantsFromIdentities(addIdentities),
     removeGrants: grantsFromIdentities(removeIdentities),
   };
+}
+
+/**
+ * Whether a role the server returned holds exactly the grants the editor sent
+ * it to hold. The server applies an edit as additions and removals, and a
+ * removal that matches no stored row does nothing, so a reply without an error
+ * does not prove the edit landed. Both sides go through the form's shape, so a
+ * stored wildcard and an unrestricted grant compare equal.
+ */
+export function roleHoldsGrants(
+  role: Role,
+  wanted: SdkRoleGrant[],
+  scopes: ScopeDefinition[],
+): boolean {
+  const saved = sdkGrantsFromForm(grantsFromRole(role, scopes), scopes);
+  const { addGrants, removeGrants } = diffGrants(saved, wanted);
+  return addGrants.length === 0 && removeGrants.length === 0;
 }
 
 /**

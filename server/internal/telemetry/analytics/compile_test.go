@@ -201,7 +201,7 @@ func TestCompileRejects(t *testing.T) {
 		{name: "order by on ungrouped rows", req: Request{Dataset: "tool_calls", Ungrouped: true, OrderBy: []OrderBy{{Measure: "count", Direction: "desc"}}}, code: ErrUnsatisfiable, field: "order_by"},
 		{name: "measures on ungrouped rows", req: Request{Dataset: "tool_calls", Ungrouped: true, Measures: count}, code: ErrUnsatisfiable, field: "measures"},
 		{name: "grain on ungrouped rows", req: Request{Dataset: "tool_calls", Ungrouped: true, Grain: TimeGrainDay}, code: ErrUnsatisfiable, field: "grain"},
-		{name: "unknown grain", req: Request{Dataset: "tool_calls", Measures: count, Grain: "minute"}, code: ErrUnsupportedGrain, field: "grain"},
+		{name: "unknown grain", req: Request{Dataset: "tool_calls", Measures: count, Grain: "second"}, code: ErrUnsupportedGrain, field: "grain"},
 		{name: "limit above the maximum", req: Request{Dataset: "tool_calls", Measures: count, Limit: MaxLimit + 1}, code: ErrLimitExceeded, field: "limit"},
 		{name: "rows above the rows maximum", req: Request{Dataset: "tool_calls", Ungrouped: true, Limit: MaxRowsLimit + 1}, code: ErrLimitExceeded, field: "limit"},
 		{name: "to before from", req: Request{Dataset: "tool_calls", Measures: count, FromUnixNano: testTo, ToUnixNano: testFrom}, code: ErrInvalidTimeRange, field: "to"},

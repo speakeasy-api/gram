@@ -60,7 +60,7 @@ vi.mock("@gram/client/react-query/updateEnvironment.js", () => ({
 vi.mock("./useEnvironmentVariables", () => ({
   useEnvironmentVariables: () => [],
 }));
-vi.mock("./MCPDetails", () => ({
+vi.mock("./PageSection", () => ({
   PageSection: ({
     children,
     action,
@@ -73,6 +73,8 @@ vi.mock("./MCPDetails", () => ({
       {children}
     </section>
   ),
+}));
+vi.mock("./OAuthDetailsModal", () => ({
   OAuthDetailsModal: ({
     isOpen,
     onManageMetadata,
@@ -83,6 +85,8 @@ vi.mock("./MCPDetails", () => ({
     isOpen ? (
       <button onClick={onManageMetadata}>Manage metadata source</button>
     ) : null,
+}));
+vi.mock("./oauth-wizard", () => ({
   ConnectOAuthModal: ({
     isOpen,
     existingConfig,

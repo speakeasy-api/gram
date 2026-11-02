@@ -43,6 +43,7 @@ func NewKeysClient(options *KeysClientOptions) *KeysClient {
 		httpClient.RotateKey(),
 		httpClient.ListKeys(),
 		httpClient.RevokeKey(),
+		httpClient.UpdateKeyPolicy(),
 		httpClient.VerifyKey(),
 	)
 

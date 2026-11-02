@@ -20,6 +20,8 @@ const (
 	describeAnalyticsCatalogToolName     = "describe_analytics_catalog"
 	listAnalyticsDimensionValuesToolName = "list_analytics_dimension_values"
 	runAnalyticsQueryToolName            = "run_analytics_query"
+	getSignalDefinitionToolName          = "get_signal_definition"
+	findSignalSessionsToolName           = "find_signal_sessions"
 
 	// analyticsFeature names the capability in refusals.
 	analyticsFeature = "analytics"
@@ -50,7 +52,8 @@ func registerAnalyticsTools(reg *Registrar, service *AnalyticsService) {
 		Title: "Describe the Analytics Catalog",
 		Description: "Read the catalog a project's agent session data is queried through: every dataset (what one row is, and how many days back it can be asked about), its dimensions with the filter operators and the one aggregation each admits, its measures with their units and aggregations, the time grains, and the limits every query is held to. " +
 			"Call this before run_analytics_query or list_analytics_dimension_values: the names it returns are the only vocabulary they accept, and nothing here is a table or SQL. A field's description says which producers fill it; a field's lookup names the per-project map it reads through, so grouping and filtering on it speak the mapped names. " +
-			"Requires Explore to be switched on for the organization.",
+			"Only the datasets this caller can read are listed: risk_findings, which counts what risk policies caught, is listed to organization administrators alone. A dataset of kind metric answers grouped queries only. " +
+			"Composed datasets require Explore. signal_metrics describes the entitled Signals Intelligence measurement contract, current sensors, signal names and ordered membership, independently of Explore.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: analyticsProjectSchema(nil, []string{"project_id"}),
 	}
@@ -58,15 +61,17 @@ func registerAnalyticsTools(reg *Registrar, service *AnalyticsService) {
 		Name:  listAnalyticsDimensionValuesToolName,
 		Title: "List a Dimension's Values",
 		Description: "List the values one dimension of a dataset actually holds inside a time window, most frequent first with how many rows at the dataset's grain carry each, for choosing filter values before run_analytics_query. " +
-			"Every value returned is one a filter will match: a dimension that reads through a lookup shows the mapped names, and the empty value is never offered. " +
-			"At most 200 values, 50 by default; the half-open window [from, to) is bounded by the dataset's max_time_range_days. Requires Explore to be switched on for the organization.",
+			"Every value returned is one a filter will match: a dimension that reads through a lookup shows the mapped names. Composed datasets omit empty values. " +
+			"At most 200 values, 50 by default. For dataset signals, supply signal_scope; dimension=attribute_keys discovers available labels, and dimension=attribute with an exact attribute key lists values. present=false means the label is absent, independently of a present empty string. Composed datasets require Explore; signals requires Signals Intelligence.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: analyticsProjectSchema(map[string]*jsonschema.Schema{
-			"dataset":   stringSchema("Dataset to look in, by name from describe_analytics_catalog.", 1, 64),
-			"dimension": stringSchema("Dimension to list the values of, by name from describe_analytics_catalog.", 1, 64),
-			"from":      dateTimeSchema("Start of the half-open window [from, to), RFC 3339."),
-			"to":        dateTimeSchema("End of the half-open window [from, to), RFC 3339."),
-			"limit":     {Type: "integer", Minimum: new(float64(1)), Maximum: new(float64(analytics.MaxValuesLimit)), Description: fmt.Sprintf("Maximum values to return; defaults to %d and cannot exceed %d.", analytics.DefaultValuesLimit, analytics.MaxValuesLimit)},
+			"dataset":      stringSchema("Dataset to look in, by name from describe_analytics_catalog.", 1, 64),
+			"dimension":    stringSchema("Dimension to list the values of, by name from describe_analytics_catalog.", 1, 64),
+			"from":         dateTimeSchema("Start of the half-open window [from, to), RFC 3339."),
+			"to":           dateTimeSchema("End of the half-open window [from, to), RFC 3339."),
+			"limit":        {Type: "integer", Minimum: new(float64(1)), Maximum: new(float64(analytics.MaxValuesLimit)), Description: fmt.Sprintf("Maximum values to return; defaults to %d and cannot exceed %d.", analytics.DefaultValuesLimit, analytics.MaxValuesLimit)},
+			"signal_scope": signalScopeSchema(),
+			"attribute":    stringSchema("Exact label key when dimension is attribute.", 1, 256),
 		}, []string{"project_id", "dataset", "dimension", "from", "to"}),
 	}
 	query := &mcp.Tool{
@@ -74,15 +79,19 @@ func registerAnalyticsTools(reg *Registrar, service *AnalyticsService) {
 		Title: "Run an Analytics Query",
 		Description: "Run one query against a dataset from describe_analytics_catalog, in catalog vocabulary, never SQL. " +
 			fmt.Sprintf("Grouped, the default: group by up to %d dimensions, optionally bucketed by a time grain, with one or more measures (count alone, count_distinct over a dimension that admits it, or an aggregation over a measure field that admits it), filters ANDed with at most %d values each, an order by measure alias, and a limit of at most %d rows (%d by default), ordered by the first measure descending unless order_by says otherwise. ", analytics.MaxDimensions, analytics.MaxFilterValues, analytics.MaxLimit, analytics.DefaultLimit) +
-			"Ungrouped: rows at the dataset's grain, newest first, projecting the named dimensions, with no measures and no grain. " +
+			"Ungrouped: rows at the dataset's grain, newest first, projecting the named dimensions, with no measures and no grain; a dataset of kind metric refuses it. " +
 			"Row keys are the dimension names plus each measure's alias; time_bucket is present when a grain is set and time on ungrouped rows, both RFC 3339 in UTC, and columns says which key is which. " +
-			"The half-open window [from, to) is bounded by the dataset's max_time_range_days. An invalid request is refused naming the field to correct; a result holds at most limit rows and does not say whether more exist. Requires Explore to be switched on for the organization.",
+			"Composed results hold at most limit rows and do not say whether more exist. For dataset signals, send signal_query and omit composed dimensions/measures/filters: a sensor and explicit match rule define original-message matches, share among measured answers and exact distinct-conversation breadth, with outcome companions and definition context. grain=auto budgets complete UTC series; signal_result explains units, unknown coverage, selected groups and live freshness. Arbitrary attribute selectors are structured references. Composed datasets require Explore; signals requires Signals Intelligence.",
 		Annotations: readOnlyAnnotations(),
 		InputSchema: runAnalyticsQuerySchema(),
 	}
+	definition := &mcp.Tool{Name: getSignalDefinitionToolName, Title: "Inspect a Signal Measurement Definition", Description: "Read the immutable question, signal criteria, ordering and input contract behind a definition_hash returned by a signal measurement. Select the exact project, sensor and fingerprint. An absent historical snapshot is reported as unavailable, never reconstructed from current configuration. Requires Signals Intelligence and project:read; returns definition content, not conversation content.", Annotations: readOnlyAnnotations(), InputSchema: analyticsProjectSchema(map[string]*jsonschema.Schema{"sensor_id": uuidSchema("Contributing sensor UUID."), "definition_hash": stringSchema("Exact 64-character semantic fingerprint from the measurement.", 64, 64)}, []string{"project_id", "sensor_id", "definition_hash"})}
 
+	finder := &mcp.Tool{Name: findSignalSessionsToolName, Title: "Find Cross-session Signal Patterns", Description: "Measure signal presence, breadth and concentration across conversations in one exact project. Optionally select a peer predicate for separately named same-message and same-session co-occurrence with joint-answer denominators, and compare an equal-duration previous window with explicit comparability gates. signal_query uses the chart's sensor, probability rule, trigger/run and filters, without group_by. Evidence is an opt-in sample of at most twenty recent permitted conversations, containing reference coordinates only; open transcripts in the dashboard. Coverage remains unknown and differences are exploratory, not causal or significance claims. Requires Signals Intelligence and project:read; every evidence reference additionally passes chat access checks.", Annotations: readOnlyAnnotations(), InputSchema: analyticsProjectSchema(map[string]*jsonschema.Schema{
+		"from": dateTimeSchema("Inclusive source-time boundary."), "to": dateTimeSchema("Exclusive source-time boundary."), "signal_query": signalFindingsQuerySchema(), "peer": signalSelectionSchema(), "compare_previous": {Type: "boolean", Description: "Compare the adjacent equal-duration window, with comparability markers."}, "evidence": {Type: "boolean", Description: "Include bounded, permission-checked conversation references. Defaults to false."},
+	}, []string{"project_id", "from", "to", "signal_query"})}
 	if !live {
-		for _, tool := range []*mcp.Tool{describe, values, query} {
+		for _, tool := range []*mcp.Tool{describe, values, query, definition, finder} {
 			tool.Description += " Analytics queries are unavailable in this deployment."
 			addTool(reg, tool, meta, unavailableTool(analyticsFeature))
 		}
@@ -102,6 +111,16 @@ func registerAnalyticsTools(reg *Registrar, service *AnalyticsService) {
 	addTool(reg, query, meta, func(ctx context.Context, _ *mcp.CallToolRequest, input RunAnalyticsQueryInput) (*mcp.CallToolResult, RunAnalyticsQueryOutput, error) {
 		return analyticsToolCall(ctx, service.logger, query.Name, func(principal Principal) (RunAnalyticsQueryOutput, error) {
 			return service.Query(ctx, principal, input)
+		})
+	})
+	addTool(reg, definition, meta, func(ctx context.Context, _ *mcp.CallToolRequest, input GetSignalDefinitionInput) (*mcp.CallToolResult, GetSignalDefinitionOutput, error) {
+		return analyticsToolCall(ctx, service.logger, definition.Name, func(principal Principal) (GetSignalDefinitionOutput, error) {
+			return service.Definition(ctx, principal, input)
+		})
+	})
+	addTool(reg, finder, meta, func(ctx context.Context, _ *mcp.CallToolRequest, input FindSignalSessionsInput) (*mcp.CallToolResult, FindSignalSessionsOutput, error) {
+		return analyticsToolCall(ctx, service.logger, finder.Name, func(principal Principal) (FindSignalSessionsOutput, error) {
+			return service.FindSignalSessions(ctx, principal, input)
 		})
 	})
 }
@@ -150,7 +169,13 @@ func analyticsRefusalFor(err error) (refusal analyticsRefusal, named bool) {
 		refusal.Message = "Name exactly one project by its ID, as list_projects returns it."
 	case errors.Is(err, ErrAnalyticsNotEnabled):
 		refusal.Code = analyticsNotEnabledCode
-		refusal.Message = "Analytics queries are not switched on for your organization yet. They arrive with Explore; ask your Speakeasy contact to turn it on."
+		refusal.Message = "The requested analytics capability is not enabled. Composed datasets require Explore; signal measurements require Signals Intelligence."
+	case errors.Is(err, ErrAnalyticsDatasetRestricted):
+		refusal.Code = "forbidden"
+		refusal.Message = "Only organization administrators can read that dataset. Choose another dataset from describe_analytics_catalog, which lists only the ones this caller can read."
+	case errors.Is(err, ErrAnalyticsDefinitionNotFound):
+		refusal.Code = "not_found"
+		refusal.Message = "This historical measurement definition was not captured or is unavailable in the selected project. Inspect the current sensor separately; it may have changed."
 	case errors.Is(err, ErrForbidden):
 		refusal.Code = "forbidden"
 		refusal.Message = "That project is not one this caller can read."
@@ -203,15 +228,69 @@ func runAnalyticsQuerySchema() *jsonschema.Schema {
 		"direction": described(enumSchema("asc", "desc"), "Defaults to desc."),
 	}, []string{"measure"})
 	return analyticsProjectSchema(map[string]*jsonschema.Schema{
-		"dataset":    stringSchema("Dataset to query, by name from describe_analytics_catalog.", 1, 64),
-		"from":       dateTimeSchema("Start of the half-open window [from, to), RFC 3339."),
-		"to":         dateTimeSchema("End of the half-open window [from, to), RFC 3339."),
-		"grain":      described(enumSchema(analyticsNames(analytics.TimeGrains())...), "Time bucket width for a grouped query. Omit for none."),
-		"dimensions": described(boundedArraySchema(stringSchema("", 1, 64), 0, analytics.MaxDimensions, true), fmt.Sprintf("Group-by key when grouped; projected columns when ungrouped. At most %d.", analytics.MaxDimensions)),
-		"measures":   described(arraySchema(measure, 0, false), "Composed measures. Required when grouped, forbidden when ungrouped."),
-		"filters":    described(arraySchema(filter, 0, false), fmt.Sprintf("Filters, ANDed. At most %d values per filter.", analytics.MaxFilterValues)),
-		"order_by":   described(arraySchema(order, 0, false), "Sort for a grouped result, by measure alias. Ungrouped rows are always newest first."),
-		"limit":      {Type: "integer", Minimum: new(float64(1)), Maximum: new(float64(analytics.MaxLimit)), Description: fmt.Sprintf("Maximum rows; defaults to %d, at most %d for a grouped result and %d for ungrouped rows. Narrow the window or filter rather than raising it.", analytics.DefaultLimit, analytics.MaxLimit, analytics.MaxRowsLimit)},
-		"ungrouped":  {Type: "boolean", Description: "Return rows at the dataset's grain instead of aggregating. Defaults to false."},
+		"dataset":      stringSchema("Dataset to query, by name from describe_analytics_catalog.", 1, 64),
+		"from":         dateTimeSchema("Start of the half-open window [from, to), RFC 3339."),
+		"to":           dateTimeSchema("End of the half-open window [from, to), RFC 3339."),
+		"grain":        stringSchema("Time interval from the catalog. auto is available for signal measurements.", 1, 64),
+		"signal_query": signalQuerySchema(),
+		"dimensions":   described(boundedArraySchema(stringSchema("", 1, 64), 0, analytics.MaxDimensions, true), fmt.Sprintf("Group-by key when grouped; projected columns when ungrouped. At most %d.", analytics.MaxDimensions)),
+		"measures":     described(arraySchema(measure, 0, false), "Composed measures. Required when grouped, forbidden when ungrouped."),
+		"filters":      described(arraySchema(filter, 0, false), fmt.Sprintf("Filters, ANDed. At most %d values per filter.", analytics.MaxFilterValues)),
+		"order_by":     described(arraySchema(order, 0, false), "Sort for a grouped result, by measure alias. Ungrouped rows are always newest first."),
+		"limit":        {Type: "integer", Minimum: new(float64(1)), Maximum: new(float64(analytics.MaxLimit)), Description: fmt.Sprintf("Maximum rows; defaults to %d, at most %d for a grouped result and %d for ungrouped rows. Narrow the window or filter rather than raising it.", analytics.DefaultLimit, analytics.MaxLimit, analytics.MaxRowsLimit)},
+		"ungrouped":    {Type: "boolean", Description: "Return rows at the dataset's grain instead of aggregating. Defaults to false."},
 	}, []string{"project_id", "dataset", "from", "to"})
+}
+
+func signalDimensionSchema() *jsonschema.Schema {
+	schema := described(closedObject(map[string]*jsonschema.Schema{
+		"field":     stringSchema("System dimension advertised by signal_metrics.system_dimensions.", 1, 64),
+		"attribute": {Type: "string", MinLength: new(1), Description: "Exact arbitrary label key, at most 256 UTF-8 bytes; validated by the shared query engine."},
+	}, nil), "Exactly one system field or attribute key.")
+	schema.OneOf = []*jsonschema.Schema{{Required: []string{"field"}}, {Required: []string{"attribute"}}}
+	return schema
+}
+
+func signalScopeSchema() *jsonschema.Schema {
+	return closedObject(map[string]*jsonschema.Schema{
+		"sensor_id": uuidSchema("Exact sensor UUID from signal_metrics in the analytics catalog."),
+		"trigger":   stringSchema("Evaluation population: stream or manual. Defaults to stream.", 1, 64),
+		"run_id":    uuidSchema("Required for manual, absent for stream."),
+	}, []string{"sensor_id"})
+}
+
+func signalSelectionSchema() *jsonschema.Schema {
+	selection := closedObject(map[string]*jsonschema.Schema{
+		"sensor_id":     uuidSchema("Contributing sensor from signal_metrics.sensors."),
+		"signal_id":     uuidSchema("Signal for multi-label or exclusive measurements; omit with minimum_level."),
+		"minimum_level": {Type: "integer", Minimum: new(float64(0)), Maximum: new(float64(9)), Description: "Zero-based ordered level; use cumulative probability at or above it, never expected_index."},
+		"threshold":     {Type: "number", ExclusiveMinimum: new(float64(0)), Maximum: new(float64(1)), Description: "Explicit probability threshold greater than zero. Exclusive mode uses the selected signal."},
+	}, []string{"sensor_id", "threshold"})
+	selection.OneOf = []*jsonschema.Schema{{Required: []string{"signal_id"}}, {Required: []string{"minimum_level"}}}
+	return selection
+}
+
+func signalQuerySchema() *jsonschema.Schema {
+	filter := closedObject(map[string]*jsonschema.Schema{
+		"dimension": signalDimensionSchema(),
+		"operator":  stringSchema("Comparison advertised by signal_metrics.operators.", 1, 64),
+		"values":    boundedArraySchema(stringSchema("Exact value; empty is distinct from missing.", 0, 32768), 0, 100, true),
+	}, []string{"dimension", "operator"})
+	return closedObject(map[string]*jsonschema.Schema{
+		"selection": signalSelectionSchema(),
+		"trigger":   stringSchema("Evaluation population: stream or manual.", 1, 64),
+		"run_id":    uuidSchema("Exact manual run, absent for streaming."),
+		"group_by":  boundedArraySchema(signalDimensionSchema(), 0, 3, true),
+		"filters":   boundedArraySchema(filter, 0, 20, false),
+		"groups":    {Type: "integer", Minimum: new(float64(1)), Maximum: new(float64(20)), Description: "Top groups over the complete window; default five."},
+		"points":    {Type: "integer", Minimum: new(float64(1)), Maximum: new(float64(10000)), Description: "Complete-series point budget across all selected groups; default 2000."},
+	}, []string{"selection"})
+}
+
+func signalFindingsQuerySchema() *jsonschema.Schema {
+	schema := signalQuerySchema()
+	for _, field := range []string{"group_by", "groups", "points"} {
+		delete(schema.Properties, field)
+	}
+	return schema
 }

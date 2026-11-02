@@ -4,12 +4,16 @@ import (
 	"context"
 	"fmt"
 	"math"
+	"slices"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	hooksRepo "github.com/speakeasy-api/gram/server/internal/hooks/repo"
+	"github.com/speakeasy-api/gram/server/internal/risk"
+	riskRepo "github.com/speakeasy-api/gram/server/internal/risk/repo"
+	signalquery "github.com/speakeasy-api/gram/server/internal/telemetry/analytics/signals"
 )
 
 // Engine is the query path without its transport, shared by the analytics
@@ -18,6 +22,7 @@ import (
 type Engine struct {
 	catalog *Catalog
 	ch      Querier
+	db      *pgxpool.Pool
 }
 
 // NewEngine binds the default catalog's lookups to their loaders over db and
@@ -25,11 +30,13 @@ type Engine struct {
 func NewEngine(db *pgxpool.Pool, ch Querier) (*Engine, error) {
 	catalog, err := Default.WithLoaders(map[string]LookupLoader{
 		MCPServerDisplayNamesLookup: mcpServerDisplayNames(hooksRepo.New(db)),
+		RiskPolicyNamesLookup:       riskPolicyNames(riskRepo.New(db)),
+		RiskPolicySeveritiesLookup:  riskPolicySeverities(riskRepo.New(db)),
 	})
 	if err != nil {
 		return nil, fmt.Errorf("bind catalog lookups: %w", err)
 	}
-	return &Engine{catalog: catalog, ch: ch}, nil
+	return &Engine{catalog: catalog, ch: ch, db: db}, nil
 }
 
 // Catalog is the contract the engine answers: what describe serves.
@@ -44,11 +51,27 @@ type QueryResult struct {
 	Plan    string
 	Columns []Column
 	Rows    []Row
+	// SignalResult preserves the semantic companions for a signal measurement.
+	SignalResult *SignalResult
 }
 
 // Query loads the lookups the request reads, compiles it and runs it. A
 // request the compiler rejects comes back as an *Error.
 func (e *Engine) Query(ctx context.Context, tenant Tenant, req Request) (*QueryResult, error) {
+	if req.Dataset == signalquery.Dataset && e.catalog.signalMetrics {
+		if req.SignalQuery == nil || req.Ungrouped || len(req.Measures)+len(req.Dimensions)+len(req.Filters)+len(req.OrderBy) > 0 {
+			return nil, newError(ErrUnsatisfiable, req.Dataset, "signal_query", "", "signals requires signal_query instead of composed measures, dimensions or filters")
+		}
+		step := string(req.Grain)
+		result, err := e.SignalQuery(ctx, tenant, Window{FromUnixNano: req.FromUnixNano, ToUnixNano: req.ToUnixNano}, step, *req.SignalQuery)
+		if err != nil {
+			return nil, err
+		}
+		return &QueryResult{Dataset: signalquery.Dataset, Plan: "signals.canonical_final", Columns: signalColumns(), Rows: result.Rows, SignalResult: result}, nil
+	}
+	if req.SignalQuery != nil {
+		return nil, newError(ErrUnknownDataset, req.Dataset, "signal_query", "", "signal_query is only supported by the signals dataset")
+	}
 	lookups, err := e.catalog.LoadLookups(ctx, tenant, req.Dataset, req.Reads())
 	if err != nil {
 		return nil, fmt.Errorf("load the dataset's lookups: %w", err)
@@ -61,12 +84,31 @@ func (e *Engine) Query(ctx context.Context, tenant Tenant, req Request) (*QueryR
 	if err != nil {
 		return nil, fmt.Errorf("run analytics query: %w", err)
 	}
-	return &QueryResult{Dataset: plan.Dataset, Plan: plan.Name, Columns: plan.Columns, Rows: rows}, nil
+	return &QueryResult{Dataset: plan.Dataset, Plan: plan.Name, Columns: plan.Columns, Rows: rows, SignalResult: nil}, nil
+}
+
+// signalColumns describes every time-series field, including outcome and
+// definition companions that explain the measured population.
+func signalColumns() []Column {
+	columns := []Column{{Name: "time_bucket", Kind: ColumnTime}, {Name: "bucket_end", Kind: ColumnTime}, {Name: "latest_inserted_at", Kind: ColumnTime}}
+	for _, name := range []string{"series_id", "partial", "observed", "definition_hashes", "classifier_models", "classifier_providers", "evaluated_models", "compiler_versions", "input_strategies"} {
+		columns = append(columns, Column{Name: name, Kind: ColumnDimension})
+	}
+	for _, name := range []string{"observed_outcomes", "answered", "unmeasured", "matched_messages", "failed", "not_applicable", "draft", "evaluated_sessions", "matched_sessions", "definition_count", "unknown_measured_definitions", "unknown_measured_models", "probability_bins", "match_share", "session_breadth"} {
+		columns = append(columns, Column{Name: name, Kind: ColumnMeasure})
+	}
+	return columns
 }
 
 // Values lists a dimension's values inside a window, most frequent first,
 // read through its lookup like a query. Errors are as for Query.
 func (e *Engine) Values(ctx context.Context, tenant Tenant, req ValuesRequest) ([]DimensionValue, error) {
+	if req.Dataset == signalquery.Dataset && e.catalog.signalMetrics {
+		return e.signalValues(ctx, tenant, req)
+	}
+	if req.SignalScope != nil || req.Attribute != "" {
+		return nil, newError(ErrUnsatisfiable, req.Dataset, "signal_scope", "", "signal scope and attributes require dataset signals")
+	}
 	lookups, err := e.catalog.LoadLookups(ctx, tenant, req.Dataset, []string{req.Dimension})
 	if err != nil {
 		return nil, fmt.Errorf("load the dataset's lookups: %w", err)
@@ -101,6 +143,92 @@ func mcpServerDisplayNames(hooks *hooksRepo.Queries) LookupLoader {
 		}
 		return names, nil
 	}
+}
+
+// riskPolicyNames loads the project's risk policies, deleted ones included,
+// id to name.
+func riskPolicyNames(policies *riskRepo.Queries) LookupLoader {
+	return func(ctx context.Context, tenant Tenant) (map[string]string, error) {
+		rows, err := riskPolicyRows(ctx, policies, tenant)
+		if err != nil {
+			return nil, err
+		}
+		return namesByPolicy(rows), nil
+	}
+}
+
+// namesByPolicy maps each policy id to its name, a deleted one marked as such.
+func namesByPolicy(rows []riskRepo.ListRiskPolicyAnalyticsLabelsRow) map[string]string {
+	names := make(map[string]string, len(rows))
+	for _, row := range rows {
+		name := row.Name
+		if row.Deleted {
+			name += " (deleted)"
+		}
+		names[row.ID.String()] = name
+	}
+	return names
+}
+
+// riskPolicySeverities loads the project's risk policies, deleted ones
+// included, as severitiesByKey.
+func riskPolicySeverities(policies *riskRepo.Queries) LookupLoader {
+	return func(ctx context.Context, tenant Tenant) (map[string]string, error) {
+		rows, err := riskPolicyRows(ctx, policies, tenant)
+		if err != nil {
+			return nil, err
+		}
+		return severitiesByKey(rows), nil
+	}
+}
+
+// severitiesByKey maps every riskSeverityKeyExpr key the project's findings
+// can have to the band the finding reads as: its policy's, when the policy is
+// live and scored, as on the Watchdog page, or else the category band the key
+// carries. Findings without a policy key on the empty id.
+func severitiesByKey(rows []riskRepo.ListRiskPolicyAnalyticsLabelsRow) map[string]string {
+	bands := riskCategoryBands()
+	severities := make(map[string]string, (len(rows)+1)*len(bands))
+	for _, band := range bands {
+		severities[":"+band] = band
+	}
+	for _, row := range rows {
+		for _, band := range bands {
+			severity := band
+			if !row.Deleted && row.Score > 0 {
+				severity = risk.FindingSeverity(row.Score, "")
+			}
+			severities[row.ID.String()+":"+band] = severity
+		}
+	}
+	return severities
+}
+
+// riskCategoryBands are the bands categorySeverityExpr can read a category as.
+func riskCategoryBands() []string {
+	fallbacks, unknown := risk.CategoryFallbackSeverities()
+	bands := []string{unknown}
+	for _, band := range fallbacks {
+		if !slices.Contains(bands, band) {
+			bands = append(bands, band)
+		}
+	}
+	return bands
+}
+
+func riskPolicyRows(ctx context.Context, policies *riskRepo.Queries, tenant Tenant) ([]riskRepo.ListRiskPolicyAnalyticsLabelsRow, error) {
+	projectID, err := uuid.Parse(tenant.ProjectID)
+	if err != nil {
+		return nil, fmt.Errorf("parse project id: %w", err)
+	}
+	rows, err := policies.ListRiskPolicyAnalyticsLabels(ctx, riskRepo.ListRiskPolicyAnalyticsLabelsParams{
+		ProjectID:      projectID,
+		OrganizationID: tenant.OrganizationID,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list risk policy labels: %w", err)
+	}
+	return rows, nil
 }
 
 // UnixNano is undefined outside the years 1678 to 2262, so a bound is checked

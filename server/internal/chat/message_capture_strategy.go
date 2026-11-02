@@ -130,6 +130,16 @@ func (s *ChatMessageCaptureStrategy) StartOrResumeChat(ctx context.Context, requ
 	}
 
 	rows := buildPendingRows(request, projectID, userID, externalUserID, newMessages, generation)
+	if matchResult.diverged {
+		slots := make([]messageSlot, len(newMessages))
+		for i, message := range newMessages {
+			slots[i] = slotFromIncoming(message)
+		}
+		lineages := transcriptLineage(matchResult.previous, slots, false)
+		for i := range rows {
+			rows[i].lineage = lineages[i]
+		}
+	}
 
 	if err := s.writer.WriteWithAssets(ctx, projectID, rows); err != nil {
 		s.logger.ErrorContext(ctx, "failed to store chat messages", attr.SlogError(err))
@@ -152,6 +162,7 @@ type matchResult struct {
 	generation    int32
 	matchedPrefix int
 	diverged      bool
+	previous      []repo.ListChatMessagesForMatchRow
 }
 
 // matchIncomingAgainstStored finds the longest matching prefix between
@@ -224,6 +235,7 @@ func (s *ChatMessageCaptureStrategy) matchIncomingAgainstStored(ctx context.Cont
 		generation:    currentGen,
 		matchedPrefix: ii,
 		diverged:      diverged,
+		previous:      stored,
 	}, nil
 }
 
@@ -284,6 +296,7 @@ func buildPendingRows(
 			completionTokens: 0,
 			totalTokens:      0,
 			generation:       generation,
+			lineage:          nil,
 		}
 	}
 	return rows
@@ -436,6 +449,7 @@ func buildAssistantRows(
 		UserEmail:         request.UserEmail,
 		Provider:          response.Provider,
 		InferenceProvider: response.Provider,
+		Lineage:           nil,
 		HookHostname:      "",
 		AccountType:       "",
 		BillingMode:       "",

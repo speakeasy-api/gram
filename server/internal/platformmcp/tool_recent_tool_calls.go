@@ -8,6 +8,7 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -47,7 +48,10 @@ type ListRecentToolCallsInput struct {
 	ProjectSlug string `json:"project_slug,omitempty" jsonschema:"project slug to inspect; supply exactly one project selector"`
 	Window      string `json:"window,omitempty" jsonschema:"observation window: 1h (default) or 24h"`
 	Outcome     string `json:"outcome,omitempty" jsonschema:"optional outcome filter: success, error, blocked, or pending"`
-	Limit       int    `json:"limit,omitempty" jsonschema:"maximum calls to return; defaults to 10 and is capped at 50"`
+	// AgentID selects only calls attributed to this authenticated agent.
+	AgentID string `json:"agent_id,omitempty" jsonschema:"optional exact agent UUID; filters authenticated gateway and hook calls without selecting user identities"`
+
+	Limit int `json:"limit,omitempty" jsonschema:"maximum calls to return; defaults to 10 and is capped at 50"`
 }
 
 type RecentToolCall struct {
@@ -58,6 +62,8 @@ type RecentToolCall struct {
 	Target     string `json:"target,omitempty"`
 	Outcome    string `json:"outcome"`
 	Client     string `json:"client,omitempty"`
+	// AgentID is present only for the trusted agent identity in Tool Logs.
+	AgentID string `json:"agent_id,omitempty"`
 }
 
 type ListRecentToolCallsOutput struct {
@@ -80,6 +86,14 @@ func (r *PostgresReader) ListRecentToolCalls(ctx context.Context, principal Prin
 	outcome := strings.ToLower(strings.TrimSpace(input.Outcome))
 	if outcome != "" && !validRecentToolCallOutcome(outcome) {
 		return ListRecentToolCallsOutput{}, fmt.Errorf("outcome must be one of success, error, blocked, pending")
+	}
+	var agentIDs []string
+	if input.AgentID != "" {
+		agentID, err := uuid.Parse(input.AgentID)
+		if err != nil || agentID == uuid.Nil {
+			return ListRecentToolCallsOutput{}, fmt.Errorf("agent_id must be a nonzero agent UUID")
+		}
+		agentIDs = []string{agentID.String()}
 	}
 
 	project, err := r.ResolveProjectLogRead(ctx, principal, FindMCPInput{ProjectID: input.ProjectID, ProjectSlug: input.ProjectSlug})
@@ -119,10 +133,12 @@ func (r *PostgresReader) ListRecentToolCalls(ctx context.Context, principal Prin
 		MetaMCPMatchers:    metaMCPMatchers,
 		TargetTypes:        nil,
 		HostedToolsetSlugs: nil,
+		MCPServerIDs:       nil,
 		MCPServerTargetIDs: nil,
 		ShadowServerNames:  nil,
 		MetaMCPServerIDs:   nil,
 		UserFilters:        nil,
+		AgentIDs:           agentIDs,
 		HookSources:        nil,
 		AccountType:        "",
 		Statuses:           statuses,
@@ -139,6 +155,14 @@ func (r *PostgresReader) ListRecentToolCalls(ctx context.Context, principal Prin
 	rows, more := boundedRows(rows, limit)
 	calls := make([]RecentToolCall, 0, len(rows))
 	for _, row := range rows {
+		// UserKey is an identity union. Only its authenticated agent variant
+		// can leave this summary; user and external subject IDs stay private.
+		agentID := ""
+		if row.UserKind == "agent_id" {
+			if id, err := uuid.Parse(row.UserKey); err == nil && id != uuid.Nil {
+				agentID = id.String()
+			}
+		}
 		calls = append(calls, RecentToolCall{
 			OccurredAt: time.Unix(0, row.StartTimeUnixNano).UTC().Format(time.RFC3339Nano),
 			ToolName:   row.ToolName,
@@ -147,6 +171,7 @@ func (r *PostgresReader) ListRecentToolCalls(ctx context.Context, principal Prin
 			Target:     recentToolCallTarget(row),
 			Outcome:    recentToolCallOutcome(row),
 			Client:     dereferenceString(row.HookSource),
+			AgentID:    agentID,
 		})
 	}
 	organization, err := organizationsrepo.New(r.db).GetOrganizationMetadata(ctx, principal.OrganizationID)
@@ -210,7 +235,7 @@ func registerRecentToolCallTools(reg *Registrar, reader *PostgresReader) {
 	addTool(reg, &mcp.Tool{
 		Name:        "list_recent_tool_calls",
 		Title:       "List Recent Tool Calls",
-		Description: "List the newest Tool Logs summaries for one project, defaulting to 10 calls from the last hour. Requires log:read on the project. Each call is reduced to when it happened, the tool and target, how it ended, and the calling app when known. Constraints: this uses the bounded Tool Logs summary path and never returns arguments, results, bodies, headers, URLs, attributes, or user identities. The returned dashboard link opens the full Tool Logs page.",
+		Description: "List the newest Tool Logs summaries for one project, defaulting to 10 calls from the last hour. Requires log:read on the project. Optionally filter by an exact agent_id to inspect that agent's gateway and hook calls. Each call is reduced to when it happened, the tool and target, how it ended, the calling app, and the authenticated agent ID when known. Agent names can be resolved through the agent directory with its separate permissions. Constraints: this uses the bounded Tool Logs summary path and never returns arguments, results, bodies, headers, URLs, attributes, or user identities. The returned dashboard link opens the full Tool Logs page.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryLogRead}, func(ctx context.Context, _ *mcp.CallToolRequest, input ListRecentToolCallsInput) (*mcp.CallToolResult, ListRecentToolCallsOutput, error) {
 		principal, err := principalFromToolContext(ctx)
@@ -226,7 +251,10 @@ func registerUnavailableRecentToolCallTools(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "list_recent_tool_calls",
 		Title:       "List Recent Tool Calls",
-		Description: "List recent Tool Logs summaries for one project. This is not switched on for your organization yet.",
+		Description: "List recent Tool Logs summaries for one project, optionally filtered by an exact agent_id. This is not switched on for your organization yet.",
 		Annotations: readOnlyAnnotations(),
-	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryLogRead}, unavailableTool("recent_tool_calls"))
+	}, ToolMeta{Authorization: ExternalAuthorizationMember, Audiences: bothAudiences, ProjectScope: ProjectScopeExplicit, DiscoveryScopes: discoveryLogRead}, func(ctx context.Context, request *mcp.CallToolRequest, _ ListRecentToolCallsInput) (*mcp.CallToolResult, ListRecentToolCallsOutput, error) {
+		result, _, err := unavailableTool("recent_tool_calls")(ctx, request, nil)
+		return result, ListRecentToolCallsOutput{}, err
+	})
 }

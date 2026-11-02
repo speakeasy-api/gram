@@ -30,6 +30,11 @@ const maxDescriptionLength = 2000
 // found the widget changed since. It is wrapped in a conflict error.
 var ErrVersionChanged = errors.New("widget changed since it was read")
 
+// ErrDatasetRestricted marks a save over a dataset the caller may not read,
+// such as one only organization administrators may read. It is wrapped in a
+// forbidden error.
+var ErrDatasetRestricted = errors.New("dataset is restricted")
+
 // Input is a widget as a caller wants it saved.
 type Input struct {
 	// Name is the display name, 1 to 200 characters.
@@ -265,6 +270,11 @@ func (s *Service) DuplicateInTx(ctx context.Context, tx pgx.Tx, caller Caller, i
 	source, err := s.sourceWidget(ctx, repo.New(tx), *authCtx.ProjectID, widgetID, expectedVersion)
 	if err != nil {
 		return Snapshot{}, err
+	}
+	if ds, ok := s.catalog.Dataset(source.Dataset); ok {
+		if err := s.requireDataset(ctx, ds); err != nil {
+			return Snapshot{}, err
+		}
 	}
 	reason, err := s.problem(ctx, source.Dataset, source.Query, source.Visualization)
 	if err != nil {

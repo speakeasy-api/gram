@@ -163,6 +163,7 @@ func validateQuery(catalog *analytics.Catalog, dataset string, query Query, now 
 		OrderBy:      make([]analytics.OrderBy, 0, len(query.OrderBy)),
 		Limit:        query.Limit,
 		Ungrouped:    query.Ungrouped,
+		SignalQuery:  nil,
 	}
 	// The compiler folds the case of these, but the query endpoint's schema
 	// does not: a saved "COUNT" would validate here and be refused on replay.

@@ -3,26 +3,18 @@ package risk
 import (
 	"context"
 	"fmt"
-	"log/slog"
 	"slices"
 
-	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/outbox"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
-	"github.com/speakeasy-api/gram/server/internal/risk/policyflags"
-	"github.com/speakeasy-api/gram/server/internal/risk/repo"
 )
 
-// RiskFindingCreatedEvent carries one finding webhook and its flag scope.
+// RiskFindingCreatedEvent carries one finding webhook for its organization.
 type RiskFindingCreatedEvent struct {
-	// ProjectID scopes the rollout flag.
-	ProjectID uuid.UUID
-
-	// OrganizationID scopes the event and rollout flag.
+	// OrganizationID scopes the outbox entry.
 	OrganizationID string
 
 	// Event is the payload with its stable delivery id.
@@ -34,45 +26,25 @@ type RiskFindingCreatedEmitter interface {
 	Emit(ctx context.Context, candidates []RiskFindingCreatedEvent) error
 }
 
-// OutboxRiskFindingCreatedEmitter publishes enabled organizations through the transactional outbox.
+// OutboxRiskFindingCreatedEmitter publishes finding-created events through the transactional outbox.
 type OutboxRiskFindingCreatedEmitter struct {
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	flags  feature.Provider
+	db *pgxpool.Pool
 }
 
 // NewOutboxRiskFindingCreatedEmitter builds the ClickHouse-side webhook emitter.
-func NewOutboxRiskFindingCreatedEmitter(logger *slog.Logger, db *pgxpool.Pool, flags feature.Provider) *OutboxRiskFindingCreatedEmitter {
-	return &OutboxRiskFindingCreatedEmitter{logger: logger, db: db, flags: flags}
+func NewOutboxRiskFindingCreatedEmitter(db *pgxpool.Pool) *OutboxRiskFindingCreatedEmitter {
+	return &OutboxRiskFindingCreatedEmitter{db: db}
 }
 
-// Emit appends stable-id events only for projects switched to this emitter.
+// Emit appends stable-id events grouped by organization in one transaction.
 func (e *OutboxRiskFindingCreatedEmitter) Emit(ctx context.Context, candidates []RiskFindingCreatedEvent) error {
 	if len(candidates) == 0 {
 		return nil
 	}
 
-	ctx = policyflags.WithRequestMemo(ctx)
-	queries := repo.New(e.db)
-	enabledProjects := make(map[uuid.UUID]bool)
 	byOrganization := make(map[string][]outbox.IdentifiedWebhookEvent[events.RiskFindingCreatedPayloadV1])
 	for _, candidate := range candidates {
-		enabled, ok := enabledProjects[candidate.ProjectID]
-		if !ok {
-			// A failed lookup fails the batch so redelivery retries it rather than dropping the webhook.
-			var err error
-			enabled, err = policyflags.ProjectFlagChecked(ctx, e.logger, queries, e.flags, candidate.OrganizationID, candidate.ProjectID, feature.FlagRiskFindingsClickHouseCutover)
-			if err != nil {
-				return fmt.Errorf("check finding webhook emitter flag: %w", err)
-			}
-			enabledProjects[candidate.ProjectID] = enabled
-		}
-		if enabled {
-			byOrganization[candidate.OrganizationID] = append(byOrganization[candidate.OrganizationID], candidate.Event)
-		}
-	}
-	if len(byOrganization) == 0 {
-		return nil
+		byOrganization[candidate.OrganizationID] = append(byOrganization[candidate.OrganizationID], candidate.Event)
 	}
 
 	tx, err := e.db.Begin(ctx)

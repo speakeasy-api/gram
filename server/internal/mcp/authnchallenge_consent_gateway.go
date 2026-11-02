@@ -15,6 +15,10 @@ import (
 	"slices"
 
 	"github.com/google/uuid"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // gatewayListOpenLimit is the most servers a gateway's page lists open by
@@ -30,6 +34,10 @@ const maxFocusServerLength = 256
 type gatewayServerStatus string
 
 const (
+	// gatewayServerUnavailable is a server that did not complete discovery.
+	gatewayServerUnavailable gatewayServerStatus = "unavailable"
+	// gatewayServerNoAccess is a server the subject cannot access.
+	gatewayServerNoAccess gatewayServerStatus = "no_access"
 	// gatewayServerNoSignIn is a server whose upstream needs no per-person
 	// sign-in, so it works as soon as the gateway is authorized.
 	gatewayServerNoSignIn gatewayServerStatus = "no_sign_in"
@@ -64,8 +72,17 @@ type gatewayServer struct {
 	// needs connecting. A server with several services connects on its own
 	// page instead, where each is named.
 	ConnectClientID string
+	// ServerID is the member's mcp_servers id, which Hide and Show post.
+	ServerID string
+	// Hidden marks a server the person hid: listed last and left out of
+	// their tools.
+	Hidden bool
 	// cardIDs are the services the server signs in through.
 	cardIDs []string
+
+	// Auth is the server's upstream credential choice, where typed auth
+	// client resolution is enforced.
+	Auth *consentServerAuth
 }
 
 // Ready reports whether the server works without any further action.
@@ -73,7 +90,7 @@ func (g gatewayServer) Ready() bool {
 	switch g.Status {
 	case gatewayServerNoSignIn, gatewayServerConnected, gatewayServerChained:
 		return true
-	case gatewayServerChainPending, gatewayServerReconnect, gatewayServerNotConnected, gatewayServerNotSetUp:
+	case gatewayServerChainPending, gatewayServerReconnect, gatewayServerNotConnected, gatewayServerNotSetUp, gatewayServerUnavailable, gatewayServerNoAccess:
 		return false
 	}
 	return false
@@ -82,6 +99,10 @@ func (g gatewayServer) Ready() bool {
 // StatusLabel is the server's status line.
 func (g gatewayServer) StatusLabel() string {
 	switch g.Status {
+	case gatewayServerUnavailable:
+		return "Unavailable · try again later"
+	case gatewayServerNoAccess:
+		return "No access"
 	case gatewayServerNoSignIn:
 		return "Ready · no sign-in needed"
 	case gatewayServerConnected:
@@ -108,7 +129,7 @@ func (g gatewayServer) NeedsAttention() bool {
 // NeedsSignIn reports whether the server signs in through a service the
 // person can connect.
 func (g gatewayServer) NeedsSignIn() bool {
-	return g.Status != gatewayServerNoSignIn && g.Status != gatewayServerNotSetUp
+	return len(g.cardIDs) > 0 && (g.Status == gatewayServerNotConnected || g.Status == gatewayServerReconnect || g.Status == gatewayServerConnected || g.Status == gatewayServerChained || g.Status == gatewayServerChainPending)
 }
 
 // NotSetUp reports whether no service the person can connect signs in to
@@ -120,6 +141,11 @@ func (g gatewayServer) NotSetUp() bool {
 // gatewayConsentView is what a gateway's consent page renders in place of
 // the flat list of services.
 type gatewayConsentView struct {
+	members []metaMember
+	cards   []remoteSessionCard
+	// auth is each proxied member's credential choice, by server, where
+	// typed auth client resolution is enforced.
+	auth map[uuid.UUID]*consentServerAuth
 	// Servers are the servers the person can reach through the gateway,
 	// those needing action first.
 	Servers    []gatewayServer
@@ -136,6 +162,91 @@ type gatewayConsentView struct {
 	// FocusUnavailable marks a connect page requested for a server the
 	// person cannot reach, which renders the gateway's own page instead.
 	FocusUnavailable bool
+
+	// CanHide offers Hide and Show, which only a signed-in person has.
+	CanHide bool
+}
+
+// gatewayServerRow is a server with the page's form fields, shared by both lists.
+type gatewayServerRow struct {
+	gatewayServer
+	ConsentPath string
+	State       string
+	CSRFToken   string
+	CanHide     bool
+}
+
+// VisibleGatewayRows are the rows of the servers the person has not hidden.
+func (d consentTemplateData) VisibleGatewayRows() []gatewayServerRow {
+	return d.gatewayRows(d.Gateway.VisibleServers())
+}
+
+// HiddenGatewayRows are the rows of the servers the person hid.
+func (d consentTemplateData) HiddenGatewayRows() []gatewayServerRow {
+	return d.gatewayRows(d.Gateway.HiddenServers())
+}
+
+func (d consentTemplateData) gatewayRows(servers []gatewayServer) []gatewayServerRow {
+	rows := make([]gatewayServerRow, 0, len(servers))
+	for _, server := range servers {
+		rows = append(rows, gatewayServerRow{gatewayServer: server, ConsentPath: d.ConsentPath(), State: d.State, CSRFToken: d.CSRFToken, CanHide: d.Gateway.CanHide})
+	}
+	return rows
+}
+
+// VisibleServers are the servers the person has not hidden.
+func (v *gatewayConsentView) VisibleServers() []gatewayServer {
+	return slices.DeleteFunc(slices.Clone(v.Servers), func(g gatewayServer) bool { return g.Hidden })
+}
+
+// HiddenServers are the servers the person hid.
+func (v *gatewayConsentView) HiddenServers() []gatewayServer {
+	return slices.DeleteFunc(slices.Clone(v.Servers), func(g gatewayServer) bool { return !g.Hidden })
+}
+
+// markHidden flags the servers the person hid, which sort last.
+func (v *gatewayConsentView) markHidden(hidden map[uuid.UUID]bool) {
+	if len(hidden) == 0 {
+		return
+	}
+	for i := range v.Servers {
+		id, err := uuid.Parse(v.Servers[i].ServerID)
+		v.Servers[i].Hidden = err == nil && hidden[id]
+	}
+	v.recount()
+	sortGatewayServers(v.Servers)
+}
+
+// recount sets ReadyCount to the ready servers the person has not hidden.
+func (v *gatewayConsentView) recount() {
+	v.ReadyCount = 0
+	for _, server := range v.Servers {
+		if server.Ready() && !server.Hidden {
+			v.ReadyCount++
+		}
+	}
+}
+
+// AnyReady reports whether any server works, hidden ones included, so hiding
+// never blocks approval.
+func (v *gatewayConsentView) AnyReady() bool {
+	return slices.ContainsFunc(v.Servers, gatewayServer.Ready)
+}
+
+func sortGatewayServers(servers []gatewayServer) {
+	slices.SortStableFunc(servers, func(a, b gatewayServer) int {
+		return cmp.Or(compareBool(a.Hidden, b.Hidden), cmp.Compare(statusOrder(a.Status), statusOrder(b.Status)), cmp.Compare(a.Name, b.Name), cmp.Compare(a.Slug, b.Slug))
+	})
+}
+
+func compareBool(a, b bool) int {
+	switch {
+	case a == b:
+		return 0
+	case a:
+		return 1
+	}
+	return -1
 }
 
 // gatewayConsent builds the gateway consent view for the challenge's
@@ -155,7 +266,15 @@ func (s *Service) gatewayConsent(
 		return nil, nil, err
 	}
 	view := gatewayServersView(members, cards)
-	view.ListOpen = challengeState.FirstParty || len(view.Servers) <= gatewayListOpenLimit
+	if challengeState.Subject != nil && challengeState.Subject.Kind == urn.SessionSubjectKindUser {
+		view.CanHide = true
+		hidden, herr := hiddenmcpservers.HiddenServerIDs(ctx, s.db, endpoint.OrganizationID, challengeState.Subject.ID)
+		if herr != nil {
+			endpoint.LogWith(s.logger).WarnContext(ctx, "load hidden gateway servers", attr.SlogError(herr))
+		}
+		view.markHidden(hidden)
+	}
+	view.ListOpen = challengeState.FirstParty || len(view.VisibleServers()) <= gatewayListOpenLimit
 	if focus == "" {
 		return view, nil, nil
 	}
@@ -176,9 +295,9 @@ func (s *Service) gatewayConsent(
 // server, from the member's own project unless no project owns it, the same
 // match clientServesAnyMember makes.
 func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewayConsentView {
-	view := &gatewayConsentView{Servers: make([]gatewayServer, 0, len(members)), ReadyCount: 0, ListOpen: false, Focus: nil, FocusUnavailable: false}
+	view := &gatewayConsentView{Servers: make([]gatewayServer, 0, len(members)), ReadyCount: 0, ListOpen: false, Focus: nil, FocusUnavailable: false, CanHide: false, members: members, cards: cards, auth: nil}
 	for _, member := range members {
-		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", cardIDs: nil}
+		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", ServerID: member.serverID.String(), Hidden: false, cardIDs: nil, Auth: nil}
 		for _, card := range cards {
 			if cardServesMember(card, member) {
 				server.cardIDs = append(server.cardIDs, card.ClientID)
@@ -191,15 +310,39 @@ func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewa
 		if len(server.cardIDs) == 1 && (server.Status == gatewayServerNotConnected || server.Status == gatewayServerReconnect) {
 			server.ConnectClientID = server.cardIDs[0]
 		}
-		if server.Ready() {
-			view.ReadyCount++
-		}
 		view.Servers = append(view.Servers, server)
 	}
-	slices.SortStableFunc(view.Servers, func(a, b gatewayServer) int {
-		return cmp.Or(cmp.Compare(statusOrder(a.Status), statusOrder(b.Status)), cmp.Compare(a.Name, b.Name), cmp.Compare(a.Slug, b.Slug))
-	})
+	view.recount()
+	sortGatewayServers(view.Servers)
 	return view
+}
+
+// applyOutcomes makes discovery authoritative for status, ordering and actions.
+func (v *gatewayConsentView) applyOutcomes(outcomes []consentMemberOutcome) {
+	for i := range v.Servers {
+		server := &v.Servers[i]
+		server.Status = gatewayServerUnavailable
+		for _, outcome := range outcomes {
+			if outcome.Slug == server.Slug {
+				server.Status = outcome.Status
+				break
+			}
+		}
+		for _, member := range v.members {
+			if member.slug == server.Slug {
+				server.Auth = v.auth[member.serverID]
+				break
+			}
+		}
+		server.ConnectClientID = ""
+		if len(server.cardIDs) == 1 && (server.Status == gatewayServerReconnect || server.Status == gatewayServerNotConnected) {
+			server.ConnectClientID = server.cardIDs[0]
+		}
+	}
+	v.recount()
+	sortGatewayServers(v.Servers)
+	visible := len(v.VisibleServers())
+	v.ListOpen = visible <= gatewayListOpenLimit || v.ReadyCount < visible
 }
 
 func cardServesMember(card remoteSessionCard, member metaMember) bool {
@@ -259,7 +402,7 @@ func readiness(status gatewayServerStatus) int {
 		return 2
 	case gatewayServerNotConnected:
 		return 1
-	case gatewayServerNoSignIn, gatewayServerNotSetUp:
+	case gatewayServerNoSignIn, gatewayServerNotSetUp, gatewayServerUnavailable, gatewayServerNoAccess:
 		return 0
 	}
 	return 0
@@ -272,7 +415,7 @@ func statusOrder(status gatewayServerStatus) int {
 		return 0
 	case gatewayServerNotConnected:
 		return 1
-	case gatewayServerNotSetUp, gatewayServerChainPending:
+	case gatewayServerNotSetUp, gatewayServerChainPending, gatewayServerUnavailable, gatewayServerNoAccess:
 		return 2
 	case gatewayServerChained, gatewayServerConnected:
 		return 3

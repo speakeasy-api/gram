@@ -166,6 +166,16 @@ describe("useProjectNavRoutes", () => {
     expect(sessions()?.resourceId).toBe("project_b");
   });
 
+  it("keeps Agent Sessions discoverable for members who can read their own history", () => {
+    const { result } = renderHook(() => useProjectNavRoutes());
+    const sessions = result.current.find(
+      (entry) => entry.route === routes.agentSessions,
+    );
+    // Command K registers these routes as page actions. Requiring chat:read
+    // here would hide the search destination from owners without that grant.
+    expect(sessions?.scope).toEqual(["project:read"]);
+  });
+
   it("lists Identity before MCP Gateway, Security and Policy, and Observability", () => {
     const { result } = renderHook(() => useProjectNavRoutes());
     const navRoutes = result.current.map((entry) => entry.route);

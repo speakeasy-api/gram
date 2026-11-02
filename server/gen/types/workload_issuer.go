@@ -24,6 +24,10 @@ type WorkloadIssuer struct {
 	// What the platform is and what runs on it. Empty rather than absent where
 	// none is set.
 	Description string
+	// Allow valid assertions with jti or uti identifiers to be exchanged
+	// repeatedly until expiry. Defaults to false. Tokens without replay
+	// identifiers retain existing exact-token compatibility.
+	AllowAssertionReuse bool
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	AllowWildcardAdmission bool
 	// Free-form labels for grouping and filtering trusted platforms. Empty rather

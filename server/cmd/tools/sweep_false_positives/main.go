@@ -26,12 +26,11 @@
 //   - -dry-run defaults to true: a plain run only reports what it would mark.
 //   - Candidates are paged from Postgres risk_results, so findings that exist
 //     only in ClickHouse are not swept.
-//   - Marks are appended to ClickHouse first, then mirrored to Postgres. Every
-//     write is scoped by organization_id + project_id + id and skips findings
-//     already dismissed, so re-runs and resumes are idempotent.
+//   - Marks are appended to ClickHouse. Every write is scoped by
+//     organization_id + project_id + id and skips findings already dismissed,
+//     so re-runs and resumes are idempotent.
 //   - Marks are reversible through the risk results restore API, which
-//     appends ClickHouse reversal copies and clears the Postgres mirror. A
-//     Postgres UPDATE alone does not undo a sweep.
+//     appends ClickHouse reversal copies.
 //
 // On interruption (Ctrl-C) or error it prints the last processed id so the run
 // can be resumed with -cursor.
@@ -375,7 +374,7 @@ func sweep(ctx context.Context, pool *pgxpool.Pool, ch *chrepo.Queries, cfg conf
 		rep.flagged += int64(len(ids))
 
 		if len(ids) > 0 {
-			changed, err := falsepositivesweep.Apply(ctx, pool, ch, cfg.orgID, cfg.projectID, ids, reasons, cfg.dryRun)
+			changed, err := falsepositivesweep.Apply(ctx, ch, cfg.orgID, cfg.projectID, ids, reasons, cfg.dryRun)
 			if !cfg.dryRun {
 				// Earlier chunks may have committed before an error.
 				rep.updated += changed

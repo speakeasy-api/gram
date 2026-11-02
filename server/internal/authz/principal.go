@@ -238,6 +238,9 @@ func PatchPrincipalGrants(ctx context.Context, dbtx repo.DBTX, orgID string, pri
 	if _, err := principal.Value(); err != nil {
 		return fmt.Errorf("invalid grant principal: %w", err)
 	}
+	if err := RequireUpstreamSelectorWritesForGrants(ctx, orgID, addGrants); err != nil {
+		return err
+	}
 
 	removeRows, err := flattenRoleGrants(removeGrants)
 	if err != nil {
@@ -300,7 +303,7 @@ func parseRolePrincipalURN(rolePrincipalURN string) (urn.Principal, error) {
 
 func upsertPrincipalGrants(ctx context.Context, q *repo.Queries, orgID string, principal urn.Principal, rows []roleGrantRow) error {
 	for _, row := range rows {
-		if _, err := q.UpsertPrincipalGrant(ctx, repo.UpsertPrincipalGrantParams{
+		if err := upsertGrant(ctx, q, repo.UpsertPrincipalGrantParams{
 			OrganizationID: orgID,
 			PrincipalUrn:   principal,
 			Scope:          string(row.Scope),
@@ -314,6 +317,11 @@ func upsertPrincipalGrants(ctx context.Context, q *repo.Queries, orgID string, p
 }
 
 func insertRoleGrantsIfAbsent(ctx context.Context, q *repo.Queries, orgID string, roleSlug string, principal urn.Principal, rows []roleGrantRow) error {
+	for _, row := range rows {
+		if err := RequireUpstreamSelectorWrites(ctx, orgID, row.Selector); err != nil {
+			return err
+		}
+	}
 	for _, row := range rows {
 		if _, err := q.InsertPrincipalGrantIfAbsent(ctx, repo.InsertPrincipalGrantIfAbsentParams{
 			OrganizationID: orgID,

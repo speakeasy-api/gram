@@ -18,6 +18,14 @@ import (
 // or by request validation.
 const InstrumentMCPRequestRejected = "mcp.request.rejected"
 
+// InstrumentOAuthIDJAGExchange is the OTel instrument name for the counter of
+// ID-JAG token exchanges by outcome and rejection reason. Only exchanges that
+// reach the jwt-bearer grant handler are counted, plus a shared token
+// endpoint's refusal of one naming no resource. Refusals during client
+// authentication, client admission, AI tool blocking, or another shared
+// resource check happen earlier and are not counted.
+const InstrumentOAuthIDJAGExchange = "oauth.id_jag.exchange"
+
 // RequestRejectionReason is the closed set of reasons [Metrics] records on
 // mcp.request.rejected under gram.mcp.rejection_reason. It stays coarse so
 // the counter's per-server URL dimension does not multiply into many series.
@@ -47,6 +55,28 @@ const (
 // their declared protocol revision is outside the terminating surface's
 // supported set.
 const InstrumentMCPProtocolVersionRejected = "mcp.request.protocol_version_rejected"
+
+// InstrumentMCPSkillRead is the OTel instrument name for the counter of
+// skills served over MCP: one increment per `resources/read` of a `skill://`
+// URI that returned the skill's SKILL.md.
+const InstrumentMCPSkillRead = "mcp.skill.read"
+
+// SkillOrigin is the closed set of origins [Metrics.RecordSkillRead] records
+// on mcp.skill.read under gram.mcp.skill.origin. It names where the served
+// bytes came from, not which surface served them; the surface is a separate
+// dimension because the platform surface may one day serve distributed
+// skills too.
+type SkillOrigin string
+
+const (
+	// SkillOriginDistribution: a managed skill reached the endpoint through
+	// an active plugin skill distribution.
+	SkillOriginDistribution SkillOrigin = "distribution"
+
+	// SkillOriginEmbedded: a reviewed skill compiled into the server and
+	// served by the platform toolset.
+	SkillOriginEmbedded SkillOrigin = "embedded"
+)
 
 // OAuthFlowStage is the closed set of coarse stages at which a user-facing
 // OAuth flow can terminally resolve to a non-completion outcome (failed or
@@ -111,12 +141,22 @@ type Metrics struct {
 	// client resolver against the upstream client choice, by whether they
 	// agreed and each side's outcome.
 	authClientParityCounter metric.Int64Counter
+	// mandatoryAuthzShadowCounter counts shadowed mandatory checks.
+	mandatoryAuthzShadowCounter metric.Int64Counter
 
 	// mcpProtocolVersionRejectedCounter partitions terminating-surface traffic
 	// with requestCensus: rejected declarations land here before authentication,
 	// while accepted declarations reach requestCensus at dispatch. Remote and
 	// tunneled proxy traffic is outside this counter by design.
 	mcpProtocolVersionRejectedCounter metric.Int64Counter
+
+	// mcpSkillReadCounter is the unsampled census of skills served over MCP
+	// (mcp.skill.read), by serving surface and skill origin. It deliberately
+	// carries no per-server, per-skill, or per-organization dimension: the
+	// activation question ("are agents loading skills over MCP at all, and
+	// from which surface?") needs fleet-wide aggregation, and per-skill
+	// activation is recorded durably as skill observations instead.
+	mcpSkillReadCounter metric.Int64Counter
 
 	mcpToolCallCounter metric.Int64Counter
 	mcpRequestDuration metric.Float64Histogram
@@ -155,6 +195,10 @@ type Metrics struct {
 	// oauthResourceRejectedCounter counts RFC 8707 resource indicators a
 	// shared authorization server refused, by issuer, reason, and stage.
 	oauthResourceRejectedCounter metric.Int64Counter
+
+	// oauthIDJAGExchangeCounter counts ID-JAG token exchanges by issuer,
+	// outcome, and rejection reason.
+	oauthIDJAGExchangeCounter metric.Int64Counter
 
 	// tunnelPublicRejectedCounter counts anonymous public tunnel requests the
 	// admission gate rejected with 429 before they reached the tunnel gateway.
@@ -266,6 +310,15 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(context.Background(), "failed to create oauth resource rejected counter", attr.SlogError(err))
 	}
 
+	oauthIDJAGExchangeCounter, err := meter.Int64Counter(
+		InstrumentOAuthIDJAGExchange,
+		metric.WithDescription("ID-JAG token exchanges reaching Speakeasy's jwt-bearer grant handler, by user session issuer, outcome, and rejection reason; refusals during client authentication, client admission, AI tool blocking, or a shared token endpoint's resource check happen earlier and are not counted, except a request naming no resource"),
+		metric.WithUnit("{exchange}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(InstrumentOAuthIDJAGExchange), attr.SlogError(err))
+	}
+
 	mcpRequestRejectedCounter, err := meter.Int64Counter(
 		InstrumentMCPRequestRejected,
 		metric.WithDescription("MCP requests rejected before dispatch by the Session OAuth authentication gate or by request validation, by rejection reason, OAuth failure reason, server URL, serving surface, and public/private network surface"),
@@ -284,6 +337,15 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(InstrumentMCPProtocolVersionRejected), attr.SlogError(err))
 	}
 
+	mcpSkillReadCounter, err := meter.Int64Counter(
+		InstrumentMCPSkillRead,
+		metric.WithDescription("Skills served over MCP through resources/read of a skill:// URI, by serving surface, skill origin, and public/private network surface"),
+		metric.WithUnit("{read}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(InstrumentMCPSkillRead), attr.SlogError(err))
+	}
+
 	authClientParityCounter, err := meter.Int64Counter(
 		"mcp.auth_client.parity",
 		metric.WithDescription("Shadow comparisons of the typed auth client resolver against the upstream client choice, by agreement and each side's outcome"),
@@ -291,6 +353,15 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 	)
 	if err != nil {
 		logger.ErrorContext(context.Background(), "failed to create auth client parity counter", attr.SlogError(err))
+	}
+
+	mandatoryAuthzShadowCounter, err := meter.Int64Counter(
+		"mcp.authz.mandatory_shadow",
+		metric.WithDescription("Shadowed mandatory server and auth client checks beside today's decision, by organization, surface, caller, both outcomes, policy source and deny reason"),
+		metric.WithUnit("{check}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create mandatory authz shadow counter", attr.SlogError(err))
 	}
 
 	tunnelPublicRejectedCounter, err := meter.Int64Counter(
@@ -309,7 +380,9 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		metaMemberDispatchCounter:            metaMemberDispatchCounter,
 		mcpRequestRejectedCounter:            mcpRequestRejectedCounter,
 		authClientParityCounter:              authClientParityCounter,
+		mandatoryAuthzShadowCounter:          mandatoryAuthzShadowCounter,
 		mcpProtocolVersionRejectedCounter:    mcpProtocolVersionRejectedCounter,
+		mcpSkillReadCounter:                  mcpSkillReadCounter,
 		requestCensus:                        NewRequestCounter(meter, logger),
 		identityCoverage:                     NewIdentityCoverageCounter(meter, logger),
 		legacyFallback:                       NewLegacyFallbackCounter(meter, logger),
@@ -320,6 +393,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		oauthRefreshTokenReplayServedCounter: oauthRefreshTokenReplayServedCounter,
 		oauthAuthorityUnavailableCounter:     oauthAuthorityUnavailableCounter,
 		oauthResourceRejectedCounter:         oauthResourceRejectedCounter,
+		oauthIDJAGExchangeCounter:            oauthIDJAGExchangeCounter,
 		tunnelPublicRejectedCounter:          tunnelPublicRejectedCounter,
 	}
 }
@@ -370,6 +444,24 @@ func (m *Metrics) RecordMCPToolCall(ctx context.Context, orgID string, mcpURL st
 		kv = append(kv, attr.McpServerID(mcpServerID))
 	}
 	m.mcpToolCallCounter.Add(ctx, 1, metric.WithAttributes(kv...))
+}
+
+// RecordSkillRead counts one skill served over MCP: a `resources/read` of a
+// `skill://` URI that returned the skill's SKILL.md on the given surface,
+// from the given origin. Reads that fail (unknown URI, caller not assigned,
+// extension not enabled) are not counted; they stay on the span. Like
+// `mcp.request` it carries the network surface so private-network and public
+// activation can be told apart, and nothing per server or per skill.
+func (m *Metrics) RecordSkillRead(ctx context.Context, surface Surface, origin SkillOrigin) {
+	if m == nil || m.mcpSkillReadCounter == nil {
+		return
+	}
+
+	m.mcpSkillReadCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.McpSurface(string(surface)),
+		attr.McpSkillOrigin(origin),
+		attr.NetworkSurface(NetworkSurfaceFromContext(ctx)),
+	))
 }
 
 // RecordKillswitchIdentityCoverage records the bounded coverage classes for
@@ -475,6 +567,41 @@ func (m *Metrics) RecordAuthClientParity(ctx context.Context, agreed bool, outco
 		attr.AuthClientOutcome(outcome),
 		attr.AuthClientLegacyOutcome(legacyOutcome),
 		attr.AuthClientReason(reason),
+	))
+}
+
+// MandatoryAuthzShadow is one shadowed mandatory check. Every field but
+// OrganizationID is a closed set, and organizations only report while the
+// shadow flag targets them, so the series stay bounded.
+type MandatoryAuthzShadow struct {
+	OrganizationID string
+	Surface        string
+	Caller         string
+	Principal      string
+	LegacyAllowed  bool
+	// LegacyAuthCeiling separates coverage resting on a pre-version-5
+	// credential's derived auth client ceiling from explicit grants.
+	LegacyAuthCeiling bool
+	Outcome           string
+	Source            string
+	Reason            string
+}
+
+// RecordMandatoryAuthzShadow counts one shadowed mandatory check.
+func (m *Metrics) RecordMandatoryAuthzShadow(ctx context.Context, shadow MandatoryAuthzShadow) {
+	if m == nil || m.mandatoryAuthzShadowCounter == nil {
+		return
+	}
+	m.mandatoryAuthzShadowCounter.Add(ctx, 1, metric.WithAttributes(
+		attr.OrganizationID(shadow.OrganizationID),
+		attr.MandatoryAuthzSurface(shadow.Surface),
+		attr.MandatoryAuthzCaller(shadow.Caller),
+		attr.MandatoryAuthzPrincipal(shadow.Principal),
+		attr.MandatoryAuthzLegacyAllowed(shadow.LegacyAllowed),
+		attr.MandatoryAuthzLegacyAuthCeiling(shadow.LegacyAuthCeiling),
+		attr.MandatoryAuthzOutcome(shadow.Outcome),
+		attr.MandatoryAuthzSource(shadow.Source),
+		attr.MandatoryAuthzReason(shadow.Reason),
 	))
 }
 

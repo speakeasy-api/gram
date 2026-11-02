@@ -37,8 +37,8 @@ const consentToolNameLimit = consentInventoryMaxTools
 // plus manually picked tool names. Snapshot expansions are omitted — the
 // island re-previews annotation grants against the inventory it fetches.
 // Empty when there is no restrictive prefill.
-func consentPrefillAttr(prefill *toolfilter.SessionSelection) string {
-	if prefill == nil {
+func consentPrefillAttr(prefill *toolfilter.SessionSelection, catalog *toolfilter.CatalogReference) string {
+	if prefill == nil && catalog == nil {
 		return ""
 	}
 	type prefillAnnotation struct {
@@ -47,7 +47,11 @@ func consentPrefillAttr(prefill *toolfilter.SessionSelection) string {
 	}
 	annotations := []prefillAnnotation{}
 	tools := []string{}
-	for _, entry := range prefill.Allow {
+	var allow []toolfilter.AllowEntry
+	if prefill != nil {
+		allow = prefill.Allow
+	}
+	for _, entry := range allow {
 		switch entry.Type {
 		case toolfilter.AllowTypeAnnotation:
 			if entry.Mode != nil {
@@ -57,7 +61,21 @@ func consentPrefillAttr(prefill *toolfilter.SessionSelection) string {
 			tools = append(tools, entry.Name)
 		}
 	}
-	encoded, err := json.Marshal(map[string]any{"annotations": annotations, "tools": tools})
+	accessMode := ""
+	if catalog != nil {
+		accessMode = "specific"
+		if catalog.AllTools {
+			accessMode = "all"
+			if catalog.Mode == toolfilter.CatalogModeCached {
+				accessMode = "cached"
+			}
+		}
+	}
+	encoded, err := json.Marshal(struct {
+		Annotations []prefillAnnotation `json:"annotations"`
+		Tools       []string            `json:"tools"`
+		AccessMode  string              `json:"accessMode,omitempty"`
+	}{Annotations: annotations, Tools: tools, AccessMode: accessMode})
 	if err != nil {
 		return ""
 	}
@@ -112,6 +130,9 @@ func (s *Service) describeConsentToolset(ctx context.Context, endpoint *Resolved
 }
 
 func (s *Service) consentToolPickerEligible(ctx context.Context, endpoint *ResolvedMcpEndpoint) (bool, error) {
+	if endpoint.MetaMcpServerID.Valid {
+		return true, nil
+	}
 	if !endpoint.McpServerID.Valid {
 		return false, nil
 	}

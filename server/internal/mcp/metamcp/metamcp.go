@@ -29,3 +29,7 @@ const (
 	ToolDescribeTools  = "describe_tools"
 	ToolExecuteTool    = "execute_tool"
 )
+
+// ToolCodeExecute is the one tool Code Mode serves: it runs a Python program
+// against the connection's member servers.
+const ToolCodeExecute = "execute"

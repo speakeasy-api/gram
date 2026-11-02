@@ -124,6 +124,14 @@ message MessageEvent {
   // attachments cannot emit a message event until associated with a message.
   repeated string attachment_ids = 11;
 
+  // Transcript position at capture, independent of later generations.
+  int32 generation = 12;
+  int64 sequence = 13;
+  // original, reobserved, synthetic or unknown. Independent of historical imports.
+  string capture_kind = 14;
+  // Original persisted target when this row is an exact transcript copy.
+  string original_message_id = 15;
+
   option (gcp.pubsub.v1.topic) = {
     retention_hint: { seconds: 345600 /* 4 days */ }
   };

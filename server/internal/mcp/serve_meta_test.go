@@ -72,7 +72,8 @@ func createMetaMcpEndpoint(
 }
 
 // seedMetaMember creates a member mcp_server (remote-backed, named and
-// slugged) and attaches it to the meta server at the given sort order.
+// slugged), attaches it to the meta server at the given sort order, and
+// returns the member server's id.
 func seedMetaMember(
 	t *testing.T,
 	ctx context.Context,
@@ -82,7 +83,7 @@ func seedMetaMember(
 	name, slug string,
 	sortOrder int32,
 	visibility string,
-) {
+) uuid.UUID {
 	t.Helper()
 
 	remote := remotemcptest.SeedServer(t, ctx, conn, remotemcprepo.CreateServerParams{
@@ -116,6 +117,8 @@ func seedMetaMember(
 		SortOrder:       sortOrder,
 	})
 	require.NoError(t, err)
+
+	return server.ID
 }
 
 func makeMetaRPCBody(t *testing.T, method string, params map[string]any) []byte {
@@ -706,13 +709,8 @@ func TestWellKnown_MetaEndpoint_NoIssuer_NotFound(t *testing.T) {
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 }
 
-// TestHandleConsentMCP_MetaEndpoint_NotFound pins that the consent
-// tool-picker transport does not exist for meta-MCP-backed endpoints: they
-// have no per-tool picker (member tool catalogs land with the AGE-3291
-// runtime), so the transport answers NotFound — not the BadRequest a
-// missing-consent-headers request would otherwise get, and never the
-// "neither toolset nor mcp server backend" 500.
-func TestHandleConsentMCP_MetaEndpoint_NotFound(t *testing.T) {
+// Gateway consent transports reject requests without consent credentials.
+func TestHandleConsentMCP_MetaEndpoint_RequiresConsentCredentials(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -735,7 +733,7 @@ func TestHandleConsentMCP_MetaEndpoint_NotFound(t *testing.T) {
 	require.Error(t, err)
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code, "gateways reach the consent transport, which requires its own credentials")
 }
 
 // TestServePublic_MetaEndpoint_Initialize_Negotiation pins the negotiation

@@ -79,7 +79,7 @@ vi.mock("@/routes", () => ({
     home: { href: () => "/projects/request-project" },
     logs: { href: () => "/projects/request-project/logs" },
     mcp: {
-      x: {
+      details: {
         overview: {
           href: (slug: string) => `/projects/request-project/mcp/${slug}`,
         },
@@ -312,6 +312,27 @@ describe("useMcpGuideOperations", () => {
 
     const { result } = renderHook(() => useMcpGuideOperations());
 
+    expect(
+      result.current.catalogServers?.map((server) => server.title),
+    ).toEqual(["Linear"]);
+  });
+
+  it("keeps unknown OAuth setup out of automatic onboarding but allows CIMD", () => {
+    const unknown = catalogServer({
+      title: "Notion",
+      supportsDcr: false,
+      authSetup: "unknown",
+    });
+    const cimd = catalogServer({
+      title: "Linear",
+      supportsDcr: false,
+      supportsCimd: true,
+      authSetup: "cimd",
+    });
+    queryHooks.catalog.mockReturnValue(
+      queryResult({ servers: [unknown, cimd] }),
+    );
+    const { result } = renderHook(() => useMcpGuideOperations());
     expect(
       result.current.catalogServers?.map((server) => server.title),
     ).toEqual(["Linear"]);

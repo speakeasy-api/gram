@@ -161,6 +161,18 @@ type ReadingRow struct {
 	// ConversationRole preserves an extensible role vocabulary.
 	ConversationRole string `ch:"conversation_role"`
 
+	// ConversationGeneration is the captured transcript generation.
+	ConversationGeneration int32 `ch:"conversation_generation"`
+
+	// ConversationSequence is the captured message sequence.
+	ConversationSequence int64 `ch:"conversation_sequence"`
+
+	// ConversationCaptureKind distinguishes original and copied/generated history.
+	ConversationCaptureKind string `ch:"conversation_capture_kind"`
+
+	// ConversationOriginalMessageID retains an exact copy's original target.
+	ConversationOriginalMessageID *uuid.UUID `ch:"conversation_original_message_id"`
+
 	// ToolName is the producer's tool name when supplied.
 	ToolName string `ch:"tool_name"`
 
@@ -409,6 +421,18 @@ func parseAttempt(m *sigintv1.Reading, insertedAt time.Time, requireDefinition b
 			return invalid("invalid conversation UUID")
 		}
 		row.ConversationRole = strings.ToLower(strings.TrimPrefix(context.GetRole().String(), "ROLE_"))
+		row.ConversationGeneration = context.GetGeneration()
+		row.ConversationSequence = context.GetSequence()
+		row.ConversationCaptureKind = context.GetCaptureKind()
+		row.ConversationOriginalMessageID, err = optionalUUID(context.GetOriginalMessageId())
+		if err != nil || row.ConversationGeneration < 0 || row.ConversationSequence < 0 {
+			return invalid("invalid conversation lineage")
+		}
+		switch row.ConversationCaptureKind {
+		case "", "original", "reobserved", "synthetic", "unknown":
+		default:
+			return invalid("invalid conversation capture kind")
+		}
 	}
 	if context := m.GetEvent().GetToolCall(); context != nil {
 		row.EventContextType = "tool_call"
@@ -481,7 +505,8 @@ func (q *Queries) InsertReadings(ctx context.Context, rows []ReadingRow) error {
 		status, failure_reason, configured_model, models, compiler_version, provider,
 		input_strategy, input_requested_message_count, input_message_count, input_truncated,
 		event_context_type,
-		conversation_id, conversation_role, tool_name, tool_call_id, mcp_server_id,
+		conversation_id, conversation_role, conversation_generation, conversation_sequence,
+		conversation_capture_kind, conversation_original_message_id, tool_name, tool_call_id, mcp_server_id,
 		actor_user_id, actor_external_user_id, actor_user_email, billing_user_id, source,
 		user_account_id, account_type, billing_mode, assistant_id, replayed, attributes,
 		result_type, probabilities, selected_signal_id, selected_signal_slug,

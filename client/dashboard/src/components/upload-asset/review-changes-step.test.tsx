@@ -21,7 +21,7 @@ vi.mock("@/contexts/Sdk", () => ({
 }));
 vi.mock("@/routes", () => ({
   useRoutes: () => ({
-    mcp: { details: { href: (slug: string) => `/mcp/${slug}` } },
+    toolset: { href: (slug: string) => `/toolsets/${slug}` },
   }),
 }));
 

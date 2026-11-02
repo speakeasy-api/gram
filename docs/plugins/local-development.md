@@ -30,9 +30,9 @@ Add to `mise.local.toml`:
 
 ```toml
 [env]
-GRAM_PLUGINS_GITHUB_APP_ID       = "<int64 app ID>"
-GRAM_PLUGINS_GITHUB_PRIVATE_KEY  = "<PEM-encoded private key>"
-GRAM_PLUGINS_GITHUB_ORG          = "<GitHub org where plugin repos are created>"
+GRAM_PLUGINS_GITHUB_APP_ID = "<int64 app ID>"
+GRAM_PLUGINS_GITHUB_PRIVATE_KEY = "<PEM-encoded private key>"
+GRAM_PLUGINS_GITHUB_ORG = "<GitHub org where plugin repos are created>"
 GRAM_PLUGINS_GITHUB_INSTALLATION_ID = "<int64 installation ID>"
 ```
 

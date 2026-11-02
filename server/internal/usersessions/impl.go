@@ -1,9 +1,8 @@
 // Package usersessions implements the management API services that surface
 // user_session_issuer / user_session_client / user_session_consent /
-// user_session resources. The six Goa services are authored under
-// server/design/usersession{issuers,clients,consents}/ and
-// server/design/usersessions/; a single Go package owns their shared
-// implementation, dependencies, and lifecycle.
+// user_session and gateway session resources. Their Goa designs live under
+// server/design; this package owns their shared implementation, dependencies,
+// and lifecycle.
 package usersessions
 
 import (
@@ -17,6 +16,8 @@ import (
 	goa "goa.design/goa/v3/pkg"
 	"goa.design/goa/v3/security"
 
+	gatewaygen "github.com/speakeasy-api/gram/server/gen/gateway_sessions"
+	gatewaysrv "github.com/speakeasy-api/gram/server/gen/http/gateway_sessions/server"
 	organizationissuerssrv "github.com/speakeasy-api/gram/server/gen/http/organization_user_session_issuers/server"
 	clientssrv "github.com/speakeasy-api/gram/server/gen/http/user_session_clients/server"
 	consentssrv "github.com/speakeasy-api/gram/server/gen/http/user_session_consents/server"
@@ -34,9 +35,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -45,18 +46,19 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 )
 
-// Service implements all four Goa services. The split into four design
-// packages keeps the management-API surface logically grouped while a single
+// Service implements the user-session and gateway-session Goa services. Separate design
+// packages keep the management-API surface logically grouped while a single
 // Service struct lets handlers share dependencies.
 type Service struct {
-	tracer       trace.Tracer
-	logger       *slog.Logger
-	db           *pgxpool.Pool
-	auth         *auth.Auth
-	sessions     *sessions.Manager
-	authz        *authz.Engine
-	chatSessions TokenRevoker
-	audit        *audit.Logger
+	codeModeSelection codemode.SelectionGate
+	tracer            trace.Tracer
+	logger            *slog.Logger
+	db                *pgxpool.Pool
+	auth              *auth.Auth
+	sessions          *sessions.Manager
+	authz             *authz.Engine
+	chatSessions      TokenRevoker
+	audit             *audit.Logger
 	// signer mints the user-session JWT returned by mintUserSession. Same
 	// signer the /mcp/{slug}/token handler uses, so the resulting JWTs
 	// validate through the runtime gateway by the existing user-session
@@ -94,11 +96,11 @@ type Service struct {
 	// scanner wearing Speakeasy's egress IPs, or pin goroutines against a
 	// slowloris host for fetchTimeout apiece.
 	verifyLimiter *ratelimit.Limiter
-
-	hostedSync HostedSyncFunc
 }
 
 var (
+	_ gatewaygen.Service             = (*Service)(nil)
+	_ gatewaygen.Auther              = (*Service)(nil)
 	_ issuersgen.Service             = (*Service)(nil)
 	_ issuersgen.Auther              = (*Service)(nil)
 	_ organizationissuersgen.Service = (*Service)(nil)
@@ -112,7 +114,7 @@ var (
 )
 
 // NewService constructs a Service ready to be Attached against each of the
-// six user_session* Goa services. chatSessionsManager is used by the
+// user session and gateway session Goa services. chatSessionsManager is used by the
 // userSessions and userSessionClients revoke handlers to push revoked jtis
 // into the revocation cache; it is held as a TokenRevoker so tests can
 // substitute a failing revoker.
@@ -120,39 +122,45 @@ var (
 // disable that handler (it will 503 on call — used in tests that don't
 // need the surface). sharedHosts must match the hosts the MCP service serves
 // shared authorization servers on.
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager TokenRevoker, authzEngine *authz.Engine, auditLogger *audit.Logger, guardianPolicy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, enc *encryption.Client, signer *Signer, serverURL string, sharedHosts authserver.Hosts, verifyStore ratelimit.Store, assertionSigners ...remotesessions.TokenEndpointAssertionSigner) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, chatSessionsManager TokenRevoker, authzEngine *authz.Engine, auditLogger *audit.Logger, guardianPolicy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, enc *encryption.Client, signer *Signer, serverURL string, sharedHosts authserver.Hosts, verifyStore ratelimit.Store, codeModeSelection codemode.SelectionGate, assertionSigners ...remotesessions.TokenEndpointAssertionSigner) *Service {
 	logger = logger.With(attr.SlogComponent("usersessions"))
 
 	return &Service{
-		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/usersessions"),
-		logger:       logger,
-		db:           db,
-		auth:         auth.New(logger, db, sessionManager, authzEngine),
-		sessions:     sessionManager,
-		authz:        authzEngine,
-		chatSessions: chatSessionsManager,
-		audit:        auditLogger,
-		signer:       signer,
-		serverURL:    serverURL,
-		sharedHosts:  sharedHosts,
-		cimdResolver: cimd.NewResolver(guardianPolicy, meterProvider, logger),
-		revoker:      remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnels, assertionSigners...),
+		codeModeSelection: codeModeSelection,
+		tracer:            tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/usersessions"),
+		logger:            logger,
+		db:                db,
+		auth:              auth.New(logger, db, sessionManager, authzEngine),
+		sessions:          sessionManager,
+		authz:             authzEngine,
+		chatSessions:      chatSessionsManager,
+		audit:             auditLogger,
+		signer:            signer,
+		serverURL:         serverURL,
+		sharedHosts:       sharedHosts,
+		cimdResolver:      cimd.NewResolver(guardianPolicy, meterProvider, logger),
+		revoker:           remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnels, assertionSigners...),
 		verifyLimiter: ratelimit.New(verifyStore, "cimd-url-verify",
 			ratelimit.PerMinute(verifyRatePerMin).WithBurst(verifyRateBurst),
 			ratelimit.WithMetrics(meterProvider)),
-		hostedSync: hostedmcp.SyncDeferringIssuerResync,
 	}
 }
 
 // Attach wires every Goa service this package backs onto the shared mux:
 // userSessionIssuers, organizationUserSessionIssuers,
 // userSessionIssuersCimdClients, userSessionClients,
-// userSessionConsents, userSessions.
+// userSessionConsents, userSessions, gatewaySessions.
 func Attach(mux goahttp.Muxer, service *Service) {
 	mw := []func(goa.Endpoint) goa.Endpoint{
 		middleware.MapErrors(),
 		middleware.TraceMethods(service.tracer),
 	}
+
+	gatewayEndpoints := gatewaygen.NewEndpoints(service)
+	for _, m := range mw {
+		gatewayEndpoints.Use(m)
+	}
+	gatewaysrv.Mount(mux, gatewaysrv.New(gatewayEndpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
 
 	issuerEndpoints := issuersgen.NewEndpoints(service)
 	for _, m := range mw {

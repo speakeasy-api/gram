@@ -1,4 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { useState } from "react";
+import type { GatewayInspection } from "./useGatewayInspection";
 import { afterEach, expect, it, vi } from "vitest";
 import { MemoryRouter, useLocation } from "react-router";
 import { unrecognized } from "@gram/client/types/unrecognized.js";
@@ -11,7 +13,36 @@ vi.mock("@/lib/utils", async (importOriginal) => ({
   mcpConnectionUrl: (value: string) => value,
 }));
 
-const state = vi.hoisted(() => ({ mint: vi.fn() }));
+vi.mock("@/components/ui/CodeSnippet", () => ({
+  CodeSnippet: ({ code }: { code: string }) => <pre>{code}</pre>,
+}));
+
+const state = vi.hoisted(() => ({
+  mint: vi.fn(),
+  data: undefined as GatewayInspection | undefined,
+  loading: false,
+  accessToken: undefined as string | undefined,
+}));
+vi.mock("./GatewayCodeExecution", () => ({
+  GatewayCodeExecution: ({
+    disabled,
+    headers,
+  }: {
+    disabled: boolean;
+    headers?: Record<string, string>;
+  }) => {
+    const [source, setSource] = useState("initial");
+    return (
+      <input
+        aria-label="Persistent source"
+        data-authorization={headers?.Authorization ?? ""}
+        value={source}
+        disabled={disabled}
+        onChange={(event) => setSource(event.target.value)}
+      />
+    );
+  },
+}));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-test" }),
   useSession: () => ({ user: { id: "user-test" } }),
@@ -20,7 +51,7 @@ vi.mock("@/hooks/useUserSessionToken", () => ({
   useUserSessionToken: (input: { target: { discoveryMode?: string } }) => {
     state.mint(input);
     return {
-      accessToken: undefined,
+      accessToken: state.accessToken,
       isLoading: false,
       isError: !!input.target.discoveryMode,
       error: input.target.discoveryMode
@@ -48,8 +79,8 @@ vi.mock("./useGatewayMemberRows", () => ({
 }));
 vi.mock("./useGatewayInspection", () => ({
   useGatewayInspection: () => ({
-    data: undefined,
-    isLoading: false,
+    data: state.data,
+    isLoading: state.loading,
     isError: false,
     needsAuth: false,
     error: null,
@@ -76,7 +107,12 @@ vi.mock("@/components/page-layout", () => {
 function Location() {
   return <output aria-label="location">{useLocation().search}</output>;
 }
-afterEach(cleanup);
+afterEach(() => {
+  cleanup();
+  state.data = undefined;
+  state.loading = false;
+  state.accessToken = undefined;
+});
 it("applies discovery choices to the URL and the minted connection", async () => {
   state.mint.mockClear();
   const gateway = {
@@ -162,3 +198,72 @@ it.each([
     );
   },
 );
+
+it("preserves Python source while inspection reloads for a refreshed credential", () => {
+  const data: GatewayInspection = {
+    discoveryMode: "code_mode",
+    tools: [{ name: "execute", description: "Run Python" }],
+    instructions: "Python",
+    protocolVersion: undefined,
+    serverName: undefined,
+    servers: undefined,
+  };
+  state.data = data;
+  state.accessToken = "first-token";
+  const gateway = {
+    id: "gateway-test",
+    discoveryMode: "code_mode",
+  } as MetaMcpServer;
+  const view = () => (
+    <MemoryRouter>
+      <GatewayInspectTab
+        metaMcpServer={gateway}
+        endpoints={[]}
+        isLoadingEndpoints={false}
+      />
+    </MemoryRouter>
+  );
+  const { rerender } = render(view());
+  fireEvent.change(screen.getByLabelText("Persistent source"), {
+    target: { value: "my Python" },
+  });
+  state.data = undefined;
+  state.loading = true;
+  state.accessToken = "refreshed-token";
+  rerender(view());
+  expect(
+    (screen.getByLabelText("Persistent source") as HTMLInputElement).value,
+  ).toBe("my Python");
+  expect(
+    (screen.getByLabelText("Persistent source") as HTMLInputElement).disabled,
+  ).toBe(true);
+  state.data = data;
+  state.loading = false;
+  rerender(view());
+  const source = screen.getByLabelText("Persistent source") as HTMLInputElement;
+  expect(source.value).toBe("my Python");
+  expect(source.dataset.authorization).toBe("Bearer refreshed-token");
+});
+
+it("explains Progressive fallback when the saved Code runtime is unavailable", () => {
+  render(
+    <TooltipProvider>
+      <MemoryRouter>
+        <GatewayInspectTab
+          metaMcpServer={
+            {
+              id: "gateway-test",
+              discoveryMode: "code_mode",
+              codeModeEnabled: false,
+            } as MetaMcpServer
+          }
+          endpoints={[]}
+          isLoadingEndpoints={false}
+        />
+      </MemoryRouter>
+    </TooltipProvider>,
+  );
+  expect(
+    screen.getByText(/this connection uses Progressive discovery/i),
+  ).toBeTruthy();
+});

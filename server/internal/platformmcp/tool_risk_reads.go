@@ -519,11 +519,11 @@ func riskPolicyMCPScopeSchema() *jsonschema.Schema {
 		"tool_annotations": annotations,
 		"servers":          servers,
 	}, nil)
-	schema.Description = "Limit the policy to MCP tool calls through chosen servers, checked at the gateway before the tool runs. Omit to apply the policy to agent sessions instead; an unscoped policy is enforced inside observed agent sessions, including their tool calls, but not at an MCP server for callers outside one. A scoped policy only checks calls through its servers, supports only the flag and block actions, and cannot use the shadow_mcp or account_identity sources."
+	schema.Description = "Limit the policy to MCP tool calls through chosen servers, checked at the gateway before the tool runs. Omit to apply the policy to agent sessions instead; an unscoped policy is enforced inside observed agent sessions, including their tool calls, but not at an MCP server for callers outside one. A scoped policy only checks calls through its servers, supports only the flag and block actions here, and cannot use the shadow_mcp or account_identity sources. Tool approval policies (require_approval) are also scoped but are read-only through these tools."
 	return schema
 }
 func riskPolicyActionSchema(catalog policycatalog.Catalog) *jsonschema.Schema {
-	const mcpNote = "MCP-scoped policies support flag and block only."
+	const mcpNote = "MCP-scoped policies support flag and block only. Tool approval policies (require_approval) are read-only through these tools."
 	schema := describedCatalogEnumSchema(catalog, catalog.Actions, "What happens when the policy fires; default flag. "+mcpNote+" One of:", func(value string) string { return policycatalog.ActionDescriptions[value] })
 	if schema.Description == "" {
 		schema.Description = "Policy action. " + mcpNote

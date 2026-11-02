@@ -51,6 +51,7 @@ func registerIdentityProviderTool(reg *Registrar, registrations *RegistrationSer
 		Title:       "Connect an MCP Server's OAuth Provider",
 		Description: "Connect one MCP server to the OAuth provider it advertises, so people can sign in to it. Without a project named, it acts on the organization's default project; project_slug in the result says which project was used. Ask for explicit user confirmation before calling this tool. It works out the provider's metadata from the stored MCP source and obtains an OAuth client automatically: through dynamic client registration when the provider offers it, otherwise through a client ID metadata document when the provider supports one. Constraints: non-secret provider URLs may be returned, but it never accepts or returns credentials, OAuth codes, tokens, client secrets, passwords, or API keys. After success, immediately present authorization_url as a clickable link and tell the user to open it and use Connect or Authorize.",
 		Annotations: identityProviderAttachmentAnnotations(),
+		Meta:        cardToolMeta(),
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,
 		// Connection-less: the registration is resolved by user and project,
@@ -89,11 +90,11 @@ func registerIdentityProviderTool(reg *Registrar, registrations *RegistrationSer
 			}
 			return identityProviderAttachmentUnavailableResult()
 		}
-		authorizationURL, err := registrations.DashboardAuthorizationURL(ctx, principal, input.ProjectSlug, input.RegistrationID)
+		authorization, err := registrations.DashboardAuthorization(ctx, principal, input.ProjectSlug, input.RegistrationID)
 		if err != nil {
 			return identityProviderAttachmentAuthorizationUnavailableResult()
 		}
-		return nil, identityProviderAttachmentOutput(input.ProjectSlug, input.RegistrationID, attachment, authorizationURL), nil
+		return cardResult(signInCard(authorization.ServerName, authorization.Logo, authorization.URL)), identityProviderAttachmentOutput(input.ProjectSlug, input.RegistrationID, attachment, authorization.URL), nil
 	})
 }
 

@@ -108,7 +108,8 @@ function render(ui: React.ReactNode) {
 }
 
 async function advanceGuideDelay(count = 1): Promise<void> {
-  await act(() =>
+  // Timer-driven updates also queue microtasks; keep act open until they flush.
+  await act(async () =>
     vi.advanceTimersByTime(count * PROJECT_GUIDE_MICRO_STEP_DELAY_MS),
   );
 }
@@ -487,25 +488,27 @@ describe("ProjectGuide", () => {
     ).toBe(true);
 
     const activity = screen.getByRole("log", { name: "Journey A activity" });
-    await act(() => vi.advanceTimersByTime(0));
+    await act(async () => vi.advanceTimersByTime(0));
     expect(activity.textContent).toContain("Read the server's tool list");
     expect(activity.textContent).not.toContain(
       "Adding Linear MCP server to this project",
     );
-    await act(() =>
+    await act(async () =>
       vi.advanceTimersByTime(PROJECT_GUIDE_MICRO_STEP_DELAY_MS - 1),
     );
     expect(activity.textContent).not.toContain(
       "Adding Linear MCP server to this project",
     );
-    await act(() => vi.advanceTimersByTime(1));
+    await act(async () => vi.advanceTimersByTime(1));
     expect(activity.textContent).toContain(
       "Adding Linear MCP server to this project",
     );
     expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
       "running",
     );
-    await act(() => vi.advanceTimersByTime(PROJECT_GUIDE_MICRO_STEP_DELAY_MS));
+    await act(async () =>
+      vi.advanceTimersByTime(PROJECT_GUIDE_MICRO_STEP_DELAY_MS),
+    );
     expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
       "confirming",
     );
@@ -513,13 +516,13 @@ describe("ProjectGuide", () => {
     expect(screen.getByText("server ready")).toBeTruthy();
     expect(screen.getByText("0 of 4 done")).toBeTruthy();
 
-    await act(() =>
+    await act(async () =>
       vi.advanceTimersByTime(MCP_SETUP_CONFIRMATION_DELAY_MS - 1),
     );
     expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
       "confirming",
     );
-    await act(() => vi.advanceTimersByTime(1));
+    await act(async () => vi.advanceTimersByTime(1));
     expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
       "checkpoint",
     );
@@ -698,7 +701,9 @@ describe("ProjectGuide", () => {
     expect(screen.getByTestId("project-guide-run").dataset.displayState).toBe(
       "confirming",
     );
-    await act(() => vi.advanceTimersByTime(MCP_SETUP_CONFIRMATION_DELAY_MS));
+    await act(async () =>
+      vi.advanceTimersByTime(MCP_SETUP_CONFIRMATION_DELAY_MS),
+    );
     expect(
       screen.getByRole("heading", { name: "Connect your client" }),
     ).toBeTruthy();

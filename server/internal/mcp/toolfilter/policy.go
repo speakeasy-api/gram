@@ -19,6 +19,26 @@ type GatewayOptions struct {
 	DiscoveryMode *metamcp.DiscoveryMode `json:"discovery_mode,omitempty"`
 }
 
+// CatalogMode chooses live discovery or the immutable consent catalog.
+type CatalogMode string
+
+const (
+	// CatalogModeLive includes later tools from the approved member servers.
+	CatalogModeLive CatalogMode = "live"
+	// CatalogModeCached fixes discovery to the tools captured at consent.
+	CatalogModeCached CatalogMode = "cached"
+)
+
+// CatalogReference binds a connection to its server-owned consent catalog.
+type CatalogReference struct {
+	// ID identifies one immutable catalog in the connection store.
+	ID uuid.UUID `json:"id"`
+	// Mode determines whether discovery reads the stored or live definitions.
+	Mode CatalogMode `json:"mode"`
+	// AllTools preserves the consent choice for reconnecting clients.
+	AllTools bool `json:"all_tools"`
+}
+
 // SessionPolicy separates connection options from restrictive tool selection.
 // A nil policy is a legacy unrestricted session. A policy with only gateway
 // options is also unrestricted, but remains bound to its gateway.
@@ -26,11 +46,15 @@ type SessionPolicy struct {
 	// Resource binds both options and restrictions to one endpoint identity.
 	Resource string
 
-	// Selection is nil for unrestricted tools; an empty allow list denies all.
+	// Selection records the consent choice; an empty allow list denies all.
+	// Catalog-backed sessions enforce their stored definitions at dispatch.
 	Selection *SessionSelection
 
 	// Gateway holds explicit options for a gateway connection.
 	Gateway *GatewayOptions
+
+	// Catalog names the approved catalog and its discovery behavior.
+	Catalog *CatalogReference
 }
 
 type gatewayPolicyDocument struct {
@@ -38,6 +62,7 @@ type gatewayPolicyDocument struct {
 	Resource  string            `json:"resource"`
 	Gateway   *GatewayOptions   `json:"gateway"`
 	Selection *SessionSelection `json:"selection,omitempty"`
+	Catalog   *CatalogReference `json:"catalog,omitempty"`
 }
 
 // PolicyForSelection preserves a legacy restrictive selection without adding
@@ -46,7 +71,7 @@ func PolicyForSelection(selection *SessionSelection) *SessionPolicy {
 	if selection == nil {
 		return nil
 	}
-	return &SessionPolicy{Resource: selection.Resource, Selection: selection, Gateway: nil}
+	return &SessionPolicy{Resource: selection.Resource, Selection: selection, Gateway: nil, Catalog: nil}
 }
 
 // ParseSessionPolicy reads legacy selections and versioned gateway documents.
@@ -67,6 +92,9 @@ func ParseSessionPolicy(raw []byte) (*SessionPolicy, error) {
 		if err != nil {
 			return nil, err
 		}
+		if selection != nil && strings.HasPrefix(selection.Resource, gatewayResourceKind+":") {
+			return nil, fmt.Errorf("gateway tool selections require a versioned policy")
+		}
 		return PolicyForSelection(selection), nil
 	}
 	var document gatewayPolicyDocument
@@ -78,10 +106,18 @@ func ParseSessionPolicy(raw []byte) (*SessionPolicy, error) {
 	if err := decoder.Decode(new(json.RawMessage)); !errors.Is(err, io.EOF) {
 		return nil, fmt.Errorf("gateway policy carries trailing data")
 	}
-	if document.Version != 1 {
+	if document.Version != 1 && document.Version != 2 {
 		return nil, fmt.Errorf("unsupported gateway policy version")
 	}
-	policy := &SessionPolicy{Resource: document.Resource, Selection: document.Selection, Gateway: document.Gateway}
+	if (document.Version == 2) != (document.Catalog != nil) {
+		return nil, fmt.Errorf("gateway catalog requires a version 2 policy")
+	}
+	if document.Selection != nil {
+		if err := document.Selection.compile(); err != nil {
+			return nil, err
+		}
+	}
+	policy := &SessionPolicy{Resource: document.Resource, Selection: document.Selection, Gateway: document.Gateway, Catalog: document.Catalog}
 	if err := policy.validateGateway(); err != nil {
 		return nil, err
 	}
@@ -91,16 +127,42 @@ func ParseSessionPolicy(raw []byte) (*SessionPolicy, error) {
 func (p *SessionPolicy) validateGateway() error {
 	kind, id, ok := strings.Cut(p.Resource, ":")
 	parsed, err := uuid.Parse(id)
-	if !ok || kind != "meta_mcp_server" || err != nil || parsed == uuid.Nil || parsed.String() != id {
+	if !ok || kind != gatewayResourceKind || err != nil || parsed == uuid.Nil || parsed.String() != id {
 		return fmt.Errorf("gateway policy carries an invalid resource binding")
 	}
-	if p.Gateway == nil || p.Gateway.DiscoveryMode == nil || !p.Gateway.DiscoveryMode.Valid() {
+	if p.Gateway == nil {
+		return fmt.Errorf("gateway policy requires gateway options")
+	}
+	if p.Gateway.DiscoveryMode != nil && !p.Gateway.DiscoveryMode.Valid() {
 		return fmt.Errorf("gateway policy requires a supported discovery mode")
 	}
-	// Gateway tool restrictions use definition snapshots, not a legacy
-	// member-local name selection that could match another member's tool.
-	if p.Selection != nil {
+	if p.Gateway.DiscoveryMode == nil && p.Selection == nil && p.Catalog == nil {
+		return fmt.Errorf("gateway policy carries neither a discovery mode nor a tool selection")
+	}
+	// Gateway selections name tools by member-qualified name, so a selection
+	// bound to any other resource could match another member's tool.
+	if p.Selection != nil && p.Selection.Resource != p.Resource {
+		return fmt.Errorf("gateway policy tool selection is bound to a different resource")
+	}
+	if p.Catalog == nil && p.Selection != nil {
 		return fmt.Errorf("gateway policy does not support legacy tool selections")
+	}
+	if p.Catalog != nil {
+		if (p.Catalog.AllTools && p.Selection != nil) || (!p.Catalog.AllTools && p.Selection == nil) {
+			return fmt.Errorf("catalog selection must match its access mode")
+		}
+		if p.Catalog.Mode == CatalogModeLive && p.Selection != nil {
+			return fmt.Errorf("live catalog cannot carry a tool selection")
+		}
+		if p.Selection != nil && len(p.Selection.LiveAnnotations()) > 0 {
+			return fmt.Errorf("cached catalog cannot carry live annotation grants")
+		}
+		if !p.Catalog.AllTools && p.Catalog.Mode != CatalogModeCached {
+			return fmt.Errorf("specific tools requires cached discovery")
+		}
+		if p.Catalog.ID == uuid.Nil || (p.Catalog.Mode != CatalogModeLive && p.Catalog.Mode != CatalogModeCached) {
+			return fmt.Errorf("gateway policy carries an invalid catalog binding")
+		}
 	}
 	return nil
 }
@@ -124,17 +186,32 @@ func (p *SessionPolicy) MarshalJSON() ([]byte, error) {
 		}
 		return raw, nil
 	}
-	if err := p.validateGateway(); err != nil {
+	// Validate the compiled form of the selection being written: a selection
+	// built or edited after construction carries a stale projection, so its
+	// live annotation grants would otherwise escape the cached-catalog check.
+	policy := *p
+	if p.Selection != nil {
+		selection := *p.Selection
+		if err := selection.compile(); err != nil {
+			return nil, err
+		}
+		policy.Selection = &selection
+	}
+	if err := policy.validateGateway(); err != nil {
 		return nil, err
 	}
-	raw, err := json.Marshal(gatewayPolicyDocument{Version: 1, Resource: p.Resource, Gateway: p.Gateway, Selection: p.Selection})
+	version := 1
+	if policy.Catalog != nil {
+		version = 2
+	}
+	raw, err := json.Marshal(gatewayPolicyDocument{Version: version, Resource: policy.Resource, Gateway: policy.Gateway, Selection: policy.Selection, Catalog: policy.Catalog})
 	if err != nil {
 		return nil, fmt.Errorf("marshal gateway policy: %w", err)
 	}
 	return raw, nil
 }
 
-// UnmarshalJSON validates cached authorization grants as strictly as stored rows.
+// UnmarshalJSON validates JSON session policies, including stored rows.
 func (p *SessionPolicy) UnmarshalJSON(raw []byte) error {
 	policy, err := ParseSessionPolicy(raw)
 	if err != nil {

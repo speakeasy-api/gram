@@ -300,6 +300,32 @@ func TestConsentTemplate_GatewayServerPageHasNoApproval(t *testing.T) {
 	require.NotContains(t, page, "consent-approve-button")
 }
 
+// A server the identity provider is still being checked for is a sign-in
+// server: its page must not claim it needs no sign-in beside the pending
+// identity-provider card.
+func TestConsentTemplate_GatewayChainPendingServerPage(t *testing.T) {
+	t.Parallel()
+
+	project := uuid.New()
+	idp := uuid.New()
+	card := gatewayTestCard("wiki-client", idp, uuid.NullUUID{})
+	card.Chained = true
+	card.ChainCheck = chainCheckPending
+	cards := []remoteSessionCard{card}
+	view := gatewayServersView([]metaMember{gatewayTestMember("wiki", "Wiki", idp, project)}, cards)
+	require.Equal(t, gatewayServerChainPending, view.Servers[0].Status)
+	require.True(t, view.Servers[0].NeedsSignIn())
+
+	list := renderGatewayConsent(t, gatewayTemplateData(view, nil))
+	require.Contains(t, list, `server=wiki" class="text-muted-foreground interact:text-foreground shrink-0 text-xs" data-gateway-server-page >Connect`)
+
+	focus := view.Servers[0]
+	view.Focus = &focus
+	page := renderGatewayConsent(t, gatewayTemplateData(view, focusedCards(view, focus, cards)))
+	require.Contains(t, page, "Connecting is all Wiki needs")
+	require.NotContains(t, page, "needs no sign-in")
+}
+
 // A server signing in through several services connects on its own page,
 // where each is named; one with a usable connection is managed there.
 func TestConsentTemplate_GatewayListLinksServerPages(t *testing.T) {
@@ -364,4 +390,22 @@ func TestConsentTemplate_GatewayListLinksNotSetUpServer(t *testing.T) {
 	page := renderGatewayConsent(t, gatewayTemplateData(view, nil))
 	require.Contains(t, page, `server=eng.jira" class="text-muted-foreground interact:text-foreground shrink-0 text-xs" data-gateway-server-page >View`)
 	require.NotContains(t, page, "server=docs")
+}
+
+func TestConsentTemplateGatewayAuthPickerAndVisibility(t *testing.T) {
+	t.Parallel()
+	member := gatewayTestMember("source", "Source", uuid.Nil, uuid.New())
+	member.serverID = uuid.New()
+	view := gatewayServersView([]metaMember{member}, nil)
+	view.CanHide = true
+	view.Servers[0].Auth = &consentServerAuth{Status: consentAuthChoose, Options: []consentAuthClientOption{
+		{ID: uuid.New(), Name: "Personal", Type: authClientTypeRemoteSession, State: consentClientReady},
+		{ID: uuid.New(), Name: "Shared", Type: authClientTypeStaticCredential, State: consentClientReady},
+	}}
+	page := renderGatewayConsent(t, gatewayTemplateData(view, nil))
+	require.Contains(t, page, `id="gateway-auth-form"`)
+	require.Contains(t, page, `name="auth_client.source" form="gateway-auth-form"`)
+	require.Contains(t, page, `aria-label="Sign in to Source as"`)
+	require.Contains(t, page, `value="hide_server"`)
+	require.Contains(t, page, `name="server_id" value="`+member.serverID.String()+`"`)
 }

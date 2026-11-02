@@ -7,18 +7,28 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type CreateOrganizationRequestBody = {
   /**
+   * Organization display name. When omitted, a name is derived from the registrable company domain.
+   */
+  name?: string | undefined;
+  /**
    * The operator confirms that domain ownership was established outside this form.
    */
   ownershipConfirmed: boolean;
   /**
-   * Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes the name and verified email domain.
+   * Preferred organization URL slug. When omitted, a unique slug is derived from the organization name. Explicit slugs use lowercase letters, numbers, and hyphens.
+   */
+  slug?: string | undefined;
+  /**
+   * Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes the verified email domain.
    */
   url: string;
 };
 
 /** @internal */
 export type CreateOrganizationRequestBody$Outbound = {
+  name?: string | undefined;
   ownership_confirmed: boolean;
+  slug?: string | undefined;
   url: string;
 };
 
@@ -28,7 +38,9 @@ export const CreateOrganizationRequestBody$outboundSchema: z.ZodMiniType<
   CreateOrganizationRequestBody
 > = z.pipe(
   z.object({
+    name: z.optional(z.string()),
     ownershipConfirmed: z.boolean(),
+    slug: z.optional(z.string()),
     url: z.string(),
   }),
   z.transform((v) => {

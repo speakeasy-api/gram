@@ -4,14 +4,16 @@ import {
   isShadowMCPBlockConfiguration,
 } from "./policy-shadow-mcp-setup";
 
-/** How a policy decides what it flags: a built-in detector, an LLM judge, or
- *  the per-Shadow AI decisions of the project's Shadow AI policy. */
-export type PolicyType = "built_in" | "prompt" | "shadow_ai";
+/** How a policy decides what it flags: a built-in detector, an LLM judge,
+ *  the per-Shadow AI decisions of the project's Shadow AI policy, or a person
+ *  approving each held tool call. */
+export type PolicyType = "built_in" | "prompt" | "shadow_ai" | "approval";
 
 export const POLICY_TYPE_LABEL: Record<PolicyType, string> = {
   built_in: "Built-in",
   prompt: "Prompt-based",
   shadow_ai: "Shadow AI",
+  approval: "Approval",
 };
 
 type PolicyShape = Pick<RiskPolicy, "policyType" | "sources" | "action">;
@@ -30,6 +32,7 @@ export function isShadowAIPolicy(policy: PolicyShape): boolean {
 }
 
 export function policyTypeOf(policy: PolicyShape): PolicyType {
+  if (policy.action === "require_approval") return "approval";
   if (policy.policyType === "prompt_based") return "prompt";
   if (isShadowAIPolicy(policy)) return "shadow_ai";
   return "built_in";

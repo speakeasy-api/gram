@@ -46,8 +46,9 @@ type Source struct {
 	Where   []squirrel.Sqlizer
 	Key     string
 	Columns []string
-	// Having keeps a folded row. It must name columns the fold keeps any
-	// non-empty value of, so Observations can test it on the raw rows.
+	// Having keeps a folded row. On a source a Typeahead field lists values
+	// from, it must name columns the fold keeps any non-empty value of, so
+	// Observations can test it on the raw rows.
 	Having string
 }
 
@@ -73,21 +74,45 @@ func (s Source) Observations(qc QueryContext) squirrel.SelectBuilder {
 // engine reads a table the way its ClickHouse engine family merges it.
 type engine interface {
 	rows(qc QueryContext, s Source) squirrel.SelectBuilder
+	// planSuffix names how a query is answered in its plan name, a stable
+	// diagnostic identifier rather than a table a client could depend on.
+	planSuffix() string
+	// retentionDays is how long the table keeps a row, from its TTL in
+	// server/clickhouse/schema.sql. A window reaching past it reads rows the
+	// TTL has already dropped and comes back silently incomplete.
+	retentionDays() int
 }
 
 // mergeTree rows are facts as appended. Its fold must be idempotent, so a
 // redelivered row changes nothing: argMax, min, max, uniqExact, never count
 // or sum over raw rows.
-type mergeTree struct{ table, time string }
+type mergeTree struct {
+	table, time, plan string
+	retention         int
+}
 
 // aggregatingMergeTree rows are partial states per key until merges catch
 // up, so keys are picked by start and every row of those keys is merged.
-type aggregatingMergeTree struct{ table, start string }
+type aggregatingMergeTree struct {
+	table, start, plan string
+	retention          int
+}
 
 var (
-	agentEvents = mergeTree{table: "agent_events", time: "occurred_at_unix_nano"}
-	toolCalls   = aggregatingMergeTree{table: "tool_calls", start: "started_at_unix_nano"}
+	agentEvents = mergeTree{table: "agent_events", time: "occurred_at_unix_nano", plan: "agent_events", retention: MaxEventTimeRangeDays}
+	// The tool_calls plan name predates the move off agent_events and stays,
+	// being a stable identifier.
+	toolCalls = aggregatingMergeTree{table: "tool_calls", start: "started_at_unix_nano", plan: "agent_events", retention: MaxEventTimeRangeDays}
+	// riskFindingStates is one row per finding, each column the winning
+	// copy's value, folded by risk_finding_states_mv with the shadow engine's
+	// comparison rows set aside.
+	riskFindingStates = aggregatingMergeTree{table: "risk_finding_states", start: "created_at_unix_nano", plan: "risk_findings", retention: MaxEventTimeRangeDays}
 )
+
+func (t mergeTree) planSuffix() string            { return t.plan }
+func (t aggregatingMergeTree) planSuffix() string { return t.plan }
+func (t mergeTree) retentionDays() int            { return t.retention }
+func (t aggregatingMergeTree) retentionDays() int { return t.retention }
 
 func (t mergeTree) scan(qc QueryContext) squirrel.SelectBuilder {
 	return sq.Select("*").
@@ -113,8 +138,8 @@ func (t aggregatingMergeTree) rows(qc QueryContext, s Source) squirrel.SelectBui
 		Where(tenant(qc)).
 		Where(squirrel.Expr(s.Key+" IN (?)", keys)).
 		GroupBy("organization_id", "project_id", s.Key).
-		Having("started_at >= ?", qc.Window.FromUnixNano).
-		Having("started_at < ?", qc.Window.ToUnixNano)
+		Having("min("+t.start+") >= ?", qc.Window.FromUnixNano).
+		Having("min("+t.start+") < ?", qc.Window.ToUnixNano)
 }
 
 func tenant(qc QueryContext) squirrel.Eq {
@@ -166,4 +191,30 @@ var skillsSource = Source{
 	Key:     toolCallsSource.Key,
 	Columns: toolCallsSource.Columns,
 	Having:  "skill_name != ''",
+}
+
+// riskFindingsSource is one row per live finding: not suppressed, not marked
+// a false positive and not a could-not-analyze sentinel. Its table keeps no
+// matched value, redacted or not, and no chat or message id, so nothing a
+// dataset declares over it can name what was found or where.
+var riskFindingsSource = Source{
+	Table: riskFindingStates,
+	Where: nil,
+	Key:   "id",
+	Columns: []string{
+		"organization_id",
+		"project_id",
+		"id",
+		"min(created_at_unix_nano) AS detected_at",
+		"argMaxIfMerge(category) AS category",
+		"argMaxIfMerge(rule_id) AS rule_id",
+		"argMaxIfMerge(source) AS source",
+		"argMaxIfMerge(risk_policy_id) AS risk_policy_id",
+		"argMaxIfMerge(chat_source) AS chat_source",
+		"argMaxIfMerge(team) AS team",
+		// Neither email column is aliased, so both still name the state.
+		"if(argMaxIfMerge(user_email) != '', argMaxIfMerge(user_email), argMaxIfMerge(external_user_id)) AS user_label",
+		"argMaxIfMerge(enforcement_outcome) AS enforcement_outcome",
+	},
+	Having: "argMaxMerge(live) = 1",
 }

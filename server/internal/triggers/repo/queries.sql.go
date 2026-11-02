@@ -412,33 +412,33 @@ func (q *Queries) GetTriggerThreadRoute(ctx context.Context, arg GetTriggerThrea
 	return i, err
 }
 
-const getWakeWorkloadSessionClient = `-- name: GetWakeWorkloadSessionClient :one
-SELECT user_session_client_id
+const getWakeWorkloadSession = `-- name: GetWakeWorkloadSession :one
+SELECT id
 FROM user_sessions
 WHERE jti = $1 AND subject_urn = $2
   AND organization_id = $3
   AND (project_id = $4 OR project_id IS NULL)
+  AND deleted IS FALSE AND expires_at > clock_timestamp()
 `
 
-type GetWakeWorkloadSessionClientParams struct {
+type GetWakeWorkloadSessionParams struct {
 	Jti            string
 	SubjectUrn     urn.SessionSubject
 	OrganizationID pgtype.Text
 	ProjectID      uuid.NullUUID
 }
 
-// Classify authenticated workload sessions without filtering revoked rows: a
-// retired runtime registration must not fall back to legacy workload behavior.
-func (q *Queries) GetWakeWorkloadSessionClient(ctx context.Context, arg GetWakeWorkloadSessionClientParams) (uuid.NullUUID, error) {
-	row := q.db.QueryRow(ctx, getWakeWorkloadSessionClient,
+// Recheck the authenticated session inside the wake transaction.
+func (q *Queries) GetWakeWorkloadSession(ctx context.Context, arg GetWakeWorkloadSessionParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getWakeWorkloadSession,
 		arg.Jti,
 		arg.SubjectUrn,
 		arg.OrganizationID,
 		arg.ProjectID,
 	)
-	var user_session_client_id uuid.NullUUID
-	err := row.Scan(&user_session_client_id)
-	return user_session_client_id, err
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
 }
 
 const listActiveTriggerInstancesByTarget = `-- name: ListActiveTriggerInstancesByTarget :many

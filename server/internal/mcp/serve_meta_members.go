@@ -13,9 +13,13 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
@@ -38,6 +42,8 @@ const (
 // metaMember is one servable, authorized member in a request's snapshot.
 type metaMember struct {
 	serverID uuid.UUID
+	// configurationHash is loaded with the request's approved member set.
+	configurationHash string
 	// The member's own project. A stored gateway's members all share the
 	// gateway's project, but an agent gateway's can span several, so member
 	// dispatch keys on this rather than on the request's project.
@@ -73,9 +79,15 @@ type metaMember struct {
 	// authentication for this member.
 	upstreamNoAuth bool
 
+	// typedAuthClient reports that chosenClientID is the registration of a
+	// typed auth client the resolver checked against the member, which
+	// authorizes it without a sign-in link.
+	typedAuthClient bool
+
 	// upstreamUnavailable is why the credential cannot reach this member
 	// under its choices, nil otherwise.
 	upstreamUnavailable error
+	authClient          *authClientResolution
 
 	// associatedClients is a proxied member's associated upstream clients;
 	// nil for a hosted member, which matches clients by authorization server
@@ -137,6 +149,8 @@ type metaMemberCandidate struct {
 func (s *Service) resolveMetaMemberSnapshot(
 	ctx context.Context,
 	logger *slog.Logger,
+	surface string,
+	organizationID string,
 	metaServerID uuid.UUID,
 	projectID uuid.UUID,
 ) (context.Context, []metaMember, error) {
@@ -180,17 +194,17 @@ func (s *Service) resolveMetaMemberSnapshot(
 		})
 	}
 
-	return s.admitMetaMembers(ctx, logger, candidates)
+	return s.admitMetaMembers(ctx, logger, surface, organizationID, candidates)
 }
 
 // resolveEndpointMemberSnapshot resolves the members an OAuth flow for a
 // gateway endpoint authorizes against: a stored gateway's membership rows, or
 // an organization gateway's derived members.
-func (s *Service) resolveEndpointMemberSnapshot(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint) (context.Context, []metaMember, error) {
+func (s *Service) resolveEndpointMemberSnapshot(ctx context.Context, logger *slog.Logger, surface string, endpoint *ResolvedMcpEndpoint) (context.Context, []metaMember, error) {
 	if endpoint.IsOrganizationGateway() {
-		return s.resolveOrganizationMemberSnapshot(ctx, logger, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+		return s.resolveOrganizationMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, endpoint.UserSessionIssuerID, endpoint.ProjectID)
 	}
-	ctx, members, err := s.resolveMetaMemberSnapshot(ctx, logger, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
+	ctx, members, err := s.resolveMetaMemberSnapshot(ctx, logger, surface, endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, endpoint.ProjectID)
 	if err != nil {
 		return ctx, nil, err
 	}
@@ -214,16 +228,42 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 		err     error
 	)
 	if gate.agentID == uuid.Nil && !gate.organizationGateway {
-		ctx, members, err = s.resolveMetaMemberSnapshot(ctx, logger, metaServerID, projectID)
+		ctx, members, err = s.resolveMetaMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, metaServerID, projectID)
 	} else {
 		issuer := uuid.Nil
+		scopeProjectID := uuid.Nil
 		if gate.organizationGateway {
 			issuer = gate.userSessionIssuerID
+			scopeProjectID = gate.projectID
 		}
-		ctx, members, err = s.resolveOrganizationMemberSnapshot(ctx, logger, gate.organizationID, issuer)
+		ctx, members, err = s.resolveOrganizationMemberSnapshot(ctx, logger, mandatorySurfaceGatewayMember, gate.organizationID, issuer, scopeProjectID)
+	}
+	if err == nil && gate.userID != "" && !isAssistantRequest(ctx) {
+		members, gate.hiddenMembers = s.splitHiddenMembers(ctx, logger, gate.organizationID, gate.userID, members)
+	}
+	if err == nil && gate.catalog != nil {
+		members, gate.unapprovedMembers = gate.catalog.approvedMembers(members)
+		gate.hiddenMembers, _ = gate.catalog.approvedMembers(gate.hiddenMembers)
+	}
+	if err == nil && gate.catalog != nil {
+		ids := make([]uuid.UUID, 0, len(members))
+		for _, member := range members {
+			ids = append(ids, member.serverID)
+		}
+		hashes, hashErr := s.catalogMemberConfigurations(ctx, gate.organizationID, ids)
+		if hashErr != nil {
+			return ctx, nil, hashErr
+		}
+		for i := range members {
+			members[i].configurationHash = hashes[members[i].serverID]
+		}
 	}
 	if err == nil && gate.memberChoices != nil {
-		gate.memberChoices.apply(ctx, logger, members)
+		if gate.catalog == nil {
+			gate.memberChoices.apply(ctx, logger, members, false)
+		} else if gate.catalogRef.Mode != toolfilter.CatalogModeCached || gate.execute {
+			gate.memberChoices.apply(ctx, logger, members, true)
+		}
 	}
 	return ctx, members, err
 }
@@ -239,7 +279,8 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 //
 // userSessionIssuerID is the organization gateway's issuer, whose clients are
 // the only way a person connects a member that signs in upstream. uuid.Nil
-// (the agent gateway) skips that check.
+// (the agent gateway) skips that check. A nonzero scopeProjectID restricts
+// candidates before admission and credential association for project gateways.
 //
 // The organization gateway also drops servers backed by a toolset with
 // Platform tools, mirroring automatic plugin delivery: those toolsets serve
@@ -249,8 +290,10 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 func (s *Service) resolveOrganizationMemberSnapshot(
 	ctx context.Context,
 	logger *slog.Logger,
+	authzSurface string,
 	organizationID string,
 	userSessionIssuerID uuid.UUID,
+	scopeProjectID uuid.UUID,
 ) (context.Context, []metaMember, error) {
 	// Unconditional for the same reason resolveMetaMemberSnapshot prepares it.
 	ctx, err := s.authz.PrepareContext(ctx)
@@ -273,6 +316,9 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 
 	candidates := make([]metaMemberCandidate, 0, len(rows))
 	for _, row := range rows {
+		if scopeProjectID != uuid.Nil && row.McpServerProjectID != scopeProjectID {
+			continue
+		}
 		if !servableOnSurface(row.McpServerNetworkAccessMode, surface) {
 			continue
 		}
@@ -301,7 +347,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 		})
 	}
 
-	ctx, members, err := s.admitMetaMembers(ctx, logger, candidates)
+	ctx, members, err := s.admitMetaMembers(ctx, logger, authzSurface, organizationID, candidates)
 	if err != nil {
 		return ctx, nil, err
 	}
@@ -317,9 +363,10 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "list gateway sign-in clients").LogError(ctx, logger)
 		}
 	}
+	shadow := s.newMandatoryShadow(ctx, organizationID)
 	eligible := make([]metaMember, 0, len(members))
 	for _, member := range members {
-		supported, needsOAuth, err := s.derivedMemberAuth(ctx, member)
+		supported, needsOAuth, err := s.derivedMemberAuth(ctx, shadow, authzSurface, member)
 		if err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "check gateway member authentication").LogError(ctx, logger)
 		}
@@ -381,8 +428,11 @@ func qualifyMemberSlugsByProject(members []metaMember) []metaMember {
 func (s *Service) admitMetaMembers(
 	ctx context.Context,
 	logger *slog.Logger,
+	surface string,
+	organizationID string,
 	candidates []metaMemberCandidate,
 ) (context.Context, []metaMember, error) {
+	shadow := s.newMandatoryShadow(ctx, organizationID)
 	members := make([]metaMember, 0, len(candidates))
 	for _, candidate := range candidates {
 		if candidate.unproxied {
@@ -410,25 +460,31 @@ func (s *Service) admitMetaMembers(
 		// This gates on the member server's own visibility only: a hosted
 		// member whose toolset is private still lists here (its endpoint is
 		// public), then reads as nonexistent on drill-down (loadMemberToolset).
+		connect := authz.MCPCheck(authz.ScopeMCPConnect, connectResourceID.String(), candidate.projectID.String())
 		switch candidate.visibility {
 		case mcpservers.VisibilityPublic:
+			shadow.recordServer(ctx, surface, true, authz.MandatoryServerPublic, connect)
 		case mcpservers.VisibilityPrivate:
-			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, connectResourceID.String(), candidate.projectID.String())); err != nil {
+			if err := s.authz.Require(ctx, connect); err != nil {
 				// Forbidden and Unauthorized (anonymous callers on an ungated
 				// endpoint carry no AuthContext) are denials: filter the
 				// member. Anything else is an evaluation failure.
 				var oopsErr *oops.ShareableError
 				if errors.As(err, &oopsErr) && (oopsErr.Code == oops.CodeForbidden || oopsErr.Code == oops.CodeUnauthorized) {
+					shadow.recordServer(ctx, surface, false, authz.MandatoryServerPrivate, connect)
 					continue
 				}
 				return ctx, nil, oops.E(oops.CodeUnexpected, err, "check member authz").LogError(ctx, logger)
 			}
+			shadow.recordServer(ctx, surface, true, authz.MandatoryServerPrivate, connect)
 		default:
 			continue
 		}
 
 		members = append(members, metaMember{
 			serverID:                   candidate.serverID,
+			configurationHash:          "",
+			authClient:                 nil,
 			projectID:                  candidate.projectID,
 			projectSlug:                candidate.projectSlug,
 			slug:                       candidate.slug,
@@ -446,6 +502,7 @@ func (s *Service) admitMetaMembers(
 			chosenClientID:             uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 			upstreamNoAuth:             false,
 			upstreamUnavailable:        nil,
+			typedAuthClient:            false,
 			associatedClients:          nil,
 		})
 	}
@@ -463,4 +520,37 @@ func findMetaMember(members []metaMember, serverSlug string) (metaMember, bool) 
 	}
 	var none metaMember
 	return none, false
+}
+
+// isAssistantRequest reports an assistant run, which acts for its owner but
+// must not inherit the owner's hidden servers.
+func isAssistantRequest(ctx context.Context) bool {
+	_, ok := contextvalues.GetAssistantPrincipal(ctx)
+	return ok
+}
+
+// splitHiddenMembers separates the servers the user hid from those served.
+// Hiding is a preference, so a failed lookup serves every member rather than
+// failing the request.
+func (s *Service) splitHiddenMembers(ctx context.Context, logger *slog.Logger, organizationID, userID string, members []metaMember) ([]metaMember, []metaMember) {
+	hidden, err := hiddenmcpservers.HiddenServerIDs(ctx, s.db, organizationID, userID)
+	if err != nil {
+		if ctx.Err() == nil {
+			logger.WarnContext(ctx, "load hidden gateway members", attr.SlogError(err))
+		}
+		return members, nil
+	}
+	if len(hidden) == 0 {
+		return members, nil
+	}
+	served := make([]metaMember, 0, len(members))
+	var removed []metaMember
+	for _, member := range members {
+		if hidden[member.serverID] {
+			removed = append(removed, member)
+		} else {
+			served = append(served, member)
+		}
+	}
+	return served, removed
 }

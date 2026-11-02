@@ -1,9 +1,12 @@
-import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
-import { useDateRangeFilter } from "@/components/observe/useDateRangeFilter";
 import { Page } from "@/components/page-layout";
 import { IdentityRail } from "@/components/identity-rail";
 import { identityRailItems } from "@/components/identity-rail-items";
-import { useRecentLabelOverride } from "@/components/command-palette/recentlyVisited";
+import {
+  removeResourceVisits,
+  useRecentLabelOverride,
+  useRecentsUserId,
+} from "@/components/command-palette/recentlyVisited";
+import { useSlugs } from "@/contexts/Sdk";
 import { RequireScope } from "@/components/require-scope";
 import {
   RouteNotFoundState,
@@ -15,23 +18,29 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
 import { getInitials } from "@/lib/initials";
 import { encodeIdentityUrn } from "@/lib/identity-urn";
-import { isBadRequestError, isNotFoundError } from "@/lib/route-errors";
+import {
+  getHttpStatusCode,
+  isBadRequestError,
+  isNotFoundError,
+} from "@/lib/route-errors";
 import { useRoutes } from "@/routes";
 import type { IdentityModel } from "@gram/client/models/components/identitymodel.js";
 import {
   AgentHeaderActions,
   AgentIdentityProfile,
+  AgentRenameAction,
 } from "./AgentIdentityProfile";
 import { useIdentitySubject } from "./useIdentitySubject";
 import {
   useCallback,
+  useEffect,
   useState,
   type CSSProperties,
   type ReactNode,
 } from "react";
 import { Navigate, Outlet, useLocation, useParams } from "react-router";
 import type { IdentityOutletContext } from "./identityRoute";
-import { useCanReadRisk, useIdentityIsKnown } from "./useIdentityQueries";
+import { useIdentityIsKnown } from "./useIdentityQueries";
 import { withoutFindingsFilter } from "./identityFindingsLink";
 
 /** How each resolved subject kind reads in the header chip. */
@@ -95,11 +104,24 @@ function IdentityDetailContent(): JSX.Element {
   // corrupt an identifier that legitimately contains a percent escape.
   const { identityUrn: urn = "" } = useParams<{ identityUrn: string }>();
   const encodedUrn = urn ? encodeIdentityUrn(urn) : undefined;
-  const canReadRisk = useCanReadRisk();
   const routes = useRoutes();
   const location = useLocation();
 
   const identityQuery = useIdentitySubject(urn);
+  const statusCode = getHttpStatusCode(identityQuery.error);
+  // A failed refetch retains cached data, but a definitive loss of agent
+  // access must hide it (for example, after transferring ownership).
+  const agentUnavailable =
+    urn.startsWith("agent:") && (statusCode === 403 || statusCode === 404);
+  const recentsUserId = useRecentsUserId(agentUnavailable);
+  const { orgSlug, projectSlug } = useSlugs();
+  const resourceHref = encodedUrn
+    ? routes.identities.href(encodedUrn)
+    : undefined;
+  useEffect(() => {
+    if (!agentUnavailable || !recentsUserId || !resourceHref) return;
+    removeResourceVisits(recentsUserId, orgSlug, projectSlug, resourceHref);
+  }, [agentUnavailable, recentsUserId, orgSlug, projectSlug, resourceHref]);
   // How far down the rail has to stick to clear the header above it. The
   // header's height is not a constant — a long name wraps, and so does a row
   // of directory groups — so a fixed offset parks the rail under the header's
@@ -117,10 +139,15 @@ function IdentityDetailContent(): JSX.Element {
   }, []);
   // Without this the recents entry is the sub-page segment ("overview"), since
   // the URN is neither an id nor long enough for the label heuristic to reject.
-  useRecentLabelOverride(location.pathname, identityQuery.data?.displayName);
+  useRecentLabelOverride(
+    location.pathname,
+    agentUnavailable ? undefined : identityQuery.data?.displayName,
+  );
   // The resolver answers any well-formed URN with a subject, so a typo renders
   // a complete page for someone who does not exist unless we check.
-  const subject = useIdentityIsKnown(identityQuery.data);
+  const subject = useIdentityIsKnown(
+    agentUnavailable ? undefined : identityQuery.data,
+  );
 
   // The bare route carries no panels of its own; overview is the landing view.
   if (encodedUrn && location.pathname === routes.identities.href(encodedUrn)) {
@@ -137,6 +164,7 @@ function IdentityDetailContent(): JSX.Element {
   if (
     identityQuery.error &&
     !identityQuery.data &&
+    !agentUnavailable &&
     !isNotFoundError(identityQuery.error) &&
     !isBadRequestError(identityQuery.error)
   ) {
@@ -145,6 +173,7 @@ function IdentityDetailContent(): JSX.Element {
 
   if (
     !urn ||
+    agentUnavailable ||
     (identityQuery.error && !identityQuery.data) ||
     (identityQuery.data && !subject.isPending && !subject.known)
   ) {
@@ -155,8 +184,14 @@ function IdentityDetailContent(): JSX.Element {
         </Page.Header>
         <Page.Body>
           <RouteNotFoundState
-            title="Identity not found"
-            description="No activity in this organization resolves to that identifier."
+            title={
+              agentUnavailable ? "Agent unavailable" : "Identity not found"
+            }
+            description={
+              agentUnavailable
+                ? "This agent no longer exists or you no longer have permission to view it."
+                : "No activity in this organization resolves to that identifier."
+            }
             action={
               <routes.identities.Link>
                 <SecondaryRouteAction>Back to identities</SecondaryRouteAction>
@@ -225,13 +260,16 @@ function IdentityDetailContent(): JSX.Element {
         >
           <IdentityHeader
             identity={identity}
-            actions={
+            nameAction={
               identity.agent && (
-                <AgentHeaderActions
+                <AgentRenameAction
                   agent={identity.agent}
                   refresh={() => void identityQuery.refetch()}
                 />
               )
+            }
+            actions={
+              identity.agent && <AgentHeaderActions agent={identity.agent} />
             }
           />
         </div>
@@ -260,8 +298,6 @@ function IdentityDetailContent(): JSX.Element {
               // The Findings filter is that page's own, not a setting to
               // carry into the other sections and back.
               withoutFindingsFilter(location.search),
-              // Agents render the agent profile, which has no Findings view.
-              canReadRisk && !identity.agent,
               identity.kind,
             )}
             // Narrow, the rail is a scrollable row above the content: hiding
@@ -298,21 +334,15 @@ function IdentityDetailContent(): JSX.Element {
 
 function IdentityHeader({
   identity,
+  nameAction,
   actions,
 }: {
   identity: IdentityModel;
-  /** Controls on the subject itself, under its badges. */
+  /** A control on the name itself (rename), shown beside it on hover. */
+  nameAction?: ReactNode;
+  /** Controls on the subject itself, in the header's top right. */
   actions?: ReactNode;
 }): JSX.Element {
-  const {
-    dateRange,
-    customRange,
-    customRangeLabel,
-    setDateRangeParam,
-    setCustomRangeParam,
-    clearCustomRange,
-  } = useDateRangeFilter();
-
   const primaryEmail = identity.emails[0];
   // Tobias is for names. When the only name we have is the address itself, the
   // display face loses the punctuation that makes it readable, and repeating it
@@ -340,15 +370,22 @@ function IdentityHeader({
             <AvatarFallback>{getInitials(identity.displayName)}</AvatarFallback>
           </Avatar>
           <div className="flex min-w-0 flex-col gap-1">
-            <h1
-              className={
-                nameIsAddress
-                  ? "truncate font-mono text-xl"
-                  : "text-display-sm truncate font-thin"
-              }
-            >
-              {identity.displayName}
-            </h1>
+            <div className="group/name flex min-w-0 items-center gap-1">
+              <h1
+                className={
+                  nameIsAddress
+                    ? "truncate font-mono text-xl"
+                    : "text-display-sm truncate font-thin"
+                }
+              >
+                {identity.displayName}
+              </h1>
+              {nameAction && (
+                <span className="shrink-0 opacity-0 transition-opacity group-hover/name:opacity-100 focus-within:opacity-100">
+                  {nameAction}
+                </span>
+              )}
+            </div>
             <div className="flex items-center gap-2">
               {primaryEmail && !nameIsAddress && (
                 <Text variant="small" muted className="truncate">
@@ -360,19 +397,11 @@ function IdentityHeader({
                 <Badge variant="neutral">No linked account</Badge>
               )}
             </div>
-            {actions}
           </div>
         </div>
-        <div className="flex shrink-0 items-center gap-2">
-          <TimeRangePicker
-            preset={customRange ? null : dateRange}
-            customRange={customRange}
-            customRangeLabel={customRangeLabel}
-            onPresetChange={setDateRangeParam}
-            onCustomRangeChange={setCustomRangeParam}
-            onClearCustomRange={clearCustomRange}
-          />
-        </div>
+        {actions && (
+          <div className="flex shrink-0 items-center gap-2">{actions}</div>
+        )}
       </div>
 
       <div className="flex flex-wrap items-center gap-2">

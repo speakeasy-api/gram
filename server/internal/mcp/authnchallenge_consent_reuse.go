@@ -285,7 +285,7 @@ func (s *Service) consentReuseInventory(ctx context.Context, endpoint *ResolvedM
 	if err != nil {
 		return nil, err
 	}
-	inventory, found, err := s.getCompletedConsentInventory(ctx, state.ID, attempt)
+	inventory, found, err := s.getCompletedConsentInventory(ctx, endpoint, state.ID, attempt)
 	if err != nil || !found {
 		return nil, err
 	}

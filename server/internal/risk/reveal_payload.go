@@ -3,6 +3,7 @@ package risk
 import (
 	"context"
 	"errors"
+	"fmt"
 	"time"
 
 	"github.com/google/uuid"
@@ -25,6 +26,9 @@ func (s *Service) RevealRiskResultPayload(ctx context.Context, payload *gen.Reve
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
+	}
+	if err := authz.CheckSensitiveContentAccess(ctx); err != nil {
+		return nil, fmt.Errorf("authorize risk payload reveal: %w", err)
 	}
 	projectID := *authCtx.ProjectID
 

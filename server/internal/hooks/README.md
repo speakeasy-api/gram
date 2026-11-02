@@ -44,11 +44,31 @@ Generated hooks translate that response into the local provider response shape.
 when an explicit project selector is needed. Keep secret-bearing hook
 configuration uncommitted.
 
-Subscribe to `user.message.inbound` for prompts, `model.response.after` for
-assistant responses and usage, and `tool.before` / `tool.after` for tool activity.
-Observe mode records events without enforcing policy. Prompt and tool
+Call `hooks/configuration` to discover the supported subscriptions:
+
+- Intercept: `user.message.inbound` and `tool.before`.
+- Observe: `session.start`, `session.end`, `turn.end`,
+  `model.response.after`, and `tool.after`.
+
+Each event is advertised once. Intercept subscriptions use a ten-second timeout
+and the authenticated organization's current fail-open setting; policy presence
+does not change delivery mode. Both modes request `content: {"default": "body"}`.
+The timeout is a fixed transport default; there is no organization-level AHP timeout setting.
+Discovery lookup failures return the SDK-native JSON-RPC
+error `-32004` (`Backend internal error`) over HTTP 200, without subscriptions or
+an assumed failure policy. Authentication failures remain HTTP 401/403.
+
+Observe mode records events without enforcing policy. `turn.start` is not advertised. Prompt and tool
 interception require the harness to support denial at the subscribed boundary.
-Only inline text is supported; content references and uploads are not supported.
+Both subscriptions advertise `/ahp/uploads` with a ten-second timeout and a 1 MiB
+limit. Uploads use the same authentication and project as event requests. Binary
+uploads are accepted, but only text is processed as prompt attachment evidence.
+Unavailable staged references return a backend error, subject to the subscription's
+fail-open or fail-closed policy.
+
+To omit local subscriptions, clients must support discovery and approve the upload
+destination and credential forwarding. Go SDK hosts use `AuthorizeConfiguration`;
+without approval, discovery skips the **entire backend**, including inline-text events.
 
 ## Legacy Compatibility
 

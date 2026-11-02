@@ -3,6 +3,7 @@ package identity
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -58,5 +59,38 @@ func TestWorkOSAdapterSetEmailVerifiedOnlySendsVerificationUpdate(t *testing.T) 
 		"metadata",
 	} {
 		require.NotContains(t, requestBody, field)
+	}
+}
+
+func TestWorkOSAdapterCodeExchangeErrors(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		status   int
+		body     string
+		rejected bool
+	}{
+		{name: "invalid code", status: http.StatusBadRequest, body: `{"error":"invalid_grant","error_description":"code expired"}`, rejected: true},
+		{name: "invalid client", status: http.StatusUnauthorized, body: `{"error":"invalid_client"}`},
+		{name: "invalid request", status: http.StatusBadRequest, body: `{"error":"invalid_request"}`},
+		{name: "rate limited", status: http.StatusTooManyRequests, body: `{"error":"rate_limit_exceeded"}`},
+		{name: "provider outage", status: http.StatusServiceUnavailable, body: `{"error":"temporarily_unavailable"}`},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			t.Cleanup(server.Close)
+			client := usermanagement.NewClient("test")
+			client.Endpoint = server.URL
+			client.HTTPClient = server.Client()
+			adapter := NewWorkOSAdapter(client)
+			_, err := adapter.AuthenticateWithCode(t.Context(), "test-client", "test-code")
+			require.Error(t, err)
+			require.Equal(t, tc.rejected, errors.Is(err, ErrCodeRejected))
+		})
 	}
 }

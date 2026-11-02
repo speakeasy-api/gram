@@ -86,6 +86,7 @@ import {
   useRowReveal,
 } from "./chatHelpers";
 import { QueryHighlight } from "./QueryHighlight";
+import { parseOpenClawContext } from "@/lib/openclawContext";
 import { CreateExclusionContext } from "./exclusionContext";
 import { toolSectionRiskMatches, type ToolRiskField } from "./toolRisk";
 import { useDismissFinding } from "@/pages/security/useDismissFinding";
@@ -119,6 +120,10 @@ interface RowContext {
    * userId is a display label as often as an id (userLabelOverride replaces
    * it wholesale), so it cannot be keyed on. */
   ownerIdentifier?: IdentityRef | null;
+  /** True when OpenClaw captured the session. Only then is a user turn's
+   * OpenClaw context wrapper unfolded, so the same text pasted into another
+   * session stays as typed. */
+  openClawSession?: boolean;
 }
 
 type ResolvedRowContext = Required<
@@ -369,10 +374,12 @@ function TurnHeader({
 // that spoofs an envelope is exactly the kind of thing they are looking for.
 function HarnessContextDisclosure({
   envelope,
+  label = "Harness context",
   results,
   revealed,
 }: {
   envelope: string;
+  label?: string;
   results: RiskResult[] | undefined;
   revealed?: boolean;
 }) {
@@ -395,7 +402,7 @@ function HarnessContextDisclosure({
         ) : (
           <ChevronDown className="size-3" />
         )}
-        Harness context
+        {label}
       </CollapsibleTrigger>
       <CollapsibleContent className="text-muted-foreground mt-1 border-l-2 pl-2 font-mono text-xs whitespace-pre-wrap">
         {envelopeResults.length > 0 ? (
@@ -440,8 +447,26 @@ function UserMessageRow({
     results = [...(messageResults ?? []), ...attachmentResults];
   }
   const usage = ctx.claudeUsageByMessage.get(message.id);
-  const text = messageText(message.content);
-  const envelope = messageEnvelope(message.content);
+  const rawText = messageText(message.content);
+  const harnessEnvelope = messageEnvelope(message.content);
+  // OpenClaw wraps the request in its requester profile and a replay of the
+  // earlier conversation; show the request and fold the rest away. Search
+  // matches the full stored text, so a searched row keeps it whole.
+  const openClaw =
+    ctx.openClawSession && !ctx.searchQuery
+      ? parseOpenClawContext(rawText)
+      : null;
+  const text = openClaw?.request ?? rawText;
+  let envelope = harnessEnvelope;
+  if (openClaw) {
+    envelope = [
+      harnessEnvelope,
+      openClaw.metadata,
+      openClaw.conversationContext,
+    ]
+      .filter(Boolean)
+      .join("\n\n");
+  }
   const flagged =
     (!!results && results.length > 0) ||
     row.attachments.some((attachment) => attachment.isRisk);
@@ -466,6 +491,7 @@ function UserMessageRow({
         {envelope && (
           <HarnessContextDisclosure
             envelope={envelope}
+            label={openClaw ? "OpenClaw context" : undefined}
             results={messageResults}
             revealed={messageSensitive ? revealed : undefined}
           />

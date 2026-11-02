@@ -16,11 +16,12 @@ import (
 
 // Endpoints wraps the "keys" service endpoints.
 type Endpoints struct {
-	CreateKey goa.Endpoint
-	RotateKey goa.Endpoint
-	ListKeys  goa.Endpoint
-	RevokeKey goa.Endpoint
-	VerifyKey goa.Endpoint
+	CreateKey       goa.Endpoint
+	RotateKey       goa.Endpoint
+	ListKeys        goa.Endpoint
+	RevokeKey       goa.Endpoint
+	UpdateKeyPolicy goa.Endpoint
+	VerifyKey       goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "keys" service with endpoints.
@@ -28,11 +29,12 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateKey: NewCreateKeyEndpoint(s, a.APIKeyAuth),
-		RotateKey: NewRotateKeyEndpoint(s, a.APIKeyAuth),
-		ListKeys:  NewListKeysEndpoint(s, a.APIKeyAuth),
-		RevokeKey: NewRevokeKeyEndpoint(s, a.APIKeyAuth),
-		VerifyKey: NewVerifyKeyEndpoint(s, a.APIKeyAuth),
+		CreateKey:       NewCreateKeyEndpoint(s, a.APIKeyAuth),
+		RotateKey:       NewRotateKeyEndpoint(s, a.APIKeyAuth),
+		ListKeys:        NewListKeysEndpoint(s, a.APIKeyAuth),
+		RevokeKey:       NewRevokeKeyEndpoint(s, a.APIKeyAuth),
+		UpdateKeyPolicy: NewUpdateKeyPolicyEndpoint(s, a.APIKeyAuth),
+		VerifyKey:       NewVerifyKeyEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -42,6 +44,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.RotateKey = m(e.RotateKey)
 	e.ListKeys = m(e.ListKeys)
 	e.RevokeKey = m(e.RevokeKey)
+	e.UpdateKeyPolicy = m(e.UpdateKeyPolicy)
 	e.VerifyKey = m(e.VerifyKey)
 }
 
@@ -134,6 +137,29 @@ func NewRevokeKeyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 			return nil, err
 		}
 		return nil, s.RevokeKey(ctx, p)
+	}
+}
+
+// NewUpdateKeyPolicyEndpoint returns an endpoint function that calls the
+// method "updateKeyPolicy" of service "keys".
+func NewUpdateKeyPolicyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*UpdateKeyPolicyPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.UpdateKeyPolicy(ctx, p)
 	}
 }
 

@@ -71,10 +71,11 @@ func liveExpectationFor(t *testing.T, issuer *devidptest.Instance, jwksURI strin
 		KeySource: source,
 		// Spent identifiers are scoped by this endpoint, never by anything the
 		// assertion carries.
-		ReplayIssuer: testAudience,
-		ReplayParty:  issuer.OAuth21URL,
-		Audiences:    []string{testAudience, testAudience + "/token"},
-		MaxLifetime:  testMaxLifetime,
+		ReplayIssuer:        testAudience,
+		ReplayParty:         issuer.OAuth21URL,
+		Audiences:           []string{testAudience, testAudience + "/token"},
+		MaxLifetime:         testMaxLifetime,
+		AllowAssertionReuse: false,
 	}
 }
 

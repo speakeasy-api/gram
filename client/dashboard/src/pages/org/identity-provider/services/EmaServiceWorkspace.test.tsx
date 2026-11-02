@@ -30,7 +30,11 @@ const mocks = vi.hoisted(() => ({
   servicesRefresh: null as Promise<void> | null,
   saveResult: { isDefault: false } as { isDefault: boolean },
   speakeasyIssuer: "https://speakeasy.example.com/issuer" as string | undefined,
-  signIns: [] as { projectId: string; trustedRemoteSessionIssuerId?: string }[],
+  signIns: [] as {
+    projectId: string;
+    trustedRemoteSessionIssuerId?: string;
+    trustedRemoteSessionClientId?: string;
+  }[],
   signInsState: "success" as "success" | "pending" | "error",
   signInsRefetch: vi.fn(),
   issuers: [] as { id: string; name: string; issuer: string }[],
@@ -256,7 +260,13 @@ beforeEach(() => {
   mocks.servicesRefresh = null;
   mocks.saveResult = { isDefault: false };
   mocks.speakeasyIssuer = "https://speakeasy.example.com/issuer";
-  mocks.signIns = [{ projectId: "", trustedRemoteSessionIssuerId: "okta" }];
+  mocks.signIns = [
+    {
+      projectId: "",
+      trustedRemoteSessionIssuerId: "okta",
+      trustedRemoteSessionClientId: "okta-client",
+    },
+  ];
   mocks.signInsState = "success";
   mocks.signInsRefetch.mockReset();
   mocks.issuers = [
@@ -373,6 +383,13 @@ describe("one service", () => {
         },
       },
     });
+  });
+
+  it("doesn't offer a provider trusted for inbound ID-JAGs only", () => {
+    mocks.signIns = [{ projectId: "", trustedRemoteSessionIssuerId: "okta" }];
+    show();
+    fireEvent.click(editButton());
+    expect(checkboxes()).toEqual([{ name: "Speakeasy", checked: true }]);
   });
 
   it("refreshes the services and every server's reading after a save", async () => {
@@ -505,6 +522,7 @@ describe("one service", () => {
     mocks.signIns = ids.map((id) => ({
       projectId: "",
       trustedRemoteSessionIssuerId: id,
+      trustedRemoteSessionClientId: `${id}-client`,
     }));
     mocks.issuers = ids.map((id) => ({
       id,

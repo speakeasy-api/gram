@@ -10,8 +10,15 @@ import {
   MCPServerStatusDropdown,
 } from "./MCPServerDetails";
 
+const followRenamedServer = vi.hoisted(() => vi.fn());
+vi.mock("@/pages/mcp/x/useFollowRenamedServer", () => ({
+  useFollowRenamedServer: () => followRenamedServer,
+}));
+
 const mocks = vi.hoisted(() => ({
   hasScope: vi.fn(),
+  guardRequest: vi.fn(),
+  capture: vi.fn(),
   mutate: vi.fn(),
   mutationOptions: vi.fn(),
   invalidateAudience: vi.fn(() => Promise.resolve()),
@@ -22,6 +29,25 @@ vi.mock("@gram/client/react-query/resourceAudience.js", () => ({
   invalidateAllResourceAudience: mocks.invalidateAudience,
 }));
 
+vi.mock("@/contexts/Telemetry", () => ({
+  useTelemetry: () => ({ capture: mocks.capture }),
+}));
+vi.mock("./hosted/useHostedVisibilityGuard", () => ({
+  useHostedVisibilityGuard: ({
+    server,
+    apply,
+  }: {
+    server: { toolset?: { slug: string } };
+    apply: (next: string) => void;
+  }) => ({
+    request: (next: string) => {
+      mocks.guardRequest(server.toolset?.slug, next);
+      apply(next);
+    },
+    publicUnavailable: false,
+    dialogs: null,
+  }),
+}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: mocks.hasScope }),
 }));
@@ -248,10 +274,19 @@ describe("hosted MCP server visibility", () => {
     id: "hosted-1",
     remoteMcpServerId: undefined,
     toolsetId: "hosted-1",
-    visibility: "public",
+    toolset: {
+      id: "hosted-1",
+      slug: "hosted-tools",
+      name: "Hosted tools",
+      toolCount: 1,
+      toolSelectionMode: "static",
+      externalMcpSlugs: [],
+      externalMcpProxyOnly: false,
+    },
+    visibility: "private",
   } as McpServer;
 
-  it("keeps the availability switch read-only", () => {
+  it("keeps the availability switch on the dropdown's confirmations", () => {
     renderToggle(hosted);
 
     expect(
@@ -259,13 +294,20 @@ describe("hosted MCP server visibility", () => {
     ).toHaveProperty("disabled", true);
   });
 
-  it("keeps the status dropdown read-only", () => {
+  it("offers Public through the hosted confirmations", () => {
     renderInApp(<MCPServerStatusDropdown server={hosted} />);
 
-    expect(screen.getByRole("button", { name: /Public/ })).toHaveProperty(
-      "disabled",
-      true,
-    );
+    fireEvent.click(screen.getByRole("menuitem", { name: /^Public/ }));
+
+    expect(mocks.guardRequest).toHaveBeenCalledWith("hosted-tools", "public");
+    expect(mocks.mutate).toHaveBeenCalledWith({
+      request: {
+        updateMcpServerForm: expect.objectContaining({
+          id: "hosted-1",
+          visibility: "public",
+        }),
+      },
+    });
   });
 });
 

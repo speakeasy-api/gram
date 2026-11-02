@@ -12,6 +12,23 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const activityCountSignalMessages = `-- name: ActivityCountSignalMessages :one
+SELECT count(*) FROM chat_messages
+WHERE project_id = $1 AND id = ANY($2::uuid[]) AND capture_kind = 'original'
+`
+
+type ActivityCountSignalMessagesParams struct {
+	ProjectID  uuid.NullUUID
+	MessageIds []uuid.UUID
+}
+
+func (q *Queries) ActivityCountSignalMessages(ctx context.Context, arg ActivityCountSignalMessagesParams) (int64, error) {
+	row := q.db.QueryRow(ctx, activityCountSignalMessages, arg.ProjectID, arg.MessageIds)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const activityDeleteAnthropicInferenceConfig = `-- name: ActivityDeleteAnthropicInferenceConfig :exec
 DELETE FROM ai_integration_configs WHERE organization_id = $1 AND provider = 'anthropic_inference'
 `
@@ -382,6 +399,35 @@ func (q *Queries) ActivityInsertQuarantineAuditLog(ctx context.Context, arg Acti
 		arg.RiskPolicyID,
 	)
 	return err
+}
+
+const activityInsertSignalMessage = `-- name: ActivityInsertSignalMessage :one
+INSERT INTO chat_messages (id, chat_id, project_id, role, content, source, model, capture_kind, created_at, risk_analyzed_at)
+VALUES ($1, $2, $3::uuid, $4, $5, 'claude-code', 'demo-model', 'original', $6, now())
+RETURNING seq
+`
+
+type ActivityInsertSignalMessageParams struct {
+	ID        uuid.UUID
+	ChatID    uuid.UUID
+	ProjectID uuid.UUID
+	Role      string
+	Content   string
+	CreatedAt pgtype.Timestamptz
+}
+
+func (q *Queries) ActivityInsertSignalMessage(ctx context.Context, arg ActivityInsertSignalMessageParams) (int64, error) {
+	row := q.db.QueryRow(ctx, activityInsertSignalMessage,
+		arg.ID,
+		arg.ChatID,
+		arg.ProjectID,
+		arg.Role,
+		arg.Content,
+		arg.CreatedAt,
+	)
+	var seq int64
+	err := row.Scan(&seq)
+	return seq, err
 }
 
 const activityInsertSpendRuleEvents = `-- name: ActivityInsertSpendRuleEvents :exec

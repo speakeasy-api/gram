@@ -22,3 +22,8 @@ func (t Token) String() string               { return "[redacted chained token]"
 func (t Token) GoString() string             { return t.String() }
 func (t Token) MarshalJSON() ([]byte, error) { return []byte("{}"), nil }
 func (t Token) LogValue() slog.Value         { return slog.StringValue(t.String()) }
+
+// NewTokenForTest constructs a redacted credential for test fakes.
+func NewTokenForTest(value string, expiresAt time.Time) Token {
+	return Token{value: value, expiresAt: expiresAt}
+}

@@ -269,6 +269,11 @@ func TestMatcher_CompactionBumpsGeneration(t *testing.T) {
 	}
 	require.Equal(t, 4, gens[0], "pre-compaction rows stay at gen 0")
 	require.Equal(t, 3, gens[1], "compacted chain starts at gen 1")
+	for _, event := range conversationMessages(t, ti) {
+		if event.GetGeneration() == 1 && event.GetRole() == conversationv1.MessageEvent_ROLE_USER {
+			require.Equal(t, chat.CaptureUnknown, event.GetCaptureKind(), "rewritten history has no trustworthy original-utterance identity")
+		}
+	}
 }
 
 // Edit: same number of messages but content at index 0 differs. Treated as a
@@ -294,6 +299,8 @@ func TestMatcher_EditBumpsGeneration(t *testing.T) {
 	require.Equal(t, int32(0), rows[1].Generation)
 	require.Equal(t, int32(1), rows[2].Generation)
 	require.Equal(t, int32(1), rows[3].Generation)
+	require.Equal(t, chat.CaptureUnknown, rows[2].CaptureKind.String)
+	require.Equal(t, chat.CaptureOriginal, rows[3].CaptureKind.String)
 }
 
 func TestMatcher_ToolCallsMatchAcrossIndexAndOrderVariations(t *testing.T) {

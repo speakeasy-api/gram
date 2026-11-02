@@ -39,6 +39,39 @@ func DelegableGrantsWithExclusions(agent, owner, caller []authz.Grant) ([]authz.
 	return delegableGrants(agent, owner, caller, "", true, nil)
 }
 
+// DelegableGrantsWithExclusionsFor is DelegableGrantsWithExclusions for a
+// credential that will act for representedUserID, narrowed by constraints as
+// DelegableGrantsFor is. A candidate that a carried exclusion withdraws
+// entirely is dropped: a key storing it would reach nothing through it, so
+// discovery must not offer it as reach.
+func DelegableGrantsWithExclusionsFor(representedUserID string, agent, owner, caller []authz.Grant, constraints ...authz.Selector) ([]authz.Grant, error) {
+	grants, err := delegableGrants(agent, owner, caller, representedUserID, true, constraints)
+	if err != nil {
+		return nil, err
+	}
+	kept := make([]authz.Grant, 0, len(grants))
+	for _, grant := range grants {
+		if !withdrawn(grant, grants, representedUserID) {
+			kept = append(kept, grant)
+		}
+	}
+	return kept, nil
+}
+
+// withdrawn reports whether an exclusion in grants covers the whole of allow.
+func withdrawn(allow authz.Grant, grants []authz.Grant, representedUserID string) bool {
+	if authz.IsBlocklistScope(allow.Scope) {
+		return false
+	}
+	exclusion, ok := authz.ExclusionScopeFor(allow.Scope)
+	if !ok {
+		return false
+	}
+	return slices.ContainsFunc(grants, func(carried authz.Grant) bool {
+		return carried.Scope == exclusion && carried.Selector.StrictMatchesFor(allow.Selector, representedUserID)
+	})
+}
+
 // DelegatedRuntimeGrants derives the policy that bounds a credential storing
 // none of its own from live parent policies: the delegable subset of agent
 // within owner and delegator, exclusions carried, in the canonical form a
@@ -96,7 +129,7 @@ func delegableGrants(agent, owner, caller []authz.Grant, representedUserID strin
 					if !ok || !authz.GrantsContainSelectorFor(representedUserID, []authz.Grant{callerGrant}, scope, narrowed) {
 						continue
 					}
-					candidate := authz.Grant{PrincipalUrn: "", Scope: scope, Selector: narrowed}
+					candidate := authz.Grant{PrincipalUrn: "", Scope: scope, Selector: narrowed, Inferred: false}
 					key, err := delegableGrantKey(candidate)
 					if err != nil {
 						return nil, err
@@ -168,7 +201,7 @@ func delegationFor(candidate authz.Grant, carryExclusions bool, representedUserI
 				return nil, false
 			}
 			if !slices.ContainsFunc(delegated[1:], func(existing authz.Grant) bool { return maps.Equal(existing.Selector, overlap.selector) }) {
-				delegated = append(delegated, authz.Grant{PrincipalUrn: "", Scope: exclusion, Selector: overlap.selector})
+				delegated = append(delegated, authz.Grant{PrincipalUrn: "", Scope: exclusion, Selector: overlap.selector, Inferred: false})
 			}
 		}
 	}

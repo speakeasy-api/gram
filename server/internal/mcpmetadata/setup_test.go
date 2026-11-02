@@ -160,8 +160,6 @@ func createMcpServerWithEndpoint(
 			Slug:                   "fixture-toolset-" + uuid.NewString()[:8],
 			Description:            conv.ToPGText("Fixture toolset for mcp_server backend"),
 			DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-			McpSlug:                pgtype.Text{String: "", Valid: false},
-			McpEnabled:             false,
 		})
 		require.NoError(t, err)
 		opts.toolsetID = uuid.NullUUID{UUID: toolset.ID, Valid: true}
@@ -220,4 +218,67 @@ func createUserSessionIssuer(t *testing.T, ctx context.Context, ti *testInstance
 	require.NoError(t, err)
 
 	return usi
+}
+
+// servedToolsetOptions describes a toolset served at mcpSlug by its canonical MCP server.
+type servedToolsetOptions struct {
+	name           string
+	slug           string
+	mcpSlug        string
+	description    string
+	visibility     string
+	issuerID       uuid.NullUUID
+	customDomainID uuid.NullUUID
+	// legacyAlias serves mcpSlug through the toolset's legacy alias instead of a server endpoint.
+	legacyAlias    bool
+	organizationID string
+	projectID      uuid.UUID
+}
+
+// createServedToolset creates a toolset and its canonical MCP server, reachable at opts.mcpSlug.
+func createServedToolset(t *testing.T, ctx context.Context, ti *testInstance, opts servedToolsetOptions) toolsets_repo.Toolset {
+	t.Helper()
+
+	if opts.organizationID == "" {
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		require.NotNil(t, authCtx.ProjectID)
+		opts.organizationID = authCtx.ActiveOrganizationID
+		opts.projectID = *authCtx.ProjectID
+	}
+	if opts.slug == "" {
+		opts.slug = opts.mcpSlug
+	}
+	if opts.name == "" {
+		opts.name = opts.slug
+	}
+	if opts.visibility == "" {
+		opts.visibility = mcpservers.VisibilityPrivate
+	}
+
+	toolset, err := toolsets_repo.New(ti.conn).CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+		OrganizationID:         opts.organizationID,
+		ProjectID:              opts.projectID,
+		Name:                   opts.name,
+		Slug:                   opts.slug,
+		Description:            pgtype.Text{String: opts.description, Valid: opts.description != ""},
+		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	createCanonicalWrapper(t, ctx, ti, toolset, opts.visibility)
+
+	hosted := testenv.HostedMCP{Visibility: "", UserSessionIssuerID: nil, Slug: opts.mcpSlug, CustomDomainID: opts.customDomainID}
+	if opts.issuerID.Valid {
+		hosted.UserSessionIssuerID = &opts.issuerID
+	}
+	if opts.legacyAlias {
+		testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, opts.mcpSlug, opts.customDomainID)
+		hosted.Slug = ""
+		hosted.CustomDomainID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	}
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, hosted)
+
+	toolset, err = toolsets_repo.New(ti.conn).GetToolsetByIDAndProject(ctx, toolsets_repo.GetToolsetByIDAndProjectParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
+	require.NoError(t, err)
+	return toolset
 }

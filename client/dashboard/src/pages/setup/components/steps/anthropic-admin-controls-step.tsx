@@ -6,6 +6,7 @@ import { EnableLoggingSection } from "../enable-logging-section";
 import { MarketplaceSection } from "../marketplace-section";
 import { isMarketplacePublished } from "../marketplace-status";
 import { ConfirmTrafficSection } from "../confirm-traffic-section";
+import { OrganizationGatewayConnectorSection } from "../organization-gateway-section";
 import { isAnthropicOrCursorSource } from "../hook-event-sources";
 import { usePlatformApiKeys } from "../platform-setup-values";
 import { PlatformSetupFlow } from "../platform-setup-flow";
@@ -51,7 +52,7 @@ export function AnthropicAdminControlsStep({
   return (
     <StepContainer
       title="Set up Anthropic admin controls"
-      description="On Team or Enterprise, an Owner or Primary Owner can configure Cowork organization plugins and Claude Code server-managed settings from Claude.ai. Personal installations and endpoint-managed policies are separate paths. Turn logging on, publish your plugin marketplace, follow the appropriate setup below, optionally connect Cursor, and verify actual event delivery."
+      description="On Team or Enterprise, an Owner or Primary Owner can configure Cowork organization plugins and Claude Code server-managed settings from Claude.ai. Personal installations and endpoint-managed policies are separate paths. Turn logging on, publish your plugin marketplace, follow the appropriate setup below, optionally add the Organization Gateway as a Claude connector and connect Cursor, and verify actual event delivery."
       onContinue={onComplete}
     >
       <div className="space-y-8">
@@ -106,6 +107,16 @@ export function AnthropicAdminControlsStep({
 
         <StepSection
           index={5}
+          slug="connect-organization-gateway"
+          title="Add the Organization Gateway to Claude"
+          badge="Optional"
+          description="The Organization Gateway gives each person every MCP server they can reach at one URL. On Team or Enterprise, an Owner adds it once as an organization connector; on Pro or Max, each person adds it as a custom connector. Its URL appears once an admin has reviewed MCP assignments and turned the gateway on."
+        >
+          <OrganizationGatewayConnectorSection />
+        </StepSection>
+
+        <StepSection
+          index={6}
           slug="connect-cursor"
           title="Connect Cursor"
           badge="Optional"
@@ -123,7 +134,7 @@ export function AnthropicAdminControlsStep({
         </StepSection>
 
         <ConfirmTrafficSection
-          index={6}
+          index={7}
           description="Run any tool in Claude Code or Cursor, or start a Cowork session. Confirm their events actually arrive here; installation alone does not prove delivery."
           callout={{
             title: "Turn Cowork on before you chat",

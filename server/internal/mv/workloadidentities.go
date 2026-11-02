@@ -28,6 +28,7 @@ func BuildWorkloadIssuerView(row repo.WorkloadIssuer) *types.WorkloadIssuer {
 		JwksURI:                row.JwksUri,
 		Description:            conv.FromPGTextOrEmpty[string](row.Description),
 		AllowWildcardAdmission: row.AllowWildcardAdmission,
+		AllowAssertionReuse:    row.AllowAssertionReuse.Valid && row.AllowAssertionReuse.Bool,
 		// Empty rather than nil, so a client never has to distinguish "no tags"
 		// from "field absent".
 		Tags:      conv.DefaultSlice(row.Tags, []string{}),

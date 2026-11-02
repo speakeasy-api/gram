@@ -49,10 +49,6 @@ type Client struct {
 	// the listToolSchemaStaticValues endpoint.
 	ListToolSchemaStaticValuesDoer goahttp.Doer
 
-	// CheckMCPSlugAvailability Doer is the HTTP client used to make requests to
-	// the checkMCPSlugAvailability endpoint.
-	CheckMCPSlugAvailabilityDoer goahttp.Doer
-
 	// CloneToolset Doer is the HTTP client used to make requests to the
 	// cloneToolset endpoint.
 	CloneToolsetDoer goahttp.Doer
@@ -105,7 +101,6 @@ func NewClient(
 		GetToolsetDoer:                 doer,
 		ListToolFiltersDoer:            doer,
 		ListToolSchemaStaticValuesDoer: doer,
-		CheckMCPSlugAvailabilityDoer:   doer,
 		CloneToolsetDoer:               doer,
 		AddExternalOAuthServerDoer:     doer,
 		UpdateExternalOAuthServerDoer:  doer,
@@ -307,30 +302,6 @@ func (c *Client) ListToolSchemaStaticValues() goa.Endpoint {
 		resp, err := c.ListToolSchemaStaticValuesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("toolsets", "listToolSchemaStaticValues", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
-// CheckMCPSlugAvailability returns an endpoint that makes HTTP requests to the
-// toolsets service checkMCPSlugAvailability server.
-func (c *Client) CheckMCPSlugAvailability() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeCheckMCPSlugAvailabilityRequest(c.encoder)
-		decodeResponse = DecodeCheckMCPSlugAvailabilityResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildCheckMCPSlugAvailabilityRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.CheckMCPSlugAvailabilityDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("toolsets", "checkMCPSlugAvailability", err)
 		}
 		return decodeResponse(resp)
 	}

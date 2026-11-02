@@ -276,7 +276,7 @@ SELECT
     p.slug as project_slug,
     
     -- Organization metadata fields
-    om.id, om.name, om.slug, om.gram_account_type, om.workos_id, om.workos_updated_at, om.workos_last_event_id, om.svix_app_id, om.webhooks_enabled, om.whitelisted, om.free_trial_started_at, om.free_trial_ends_at, om.scim_enabled, om.sso_enabled, om.verified_domains, om.creation_source, om.default_host, om.created_at, om.updated_at, om.disabled_at
+    om.id, om.name, om.slug, om.gram_account_type, om.workos_id, om.workos_updated_at, om.workos_last_event_id, om.svix_app_id, om.webhooks_enabled, om.whitelisted, om.free_trial_started_at, om.free_trial_ends_at, om.scim_enabled, om.sso_enabled, om.verified_domains, om.creation_source, om.default_host, om.adoption_dashboard_url, om.created_at, om.updated_at, om.disabled_at
     
 FROM projects p
 INNER JOIN organization_metadata om ON p.organization_id = om.id
@@ -285,29 +285,30 @@ WHERE p.deleted IS FALSE
 `
 
 type GetProjectWithOrganizationMetadataRow struct {
-	ProjectID          uuid.UUID
-	ProjectName        string
-	ProjectSlug        string
-	ID                 string
-	Name               string
-	Slug               string
-	GramAccountType    string
-	WorkosID           pgtype.Text
-	WorkosUpdatedAt    pgtype.Timestamptz
-	WorkosLastEventID  pgtype.Text
-	SvixAppID          pgtype.Text
-	WebhooksEnabled    pgtype.Bool
-	Whitelisted        bool
-	FreeTrialStartedAt pgtype.Timestamptz
-	FreeTrialEndsAt    pgtype.Timestamptz
-	ScimEnabled        pgtype.Bool
-	SsoEnabled         pgtype.Bool
-	VerifiedDomains    []string
-	CreationSource     pgtype.Text
-	DefaultHost        pgtype.Text
-	CreatedAt          pgtype.Timestamptz
-	UpdatedAt          pgtype.Timestamptz
-	DisabledAt         pgtype.Timestamptz
+	ProjectID            uuid.UUID
+	ProjectName          string
+	ProjectSlug          string
+	ID                   string
+	Name                 string
+	Slug                 string
+	GramAccountType      string
+	WorkosID             pgtype.Text
+	WorkosUpdatedAt      pgtype.Timestamptz
+	WorkosLastEventID    pgtype.Text
+	SvixAppID            pgtype.Text
+	WebhooksEnabled      pgtype.Bool
+	Whitelisted          bool
+	FreeTrialStartedAt   pgtype.Timestamptz
+	FreeTrialEndsAt      pgtype.Timestamptz
+	ScimEnabled          pgtype.Bool
+	SsoEnabled           pgtype.Bool
+	VerifiedDomains      []string
+	CreationSource       pgtype.Text
+	DefaultHost          pgtype.Text
+	AdoptionDashboardUrl pgtype.Text
+	CreatedAt            pgtype.Timestamptz
+	UpdatedAt            pgtype.Timestamptz
+	DisabledAt           pgtype.Timestamptz
 }
 
 func (q *Queries) GetProjectWithOrganizationMetadata(ctx context.Context, id uuid.UUID) (GetProjectWithOrganizationMetadataRow, error) {
@@ -334,6 +335,7 @@ func (q *Queries) GetProjectWithOrganizationMetadata(ctx context.Context, id uui
 		&i.VerifiedDomains,
 		&i.CreationSource,
 		&i.DefaultHost,
+		&i.AdoptionDashboardUrl,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DisabledAt,

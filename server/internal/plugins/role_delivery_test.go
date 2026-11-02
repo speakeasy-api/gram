@@ -65,7 +65,7 @@ func TestRoleAudienceDeliversExistingUseGrant(t *testing.T) {
 	require.True(t, refreshRequested, "content delivery requests a refresh of the affected marketplace")
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
-	require.Contains(t, string(publisher.lastPushedFiles["cursor-plugins/delivery-cursor/mcp.json"]), server.McpSlug.String)
+	require.Contains(t, string(publisher.lastPushedFiles["cursor-plugins/delivery-cursor/mcp.json"]), server.Slug)
 	membershipID := got.Servers[0].ID
 	require.NoError(t, ti.service.RemovePluginServer(ctx, &gen.RemovePluginServerPayload{ID: membershipID, PluginID: plugin.ID}))
 	// Replaying the same assignment and publishing do not recompute contents.
@@ -76,7 +76,7 @@ func TestRoleAudienceDeliversExistingUseGrant(t *testing.T) {
 	got, err = ti.service.GetPlugin(ctx, &gen.GetPluginPayload{ID: plugin.ID})
 	require.NoError(t, err)
 	require.Empty(t, got.Servers)
-	require.NotContains(t, string(publisher.lastPushedFiles["cursor-plugins/delivery-cursor/mcp.json"]), server.McpSlug.String)
+	require.NotContains(t, string(publisher.lastPushedFiles["cursor-plugins/delivery-cursor/mcp.json"]), server.Slug)
 	// A new explicit assignment can add it again; removal history is not an exclusion.
 	_, err = ti.service.SetPluginAssignments(ctx, &gen.SetPluginAssignmentsPayload{PluginID: plugin.ID, PrincipalUrns: []string{}})
 	require.NoError(t, err)

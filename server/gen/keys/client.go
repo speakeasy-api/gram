@@ -15,21 +15,23 @@ import (
 
 // Client is the "keys" service client.
 type Client struct {
-	CreateKeyEndpoint goa.Endpoint
-	RotateKeyEndpoint goa.Endpoint
-	ListKeysEndpoint  goa.Endpoint
-	RevokeKeyEndpoint goa.Endpoint
-	VerifyKeyEndpoint goa.Endpoint
+	CreateKeyEndpoint       goa.Endpoint
+	RotateKeyEndpoint       goa.Endpoint
+	ListKeysEndpoint        goa.Endpoint
+	RevokeKeyEndpoint       goa.Endpoint
+	UpdateKeyPolicyEndpoint goa.Endpoint
+	VerifyKeyEndpoint       goa.Endpoint
 }
 
 // NewClient initializes a "keys" service client given the endpoints.
-func NewClient(createKey, rotateKey, listKeys, revokeKey, verifyKey goa.Endpoint) *Client {
+func NewClient(createKey, rotateKey, listKeys, revokeKey, updateKeyPolicy, verifyKey goa.Endpoint) *Client {
 	return &Client{
-		CreateKeyEndpoint: createKey,
-		RotateKeyEndpoint: rotateKey,
-		ListKeysEndpoint:  listKeys,
-		RevokeKeyEndpoint: revokeKey,
-		VerifyKeyEndpoint: verifyKey,
+		CreateKeyEndpoint:       createKey,
+		RotateKeyEndpoint:       rotateKey,
+		ListKeysEndpoint:        listKeys,
+		RevokeKeyEndpoint:       revokeKey,
+		UpdateKeyPolicyEndpoint: updateKeyPolicy,
+		VerifyKeyEndpoint:       verifyKey,
 	}
 }
 
@@ -115,6 +117,28 @@ func (c *Client) ListKeys(ctx context.Context, p *ListKeysPayload) (res *ListKey
 func (c *Client) RevokeKey(ctx context.Context, p *RevokeKeyPayload) (err error) {
 	_, err = c.RevokeKeyEndpoint(ctx, p)
 	return
+}
+
+// UpdateKeyPolicy calls the "updateKeyPolicy" endpoint of the "keys" service.
+// UpdateKeyPolicy may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) UpdateKeyPolicy(ctx context.Context, p *UpdateKeyPolicyPayload) (res *Key, err error) {
+	var ires any
+	ires, err = c.UpdateKeyPolicyEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*Key), nil
 }
 
 // VerifyKey calls the "verifyKey" endpoint of the "keys" service.

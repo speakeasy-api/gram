@@ -237,6 +237,28 @@ func TestGrantsAuthorizeNarrowedDirectGrantOutranksRoleBlockOnlyAsFarAsItReaches
 	require.False(t, allowed, "tools outside the direct grant stay blocked")
 }
 
+func TestGrantsAuthorizeInferredDirectGrantNeverOutranksInheritedBlock(t *testing.T) {
+	t.Parallel()
+
+	client := MCPAuthClientCheck("client-1", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: "project-1", ConnectionOwner: "", UpstreamClient: ""})
+	inferred := heldBy(precedenceUser, Grant{PrincipalUrn: "", Scope: ScopeMCPAuth, Selector: AuthClientSelector("client-1", ""), Inferred: true})
+	block := heldBy(precedenceRole, Grant{PrincipalUrn: "", Scope: ScopeMCPBlockedAuth, Selector: AuthClientSelector("client-1", ""), Inferred: false})
+
+	allowed, err := GrantsAuthorize([]Grant{inferred}, client)
+	require.NoError(t, err)
+	require.True(t, allowed, "an inferred grant allows like any other")
+
+	allowed, err = GrantsAuthorize([]Grant{inferred, block}, client)
+	require.NoError(t, err)
+	require.False(t, allowed, "an inferred grant yields to an inherited block")
+
+	explicit := inferred
+	explicit.Inferred = false
+	allowed, err = GrantsAuthorize([]Grant{explicit, block}, client)
+	require.NoError(t, err)
+	require.True(t, allowed, "the same grant written by name outranks the block")
+}
+
 func TestGrantsAuthorizeDispositionDirectGrantReachesOnlyMatchingTools(t *testing.T) {
 	t.Parallel()
 

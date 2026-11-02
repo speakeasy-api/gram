@@ -28,6 +28,7 @@ import (
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/plugins/publishstatus"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -48,7 +49,7 @@ func TestPluginAssignmentAdmissionRejectionLeavesNoMutationOrReceipt(t *testing.
 	beforeAudit, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionPluginAssignmentsSet)
 	require.NoError(t, err)
 	store := NewPluginAssignmentMutationReceiptStore(conn)
-	normalized := normalizedPluginAssignmentMutationInput(project.ID, plugin.ID.String(), []string{"everyone"}, "version")
+	normalized := normalizedPluginAssignmentMutationInput(project.ID, plugin.ID.String(), []string{"everyone"}, "version", nil)
 	_, err = store.Execute(ctx, principal, project, "admission-rejected", normalized, noReceiptCharge, func(ctx context.Context, tx pgx.Tx) (SetPluginAssignmentsReceiptResult, error) {
 		locked, err := pluginassignments.Lock(ctx, tx, principal.OrganizationID, project.ID, plugin.ID)
 		require.NoError(t, err)
@@ -210,8 +211,10 @@ func TestMemberPluginInventoryUsesDeliveryPrincipalsAndPublishedPackages(t *test
 	}
 	published := map[string]string{}
 	pluginsBySlug := map[string]pluginsrepo.Plugin{}
+	// Every assigned plugin has auto sync off, so the member projection's
+	// omission of it is observable.
 	for _, assignment := range assignments {
-		plugin := seedPlugin(t, prepared, conn, principal.OrganizationID, project.ID, assignment.slug, assignment.slug)
+		plugin := seedPluginWithAutoSync(t, prepared, conn, principal.OrganizationID, project.ID, assignment.slug, assignment.slug, pgtype.Bool{Bool: false, Valid: true})
 		pluginsBySlug[assignment.slug] = plugin
 		require.NoError(t, pluginsrepo.New(conn).SetPluginAutoCreatedFixture(prepared, pluginsrepo.SetPluginAutoCreatedFixtureParams{ProjectID: project.ID, ID: plugin.ID, AutoCreated: assignment.slug == "member-role"}))
 		_, err = pluginsrepo.New(conn).AddPluginAssignment(prepared, pluginsrepo.AddPluginAssignmentParams{
@@ -258,11 +261,13 @@ func TestMemberPluginInventoryUsesDeliveryPrincipalsAndPublishedPackages(t *test
 		encoded, err := json.Marshal(plugin)
 		require.NoError(t, err)
 		require.Contains(t, string(encoded), marker)
+		require.NotContains(t, string(encoded), "auto_sync_enabled", "auto sync is an administrator setting")
 		detail, err := service.GetAssignedPlugin(prepared, principal, GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.ID})
 		require.NoError(t, err)
 		encoded, err = json.Marshal(detail.Plugin)
 		require.NoError(t, err)
 		require.Contains(t, string(encoded), marker)
+		require.NotContains(t, string(encoded), "auto_sync_enabled", "auto sync is an administrator setting")
 
 		require.Nil(t, plugin.Assignments)
 		require.Equal(t, PluginPublicationPublished, plugin.Publication)
@@ -746,7 +751,7 @@ func TestSetPluginAssignmentsReplacesAtomicallyAndReplaysSafely(t *testing.T) {
 	require.Equal(t, PluginPublicationNoRepository, changed.Plugin.Publication)
 	require.Equal(t, PluginAssignmentSummary{Roles: 1}, changed.Plugin.Assignments)
 	zeroMembers := NewSubjectCount(0)
-	require.Equal(t, []PluginAssignmentSummaryResult{{Kind: "role", DisplayName: "Engineering", MemberCount: &zeroMembers}}, changed.Assignments)
+	require.Equal(t, []PluginAssignmentSummaryResult{{Kind: "role", DisplayName: "Engineering", MemberCount: &zeroMembers, InstallMode: "default"}}, changed.Assignments)
 	require.NotEqual(t, before.AssignmentVersion, changed.AssignmentVersion)
 
 	stored, err := pluginsrepo.New(conn).ListPluginAssignments(ctx, pluginsrepo.ListPluginAssignmentsParams{PluginID: plugin.ID, OrganizationID: principal.OrganizationID, ProjectID: project.ID})
@@ -805,7 +810,7 @@ func TestPluginAssignmentMutationReceiptRollsBackDomainAndReceipt(t *testing.T) 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Rollback", "rollback")
 	store := NewPluginAssignmentMutationReceiptStore(conn)
-	normalized := normalizedPluginAssignmentMutationInput(project.ID, plugin.ID.String(), nil, "version")
+	normalized := normalizedPluginAssignmentMutationInput(project.ID, plugin.ID.String(), nil, "version", nil)
 	_, err = store.Execute(ctx, principal, project, "rollback", normalized, noReceiptCharge, func(ctx context.Context, tx pgx.Tx) (SetPluginAssignmentsReceiptResult, error) {
 		_, err := pluginsrepo.New(tx).AddPluginAssignment(ctx, pluginsrepo.AddPluginAssignmentParams{
 			PluginID: plugin.ID, OrganizationID: principal.OrganizationID, PrincipalUrn: urn.PrincipalWildcard,
@@ -834,7 +839,7 @@ func TestConcurrentVersionProtectedAssignmentWritesSerialize(t *testing.T) {
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Race", "race")
 	versionKey := []byte("race-version-key")
-	expected := pluginAssignmentVersion(versionKey, project.ID, plugin.ID, nil)
+	expected := pluginAssignmentVersion(versionKey, project.ID, plugin.ID, nil, nil)
 	start := make(chan struct{})
 	var wg sync.WaitGroup
 	wg.Add(2)
@@ -852,8 +857,8 @@ func TestConcurrentVersionProtectedAssignmentWritesSerialize(t *testing.T) {
 			PrincipalURNs: []string{principalURN}, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
 		}, pluginassignments.Dependencies{
 			Guard: pluginassignments.LegacyGuard,
-			BeforeReplace: func(_ context.Context, _ pluginsrepo.Plugin, current, _ []string) error {
-				if pluginAssignmentVersion(versionKey, project.ID, plugin.ID, current) != expected {
+			BeforeReplace: func(_ context.Context, _ pluginsrepo.Plugin, current, _ []string, currentModes map[string]installmode.Mode) error {
+				if pluginAssignmentVersion(versionKey, project.ID, plugin.ID, current, currentModes) != expected {
 					return ErrPluginAssignmentMutationConflict
 				}
 				return nil
@@ -972,13 +977,21 @@ func TestSetPluginAssignmentsRejectsExpiredAndCrossProjectReferences(t *testing.
 
 func seedPlugin(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID, name, slug string) pluginsrepo.Plugin {
 	t.Helper()
+	return seedPluginWithAutoSync(t, ctx, conn, organizationID, projectID, name, slug, pgtype.Bool{})
+}
+
+// seedPluginWithAutoSync seeds a plugin with a stored auto sync setting; an
+// invalid one is the default, on.
+func seedPluginWithAutoSync(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID, name, slug string, autoSync pgtype.Bool) pluginsrepo.Plugin {
+	t.Helper()
 
 	plugin, err := pluginsrepo.New(conn).CreatePlugin(ctx, pluginsrepo.CreatePluginParams{
-		OrganizationID: organizationID,
-		ProjectID:      projectID,
-		Name:           name,
-		Slug:           slug,
-		Description:    pgtype.Text{},
+		OrganizationID:  organizationID,
+		ProjectID:       projectID,
+		Name:            name,
+		Slug:            slug,
+		Description:     pgtype.Text{},
+		AutoSyncEnabled: autoSync,
 	})
 	require.NoError(t, err)
 	return plugin

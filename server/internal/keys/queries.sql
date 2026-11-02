@@ -50,7 +50,9 @@ RETURNING *;
 -- expires_at is enforced here rather than in Go so every credential shape --
 -- agent principal keys and scoped keys given a grace expiry by a rotation --
 -- stops authenticating at the same moment.
-SELECT api_keys.*, users.email
+SELECT api_keys.*, users.email,
+       EXISTS (SELECT 1 FROM assistant_inference_credentials c
+               WHERE c.api_key_id = api_keys.id AND c.project_id = api_keys.project_id) AS superseded_kit_credential
 FROM api_keys
 JOIN users ON users.id = api_keys.created_by_user_id
 WHERE key_hash = @key_hash
@@ -207,6 +209,13 @@ WHERE id = @id
   AND organization_id = @organization_id
 FOR UPDATE;
 
+-- name: TouchAPIKeyUpdatedAt :one
+UPDATE api_keys
+SET updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+RETURNING updated_at;
+
 -- name: IsAPIKeyManagedByActiveLiteLLMInstance :one
 SELECT EXISTS (
   SELECT 1
@@ -257,3 +266,10 @@ WHERE id = @id
   -- This check reduces writes to the database to at most once per minute per
   -- key as a way to mitigate excessive write spikes.
   AND (last_accessed_at IS NULL OR last_accessed_at < clock_timestamp() - interval '1 minute');
+
+-- name: CountLiveAuthClientsInOrganization :one
+SELECT COUNT(*)
+FROM mcp_auth_clients
+WHERE organization_id = @organization_id
+  AND id = ANY(@ids::uuid[])
+  AND deleted IS FALSE;

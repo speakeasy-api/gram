@@ -2736,6 +2736,7 @@ func marshalTypesWorkloadIssuerToWorkloadIssuerResponseBody(v *types.WorkloadIss
 		Issuer:                 v.Issuer,
 		JwksURI:                v.JwksURI,
 		Description:            v.Description,
+		AllowAssertionReuse:    v.AllowAssertionReuse,
 		AllowWildcardAdmission: v.AllowWildcardAdmission,
 		CreatedAt:              v.CreatedAt,
 		UpdatedAt:              v.UpdatedAt,

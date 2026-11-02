@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/telemetry/analytics"
 	"github.com/speakeasy-api/gram/server/internal/widgets"
 )
 
@@ -40,6 +41,10 @@ const (
 
 // widgetOwnerOrWriteRequired refuses a change by anyone but the widget's creator or a project writer.
 const widgetOwnerOrWriteRequired = "owner_or_write_required"
+
+// widgetDatasetRestricted refuses a save or copy over a dataset the caller may
+// not read, such as risk_findings for anyone but an organization administrator.
+const widgetDatasetRestricted = "dataset_restricted"
 
 // widgetOperation also names the operation its receipts are stored under.
 type widgetOperation string
@@ -423,6 +428,14 @@ func (s *WidgetService) target(ctx context.Context, principal Principal, operati
 		if err != nil {
 			return out, fmt.Errorf("read widget: %w", err)
 		}
+		if operation == operationDuplicateWidget {
+			// The preview refuses what its confirmation would.
+			if ds, ok := analytics.Default.Dataset(current.Widget.Dataset); ok {
+				if err := widgets.RequireDataset(ctx, s.engine, ds); err != nil {
+					return out, fmt.Errorf("check widget dataset: %w", err)
+				}
+			}
+		}
 		if operation == operationDuplicateWidget && current.Widget.InvalidReason != nil {
 			return out, &widgetToolError{Code: "invalid_request", Field: "widget_id", Message: "This widget cannot be duplicated until it is fixed: " + *current.Widget.InvalidReason + ". Save a corrected version with save_widget first.", Cause: nil}
 		}
@@ -648,6 +661,8 @@ func (s *WidgetService) boundaryError(ctx context.Context, tool string, err erro
 		return &widgetToolError{Code: previewExpiredCode, Field: "preview_token", Message: previewExpiredMessage, Cause: err}
 	case errors.Is(err, errPreviewUsed):
 		return &widgetToolError{Code: previewUsedCode, Field: "preview_token", Message: previewUsedMessage, Cause: err}
+	case errors.Is(err, widgets.ErrDatasetRestricted):
+		return &widgetToolError{Code: widgetDatasetRestricted, Field: "dataset", Message: "Only organization administrators can save or duplicate widgets over that dataset. Choose another dataset from describe_analytics_catalog, which lists only the ones this caller can read.", Cause: err}
 	}
 	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
 		switch shareable.Code {

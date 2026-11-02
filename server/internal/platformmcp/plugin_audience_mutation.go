@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"maps"
 	"slices"
 	"strings"
 
@@ -14,7 +15,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
+	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
 	pluginassignments "github.com/speakeasy-api/gram/server/internal/plugins/assignments"
+	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -39,18 +42,22 @@ func (e *PluginAssignmentMutationError) Error() string { return e.Message }
 func (e *PluginAssignmentMutationError) Unwrap() error { return e.Cause }
 
 type SetPluginAssignmentsInput struct {
-	ProjectID                 string   `json:"project_id" jsonschema:"explicit project ID that owns the plugin"`
-	Plugin                    string   `json:"plugin" jsonschema:"exact plugin ID, slug, or name returned by list_plugins"`
-	AssignmentReferences      []string `json:"assignment_references" jsonschema:"complete desired set of opaque references returned by list_plugin_assignments or get_plugin; an empty set removes every assignment"`
-	ExpectedAssignmentVersion string   `json:"expected_assignment_version" jsonschema:"assignment version returned by get_plugin immediately before this write"`
-	IdempotencyKey            string   `json:"idempotency_key" jsonschema:"stable unique key for safely retrying this exact write"`
-	Confirmed                 bool     `json:"confirmed" jsonschema:"set true only after the user explicitly confirms the complete assignment replacement for this exact plugin"`
+	ProjectID                 string            `json:"project_id" jsonschema:"explicit project ID that owns the plugin"`
+	Plugin                    string            `json:"plugin" jsonschema:"exact plugin ID, slug, or name returned by list_plugins"`
+	AssignmentReferences      []string          `json:"assignment_references" jsonschema:"complete desired set of opaque references returned by list_plugin_assignments or get_plugin; an empty set removes every assignment"`
+	ExpectedAssignmentVersion string            `json:"expected_assignment_version" jsonschema:"assignment version returned by get_plugin immediately before this write"`
+	InstallModes              map[string]string `json:"install_modes,omitempty" jsonschema:"optional install mode per reference in assignment_references: required (installed, users can't turn it off), default (installed, users can turn it off) or available (not installed until a user turns it on); a reference left out keeps its current mode, or default when newly assigned"`
+	IdempotencyKey            string            `json:"idempotency_key" jsonschema:"stable unique key for safely retrying this exact write"`
+	Confirmed                 bool              `json:"confirmed" jsonschema:"set true only after the user explicitly confirms the complete assignment replacement for this exact plugin"`
 }
 
 type PluginAssignmentSummaryResult struct {
 	Kind        string        `json:"kind"`
 	DisplayName string        `json:"display_name"`
 	MemberCount *SubjectCount `json:"member_count,omitempty"`
+
+	// InstallMode is the audience's stored install mode after the write.
+	InstallMode string `json:"install_mode,omitempty"`
 }
 
 type PluginAssignmentMutationPlugin struct {
@@ -73,7 +80,11 @@ type SetPluginAssignmentsReceiptResult struct {
 
 type SetPluginAssignmentsOutput struct {
 	SetPluginAssignmentsReceiptResult
-	Receipt RiskMutationToolReceipt `json:"receipt"`
+	// PublishSignal reports whether the best-effort republish was requested
+	// after commit. It is "not_requested" on a replay, when the contents did
+	// not change, and when the durable publication request already covers it.
+	PublishSignal string                  `json:"publish_signal"`
+	Receipt       RiskMutationToolReceipt `json:"receipt"`
 	// DistributionAdmission is the plugin's standing with the project's Shadow
 	// MCP policy after the write, read fresh on every call including replays:
 	// covered means every server added by URL in it is approved for the whole
@@ -82,10 +93,11 @@ type SetPluginAssignmentsOutput struct {
 }
 
 type normalizedSetPluginAssignments struct {
-	ProjectID                 string   `json:"project_id"`
-	Plugin                    string   `json:"plugin"`
-	AssignmentReferences      []string `json:"assignment_references"`
-	ExpectedAssignmentVersion string   `json:"expected_assignment_version"`
+	ProjectID                 string            `json:"project_id"`
+	Plugin                    string            `json:"plugin"`
+	AssignmentReferences      []string          `json:"assignment_references"`
+	ExpectedAssignmentVersion string            `json:"expected_assignment_version"`
+	InstallModes              map[string]string `json:"install_modes,omitempty"`
 }
 
 // WithAssignmentMutations enables the separately gated write half of the plugin
@@ -124,7 +136,7 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 	input.Plugin = strings.TrimSpace(input.Plugin)
 	input.ExpectedAssignmentVersion = strings.TrimSpace(input.ExpectedAssignmentVersion)
 	input.IdempotencyKey = strings.TrimSpace(input.IdempotencyKey)
-	if principal.UserID == "" || input.ProjectID == "" || input.Plugin == "" || input.ExpectedAssignmentVersion == "" || input.IdempotencyKey == "" || len(input.IdempotencyKey) > 128 || len(input.AssignmentReferences) > maxPluginMembers {
+	if principal.UserID == "" || input.ProjectID == "" || input.Plugin == "" || input.ExpectedAssignmentVersion == "" || input.IdempotencyKey == "" || len(input.IdempotencyKey) > 128 || len(input.AssignmentReferences) > maxPluginMembers || len(input.InstallModes) > maxPluginMembers {
 		return SetPluginAssignmentsOutput{}, pluginAssignmentMutationInvalid("The plugin assignment request is invalid.")
 	}
 	if pluginID, err := uuid.Parse(input.Plugin); err == nil && pluginID == uuid.Nil {
@@ -156,7 +168,11 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 	if err != nil {
 		return SetPluginAssignmentsOutput{}, err
 	}
-	normalized := normalizedPluginAssignmentMutationInput(project.ID, input.Plugin, references, input.ExpectedAssignmentVersion)
+	requestedModes, err := normalizePluginAssignmentInstallModes(input.InstallModes, references)
+	if err != nil {
+		return SetPluginAssignmentsOutput{}, err
+	}
+	normalized := normalizedPluginAssignmentMutationInput(project.ID, input.Plugin, references, input.ExpectedAssignmentVersion, requestedModes)
 	// Charged only when no completed receipt answers the request; see
 	// executeChargedMutationReceipt.
 	charge := func(ctx context.Context) error {
@@ -183,17 +199,20 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 		if err != nil {
 			return SetPluginAssignmentsReceiptResult{}, pluginAssignmentMutationUnavailable(err)
 		}
-		principalURNs, summaries, err := s.resolveMutationAssignments(ctx, tx, principal, project, references)
+		principalURNs, summaries, summaryURNs, err := s.resolveMutationAssignments(ctx, tx, principal, project, references)
+		if err != nil {
+			return SetPluginAssignmentsReceiptResult{}, err
+		}
+		installModes, err := s.resolveMutationInstallModes(principal, project, requestedModes)
 		if err != nil {
 			return SetPluginAssignmentsReceiptResult{}, err
 		}
 		result, err := pluginassignments.Replace(ctx, tx, s.audit, locked, pluginassignments.Input{
-			OrganizationID: principal.OrganizationID,
-			ProjectID:      project.ID,
-			PluginID:       target.ID,
-			PrincipalURNs:  principalURNs,
-			// Keeps each principal's current install mode.
-			InstallModes:     nil,
+			OrganizationID:   principal.OrganizationID,
+			ProjectID:        project.ID,
+			PluginID:         target.ID,
+			PrincipalURNs:    principalURNs,
+			InstallModes:     installModes,
 			Actor:            urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
 			ActorDisplayName: nil,
 			ActorSlug:        nil,
@@ -205,8 +224,8 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 				}
 				return pluginAssignmentAdmissionError(s.distributionAdmission.CheckPluginAudience(ctx, tx, principal.OrganizationID, project.ID, plugin.ID, desired))
 			},
-			BeforeReplace: func(ctx context.Context, _ pluginsrepo.Plugin, current, _ []string) error {
-				if pluginAssignmentVersion(s.assignmentVersionKey, project.ID, target.ID, current) != input.ExpectedAssignmentVersion {
+			BeforeReplace: func(ctx context.Context, _ pluginsrepo.Plugin, current, _ []string, currentModes map[string]installmode.Mode) error {
+				if pluginAssignmentVersion(s.assignmentVersionKey, project.ID, target.ID, current, currentModes) != input.ExpectedAssignmentVersion {
 					return pluginAssignmentMutationConflict("The plugin assignments changed after they were read. Read the plugin again and retry with the new assignment version.")
 				}
 				if len(current) > maxPluginMembers {
@@ -236,6 +255,9 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 				return SetPluginAssignmentsReceiptResult{}, fmt.Errorf("replace plugin assignments: %w", err)
 			}
 		}
+		for index := range summaries {
+			summaries[index].InstallMode = string(result.InstallModes[summaryURNs[index]])
+		}
 		var publicationRequest string
 		if result.ContentChanged {
 			outcome, err := s.publicationRequests.ProjectWithOutcome(ctx, tx, principal.OrganizationID, project.ID, principal.UserID)
@@ -260,7 +282,7 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 				ID: inventory.ID, Name: inventory.Name, Slug: inventory.Slug, IsDefault: inventory.IsDefault,
 				Assignments: *inventory.Assignments, Publication: inventory.Publication,
 			},
-			AssignmentVersion:  pluginAssignmentVersion(s.assignmentVersionKey, project.ID, target.ID, result.PrincipalURNs),
+			AssignmentVersion:  pluginAssignmentVersion(s.assignmentVersionKey, project.ID, target.ID, result.PrincipalURNs, result.InstallModes),
 			Assignments:        summaries,
 			ResultCategory:     "updated",
 			PublicationRequest: publicationRequest,
@@ -275,9 +297,26 @@ func (s *PluginsService) SetPluginAssignments(ctx context.Context, principal Pri
 	}
 	return SetPluginAssignmentsOutput{
 		SetPluginAssignmentsReceiptResult: result,
+		PublishSignal:                     s.signalPluginAssignmentPublish(ctx, principal, project, receipt.Replayed, result.PublicationRequest),
 		Receipt:                           riskMutationToolReceipt(receipt),
 		DistributionAdmission:             s.pluginDistributionAdmission(ctx, principal.OrganizationID, project.ID, result.Plugin.ID),
 	}, nil
+}
+
+// signalPluginAssignmentPublish sends the best-effort republish after an
+// assignment change that moved package contents has committed, matching the
+// dashboard. An empty publicationRequest means the contents did not change.
+func (s *PluginsService) signalPluginAssignmentPublish(ctx context.Context, principal Principal, project ResolvedProject, replayed bool, publicationRequest string) string {
+	if replayed || publicationRequest == "" || publicationRequest == string(plugindelivery.ProjectPublicationEnqueued) {
+		return "not_requested"
+	}
+	if s.publisher == nil {
+		return "unavailable"
+	}
+	if err := plugindelivery.SignalPluginPublishAfterRequest(ctx, s.publisher, plugindelivery.ProjectPublicationRequestOutcome(publicationRequest), project.ID, principal.UserID); err != nil {
+		return "request_failed"
+	}
+	return "best_effort_requested"
 }
 
 // pluginDistributionAdmission reads the plugin's Shadow MCP standing after a
@@ -311,16 +350,18 @@ func pluginAssignmentAdmissionError(err error) error {
 	}
 }
 
-func (s *PluginsService) resolveMutationAssignments(ctx context.Context, tx pgx.Tx, principal Principal, project ResolvedProject, references []string) ([]string, []PluginAssignmentSummaryResult, error) {
+// resolveMutationAssignments returns the canonical principals, their sorted
+// summaries, and the principal behind each summary at the same index.
+func (s *PluginsService) resolveMutationAssignments(ctx context.Context, tx pgx.Tx, principal Principal, project ResolvedProject, references []string) ([]string, []PluginAssignmentSummaryResult, []string, error) {
 	if len(references) == 0 {
-		return []string{}, []PluginAssignmentSummaryResult{}, nil
+		return []string{}, []PluginAssignmentSummaryResult{}, []string{}, nil
 	}
 	principalURNs := make([]string, 0, len(references))
 	seen := make(map[string]struct{}, len(references))
 	for _, reference := range references {
 		value, err := s.assignmentReferences.DecodeScoped(reference, principal, subjectKindPluginAssignment, project.ID.String(), s.now().UTC())
 		if err != nil {
-			return nil, nil, pluginAssignmentMutationNotFound()
+			return nil, nil, nil, pluginAssignmentMutationNotFound()
 		}
 		canonical := canonicalPluginAssignmentURN(value)
 		if _, duplicate := seen[canonical]; duplicate {
@@ -336,32 +377,45 @@ func (s *PluginsService) resolveMutationAssignments(ctx context.Context, tx pgx.
 		OrganizationID:        principal.OrganizationID,
 	})
 	if err != nil {
-		return nil, nil, pluginAssignmentMutationUnavailable(err)
+		return nil, nil, nil, pluginAssignmentMutationUnavailable(err)
 	}
 	byURN := make(map[string]platformrepo.ListPlatformMCPPluginAssignmentOptionsRow, len(rows))
 	for _, row := range rows {
 		byURN[canonicalPluginAssignmentURN(row.PrincipalUrn)] = row
 	}
-	summaries := make([]PluginAssignmentSummaryResult, 0, len(principalURNs))
+	type summaryForPrincipal struct {
+		summary      PluginAssignmentSummaryResult
+		principalURN string
+	}
+	entries := make([]summaryForPrincipal, 0, len(principalURNs))
 	for _, principalURN := range principalURNs {
 		row, ok := byURN[principalURN]
 		if !ok {
-			return nil, nil, pluginAssignmentMutationNotFound()
+			return nil, nil, nil, pluginAssignmentMutationNotFound()
 		}
 		var count *SubjectCount
 		if row.MemberCount.Valid {
 			value := NewSubjectCount(row.MemberCount.Int64)
 			count = &value
 		}
-		summaries = append(summaries, PluginAssignmentSummaryResult{Kind: row.Kind, DisplayName: row.DisplayName, MemberCount: count})
+		entries = append(entries, summaryForPrincipal{
+			summary:      PluginAssignmentSummaryResult{Kind: row.Kind, DisplayName: row.DisplayName, MemberCount: count, InstallMode: ""},
+			principalURN: principalURN,
+		})
 	}
-	slices.SortFunc(summaries, func(a, b PluginAssignmentSummaryResult) int {
-		if compared := strings.Compare(a.Kind, b.Kind); compared != 0 {
+	slices.SortFunc(entries, func(a, b summaryForPrincipal) int {
+		if compared := strings.Compare(a.summary.Kind, b.summary.Kind); compared != 0 {
 			return compared
 		}
-		return strings.Compare(a.DisplayName, b.DisplayName)
+		return strings.Compare(a.summary.DisplayName, b.summary.DisplayName)
 	})
-	return principalURNs, summaries, nil
+	summaries := make([]PluginAssignmentSummaryResult, 0, len(entries))
+	summaryURNs := make([]string, 0, len(entries))
+	for _, entry := range entries {
+		summaries = append(summaries, entry.summary)
+		summaryURNs = append(summaryURNs, entry.principalURN)
+	}
+	return principalURNs, summaries, summaryURNs, nil
 }
 
 func visiblePluginAssignments(ctx context.Context, tx pgx.Tx, organizationID string, principalURNs []string) (map[string]struct{}, error) {
@@ -409,10 +463,57 @@ func normalizePluginAssignmentReferences(raw []string) ([]string, error) {
 	return slices.Compact(references), nil
 }
 
-func normalizedPluginAssignmentMutationInput(projectID uuid.UUID, plugin string, references []string, expectedVersion string) normalizedSetPluginAssignments {
+func normalizedPluginAssignmentMutationInput(projectID uuid.UUID, plugin string, references []string, expectedVersion string, installModes map[string]string) normalizedSetPluginAssignments {
 	return normalizedSetPluginAssignments{
 		ProjectID: projectID.String(), Plugin: plugin, AssignmentReferences: slices.Clone(references), ExpectedAssignmentVersion: expectedVersion,
+		InstallModes: maps.Clone(installModes),
 	}
+}
+
+// normalizePluginAssignmentInstallModes trims each reference key and validates
+// its mode. Every key must name one of the normalized assignment references.
+func normalizePluginAssignmentInstallModes(raw map[string]string, references []string) (map[string]string, error) {
+	if len(raw) == 0 {
+		return nil, nil
+	}
+	modes := make(map[string]string, len(raw))
+	for rawReference, rawMode := range raw {
+		reference := strings.TrimSpace(rawReference)
+		if !slices.Contains(references, reference) {
+			return nil, pluginAssignmentMutationInvalid("Every install mode must name a reference in assignment_references.")
+		}
+		mode, err := installmode.Parse(strings.TrimSpace(rawMode))
+		if err != nil {
+			return nil, pluginAssignmentMutationInvalid("Install modes must be required, default, or available.")
+		}
+		if previous, ok := modes[reference]; ok && previous != string(mode) {
+			return nil, pluginAssignmentMutationInvalid("A reference was given two different install modes.")
+		}
+		modes[reference] = string(mode)
+	}
+	return modes, nil
+}
+
+// resolveMutationInstallModes decodes reference-keyed install modes into the
+// principal-keyed form the shared assignment write expects. Distinct references
+// to one principal must agree, or the stored mode would depend on map order.
+func (s *PluginsService) resolveMutationInstallModes(principal Principal, project ResolvedProject, modes map[string]string) (map[string]string, error) {
+	if len(modes) == 0 {
+		return nil, nil
+	}
+	resolved := make(map[string]string, len(modes))
+	for reference, mode := range modes {
+		value, err := s.assignmentReferences.DecodeScoped(reference, principal, subjectKindPluginAssignment, project.ID.String(), s.now().UTC())
+		if err != nil {
+			return nil, pluginAssignmentMutationNotFound()
+		}
+		principalURN := canonicalPluginAssignmentURN(value)
+		if previous, ok := resolved[principalURN]; ok && previous != mode {
+			return nil, pluginAssignmentMutationInvalid("Two references to the same assignment were given different install modes.")
+		}
+		resolved[principalURN] = mode
+	}
+	return resolved, nil
 }
 
 func pluginAssignmentMutationInvalid(message string) error {

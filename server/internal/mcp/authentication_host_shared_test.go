@@ -232,7 +232,7 @@ func TestAuthenticationHostSharedAuthorizationServer_MetadataAdvertisesBrowserSi
 				RevocationEndpoint:       issuerURL + "/revoke",
 				TokenEndpointAuthMethods: usersessions.SupportedAuthMethods,
 				ResponseTypes:            []string{"code"},
-				GrantTypes:               []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeClientCredentials, oauthwire.GrantTypeJWTBearer},
+				GrantTypes:               []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeJWTBearer},
 				GrantProfiles:            []string{oauthwire.GrantProfileIDJAG},
 			}, metadata)
 		})

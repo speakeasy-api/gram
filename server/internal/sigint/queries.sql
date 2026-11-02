@@ -3,6 +3,28 @@
 -- namespaces this lock independently from other project-scoped subsystems.
 SELECT pg_advisory_xact_lock(hashtextextended(@project_id::text, 1397313108));
 
+-- name: SaveDefinitionSnapshots :exec
+INSERT INTO sigint_definition_snapshots (project_id, sensor_id, definition_hash, definition)
+SELECT @project_id::uuid, snapshot.sensor_id, snapshot.definition_hash, snapshot.definition
+FROM jsonb_to_recordset(@snapshots::jsonb) AS snapshot(sensor_id uuid, definition_hash text, definition jsonb)
+JOIN projects p ON p.id = @project_id::uuid AND p.organization_id = @organization_id
+ON CONFLICT (project_id, sensor_id, definition_hash) DO NOTHING;
+
+-- name: GetDefinitionSnapshot :one
+SELECT snapshot.definition, snapshot.created_at
+FROM sigint_definition_snapshots snapshot
+JOIN projects p ON p.id = snapshot.project_id AND p.organization_id = @organization_id
+WHERE snapshot.project_id = @project_id::uuid
+  AND snapshot.sensor_id = @sensor_id::uuid AND snapshot.definition_hash = @definition_hash;
+
+-- name: ListDefinitionSnapshots :many
+SELECT snapshot.definition_hash, snapshot.definition, snapshot.created_at
+FROM sigint_definition_snapshots snapshot
+JOIN projects p ON p.id = snapshot.project_id AND p.organization_id = @organization_id
+WHERE snapshot.project_id = @project_id::uuid AND snapshot.sensor_id = @sensor_id::uuid
+ORDER BY snapshot.created_at, snapshot.definition_hash
+LIMIT @limit_value;
+
 -- name: LoadEvaluationSensors :many
 -- One statement captures all enabled definitions and membership order consistently.
 SELECT sensor.id AS sensor_id, sensor.slug AS sensor_slug, sensor.mode, sensor.instructions, sensor.match_expression,

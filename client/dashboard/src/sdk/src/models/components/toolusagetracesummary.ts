@@ -89,6 +89,22 @@ export type ToolUsageTraceSummary = {
    */
   accountType?: string | undefined;
   /**
+   * Auth client that signed an agent's gateway call in to its upstream server
+   */
+  authClientId?: string | undefined;
+  /**
+   * Type of the auth client that signed an agent's gateway call in to its upstream server, such as remote_session for a person's connection or service_account for a shared credential; absent for calls recorded before it was tracked
+   */
+  authClientType?: string | undefined;
+  /**
+   * Email of the authorizer when they resolve to a known user
+   */
+  authorizerLabel?: string | undefined;
+  /**
+   * Person an agent call acted on behalf of; absent for direct calls and for agents that sign in as themselves
+   */
+  authorizerUserId?: string | undefined;
+  /**
    * Hook block reason when hook_status is blocked
    */
   blockReason?: string | undefined;
@@ -104,6 +120,14 @@ export type ToolUsageTraceSummary = {
    * MCP client version when the client reported one alongside its name
    */
   clientVersion?: string | undefined;
+  /**
+   * Display name, or email, of the connection owner when they resolve to a known user
+   */
+  connectionOwnerLabel?: string | undefined;
+  /**
+   * Person whose own connection signed an agent's gateway call in; absent for a shared credential
+   */
+  connectionOwnerUserId?: string | undefined;
   /**
    * Telemetry event source
    */
@@ -136,6 +160,10 @@ export type ToolUsageTraceSummary = {
    * Descriptor used by the dashboard to fetch child logs for a trace row
    */
   logGroup: ToolUsageTraceLogGroup;
+  /**
+   * MCP server id for hosted and tunneled targets; absent for other targets
+   */
+  mcpServerId?: string | undefined;
   /**
    * Earliest log timestamp in Unix nanoseconds as a string for JavaScript integer safety
    */
@@ -217,10 +245,16 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     account_type: z.optional(z.string()),
+    auth_client_id: z.optional(z.string()),
+    auth_client_type: z.optional(z.string()),
+    authorizer_label: z.optional(z.string()),
+    authorizer_user_id: z.optional(z.string()),
     block_reason: z.optional(z.string()),
     client_key: z.string(),
     client_label: z.string(),
     client_version: z.optional(z.string()),
+    connection_owner_label: z.optional(z.string()),
+    connection_owner_user_id: z.optional(z.string()),
     event_source: z.string(),
     gram_urn: z.string(),
     hook_source: z.optional(z.string()),
@@ -229,6 +263,7 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
     id: z.string(),
     log_count: z.int(),
     log_group: ToolUsageTraceLogGroup$inboundSchema,
+    mcp_server_id: z.optional(z.string()),
     start_time_unix_nano: z.string(),
     target_id: z.string(),
     target_kind: ToolUsageTraceSummaryTargetKind$inboundSchema,
@@ -245,10 +280,16 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       "account_type": "accountType",
+      "auth_client_id": "authClientId",
+      "auth_client_type": "authClientType",
+      "authorizer_label": "authorizerLabel",
+      "authorizer_user_id": "authorizerUserId",
       "block_reason": "blockReason",
       "client_key": "clientKey",
       "client_label": "clientLabel",
       "client_version": "clientVersion",
+      "connection_owner_label": "connectionOwnerLabel",
+      "connection_owner_user_id": "connectionOwnerUserId",
       "event_source": "eventSource",
       "gram_urn": "gramUrn",
       "hook_source": "hookSource",
@@ -256,6 +297,7 @@ export const ToolUsageTraceSummary$inboundSchema: z.ZodMiniType<
       "http_status_code": "httpStatusCode",
       "log_count": "logCount",
       "log_group": "logGroup",
+      "mcp_server_id": "mcpServerId",
       "start_time_unix_nano": "startTimeUnixNano",
       "target_id": "targetId",
       "target_kind": "targetKind",

@@ -109,7 +109,7 @@ func apply(ctx context.Context, tx pgx.Tx, org string, pluginID uuid.UUID, s ser
 			if err != nil {
 				return false, fmt.Errorf("remove role-delivered membership: %w", err)
 			}
-			if err := auditChange(ctx, tx, org, s.ProjectID, pluginID, memberRow(removed), false); err != nil {
+			if err := auditChange(ctx, tx, org, s.ProjectID, pluginID, removed, false); err != nil {
 				return false, err
 			}
 			changed = true
@@ -156,7 +156,7 @@ func apply(ctx context.Context, tx pgx.Tx, org string, pluginID uuid.UUID, s ser
 	if err != nil {
 		return false, fmt.Errorf("add role-delivered membership: %w", err)
 	}
-	if err := auditChange(ctx, tx, org, s.ProjectID, pluginID, memberRow(added), true); err != nil {
+	if err := auditChange(ctx, tx, org, s.ProjectID, pluginID, added, true); err != nil {
 		return false, err
 	}
 	return true, nil

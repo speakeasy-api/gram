@@ -259,6 +259,23 @@ no content bodies or publication-specific spilled assets.
 
 ## Delivery and observability
 
+### Transcript lineage
+
+Only original message creations are eligible targets. Exact copies from an
+earlier transcript generation, synthetic compaction/recovery messages and
+unattributable rewritten history are excluded before classification. Historical
+imports and offline-spool replay are independent: their original messages remain
+eligible at their source event time.
+
+Creation events persist generation, sequence, capture kind and an original-message
+reference where exact copying is established. Proxy rewrites match positional
+prefixes and a unique contiguous retained tail anchored at the previous
+generation's end. A repeated phrase alone does not establish a copy. Unmatched
+rewrite history is unknown; appended messages after a matched tail are original.
+Producer-declared compactions mark unmatched text synthetic. This conservative
+rule can exclude edited/rewritten messages whose original identity is unavailable;
+it does not represent complete population coverage.
+
 Readings preserve ingestion identity separately from billing attribution:
 `actor` contains the persisted message's Speakeasy user ID and external user ID plus
 the ingestion event's observed email;
@@ -287,6 +304,13 @@ Successful readings are published and their publication results awaited before
 acknowledgment.
 
 ### Outcomes
+
+The definition repository preserves each complete semantic definition before
+returning it for evaluation. Snapshots are immutable and keyed by project, sensor
+and the existing definition hash; repeated evaluation uses the same row. Sensor
+creation, update and deletion audit snapshots retain enabled state and mutation
+times for future activation accounting. History before capture began remains
+unknown; a full eligible-message census is still required for true coverage.
 
 Coverage needs every eligible sensor decision, not only answers. Each loaded
 sensor that does not produce a reading publishes one `gram.sigint.v1.Outcome`,

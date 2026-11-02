@@ -21,7 +21,7 @@ func TestKitProviderSessionID(t *testing.T) {
 
 func TestBindKitSessionRequiresRuntimeAuthority(t *testing.T) {
 	t.Parallel()
-	ctx := context.WithValue(t.Context(), inferenceContextKey{}, assistantidentity.Identity{ProjectID: uuid.New(), AssistantID: uuid.New()})
+	ctx := context.WithValue(t.Context(), inferenceContextKey{}, assistantidentity.RuntimeIdentity{ProjectID: uuid.New(), AssistantID: uuid.New()})
 	_, err := new(Manager).BindKitSession(ctx, uuid.New())
 	var forbidden *oops.ShareableError
 	require.ErrorAs(t, err, &forbidden)

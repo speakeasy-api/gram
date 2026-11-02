@@ -7,16 +7,8 @@ import {
 import { Button } from "@/components/ui/Button";
 import { Text } from "@/components/ui/Text";
 import { cn } from "@/lib/utils";
-import {
-  useCallback,
-  useMemo,
-  useState,
-  type CSSProperties,
-  type JSX,
-} from "react";
-import { CodeSnippet } from "@/components/ui/CodeSnippet";
-import { ConfigContext } from "@/components/ui/context/config";
-import type { Theme } from "@/components/ui/context/theme";
+import { useState, type JSX } from "react";
+import { CodeBlock } from "./CodeBlock";
 import { WizardStepHeader } from "./WizardChrome";
 import { isCredentialSafe } from "./gateway";
 
@@ -27,69 +19,6 @@ import { isCredentialSafe } from "./gateway";
  */
 
 const KEY_ENV = "SPEAKEASY_AGENT_KEY";
-
-/**
- * A code block, syntax highlighted and dark whatever the app theme is: these
- * are things to paste into a terminal or a config file, and reading them as
- * code is the point. The design system's snippet follows the app theme, so
- * the theme it reads is overridden here rather than forked.
- */
-function CodeBlock({
-  value,
-  label,
-  language,
-  breakAnywhere = false,
-}: {
-  value: string;
-  label: string;
-  language: string;
-  /**
-   * Break mid-token. Wrapping is by whitespace, so a single long value — a
-   * key — overflows instead, and takes the copy button off the edge with it.
-   */
-  breakAnywhere?: boolean;
-}): JSX.Element {
-  const setTheme = useCallback(() => undefined, []);
-  const dark = useMemo(
-    () => ({ theme: "dark" as Theme, setTheme }),
-    [setTheme],
-  );
-  return (
-    <div className="space-y-2">
-      <span className="text-muted-foreground font-mono text-[10px] tracking-[0.08em] uppercase">
-        {label}
-      </span>
-      {/* Named, because highlighting splits the code into token elements and
-          the block is the only thing that still reads as one value.
-          The dark tokens are declared on :root.dark, which nothing nested can
-          match, so the snippet's surface stays light however its highlighting
-          is themed. These are the three it paints with, at their dark values,
-          scoped to this block. */}
-      <div
-        aria-label={label}
-        style={
-          {
-            "--card": "var(--color-neutral-900)",
-            "--muted": "var(--color-neutral-900)",
-            "--text-body": "var(--color-neutral-200)",
-          } as CSSProperties
-        }
-      >
-        <ConfigContext.Provider value={dark}>
-          <CodeSnippet
-            code={value}
-            language={language}
-            copyable
-            // Every block carries a copy button, so each one says which.
-            copyLabel={`Copy ${label}`}
-            wordWrap
-            snippetClassName={breakAnywhere ? "break-all" : undefined}
-          />
-        </ConfigContext.Provider>
-      </div>
-    </div>
-  );
-}
 
 export function StepInstall({
   command,
@@ -250,8 +179,8 @@ export function StepInstall({
             >
               <div className="space-y-4 p-4">
                 <Text muted small>
-                  For runtimes with a shell — Claude Code, Codex, Cursor, CI
-                  runners. Run once on the machine the agent lives on.
+                  For runtimes with a shell: OpenClaw, Claude Code and Codex.
+                  Run once on the machine the agent lives on.
                 </Text>
                 {command ? (
                   <CodeBlock
@@ -270,9 +199,9 @@ export function StepInstall({
                   </span>
                   <ol className="space-y-1 text-sm">
                     {[
-                      "Exchanges the single-use setup code for this agent's API key.",
+                      "Exchanges the setup code for this agent's API key.",
                       `Configures the MCP clients it finds on PATH with the agent's gateway (${reachPhrase}).`,
-                      "Leaves the key out of your shell history: the code dies on first use.",
+                      "Leaves the key out of your shell history: the code expires after 15 minutes.",
                       "Reports what it configured, and exits non-zero if it found no client.",
                     ].map((line, index) => (
                       <li key={line} className="flex gap-3">
@@ -290,7 +219,7 @@ export function StepInstall({
                   broken rather than as unavailable. */}
                 {secret && (
                   <Text muted small>
-                    The setup link is single-use and expires in 15 minutes.{" "}
+                    The setup link expires in 15 minutes.{" "}
                     <button
                       type="button"
                       className="underline disabled:no-underline disabled:opacity-60"
@@ -304,8 +233,8 @@ export function StepInstall({
                 {command && (
                   <Text muted small>
                     Piping to a shell runs whatever this deployment returns. To
-                    read it first, fetch it to a file and run that instead — the
-                    code is spent by the fetch, so regenerate afterwards. The
+                    read it first, fetch it to a file and run that instead. The
+                    code stays valid for 15 minutes, so you can rerun it. The
                     saved file carries the key: delete it once you have run it.
                   </Text>
                 )}
@@ -359,6 +288,22 @@ export function StepInstall({
                   ].join("\n")}
                   label="Codex"
                   language="toml"
+                />
+                <CodeBlock
+                  value={[
+                    // Single quotes keep the key out of argv and out of the
+                    // config: OpenClaw saves the `${VAR}` reference and fills it
+                    // in from its own environment when it connects. `add`'s
+                    // pre-save check does not, hence --no-probe. The entry is
+                    // named `speakeasy` like the one-line setup's.
+                    `openclaw mcp add speakeasy --url ${gatewayURL} \\`,
+                    "  --transport streamable-http --no-probe \\",
+                    `  --header 'Authorization=Bearer \${${KEY_ENV}}'`,
+                  ].join("\n")}
+                  // The oldest release verified to take --no-probe and
+                  // resolve the ${VAR} reference at connect time.
+                  label="OpenClaw 2026.10.6 or later"
+                  language="shell"
                 />
                 <CodeBlock
                   value={JSON.stringify(

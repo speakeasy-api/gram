@@ -23,6 +23,7 @@ func lookupTestCatalog(t *testing.T) *Catalog {
 			Grain:       "thing",
 			Description: "things",
 			TimeExpr:    "started_at",
+			Access:      AccessProject,
 			Fields: []Field{
 				{Name: "thing", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "thing_id", Description: "", Lookup: "names"},
 				{Name: "other", Type: TypeString, Role: RoleDimension, Default: false, Unit: "", Operators: equalsIn, Aggregations: nil, Expr: "other_id", Description: "", Lookup: "names"},

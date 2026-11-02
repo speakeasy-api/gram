@@ -1,10 +1,17 @@
 import { assert } from "@/lib/utils";
 import type { MCPServerEntry } from "@/elements/types";
 import { ToolsFilter } from "@/elements/types";
-import { createMCPClient } from "@ai-sdk/mcp";
+import type { createMCPClient } from "@ai-sdk/mcp";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { useMemo, useRef } from "react";
 import { trackError } from "@/elements/lib/errorTracking";
+import { createMCPClientWithVersionFallback } from "@/lib/mcp-client";
+import {
+  createLoadSkillTool,
+  LOAD_SKILL_TOOL_NAME,
+  listServedSkills,
+  serverServesSkills,
+} from "@/elements/lib/mcpSkills";
 import { Auth } from "./useAuth";
 
 type MCPToolsResult = Awaited<
@@ -104,9 +111,13 @@ export function useMCPTools({
       }));
       perServerHeadersRef.current = serverEntries.map((s) => s.headers);
 
+      // A failed skill discovery leaves that server's tools usable, but the
+      // result is treated as stale like a partial failure so a refetch can
+      // pick the skills up.
+      let skillDiscoveryFailed = false;
       const settled = await Promise.allSettled(
         serverEntries.map(async ({ server, headers }) => {
-          const client = await createMCPClient({
+          const client = await createMCPClientWithVersionFallback({
             clientName: "gram-elements-mcp-client",
             transport: {
               type: "http",
@@ -119,7 +130,15 @@ export function useMCPTools({
                 globalThis.fetch(...args),
             },
           });
-          return { server, tools: await client.tools() };
+          const tools = await client.tools();
+          const withSkills = await withSkillTool(
+            client,
+            server,
+            headers,
+            tools,
+          );
+          if (!withSkills.discovered) skillDiscoveryFailed = true;
+          return { server, tools: withSkills.tools };
         }),
       );
 
@@ -148,7 +167,8 @@ export function useMCPTools({
       }
 
       partialFailureRef.current =
-        rejected > 0 && rejected < serverEntries.length;
+        (rejected > 0 && rejected < serverEntries.length) ||
+        skillDiscoveryFailed;
 
       // Surface as a query rejection only when every server failed, so React
       // Query's retry/backoff still recovers from total outages (e.g. expired
@@ -260,4 +280,48 @@ function transformEnvironmentToHeaders(environment: Record<string, unknown>) {
     },
     {} as Record<string, string>,
   );
+}
+
+/**
+ * Adds the load-skill tool when the server serves skills over the Skills
+ * extension and serves this caller at least one. Skill discovery is best
+ * effort: a failure is tracked and leaves the server's tools as they are, with
+ * `discovered` false so the caller can retry later, and a server tool that
+ * already uses the name keeps it.
+ */
+async function withSkillTool(
+  client: Awaited<ReturnType<typeof createMCPClientWithVersionFallback>>,
+  server: NormalizedServer,
+  headers: Record<string, string>,
+  tools: MCPToolsResult,
+): Promise<{ tools: MCPToolsResult; discovered: boolean }> {
+  if (!serverServesSkills(client) || LOAD_SKILL_TOOL_NAME in tools) {
+    return { tools, discovered: true };
+  }
+  try {
+    const skills = await listServedSkills({
+      url: server.url,
+      headers,
+      protocolVersion: client.initializeResult.protocolVersion,
+    });
+    if (skills.length === 0) return { tools, discovered: true };
+    return {
+      tools: {
+        ...tools,
+        [LOAD_SKILL_TOOL_NAME]: createLoadSkillTool(
+          client,
+          skills,
+        ) as unknown as MCPToolsResult[string],
+      },
+      discovered: true,
+    };
+  } catch (error) {
+    trackError(error, {
+      source: "custom",
+      scope: "mcp-skills",
+      serverName: server.name ?? deriveNameFromUrl(server.url),
+      serverUrl: server.url,
+    });
+    return { tools, discovered: false };
+  }
 }

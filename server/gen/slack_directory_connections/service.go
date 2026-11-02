@@ -197,6 +197,10 @@ type SlackDirectoryConnection struct {
 	Generation string
 	// Permissions granted by Slack.
 	GrantedScopes []string
+	// Permissions Speakeasy asks for that this install has not granted.
+	// Reinstalling the app grants them. Without chat:write, approval requests do
+	// not reach approvers in Slack.
+	MissingScopes []string
 	// Bounded authorization failure code, when known.
 	LastErrorCode *string
 	// When credentials were removed.

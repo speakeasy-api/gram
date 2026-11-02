@@ -25,6 +25,9 @@ import (
 //   - A direct grant spanning every resource (resource_id "*") does not
 //     override, so a broad user grant can still be revoked on one resource by
 //     a role or organization-wide block.
+//   - A grant inferred by the default auth permission backfill does not
+//     override, even when it names one resource: it mirrors access the user
+//     already had rather than an administrator's decision about them.
 //   - Agent grants never override. An agent's owner can write its policy
 //     without being an administrator, so letting those grants outrank a block
 //     would let owners lift a block an administrator put on the agent's role
@@ -68,6 +71,9 @@ func DirectOverrideGrants(grants []Grant) []Grant {
 // evaluation: a direct exclusion, or a direct allow naming a concrete resource.
 func isDirectOverrideGrant(grant Grant) bool {
 	if !IsDirectGrant(grant) {
+		return false
+	}
+	if grant.Inferred && !IsBlocklistScope(grant.Scope) {
 		return false
 	}
 	return IsBlocklistScope(grant.Scope) || grant.Selector.ResourceID() != WildcardResource

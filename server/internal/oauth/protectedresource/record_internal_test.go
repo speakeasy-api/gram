@@ -89,7 +89,7 @@ func TestDiagnosticStorage(t *testing.T) {
 	doc := wellknown.OAuthProtectedResourceMetadata{Resource: resource, MetadataURL: metadataURL, Raw: raw}
 	require.True(t, doc.ValidForResource(resource))
 	db := &diagnosticWriteDB{}
-	require.NoError(t, Record(t.Context(), db, uuid.New(), "test-org", resource, doc))
+	require.NoError(t, upsert(t.Context(), db, uuid.New(), "test-org", resource, doc, false))
 	require.Equal(t, resource, db.args[2])
 	require.Equal(t, safeMetadataURL, db.args[3])
 	require.Equal(t, string(raw), db.args[14])

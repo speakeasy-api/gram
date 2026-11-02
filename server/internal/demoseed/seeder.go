@@ -25,6 +25,8 @@ type seeder struct {
 	// run, so Go-computed timestamps agree with any now() a query still uses
 	// and ClickHouse rows line up with the Postgres ones.
 	now time.Time
+	// signalSequences joins synthetic readings to actual PostgreSQL message order.
+	signalSequences map[int]int64
 }
 
 // orgID is the tenant's organization id.
@@ -81,6 +83,7 @@ func (s *seeder) runPostgres(ctx context.Context) error {
 		{"prompts and skills", s.seedSkills},
 		{"risk and chats", s.seedRiskAndChats},
 		{"activity and billing", s.seedActivity},
+		{"signal conversations", s.seedSignalConversations},
 		{"postflight", s.postflight},
 	}
 	for _, p := range phases {

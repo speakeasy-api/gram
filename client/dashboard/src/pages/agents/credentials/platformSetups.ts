@@ -1,4 +1,5 @@
 import { claudeTagSetupInstructions } from "./ClaudeTagSetupInstructions";
+import { gkeSetupInstructions } from "./GkeSetupInstructions";
 import type { PlatformSetup } from "./setupInstructions";
 import { isSupportedCatalogEntry, type CatalogEntry } from "./workloadCatalog";
 
@@ -14,7 +15,10 @@ import { isSupportedCatalogEntry, type CatalogEntry } from "./workloadCatalog";
  * `Object.prototype` and offered as a tile with nothing behind it.
  */
 const PLATFORM_SETUPS = new Map<string, (entry: CatalogEntry) => PlatformSetup>(
-  [["claude-tag", claudeTagSetupInstructions]],
+  [
+    ["claude-tag", claudeTagSetupInstructions],
+    ["gke", gkeSetupInstructions],
+  ],
 );
 
 /** Whether this catalog entry can use the guided setup this wizard ships. */

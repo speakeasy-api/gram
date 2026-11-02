@@ -72,6 +72,11 @@ func (i *toolsCallRiskScanInterceptor) InterceptToolsCallResponse(ctx context.Co
 }
 
 func riskScanRejection(decision mcpriskscan.Decision) error {
+	// A call held for approval carries the agent's next step, so it reads as
+	// a tool result the agent acts on, the same shape hosted servers return.
+	if decision.HeldForApproval() {
+		return &proxy.ToolResultError{Message: decision.UserMessage}
+	}
 	if decision.Denied() {
 		return &proxy.RejectError{
 			Code:    proxy.RejectCodeForbidden,

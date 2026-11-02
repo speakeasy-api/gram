@@ -6,7 +6,9 @@ import type { ExplainedAccessRule } from "@gram/client/models/components/explain
 import { ServerAssignment } from "./PersonServerAssignment";
 
 vi.mock("@/routes", () => ({
-  useRoutes: () => ({ mcp: { x: { overview: { href: () => "/server" } } } }),
+  useRoutes: () => ({
+    mcp: { details: { overview: { href: () => "/server" } } },
+  }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ projects: [] }),

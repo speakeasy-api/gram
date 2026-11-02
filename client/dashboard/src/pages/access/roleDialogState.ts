@@ -15,6 +15,8 @@ export interface SaveButtonInput {
   isEditing: boolean;
   /** True when the role being edited is a system role (Member/Admin) */
   isSystemRole: boolean;
+  /** True when the upstream credential rules differ from the saved role */
+  clientTypesChanged?: boolean;
   /** Current form values */
   name: string;
   description: string;
@@ -39,6 +41,8 @@ export function visiblePermissionCount(
     (grant) =>
       grant.scope !== undefined &&
       !grant.scope.startsWith("risk_policy:") &&
+      // Auth client permissions are provisioned, not edited in the role dialog.
+      grant.scope !== "mcp:auth" &&
       !grant.scope.includes(":blocked_"),
   ).length;
 }
@@ -102,6 +106,7 @@ export function hasFormChanges(input: SaveButtonInput): boolean {
     membersHaveChanged(input.selectedAgents, input.initial.agents) ||
     input.name !== input.initial.name ||
     input.description !== input.initial.description ||
+    input.clientTypesChanged === true ||
     grantKeysString(input.grants) !== input.initial.grantKeys
   );
 }
@@ -139,6 +144,7 @@ const DISPOSITION_LABELS_LOWER: Record<string, string> = {
 };
 
 function projectResourceNoun(resourceType: ResourceType): string | null {
+  if (resourceType === "inference") return "inference";
   if (resourceType === "skill") return "skills";
   if (resourceType === "assistant") return "assistants";
   return null;
@@ -151,6 +157,7 @@ export function computeRuleLabel(
   projects: ProjectRef[],
 ): string {
   if (selectors === null) {
+    if (resourceType === "inference") return "All projects";
     if (isProjectFilteredResourceType(resourceType)) return "All assistants";
     return isProjectScopedResourceType(resourceType)
       ? "All projects"
@@ -245,6 +252,9 @@ export function computeRuleTooltip(
       const name = projects.find(
         (p) => p.id === projectSels[0]!.projectId!,
       )?.name;
+      if (resourceType === "inference") {
+        return `${verb} access to inference in ${name ?? "1 project"}`;
+      }
       const resources = isProjectFilteredResourceType(resourceType)
         ? `${resourceType}s`
         : "servers";

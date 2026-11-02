@@ -228,6 +228,34 @@ func TestScan_InvalidExpressionErrors(t *testing.T) {
 	require.ErrorContains(t, err, `evaluate custom rule "custom.broken"`)
 }
 
+// ScanForEnforcement reports evaluated=false only when no effective rule was
+// selected; an attempted scan reports true even when evaluation fails.
+func TestScanForEnforcement_ReportsWhetherRulesWereEvaluated(t *testing.T) {
+	t.Parallel()
+
+	conn := cloneDB(t)
+	p := seedProject(t, conn)
+	seedCustomRule(t, conn, p, "custom.secret", `content.matchRegex("secret")`)
+	seedCustomRule(t, conn, p, "custom.broken", `this is not valid cel !!!`)
+	scanner := newTestScanner(t, conn)
+
+	result, evaluated, err := scanner.ScanForEnforcement(t.Context(), scanReq(p, "here is a secret value"))
+	require.NoError(t, err)
+	require.False(t, evaluated)
+	require.Empty(t, result.Findings)
+	require.False(t, result.Completed)
+
+	result, evaluated, err = scanner.ScanForEnforcement(t.Context(), scanReq(p, "here is a secret value", "custom.secret"))
+	require.NoError(t, err)
+	require.True(t, evaluated)
+	require.Len(t, result.Findings, 1)
+	require.True(t, result.Completed)
+
+	_, evaluated, err = scanner.ScanForEnforcement(t.Context(), scanReq(p, "here is a secret value", "custom.broken"))
+	require.ErrorContains(t, err, `evaluate custom rule "custom.broken"`)
+	require.True(t, evaluated)
+}
+
 // ScanBatch evaluates the selected rules against every message and returns an
 // index-aligned result: matching messages carry findings, clean ones an
 // initialized empty slice.

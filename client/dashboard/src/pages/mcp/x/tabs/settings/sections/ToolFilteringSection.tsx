@@ -1,4 +1,5 @@
 import { mcpServerVisibilityUpdateForm } from "@/lib/mcp-server-visibility";
+import { useFollowRenamedServer } from "@/pages/mcp/x/useFollowRenamedServer";
 import { handleError } from "@/lib/errors";
 import { isKnownEnumValue } from "@/lib/enum";
 import { UpdateMcpServerFormVisibility as KnownUpdateMcpServerFormVisibility } from "@gram/client/models/components/updatemcpserverform.js";
@@ -63,8 +64,10 @@ export function ToolFilteringSection({
         : "Failed to update tool filtering settings",
     );
 
+  const followRenamedServer = useFollowRenamedServer();
   const updateMcpServer = useUpdateMcpServerMutation({
-    onSuccess: async () => {
+    onSuccess: async (updated) => {
+      followRenamedServer(updated);
       await Promise.all([
         invalidateAllGetMcpServer(queryClient, { refetchType: "all" }),
         invalidateAllMcpServers(queryClient, { refetchType: "all" }),

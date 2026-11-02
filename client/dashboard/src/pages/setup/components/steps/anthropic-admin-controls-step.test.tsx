@@ -46,6 +46,11 @@ vi.mock("../confirm-traffic-section", () => ({
     </div>
   ),
 }));
+vi.mock("../organization-gateway-section", () => ({
+  OrganizationGatewayConnectorSection: () => (
+    <div>Organization Gateway connector section</div>
+  ),
+}));
 vi.mock("../platform-setup-flow", () => ({
   PlatformSetupFlow: ({
     platformId,
@@ -116,12 +121,16 @@ describe("AnthropicAdminControlsStep", () => {
     expect(screen.getByText("Set up Anthropic admin controls")).toBeTruthy();
     expect(screen.getByText("Enable logging section")).toBeTruthy();
     expect(screen.getByText("Marketplace section")).toBeTruthy();
-    expect(screen.getByText("Optional")).toBeTruthy();
+    expect(screen.getAllByText("Optional")).toHaveLength(2);
+    expect(
+      screen.getByText("Organization Gateway connector section"),
+    ).toBeTruthy();
     expect(
       screen.getAllByRole("heading", { level: 3 }).map((h) => h.textContent),
     ).toEqual([
       "Connect Claude Cowork",
       "Connect Claude Code",
+      "Add the Organization Gateway to Claude",
       "Connect Cursor",
     ]);
 

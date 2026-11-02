@@ -39,6 +39,7 @@ func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, 
 			PrincipalUrn: row.PrincipalUrn.String(),
 			Scope:        Scope(row.Scope),
 			Selector:     selectors,
+			Inferred:     row.Inferred,
 		})
 	}
 

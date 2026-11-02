@@ -12,11 +12,14 @@ import (
 	"testing"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -129,7 +132,7 @@ func TestStaffOAuthAuthorizationRequiresStaffConsent(t *testing.T) {
 
 	response = httptest.NewRecorder()
 	s.ConnectHandler().ServeHTTP(response, request)
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Equal(t, 1, store.calls)
 }
 
@@ -206,7 +209,7 @@ func TestStaffOAuthAuthorizationReauthenticatesRevokedBrowserSession(t *testing.
 	verifier.err = oops.C(oops.CodeUnexpected)
 	response = httptest.NewRecorder()
 	s.ConnectHandler().ServeHTTP(response, request)
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Empty(t, response.Header().Get("Location"), "verification outages must not restart login")
 	require.Zero(t, store.calls)
 }
@@ -228,7 +231,7 @@ func TestStaffOAuthAuthorizationRejectsCopiedBrowserState(t *testing.T) {
 		}
 		response = httptest.NewRecorder()
 		s.ConnectHandler().ServeHTTP(response, request)
-		require.Equal(t, http.StatusUnauthorized, response.Code)
+		require.Equal(t, http.StatusBadRequest, response.Code)
 	}
 	require.Zero(t, verifier.calls)
 	parsed, err := url.Parse(connectURL)
@@ -245,7 +248,7 @@ func TestStaffOAuthAuthorizationRejectsCopiedBrowserState(t *testing.T) {
 		}
 		response = httptest.NewRecorder()
 		s.ConnectHandler().ServeHTTP(response, request)
-		require.Equal(t, http.StatusUnauthorized, response.Code)
+		require.Equal(t, http.StatusBadRequest, response.Code)
 		require.NoError(t, s.cache.Store(t.Context(), challenge))
 	}
 	require.Zero(t, store.calls)
@@ -298,7 +301,7 @@ func TestStaffOAuthAuthorizationRejectsUntrustedRequestAndIdentity(t *testing.T)
 	request.URL.RawQuery = query.Encode()
 	response := httptest.NewRecorder()
 	s.AuthorizeHandler().ServeHTTP(response, request)
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Empty(t, response.Header().Get("Location"))
 
 	request = staffAuthorizeRequest(pkce)
@@ -320,7 +323,7 @@ func TestStaffOAuthAuthorizationRejectsUntrustedRequestAndIdentity(t *testing.T)
 	request.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: "browser-session"})
 	response = httptest.NewRecorder()
 	s.ConnectHandler().ServeHTTP(response, request)
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Zero(t, store.calls)
 }
 
@@ -349,7 +352,7 @@ func TestStaffOAuthAuthorizationRejectsChangedBrowserSession(t *testing.T) {
 	request.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: "another-session"})
 	response = httptest.NewRecorder()
 	s.ConnectHandler().ServeHTTP(response, request)
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Zero(t, store.calls)
 }
 
@@ -374,8 +377,9 @@ func TestStaffOAuthAuthorizationMapsRevokedClient(t *testing.T) {
 	request.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: "browser-session"})
 	response = httptest.NewRecorder()
 	s.ConnectHandler().ServeHTTP(response, request)
-	require.Equal(t, http.StatusUnauthorized, response.Code)
-	require.Contains(t, response.Body.String(), `"error":"invalid_client"`)
+	require.Equal(t, http.StatusBadRequest, response.Code)
+	body := oauthtest.RequireAuthorizationErrorPage(t, response, http.StatusBadRequest)
+	require.Equal(t, "invalid_client", body.Code)
 	require.Equal(t, 1, store.calls)
 
 	store.err = errors.New("database unavailable")
@@ -393,6 +397,48 @@ func TestStaffAuthorizationStateExpires(t *testing.T) {
 	require.NoError(t, s.cache.Store(t.Context(), challenge))
 	response := httptest.NewRecorder()
 	s.ConnectHandler().ServeHTTP(response, httptest.NewRequest(http.MethodGet, Path+"/connect?state=expired", nil))
-	require.Equal(t, http.StatusUnauthorized, response.Code)
+	require.Equal(t, http.StatusBadRequest, response.Code)
 	require.Zero(t, store.calls)
+	require.NotEmpty(t, oauthtest.RequireAuthorizationErrorPage(t, response, http.StatusBadRequest).Code)
+	require.Contains(t, response.Body.String(), "link expired or was already used")
+}
+
+func TestStaffAuthorizationStateFailureExplanations(t *testing.T) {
+	t.Parallel()
+	for _, method := range []string{http.MethodGet, http.MethodPost} {
+		for _, tc := range []struct {
+			name, resource, explanation string
+			age                         time.Duration
+			missing, unavailable        bool
+		}{
+			{name: "expired", resource: staffAudience, age: time.Hour, explanation: "This connection link expired or was already used"},
+			{name: "wrong resource", resource: "https://other.example.test/admin-mcp", explanation: "This connection link is incomplete or invalid"},
+			{name: "missing state", missing: true, explanation: "This connection link is incomplete or invalid"},
+			{name: "cache outage", unavailable: true, explanation: "This is a problem on our side"},
+		} {
+			t.Run(method+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				service, store, _, _ := staffAuthorizationFixture(t)
+				if !tc.missing {
+					challenge := staffChallenge{ID: "challenge", ResourceURI: tc.resource, CreatedAt: time.Now().Add(-tc.age)}
+					require.NoError(t, service.cache.Store(t.Context(), challenge))
+				}
+				if tc.unavailable {
+					service.cache = cache.NewTypedObjectCache[staffChallenge](testenv.NewLogger(t), nil, cache.SuffixNone)
+				}
+				request := httptest.NewRequest(method, Path+"/connect?state=challenge", strings.NewReader("state=challenge"))
+				request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				response := httptest.NewRecorder()
+				service.ConnectHandler().ServeHTTP(response, request)
+				body := oauthtest.RequireAuthorizationErrorPage(t, response, http.StatusBadRequest)
+				require.Equal(t, oautherr.CodeInvalidRequest, body.Code)
+				require.Equal(t, "authorization state is invalid or expired", body.Description)
+				require.Contains(t, response.Body.String(), tc.explanation)
+				if tc.name != "expired" {
+					require.NotContains(t, response.Body.String(), "This connection link expired or was already used")
+				}
+				require.Zero(t, store.calls)
+			})
+		}
+	}
 }

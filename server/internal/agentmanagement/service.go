@@ -73,6 +73,13 @@ import (
 //     the tool's discovery and live authorization cannot reuse an existing
 //     member-default scope.
 //
+//   - Connection blocks (an owner blocking an agent on their own
+//     connection) and auth client restrictions in agent policy are deferred.
+//     They take effect only once auth client permissions are enforced, and no
+//     dashboard surface uses them yet; add the tool beside that UI so both
+//     share one product contract. The existing Platform MCP access tools never
+//     touch agent principals, so they need no change.
+//
 //   - Agent role assignment is deferred with the rest, for the same reason and
 //     not by oversight. The access API and the role dialog now take agent_ids,
 //     while Platform MCP's CreateRoleTx and UpdateRoleTx still pass
@@ -130,7 +137,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	endpoints := gen.NewEndpoints(service)
 	endpoints.Use(middleware.MapErrors())
 	endpoints.Use(middleware.TraceMethods(service.tracer))
-	srv.Mount(mux, srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil))
+	srv.Mount(mux, srv.New(endpoints, mux, requestDecoder, goahttp.ResponseEncoder, nil, nil))
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -399,7 +406,11 @@ func (s *Service) view(ctx context.Context, db repo.DBTX, human HumanContext, ag
 	if err != nil {
 		return nil, err
 	}
-	return managedAgentView(agent, permissions, ownerProfile), nil
+	view := managedAgentView(agent, permissions, ownerProfile)
+	if err := s.addConnectionHealth(ctx, db, agent.OrganizationID, []*gen.ManagedAgent{view}); err != nil {
+		return nil, err
+	}
+	return view, nil
 }
 
 func (s *Service) ownerProfile(ctx context.Context, db repo.DBTX, organizationID, ownerUserID string) (*gen.AgentOwnerProfile, error) {
@@ -420,6 +431,7 @@ func (s *Service) ownerProfile(ctx context.Context, db repo.DBTX, organizationID
 func managedAgentView(agent repo.Agent, permissions AgentPermissions, ownerProfile *gen.AgentOwnerProfile) *gen.ManagedAgent {
 	result := &gen.ManagedAgent{
 		OwnerProfile:                ownerProfile,
+		ConnectionNeedsRefresh:      nil,
 		ID:                          agent.ID.String(),
 		OwnerUserID:                 agent.OwnerUserID,
 		OwnerReassignmentRequiredAt: nil,
@@ -514,4 +526,28 @@ func (s *Service) serviceError(ctx context.Context, err error, operation string)
 func contextAuth(ctx context.Context) (*contextvalues.AuthContext, bool) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	return authCtx, ok && authCtx != nil
+}
+
+// addConnectionHealth batches only already-authorized agents, including the single-agent view.
+func (s *Service) addConnectionHealth(ctx context.Context, db repo.DBTX, organizationID string, items []*gen.ManagedAgent) error {
+	ids := make([]uuid.UUID, 0, len(items))
+	for _, item := range items {
+		ids = append(ids, uuid.MustParse(item.ID))
+	}
+	if len(ids) == 0 {
+		return nil
+	}
+	rows, err := repo.New(db).ListAgentsNeedingConnectionRefresh(ctx, repo.ListAgentsNeedingConnectionRefreshParams{OrganizationID: organizationID, AgentIds: ids})
+	if err != nil {
+		return fmt.Errorf("load agent connection health: %w", err)
+	}
+	needsRefresh := make(map[string]bool, len(rows))
+	for _, id := range rows {
+		needsRefresh[id.String()] = true
+	}
+	for _, item := range items {
+		value := needsRefresh[item.ID]
+		item.ConnectionNeedsRefresh = &value
+	}
+	return nil
 }

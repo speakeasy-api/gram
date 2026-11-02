@@ -33,6 +33,7 @@ func encodeAgentSessionPolicy(target AgentAuthorizationTarget, version runtimepo
 			authz.SelectorKeyResourceID:   target.MCPResourceID.String(),
 			authz.SelectorKeyProjectID:    target.ProjectID.String(),
 		},
+		Inferred: false,
 	}})
 	if err != nil {
 		return nil, fmt.Errorf("construct agent session policy: %w", err)

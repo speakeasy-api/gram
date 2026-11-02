@@ -1920,6 +1920,14 @@ func marshalSlackdirectoryconnectionsSlackDirectoryConnectionToSlackDirectoryCon
 	} else {
 		res.GrantedScopes = []string{}
 	}
+	if v.MissingScopes != nil {
+		res.MissingScopes = make([]string, len(v.MissingScopes))
+		for i, val := range v.MissingScopes {
+			res.MissingScopes[i] = val
+		}
+	} else {
+		res.MissingScopes = []string{}
+	}
 
 	return res
 }
