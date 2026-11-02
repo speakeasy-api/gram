@@ -8,7 +8,6 @@ import {
 } from "@/components/ui/Sheet";
 
 import { Button } from "@/components/ui/Button";
-import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { NetworkIngressCredentialsFields } from "./NetworkIngressCredentialsFields";
 import { Switch } from "@/components/ui/Switch";
@@ -20,18 +19,21 @@ import { useCreateNetworkIngressMutation } from "@gram/client/react-query/create
 import { useQueryClient } from "@tanstack/react-query";
 import { useState } from "react";
 
-const HOSTNAME_PATTERN = /^[a-z0-9](?:[a-z0-9-]{0,61}[a-z0-9])?$/;
-
 const TAILSCALE_POLICY_SNIPPET = `"tagOwners": {
-  "tag:k8s-operator": ["autogroup:admin"],
-  "tag:gram-proxy": ["tag:k8s-operator"],
-  "tag:gram-service": ["tag:k8s-operator"]
+  "tag:speakeasy": ["autogroup:admin"]
 },
 "autoApprovers": {
   "services": {
-    "tag:gram-service": ["tag:gram-proxy"]
+    "svc:speakeasy": ["tag:speakeasy"]
   }
-}`;
+},
+"grants": [
+  {
+    "src": ["autogroup:member"],
+    "dst": ["svc:speakeasy"],
+    "ip": ["tcp:443"]
+  }
+]`;
 
 export function PrivateNetworkSetupSheet({
   open,
@@ -41,7 +43,6 @@ export function PrivateNetworkSetupSheet({
   onOpenChange: (open: boolean) => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
-  const [hostname, setHostname] = useState("");
   const [clientId, setClientId] = useState("");
   const [clientSecret, setClientSecret] = useState("");
   const [identityRequired, setIdentityRequired] = useState(false);
@@ -55,7 +56,6 @@ export function PrivateNetworkSetupSheet({
     gcTime: 0,
     onSuccess: async () => {
       resetCredentials();
-      setHostname("");
       setIdentityRequired(false);
       await invalidateAllNetworkIngress(queryClient);
       onOpenChange(false);
@@ -78,10 +78,7 @@ export function PrivateNetworkSetupSheet({
   };
 
   const canSubmit =
-    HOSTNAME_PATTERN.test(hostname.toLowerCase()) &&
-    clientId.trim() !== "" &&
-    clientSecret !== "" &&
-    !create.isPending;
+    clientId.trim() !== "" && clientSecret !== "" && !create.isPending;
 
   return (
     <Sheet
@@ -106,25 +103,32 @@ export function PrivateNetworkSetupSheet({
               <li>MagicDNS is enabled.</li>
               <li>HTTPS certificates are enabled.</li>
               <li>
-                The policy has isolated operator, proxy, and service tags plus
-                service-advertisement auto-approval.
+                Devices that will connect run Tailscale 1.86 or later, which
+                Tailscale Services require.
+              </li>
+              <li>
+                The policy owns a <code>tag:speakeasy</code> tag, auto-approves
+                the <code>svc:speakeasy</code> service for it, and grants your
+                users access to that service.
               </li>
             </ul>
             <pre className="overflow-x-auto border bg-muted/30 p-3 text-xs">
               <code>{TAILSCALE_POLICY_SNIPPET}</code>
             </pre>
             <Text small muted>
-              Keep these tags dedicated to Speakeasy. Your tailnet policy must
-              also allow the intended users to reach the generated service tag.
+              Keep the tag dedicated to Speakeasy. Replace{" "}
+              <code>autogroup:member</code> with the group that should reach
+              your private MCP servers.
             </Text>
           </div>
 
           <div className="space-y-2">
             <Text variant="subheading">2. Create a Tailscale OAuth client</Text>
             <Text small muted>
-              Grant Devices Core, Auth Keys, and Services write scopes, then
-              apply the <code>tag:k8s-operator</code> tag. Do not reuse a
-              broadly privileged client.
+              Grant Auth Keys, Devices Core, and Services write scopes, then
+              apply the <code>tag:speakeasy</code> tag. Speakeasy uses it only
+              to register its gateway nodes and define the service; it never
+              leaves our control plane.
             </Text>
           </div>
 
@@ -136,27 +140,14 @@ export function PrivateNetworkSetupSheet({
             onClientSecretChange={setClientSecret}
           />
           <div className="space-y-2">
-            <Label htmlFor="private-hostname">
-              Organization private hostname
-            </Label>
-            <Input
-              id="private-hostname"
-              value={hostname}
-              onChange={(value) => setHostname(value.toLowerCase())}
-              placeholder="acme-speakeasy"
-              validate={(value) =>
-                HOSTNAME_PATTERN.test(value.toLowerCase()) ||
-                "Use a lowercase DNS label containing letters, numbers, or hyphens."
-              }
-              autoComplete="off"
-            />
+            <Label>Private hostname</Label>
+            <Text small>
+              <code>speakeasy.&lt;your tailnet&gt;.ts.net</code>
+            </Text>
             <Text small muted>
-              Choose a durable label for the organization, not an individual MCP
-              server. MCP servers opt in separately and keep their own endpoint
-              paths on the shared hostname. Tailscale appends your
-              tailnet&apos;s
-              <code>.ts.net</code> suffix. This label cannot be changed after
-              setup.
+              One hostname serves the whole organization. MCP servers opt in
+              separately and keep their own endpoint paths on the shared
+              hostname.
             </Text>
           </div>
           <div className="flex items-start justify-between gap-6 border p-4">
@@ -190,7 +181,6 @@ export function PrivateNetworkSetupSheet({
                 request: {
                   createIngressRequestBody: {
                     provider: "tailscale",
-                    hostname: hostname.toLowerCase(),
                     oauthClientId: clientId.trim(),
                     oauthClientSecret: clientSecret,
                     identityRequired,
