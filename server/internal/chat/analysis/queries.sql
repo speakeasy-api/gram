@@ -122,9 +122,14 @@ LIMIT @page_size;
 
 -- name: EnqueueChatAnalysisEvaluations :exec
 -- Idempotent enqueue: one row per (chat, judge) unit, expanded from the page's
--- chats crossed with the judge roster. Scored and failed units are left alone;
--- a pending unit refreshes observed_at so a resumed session keeps its place in
--- the recent-first reservation order and its quiet clock restarts.
+-- chats crossed with the judge roster. Failed units are left alone; a pending
+-- unit refreshes observed_at so a resumed session keeps its place in the
+-- recent-first reservation order and its quiet clock restarts. A scored unit
+-- of a rearm judge (one whose output must track the whole chat, such as the
+-- chat summary) goes back to pending with a fresh attempt budget when the chat
+-- has new messages since it was judged; other judges score a chat once. The
+-- re-reservation overwrites reserved_on, so a unit judged twice on one day
+-- counts once against that day's cap.
 --
 -- organization_id is derived from the project row, never taken from the
 -- caller: the daily spend count reaches evaluations through the project's
@@ -157,8 +162,16 @@ WHERE p.id = @project_id
   AND p.deleted IS FALSE
 ON CONFLICT (project_id, chat_id, judge) DO UPDATE
 SET observed_at = GREATEST(chat_analysis_evaluations.observed_at, excluded.observed_at),
+    state = 'pending',
+    attempts = CASE WHEN chat_analysis_evaluations.state = 'pending' THEN chat_analysis_evaluations.attempts ELSE 0 END,
+    last_error = CASE WHEN chat_analysis_evaluations.state = 'pending' THEN chat_analysis_evaluations.last_error ELSE NULL END,
     updated_at = clock_timestamp()
-WHERE chat_analysis_evaluations.state = 'pending';
+WHERE chat_analysis_evaluations.state = 'pending'
+  OR (
+    chat_analysis_evaluations.state = 'scored'
+    AND chat_analysis_evaluations.judge = ANY(@rearm_judges::text[])
+    AND excluded.observed_at > chat_analysis_evaluations.observed_at
+  );
 
 -- name: CountChatAnalysisJudgeSpendForProject :many
 -- Per-judge spend for the day, organization-grained and entered through the
