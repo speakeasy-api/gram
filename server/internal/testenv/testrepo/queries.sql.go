@@ -5982,16 +5982,18 @@ const setAPIKeyCreatorFixture = `-- name: SetAPIKeyCreatorFixture :exec
 UPDATE api_keys
 SET created_by_user_id = $1
 WHERE id = $2
+  AND organization_id = $3
 `
 
 type SetAPIKeyCreatorFixtureParams struct {
 	CreatedByUserID string
 	ID              uuid.UUID
+	OrganizationID  string
 }
 
 // Test-only fixture: an agent key issued by another member of the organization.
 func (q *Queries) SetAPIKeyCreatorFixture(ctx context.Context, arg SetAPIKeyCreatorFixtureParams) error {
-	_, err := q.db.Exec(ctx, setAPIKeyCreatorFixture, arg.CreatedByUserID, arg.ID)
+	_, err := q.db.Exec(ctx, setAPIKeyCreatorFixture, arg.CreatedByUserID, arg.ID, arg.OrganizationID)
 	return err
 }
 

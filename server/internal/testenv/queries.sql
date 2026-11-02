@@ -2413,4 +2413,5 @@ DELETE FROM organization_features WHERE organization_id = @organization_id AND f
 -- Test-only fixture: an agent key issued by another member of the organization.
 UPDATE api_keys
 SET created_by_user_id = @created_by_user_id
-WHERE id = @id;
+WHERE id = @id
+  AND organization_id = @organization_id;

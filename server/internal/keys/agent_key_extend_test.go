@@ -241,7 +241,7 @@ func TestKeysService_ExtendAgentKeysSkipsOtherIssuersAndExpiredKeys(t *testing.T
 	})
 	require.NoError(t, err)
 	fixtures := testrepo.New(ti.conn)
-	require.NoError(t, fixtures.SetAPIKeyCreatorFixture(ctx, testrepo.SetAPIKeyCreatorFixtureParams{CreatedByUserID: otherID, ID: uuid.MustParse(othersKey)}))
+	require.NoError(t, fixtures.SetAPIKeyCreatorFixture(ctx, testrepo.SetAPIKeyCreatorFixtureParams{CreatedByUserID: otherID, ID: uuid.MustParse(othersKey), OrganizationID: testAuthContext(t, ctx).ActiveOrganizationID}))
 	require.NoError(t, fixtures.ExpireAPIKeyFixture(ctx, testrepo.ExpireAPIKeyFixtureParams{ID: uuid.MustParse(expired), OrganizationID: testAuthContext(t, ctx).ActiveOrganizationID}))
 
 	second := uuid.NewString()
