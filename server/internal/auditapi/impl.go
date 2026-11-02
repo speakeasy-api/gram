@@ -16,6 +16,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	goahttp "goa.design/goa/v3/http"
 	"goa.design/goa/v3/security"
+	"golang.org/x/sync/errgroup"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auditlogs"
 	srv "github.com/speakeasy-api/gram/server/gen/http/auditlogs/server"
@@ -120,15 +121,20 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 	params.CreatedFrom = conv.PtrToPGTimestamptz(createdFrom)
 	params.CreatedTo = conv.PtrToPGTimestamptz(createdTo)
 
+	category := categoryOrDefault(payload.Category)
 	if payload.Cursor != nil && *payload.Cursor != "" {
-		seq, err := audit.DecodeCursor(*payload.Cursor)
+		cursor, err := audit.DecodeCursor(*payload.Cursor)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogError(ctx, s.logger)
 		}
-		params.CursorSeq = pgtype.Int8{Int64: seq, Valid: true}
+		// The two logs number their rows from different ranges, so a cursor
+		// from the other log would page from the wrong place without error.
+		if cursor.Category != category {
+			return nil, oops.E(oops.CodeBadRequest, nil, "cursor was issued for the %s log, not the %s log", cursor.Category, category).LogError(ctx, s.logger)
+		}
+		params.CursorSeq = pgtype.Int8{Int64: cursor.Seq, Valid: true}
 	}
 
-	category := categoryOrDefault(payload.Category)
 	var rows []repo.ListAuditLogsRow
 	if category == audit.CategorySecurity {
 		rows, err = securityevent.List(ctx, s.db, params)
@@ -150,7 +156,7 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.List
 
 	var nextCursor *string
 	if len(rows) > listAuditLogsPageSize {
-		cursor := audit.EncodeCursor(rows[listAuditLogsPageSize-1].Seq, rows[listAuditLogsPageSize-1].ID.String())
+		cursor := audit.EncodeCursor(category, rows[listAuditLogsPageSize-1].Seq, rows[listAuditLogsPageSize-1].ID.String())
 		nextCursor = &cursor
 		logs = logs[:listAuditLogsPageSize]
 	}
@@ -339,31 +345,47 @@ func (s *Service) listFacetRows(ctx context.Context, category audit.Category, or
 		actors   []repo.ListAuditActorFacetsRow
 		actions  []repo.ListAuditActionFacetsRow
 		surfaces []repo.ListAuditSurfaceFacetsRow
-		err      error
 	)
-	if category == audit.CategorySecurity {
-		actors, err = securityevent.ActorFacets(ctx, s.db, actorParams)
-	} else {
-		actors, err = repo.New(s.db).ListAuditActorFacets(ctx, actorParams)
-	}
-	if err != nil {
-		return nil, nil, nil, oops.E(oops.CodeUnexpected, err, "error listing audit actor facets").LogError(ctx, s.logger)
-	}
-	if category == audit.CategorySecurity {
-		actions, err = securityevent.ActionFacets(ctx, s.db, actionParams)
-	} else {
-		actions, err = repo.New(s.db).ListAuditActionFacets(ctx, actionParams)
-	}
-	if err != nil {
-		return nil, nil, nil, oops.E(oops.CodeUnexpected, err, "error listing audit action facets").LogError(ctx, s.logger)
-	}
-	if category == audit.CategorySecurity {
-		surfaces, err = securityevent.SurfaceFacets(ctx, s.db, surfaceParams)
-	} else {
-		surfaces, err = repo.New(s.db).ListAuditSurfaceFacets(ctx, surfaceParams)
-	}
-	if err != nil {
-		return nil, nil, nil, oops.E(oops.CodeUnexpected, err, "error listing audit surface facets").LogError(ctx, s.logger)
+	security := category == audit.CategorySecurity
+	// The three facets are independent reads, so they run together: a page
+	// load waits for the slowest one rather than for all three in turn, which
+	// matters most for the security log, the faster-growing of the two.
+	group, groupCtx := errgroup.WithContext(ctx)
+	group.Go(func() (err error) {
+		if security {
+			actors, err = securityevent.ActorFacets(groupCtx, s.db, actorParams)
+		} else {
+			actors, err = repo.New(s.db).ListAuditActorFacets(groupCtx, actorParams)
+		}
+		if err != nil {
+			return fmt.Errorf("list audit actor facets: %w", err)
+		}
+		return nil
+	})
+	group.Go(func() (err error) {
+		if security {
+			actions, err = securityevent.ActionFacets(groupCtx, s.db, actionParams)
+		} else {
+			actions, err = repo.New(s.db).ListAuditActionFacets(groupCtx, actionParams)
+		}
+		if err != nil {
+			return fmt.Errorf("list audit action facets: %w", err)
+		}
+		return nil
+	})
+	group.Go(func() (err error) {
+		if security {
+			surfaces, err = securityevent.SurfaceFacets(groupCtx, s.db, surfaceParams)
+		} else {
+			surfaces, err = repo.New(s.db).ListAuditSurfaceFacets(groupCtx, surfaceParams)
+		}
+		if err != nil {
+			return fmt.Errorf("list audit surface facets: %w", err)
+		}
+		return nil
+	})
+	if err := group.Wait(); err != nil {
+		return nil, nil, nil, oops.E(oops.CodeUnexpected, err, "error listing audit facets").LogError(ctx, s.logger)
 	}
 	return actors, actions, surfaces, nil
 }

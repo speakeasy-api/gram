@@ -1125,3 +1125,60 @@ func TestAuditService_List_FilterBySubjectIDs(t *testing.T) {
 	require.Len(t, padded.Logs, 1)
 	require.Equal(t, setCreated.String(), padded.Logs[0].ID)
 }
+
+// A cursor names the log it pages, so replaying it against the other log is
+// refused instead of paging from the wrong place: the two logs number their
+// rows from different ranges.
+func TestAuditService_List_RejectsACursorFromTheOtherLog(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAuditService(t)
+	authCtx := testAuthContext(t, ctx)
+	projectID := uuid.NullUUID{UUID: *authCtx.ProjectID, Valid: true}
+
+	// One more than a page (50), so the first page returns a cursor.
+	for range 51 {
+		insertAuditLog(t, ctx, ti, auditLogSeed{
+			organizationID: authCtx.ActiveOrganizationID,
+			projectID:      projectID,
+			actorID:        "agent:" + uuid.NewString(),
+			actorType:      "agent",
+			action:         string(audit.ActionWorkloadAdmissionAdmit),
+			subjectID:      uuid.NewString(),
+			subjectType:    "workload_admission",
+			category:       audit.CategorySecurity,
+		})
+	}
+
+	list := func(category audit.Category, cursor *string) (*gen.ListAuditLogsResult, error) {
+		return ti.service.List(ctx, &gen.ListPayload{
+			ApikeyToken:  nil,
+			SessionToken: nil,
+			Cursor:       cursor,
+			ProjectSlug:  nil,
+			ActorID:      nil,
+			Action:       nil,
+			SubjectType:  nil,
+			SubjectID:    nil,
+			Category:     string(category),
+		})
+	}
+
+	first, err := list(audit.CategorySecurity, nil)
+	require.NoError(t, err)
+	require.NotNil(t, first.NextCursor)
+
+	_, err = list(audit.CategoryConfiguration, first.NextCursor)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+
+	next, err := list(audit.CategorySecurity, first.NextCursor)
+	require.NoError(t, err)
+	require.Len(t, next.Logs, 1, "the security cursor pages the security log")
+
+	configurationCursor := audit.EncodeCursor(audit.CategoryConfiguration, 42, uuid.NewString())
+	_, err = list(audit.CategorySecurity, &configurationCursor)
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
+}
