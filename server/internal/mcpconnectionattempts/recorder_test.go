@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"log/slog"
 	"strings"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"testing/synctest"
@@ -299,6 +300,9 @@ func TestRowAt_RefusesWhatBreaksTheTableContract(t *testing.T) {
 		{"not started", NoAttempt, StepInboundToken, ResultCodeIssued},
 		{"no organization", Begin(ServerScope("", uuid.New(), uuid.New(), AppDCR)), StepInboundToken, ResultCodeIssued},
 		{"no server", Begin(ServerScope("org-test", uuid.New(), uuid.Nil, AppDCR)), StepInboundToken, ResultCodeIssued},
+		{"server with no project", Begin(ServerScope("org-test", uuid.Nil, uuid.New(), AppDCR)), StepInboundToken, ResultCodeIssued},
+		{"gateway with no project", Begin(GatewayScope("org-test", uuid.Nil, uuid.New(), AppDCR)), StepInboundToken, ResultCodeIssued},
+		{"toolset with no project", Begin(ToolsetScope("org-test", uuid.Nil, uuid.New(), AppDCR)), StepInboundToken, ResultCodeIssued},
 		{"zero step", Begin(testScope()), Step{}, ResultCodeIssued},
 		{"nothing happened", Begin(testScope()), StepInboundToken, nil},
 		{"zero result", Begin(testScope()), StepInboundToken, Result{}},
@@ -417,6 +421,7 @@ func TestRecord_NeverBlocksWhileClickHouseStalls(t *testing.T) {
 	t.Parallel()
 
 	release := make(chan struct{})
+	defer close(release)
 	conn := &scriptedConn{Conn: nil, block: release, err: errors.New("stalled"), prepares: atomic.Int64{}}
 	cfg := testConfig()
 	cfg.queueSize = 4
@@ -445,7 +450,6 @@ func TestRecord_NeverBlocksWhileClickHouseStalls(t *testing.T) {
 	}
 	require.GreaterOrEqual(t, recorder.dropped(t, dropQueueFull)-before, int64(1000-cfg.queueSize))
 
-	close(release)
 }
 
 func TestRecord_StalledInsertIsAbandonedAtItsTimeout(t *testing.T) {
@@ -541,16 +545,21 @@ func TestRecord_MetricHasItsTagsAndNoPersonOrgOrHost(t *testing.T) {
 	}, keys)
 }
 
-func stepsCounted(t *testing.T, recorder testRecorder) int {
+func stepsCounted(t *testing.T, recorder testRecorder) int64 {
 	t.Helper()
 
 	var collected metricdata.ResourceMetrics
 	require.NoError(t, recorder.reader.Collect(t.Context(), &collected))
-	total := 0
+	var total int64
 	for _, scope := range collected.ScopeMetrics {
 		for _, m := range scope.Metrics {
-			if m.Name == meterSteps {
-				total++
+			if m.Name != meterSteps {
+				continue
+			}
+			sum, ok := m.Data.(metricdata.Sum[int64])
+			require.True(t, ok)
+			for _, point := range sum.DataPoints {
+				total += point.Value
 			}
 		}
 	}
@@ -618,7 +627,7 @@ func TestLogs_TurnedOffWritesNothing(t *testing.T) {
 	require.Zero(t, events)
 	require.Zero(t, rollup)
 	require.Equal(t, int64(3), recorder.dropped(t, dropLogsOff))
-	require.Equal(t, 1, stepsCounted(t, recorder), "the step metric has no org, so it has no gap")
+	require.Equal(t, int64(3), stepsCounted(t, recorder), "the step metric has no org, so it has no gap")
 }
 
 func TestLogs_NeverConfiguredWritesNothing(t *testing.T) {
@@ -818,4 +827,36 @@ func TestRecord_SlowInsertsStillSendFullBatchesFromABacklog(t *testing.T) {
 			require.Equal(t, maxBatch, size)
 		}
 	})
+}
+
+// A row racing Shutdown is either written or counted, never lost.
+func TestRecord_RowsRacingShutdownAreWrittenOrCounted(t *testing.T) {
+	t.Parallel()
+
+	const (
+		writers   = 8
+		perWriter = 2000
+	)
+	conn := &slowConn{Conn: nil, delay: 0, sizes: nil}
+	cfg := testConfig()
+	cfg.queueSize = writers * perWriter
+	recorder := newTestRecorder(t, conn, cfg)
+	attempt := Begin(testScope())
+
+	var group sync.WaitGroup
+	for range writers {
+		group.Go(func() {
+			for range perWriter {
+				recorder.Step(context.Background(), attempt, StepInboundAuthorize, ResultAccepted)
+			}
+		})
+	}
+	require.NoError(t, recorder.Shutdown(t.Context()))
+	group.Wait()
+
+	written := 0
+	for _, size := range conn.sizes {
+		written += size
+	}
+	require.Equal(t, int64(writers*perWriter), int64(written)+recorder.dropped(t, dropShutdown)+recorder.dropped(t, dropQueueFull))
 }

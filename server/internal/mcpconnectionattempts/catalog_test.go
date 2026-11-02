@@ -249,3 +249,14 @@ func TestCatalog_SameMeaningHasOneCode(t *testing.T) {
 		require.False(t, ok, merged)
 	}
 }
+
+func TestDefine_RefusesADuplicateName(t *testing.T) {
+	t.Parallel()
+
+	require.Panics(t, func() {
+		define(CodeCanceled.String(), OutcomeFailed, WhoAdmin, "a", "b")
+	})
+	meaning, ok := MeaningOf(CodeCanceled.String())
+	require.True(t, ok)
+	require.Equal(t, OutcomeDeclined, meaning.Outcome)
+}

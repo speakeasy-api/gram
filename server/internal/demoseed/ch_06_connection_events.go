@@ -122,6 +122,12 @@ func (s *seeder) connectionAttemptRows(attempt mcpconnectionattempts.Attempt, ke
 		return []mcpconnectionattempts.Row{first}, nil
 	}
 
+	rows := []mcpconnectionattempts.Row{first}
+	if ending.step == mcpconnectionattempts.StepInboundAuthorize {
+		// A refused authorize was never accepted first.
+		rows = nil
+	}
+
 	subject := urn.NewUserSubject(s.userID("amara"))
 	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&subject)}
 	if ending.step == mcpconnectionattempts.StepProviderSignIn || ending.step == mcpconnectionattempts.StepProviderToken {
@@ -135,5 +141,5 @@ func (s *seeder) connectionAttemptRows(attempt mcpconnectionattempts.Attempt, ke
 		return nil, fmt.Errorf("build connection event: %w", err)
 	}
 	last.TraceID = md5Hex(s.name(key + "-ending"))
-	return []mcpconnectionattempts.Row{first, last}, nil
+	return append(rows, last), nil
 }
