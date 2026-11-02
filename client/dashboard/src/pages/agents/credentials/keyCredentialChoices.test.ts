@@ -3,8 +3,15 @@ import { describe, expect, it, vi } from "vitest";
 import { keyCredentialChoices } from "./keyCredentialChoices";
 
 const server = { id: "server_one", name: "Example server", kind: "Remote" };
-function sdkWith(choices: string[], status?: string) {
+function sdkWith(choices: string[], status?: string, accounts: string[] = []) {
   return {
+    remoteSessionClients: {
+      list: vi.fn().mockResolvedValue(
+        (async function* () {
+          yield { result: { items: accounts.map((id) => ({ id })) } };
+        })(),
+      ),
+    },
     authClients: {
       listMcpServerChoices: vi.fn().mockResolvedValue({
         choices: choices.map((id) => ({ id })),
@@ -61,4 +68,57 @@ describe("keyCredentialChoices", () => {
       ).rejects.toThrow("Choose which credential");
     },
   );
+
+  it("requires picking the only shared credential of a server without accounts", async () => {
+    await expect(
+      keyCredentialChoices(sdkWith(["client_a"], "configured"), [server]),
+    ).rejects.toThrow(
+      "Choose which credential the key uses on Example server.",
+    );
+  });
+
+  it("records the only shared credential once it is picked", async () => {
+    await expect(
+      keyCredentialChoices(sdkWith(["client_a"], "configured"), [
+        { ...server, authClientId: "client_a" },
+      ]),
+    ).resolves.toEqual([{ mcpServerId: server.id, authClientId: "client_a" }]);
+  });
+
+  it("keeps the connected account when a server also offers accounts and nothing is picked", async () => {
+    const sdk = sdkWith(["client_a"], "configured", ["oauth_client"]);
+    await expect(
+      keyCredentialChoices(sdk, [
+        { ...server, projectSlug: "project", issuerId: "issuer" },
+      ]),
+    ).resolves.toEqual([]);
+    expect(sdk.remoteSessionClients.list).toHaveBeenCalledWith({
+      gramProject: "project",
+      userSessionIssuerId: "issuer",
+    });
+  });
+
+  it("records a shared credential picked on a server that also offers accounts", async () => {
+    await expect(
+      keyCredentialChoices(
+        sdkWith(["client_a"], "configured", ["oauth_client"]),
+        [
+          {
+            ...server,
+            projectSlug: "project",
+            issuerId: "issuer",
+            authClientId: "client_a",
+          },
+        ],
+      ),
+    ).resolves.toEqual([{ mcpServerId: server.id, authClientId: "client_a" }]);
+  });
+
+  it("requires a pick when the server's sign-in offers no accounts", async () => {
+    await expect(
+      keyCredentialChoices(sdkWith(["client_a"], "configured", []), [
+        { ...server, projectSlug: "project", issuerId: "issuer" },
+      ]),
+    ).rejects.toThrow("Choose which credential");
+  });
 });

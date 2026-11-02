@@ -1,5 +1,6 @@
 import type { Gram } from "@gram/client";
 import type { AgentKeyAuthClientChoice } from "@gram/client/models/components/agentkeyauthclientchoice.js";
+import { collectPageItems } from "@/components/sessions/collectPageItems";
 
 /** A server a key will reach, with the credential picked for it, if any. */
 export interface KeyCredentialPick {
@@ -7,15 +8,21 @@ export interface KeyCredentialPick {
   name: string;
   kind: string;
   authClientId?: string;
+  /** Where the server's sign-in lives, to tell whether it offers accounts. */
+  projectSlug?: string;
+  issuerId?: string;
 }
 
 /**
  * The credential choices a key is issued with, read against what each remote
  * or tunneled server offers now. A server requiring authentication and offering
- * several shared credentials needs the key to name the one it uses; otherwise it keeps
- * serving it the way it did before credentials could be chosen. Throws an
- * error naming the servers still to choose. An explicitly optional upstream
- * records no authentication when no offered credential is selected.
+ * several shared credentials needs the key to name the one it uses. So does a
+ * server whose only way in is one shared credential: a key that names none is
+ * not served that credential. A server that also offers accounts keeps serving
+ * the key through the account connected for the agent unless a shared
+ * credential is picked, so a shared credential never replaces it unasked.
+ * Throws an error naming the servers still to choose. An explicitly optional
+ * upstream records no authentication when no offered credential is selected.
  */
 export async function keyCredentialChoices(
   sdk: Gram,
@@ -40,22 +47,58 @@ export async function keyCredentialChoices(
       ),
   );
   // A pick the server no longer offers counts as no pick.
-  const unchosen = offered.filter(
-    ({ pick, ids, noAuth }) =>
-      !noAuth &&
-      ids.length > 1 &&
-      (!pick.authClientId || !ids.includes(pick.authClientId)),
+  const picked = ({ pick, ids }: (typeof offered)[number]) =>
+    !!pick.authClientId && ids.includes(pick.authClientId);
+  const sole = await Promise.all(
+    offered
+      .filter(
+        (entry) => !entry.noAuth && entry.ids.length === 1 && !picked(entry),
+      )
+      .map(async (entry) => ({
+        entry,
+        accounts: await offersAccounts(sdk, entry.pick),
+      })),
   );
+  const unchosen = [
+    ...offered.filter(
+      (entry) => !entry.noAuth && entry.ids.length > 1 && !picked(entry),
+    ),
+    ...sole.filter(({ accounts }) => !accounts).map(({ entry }) => entry),
+  ];
   if (unchosen.length > 0) {
     throw new Error(
       `Choose which credential the key uses on ${unchosen.map(({ pick }) => pick.name).join(", ")}.`,
     );
   }
-  return offered.flatMap(({ pick, ids, noAuth }) =>
-    pick.authClientId && ids.includes(pick.authClientId)
-      ? [{ mcpServerId: pick.id, authClientId: pick.authClientId }]
-      : noAuth
-        ? [{ mcpServerId: pick.id }]
+  return offered.flatMap((entry) =>
+    picked(entry)
+      ? [{ mcpServerId: entry.pick.id, authClientId: entry.pick.authClientId! }]
+      : entry.noAuth
+        ? [{ mcpServerId: entry.pick.id }]
         : [],
   );
+}
+
+/**
+ * Whether the server's sign-in offers accounts an agent connects, the ones the
+ * key's accounts step asks for. A server without a sign-in offers none.
+ */
+async function offersAccounts(
+  sdk: Gram,
+  pick: KeyCredentialPick,
+): Promise<boolean> {
+  if (!pick.issuerId || !pick.projectSlug) return false;
+  try {
+    const clients = await collectPageItems(
+      sdk.remoteSessionClients.list({
+        gramProject: pick.projectSlug,
+        userSessionIssuerId: pick.issuerId,
+      }),
+    );
+    return clients.length > 0;
+  } catch {
+    throw new Error(
+      `The accounts ${pick.name} offers could not be loaded. Try again.`,
+    );
+  }
 }
