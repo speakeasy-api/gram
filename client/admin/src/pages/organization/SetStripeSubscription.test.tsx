@@ -383,7 +383,9 @@ describe("SetStripeSubscription", () => {
           ...ORG,
           ...change,
         });
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, 0);
+        });
       });
       await act(async () => {
         stale.resolve(CANDIDATE);
@@ -394,7 +396,9 @@ describe("SetStripeSubscription", () => {
       await screen.findByRole("status");
       await act(async () => {
         qc.setQueryData(organizationQuery(ORG.slug).queryKey, ORG);
-        await new Promise((resolve) => setTimeout(resolve, 0));
+        await new Promise<void>((resolve) => {
+          setTimeout(resolve, 0);
+        });
       });
       expect(applyDisabled()).toBe(true);
       expect(screen.queryByRole("status")).toBeNull();
