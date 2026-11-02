@@ -11,12 +11,11 @@ import (
 	"testing"
 	"time"
 
-	or "github.com/OpenRouterTeam/go-sdk/models/components"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
-	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval"
+	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/bench"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
@@ -115,93 +114,42 @@ func TestJudgedEvalHarnessScoresScriptedAnswers(t *testing.T) {
 	t.Parallel()
 	corpus := memoryeval.Build(corpusNow)
 	loaded := loadCorpus(t, "memoryeval_harness", corpus)
-	ctx, searchArm := searchChatsArm(t, loaded)
-	noMemory := arm{name: "A: no memory", search: nil, sweep: nil, tools: nil, call: nil, instructions: ""}
-	arms := []arm{noMemory, searchArm}
+	searchArm, err := bench.SearchChatsArm(testenv.NewLogger(t), loaded.target())
+	require.NoError(t, err)
+	noMemory := bench.NoMemoryArm()
 	model := scriptedModel{searchFrom: corpusNow.AddDate(0, 0, -30).Format(time.RFC3339), searchTo: corpusNow.Add(24 * time.Hour).Format(time.RFC3339)}
 
-	answers, verdicts := runEval(ctx, t, model, "scripted-answer", "scripted-judge", corpus, arms, 1, 4)
-	stats := summarize(corpus, 1, arms, answers, verdicts)
-	report := buildReport(corpus, "scripted-answer", "scripted-judge", 1, arms, answers, verdicts)
-	t.Log("\n" + report)
-	require.Contains(t, report, "| B: search_chats | 2% (2–2%)")
-
-	none, search := stats[noMemory.name], stats[searchArm.name]
-	require.InDelta(t, 10.0/40, none.accuracyByRun[0], 1e-9, "no memory answers Not found, which is right for the 10 negative and isolation questions")
-	require.InDelta(t, 1.0/40, search.accuracyByRun[0], 1e-9, "the scripted search arm only answers the pooler question")
-	require.Equal(t, 30, search.answerable)
-	require.Equal(t, 30, search.citedAnswers)
-	require.Equal(t, 1, search.validCited, "the reversal chat supports only the pooler question")
-	require.Empty(t, search.leaks)
-	require.Empty(t, search.isolation)
-	require.Positive(t, search.toolTokens)
-	require.Zero(t, none.toolTokens)
-}
-
-// TestSummarizeLeavesErrorsOutOfAccuracy checks that an answer that failed
-// for API reasons counts as an error, not as a wrong answer.
-func TestSummarizeLeavesErrorsOutOfAccuracy(t *testing.T) {
-	t.Parallel()
-	corpus := memoryeval.Build(corpusNow)
-	a := arm{name: "A: no memory", search: nil, sweep: nil, tools: nil, call: nil, instructions: ""}
-	answers := []answer{
-		{arm: a.name, run: 0, question: corpus.Questions[0], text: "right", citations: nil, toolOutput: "", err: nil},
-		{arm: a.name, run: 0, question: corpus.Questions[1], text: "", citations: nil, toolOutput: "", err: errors.New("rate limited")},
-	}
-	verdicts := []verdict{
-		{Correct: true, Miss: "", Reason: "ok"},
-		judge(t.Context(), scriptedModel{searchFrom: "", searchTo: ""}, "scripted-judge", answers[1]),
-	}
-
-	s := summarize(corpus, 1, []arm{a}, answers, verdicts)[a.name]
-	require.InDelta(t, 1.0, s.accuracyByRun[0], 1e-9)
-	require.Equal(t, 1, s.errors)
-}
-
-func TestParseVerdictRejectsIncompleteOrContradictoryReplies(t *testing.T) {
-	t.Parallel()
-	ok, err := parseVerdict(`{"correct": false, "miss": "reasoning", "reason": "wrong library"}`)
+	// The scripted model ignores the model name, so two names check that a
+	// run scores every answer model separately.
+	cfg := bench.Config{AnswerModels: []string{"anthropic/claude-sonnet-5.5", "google/gemini-3.1-flash-lite"}, JudgeModel: "openai/gpt-5.5", Runs: 1, Concurrency: 4}
+	report, err := bench.Run(t.Context(), model, corpus, []bench.Arm{noMemory, searchArm}, cfg)
 	require.NoError(t, err)
-	require.Equal(t, verdict{Correct: false, Miss: "reasoning", Reason: "wrong library"}, ok)
+	markdown := report.Markdown()
+	t.Log("\n" + markdown)
+	require.Contains(t, markdown, "| google/gemini-3.1-flash-lite | B: search_chats | 2% (2–2%)")
+	require.Len(t, report.Scores, 4)
 
-	for _, reply := range []string{
-		`{"miss": "", "reason": "no verdict"}`,
-		`{"correct": true, "miss": "retrieval", "reason": "both"}`,
-		`{"correct": false, "miss": "", "reason": "no miss"}`,
-		`not json`,
-	} {
-		_, err := parseVerdict(reply)
-		require.Error(t, err, reply)
+	for _, model := range cfg.AnswerModels {
+		var none, search bench.ArmScore
+		for _, s := range report.Scores {
+			switch {
+			case s.Model == model && s.Arm == noMemory.Name:
+				none = s
+			case s.Model == model && s.Arm == searchArm.Name:
+				search = s
+			}
+		}
+		require.InDelta(t, 10.0/40, none.AccuracyByRun[0], 1e-9, "no memory answers Not found, which is right for the 10 negative and isolation questions")
+		require.InDelta(t, 1.0/40, search.AccuracyByRun[0], 1e-9, "the scripted search arm only answers the pooler question")
+		require.Equal(t, 30, search.Answerable)
+		require.Equal(t, 30, search.CitedAnswers)
+		require.Equal(t, 1, search.ValidCited, "the reversal chat supports only the pooler question")
+		require.Empty(t, search.Leaks)
+		require.Empty(t, search.IsolationViolations)
+		require.Positive(t, search.ToolTokensPerQuestion)
+		require.Zero(t, none.ToolTokensPerQuestion)
+		require.True(t, search.HasTools)
+		require.False(t, none.HasTools)
+		require.Equal(t, 40, search.Answers)
 	}
-}
-
-// keyResolverSentinel stops a completion right after request validation.
-type keyResolverSentinel struct{}
-
-var errReachedKeyResolver = errors.New("reached key resolution")
-
-func (keyResolverSentinel) ResolveKey(context.Context, string, string, billing.ModelUsageSource, openrouter.KeyType) (openrouter.ResolvedKey, error) {
-	return openrouter.ResolvedKey{}, errReachedKeyResolver
-}
-
-// TestCompletionRequestPassesClientValidation runs the eval's request through
-// the real completion client. Key resolution happens after validation, so
-// reaching it proves the client would send the request to the model.
-func TestCompletionRequestPassesClientValidation(t *testing.T) {
-	t.Parallel()
-	client := openrouter.NewUnifiedClient(
-		testenv.NewLogger(t),
-		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
-		openrouter.NewDevelopment("unused"),
-		keyResolverSentinel{},
-		nil, nil, nil, nil,
-	)
-	_, err := client.GetCompletion(t.Context(), completionRequest("scripted-answer", []or.ChatMessages{openrouter.CreateMessageUser("hi")}, nil, nil))
-	require.ErrorIs(t, err, errReachedKeyResolver)
-}
-
-func TestRequireSomeSucceededPassesWithOneSuccess(t *testing.T) {
-	t.Parallel()
-	errs := []error{errors.New("rate limited"), nil}
-	requireSomeSucceeded(t, "answer", len(errs), func(i int) error { return errs[i] })
 }
