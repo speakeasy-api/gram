@@ -1,6 +1,7 @@
 package mcp_test
 
 import (
+	"bytes"
 	"context"
 	"net/http"
 	"net/http/httptest"
@@ -9,6 +10,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -26,10 +28,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/keys"
 	"github.com/speakeasy-api/gram/server/internal/mcp/fixtures/fixturerepo"
+	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -53,7 +57,7 @@ import (
 func TestAgentMemberAuthRegression(t *testing.T) {
 	t.Parallel()
 	for _, mode := range []string{"off", "shadow", "enforced"} {
-		for _, state := range []string{"live", "missing_attachment", "revoked_attachment", "same_source_new_generation", "replaced_source_without_reattach", "disabled_agent", "removed_agent_grant", "owner_block", "noauth", "shared_static_client", "deleted_client", "disabled_typed_client", "shared_oauth_registration", "sibling_issuer_client", "legacy_static_client"} {
+		for _, state := range []string{"live", "missing_attachment", "revoked_attachment", "same_source_new_generation", "replaced_source_without_reattach", "disabled_agent", "removed_agent_grant", "owner_block", "credential_block", "noauth", "shared_static_client", "deleted_client", "disabled_typed_client", "shared_oauth_registration", "sibling_issuer_client", "legacy_static_client"} {
 			t.Run(mode+"/"+state, func(t *testing.T) {
 				t.Parallel()
 				ctx, ti := newTestMCPService(t)
@@ -234,6 +238,16 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 						removed++
 					}
 					require.Equal(t, 1, removed)
+				case "credential_block":
+					// Credentials this agent can't use: mcp:blocked_auth on the
+					// credential itself, written through the policy writer.
+					clients, err := authclientsrepo.New(ti.conn).ListServerAuthClients(ctx, authclientsrepo.ListServerAuthClientsParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: projectID, McpServerID: serverID})
+					require.NoError(t, err)
+					require.Len(t, clients, 1)
+					projectIDText := projectID.String()
+					agents := agentmanagement.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, ti.authzEngine, ti.audit, nil, nil)
+					_, err = agents.CreatePolicyGrant(ctx, &agentsgen.CreatePolicyGrantPayload{AgentID: fx.agent.ID.String(), Scope: string(authz.ScopeMCPBlockedAuth), Effect: "allow", Selector: &agentsgen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCPAuthClient, ResourceID: clients[0].ID.String(), ProjectID: &projectIDText}})
+					require.NoError(t, err)
 				case "owner_block":
 					// Connection-owner blocks are mcp:blocked_auth on the agent,
 					// not an effect=deny mutation to the owner's mcp:connect grant.
@@ -285,7 +299,7 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 				}
 				// Connection-owner policy remains connect-equivalent: only enforced
 				// mode applies typed-client enablement and mcp:blocked_auth.
-				allowed := state == "sibling_issuer_client" || state == "live" || state == "same_source_new_generation" || state == "noauth" || state == "shared_static_client" || state == "shared_oauth_registration" || ((state == "owner_block" || state == "disabled_typed_client" || state == "legacy_static_client") && mode != "enforced") ||
+				allowed := state == "sibling_issuer_client" || state == "live" || state == "same_source_new_generation" || state == "noauth" || state == "shared_static_client" || state == "shared_oauth_registration" || ((state == "owner_block" || state == "credential_block" || state == "disabled_typed_client" || state == "legacy_static_client") && mode != "enforced") ||
 					// Under enforcement an agent key without a usable attachment is
 					// served by its authorizer's own connection when the agent's own
 					// mcp:auth permits that owner; before enforcement it is denied.
@@ -326,10 +340,60 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 						}
 					}
 				}
+				if state == "live" || state == "owner_block" || state == "credential_block" {
+					// The same key on the server's own endpoint must reach the
+					// gateway's decision: a block the gateway enforces cannot be
+					// bypassed by calling the server directly.
+					upstream.mu.Lock()
+					upstream.requests = nil
+					upstream.mu.Unlock()
+					attempts.Store(0)
+					rejected.Store(0)
+					_, err := mcpendpointsrepo.New(ti.conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+						ProjectID:       projectID,
+						CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+						McpServerID:     conv.ToNullUUID(serverID),
+						MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+						Slug:            fx.granted,
+					})
+					require.NoError(t, err)
+					direct := serveAgentKeyDirect(t, ti, fx.granted, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "ping", "arguments": map[string]any{}}), fx.token)
+					var directCredentials []string
+					for _, request := range upstream.journal() {
+						require.NotEqual(t, "Bearer decoy-connection", request.authorization)
+						if request.rpcMethod == "tools/call" {
+							directCredentials = append(directCredentials, request.authorization)
+						}
+					}
+					if allowed {
+						require.Equal(t, http.StatusOK, direct.Code, "direct: %s", direct.Body.String())
+						require.Equal(t, []string{"Bearer exact-owner-connection"}, directCredentials, "direct")
+					} else {
+						require.Zero(t, attempts.Load(), "direct: a blocked agent key must not reach upstream: %d %s", direct.Code, direct.Body.String())
+						require.Empty(t, directCredentials, "direct")
+						require.NotEqual(t, http.StatusOK, direct.Code, "direct: %s", direct.Body.String())
+					}
+				}
 				require.Equal(t, before, snapshot(), "serving must not repair attachment authority")
 			})
 		}
 	}
+}
+
+// serveAgentKeyDirect calls a server's own endpoint with an agent key, as an
+// MCP client configured with the key would.
+func serveAgentKeyDirect(t *testing.T, ti *testInstance, slug string, body []byte, token string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug, bytes.NewReader(body))
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	req.Header.Set("Content-Type", "application/json")
+	req.Header.Set("Authorization", "Bearer "+token)
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", slug)
+	req = req.WithContext(context.WithValue(t.Context(), chi.RouteCtxKey, rctx))
+	w := httptest.NewRecorder()
+	oops.ErrHandle(ti.logger, ti.service.ServePublic).ServeHTTP(w, req)
+	return w
 }
 
 // issueMemberAuthRegressionKey uses the same grant and issuance boundaries as management.
