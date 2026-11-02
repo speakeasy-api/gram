@@ -144,7 +144,6 @@ describe("workflowYaml", () => {
     organizationId: "org-123",
     projectSlug: "ci",
     controlPlaneUrl: ACTION_DEFAULT_CONTROL_PLANE,
-    buildFromSource: false,
   };
 
   /** The workflow for these options, which must have one. */
@@ -156,11 +155,8 @@ describe("workflowYaml", () => {
 
   /** Every variant the setup can print. */
   const variants = (["claude", "codex"] as const).flatMap((agent) =>
-    [false, true].flatMap((buildFromSource) =>
-      [ACTION_DEFAULT_CONTROL_PLANE, "https://speakeasy.example.com"].map(
-        (controlPlaneUrl) =>
-          workflow({ agent, buildFromSource, controlPlaneUrl }),
-      ),
+    [ACTION_DEFAULT_CONTROL_PLANE, "https://speakeasy.example.com"].map(
+      (controlPlaneUrl) => workflow({ agent, controlPlaneUrl }),
     ),
   );
 
@@ -170,12 +166,11 @@ describe("workflowYaml", () => {
     expect(yaml).toContain("organization-id: org-123");
     expect(yaml).toContain("project: ci");
     expect(yaml).not.toContain("control-plane-url");
-    expect(yaml).not.toContain("speakeasyd-binary");
   });
 
   // The job grants id-token: write, so every step can mint its OIDC token: no
   // step may run code a moved branch or tag could swap out.
-  it("pins every action, CLI and speakeasyd's source", () => {
+  it("pins every action and CLI", () => {
     for (const yaml of variants) {
       const used = yaml.match(/uses: \S+/g) ?? [];
       expect(used.length).toBeGreaterThan(0);
@@ -188,9 +183,6 @@ describe("workflowYaml", () => {
         expect(install).toMatch(/@\d+\.\d+\.\d+$/);
       }
     }
-    expect(workflow({ buildFromSource: true })).toMatch(
-      /^ {10}ref: [0-9a-f]{40}$/m,
-    );
   });
 
   it("runs Claude after Speakeasy has configured its MCP servers", () => {
@@ -277,19 +269,20 @@ describe("workflowYaml", () => {
     expect(controlPlaneProblem("https://speakeasy.example.com")).toBeNull();
   });
 
-  it("builds speakeasyd from source until a release supports it", () => {
-    const yaml = workflow({ buildFromSource: true });
-    expect(yaml).toContain("repository: speakeasy-api/device-agent");
-    expect(yaml).toContain('go build -o "$RUNNER_TEMP/speakeasyd"');
-    expect(yaml).toContain("speakeasyd-binary: ${{ runner.temp }}/speakeasyd");
-    // The source is gone before the agent runs, so it describes only the
-    // repository's own files.
-    expect(yaml.indexOf("rm -rf .speakeasyd-src")).toBeGreaterThan(
-      yaml.indexOf("go build"),
-    );
-    expect(yaml.indexOf("rm -rf .speakeasyd-src")).toBeLessThan(
-      yaml.indexOf("- name: Connect to Speakeasy"),
-    );
+  it("installs speakeasyd with the device agent action alone", () => {
+    for (const yaml of variants) {
+      expect(yaml).toContain(
+        "uses: speakeasy-api/device-agent-action@596e9f8598bf2896e6dda3c45eb098313b671962 # main",
+      );
+      // The only checkout is the repository's own, and nothing builds
+      // speakeasyd before the action installs a release.
+      expect(yaml.match(/uses: actions\/checkout@/g)).toHaveLength(1);
+      expect(yaml).not.toContain("actions/setup-go");
+      expect(yaml).not.toContain("go build");
+      expect(yaml).not.toContain("speakeasyd-binary");
+      // No version input, so the action installs the latest stable release.
+      expect(yaml).not.toMatch(/^\s+version:/m);
+    }
   });
 
   it("shows placeholders while the organization or project is unknown", () => {

@@ -25,6 +25,10 @@ export const GITHUB_ACTIONS_KEY = "github-actions";
  * job's OIDC token, and a moved ref would run code nobody reviewed with the
  * agent's access. The tag or branch each commit was taken from is kept
  * beside it, so bumping one is a matter of looking that ref up again.
+ *
+ * speakeasyd is the exception: the device agent action installs the latest
+ * stable release, checked against Speakeasy's release records, unless the
+ * step sets `version`.
  */
 const PINNED_ACTIONS = {
   checkout: {
@@ -32,14 +36,9 @@ const PINNED_ACTIONS = {
     commit: "3d3c42e5aac5ba805825da76410c181273ba90b1",
     ref: "v7",
   },
-  setupGo: {
-    uses: "actions/setup-go",
-    commit: "b7ad1dad31e06c5925ef5d2fc7ad053ef454303e",
-    ref: "v7",
-  },
   deviceAgent: {
     uses: ACTION,
-    commit: "1b4e09374058ac30d700de7f8f9f9347a34eec78",
+    commit: "596e9f8598bf2896e6dda3c45eb098313b671962",
     ref: "main",
   },
   claude: {
@@ -53,12 +52,6 @@ const PINNED_ACTIONS = {
     ref: "v1",
   },
 } as const;
-
-/**
- * The device-agent commit with GitHub Actions support that the workflow
- * builds speakeasyd from, until a speakeasyd release carries it.
- */
-const SPEAKEASYD_SOURCE_COMMIT = "103ae14d8f361d31f267c09c76b5741edf2d2c84";
 
 /** A step's `uses:` value for a pinned action, naming the ref it came from. */
 function uses(action: keyof typeof PINNED_ACTIONS): string {
@@ -213,14 +206,11 @@ export function workflowYaml({
   organizationId,
   projectSlug,
   controlPlaneUrl,
-  buildFromSource,
 }: {
   agent: WorkflowAgent;
   organizationId: string;
   projectSlug: string;
   controlPlaneUrl: string;
-  /** Builds speakeasyd from source, until a release supports GitHub Actions. */
-  buildFromSource: boolean;
 }): { yaml: string; problem: null } | { yaml: null; problem: string } {
   const problem = controlPlaneProblem(controlPlaneUrl);
   if (problem !== null) return { yaml: null, problem };
@@ -249,25 +239,7 @@ export function workflowYaml({
     `      - name: Install ${selected.name}`,
     "        run: |",
     ...selected.install,
-    ...(buildFromSource
-      ? [
-          "      # Until a speakeasyd release supports GitHub Actions, build it from source.",
-          `      - uses: ${uses("checkout")}`,
-          "        with:",
-          "          repository: speakeasy-api/device-agent",
-          `          ref: ${SPEAKEASYD_SOURCE_COMMIT}`,
-          "          path: .speakeasyd-src",
-          "          persist-credentials: false",
-          `      - uses: ${uses("setupGo")}`,
-          "        with:",
-          "          go-version-file: .speakeasyd-src/go.mod",
-          // Removed once built, so the agent's later steps see only the
-          // repository's own files.
-          "      - run: |",
-          '          (cd .speakeasyd-src && CGO_ENABLED=0 go build -o "$RUNNER_TEMP/speakeasyd" ./cmd/speakeasyd)',
-          "          rm -rf .speakeasyd-src",
-        ]
-      : []),
+    "      # Installs the latest stable speakeasyd; add version: <x.y.z> to pin one.",
     "      - name: Connect to Speakeasy",
     "        id: speakeasy",
     `        uses: ${uses("deviceAgent")}`,
@@ -276,9 +248,6 @@ export function workflowYaml({
     `          project: ${projectSlug || "SPEAKEASY_PROJECT"} # hook events go to this project`,
     ...(controlPlane !== "" && controlPlane !== ACTION_DEFAULT_CONTROL_PLANE
       ? [`          control-plane-url: ${controlPlane}`]
-      : []),
-    ...(buildFromSource
-      ? ["          speakeasyd-binary: ${{ runner.temp }}/speakeasyd"]
       : []),
     "      # Lists the agent's Speakeasy MCP servers; each one connects with a fresh token.",
     `      - run: ${agent} mcp list`,

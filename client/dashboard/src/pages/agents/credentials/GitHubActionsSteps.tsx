@@ -196,7 +196,6 @@ export function WorkflowStep(): JSX.Element {
     organizationId: organization.id,
     projectSlug: project.slug,
     controlPlaneUrl: getServerURL(),
-    buildFromSource: true,
   });
   return (
     <div className="space-y-4 text-sm">
@@ -240,17 +239,6 @@ export function WorkflowStep(): JSX.Element {
               language="yaml"
             />
           )}
-          <Alert variant="info">
-            <div className="space-y-2 text-sm">
-              <p>
-                <strong>Preview.</strong> The action needs a speakeasyd with
-                GitHub Actions support, which no release includes yet, so this
-                workflow builds speakeasyd from source. Remove those three steps
-                and the <code>speakeasyd-binary</code> input once a release
-                supports it.
-              </p>
-            </div>
-          </Alert>
           <ul className="list-disc space-y-1 pl-5">
             <li>
               <code>id-token: write</code> is required. Without it the job has
