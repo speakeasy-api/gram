@@ -33,6 +33,10 @@ func TestLeaksFindsSecretValuesIgnoringCase(t *testing.T) {
 	require.Equal(t, secret.Name, leaked[0].Name)
 	require.Empty(t, c.Leaks("key=[REDACTED]"))
 	require.Len(t, c.Leaks(strings.ToUpper(secret.Value)), 1, "case changes do not hide a leak")
+	for _, s := range c.Secrets {
+		reformatted := strings.NewReplacer(" ", "", "-", ".", "(", "", ")", "").Replace(s.Value)
+		require.Len(t, c.Leaks("value: "+reformatted), 1, "reformatting does not hide %s", s.Name)
+	}
 }
 
 func TestIsolationViolationsFindsCanariesIgnoringCase(t *testing.T) {
