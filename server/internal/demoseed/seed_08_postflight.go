@@ -502,10 +502,12 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		},
 		// Personal accounts are the reading the governance note exists for;
 		// one surviving row would make the pattern look like an edge case.
+		// The roster seeds three; the team memory eval corpus adds one for
+		// jonas, whose private session must stay out of team memory.
 		{
 			what:  "personal accounts",
 			count: byOrg(s.q.PostflightCountPersonalAccounts),
-			fail:  postflightMustEqual(3, "expected 3 personal accounts, found %d"),
+			fail:  postflightMustEqual(4, "expected 4 personal accounts, found %d"),
 		},
 	}
 	if err := s.runPostflightChecks(checks); err != nil {

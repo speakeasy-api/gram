@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval"
@@ -252,5 +253,24 @@ func TestCardNumberPassesLuhn(t *testing.T) {
 			sum += d
 		}
 		require.Zero(t, sum%10, s.Value)
+	}
+}
+
+func TestWithChatIDsKeepsCitationsByKey(t *testing.T) {
+	t.Parallel()
+	corpus := memoryeval.Build(corpusNow)
+	remapped := corpus.WithChatIDs(func(key string) uuid.UUID { return uuid.NewSHA1(uuid.NameSpaceOID, []byte("tenant-"+key)) })
+
+	require.Len(t, remapped.Chats, len(corpus.Chats))
+	require.Equal(t, memoryeval.ChatID(corpus.Chats[0].Key), corpus.Chats[0].ID, "the original corpus is unchanged")
+	for _, q := range remapped.Questions {
+		if q.ExpectsNotFound() {
+			continue
+		}
+		source, ok := remapped.Chat(q.Sources[0])
+		require.True(t, ok, q.ID)
+		require.NotEqual(t, memoryeval.ChatID(source.Key), source.ID, q.ID)
+		require.Equal(t, corpus.ChatCitationValid(q, memoryeval.ChatID(source.Key)), remapped.ChatCitationValid(q, source.ID), q.ID)
+		require.False(t, remapped.ChatCitationValid(q, memoryeval.ChatID(source.Key)), "old IDs no longer resolve")
 	}
 }
