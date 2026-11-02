@@ -539,28 +539,34 @@ func TestEnrichRemoteSessionRefreshIntrospectionAskedOnce(t *testing.T) {
 func TestEnrichRemoteSessionRefreshIntrospectionIgnoresPastExp(t *testing.T) {
 	t.Parallel()
 
-	as := newEnrichmentAS(t)
-	as.script(nil, func(w http.ResponseWriter, r *http.Request) {
-		w.Header().Set("Content-Type", "application/json")
-		if r.PostForm.Get("token_type_hint") == "refresh_token" {
-			_, _ = fmt.Fprintf(w, `{"active":true,"exp":%d}`, time.Now().Add(-time.Hour).Unix())
-			return
-		}
-		_, _ = w.Write([]byte(`{"active":true,"sub":"user-123"}`))
-	})
-	ctx, env := newSyntheticExpiryEnv(t, "refresh-past-exp", plainTokenHandler(true), withIDTokenIssuer(newIDTokenIssuer(t)), withEnrichmentAS(as))
+	for name, active := range map[string]bool{"active": true, "inactive": false} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
 
-	_, err := env.mgr.EnrichRemoteSession(ctx, env.ref(env.session))
-	require.NoError(t, err)
-	sess := reloadSession(t, env)
-	require.False(t, sess.RefreshExpiresAt.Valid)
-	doc := decodeEnrichment(t, sess.Enrichment)
-	require.Equal(t, "exp passed", doc.Interfaces["refresh_introspection"].Reason)
-	require.ElementsMatch(t, []string{"access_token", "refresh_token"}, introspectionHints(as.drain()))
+			as := newEnrichmentAS(t)
+			as.script(nil, func(w http.ResponseWriter, r *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				if r.PostForm.Get("token_type_hint") == "refresh_token" {
+					_, _ = fmt.Fprintf(w, `{"active":%t,"exp":%d}`, active, time.Now().Add(-time.Hour).Unix())
+					return
+				}
+				_, _ = w.Write([]byte(`{"active":true,"sub":"user-123"}`))
+			})
+			ctx, env := newSyntheticExpiryEnv(t, "refresh-past-exp-"+name, plainTokenHandler(true), withIDTokenIssuer(newIDTokenIssuer(t)), withEnrichmentAS(as))
 
-	_, err = env.mgr.EnrichRemoteSession(ctx, env.ref(sess))
-	require.NoError(t, err)
-	require.Equal(t, []string{"access_token"}, introspectionHints(as.drain()), "a provider that reported a past exp is not asked again")
+			_, err := env.mgr.EnrichRemoteSession(ctx, env.ref(env.session))
+			require.NoError(t, err)
+			sess := reloadSession(t, env)
+			require.False(t, sess.RefreshExpiresAt.Valid)
+			doc := decodeEnrichment(t, sess.Enrichment)
+			require.Equal(t, "exp passed", doc.Interfaces["refresh_introspection"].Reason)
+			require.ElementsMatch(t, []string{"access_token", "refresh_token"}, introspectionHints(as.drain()))
+
+			_, err = env.mgr.EnrichRemoteSession(ctx, env.ref(sess))
+			require.NoError(t, err)
+			require.Equal(t, []string{"access_token"}, introspectionHints(as.drain()), "a provider that reported a past exp is not asked again")
+		})
+	}
 }
 
 func introspectionHints(requests []enrichmentRequest) []string {
