@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
-	"log/slog"
 	"regexp"
 	"strconv"
 	"strings"
@@ -191,7 +190,7 @@ func (keyResolverSentinel) ResolveKey(context.Context, string, string, billing.M
 func TestCompletionRequestPassesClientValidation(t *testing.T) {
 	t.Parallel()
 	client := openrouter.NewUnifiedClient(
-		slog.New(slog.DiscardHandler),
+		testenv.NewLogger(t),
 		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
 		openrouter.NewDevelopment("unused"),
 		keyResolverSentinel{},

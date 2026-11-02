@@ -3,7 +3,6 @@
 package memoryeval_test
 
 import (
-	"log/slog"
 	"os"
 	"strconv"
 	"testing"
@@ -71,7 +70,7 @@ func TestMemoryEvalJudged(t *testing.T) { //nolint:paralleltest // one long run 
 
 	provisioner := openrouter.NewDevelopment(apiKey)
 	client := openrouter.NewUnifiedClient(
-		slog.New(slog.DiscardHandler),
+		testenv.NewLogger(t),
 		guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)),
 		provisioner,
 		&openrouter.PlatformKeyResolver{Provisioner: provisioner},
