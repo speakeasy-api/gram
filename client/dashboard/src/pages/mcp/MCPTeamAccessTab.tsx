@@ -21,6 +21,7 @@ import { CheckAccess } from "./access/CheckAccess";
 import { ManageAccess } from "./access/ManageAccess";
 import { RoleLink } from "@/components/role-link";
 import { blockingRules } from "./access/serverAudience";
+import { toolSourceUnavailableMessage } from "./access/toolSourceMessage";
 
 /** The annotations a tool carries, in the vocabulary selectors store. */
 function toolAnnotations(tool: Tool | ServerTool): ToolAnnotation[] {
@@ -215,7 +216,7 @@ export function MCPTeamAccessTab({
         {toolSource?.status === "needs-connect" && (
           <div role="status">
             <Text muted small>
-              Connect to this server to load its tools.
+              {toolSourceUnavailableMessage(toolSource)}
             </Text>
             {toolSource.connect && (
               <Button
@@ -230,8 +231,7 @@ export function MCPTeamAccessTab({
         )}
         {toolSource?.status === "needs-write" && (
           <Text muted small>
-            Someone with write access to this server must load its tools before
-            they can be selected here.
+            {toolSourceUnavailableMessage(toolSource)}
           </Text>
         )}
         {audienceFailed ? (
@@ -247,6 +247,7 @@ export function MCPTeamAccessTab({
             rolePlugins={canManage ? audienceData?.rolePlugins : undefined}
             version={audienceData?.version ?? ""}
             toolCatalog={toolCatalog}
+            toolSource={toolSource}
             isLoading={audienceLoading}
           />
         )}

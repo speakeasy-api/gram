@@ -1,5 +1,5 @@
 import userEvent from "@testing-library/user-event";
-import { cleanup, render, screen } from "@testing-library/react";
+import { cleanup, render, screen, within } from "@testing-library/react";
 import { MemoryRouter, Route, Routes, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
@@ -127,14 +127,17 @@ vi.mock("../access/ManageAccess", async () => {
     ManageAccess: ({
       resourceId,
       toolCatalog,
+      toolSource,
     }: {
       resourceId: string;
+      toolSource?: import("@/pages/access/useServerTools").ToolSource;
       toolCatalog?: import("@/components/tool-selection/ToolSelectionPanel").ToolSelectionTool[];
     }) =>
       mocks.openNarrowing ? (
         <ToolNarrowingDialog
           serverId={resourceId}
           catalog={toolCatalog}
+          toolSource={toolSource}
           tools={[]}
           dispositions={[]}
           pending={false}
@@ -334,6 +337,58 @@ describe("Team access remote tool source states", () => {
     mocks.toolSource = { status: "needs-write" };
     visit("/acme/projects/default/mcp/my-server/team-access");
     expect(screen.getByText(/Someone with write access/)).toBeTruthy();
+    expect(
+      screen.queryByRole("button", { name: "Connect to load tools" }),
+    ).toBeNull();
+  });
+});
+
+describe("Team access unavailable tool picker states", () => {
+  it.each([
+    [{ status: "loading" }, "Loading tools…"],
+    [{ status: "error", retry: vi.fn() }, "Couldn't load this server's tools."],
+    [
+      { status: "needs-write" },
+      "Someone with write access to this server must load its tools before they can be selected here.",
+    ],
+    [
+      { status: "needs-connect", connect: vi.fn() },
+      "Connect to this server to load its tools.",
+    ],
+    [
+      { status: "needs-connect", connect: undefined },
+      "Connect isn't available for this server. Review its authentication settings.",
+    ],
+  ] as const)(
+    "preserves %j inside the narrowing dialog",
+    async (source, message) => {
+      mocks.toolSource = source;
+      visit("/acme/projects/default/mcp/my-server/team-access");
+      const dialog = within(screen.getByRole("dialog"));
+      await userEvent.click(dialog.getByRole("button", { name: "By tool" }));
+      expect(dialog.getByText(message)).toBeTruthy();
+      expect(
+        dialog.queryByText("Tools are resolved when the server is called"),
+      ).toBeNull();
+      if (source.status === "error") {
+        await userEvent.click(dialog.getByRole("button", { name: "Retry" }));
+        expect(source.retry).toHaveBeenCalled();
+      }
+    },
+  );
+
+  it("does not instruct connecting when no connect action exists", () => {
+    mocks.openNarrowing = false;
+    mocks.toolSource = { status: "needs-connect", connect: undefined };
+    visit("/acme/projects/default/mcp/my-server/team-access");
+    expect(
+      screen.getByText(
+        "Connect isn't available for this server. Review its authentication settings.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText("Connect to this server to load its tools."),
+    ).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Connect to load tools" }),
     ).toBeNull();
