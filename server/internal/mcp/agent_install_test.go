@@ -86,9 +86,9 @@ func TestAgentInstall_CodeExchangesForAScriptCarryingTheKey(t *testing.T) {
 	require.Equal(t, "no-store", script.Result().Header.Get("Cache-Control"))
 }
 
-// A code can be redeemed once: the second fetch gets nothing, and an unknown
-// code is indistinguishable from a spent one.
-func TestAgentInstall_CodeIsSingleUse(t *testing.T) {
+// Fetching the script does not spend the code, so a second fetch returns the
+// same key. An unknown code gets nothing. Expiry is the cache TTL.
+func TestAgentInstall_CodeIsReusable(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestMCPService(t)
 	fx := seedAgentGateway(t, ctx, ti)
@@ -97,11 +97,13 @@ func TestAgentInstall_CodeIsSingleUse(t *testing.T) {
 	require.NoError(t, err)
 	code := codeFrom(t, minted)
 
-	_, err = fetchInstallScript(t, ti, code)
+	first, err := fetchInstallScript(t, ti, code)
 	require.NoError(t, err)
+	require.Contains(t, first.Body.String(), fx.token)
 
-	_, err = fetchInstallScript(t, ti, code)
-	requireAgentGatewayCode(t, err, oops.CodeNotFound)
+	second, err := fetchInstallScript(t, ti, code)
+	require.NoError(t, err)
+	require.Contains(t, second.Body.String(), fx.token)
 
 	_, err = fetchInstallScript(t, ti, "never-minted")
 	requireAgentGatewayCode(t, err, oops.CodeNotFound)

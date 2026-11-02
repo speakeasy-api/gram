@@ -151,7 +151,7 @@ func (s *Service) RunUpstreamOAuthMigration(ctx context.Context, p *gen.RunUpstr
 		SelectionsWritten:                  selections.Written,
 		AuthClientsWritten:                 new(int64(authClients.ClientsWritten)),
 		AuthClientLinksWritten:             new(int64(authClients.LinksWritten)),
-		ServersMarkedRequiringUpstreamAuth: new(int64(authClients.ServersMarked)),
+		ServersMarkedRequiringUpstreamAuth: nil,
 		SelectionsMapped:                   new(int64(authClients.SelectionsMapped)),
 		ExecutionProfileVersionsWritten:    profileVersionsWritten,
 		AuthPermissionGrantsWritten:        new(int64(authClients.GrantsWritten)),
@@ -301,14 +301,14 @@ func (s *Service) authClientMigrationStatus(ctx context.Context, organizationID 
 	classes, gaps, gapCount := selectionCoverage(report)
 	_, selectionsFailed := report.PhaseErrors[authclientbackfill.PhaseSelections]
 	return &gen.AdminUpstreamOAuthMigrationAuthClients{
-		Complete:                 report.PendingClients == 0 && report.PendingLinks == 0 && report.PendingHeaders == 0 && report.Gaps == 0 && pendingRetirements == 0 && report.PendingMarkedServers == 0 && report.AttachmentsWaiting == 0 && len(phases) == 0,
+		Complete:                 report.PendingClients == 0 && report.PendingLinks == 0 && report.PendingHeaders == 0 && report.Gaps == 0 && pendingRetirements == 0 && report.AttachmentsWaiting == 0 && len(phases) == 0,
 		InProgress:               false,
 		Associations:             int64(report.Associations),
 		PendingClients:           int64(report.PendingClients),
 		PendingLinks:             int64(report.PendingLinks),
 		PendingHeaders:           int64(report.PendingHeaders),
 		PendingRetirements:       pendingRetirements,
-		PendingMarkedServers:     int64(report.PendingMarkedServers),
+		PendingMarkedServers:     0,
 		Unresolved:               int64(len(unresolved)),
 		UnresolvedAssociations:   unresolved,
 		Warnings:                 warnings,
@@ -401,7 +401,7 @@ func (s *Service) executionProfileMigrationStatus(ctx context.Context, organizat
 // failedPhases names the phases a run reports failed, in run order.
 func failedPhases(report authclientbackfill.Report) []string {
 	phases := []string{}
-	for _, phase := range []string{authclientbackfill.PhaseOAuth, authclientbackfill.PhaseHeaders, authclientbackfill.PhaseEMA, authclientbackfill.PhaseEMAWarnings, authclientbackfill.PhaseReconcile, authclientbackfill.PhaseMark, authclientbackfill.PhaseSelections, authclientbackfill.PhaseGrants} {
+	for _, phase := range []string{authclientbackfill.PhaseOAuth, authclientbackfill.PhaseHeaders, authclientbackfill.PhaseEMA, authclientbackfill.PhaseEMAWarnings, authclientbackfill.PhaseReconcile, authclientbackfill.PhaseSelections, authclientbackfill.PhaseGrants} {
 		if _, failed := report.PhaseErrors[phase]; failed {
 			phases = append(phases, phase)
 		}

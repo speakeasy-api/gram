@@ -212,18 +212,11 @@ func TestAttachAuthClientRefusesServersItCannotServe(t *testing.T) {
 	ctx, ti := newTestService(t)
 	_, otherProject := seedOtherOrganization(t, ctx, ti.conn)
 	foreignServer := seedServer(t, ctx, ti.conn, otherProject, visibility.Private)
-	noAuth := seedServer(t, ctx, ti.conn, ti.projectID, visibility.Private)
 	clientID := seedStaticClient(t, ctx, ti.conn, ti.organizationID, ti.projectID, "Project token")
 	ctx = withOrgGrants(t, ctx, authz.ScopeOrgRead, authz.ScopeOrgAdmin)
 
-	_, err := ti.service.SetMcpServerUpstreamAuthRequirement(ctx, &gen.SetMcpServerUpstreamAuthRequirementPayload{McpServerID: noAuth.id.String(), RequiresUpstreamAuth: false})
-	require.NoError(t, err)
-
-	_, err = ti.service.AttachAuthClientToMcpServer(ctx, &gen.AttachAuthClientToMcpServerPayload{ID: clientID.String(), McpServerID: foreignServer.id.String()})
+	_, err := ti.service.AttachAuthClientToMcpServer(ctx, &gen.AttachAuthClientToMcpServerPayload{ID: clientID.String(), McpServerID: foreignServer.id.String()})
 	requireOopsCode(t, err, oops.CodeNotFound)
-
-	_, err = ti.service.AttachAuthClientToMcpServer(ctx, &gen.AttachAuthClientToMcpServerPayload{ID: clientID.String(), McpServerID: noAuth.id.String()})
-	requireOopsCode(t, err, oops.CodeConflict)
 }
 
 func TestAttachProjectClientRefusesServerInAnotherProject(t *testing.T) {

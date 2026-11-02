@@ -1,8 +1,10 @@
 import { useQueries } from "@tanstack/react-query";
+import { queryKeyMcpServerAuthentication } from "@gram/client/react-query/mcpServerAuthentication.js";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import { collectPageItems } from "@/components/sessions/collectPageItems";
 import {
+  offersPersonalSignIn,
   serverConnection,
   userSubject,
   type ServerConnection,
@@ -26,6 +28,9 @@ export interface OwnerConnections {
  * server's project rather than the agent's attachment candidates: one listing
  * of their sessions per project, and the upstream sign-ins each issuer asks
  * for. Provisioning checks the agent's real candidates again before attaching.
+ *
+ * A server with an issuer still needs nobody when its own auth clients offer
+ * no personal sign-in: the issuer may be shared with servers that do.
  */
 export function useOwnerConnections(
   servers: InventoryServer[],
@@ -49,6 +54,29 @@ export function useOwnerConnections(
     ).values(),
   ];
   const ownerScope = { organizationId: organization.id, userId: user.id };
+  // Shares its cache with the server's info popover, which reads the same.
+  const auth = useQueries({
+    queries: personal.map((server) => ({
+      queryKey: queryKeyMcpServerAuthentication({ mcpServerId: server.id }),
+      queryFn: ({ signal }: { signal: AbortSignal }) =>
+        sdk.authClients.getMcpServerAuthentication(
+          { mcpServerId: server.id },
+          undefined,
+          { signal },
+        ),
+      enabled,
+      retry: false,
+      throwOnError: false,
+    })),
+  });
+  /**
+   * Whether a server's own auth clients settle that it needs no person. A
+   * failed re-read does not count, even with an earlier answer cached.
+   */
+  const shared = (server: InventoryServer): boolean => {
+    const read = auth[personal.indexOf(server)];
+    return !!read?.data && !read.isError && !offersPersonalSignIn(read.data);
+  };
   const sessions = useQueries({
     queries: projects.map((gramProject) => ({
       queryKey: ["owner-connections", "sessions", ownerScope, gramProject],
@@ -94,6 +122,11 @@ export function useOwnerConnections(
   });
   const byServer = new Map<string, ServerConnection>();
   for (const server of personal) {
+    if (shared(server)) {
+      byServer.set(server.id, { status: "not-required" });
+      continue;
+    }
+    const authRead = auth[personal.indexOf(server)];
     const sessionRead = sessions[projects.indexOf(server.projectSlug)];
     const clientRead =
       clients[
@@ -112,6 +145,7 @@ export function useOwnerConnections(
         )
       ];
     if (
+      authRead?.isError ||
       sessionRead?.isError ||
       clientRead?.isError ||
       (agentId && bindingRead?.isError)
@@ -120,6 +154,7 @@ export function useOwnerConnections(
       continue;
     }
     if (
+      !authRead?.data ||
       !sessionRead?.data ||
       !clientRead?.data ||
       (agentId && !bindingRead?.data)
@@ -147,6 +182,10 @@ export function useOwnerConnections(
   const assignedByServer = agentId ? new Map(byServer) : undefined;
   if (assignedByServer) {
     for (const server of personal) {
+      // Shared needs no assignment, and until the server's auth is read its
+      // checking or error state stands.
+      const authRead = auth[personal.indexOf(server)];
+      if (shared(server) || !authRead?.data || authRead.isError) continue;
       const index = issuers.findIndex(
         (issuer) =>
           issuer.gramProject === server.projectSlug &&
@@ -189,9 +228,14 @@ export function useOwnerConnections(
     assignedByServer,
     refetch: async () => {
       await Promise.all(
-        [...sessions, ...clients, ...(agentId ? bindings : [])].map((read) =>
-          read.refetch(),
-        ),
+        [
+          ...sessions,
+          ...clients,
+          ...(agentId ? bindings : []),
+          // A server's auth does not change when someone signs in, but a
+          // failed read gets another try.
+          ...auth.filter((read) => read.isError),
+        ].map((read) => read.refetch()),
       );
     },
   };

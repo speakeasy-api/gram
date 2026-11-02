@@ -179,8 +179,11 @@ func (s *Service) consentAuthChoicesEnforced(ctx context.Context, organizationID
 // choose from, their state, and which one is selected: the person's pick when
 // it is still usable, otherwise the client they last approved for the server,
 // otherwise the first usable one in the fixed preselection order. Nothing is
-// selected that cannot be approved now.
-func (s *Service) consentAuthChoices(ctx context.Context, organizationID string, subject urn.SessionSubject, servers []consentAuthServer, cards []remoteSessionCard, picked map[uuid.UUID]uuid.UUID) (map[uuid.UUID]*consentServerAuth, error) {
+// selected that cannot be approved now. With deferPersonal, personal and
+// identity-provider clients the resolver accepts are left in
+// consentClientConnect for the caller to judge, as a browserless caller has
+// no consent cards; cards is then unused.
+func (s *Service) consentAuthChoices(ctx context.Context, organizationID string, subject urn.SessionSubject, servers []consentAuthServer, cards []remoteSessionCard, picked map[uuid.UUID]uuid.UUID, deferPersonal bool) (map[uuid.UUID]*consentServerAuth, error) {
 	if len(servers) == 0 {
 		return map[uuid.UUID]*consentServerAuth{}, nil
 	}
@@ -217,23 +220,19 @@ func (s *Service) consentAuthChoices(ctx context.Context, organizationID string,
 		auth := &consentServerAuth{ServerID: server.id, Status: consentAuthChoose, Options: nil}
 		choices[server.id] = auth
 
-		var requires *bool
-		if len(serverRows) > 0 && serverRows[0].RequiresUpstreamAuth.Valid {
-			requires = &serverRows[0].RequiresUpstreamAuth.Bool
-		}
 		offered := slices.DeleteFunc(slices.Clone(serverRows), func(row upstreamclientsrepo.ListServerConsentAuthClientsRow) bool {
 			return !row.AuthClientID.Valid
 		})
 		switch {
-		case requires != nil && !*requires:
-			auth.Status = consentAuthNoAuth
-			continue
-		case len(offered) == 0 && requires != nil:
+		case len(offered) > 0:
+		case len(serverRows) > 0 && serverRows[0].UpstreamAuthPending:
+			// Upstream credentials no auth client records yet are incomplete
+			// setup, never a server needing none.
 			auth.Status = consentAuthSetupIncomplete
 			continue
-		case len(offered) == 0:
-			// Undecided with nothing offered serves without upstream
-			// authentication, as the resolver does.
+		default:
+			// A server offering no enabled client needs no upstream
+			// authentication.
 			auth.Status = consentAuthNoAuth
 			continue
 		}
@@ -264,6 +263,8 @@ func (s *Service) consentAuthChoices(ctx context.Context, organizationID string,
 			switch {
 			case res.outcome == authClientGap:
 				option.State = consentClientSetup
+			case (clientType == authz.AuthClientTypeRemoteSession || clientType == authz.AuthClientTypeEMA) && deferPersonal:
+				option.State = consentClientConnect
 			case clientType == authz.AuthClientTypeRemoteSession || clientType == authz.AuthClientTypeEMA:
 				option.State, option.ConnectClientID = personalReadiness(clientType, row.RemoteSessionClientID, cards)
 			}
@@ -378,7 +379,7 @@ func (s *Service) directConsentAuthChoice(ctx context.Context, endpoint *Resolve
 		return nil, fmt.Errorf("stamp consent subject context: %w", err)
 	}
 	serverID := endpoint.McpServerID.UUID
-	choices, err := s.consentAuthChoices(withMandatoryAdmission(subjectCtx), endpoint.OrganizationID, *challengeState.Subject, []consentAuthServer{{id: serverID, projectID: endpoint.ProjectID}}, cards, map[uuid.UUID]uuid.UUID{serverID: picked})
+	choices, err := s.consentAuthChoices(withMandatoryAdmission(subjectCtx), endpoint.OrganizationID, *challengeState.Subject, []consentAuthServer{{id: serverID, projectID: endpoint.ProjectID}}, cards, map[uuid.UUID]uuid.UUID{serverID: picked}, false)
 	if err != nil {
 		return nil, err
 	}
@@ -455,7 +456,7 @@ func (s *Service) gatewayConsentAuthChoices(ctx context.Context, r *http.Request
 			}
 		}
 	}
-	return s.consentAuthChoices(ctx, endpoint.OrganizationID, subject, servers, cards, picked)
+	return s.consentAuthChoices(ctx, endpoint.OrganizationID, subject, servers, cards, picked, false)
 }
 
 // resolveMemberAuthChoice is the resolution a gateway member's credential

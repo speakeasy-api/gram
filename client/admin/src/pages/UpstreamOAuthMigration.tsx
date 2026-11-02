@@ -520,9 +520,6 @@ function AuthClientStatus({
     a.pendingRetirements > 0
       ? `${a.pendingRetirements} stale ${a.pendingRetirements === 1 ? "record" : "records"} to retire`
       : null,
-    a.pendingMarkedServers > 0
-      ? `${a.pendingMarkedServers} ${a.pendingMarkedServers === 1 ? "server" : "servers"} to mark as needing upstream auth`
-      : null,
     a.unresolved > 0 ? `${a.unresolved} need attention` : null,
     (a.attachmentsWaiting ?? 0) > 0
       ? `${a.attachmentsWaiting} agent ${a.attachmentsWaiting === 1 ? "attachment grant waits" : "attachment grants wait"} until upstream selector writes are allowed for this organization`

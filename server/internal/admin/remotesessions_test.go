@@ -19,6 +19,7 @@ import (
 	"log/slog"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"strings"
 	"testing"
 	"time"
@@ -69,6 +70,7 @@ func TestStandaloneIssuerRoutes_ValidAdminDispatch(t *testing.T) {
 	var auditLog bytes.Buffer
 	auditLogger := slog.New(slog.NewJSONHandler(&auditLog, nil))
 	svc.SetRemoteSessionService(remotesessions.NewGlobalService(auditLogger, tp, testenv.NewMeterProvider(t), db, enc, policy))
+	svc.dashboardURL, _ = url.Parse("https://public.example.test")
 	svc.SetAssetService(assets.NewPlatformService(svc.logger, tp, policy, db, assetstest.NewTestBlobStore(t)))
 	sessionID, err := svc.sessions.Store(ctx, StoreParams{Email: "operator@example.com", Name: "Test Operator", OIDCSubject: "sub-admin", HD: testAdminHD, AccessToken: "access-token", RefreshToken: "refresh-token", ExpiresAt: time.Now().Add(time.Hour)})
 	require.NoError(t, err)

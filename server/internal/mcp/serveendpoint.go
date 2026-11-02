@@ -847,6 +847,7 @@ func (s *Service) agentKeyUngatedUpstream(
 		authClient:             nil,
 		chainingAuthClient:     nil,
 		attachedSession:        uuid.Nil,
+		authorizerOwner:        "",
 	}
 	token, err := s.resolveDirectUpstreamToken(ctx, w, logger, authentication, upstreamResource, mcpServer.TunneledMcpServerID.Valid, mcpServer.RemoteSessionIssuerID)
 	if err != nil {

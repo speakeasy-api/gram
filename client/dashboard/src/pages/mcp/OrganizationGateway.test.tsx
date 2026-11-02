@@ -36,6 +36,20 @@ vi.mock("@/components/sessions/ClientsAndSessionsTab", () => ({
     );
   },
 }));
+vi.mock("./gateway/GatewayActivitySection", () => ({
+  GatewayActivitySection: ({
+    scope,
+  }: {
+    scope: { kind: string; organizationId?: string };
+  }) => (
+    <div>
+      Organization gateway activity
+      <output aria-label="Activity scope">
+        {scope.kind}:{scope.organizationId}
+      </output>
+    </div>
+  ),
+}));
 vi.mock("@/components/page-templates", () => ({
   SettingsPage: ({
     children,
@@ -144,17 +158,12 @@ beforeEach(() => {
   vi.clearAllMocks();
 });
 
-it("routes the MCP page switch through access review before mutating", () => {
+it("confirms before turning the gateway on", () => {
   render(<OrganizationGateway />);
   fireEvent.click(screen.getByRole("switch", { name: "Organization Gateway" }));
   expect(state.setOn).not.toHaveBeenCalled();
-  const enable = screen.getByRole("button", {
-    name: "Enable Organization Gateway",
-  }) as HTMLButtonElement;
-  expect(enable.disabled).toBe(true);
-  fireEvent.click(screen.getByRole("button", { name: "Assignments loaded" }));
-  fireEvent.click(screen.getByRole("checkbox"));
-  fireEvent.click(enable);
+  expect(screen.getByText(/recommend reviewing MCP assignments/)).toBeTruthy();
+  fireEvent.click(screen.getByRole("button", { name: "Turn on" }));
   expect(state.setOn).toHaveBeenCalledWith(
     true,
     expect.objectContaining({ onSuccess: expect.any(Function) }),
@@ -305,4 +314,22 @@ it("restores a shared Connections URL while the gateway is disabled", () => {
       .getByRole("tab", { name: "Connections" })
       .getAttribute("aria-selected"),
   ).toBe("true");
+});
+
+it("shows organization-wide activity to non-admins", async () => {
+  state.admin = false;
+  render(<OrganizationGateway />);
+  await userEvent.click(screen.getByRole("tab", { name: "Activity" }));
+  expect(screen.getByText("Organization gateway activity")).toBeTruthy();
+  expect(screen.getByLabelText("Activity scope").textContent).toBe(
+    "organization:test-org",
+  );
+});
+
+it("restores a shared Activity URL", () => {
+  render(<OrganizationGateway />, "/?tab=activity&range=7d");
+  expect(
+    screen.getByRole("tab", { name: "Activity" }).getAttribute("aria-selected"),
+  ).toBe("true");
+  expect(screen.getByText("Organization gateway activity")).toBeTruthy();
 });

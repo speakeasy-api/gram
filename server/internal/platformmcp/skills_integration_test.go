@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -971,6 +972,10 @@ func TestPostgresSkillMCPTargetsResolvesPastTheLookupCap(t *testing.T) {
 	byID, err := targets.SkillMCPTargets(ctx, principal.OrganizationID, project.ID, SkillMCPTargetServer, last[0].ID)
 	require.NoError(t, err)
 	require.Equal(t, last, byID)
+
+	byUpperID, err := targets.SkillMCPTargets(ctx, principal.OrganizationID, project.ID, SkillMCPTargetGateway, strings.ToUpper(gatewayID.String()))
+	require.NoError(t, err)
+	require.Equal(t, gateways, byUpperID, "an id matches whatever its letter case")
 
 	wrongKind, err := targets.SkillMCPTargets(ctx, principal.OrganizationID, project.ID, SkillMCPTargetServer, "Team Gateway")
 	require.NoError(t, err)

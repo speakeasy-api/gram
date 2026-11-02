@@ -1932,8 +1932,10 @@ type MigrateToGlobalIssuerResponseBody struct {
 // UploadPlatformImageResponseBody is the type of the "admin" service
 // "uploadPlatformImage" endpoint HTTP response body.
 type UploadPlatformImageResponseBody struct {
-	// The asset entry that was created in Speakeasy
+	// The uploaded platform image asset
 	Asset *AssetResponseBody `form:"asset,omitempty" json:"asset,omitempty" xml:"asset,omitempty"`
+	// Canonical public URL for the uploaded image
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 }
 
 // StartTrialResponseBody is the type of the "admin" service "startTrial"
@@ -2757,8 +2759,8 @@ type RunUpstreamOAuthMigrationResponseBody struct {
 	AuthClientsWritten *int64 `form:"auth_clients_written,omitempty" json:"auth_clients_written,omitempty" xml:"auth_clients_written,omitempty"`
 	// Server to auth client links recorded.
 	AuthClientLinksWritten *int64 `form:"auth_client_links_written,omitempty" json:"auth_client_links_written,omitempty" xml:"auth_client_links_written,omitempty"`
-	// Servers marked as needing upstream authentication because they offer a
-	// backfilled auth client.
+	// Deprecated: always omitted. Whether a server needs upstream authentication
+	// follows from the auth clients it offers, so no server is marked.
 	ServersMarkedRequiringUpstreamAuth *int64 `form:"servers_marked_requiring_upstream_auth,omitempty" json:"servers_marked_requiring_upstream_auth,omitempty" xml:"servers_marked_requiring_upstream_auth,omitempty"`
 	// Credential choices this run named a typed auth client on.
 	SelectionsMapped *int64 `form:"selections_mapped,omitempty" json:"selections_mapped,omitempty" xml:"selections_mapped,omitempty"`
@@ -23563,10 +23565,12 @@ type AdminMcpServerHealthRemoteSessionsResponseBody struct {
 // AdminMcpServerHealthUpstreamAuthResponseBody is used to define fields on
 // response body types.
 type AdminMcpServerHealthUpstreamAuthResponseBody struct {
-	// configured, setup_incomplete (required with no enabled client),
-	// no_auth_required or undecided.
+	// configured (at least one enabled auth client), setup_incomplete (no auth
+	// client was ever linked to it, live or detached, but it has upstream
+	// credentials that no auth client records yet) or no_auth_required.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
-	// Whether the upstream needs authentication. Omitted while undecided.
+	// Whether the upstream needs authentication: true when the server offers at
+	// least one enabled auth client.
 	RequiresUpstreamAuth *bool                                         `form:"requires_upstream_auth,omitempty" json:"requires_upstream_auth,omitempty" xml:"requires_upstream_auth,omitempty"`
 	AuthClients          []*AdminMcpServerHealthAuthClientResponseBody `form:"auth_clients,omitempty" json:"auth_clients,omitempty" xml:"auth_clients,omitempty"`
 }
@@ -24066,14 +24070,14 @@ type AdminUpstreamOAuthMigrationServerResponseBody struct {
 // on response body types.
 type AdminUpstreamOAuthMigrationAuthClientsResponseBody struct {
 	// Whether every configured identity has its auth client, server links and
-	// header copies recorded, no backfilled record is left to retire, no server
-	// offering one is left undecided, and no phase failed.
+	// header copies recorded, no backfilled record is left to retire, and no phase
+	// failed.
 	Complete *bool `form:"complete,omitempty" json:"complete,omitempty" xml:"complete,omitempty"`
 	// Whether a run is recording typed auth clients for the organization right
 	// now. The other counts are then empty; check again when it finishes.
 	InProgress *bool `form:"in_progress,omitempty" json:"in_progress,omitempty" xml:"in_progress,omitempty"`
-	// Servers offering a backfilled auth client whose need for upstream
-	// authentication is still undecided, not yet marked as needing it.
+	// Deprecated: always 0. Whether a server needs upstream authentication follows
+	// from the auth clients it offers, so no server is marked.
 	PendingMarkedServers *int64 `form:"pending_marked_servers,omitempty" json:"pending_marked_servers,omitempty" xml:"pending_marked_servers,omitempty"`
 	// Configured identities and server links decided.
 	Associations *int64 `form:"associations,omitempty" json:"associations,omitempty" xml:"associations,omitempty"`
@@ -24242,9 +24246,8 @@ type AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody struct {
 	// Why there is no choice: selection_required (several clients could serve it),
 	// personal_requires_user (only a personal client serves it, and the turn has
 	// no user), no_client (no live, enabled auth client carries its upstream OAuth
-	// client), setup_incomplete (it needs upstream authentication and offers no
-	// auth client) or upstream_auth_undecided (it offers no auth client and an
-	// administrator has not decided whether it needs upstream authentication).
+	// client) or setup_incomplete (no auth client was ever linked to it, live or
+	// detached, but it has upstream credentials that no auth client records yet).
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 	// Profile and server pairs with no choice for this reason.
 	Servers *int64 `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
@@ -33994,10 +33997,12 @@ func NewMigrateToGlobalIssuerGatewayError(body *MigrateToGlobalIssuerGatewayErro
 	return v
 }
 
-// NewUploadPlatformImageUploadImageResultOK builds a "admin" service
+// NewUploadPlatformImageAdminUploadImageResultOK builds a "admin" service
 // "uploadPlatformImage" endpoint result from a HTTP "OK" response.
-func NewUploadPlatformImageUploadImageResultOK(body *UploadPlatformImageResponseBody) *admin.UploadImageResult {
-	v := &admin.UploadImageResult{}
+func NewUploadPlatformImageAdminUploadImageResultOK(body *UploadPlatformImageResponseBody) *admin.AdminUploadImageResult {
+	v := &admin.AdminUploadImageResult{
+		URL: *body.URL,
+	}
 	v.Asset = unmarshalAssetResponseBodyToAdminAsset(body.Asset)
 
 	return v
@@ -34170,13 +34175,15 @@ func NewUploadPlatformImageGatewayError(body *UploadPlatformImageGatewayErrorRes
 
 // NewServeImageResultOK builds a "admin" service "serveImage" endpoint result
 // from a HTTP "OK" response.
-func NewServeImageResultOK(contentType string, contentLength int64, lastModified string, accessControlAllowOrigin *string, crossOriginResourcePolicy string) *admin.ServeImageResult {
+func NewServeImageResultOK(contentType string, contentLength int64, lastModified string, accessControlAllowOrigin *string, crossOriginResourcePolicy string, contentSecurityPolicy *string, xContentTypeOptions *string) *admin.ServeImageResult {
 	v := &admin.ServeImageResult{}
 	v.ContentType = contentType
 	v.ContentLength = contentLength
 	v.LastModified = lastModified
 	v.AccessControlAllowOrigin = accessControlAllowOrigin
 	v.CrossOriginResourcePolicy = crossOriginResourcePolicy
+	v.ContentSecurityPolicy = contentSecurityPolicy
+	v.XContentTypeOptions = xContentTypeOptions
 
 	return v
 }
@@ -44937,6 +44944,9 @@ func ValidateMigrateToGlobalIssuerResponseBody(body *MigrateToGlobalIssuerRespon
 func ValidateUploadPlatformImageResponseBody(body *UploadPlatformImageResponseBody) (err error) {
 	if body.Asset == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("asset", "body"))
+	}
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
 	}
 	if body.Asset != nil {
 		if err2 := ValidateAssetResponseBody(body.Asset); err2 != nil {
@@ -73940,12 +73950,15 @@ func ValidateAdminMcpServerHealthUpstreamAuthResponseBody(body *AdminMcpServerHe
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
+	if body.RequiresUpstreamAuth == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("requires_upstream_auth", "body"))
+	}
 	if body.AuthClients == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("auth_clients", "body"))
 	}
 	if body.Status != nil {
-		if !(*body.Status == "configured" || *body.Status == "setup_incomplete" || *body.Status == "no_auth_required" || *body.Status == "undecided") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"configured", "setup_incomplete", "no_auth_required", "undecided"}))
+		if !(*body.Status == "configured" || *body.Status == "setup_incomplete" || *body.Status == "no_auth_required") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"configured", "setup_incomplete", "no_auth_required"}))
 		}
 	}
 	for _, e := range body.AuthClients {

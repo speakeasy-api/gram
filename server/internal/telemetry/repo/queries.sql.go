@@ -2485,7 +2485,7 @@ type GetTimeSeriesMetricsParams struct {
 	// untagged. Ignored when HookSource is set: an explicit source filter
 	// overrides the exclusion.
 	ExcludedHookSources []string
-	GramProjectID       string
+	GramProjectIDs      []string
 	TimeStart           int64
 	TimeEnd             int64
 	IntervalSeconds     int64                 // Bucket interval in seconds
@@ -2540,7 +2540,7 @@ func (q *Queries) GetTimeSeriesMetrics(ctx context.Context, arg GetTimeSeriesMet
 			"if(isNaN(avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gen_ai.conversation.duration) != '')), 0, avgIf(toFloat64OrZero(toString(attributes.gen_ai.conversation.duration)) * 1000, toString(attributes.gen_ai.conversation.duration) != '')) AS avg_session_duration_ms",
 		).
 		From("telemetry_logs").
-		Where("gram_project_id = ?", arg.GramProjectID).
+		Where(squirrel.Eq{"gram_project_id": arg.GramProjectIDs}).
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd).
 		GroupBy("bucket_time_unix_nano")
@@ -2629,7 +2629,7 @@ type GetToolMetricsBreakdownParams struct {
 	// untagged. Ignored when HookSource is set: an explicit source filter
 	// overrides the exclusion.
 	ExcludedHookSources []string
-	GramProjectID       string
+	GramProjectIDs      []string
 	TimeStart           int64
 	TimeEnd             int64
 	User                UserIdentity          // Optional filter - scopes to one employee across all their identities
@@ -2662,7 +2662,7 @@ func (q *Queries) GetToolMetricsBreakdown(ctx context.Context, arg GetToolMetric
 		"countIf(toInt32OrZero(toString(attributes.http.response.status_code)) >= 400) / greatest(toFloat64(count(*)), 1) as failure_rate",
 	).
 		From("telemetry_logs").
-		Where("gram_project_id = ?", arg.GramProjectID).
+		Where(squirrel.Eq{"gram_project_id": arg.GramProjectIDs}).
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd).
 		Where("startsWith(gram_urn, 'tools:')")
@@ -2756,7 +2756,7 @@ type GetOverviewSummaryParams struct {
 	// untagged. Ignored when HookSource is set: an explicit source filter
 	// overrides the exclusion.
 	ExcludedHookSources []string
-	GramProjectID       string
+	GramProjectIDs      []string
 	TimeStart           int64
 	TimeEnd             int64
 	User                UserIdentity          // Optional filter - scopes to one employee across all their identities
@@ -2852,7 +2852,7 @@ func (q *Queries) getOverviewSummaryMV(arg GetOverviewSummaryParams) squirrel.Se
 		"avgIfMerge(avg_tool_duration_ms) as avg_latency_ms",
 	).
 		From("metrics_summaries").
-		Where("gram_project_id = ?", arg.GramProjectID).
+		Where(squirrel.Eq{"gram_project_id": arg.GramProjectIDs}).
 		Where("time_bucket >= toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeStart).
 		Where("time_bucket < toStartOfHour(fromUnixTimestamp64Nano(?))", arg.TimeEnd)
 }
@@ -2876,7 +2876,7 @@ func (q *Queries) getOverviewSummaryRaw(arg GetOverviewSummaryParams) squirrel.S
 		"if(isNaN(avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:'))), 0, avgIf(toFloat64OrZero(toString(attributes.http.server.request.duration)) * 1000, startsWith(gram_urn, 'tools:'))) as avg_latency_ms",
 	).
 		From("telemetry_logs").
-		Where("gram_project_id = ?", arg.GramProjectID).
+		Where(squirrel.Eq{"gram_project_id": arg.GramProjectIDs}).
 		Where("time_unix_nano >= ?", arg.TimeStart).
 		Where("time_unix_nano <= ?", arg.TimeEnd)
 
@@ -4157,7 +4157,7 @@ const (
 	toolUsageTargetKindLocalTools = "local_tools"
 	toolUsageTargetKindSkill      = "skill"
 
-	toolUsageUserKindAgentID        = "agent_id"
+	ToolUsageUserKindAgentID        = "agent_id"
 	toolUsageUserKindEmail          = "email"
 	toolUsageUserKindExternalUserID = "external_user_id"
 	toolUsageUserKindUserID         = "user_id"
@@ -4622,12 +4622,12 @@ func (q *Queries) GetToolUsageFilterOptions(ctx context.Context, arg GetToolUsag
 	if splitAgents {
 		users := make([]ToolUsageUserFilterOptionRow, 0, len(options.Users)+len(agents))
 		for _, row := range options.Users {
-			if row.UserKind != toolUsageUserKindAgentID {
+			if row.UserKind != ToolUsageUserKindAgentID {
 				users = append(users, row)
 			}
 		}
 		for _, row := range agents {
-			if row.UserKind == toolUsageUserKindAgentID {
+			if row.UserKind == ToolUsageUserKindAgentID {
 				users = append(users, row)
 			}
 		}
@@ -4729,7 +4729,7 @@ func toolUsageAgentFilter(agentIDs []string) squirrel.Sqlizer {
 		return nil
 	}
 	return squirrel.And{
-		squirrel.Eq{"user_kind": toolUsageUserKindAgentID},
+		squirrel.Eq{"user_kind": ToolUsageUserKindAgentID},
 		squirrel.Eq{"user_key": agentIDs},
 	}
 }
@@ -6134,7 +6134,7 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 	userKey := chFirstNonEmpty("g_agent_id", "g_user_email", "g_external_user_id", "g_user_id", "'Unknown'")
 	userLabel := chMultiIf("g_agent_id != ''", "concat('agent:', g_agent_id)", userKey)
 	userKind := chMultiIf(
-		"g_agent_id != ''", "'"+toolUsageUserKindAgentID+"'",
+		"g_agent_id != ''", "'"+ToolUsageUserKindAgentID+"'",
 		"g_user_email != ''", "'"+toolUsageUserKindEmail+"'",
 		"g_external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
 		"g_user_id != ''", "'"+toolUsageUserKindUserID+"'",
@@ -6365,7 +6365,7 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 	traceAgentID := "max(agent_id) OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ")"
 	traceAuthorizerUserID := "max(authorizer_user_id) OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ")"
 	userKind := chMultiIf(
-		traceAgentID+" != ''", "'"+toolUsageUserKindAgentID+"'",
+		traceAgentID+" != ''", "'"+ToolUsageUserKindAgentID+"'",
 		"user_email != ''", "'"+toolUsageUserKindEmail+"'",
 		"external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
 		"user_id != ''", "'"+toolUsageUserKindUserID+"'",
@@ -6684,7 +6684,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 	// aggregate, which nests any()/sum() and fails with ILLEGAL_AGGREGATION once a
 	// caller (uniqExact(tool_name), sum(success), ...) aggregates over normalized_events.
 	userKind := chMultiIf(
-		"g_agent_id != ''", "'"+toolUsageUserKindAgentID+"'",
+		"g_agent_id != ''", "'"+ToolUsageUserKindAgentID+"'",
 		"g_user_email != ''", "'"+toolUsageUserKindEmail+"'",
 		"g_external_user_id != ''", "'"+toolUsageUserKindExternalUserID+"'",
 		"g_user_id != ''", "'"+toolUsageUserKindUserID+"'",

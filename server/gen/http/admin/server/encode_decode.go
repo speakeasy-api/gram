@@ -10840,7 +10840,7 @@ func EncodeMigrateToGlobalIssuerError(encoder func(context.Context, http.Respons
 // by the admin uploadPlatformImage endpoint.
 func EncodeUploadPlatformImageResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*admin.UploadImageResult)
+		res, _ := v.(*admin.AdminUploadImageResult)
 		enc := encoder(ctx, w)
 		body := NewUploadPlatformImageResponseBody(res)
 		w.WriteHeader(http.StatusOK)
@@ -11068,6 +11068,12 @@ func EncodeServeImageResponse(encoder func(context.Context, http.ResponseWriter)
 			w.Header().Set("Access-Control-Allow-Origin", *res.AccessControlAllowOrigin)
 		}
 		w.Header().Set("Cross-Origin-Resource-Policy", res.CrossOriginResourcePolicy)
+		if res.ContentSecurityPolicy != nil {
+			w.Header().Set("Content-Security-Policy", *res.ContentSecurityPolicy)
+		}
+		if res.XContentTypeOptions != nil {
+			w.Header().Set("X-Content-Type-Options", *res.XContentTypeOptions)
+		}
 		w.WriteHeader(http.StatusOK)
 		return nil
 	}

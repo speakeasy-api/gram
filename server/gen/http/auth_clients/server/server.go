@@ -27,6 +27,9 @@ type Server struct {
 	SetAuthClientHeaders                http.Handler
 	DetachAuthClientFromMcpServer       http.Handler
 	ListMcpServerAuthClientChoices      http.Handler
+	ListIssuanceProfiles                http.Handler
+	SetIssuanceProfile                  http.Handler
+	DeleteIssuanceProfile               http.Handler
 	GetMcpServerAuthentication          http.Handler
 	SetMcpServerUpstreamAuthRequirement http.Handler
 	GetAuthClientAudience               http.Handler
@@ -68,6 +71,9 @@ func New(
 			{"SetAuthClientHeaders", "POST", "/rpc/authClients.setHeaders"},
 			{"DetachAuthClientFromMcpServer", "POST", "/rpc/authClients.detachFromMcpServer"},
 			{"ListMcpServerAuthClientChoices", "GET", "/rpc/authClients.listMcpServerChoices"},
+			{"ListIssuanceProfiles", "GET", "/rpc/authClients.listIssuanceProfiles"},
+			{"SetIssuanceProfile", "POST", "/rpc/authClients.setIssuanceProfile"},
+			{"DeleteIssuanceProfile", "POST", "/rpc/authClients.deleteIssuanceProfile"},
 			{"GetMcpServerAuthentication", "GET", "/rpc/authClients.getMcpServerAuthentication"},
 			{"SetMcpServerUpstreamAuthRequirement", "POST", "/rpc/authClients.setMcpServerUpstreamAuthRequirement"},
 			{"GetAuthClientAudience", "GET", "/rpc/authClients.getAudience"},
@@ -81,6 +87,9 @@ func New(
 		SetAuthClientHeaders:                NewSetAuthClientHeadersHandler(e.SetAuthClientHeaders, mux, decoder, encoder, errhandler, formatter),
 		DetachAuthClientFromMcpServer:       NewDetachAuthClientFromMcpServerHandler(e.DetachAuthClientFromMcpServer, mux, decoder, encoder, errhandler, formatter),
 		ListMcpServerAuthClientChoices:      NewListMcpServerAuthClientChoicesHandler(e.ListMcpServerAuthClientChoices, mux, decoder, encoder, errhandler, formatter),
+		ListIssuanceProfiles:                NewListIssuanceProfilesHandler(e.ListIssuanceProfiles, mux, decoder, encoder, errhandler, formatter),
+		SetIssuanceProfile:                  NewSetIssuanceProfileHandler(e.SetIssuanceProfile, mux, decoder, encoder, errhandler, formatter),
+		DeleteIssuanceProfile:               NewDeleteIssuanceProfileHandler(e.DeleteIssuanceProfile, mux, decoder, encoder, errhandler, formatter),
 		GetMcpServerAuthentication:          NewGetMcpServerAuthenticationHandler(e.GetMcpServerAuthentication, mux, decoder, encoder, errhandler, formatter),
 		SetMcpServerUpstreamAuthRequirement: NewSetMcpServerUpstreamAuthRequirementHandler(e.SetMcpServerUpstreamAuthRequirement, mux, decoder, encoder, errhandler, formatter),
 		GetAuthClientAudience:               NewGetAuthClientAudienceHandler(e.GetAuthClientAudience, mux, decoder, encoder, errhandler, formatter),
@@ -101,6 +110,9 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.SetAuthClientHeaders = m(s.SetAuthClientHeaders)
 	s.DetachAuthClientFromMcpServer = m(s.DetachAuthClientFromMcpServer)
 	s.ListMcpServerAuthClientChoices = m(s.ListMcpServerAuthClientChoices)
+	s.ListIssuanceProfiles = m(s.ListIssuanceProfiles)
+	s.SetIssuanceProfile = m(s.SetIssuanceProfile)
+	s.DeleteIssuanceProfile = m(s.DeleteIssuanceProfile)
 	s.GetMcpServerAuthentication = m(s.GetMcpServerAuthentication)
 	s.SetMcpServerUpstreamAuthRequirement = m(s.SetMcpServerUpstreamAuthRequirement)
 	s.GetAuthClientAudience = m(s.GetAuthClientAudience)
@@ -120,6 +132,9 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountSetAuthClientHeadersHandler(mux, h.SetAuthClientHeaders)
 	MountDetachAuthClientFromMcpServerHandler(mux, h.DetachAuthClientFromMcpServer)
 	MountListMcpServerAuthClientChoicesHandler(mux, h.ListMcpServerAuthClientChoices)
+	MountListIssuanceProfilesHandler(mux, h.ListIssuanceProfiles)
+	MountSetIssuanceProfileHandler(mux, h.SetIssuanceProfile)
+	MountDeleteIssuanceProfileHandler(mux, h.DeleteIssuanceProfile)
 	MountGetMcpServerAuthenticationHandler(mux, h.GetMcpServerAuthentication)
 	MountSetMcpServerUpstreamAuthRequirementHandler(mux, h.SetMcpServerUpstreamAuthRequirement)
 	MountGetAuthClientAudienceHandler(mux, h.GetAuthClientAudience)
@@ -535,6 +550,165 @@ func NewListMcpServerAuthClientChoicesHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "listMcpServerAuthClientChoices")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "authClients")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListIssuanceProfilesHandler configures the mux to serve the
+// "authClients" service "listIssuanceProfiles" endpoint.
+func MountListIssuanceProfilesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/authClients.listIssuanceProfiles", f)
+}
+
+// NewListIssuanceProfilesHandler creates a HTTP handler which loads the HTTP
+// request and calls the "authClients" service "listIssuanceProfiles" endpoint.
+func NewListIssuanceProfilesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListIssuanceProfilesRequest(mux, decoder)
+		encodeResponse = EncodeListIssuanceProfilesResponse(encoder)
+		encodeError    = EncodeListIssuanceProfilesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listIssuanceProfiles")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "authClients")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetIssuanceProfileHandler configures the mux to serve the "authClients"
+// service "setIssuanceProfile" endpoint.
+func MountSetIssuanceProfileHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/authClients.setIssuanceProfile", f)
+}
+
+// NewSetIssuanceProfileHandler creates a HTTP handler which loads the HTTP
+// request and calls the "authClients" service "setIssuanceProfile" endpoint.
+func NewSetIssuanceProfileHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetIssuanceProfileRequest(mux, decoder)
+		encodeResponse = EncodeSetIssuanceProfileResponse(encoder)
+		encodeError    = EncodeSetIssuanceProfileError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setIssuanceProfile")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "authClients")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountDeleteIssuanceProfileHandler configures the mux to serve the
+// "authClients" service "deleteIssuanceProfile" endpoint.
+func MountDeleteIssuanceProfileHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/authClients.deleteIssuanceProfile", f)
+}
+
+// NewDeleteIssuanceProfileHandler creates a HTTP handler which loads the HTTP
+// request and calls the "authClients" service "deleteIssuanceProfile" endpoint.
+func NewDeleteIssuanceProfileHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeDeleteIssuanceProfileRequest(mux, decoder)
+		encodeResponse = EncodeDeleteIssuanceProfileResponse(encoder)
+		encodeError    = EncodeDeleteIssuanceProfileError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "deleteIssuanceProfile")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "authClients")
 		payload, err := decodeRequest(r)
 		if err != nil {

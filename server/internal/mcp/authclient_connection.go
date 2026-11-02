@@ -7,6 +7,7 @@ import (
 
 	"github.com/google/uuid"
 
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -25,6 +26,9 @@ type authClientConnectionOwner struct {
 	// attachedSession is the exact remote session an attachment serves, set
 	// only for an attached agent.
 	attachedSession uuid.UUID
+	// authorizer marks an unattached principal-backed agent key served by its
+	// validated authorizer's own connection.
+	authorizer bool
 }
 
 // authClientConnection resolves the stored owner of the personal connection
@@ -43,11 +47,21 @@ func (s *Service) authClientConnection(ctx context.Context, permit authClientPer
 		return none, nil
 	}
 	if permit.Subject.Kind == urn.SessionSubjectKindUser {
-		return authClientConnectionOwner{owner: permit.Subject.ID, attachedSession: uuid.Nil}, nil
+		return authClientConnectionOwner{owner: permit.Subject.ID, attachedSession: uuid.Nil, authorizer: false}, nil
+	}
+	// An agent key with no attachment for this registration is served by its
+	// validated authorizer's own connection; the mcp:auth check names that
+	// user as the owner and still decides with the agent's own grants.
+	// Without a usable attachment the owner is this fallback: the agent
+	// key's authorizer, or no owner for any other caller, which no personal
+	// grant matches.
+	fallback := none
+	if authorizer, ok := agentKeyAuthorizer(ctx, permit.Subject); ok {
+		fallback = authClientConnectionOwner{owner: authorizer, attachedSession: uuid.Nil, authorizer: true}
 	}
 	lookup := s.attachedConnectionLookup()
 	if lookup == nil || !permit.RegistrationID.Valid || permit.Subject.IsZero() {
-		return none, nil
+		return fallback, nil
 	}
 	conn, attached, err := lookup.AuthClientAttachedConnection(ctx, remotesessions.AuthClientTokenRequest{
 		ProjectID:           permit.ProjectID,
@@ -59,18 +73,57 @@ func (s *Service) authClientConnection(ctx context.Context, permit authClientPer
 	})
 	switch {
 	case errors.Is(err, remotesessions.ErrInvalidAuthorizationRequest):
-		// A caller the attachment lookup refuses has no connection to own.
-		return none, nil
+		// A caller the attachment lookup refuses has no attached connection.
+		return fallback, nil
 	case err != nil:
 		return none, fmt.Errorf("resolve attached connection owner: %w", err)
 	case !attached:
-		return none, nil
+		return fallback, nil
 	case conn.RemoteSessionID == uuid.Nil:
 		// A zero connection would disable the pin that binds tokens to
 		// the checked connection, so it is never an owner.
 		return none, errors.New("resolve attached connection owner: attachment names no connection")
 	}
-	return authClientConnectionOwner{owner: conn.OwnerUserID, attachedSession: conn.RemoteSessionID}, nil
+	return authClientConnectionOwner{owner: conn.OwnerUserID, attachedSession: conn.RemoteSessionID, authorizer: false}, nil
+}
+
+// agentKeyAuthorizer is the validated authorizer of an admitted agent
+// principal (a principal-backed API key or an agent session) whose agent is
+// subject. Signed principal credentials resolve their authorizer earlier
+// (connectionSubject); legacy keys and workloads have none.
+func agentKeyAuthorizer(ctx context.Context, subject urn.SessionSubject) (string, bool) {
+	if subject.Kind != urn.SessionSubjectKindAgent {
+		return "", false
+	}
+	actor, ok := contextvalues.AuthenticatedActor(ctx)
+	if !ok || actor.Type != urn.PrincipalTypeAgent || actor.ID != subject.ID {
+		return "", false
+	}
+	credential, ok := contextvalues.PrincipalCredentialAuthorization(ctx)
+	if !ok || credential.AuthorizerUserID == "" {
+		return "", false
+	}
+	return credential.AuthorizerUserID, true
+}
+
+// tokenSubject is whose connection serves a typed client's tokens for
+// subject: the authorizer an unattached agent key's permit was decided for,
+// otherwise the connection subject.
+func tokenSubject(ctx context.Context, subject urn.SessionSubject, authorizerOwner string) urn.SessionSubject {
+	if authorizerOwner != "" {
+		return urn.NewUserSubject(authorizerOwner)
+	}
+	return connectionSubject(ctx, subject)
+}
+
+// handbackSubject is whose connection serves a handback to the upstream
+// client choice: the authorizer an unattached agent key's permit was decided
+// for, otherwise subject unchanged.
+func handbackSubject(subject urn.SessionSubject, authorizerOwner string) urn.SessionSubject {
+	if authorizerOwner != "" {
+		return urn.NewUserSubject(authorizerOwner)
+	}
+	return subject
 }
 
 // upstreamTokenSource resolves a caller's upstream tokens for serving.
