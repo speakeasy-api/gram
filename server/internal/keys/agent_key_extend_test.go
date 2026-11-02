@@ -193,10 +193,9 @@ func TestKeysService_ExtendAgentKeysSkipsOtherIssuersAndExpiredKeys(t *testing.T
 		ID: otherID, Email: otherID + "@example.com", DisplayName: otherID, PhotoUrl: conv.PtrToPGText(nil), Admin: false,
 	})
 	require.NoError(t, err)
-	_, err = ti.conn.Exec(ctx, "UPDATE api_keys SET created_by_user_id = $1 WHERE id = $2", otherID, othersKey)
-	require.NoError(t, err)
-	_, err = ti.conn.Exec(ctx, "UPDATE api_keys SET created_at = now() - interval '2 hours', expires_at = now() - interval '1 hour' WHERE id = $1", expired)
-	require.NoError(t, err)
+	fixtures := testrepo.New(ti.conn)
+	require.NoError(t, fixtures.SetAPIKeyCreatorFixture(ctx, testrepo.SetAPIKeyCreatorFixtureParams{CreatedByUserID: otherID, ID: uuid.MustParse(othersKey)}))
+	require.NoError(t, fixtures.ExpireAPIKeyFixture(ctx, testrepo.ExpireAPIKeyFixtureParams{ID: uuid.MustParse(expired), OrganizationID: testAuthContext(t, ctx).ActiveOrganizationID}))
 
 	second := uuid.NewString()
 	grantConnect(t, ctx, ti, agentID, second)
