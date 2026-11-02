@@ -169,7 +169,7 @@ describe("workflowYaml", () => {
   });
 
   // The job grants id-token: write, so every step can mint its OIDC token: no
-  // step may run code a moved branch or tag could swap out.
+  // action or CLI may come from a branch or tag that could move.
   it("pins every action and CLI", () => {
     for (const yaml of variants) {
       const used = yaml.match(/uses: \S+/g) ?? [];
