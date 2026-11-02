@@ -222,18 +222,10 @@ func (s *Service) resolveMemberTokens(ctx context.Context, gate *metaGateContext
 		}
 		return tokens, nil
 	}
-	clients, err := s.remoteChallengeMgr.ListClients(ctx, member.projectID, gate.organizationID, server.UserSessionIssuerID.UUID)
-	if err != nil {
-		return nil, fmt.Errorf("load agent member clients: %w", err)
-	}
-	associated, err := s.serverAssociatedClients(ctx, gate.organizationID, []uuid.UUID{member.serverID})
+	clients, err := s.agentServerClients(ctx, agentServerTarget{organizationID: gate.organizationID, agentID: gate.agentID, serverID: member.serverID, projectID: member.projectID, slug: member.slug}, server.UserSessionIssuerID.UUID)
 	if err != nil {
 		return nil, err
 	}
-	// An issuer can also bind clients belonging to sibling servers.
-	clients = slices.DeleteFunc(clients, func(client remotesessions.Client) bool {
-		return !associated[member.serverID][client.ID]
-	})
 	if len(clients) == 0 {
 		// Distinguish a legitimate header/no-auth member from a required OAuth
 		// member whose last client was removed. No runtime catalog repairs.
@@ -242,11 +234,7 @@ func (s *Service) resolveMemberTokens(ctx context.Context, gate *metaGateContext
 	}
 	tokens := make(map[uuid.UUID]remotesessions.UpstreamToken, len(clients))
 	for _, client := range clients {
-		clientType := authClientTypeRemoteSession
-		if client.CredentialOwner == remotesessions.CredentialOwnerSelf {
-			clientType = authClientTypeServiceAccount
-		}
-		resolved, err := s.agentMemberClientTokens(ctx, gate, member, server.UserSessionIssuerID.UUID, client.ID, clientType)
+		resolved, err := s.agentMemberClientTokens(ctx, gate, member, server.UserSessionIssuerID.UUID, client.ID, agentClientType(client))
 		if err != nil {
 			return nil, err
 		}
@@ -293,6 +281,31 @@ func agentServerCredentialError(slug string) error {
 // same owner-sensitive permit as selected members.
 func (s *Service) authorizeAgentMemberClient(ctx context.Context, gate *metaGateContext, member metaMember, issuer uuid.UUID, registration uuid.NullUUID, clientType string) (authClientConnectionOwner, error) {
 	return s.authorizeAgentServerClient(ctx, agentServerTarget{organizationID: gate.organizationID, agentID: gate.agentID, serverID: member.serverID, projectID: member.projectID, slug: member.slug}, issuer, registration, clientType)
+}
+
+// agentServerClients lists the clients issuer binds that belong to the
+// target server. An issuer can also bind clients of sibling servers, which
+// never serve this one.
+func (s *Service) agentServerClients(ctx context.Context, target agentServerTarget, issuer uuid.UUID) ([]remotesessions.Client, error) {
+	clients, err := s.remoteChallengeMgr.ListClients(ctx, target.projectID, target.organizationID, issuer)
+	if err != nil {
+		return nil, fmt.Errorf("load agent server clients: %w", err)
+	}
+	associated, err := s.serverAssociatedClients(ctx, target.organizationID, []uuid.UUID{target.serverID})
+	if err != nil {
+		return nil, err
+	}
+	return slices.DeleteFunc(clients, func(client remotesessions.Client) bool {
+		return !associated[target.serverID][client.ID]
+	}), nil
+}
+
+// agentClientType is the auth client type of an issuer client an agent uses.
+func agentClientType(client remotesessions.Client) string {
+	if client.CredentialOwner == remotesessions.CredentialOwnerSelf {
+		return authClientTypeServiceAccount
+	}
+	return authClientTypeRemoteSession
 }
 
 // agentServerTarget is the server an agent key reaches, through its agent

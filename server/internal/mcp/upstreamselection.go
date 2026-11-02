@@ -21,8 +21,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
-	"slices"
 	"sync"
 
 	"github.com/google/uuid"
@@ -406,46 +406,67 @@ func directAgentKeyActor(ctx context.Context, endpoint *ResolvedMcpEndpoint) (uu
 	return agentID, true
 }
 
+// agentKeyClient is one client an agent key is served by, with the
+// connection its permit was decided for.
+type agentKeyClient struct {
+	id         uuid.UUID
+	connection authClientConnectionOwner
+}
+
 // authorizeDirectAgentKey applies the agent gateway's checks for a key
 // without a credential choice to the server's own endpoint: every client the
-// server's issuer binds for it must be one the agent may use, through the
-// exact connection it is attached to. A sole attached connection is pinned,
-// so the request is served by the connection the check was decided for.
+// server's issuer binds for it must be one the agent may use. The request is
+// then served only by those clients, each through the connection its permit
+// was decided for, as the gateway serves the same server.
 func (s *Service) authorizeDirectAgentKey(ctx context.Context, authentication *issuerGateAuthentication, agentID uuid.UUID) error {
 	endpoint := authentication.endpoint
 	target := agentServerTarget{organizationID: endpoint.OrganizationID, agentID: agentID, serverID: endpoint.McpServerID.UUID, projectID: endpoint.ProjectID, slug: endpoint.Slug}
-	clients, err := s.remoteChallengeMgr.ListClients(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID)
+	clients, err := s.agentServerClients(ctx, target, endpoint.UserSessionIssuerID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "load agent key clients").LogError(ctx, s.logger)
 	}
-	associated, err := s.serverAssociatedClients(ctx, endpoint.OrganizationID, []uuid.UUID{target.serverID})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "load agent key clients").LogError(ctx, s.logger)
-	}
-	// An issuer can also bind clients belonging to sibling servers.
-	clients = slices.DeleteFunc(clients, func(client remotesessions.Client) bool {
-		return !associated[target.serverID][client.ID]
-	})
 	if len(clients) == 0 {
 		_, err := s.authorizeAgentServerClient(ctx, target, endpoint.UserSessionIssuerID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "")
-		return s.directAgentKeyError(ctx, authentication, err)
-	}
-	attached := uuid.Nil
-	for _, client := range clients {
-		clientType := authClientTypeRemoteSession
-		if client.CredentialOwner == remotesessions.CredentialOwnerSelf {
-			clientType = authClientTypeServiceAccount
-		}
-		connection, err := s.authorizeAgentServerClient(ctx, target, endpoint.UserSessionIssuerID, uuid.NullUUID{UUID: client.ID, Valid: true}, clientType)
 		if err != nil {
 			return s.directAgentKeyError(ctx, authentication, err)
 		}
-		if len(clients) == 1 {
-			attached = connection.attachedSession
-		}
+		authentication.agentKeyClients = []agentKeyClient{}
+		return nil
 	}
-	authentication.attachedSession = attached
+	authorized := make([]agentKeyClient, 0, len(clients))
+	for _, client := range clients {
+		connection, err := s.authorizeAgentServerClient(ctx, target, endpoint.UserSessionIssuerID, uuid.NullUUID{UUID: client.ID, Valid: true}, agentClientType(client))
+		if err != nil {
+			return s.directAgentKeyError(ctx, authentication, err)
+		}
+		authorized = append(authorized, agentKeyClient{id: client.ID, connection: connection})
+	}
+	authentication.agentKeyClients = authorized
 	return nil
+}
+
+// resolveAgentKeyClientTokens reads each authorized client's credential from
+// the connection its permit was decided for: the exact attachment, pinned, or
+// for an unattached key its validated authorizer's own connection.
+func (s *Service) resolveAgentKeyClientTokens(ctx context.Context, authentication *issuerGateAuthentication, skipUnusable bool) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	endpoint := authentication.endpoint
+	tokens := make(map[uuid.UUID]remotesessions.UpstreamToken, len(authentication.agentKeyClients))
+	for _, client := range authentication.agentKeyClients {
+		subject := authentication.subject
+		if client.connection.authorizer {
+			subject = urn.NewUserSubject(client.connection.owner)
+		}
+		resolved, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, client.id, skipUnusable)
+		if err != nil {
+			return nil, fmt.Errorf("resolve agent key client: %w", err)
+		}
+		resolved, err = pinAttachedSession(resolved, client.connection.attachedSession, skipUnusable)
+		if err != nil {
+			return nil, fmt.Errorf("resolve agent key connection: %w", err)
+		}
+		maps.Copy(tokens, resolved)
+	}
+	return tokens, nil
 }
 
 // directAgentKeyError answers a refused agent key on a server's own endpoint.
@@ -484,6 +505,9 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 	endpoint := authentication.endpoint
 	if authentication.chosenNoAuth {
 		return map[uuid.UUID]remotesessions.UpstreamToken{}, nil
+	}
+	if authentication.agentKeyClients != nil {
+		return s.resolveAgentKeyClientTokens(ctx, authentication, skipUnusable)
 	}
 	if authentication.chosenClient.Valid && authentication.authClient != nil {
 		// A typed auth client was checked against the server, which authorizes
