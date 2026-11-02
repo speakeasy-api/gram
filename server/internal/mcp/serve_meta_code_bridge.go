@@ -368,7 +368,7 @@ func (b *metaCodeBackend) call(ctx context.Context, path string, arguments json.
 		}
 		// The member's own remedy names a connect page the program cannot
 		// open; point it at tools.connect, which binds the link to this user.
-		if invocation.credential && !invocation.dispatched {
+		if invocation.credential {
 			if slug, _, splitErr := metamcp.SplitQualifiedName(path); splitErr == nil {
 				if member, ok := findMetaMember(members, slug); ok && codeConnectAvailable(&callGate) && callGate.memberConnectURL(member) != "" {
 					failure = &codemode.ConnectionRequiredError{Server: member.slug}

@@ -19,6 +19,8 @@ const (
 	discoveryConcurrency = 4
 	// memberDeadline limits an individual catalog lookup.
 	memberDeadline = 5 * time.Second
+	// verificationDeadline leaves time for the program to handle partial results.
+	verificationDeadline = 10 * time.Second
 	// pathSeparator joins a member slug and an upstream tool name. Member
 	// slugs never contain it, so the first occurrence is the boundary and the
 	// tool name may contain further occurrences.
@@ -182,22 +184,21 @@ func (h *CatalogHost) Servers(ctx context.Context, args PageArgs) (*ServerPage, 
 		if !ok {
 			return nil, fmt.Errorf("live verification unavailable")
 		}
-		group, verifyCtx := errgroup.WithContext(ctx)
-		group.SetLimit(discoveryConcurrency)
+		verifyCtx, cancel := context.WithTimeout(ctx, verificationDeadline)
+		defer cancel()
+		slugs := make([]string, len(page.Items))
 		for i := range page.Items {
-			group.Go(func() error {
-				probeCtx, cancel := context.WithTimeout(verifyCtx, memberDeadline)
-				defer cancel()
-				connection, err := verifier.VerifyConnection(probeCtx, page.Items[i].Slug)
-				if err != nil {
-					return fmt.Errorf("verify server %s: %w", page.Items[i].Slug, err)
-				}
-				page.Items[i].Connection = connection
-				return nil
-			})
+			slugs[i] = page.Items[i].Slug
 		}
-		if err := group.Wait(); err != nil {
+		connections, err := verifier.VerifyConnections(verifyCtx, slugs)
+		if err != nil {
 			return nil, fmt.Errorf("verify server page: %w", err)
+		}
+		if len(connections) != len(page.Items) {
+			return nil, fmt.Errorf("invalid verification result count")
+		}
+		for i := range page.Items {
+			page.Items[i].Connection = connections[i]
 		}
 	}
 	return page, nil
@@ -423,7 +424,10 @@ func (h *CatalogHost) Connect(ctx context.Context, server string) (*ConnectionAc
 	return result, nil
 }
 
-// ConnectionVerifier probes one visible member without widening consent.
+// ConnectionVerifier probes a page under one refreshed authorization snapshot.
+// Results follow the input order; member failures stay in their own state.
+// Only snapshot/authorization failures fail the page. The context bounds the
+// entire batch, including snapshot acquisition and queued probes.
 type ConnectionVerifier interface {
-	VerifyConnection(context.Context, string) (*ConnectionState, error)
+	VerifyConnections(context.Context, []string) ([]*ConnectionState, error)
 }

@@ -64,7 +64,7 @@ type Server struct {
 	Slug string `json:"slug"`
 	// Name is the configured display name.
 	Name string `json:"name"`
-	// Connection reports known access state without probing the upstream.
+	// Connection reports known access state, or a live result when Verify is set.
 	Connection *ConnectionState `json:"connection,omitempty"`
 }
 

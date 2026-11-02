@@ -9,10 +9,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"golang.org/x/sync/errgroup"
 )
 
 var _ codemode.ConnectionBackend = (*metaCodeBackend)(nil)
@@ -140,22 +142,51 @@ type codeConnections struct {
 	actions map[string]*codemode.ConnectionAction
 }
 
-// VerifyConnection uses the consent page's live MCP probe, bypassing the frozen
-// tool catalogue while preserving the admitted identity and routing boundary.
-func (b *metaCodeBackend) VerifyConnection(ctx context.Context, server string) (*codemode.ConnectionState, error) {
+// VerifyConnections refreshes authorization once for the page. It uses the
+// consent page's live MCP probe without changing the frozen tool catalogue.
+func (b *metaCodeBackend) VerifyConnections(ctx context.Context, servers []string) ([]*codemode.ConnectionState, error) {
+	if len(servers) == 0 {
+		return []*codemode.ConnectionState{}, nil
+	}
 	ctx, gate, members, err := b.currentState(ctx, true, true)
 	if err != nil {
 		return nil, err
 	}
+	states := make([]*codemode.ConnectionState, len(servers))
+	var group errgroup.Group
+	group.SetLimit(4)
+	for i, server := range servers {
+		group.Go(func() error {
+			probeCtx, cancel := context.WithTimeout(ctx, 5*time.Second)
+			defer cancel()
+			states[i] = b.verifyConnection(probeCtx, gate, members, server)
+			return nil
+		})
+	}
+	_ = group.Wait() // Per-member failures are represented in states.
+	return states, nil
+}
+
+func (b *metaCodeBackend) verifyConnection(ctx context.Context, gate *metaGateContext, members []metaMember, server string) *codemode.ConnectionState {
 	member, ok := findMetaMember(members, server)
 	if !ok {
-		return nil, codemode.ErrToolUnavailable
+		return &codemode.ConnectionState{Consent: "unknown", Authentication: "unknown", Instructions: "This server is no longer available; list servers again.", CheckedAt: nil}
 	}
 	state := b.knownConnectionState(ctx, gate, member)
+	if ctx.Err() != nil {
+		state.Authentication = "unknown"
+		state.Instructions = "Verification time budget exhausted; verify this server separately."
+		return state
+	}
 	if b.service.validationLimiter != nil {
 		allowed, err := b.service.validationLimiter.Allow(ctx, "code:"+gate.userID+":"+member.serverID.String())
-		if err != nil || !allowed.Allowed {
-			return nil, errValidationRateLimited
+		switch {
+		case err != nil:
+			b.service.logger.WarnContext(ctx, "code connection validation limiter unavailable; allowing", attr.SlogError(err))
+		case !allowed.Allowed:
+			state.Authentication = "unknown"
+			state.Instructions = "Connection verification is rate limited; try again later."
+			return state
 		}
 	}
 	// Resolve credentials afresh instead of treating consent-time verification as current.
@@ -163,18 +194,19 @@ func (b *metaCodeBackend) VerifyConnection(ctx context.Context, server string) (
 	if gate.authentication != nil && gate.authentication.subject.Kind == urn.SessionSubjectKindUser {
 		probeGate.chainUpstream = b.service.gatewayMemberChainer(gate, mcpidentity.KindUserSession, uuid.Nil)
 	}
-	dial, err := b.service.dialMetaMember(ctx, b.service.logger, probeGate, member, codeCallerIdentity(ctx, gate))
+	dial, _, err := b.service.routeMetaMember(ctx, b.service.logger, probeGate, member, codeCallerIdentity(ctx, gate))
 	now := time.Now().UTC()
 	state.CheckedAt = &now
 	if err != nil {
-		if errors.Is(err, remotesessions.ErrNoValidToken) && !errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) && !errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
+		_, needsSignIn := errors.AsType[memberCredentialError](err)
+		if needsSignIn || (errors.Is(err, remotesessions.ErrNoValidToken) && !errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) && !errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured)) {
 			state.Authentication = "reauth_required"
 			state.Instructions = "Call tools.connect(server=...) to reconnect, then verify again in a fresh execution."
 		} else {
 			state.Authentication = "unknown"
 			state.Instructions = "Connection verification could not complete; try again later."
 		}
-		return state, nil
+		return state
 	}
 	verdict, _ := b.service.probeUpstream(ctx, b.service.logger, probeProxyBuilder(dial.build), member.name)
 	now = time.Now().UTC()
@@ -189,5 +221,5 @@ func (b *metaCodeBackend) VerifyConnection(ctx context.Context, server string) (
 		state.Authentication = "unreachable"
 		state.Instructions = "The upstream could not be verified; try again later."
 	}
-	return state, nil
+	return state
 }

@@ -1,11 +1,15 @@
 package mcp_test
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"net/http/httptest"
+	"net/http/httputil"
 	"net/url"
 	"testing"
 	"time"
@@ -311,41 +315,110 @@ func TestCodeServersVerifyFrozenConnection(t *testing.T) {
 	require.Greater(t, upstream.requests.Load(), before)
 }
 
+func TestCodeServersVerifyBoundsWholePageAndKeepsPartialResults(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "verify-page-"+uuid.NewString(), issuer)
+	upstream := newRecordingUpstream(t, "ping")
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Healthy", "healthy", 0, upstream.url)
+	release := make(chan struct{})
+	slow := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if r.Method != http.MethodPost {
+			w.WriteHeader(http.StatusNotFound)
+			return
+		}
+		_, _ = io.Copy(io.Discard, r.Body)
+		select {
+		case <-r.Context().Done():
+		case <-release:
+		}
+	}))
+	t.Cleanup(func() { close(release); slow.Close() })
+	for i := int32(1); i < codemode.MaxPageSize; i++ {
+		slug := fmt.Sprintf("slow-%02d", i)
+		seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, slug, slug, i, slow.URL)
+	}
+	host := mcp.NewTestMetaCodeHost(t, ctx, ti.service.Service, gateway.ID)
+	started := time.Now()
+	page, err := host.Servers(ctx, codemode.PageArgs{Verify: true, Limit: codemode.MaxPageSize})
+	require.NoError(t, err)
+	require.Less(t, time.Since(started), 13*time.Second, "a full page must not consume the 30-second execution budget")
+	require.Len(t, page.Items, codemode.MaxPageSize)
+	bySlug := make(map[string]*codemode.ConnectionState, len(page.Items))
+	for _, server := range page.Items {
+		bySlug[server.Slug] = server.Connection
+	}
+	require.Equal(t, "connected", bySlug["healthy"].Authentication, "a failed member must not erase a successful probe")
+	require.NotNil(t, bySlug["healthy"].CheckedAt)
+	require.Equal(t, "unknown", bySlug["slow-49"].Authentication)
+	require.Nil(t, bySlug["slow-49"].CheckedAt, "queued probes must not claim a check after the page deadline")
+	require.Contains(t, bySlug["slow-49"].Instructions, "budget")
+}
+
 // A member that refuses the caller for want of a sign-in fails the call
 // before dispatch with the member to pass to tools.connect, rather than the
 // generic refusal, and Connect issues that member's link.
 func TestCodeCallNeedingSignInNamesConnect(t *testing.T) {
 	t.Parallel()
-	ctx, ti := newTestMCPService(t)
-	auth, _ := contextvalues.GetAuthContext(ctx)
-	projectID := *auth.ProjectID
-	orgID := auth.ActiveOrganizationID
-	issuer := createUserSessionIssuer(t, ctx, ti.conn, projectID)
-	slug := "code-sign-in-" + uuid.NewString()
-	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, slug, issuer)
-	deny := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		w.WriteHeader(http.StatusUnauthorized)
-	}))
-	t.Cleanup(deny.Close)
-	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "code-sign-in", "", []uuid.UUID{issuer})
-	remoteIssuerID := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)
-	createMetaMember(t, ctx, ti.conn, projectID, gateway.ID, "member", deny.URL, uuid.NullUUID{UUID: remoteIssuerID, Valid: true}, 0)
-	token := mintGatewayTestSession(t, ctx, ti, gateway.ID, issuer, slug, metamcp.DiscoveryModeCode)
-	ran := false
-	mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{run: func(runCtx context.Context, _ string, host codemode.Host) (*codemode.ExecutionResult, error) {
-		ran = true
-		_, err := host.Call(runCtx, "member--ping", json.RawMessage(`{}`))
-		connect, ok := errors.AsType[*codemode.ConnectionRequiredError](err)
-		require.True(t, ok, "want a connection-required refusal, got %v", err)
-		require.Equal(t, "member", connect.Server)
-		action, err := host.Connect(runCtx, connect.Server)
-		require.NoError(t, err)
-		require.NotEmpty(t, action.AuthorizationURL)
-		return &codemode.ExecutionResult{}, nil
-	}})
-	enableCodeMode(t, ctx, ti)
-	response, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "call"}}), token, nil)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
-	require.True(t, ran)
+	for _, stage := range []string{"handshake", "call-401", "call-403"} {
+		t.Run(stage, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPService(t)
+			auth, _ := contextvalues.GetAuthContext(ctx)
+			projectID := *auth.ProjectID
+			orgID := auth.ActiveOrganizationID
+			issuer := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+			slug := "code-sign-in-" + uuid.NewString()
+			gateway := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, slug, issuer)
+			upstream := newRecordingUpstream(t, "ping")
+			target, err := url.Parse(upstream.url)
+			require.NoError(t, err)
+			proxy := httputil.NewSingleHostReverseProxy(target)
+			deny := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+				body, err := io.ReadAll(r.Body)
+				if err != nil {
+					w.WriteHeader(http.StatusBadRequest)
+					return
+				}
+				var rpc struct {
+					Method string `json:"method"`
+				}
+				_ = json.Unmarshal(body, &rpc)
+				if stage == "handshake" || rpc.Method == "tools/call" {
+					status := http.StatusUnauthorized
+					if stage == "call-403" {
+						status = http.StatusForbidden
+					}
+					w.WriteHeader(status)
+					return
+				}
+				r.Body = io.NopCloser(bytes.NewReader(body))
+				proxy.ServeHTTP(w, r)
+			}))
+			t.Cleanup(deny.Close)
+			clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "code-sign-in", "", []uuid.UUID{issuer})
+			remoteIssuerID := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)
+			createMetaMember(t, ctx, ti.conn, projectID, gateway.ID, "member", deny.URL, uuid.NullUUID{UUID: remoteIssuerID, Valid: true}, 0)
+			token := mintGatewayTestSession(t, ctx, ti, gateway.ID, issuer, slug, metamcp.DiscoveryModeCode)
+			ran := false
+			mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{run: func(runCtx context.Context, _ string, host codemode.Host) (*codemode.ExecutionResult, error) {
+				ran = true
+				_, err := host.Call(runCtx, "member--ping", json.RawMessage(`{}`))
+				connect, ok := errors.AsType[*codemode.ConnectionRequiredError](err)
+				require.True(t, ok, "want a connection-required refusal, got %v", err)
+				require.Equal(t, "member", connect.Server)
+				action, err := host.Connect(runCtx, connect.Server)
+				require.NoError(t, err)
+				require.NotEmpty(t, action.AuthorizationURL)
+				return &codemode.ExecutionResult{}, nil
+			}})
+			enableCodeMode(t, ctx, ti)
+			response, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "call"}}), token, nil)
+			require.NoError(t, err)
+			require.Equal(t, http.StatusOK, response.Code, response.Body.String())
+			require.True(t, ran)
+		})
+	}
 }

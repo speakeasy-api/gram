@@ -484,7 +484,11 @@ recovery tests verify its identity and admission boundaries.
 `await tools.servers(server="linear", verify=True)` verifies the selected visible
 member through the same MCP handshake/tools-list probe used by the consent UI.
 Without `server`, only the returned page is probed, with bounded concurrency and
-per-member deadlines. Ordinary `servers()` remains metadata-only. Verified
+five-second per-member deadlines and a ten-second budget for the whole page.
+The page shares one authorization/member snapshot. Rate limits and member
+failures appear in that member's state without discarding other results; queued
+probes that exhaust the page budget remain unchecked. Limiter outages fail open,
+matching consent verification. Ordinary `servers()` remains metadata-only. Verified
 connection results include `checked_at` and an authentication state of
 `connected`, `reauth_required`, `unreachable`, or `unknown`. Transient failures
 must not be presented as a successful login or a need to reauthenticate.
