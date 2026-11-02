@@ -1049,6 +1049,12 @@ type issuerGateAuthentication struct {
 	// authorizerOwner is the validated authorizer whose own connection an
 	// unattached agent key's permit was decided for, typed or handed back.
 	authorizerOwner string
+
+	// agentKeyClients, when not nil, are the only clients an agent key
+	// without a credential choice is served by on a direct endpoint: the
+	// server's own clients, each with the connection its permit was decided
+	// for.
+	agentKeyClients []agentKeyClient
 }
 
 // authenticateIssuerGate runs the issuer-gated authentication branch shared by
@@ -1187,6 +1193,7 @@ func (s *Service) authenticateIssuerGate(
 		chainingAuthClient:     nil,
 		attachedSession:        uuid.Nil,
 		authorizerOwner:        "",
+		agentKeyClients:        nil,
 	}, toolSelection, nil
 }
 

@@ -21,6 +21,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
 	"net/http"
 	"sync"
 
@@ -364,6 +365,15 @@ func (s *Service) directPrincipalChoice(ctx context.Context, w http.ResponseWrit
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: agent key choice unusable", issuerGateReasonUpstreamSelectionUnavailable)
 		return none, true, writeRemoteSessionReconnectChallenge(w, authentication)
 	}
+	if agentID, ok := directAgentKeyActor(ctx, authentication.endpoint); ok {
+		// A key without a choice for the server keeps the issuer-derived path,
+		// but only after the checks its agent gateway applies to the same
+		// server, so a block or missing permission cannot be bypassed here.
+		if err := s.authorizeDirectAgentKey(ctx, authentication, agentID); err != nil {
+			return none, true, err
+		}
+		return none, false, nil
+	}
 	authenticated, ok := principalcredential.FromContext(ctx)
 	if !ok {
 		return none, false, nil
@@ -377,6 +387,100 @@ func (s *Service) directPrincipalChoice(ctx context.Context, w http.ResponseWrit
 	}
 	s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: no execution profile choice", issuerGateReasonUpstreamSelectionUnavailable)
 	return none, true, writeRemoteSessionReconnectChallenge(w, authentication)
+}
+
+// directAgentKeyActor returns the agent a principal agent key in ctx
+// authenticates for endpoint's organization.
+func directAgentKeyActor(ctx context.Context, endpoint *ResolvedMcpEndpoint) (uuid.UUID, bool) {
+	mode, byKey := contextvalues.APIKeyAuthorization(ctx)
+	actor, hasActor := contextvalues.AuthenticatedActor(ctx)
+	authCtx, hasAuth := contextvalues.GetAuthContext(ctx)
+	if !byKey || mode != contextvalues.APIKeyAuthorizationModePrincipal || !hasActor || actor.Type != urn.PrincipalTypeAgent ||
+		!hasAuth || authCtx == nil || authCtx.ActiveOrganizationID != endpoint.OrganizationID || !endpoint.McpServerID.Valid {
+		return uuid.Nil, false
+	}
+	agentID, err := uuid.Parse(actor.ID)
+	if err != nil {
+		return uuid.Nil, false
+	}
+	return agentID, true
+}
+
+// agentKeyClient is one client an agent key is served by, with the
+// connection its permit was decided for.
+type agentKeyClient struct {
+	id         uuid.UUID
+	connection authClientConnectionOwner
+}
+
+// authorizeDirectAgentKey applies the agent gateway's checks for a key
+// without a credential choice to the server's own endpoint: every client the
+// server's issuer binds for it must be one the agent may use. The request is
+// then served only by those clients, each through the connection its permit
+// was decided for, as the gateway serves the same server.
+func (s *Service) authorizeDirectAgentKey(ctx context.Context, authentication *issuerGateAuthentication, agentID uuid.UUID) error {
+	endpoint := authentication.endpoint
+	target := agentServerTarget{organizationID: endpoint.OrganizationID, agentID: agentID, serverID: endpoint.McpServerID.UUID, projectID: endpoint.ProjectID, slug: endpoint.Slug}
+	clients, err := s.agentServerClients(ctx, target, endpoint.UserSessionIssuerID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "load agent key clients").LogError(ctx, s.logger)
+	}
+	if len(clients) == 0 {
+		_, err := s.authorizeAgentServerClient(ctx, target, endpoint.UserSessionIssuerID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, "")
+		if err != nil {
+			return s.directAgentKeyError(ctx, authentication, err)
+		}
+		authentication.agentKeyClients = []agentKeyClient{}
+		return nil
+	}
+	authorized := make([]agentKeyClient, 0, len(clients))
+	for _, client := range clients {
+		connection, err := s.authorizeAgentServerClient(ctx, target, endpoint.UserSessionIssuerID, uuid.NullUUID{UUID: client.ID, Valid: true}, agentClientType(client))
+		if err != nil {
+			return s.directAgentKeyError(ctx, authentication, err)
+		}
+		authorized = append(authorized, agentKeyClient{id: client.ID, connection: connection})
+	}
+	authentication.agentKeyClients = authorized
+	return nil
+}
+
+// resolveAgentKeyClientTokens reads each authorized client's credential from
+// the connection its permit was decided for: the exact attachment, pinned, or
+// for an unattached key its validated authorizer's own connection.
+func (s *Service) resolveAgentKeyClientTokens(ctx context.Context, authentication *issuerGateAuthentication, skipUnusable bool) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
+	endpoint := authentication.endpoint
+	tokens := make(map[uuid.UUID]remotesessions.UpstreamToken, len(authentication.agentKeyClients))
+	for _, client := range authentication.agentKeyClients {
+		subject := authentication.subject
+		if client.connection.authorizer {
+			subject = urn.NewUserSubject(client.connection.owner)
+		}
+		resolved, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, client.id, skipUnusable)
+		if err != nil {
+			return nil, fmt.Errorf("resolve agent key client: %w", err)
+		}
+		resolved, err = pinAttachedSession(resolved, client.connection.attachedSession, skipUnusable)
+		if err != nil {
+			return nil, fmt.Errorf("resolve agent key connection: %w", err)
+		}
+		maps.Copy(tokens, resolved)
+	}
+	return tokens, nil
+}
+
+// directAgentKeyError answers a refused agent key on a server's own endpoint.
+func (s *Service) directAgentKeyError(ctx context.Context, authentication *issuerGateAuthentication, err error) error {
+	var refused *metaMemberError
+	switch {
+	case err == nil:
+		return nil
+	case errors.As(err, &refused):
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: agent may not use the server's connection", issuerGateReasonUpstreamSelectionUnavailable)
+		return oops.E(oops.CodeForbidden, err, "this agent may not use this server's connection")
+	default:
+		return oops.E(oops.CodeUnexpected, err, "authorize agent key").LogError(ctx, s.logger)
+	}
 }
 
 // resolveAccessTokens resolves the authenticated caller's upstream
@@ -401,6 +505,9 @@ func (s *Service) resolveSelectedAccessTokens(ctx context.Context, authenticatio
 	endpoint := authentication.endpoint
 	if authentication.chosenNoAuth {
 		return map[uuid.UUID]remotesessions.UpstreamToken{}, nil
+	}
+	if authentication.agentKeyClients != nil {
+		return s.resolveAgentKeyClientTokens(ctx, authentication, skipUnusable)
 	}
 	if authentication.chosenClient.Valid && authentication.authClient != nil {
 		// A typed auth client was checked against the server, which authorizes
