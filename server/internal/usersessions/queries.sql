@@ -2993,49 +2993,35 @@ FROM user_sessions AS us
 JOIN user_session_clients AS c ON c.id = us.user_session_client_id
 WHERE COALESCE(us.credential_id, us.id) = @credential_id::uuid
   AND us.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND us.organization_id = @organization_id::text
+  AND us.project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND c.user_session_issuer_id = us.user_session_issuer_id
   AND us.subject_urn = @subject_urn
   AND c.client_id = @client_id::text
   AND c.deleted IS FALSE
   AND us.deleted IS FALSE
   AND (us.expires_at > clock_timestamp() OR us.refresh_expires_at > clock_timestamp())
 ORDER BY us.created_at DESC
-LIMIT 1;
+LIMIT 1
+FOR UPDATE OF us;
 
--- name: ReconnectUpstreamClientSelection :execrows
--- Successful member-scoped OAuth consent may replace precisely this member's
--- choice. It never reselects the other members of the credential.
-INSERT INTO upstream_client_selections (
-  project_id, organization_id, credential_kind, credential_id, mcp_server_id,
-  remote_session_client_id, client_attachment_scope, no_auth,
-  auth_client_id, auth_client_attachment_scope, source
-)
-SELECT s.project_id, p.organization_id, 'user_session', @credential_id::uuid, s.id,
-       reg.id, reg.attachment_scope, false, ac.id, ac.attachment_scope, 'issuance'
-FROM mcp_servers AS s
-JOIN projects AS p ON p.id = s.project_id AND p.deleted IS FALSE
-JOIN remote_session_clients AS reg ON reg.id = @remote_session_client_id::uuid AND reg.deleted IS FALSE
-LEFT JOIN mcp_auth_clients AS ac ON ac.id = sqlc.narg('auth_client_id')::uuid
-  AND ac.organization_id = p.organization_id
-  AND (ac.project_id IS NULL OR ac.project_id = s.project_id)
-  AND ac.remote_session_client_id = reg.id AND ac.deleted IS FALSE AND ac.enabled
-WHERE s.id = @mcp_server_id::uuid AND s.deleted IS FALSE
-  AND p.organization_id = @organization_id::text
-  AND (
-    (ac.id IS NOT NULL AND EXISTS (
-      SELECT 1 FROM mcp_server_auth_clients AS link
-      WHERE link.mcp_server_id = s.id AND link.auth_client_id = ac.id
-        AND link.organization_id = p.organization_id AND link.deleted IS FALSE
-    )) OR (sqlc.narg('auth_client_id')::uuid IS NULL AND EXISTS (
-      SELECT 1 FROM mcp_server_remote_session_clients AS link
-      JOIN remote_session_client_user_session_issuers AS issuer_link
-        ON issuer_link.remote_session_client_id = link.remote_session_client_id
-      WHERE link.mcp_server_id = s.id AND link.remote_session_client_id = reg.id
-        AND link.deleted IS FALSE AND issuer_link.user_session_issuer_id = @user_session_issuer_id::uuid
-    ))
-  )
-ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE
-DO UPDATE SET remote_session_client_id = EXCLUDED.remote_session_client_id,
-              client_attachment_scope = EXCLUDED.client_attachment_scope,
-              no_auth = false, auth_client_id = EXCLUDED.auth_client_id,
-              auth_client_attachment_scope = EXCLUDED.auth_client_attachment_scope,
-              source = EXCLUDED.source, updated_at = clock_timestamp();
+-- name: ClearReconnectUpstreamChoices :exec
+DELETE FROM upstream_client_selections
+WHERE credential_kind = 'user_session'
+  AND credential_id = @credential_id::uuid
+  AND organization_id = @organization_id::text;
+
+-- name: UpdateReconnectSessionPolicy :many
+UPDATE user_sessions AS us SET tool_selection = @tool_selection, updated_at = clock_timestamp()
+WHERE COALESCE(us.credential_id, us.id) = @credential_id::uuid
+  AND us.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND us.organization_id = @organization_id::text
+  AND us.project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND us.subject_urn = @subject_urn
+  AND us.tool_selection -> 'catalog' ->> 'id' = @catalog_id::text
+  AND EXISTS (SELECT 1 FROM user_session_clients AS c
+    WHERE c.id = us.user_session_client_id AND c.client_id = @client_id::text
+      AND c.user_session_issuer_id = us.user_session_issuer_id AND c.deleted IS FALSE)
+  AND us.deleted IS FALSE
+  AND (us.expires_at > clock_timestamp() OR us.refresh_expires_at > clock_timestamp())
+RETURNING us.jti;

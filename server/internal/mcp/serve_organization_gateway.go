@@ -553,7 +553,7 @@ func (s *Service) consentSubjectMembers(ctx context.Context, endpoint *ResolvedM
 	if err := s.withTypedMemberRegistrations(ctx, endpoint.OrganizationID, members); err != nil {
 		return nil, err
 	}
-	if binding := challengeState.CodeReconnect; binding != nil {
+	if binding := challengeState.CodeReconnect; binding != nil && !binding.reviewReady() {
 		hidden, err := hiddenmcpservers.HiddenServerIDs(ctx, s.db, endpoint.OrganizationID, binding.UserID)
 		if err != nil {
 			return nil, fmt.Errorf("check connection visibility: %w", err)

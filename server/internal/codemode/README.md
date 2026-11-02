@@ -458,10 +458,12 @@ generic refusal, when a user-bound link can be issued for that member.
 An authenticated code-mode connection whose catalogue expired can run these
 recovery helpers, but cannot invoke or discover business tools. Expired or
 revoked gateway credentials still fail normal MCP authentication. Upstream
-sign-in through a bound Code Mode reconnect refreshes the selected server in
-the existing catalogue after successful OAuth consent, without expanding other
-servers or extending the connection lifetime. Verification alone never changes
-consent. Connections without a usable catalogue still need a full reconnect:
+sign-in through a bound Code Mode reconnect opens a review of the refreshed
+gateway catalogue. The existing tool selection is preselected and added, removed
+and changed tools are shown. Only approval replaces the catalogue; the original
+connection expiry is preserved. Verification alone never changes
+consent. Connections without a usable catalogue, and non-OAuth connections, still need a
+full gateway reconnect:
 when `client_reconnect_required` is true, the user must reconnect the gateway
 in their MCP client and approve the member. The agent returns the link, ends
 execution, and checks access in a fresh execution after the user finishes.

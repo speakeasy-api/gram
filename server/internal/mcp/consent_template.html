@@ -29,8 +29,6 @@
       <section class="bg-card border">
         <header class="flex flex-col gap-2 border-b px-6 py-6 sm:px-8">
           {{if and .Gateway .Gateway.Focus}}
-          {{/* One server's connect page. Connecting a service completes this
-          focused flow, including any consent for the requesting catalogue. */}}
           <p class="text-eyebrow">Connect a server</p>
           <h1 class="text-display-xs break-all">{{.Gateway.Focus.Name}}</h1>
           <p class="text-sm text-muted-foreground">
@@ -660,6 +658,15 @@
         </div>
         {{end}}
 
+        {{with .CatalogChanges}}
+        <section class="border-t px-6 py-6 sm:px-8" data-catalog-changes>
+          <h2 class="text-lg font-semibold">Review updated tools</h2>
+          <p class="text-sm text-muted-foreground">Your gateway will use the new catalogue only after you approve. Your current access selection is preselected.</p>
+          <details><summary>{{len .Added}} added</summary><ul>{{range .Added}}<li class="font-mono text-sm">{{.}}</li>{{end}}</ul></details>
+          <details><summary>{{len .Removed}} removed</summary><ul>{{range .Removed}}<li class="font-mono text-sm">{{.}}</li>{{end}}</ul></details>
+          <details><summary>{{len .Changed}} changed</summary><ul>{{range .Changed}}<li class="font-mono text-sm">{{.}}</li>{{end}}</ul></details>
+        </section>
+        {{end}}
         {{with .ApprovalError}}
         <div role="alert" class="border-b px-6 py-6 text-sm sm:px-8">
           <p>{{.Message}}</p>
@@ -866,10 +873,8 @@
         <p class="text-sm text-muted-foreground px-6 py-6 sm:px-8">
           Connection complete. This tab will close automatically.
         </p>
+        {{else if and .ApprovalError .Gateway .Gateway.Focus}}
         {{else if and .Gateway .Gateway.Focus}}
-        {{/* No approve button: connecting a service above is what makes the
-        server usable, so the page says that instead of offering an approval
-        that would do nothing. */}}
         <div class="flex flex-col gap-4 px-6 py-6 sm:px-8" data-gateway-focus-footer>
           <p class="text-sm text-muted-foreground">
             {{if .Gateway.Focus.NotSetUp}}{{.Gateway.Focus.Name}} signs people in through a service that isn't set up on this gateway yet, so it can't be connected here. Ask an administrator to set up sign-in for it.

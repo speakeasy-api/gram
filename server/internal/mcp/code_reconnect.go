@@ -24,11 +24,16 @@ type CodeReconnectBinding struct {
 	CatalogID       uuid.UUID `json:"catalog_id,omitempty"`
 	CredentialID    uuid.UUID `json:"credential_id,omitempty"`
 	ClientID        string    `json:"client_id,omitempty"`
+	ReviewReady     bool      `json:"review_ready,omitempty"`
 	CatalogComplete bool      `json:"catalog_complete,omitempty"`
 }
 
 func (b *CodeReconnectBinding) catalogPending() bool {
 	return b != nil && b.CatalogID != uuid.Nil && !b.CatalogComplete
+}
+
+func (b *CodeReconnectBinding) reviewReady() bool {
+	return b.catalogPending() && b.ReviewReady
 }
 
 func (b *CodeReconnectBinding) authorize(userID string, impersonated bool, now time.Time) error {
@@ -94,8 +99,7 @@ func (s *Service) codeReconnectTicket(r *http.Request, endpoint *ResolvedMcpEndp
 
 // completeCatalogConsent closes the focused page only after publication. A
 // connected upstream card alone is insufficient evidence of catalogue consent.
-func (s *Service) completeCatalogConsent(ctx context.Context, state AuthnChallengeState) error {
-	binding := state.CodeReconnect
+func (s *Service) updateCodeReconnect(ctx context.Context, state AuthnChallengeState, binding CodeReconnectBinding) error {
 	for range 3 {
 		current, err := s.authnChallengeCache.Get(ctx, state.CacheKey())
 		if err != nil {
@@ -105,9 +109,7 @@ func (s *Service) completeCatalogConsent(ctx context.Context, state AuthnChallen
 			return fmt.Errorf("reconnect challenge changed")
 		}
 		updated := current
-		completed := *current.CodeReconnect
-		completed.CatalogComplete = true
-		updated.CodeReconnect = &completed
+		updated.CodeReconnect = &binding
 		done, err := s.authnChallengeCache.CompareAndSwap(ctx, current, updated)
 		if err != nil {
 			return fmt.Errorf("complete reconnect challenge: %w", err)
