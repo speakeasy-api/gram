@@ -4,7 +4,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"maps"
+	"slices"
 	"strings"
 	"sync"
 	"time"
@@ -50,8 +50,8 @@ func (f *Fake) CreateAuthKey(_ context.Context, creds Credentials, req AuthKeyRe
 	if err := f.check(creds); err != nil {
 		return AuthKey{}, err
 	}
-	if req.Tag == "" || req.TTL <= 0 {
-		return AuthKey{}, errors.New("auth key request requires a tag and a ttl")
+	if req.Tag == "" || req.TTL < time.Second {
+		return AuthKey{}, errors.New("auth key request requires a tag and a ttl of at least one second")
 	}
 	key := AuthKey{
 		ID:      fmt.Sprintf("k%d", len(f.keys)+1),
@@ -86,7 +86,7 @@ func (f *Fake) UpsertService(_ context.Context, creds Credentials, svc Service) 
 	if !strings.HasPrefix(svc.Name, "svc:") || len(svc.Ports) == 0 {
 		return errors.New("service definition requires a svc: name and at least one port")
 	}
-	f.services[svc.Name] = svc
+	f.services[svc.Name] = cloneService(svc)
 	return nil
 }
 
@@ -123,6 +123,14 @@ func (f *Fake) Services() map[string]Service {
 	f.mu.Lock()
 	defer f.mu.Unlock()
 	out := make(map[string]Service, len(f.services))
-	maps.Copy(out, f.services)
+	for name, svc := range f.services {
+		out[name] = cloneService(svc)
+	}
 	return out
+}
+
+// cloneService copies the slices so neither the caller's input nor a
+// returned snapshot aliases the fake's stored definition.
+func cloneService(svc Service) Service {
+	return Service{Name: svc.Name, Ports: slices.Clone(svc.Ports), Tags: slices.Clone(svc.Tags), Comment: svc.Comment}
 }

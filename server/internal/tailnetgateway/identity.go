@@ -1,7 +1,7 @@
 package tailnetgateway
 
 import (
-	"mime"
+	"encoding/base64"
 	"net/http"
 	"strings"
 	"unicode"
@@ -56,16 +56,19 @@ func SetIdentityHeaders(headers http.Header, who *apitype.WhoIsResponse) Identit
 }
 
 // headerValue trims the value and RFC 2047 encodes it when it is not plain
-// printable ASCII, matching what the Tailscale serve proxy sends.
+// printable ASCII or contains an encoded-word marker, so the listener's
+// parser never sees a raw "=?" it would reject as malformed.
 func headerValue(value string) string {
 	value = strings.TrimSpace(value)
 	if value == "" || strings.ContainsAny(value, "\r\n\x00") {
 		return ""
 	}
-	if isASCIIPrintable(value) {
+	if isASCIIPrintable(value) && !strings.Contains(value, "=?") {
 		return value
 	}
-	return mime.BEncoding.Encode("utf-8", value)
+	// mime.WordEncoder leaves plain ASCII untouched, so build the encoded word
+	// directly; the listener decodes it with mime.WordDecoder.
+	return "=?utf-8?b?" + base64.StdEncoding.EncodeToString([]byte(value)) + "?="
 }
 
 func isASCIIPrintable(value string) bool {
