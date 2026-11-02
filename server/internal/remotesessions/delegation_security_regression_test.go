@@ -70,7 +70,7 @@ func TestDelegationRefreshRechecksLiveAuthorityAndScopesRelease(t *testing.T) {
 
 func TestDelegationVerificationFailureQuarantinesRotation(t *testing.T) {
 	t.Parallel()
-	for _, kind := range []FederatedRefreshFailure{FederatedRefreshAmbiguous, FederatedRefreshInvalidIdentity, FederatedRefreshConfiguration} {
+	for _, kind := range []FederatedRefreshFailure{FederatedRefreshAmbiguous, FederatedRefreshInvalidIdentity} {
 		t.Run(string(kind), func(t *testing.T) {
 			t.Parallel()
 			s, store, p, b, allow := newDelegationUnitFixture(t)

@@ -55,7 +55,7 @@ func TestDelegationRefreshNormalizesProviderLifetime(t *testing.T) {
 					p.metadata.JwksURI = upstream.URL + "/jwks"
 					p.client.ClientSecretEncrypted.String, err = s.enc.Encrypt([]byte("secret"))
 					require.NoError(t, err)
-					manager := &ChallengeManager{enc: s.enc, policy: policy}
+					manager := &ChallengeManager{enc: s.enc, policy: policy, logger: testenv.NewLogger(t)}
 					var original time.Time
 					login := delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second)
 					if known {

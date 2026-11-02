@@ -92,7 +92,7 @@ func TestFederatedRefreshVerificationDependencies(t *testing.T) {
 				// verifier before the exact mapper used by RefreshFederatedIdentity.
 				req, err := http.NewRequestWithContext(ctx, http.MethodPost, p.metadata.TokenEndpoint, nil)
 				require.NoError(t, err)
-				tok, receivedAt, err := postFederatedRefresh(doer, req)
+				tok, receivedAt, err := postFederatedRefresh(testenv.NewLogger(t), doer, req)
 				require.NoError(t, err)
 				require.Equal(t, "secret-rotated", tok.RefreshToken)
 				result, mapped := manager.verifyFederatedRefresh(ctx, p, tok, receivedAt, subject, nonce, doer)

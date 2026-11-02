@@ -10,6 +10,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestDelegationAmbiguousResponseAfterRotationNeverResubmits(t *testing.T) {
@@ -37,7 +39,7 @@ func TestDelegationAmbiguousResponseAfterRotationNeverResubmits(t *testing.T) {
 				require.Equal(t, "submitted-refresh", token)
 				req, err := http.NewRequestWithContext(ctx, http.MethodPost, "https://idp.example.test/token", nil)
 				require.NoError(t, err)
-				_, _, err = postFederatedRefresh(doer, req)
+				_, _, err = postFederatedRefresh(testenv.NewLogger(t), doer, req)
 				return nil, err
 			}
 			assertion, err := s.Resolve(t.Context(), b, allow)

@@ -9,6 +9,9 @@ import (
 	"net/http"
 	"net/url"
 	"time"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 )
 
 // FederatedRefreshFailure contains only local classifications, never upstream
@@ -79,7 +82,8 @@ func (m *ChallengeManager) RefreshFederatedIdentity(ctx context.Context, p *Fede
 	if err != nil {
 		return nil, federatedRefreshSetupError(classifyFederatedExchangeError(err))
 	}
-	tok, receivedAt, err := postFederatedRefresh(doer, req)
+	logger := m.logger.With(attr.SlogOrganizationID(p.organizationID), attr.SlogRemoteSessionIssuerID(p.issuer.ID.String()), attr.SlogRemoteSessionClientID(p.client.ID.String()))
+	tok, receivedAt, err := postFederatedRefresh(logger, doer, req)
 	if err != nil {
 		return nil, err
 	}
@@ -116,7 +120,7 @@ func classifyFederatedRefreshVerificationError(err error) error {
 // response to cause unbounded allocation; one extra byte detects truncation.
 const maxFederatedRefreshResponseBytes = 64 << 10
 
-func postFederatedRefresh(doer httpDoer, req *http.Request) (tokenResponse, time.Time, error) {
+func postFederatedRefresh(logger *slog.Logger, doer httpDoer, req *http.Request) (tokenResponse, time.Time, error) {
 	var zero tokenResponse
 	resp, err := doer.Do(req)
 	if err != nil {
@@ -129,7 +133,13 @@ func postFederatedRefresh(doer httpDoer, req *http.Request) (tokenResponse, time
 		return zero, time.Time{}, &FederatedRefreshError{Kind: FederatedRefreshAmbiguous}
 	}
 	if resp.StatusCode/100 != 2 {
-		return zero, time.Time{}, classifyFederatedRefreshResponse(resp.StatusCode, body)
+		kind, code := classifyFederatedRefreshResponse(resp.StatusCode, body)
+		logger.WarnContext(req.Context(), "federated refresh rejected",
+			attr.SlogOutcome(string(kind)),
+			attr.SlogHTTPResponseStatusCode(resp.StatusCode),
+			attr.SlogOAuthError(loggableOAuthErrorCode(code)),
+		)
+		return zero, time.Time{}, &FederatedRefreshError{Kind: kind}
 	}
 	var tok tokenResponse
 	if json.Unmarshal(body, &tok) != nil || tok.AccessToken == "" {
@@ -138,25 +148,35 @@ func postFederatedRefresh(doer httpDoer, req *http.Request) (tokenResponse, time
 	return tok, receivedAt, nil
 }
 
-func classifyFederatedRefreshResponse(status int, body []byte) error {
-	var response struct {
-		Error string `json:"error"`
-	}
-	_ = json.Unmarshal(body, &response)
-	kind := FederatedRefreshConfiguration
+// classifyFederatedRefreshResponse also returns the canonical OAuth error code,
+// which is provider-controlled and may be empty. Only invalid_grant says the
+// refresh token is dead (RFC 6749 section 5.2), so every other rejection falls
+// through to configuration, which keeps the token.
+func classifyFederatedRefreshResponse(status int, body []byte) (FederatedRefreshFailure, string) {
+	parsed, _ := oautherr.ParseTokenError(body)
+	code := oautherr.CanonicalTokenErrorCode(parsed.Code)
 	switch {
 	// An intermediary can return a timeout, rate limit or 5xx after the issuer rotated.
 	// The HTTP error is not evidence that the submitted refresh token is unspent.
-	case status == http.StatusRequestTimeout || status == http.StatusTooManyRequests || status >= 500:
-		kind = FederatedRefreshAmbiguous
-	case response.Error == "invalid_grant":
-		kind = FederatedRefreshInvalidGrant
-	case response.Error == "invalid_client" || response.Error == "unauthorized_client":
-		kind = FederatedRefreshConfiguration
-	case response.Error == "temporarily_unavailable" || response.Error == "server_error":
-		kind = FederatedRefreshRetryable
+	case status == http.StatusRequestTimeout || status == http.StatusTooManyRequests || status >= http.StatusInternalServerError:
+		return FederatedRefreshAmbiguous, code
+	case code == oautherr.CodeInvalidGrant:
+		return FederatedRefreshInvalidGrant, code
+	case code == oautherr.CodeTemporarilyUnavailable || code == oautherr.CodeServerError:
+		return FederatedRefreshRetryable, code
 	}
-	return &FederatedRefreshError{Kind: kind}
+	return FederatedRefreshConfiguration, code
+}
+
+// oauthErrorCodeUnrecognized replaces a code outside the IETF registry in logs.
+const oauthErrorCodeUnrecognized = "unrecognized"
+
+// The "error" member is provider-controlled text, so only registered codes reach logs.
+func loggableOAuthErrorCode(code string) string {
+	if code == "" || oautherr.IsIETFRegisteredCode(code) {
+		return code
+	}
+	return oauthErrorCodeUnrecognized
 }
 
 func federatedRefreshCredentials(tok tokenResponse, receivedAt time.Time) FederatedRefreshCredentials {

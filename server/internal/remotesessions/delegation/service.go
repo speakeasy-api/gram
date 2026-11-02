@@ -166,8 +166,24 @@ func (s *Service) decrypt(value string) (string, error) {
 	}
 	return decrypted, nil
 }
+
+// configurationRetryDelay paces renewal after a refusal that did not invalidate
+// the refresh token. Such a refusal needs an administrator, so retrying sooner
+// mostly adds failed client authentications at the provider, and five minutes
+// is a short enough wait after the fix.
+const configurationRetryDelay = 5 * time.Minute
+
+// A zero retryAfter marks a configuration failure that erased the credential.
+func configurationFailureRetained(c delegationCredential) bool {
+	return c.status == "configuration_failure" && !c.retryAfter.IsZero()
+}
+
+func configurationFailureBlocks(c delegationCredential, now time.Time) bool {
+	return c.status == "configuration_failure" && (c.retryAfter.IsZero() || c.retryAfter.After(now))
+}
+
 func usableRefresh(c delegationCredential, now time.Time) bool {
-	return (c.status == "durable_credential_present" || c.status == "temporary_failure") && c.refresh != "" && (c.refreshExpiry.IsZero() || c.refreshExpiry.After(now)) && c.claim == uuid.Nil
+	return (c.status == "durable_credential_present" || c.status == "temporary_failure" || configurationFailureRetained(c)) && c.refresh != "" && (c.refreshExpiry.IsZero() || c.refreshExpiry.After(now)) && c.claim == uuid.Nil
 }
 func (s *Service) OfflineStatus(ctx context.Context, p Provider, humanID string) (OfflineStatus, error) {
 	if p == nil || !validDelegationBinding(delegationBinding(p, humanID)) {
@@ -441,7 +457,7 @@ func (s *Service) check(ctx context.Context, b Binding, authority Authorizer) (d
 	if c.config != p.DelegationConfigurationHash() {
 		return none, ErrStaleRegistration
 	}
-	if c.status == "configuration_failure" {
+	if configurationFailureBlocks(c, s.now()) {
 		return none, ErrConfiguration
 	}
 	return c, nil
@@ -483,7 +499,7 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	if c.config != p.DelegationConfigurationHash() {
 		return Assertion{}, ErrConfiguration
 	}
-	if c.status == "configuration_failure" {
+	if configurationFailureBlocks(c, now) {
 		return Assertion{}, ErrConfiguration
 	}
 	if c.claim != uuid.Nil {
@@ -717,6 +733,7 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 	next := c
 	next.observedAt = s.now()
 	next.claim = uuid.Nil
+	next.retryAfter = time.Time{}
 	outcome := ErrTemporary
 	switch failure.Kind {
 	case RefreshInvalidGrant:
@@ -731,8 +748,11 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 		}
 		outcome = ErrReauthentication
 	case RefreshConfiguration:
-		next = clearDelegationSecrets(next)
+		// Nothing here says the refresh token is invalid, so it survives for a later retry.
+		next.assertion = ""
+		next.assertionExpiry = time.Time{}
 		next.status = "configuration_failure"
+		next.retryAfter = s.now().Add(configurationRetryDelay)
 		outcome = ErrConfiguration
 	case RefreshInvalidIdentity:
 		next = clearDelegationSecrets(next)

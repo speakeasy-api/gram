@@ -1,10 +1,12 @@
 package remotesessions
 
 import (
+	"bytes"
 	"context"
 	"encoding/json"
 	"fmt"
 	"io"
+	"log/slog"
 	"net/http"
 	"strings"
 	"testing"
@@ -12,6 +14,9 @@ import (
 
 	"github.com/go-jose/go-jose/v4"
 	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 func TestFederatedRefreshVerification(t *testing.T) {
@@ -94,6 +99,16 @@ func TestFederatedRefreshResponse(t *testing.T) {
 		{name: "omitted rotation", status: 200, body: `{"access_token":"secret-access"}`},
 		{name: "invalid grant", status: 400, body: `{"error":"invalid_grant","error_description":"secret-upstream"}`, kind: FederatedRefreshInvalidGrant},
 		{name: "invalid client", status: 401, body: `{"error":"invalid_client","error_description":"secret-upstream"}`, kind: FederatedRefreshConfiguration},
+		{name: "vendor shaped invalid grant", status: 400, body: `{"errors":["invalid_grant - secret-upstream"]}`, kind: FederatedRefreshInvalidGrant},
+		{name: "vendor dead grant code", status: 400, body: `{"error":"bad_refresh_token"}`, kind: FederatedRefreshInvalidGrant},
+		{name: "unauthorized client", status: 400, body: `{"error":"unauthorized_client"}`, kind: FederatedRefreshConfiguration},
+		{name: "invalid request", status: 400, body: `{"error":"invalid_request"}`, kind: FederatedRefreshConfiguration},
+		{name: "unsupported grant type", status: 400, body: `{"error":"unsupported_grant_type"}`, kind: FederatedRefreshConfiguration},
+		{name: "invalid scope", status: 400, body: `{"error":"invalid_scope"}`, kind: FederatedRefreshConfiguration},
+		{name: "extension code", status: 400, body: `{"error":"secret-upstream"}`, kind: FederatedRefreshConfiguration},
+		{name: "html forbidden", status: 403, body: `<html>secret-upstream</html>`, kind: FederatedRefreshConfiguration},
+		{name: "empty not found", status: 404, kind: FederatedRefreshConfiguration},
+		{name: "unavailable code on a 4xx", status: 400, body: `{"error":"temporarily_unavailable"}`, kind: FederatedRefreshRetryable},
 		{name: "rate limited", status: 429, body: `secret-upstream`, kind: FederatedRefreshAmbiguous},
 		{name: "rate limited overrides invalid grant", status: 429, body: `{"error":"invalid_grant"}`, kind: FederatedRefreshAmbiguous},
 		{name: "rate limited overrides invalid client", status: 429, body: `{"error":"invalid_client"}`, kind: FederatedRefreshAmbiguous},
@@ -120,7 +135,7 @@ func TestFederatedRefreshResponse(t *testing.T) {
 			})
 			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "https://idp.example.test/token", nil)
 			require.NoError(t, err)
-			tok, received, err := postFederatedRefresh(doer, req)
+			tok, received, err := postFederatedRefresh(testenv.NewLogger(t), doer, req)
 			require.Equal(t, 1, calls)
 			if tc.kind != "" {
 				var failure *FederatedRefreshError
@@ -146,6 +161,41 @@ func TestFederatedRefreshResponse(t *testing.T) {
 				require.NotContains(t, string(b), "secret-")
 				require.NotContains(t, fmt.Sprintf("%v %+v %#v", v, v, v), "secret-")
 			}
+		})
+	}
+}
+
+func TestFederatedRefreshRejectionLogsOnlyStatusAndCode(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		status int
+		body   string
+		code   string
+	}{
+		{name: "registered code", status: 401, body: `{"error":"invalid_client","error_description":"secret-upstream","error_uri":"https://secret-upstream.example.test"}`, code: "invalid_client"},
+		{name: "code with a token next to it", status: 400, body: `{"error":"invalid_grant","refresh_token":"secret-rotated","access_token":"secret-access"}`, code: "invalid_grant"},
+		{name: "provider text in the code", status: 400, body: `{"error":"secret-upstream"}`, code: "unrecognized"},
+		{name: "not json", status: 403, body: `<html>secret-upstream</html>`, code: ""},
+		{name: "server failure", status: 503, body: `secret-upstream`, code: ""},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			var logs bytes.Buffer
+			logger := slog.New(slog.NewJSONHandler(&logs, nil))
+			doer := federatedHTTPDoerFunc(func(*http.Request) (*http.Response, error) {
+				return &http.Response{StatusCode: tc.status, Body: io.NopCloser(strings.NewReader(tc.body))}, nil
+			})
+			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "https://idp.example.test/token", nil)
+			require.NoError(t, err)
+			_, _, err = postFederatedRefresh(logger, doer, req)
+			require.Error(t, err)
+			require.NotContains(t, logs.String(), "secret-")
+			var entry map[string]any
+			require.NoError(t, json.Unmarshal(logs.Bytes(), &entry))
+			require.Equal(t, "WARN", entry["level"])
+			require.EqualValues(t, tc.status, entry[string(attr.HTTPResponseStatusCodeKey)])
+			require.Equal(t, tc.code, entry[string(attr.OAuthErrorKey)])
 		})
 	}
 }
