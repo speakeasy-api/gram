@@ -461,14 +461,14 @@ linters:
         # providers, encryption clients, infra launchers). It must not import
         # domain packages, otherwise internal tests in those packages can no
         # longer use testenv. Per-domain test helpers belong in sibling
-        # packages such as `externalmcptest` and `functionstest`.
+        # packages such as `functionstest`.
         testenv-no-domain-imports:
           list-mode: lax
           files:
             - "**/internal/testenv/*.go"
           deny:
             - pkg: "github.com/speakeasy-api/gram/server/internal/externalmcp"
-              desc: Move helpers that need externalmcp to internal/externalmcptest.
+              desc: Move helpers that need externalmcp to a per-domain test package.
             - pkg: "github.com/speakeasy-api/gram/server/internal/functions"
               desc: Move helpers that need functions to internal/functionstest.
             - pkg: "github.com/speakeasy-api/gram/server/internal/assets"

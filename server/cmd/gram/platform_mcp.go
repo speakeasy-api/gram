@@ -270,7 +270,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	if config.RegistryDiscoveryEnabled {
 		fixtureConfig.SetRegistryPrefix("/platform-mcp/local-fixture/registry")
 	}
-	fixtureRegistry := externalmcp.NewRegistryClient(config.Logger, config.TracerProvider, config.GuardianPolicy, nil, cache.NewRedisCacheAdapter(config.Redis)).WithAllowedCIDRBlocks(platformMCPLocalFixtureLoopbackCIDRBlocks...)
+	fixtureRegistry := externalmcp.NewRegistryClient(config.Logger, config.TracerProvider, config.GuardianPolicy, cache.NewRedisCacheAdapter(config.Redis)).WithAllowedCIDRBlocks(platformMCPLocalFixtureLoopbackCIDRBlocks...)
 	if err := fixtureRegistry.ClearCache(ctx, fixtureConfig.Registry().URL); err != nil {
 		return AssistantSurface{}, fmt.Errorf("clear local Platform MCP fixture registry cache: %w", err)
 	}

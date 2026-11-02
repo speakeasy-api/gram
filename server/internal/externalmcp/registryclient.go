@@ -26,15 +26,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-type RegistryBackend interface {
-	Match(req *http.Request) bool
-	Authorize(req *http.Request) error
-}
-
 // RegistryReader is the narrow, normalized registry contract consumed by both
-// dashboard and Platform MCP catalogue projections. RegistryClient remains the
-// Registry transport implementation; CatalogService selects an adapter
-// before delegating to it.
+// dashboard and Platform MCP catalogue projections. RegistryClient implements
+// it over HTTP for code-defined registries such as the local fixture.
 type RegistryReader interface {
 	ListServers(ctx context.Context, registry Registry, params ListServersParams) (ListServersResult, error)
 	GetServerDetails(ctx context.Context, registry Registry, serverName string, allowedRemoteURLs []string) (*ServerDetails, error)
@@ -45,19 +39,17 @@ type RegistryClient struct {
 	policy       *guardian.Policy
 	httpClient   *guardian.HTTPClient
 	logger       *slog.Logger
-	backend      RegistryBackend
 	listCache    cache.TypedCacheObject[CachedListServers]
 	detailsCache cache.TypedCacheObject[CachedServerDetailsResponse]
 	listFlight   singleflight.Group
 }
 
 // NewRegistryClient creates a new registry client.
-func NewRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, backend RegistryBackend, cacheImpl cache.Cache) *RegistryClient {
+func NewRegistryClient(logger *slog.Logger, tracerProvider trace.TracerProvider, guardianPolicy *guardian.Policy, cacheImpl cache.Cache) *RegistryClient {
 	return &RegistryClient{
 		policy:     guardianPolicy,
 		httpClient: guardianPolicy.PooledClient(guardian.WithDefaultRetryConfig()),
 		logger:     logger.With(attr.SlogComponent("mcp_registry_client")),
-		backend:    backend,
 		listCache: cache.NewTypedObjectCache[CachedListServers](
 			logger.With(attr.SlogCacheNamespace("registry-list")),
 			cacheImpl,
@@ -83,7 +75,6 @@ func (c *RegistryClient) WithAllowedCIDRBlocks(cidrs ...string) *RegistryClient 
 		policy:     c.policy,
 		httpClient: c.policy.PooledClient(guardian.WithDefaultRetryConfig(), guardian.WithAllowedCIDRBlocks(cidrs...)),
 		logger:     c.logger,
-		backend:    c.backend,
 		// Cache keys include the registry URL; share cache entries while changing
 		// only the trusted fixture client's egress policy.
 		listCache:    c.listCache,
@@ -424,11 +415,6 @@ func (c *RegistryClient) fetchAllServers(ctx context.Context, registry Registry,
 		if err != nil {
 			return CachedListServers{}, false, err
 		}
-		if c.backend != nil && c.backend.Match(req) {
-			if err := c.backend.Authorize(req); err != nil {
-				return CachedListServers{}, false, fmt.Errorf("authorize list servers request: %w", err)
-			}
-		}
 
 		page, err := c.fetchListServersPage(ctx, req)
 		if err != nil {
@@ -713,12 +699,6 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 	req, err := http.NewRequestWithContext(ctx, http.MethodGet, u.String(), http.NoBody)
 	if err != nil {
 		return nil, oops.Permanent(fmt.Errorf("create external mcp server details request: %w", err))
-	}
-
-	if c.backend != nil && c.backend.Match(req) {
-		if err := c.backend.Authorize(req); err != nil {
-			return nil, fmt.Errorf("authorize external mcp server details request: %w", err)
-		}
 	}
 
 	// Build cache key including allowedRemoteURLs filter

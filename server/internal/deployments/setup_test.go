@@ -56,7 +56,6 @@ func TestMain(m *testing.M) {
 
 type testInstance struct {
 	service        *deployments.Service
-	feature        *feature.InMemory
 	assets         *assets.Service
 	packages       *packages.Service
 	conn           *pgxpool.Pool
@@ -113,7 +112,6 @@ func newTestDeploymentService(t *testing.T, assetStorage assets.BlobStore) (cont
 
 	return ctx, &testInstance{
 		service:        svc,
-		feature:        f,
 		assets:         assetsSvc,
 		packages:       packagesSvc,
 		conn:           conn,

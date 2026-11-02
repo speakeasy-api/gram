@@ -31,7 +31,6 @@ func TestCatalogSourceFromRowAdmitsOnlyCertifiedReviewedSources(t *testing.T) {
 	source, ok := catalogSourceFromRow(base)
 	require.True(t, ok)
 	require.Equal(t, "reviewed-pulse", source.SourceKey)
-	require.False(t, source.Legacy)
 
 	for _, mutate := range []func(*repo.ListMCPRegistriesRow){
 		func(row *repo.ListMCPRegistriesRow) { row.Enabled.Bool = false },
@@ -112,7 +111,7 @@ func (r *failedCatalogReader) GetServerDetails(context.Context, Registry, string
 }
 func TestCatalogSelectedFailureNeverFallsBack(t *testing.T) {
 	t.Parallel()
-	legacy, native := &failedCatalogReader{}, &failedCatalogReader{}
+	native := &failedCatalogReader{}
 	s := NewCatalogService(nil, native)
 	s.repo = routingRepo{rows: []repo.ListMCPRegistriesRow{
 		{ID: uuid.New(), Url: "https://api.pulsemcp.com"},
@@ -122,11 +121,9 @@ func TestCatalogSelectedFailureNeverFallsBack(t *testing.T) {
 	_, err := s.List(ctx, nil, nil)
 	require.ErrorContains(t, err, "selected source failed")
 	require.Equal(t, 1, native.calls)
-	require.Zero(t, legacy.calls)
 	_, err = s.IdentityDetails(t.Context(), NativeCatalogRegistryID, "example/server", nil)
 	require.ErrorContains(t, err, "selected source failed")
 	require.Equal(t, 2, native.calls)
-	require.Zero(t, legacy.calls)
 }
 
 func TestCatalogUnsupportedIdentity(t *testing.T) {

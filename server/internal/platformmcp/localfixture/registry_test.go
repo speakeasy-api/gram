@@ -42,7 +42,6 @@ func TestRegistryHTTPServesReviewedCatalogContract(t *testing.T) {
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		registryPolicy,
-		registryBackend{},
 		cache.NoopCache,
 	)
 
@@ -89,7 +88,6 @@ func TestDynamicRegistryCatalogReloadsServerOwnedDescriptors(t *testing.T) {
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		registryPolicy,
-		registryBackend{},
 		cache.NoopCache,
 	)
 
@@ -130,7 +128,6 @@ func TestRegistryCatalogSearchFailsClosedWhenAnySourceIsUnavailable(t *testing.T
 		testenv.NewLogger(t),
 		testenv.NewTracerProvider(t),
 		registryPolicy,
-		registryBackend{},
 		cache.NoopCache,
 	)
 
@@ -167,12 +164,6 @@ func TestRegistryHTTPRejectsUnexpectedRoutesAndListQueries(t *testing.T) {
 	handler.ServeHTTP(unknownResponse, unknown)
 	require.Equal(t, http.StatusNotFound, unknownResponse.Code)
 }
-
-type registryBackend struct{}
-
-func (registryBackend) Match(*http.Request) bool { return false }
-
-func (registryBackend) Authorize(*http.Request) error { return nil }
 
 func TestRegistryEntryUsesNativeAuthAndStandardLifecycleWithoutToolClaims(t *testing.T) {
 	t.Parallel()

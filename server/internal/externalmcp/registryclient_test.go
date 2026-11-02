@@ -23,18 +23,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
-type PassthroughBackend struct{}
-
-var _ RegistryBackend = (*PassthroughBackend)(nil)
-
-func (p *PassthroughBackend) Authorize(req *http.Request) error {
-	return nil
-}
-
-func (p *PassthroughBackend) Match(req *http.Request) bool {
-	return false
-}
-
 func TestListServers_FiltersDeletedServers(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
@@ -92,7 +80,7 @@ func TestListServers_FiltersDeletedServers(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -168,7 +156,7 @@ func TestListServers_PreservesRemoteHeadersAndVariables(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -240,7 +228,7 @@ func TestListServers_FetchesAllPagesAndDeduplicates(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -277,7 +265,7 @@ func TestListServers_FiltersBySearchInMemory(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -318,7 +306,7 @@ func TestListServers_CachesResultAndClearCacheRefetches(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, nil, newRegistryTestCache())
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, newRegistryTestCache())
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -367,7 +355,7 @@ func TestListServers_CachesPerRegistryIDForSharedURL(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, newRegistryTestCache())
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, newRegistryTestCache())
 	client.httpClient = server.Client()
 
 	// Two registries sharing a URL (e.g. one recreated under the same endpoint)
@@ -431,7 +419,7 @@ func TestListServers_DoesNotCacheTruncatedCatalog(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, newRegistryTestCache())
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, newRegistryTestCache())
 	client.httpClient = server.Client()
 	registry := Registry{ID: uuid.New(), URL: server.URL}
 
@@ -481,7 +469,7 @@ func TestGetServerDetails_OnlyStreamableHTTP(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -529,7 +517,7 @@ func TestGetServerDetails_OnlySSE(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -578,7 +566,7 @@ func TestGetServerDetails_PrefersStreamableHTTPOverSSE(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -628,7 +616,7 @@ func TestGetServerDetails_SelectedRemotesFiltersToSSE(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -679,7 +667,7 @@ func TestGetServerDetails_SelectedRemotesStillPrefersStreamableHTTP(t *testing.T
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
 	client.httpClient = server.Client()
 	registry := Registry{
 		ID:  uuid.New(),
@@ -927,7 +915,7 @@ func TestListServers_PreservesRepositoryAndPackages(t *testing.T) {
 	}))
 	defer server.Close()
 
-	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, &PassthroughBackend{}, cache.NoopCache)
+	client := NewRegistryClient(logger, tracerProvider, guardianPolicy, cache.NoopCache)
 	client.httpClient = server.Client()
 	registry := Registry{ID: uuid.New(), URL: server.URL}
 
