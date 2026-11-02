@@ -27,6 +27,17 @@ const PLANNED = [
   { key: "gcp", displayName: "Google Cloud" },
 ];
 
+/**
+ * The platforms to name as coming soon: those planned that the catalog does
+ * not list, and those it lists but does not offer yet.
+ */
+function comingSoon(entries: CatalogEntry[]): { displayName: string }[] {
+  const planned = PLANNED.filter(
+    (plan) => !entries.some((entry) => entry.key === plan.key),
+  );
+  return [...planned, ...entries.filter((entry) => !entry.enabled)];
+}
+
 function selectedValue(
   credential: "api-key" | "workload",
   platformKey: string | null,
@@ -199,17 +210,8 @@ export function CredentialPicker({
   // hidden behind a collapsed section.
   const advancedShown = advancedOpen || customChosen;
   // Only an answered catalog can say which platforms it lacks. While it loads
-  // or fails, every planned platform would read as absent. One the catalog
-  // lists but does not offer yet is still coming.
-  const planned =
-    isPending || isError
-      ? []
-      : [
-          ...PLANNED.filter(
-            (plan) => !entries.some((entry) => entry.key === plan.key),
-          ),
-          ...entries.filter((entry) => !entry.enabled),
-        ];
+  // or fails, every planned platform would read as absent.
+  const planned = isPending || isError ? [] : comingSoon(entries);
 
   return (
     <RadioCardGroup

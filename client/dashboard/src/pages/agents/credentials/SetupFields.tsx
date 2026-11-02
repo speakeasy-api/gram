@@ -161,6 +161,19 @@ export function SetupError({ children }: { children: ReactNode }): JSX.Element {
   );
 }
 
+/** Something on a step that will not work as the reader expects. */
+export function SetupWarning({
+  children,
+}: {
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <Alert variant="warning">
+      <div className="space-y-2 text-sm">{children}</div>
+    </Alert>
+  );
+}
+
 /**
  * The documents a step points at, on one row: stacked a line each they read
  * as a reading list standing between the reader and the step.
@@ -279,38 +292,36 @@ export function ShadowingIssuers({
     </Fragment>
   ));
   return (
-    <Alert variant="warning">
-      <div className="space-y-2 text-sm">
-        <p>
-          {one ? "The project " : "The projects "}
-          {names} also {one ? "trusts" : "trust"} {platformName} on{" "}
-          {one ? "its" : "their"} own, at the same issuer URL.{" "}
-          {one ? "Its" : "Their"} MCP servers check a job against the
-          project&apos;s own issuer instead of the rule saved here, so the job
-          reaches them as another identity, or not at all.
-        </p>
-        {/* DNO-1477 tracks a dashboard control for withdrawing a project's
+    <SetupWarning>
+      <p>
+        {one ? "The project " : "The projects "}
+        {names} also {one ? "trusts" : "trust"} {platformName} on{" "}
+        {one ? "its" : "their"} own, at the same issuer URL.{" "}
+        {one ? "Its" : "Their"} MCP servers check a job against the
+        project&apos;s own issuer instead of the rule saved here, so the job
+        reaches them as another identity, or not at all.
+      </p>
+      {/* DNO-1477 tracks a dashboard control for withdrawing a project's
             own issuer; until it ships, the API is the only way. */}
-        <p>
-          Removing an agent&apos;s access does not fix this: the project&apos;s
-          own issuer has to be withdrawn, which also withdraws every rule
-          admitted under it. The dashboard has no control for that yet, so ask
-          someone who can manage workload identities to withdraw it.
-        </p>
-        <details>
-          <summary className="cursor-pointer">Technical details</summary>
-          <p className="mt-2">Withdraw each through the API:</p>
-          <ul className="mt-1 list-disc space-y-1 pl-5">
-            {shadows.map(({ project, issuer }) => (
-              <li key={issuer.id}>
-                <code>{`DELETE /rpc/workloadIdentities.withdrawIssuer?id=${issuer.id}`}</code>{" "}
-                with the header <code>Gram-Project: {project.slug}</code>, for{" "}
-                {project.name || project.slug}
-              </li>
-            ))}
-          </ul>
-        </details>
-      </div>
-    </Alert>
+      <p>
+        Removing an agent&apos;s access does not fix this: the project&apos;s
+        own issuer has to be withdrawn, which also withdraws every rule admitted
+        under it. The dashboard has no control for that yet, so ask someone who
+        can manage workload identities to withdraw it.
+      </p>
+      <details>
+        <summary className="cursor-pointer">Technical details</summary>
+        <p className="mt-2">Withdraw each through the API:</p>
+        <ul className="mt-1 list-disc space-y-1 pl-5">
+          {shadows.map(({ project, issuer }) => (
+            <li key={issuer.id}>
+              <code>{`DELETE /rpc/workloadIdentities.withdrawIssuer?id=${issuer.id}`}</code>{" "}
+              with the header <code>Gram-Project: {project.slug}</code>, for{" "}
+              {project.name || project.slug}
+            </li>
+          ))}
+        </ul>
+      </details>
+    </SetupWarning>
   );
 }

@@ -12,7 +12,7 @@ import type { Plugin } from "@gram/client/models/components/plugin.js";
 import { useListMcpServersForOrg } from "@gram/client/react-query/listMcpServersForOrg.js";
 import { usePlugins } from "@gram/client/react-query/plugins.js";
 import { useQueries } from "@tanstack/react-query";
-import { useState, type JSX } from "react";
+import { useState, type JSX, type ReactNode } from "react";
 import { Link } from "react-router";
 import { CodeBlock } from "./CodeBlock";
 import { PanelTab, PanelTabs } from "./PanelTabs";
@@ -28,7 +28,7 @@ import {
   type JobScope,
   type WorkflowAgent,
 } from "./githubActions";
-import { Links, SetupError } from "./SetupFields";
+import { Links, SetupError, SetupWarning } from "./SetupFields";
 import type { SetupServer } from "./setupInstructions";
 
 /** How long a plugin read for this step is reused before it is read again. */
@@ -119,13 +119,11 @@ export function PluginsStep({
         </p>
       )}
       {unreachable.length > 0 && (
-        <Alert variant="warning">
-          <div className="text-sm">
-            {agentName || "The agent"} cannot use {unreachable.join(", ")}, so
-            the job&apos;s tools will show {them} as needing authentication. Go
-            back to MCP Selection to add {them}.
-          </div>
-        </Alert>
+        <SetupWarning>
+          {agentName || "The agent"} cannot use {unreachable.join(", ")}, so the
+          job&apos;s tools will show {them} as needing authentication. Go back
+          to MCP Selection to add {them}.
+        </SetupWarning>
       )}
       <p className="text-muted-foreground">
         Servers that need each person to sign in do not work in a job: there is
@@ -170,25 +168,21 @@ function DeliveredPlugins({
   }
   if (failed) {
     return (
-      <Alert variant="warning">
-        <div className="text-sm">
-          This project&apos;s plugins could not be read. Check them on the{" "}
-          {pluginsPage}.
-        </div>
-      </Alert>
+      <SetupWarning>
+        This project&apos;s plugins could not be read. Check them on the{" "}
+        {pluginsPage}.
+      </SetupWarning>
     );
   }
   if (delivered.length === 0) {
     return (
-      <Alert variant="warning">
-        <div className="text-sm">
-          No plugin in this project is installed for Everyone, so unless {agent}{" "}
-          holds a role with plugins, the job gets no MCP servers. A plugin that
-          is only Available to Everyone is not installed on a job. On the{" "}
-          {pluginsPage}, assign a plugin to <strong>Everyone</strong> as
-          Required or On by default, or to a role and give the agent that role.
-        </div>
-      </Alert>
+      <SetupWarning>
+        No plugin in this project is installed for Everyone, so unless {agent}{" "}
+        holds a role with plugins, the job gets no MCP servers. A plugin that is
+        only Available to Everyone is not installed on a job. On the{" "}
+        {pluginsPage}, assign a plugin to <strong>Everyone</strong> as Required
+        or On by default, or to a role and give the agent that role.
+      </SetupWarning>
     );
   }
   return (
@@ -381,57 +375,7 @@ export function RepositoryRuleWarning({
   agent: string;
   subject: string;
 }): JSX.Element {
-  const rule = (
-    <>
-      The rule is <code>{subject}</code>.
-    </>
-  );
-  const [who, risk] = (() => {
-    switch (scope.kind) {
-      case "repository":
-        return [
-          <>
-            Every job in <strong>{repository}</strong> can sign in as {agent}:
-            every branch, tag, environment and pull request. {rule}
-          </>,
-          <>
-            Anyone who can push a branch to the repository can run such a job
-            and use {agent}&apos;s access. On the <code>pull_request</code>{" "}
-            event, pull requests from forks get no GitHub token, so outside
-            contributors cannot. A <code>pull_request_target</code> workflow
-            with <code>id-token: write</code> is admitted too, and if it checks
-            out the pull request&apos;s head, code from a fork runs as {agent}.
-            To admit fewer jobs, choose one branch or one environment.
-          </>,
-        ];
-      case "branch":
-        return [
-          <>
-            Jobs on <strong>{scope.name}</strong> in {repository} can sign in as{" "}
-            {agent}, unless they use an environment. Pull request jobs cannot.{" "}
-            {rule}
-          </>,
-          <>
-            Anyone who can push to {scope.name} can run such a job, so protect
-            the branch if only reviewed code should use {agent}&apos;s access.
-          </>,
-        ];
-      case "environment":
-        return [
-          <>
-            Only jobs in {repository} that use the <strong>{scope.name}</strong>{" "}
-            environment can sign in as {agent}, and GitHub starts them only once
-            the environment&apos;s protection rules pass. {rule}
-          </>,
-          <>
-            Set those rules, such as required reviewers or the branches that may
-            deploy, under the repository&apos;s Settings &gt; Environments
-            before you add the workflow. A workflow that names an environment
-            nobody has set up creates it with no rules.
-          </>,
-        ];
-    }
-  })();
+  const [who, risk] = ruleWarningText(scope, repository, agent, subject);
   return (
     <Alert variant={scope.kind === "environment" ? "info" : "warning"}>
       <div className="space-y-2 text-sm">
@@ -440,4 +384,62 @@ export function RepositoryRuleWarning({
       </div>
     </Alert>
   );
+}
+
+/** Who the rule admits, and the risk the reader should weigh, by scope. */
+function ruleWarningText(
+  scope: JobScope,
+  repository: string,
+  agent: string,
+  subject: string,
+): [ReactNode, ReactNode] {
+  const rule = (
+    <>
+      The rule is <code>{subject}</code>.
+    </>
+  );
+  switch (scope.kind) {
+    case "repository":
+      return [
+        <>
+          Every job in <strong>{repository}</strong> can sign in as {agent}:
+          every branch, tag, environment and pull request. {rule}
+        </>,
+        <>
+          Anyone who can push a branch to the repository can run such a job and
+          use {agent}&apos;s access. On the <code>pull_request</code> event,
+          pull requests from forks get no GitHub token, so outside contributors
+          cannot. A <code>pull_request_target</code> workflow with{" "}
+          <code>id-token: write</code> is admitted too, and if it checks out the
+          pull request&apos;s head, code from a fork runs as {agent}. To admit
+          fewer jobs, choose one branch or one environment.
+        </>,
+      ];
+    case "branch":
+      return [
+        <>
+          Jobs on <strong>{scope.name}</strong> in {repository} can sign in as{" "}
+          {agent}, unless they use an environment. Pull request jobs cannot.{" "}
+          {rule}
+        </>,
+        <>
+          Anyone who can push to {scope.name} can run such a job, so protect the
+          branch if only reviewed code should use {agent}&apos;s access.
+        </>,
+      ];
+    case "environment":
+      return [
+        <>
+          Only jobs in {repository} that use the <strong>{scope.name}</strong>{" "}
+          environment can sign in as {agent}, and GitHub starts them only once
+          the environment&apos;s protection rules pass. {rule}
+        </>,
+        <>
+          Set those rules, such as required reviewers or the branches that may
+          deploy, under the repository&apos;s Settings &gt; Environments before
+          you add the workflow. A workflow that names an environment nobody has
+          set up creates it with no rules.
+        </>,
+      ];
+  }
 }

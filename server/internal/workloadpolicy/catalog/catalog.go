@@ -203,9 +203,13 @@ type SubjectAlternative struct {
 	// Label is what the operator chooses it by.
 	Label string `yaml:"label"`
 
-	// Template and Wildcard are read as Subject's are.
+	// Template is the subject, with {key} placeholders for rule-tier
+	// variables; for a wildcard rule, the stem. It is held to the same rules
+	// as the default's.
 	Template string `yaml:"template"`
-	Wildcard bool   `yaml:"wildcard"`
+
+	// Wildcard makes the rule the filled template followed by "*".
+	Wildcard bool `yaml:"wildcard"`
 }
 
 // Block is one piece of a step. Which fields apply depends on Type.

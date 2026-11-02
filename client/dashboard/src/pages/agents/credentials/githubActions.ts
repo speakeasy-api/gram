@@ -372,15 +372,24 @@ function lacksAuthorizationServer(
   server: PluginServer,
   mcpServers: McpServer[],
 ): boolean {
+  const row = serverRow(server, mcpServers);
+  return row !== undefined && !row.userSessionIssuerId;
+}
+
+/** The organization's row for the server a plugin names. */
+function serverRow(
+  server: PluginServer,
+  mcpServers: McpServer[],
+): McpServer | undefined {
+  if (server.mcpServerId) {
+    return mcpServers.find((candidate) => candidate.id === server.mcpServerId);
+  }
   // A toolset is served by the row that stands in for it, not by any
   // wrapper that names it, such as a gateway member's.
-  const row = mcpServers.find((candidate) =>
-    server.mcpServerId
-      ? candidate.id === server.mcpServerId
-      : candidate.toolsetId === server.toolsetId &&
-        standsInForToolset(candidate),
+  return mcpServers.find(
+    (candidate) =>
+      candidate.toolsetId === server.toolsetId && standsInForToolset(candidate),
   );
-  return row !== undefined && !row.userSessionIssuerId;
 }
 
 /**
