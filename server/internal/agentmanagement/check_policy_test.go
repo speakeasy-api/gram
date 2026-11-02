@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // allServersGrant is the grant the dashboard's "All servers" choice writes:
@@ -317,4 +318,44 @@ func TestCheckPolicyGrantsRejectsOwnerWithAgent(t *testing.T) {
 	})
 
 	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+// A block on one shared credential names the client and leaves its type
+// open. It must not stop the caller from giving an agent the personal
+// default, which reaches only personal connections, while it still stops
+// them from giving that credential. A block on a personal client does still
+// overlap the personal default.
+func TestCheckPolicyGrantsPersonalDefaultWithAuthClientBlock(t *testing.T) {
+	t.Parallel()
+	personal := &gen.AgentPolicyGrantForm{Scope: string(authz.ScopeMCPAuth), Effect: "allow", Selector: policySelectorView(authz.PersonalAuthClientSelector())}
+	for _, tc := range []struct {
+		name            string
+		blockedType     string
+		personalAllowed bool
+	}{
+		{name: "blocked from a shared credential", blockedType: authz.AuthClientTypeStaticCredential, personalAllowed: true},
+		{name: "blocked from a personal client", blockedType: authz.AuthClientTypeRemoteSession, personalAllowed: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			f := newDelegableFixture(t)
+			blocked, err := testrepo.New(f.db).CreateAuthClientFixture(t.Context(), testrepo.CreateAuthClientFixtureParams{
+				OrganizationID: "org-delegable", ProjectID: uuid.NullUUID{}, ClientType: tc.blockedType, Name: "Blocked client",
+			})
+			require.NoError(t, err)
+			f.grant(t, "caller", authz.ScopeMCPAuth, authz.NewSelector(authz.ScopeMCPAuth, authz.WildcardResource))
+			f.grant(t, "caller", authz.ScopeMCPBlockedAuth, authz.AuthClientSelector(blocked.String(), ""))
+			ctx := validatedHumanContext(t, "org-delegable", "caller")
+
+			blockedGrant := &gen.AgentPolicyGrantForm{Scope: string(authz.ScopeMCPAuth), Effect: "allow", Selector: policySelectorView(authz.AuthClientSelector(blocked.String(), ""))}
+			checked, err := f.service.CheckPolicyGrants(ctx, &gen.CheckPolicyGrantsPayload{
+				PolicyGrants: []*gen.AgentPolicyGrantForm{personal, blockedGrant},
+			})
+			require.NoError(t, err)
+			require.Len(t, checked.Results, 2)
+			require.Equal(t, tc.personalAllowed, checked.Results[0].Allowed)
+			require.False(t, checked.Results[1].Allowed)
+			require.Equal(t, new(string(policyLimitCaller)), checked.Results[1].LimitedBy)
+		})
+	}
 }

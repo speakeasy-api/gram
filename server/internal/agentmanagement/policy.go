@@ -425,6 +425,10 @@ func (c *policyAuthorityChecker) containmentLimit(ctx context.Context, tx pgx.Tx
 		if err != nil {
 			return policyLimitNone, fmt.Errorf("load policy owner grants: %w", err)
 		}
+		c.ownerGrants, err = authz.PinAuthClientRestrictionTypes(ctx, tx, c.human.Auth.ActiveOrganizationID, c.ownerGrants)
+		if err != nil {
+			return policyLimitNone, fmt.Errorf("pin policy owner grants: %w", err)
+		}
 		c.ownerGrantsLoaded = true
 	}
 	contained, err = runtimepolicy.DelegationContained(policy, c.ownerGrants)

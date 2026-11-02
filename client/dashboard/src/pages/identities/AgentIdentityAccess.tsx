@@ -3,6 +3,9 @@ import { Button } from "@/components/ui/Button";
 import { useState } from "react";
 import { useOrganization } from "@/contexts/Auth";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
+import { useRBAC } from "@/hooks/useRBAC";
+import { clientTypeLabel } from "@/lib/auth-clients";
+import { useAllAuthClients } from "@/lib/useAllAuthClients";
 import { ResourceLink } from "@/pages/access/ResourceLink";
 import { useResourceLinkMaps } from "@/pages/access/useResourceLinkMaps";
 import {
@@ -13,6 +16,7 @@ import {
   isAgentPolicySelectorUnrestricted,
 } from "@/pages/agents/agent-policy-grants";
 import { ANY_RESOURCE } from "@/pages/agents/agent-api-key-grants";
+import { AUTH_SCOPE } from "@/pages/agents/credentials/agentAuthGrants";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
 import type { AgentPolicySelector } from "@gram/client/models/components/agentpolicyselector.js";
@@ -53,6 +57,31 @@ function wildcardGrantLabel(selector: AgentPolicySelector): string {
   return agentPolicyUnrestrictedLabel(selector.resourceKind);
 }
 
+/**
+ * What an mcp:auth grant lets the agent sign in with. The personal default
+ * reaches only the own connections of the person a credential acts for; a
+ * grant naming one credential shows its name, or a neutral phrase when the
+ * organization's credentials cannot be listed.
+ */
+function authGrantLabel(
+  selector: AgentPolicySelector,
+  names: Map<string, string>,
+): string {
+  if (isAgentPolicyConstraint(selector.connectionOwner)) {
+    return "Own connections of the person each credential acts for";
+  }
+  if (selector.resourceId !== ANY_RESOURCE) {
+    return names.get(selector.resourceId) ?? "One credential";
+  }
+  if (isAgentPolicyConstraint(selector.clientType)) {
+    return `${clientTypeLabel(selector.clientType)} · every credential of this kind`;
+  }
+  return "Every upstream credential";
+}
+
+const AUTH_SCOPE_DESCRIPTION =
+  "Sign in to upstream servers with these credentials.";
+
 export function AgentIdentityPermissions({
   agent,
 }: {
@@ -73,6 +102,7 @@ export function AgentIdentityPermissions({
     throwOnError: false,
   });
   const { orgSlug } = useSlugs();
+  const { hasScope } = useRBAC();
   // Credential restrictions are listed and edited in their own panel.
   const rows = canRead
     ? (grants.data ?? []).filter(
@@ -86,6 +116,18 @@ export function AgentIdentityPermissions({
       ({ selector }) =>
         selector.resourceKind === "mcp" && selector.resourceId !== ANY_RESOURCE,
     ),
+  );
+  // Naming a credential needs the organization's list of them.
+  const clients = useAllAuthClients({
+    enabled:
+      hasScope("org:read") &&
+      rows.some(
+        ({ scope, selector }) =>
+          scope === AUTH_SCOPE && selector.resourceId !== ANY_RESOURCE,
+      ),
+  });
+  const clientNames = new Map(
+    (clients.data ?? []).map((client) => [client.id, client.name]),
   );
   let content: JSX.Element;
   if (!canRead) {
@@ -116,9 +158,12 @@ export function AgentIdentityPermissions({
           // `Text` with no children is a loading skeleton, so a scope the
           // mirror does not describe (e.g. `mcp:blocked_*`) must skip the
           // line rather than pass `undefined`.
-          const description = AGENT_POLICY_SCOPES.find(
-            (definition) => definition.slug === scope,
-          )?.description;
+          const description =
+            scope === AUTH_SCOPE
+              ? AUTH_SCOPE_DESCRIPTION
+              : AGENT_POLICY_SCOPES.find(
+                  (definition) => definition.slug === scope,
+                )?.description;
           return (
             <div
               key={scope}
@@ -144,7 +189,11 @@ export function AgentIdentityPermissions({
                       key={grant.id}
                       className="flex flex-wrap items-center gap-x-2 gap-y-1"
                     >
-                      {selector.resourceId === ANY_RESOURCE ? (
+                      {scope === AUTH_SCOPE ? (
+                        <Text small>
+                          {authGrantLabel(selector, clientNames)}
+                        </Text>
+                      ) : selector.resourceId === ANY_RESOURCE ? (
                         <Text small>{wildcardGrantLabel(selector)}</Text>
                       ) : (
                         <ResourceLink

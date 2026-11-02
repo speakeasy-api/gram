@@ -12,7 +12,7 @@ import type { ManagedAgent } from "@gram/client/models/components/managedagent.j
 import { AgentIdentityPermissions } from "./AgentIdentityAccess";
 import { invalidateAgentPolicy } from "@/pages/agents/agent-policy-grants";
 
-const mocks = vi.hoisted(() => ({ list: vi.fn() }));
+const mocks = vi.hoisted(() => ({ list: vi.fn(), clients: vi.fn() }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true, isLoading: false, error: null }),
 }));
@@ -24,7 +24,10 @@ vi.mock("@/contexts/Auth", () => ({
   }),
 }));
 vi.mock("@/contexts/Sdk", () => ({
-  useSdkClient: () => ({ agents: { listPolicyGrants: mocks.list } }),
+  useSdkClient: () => ({
+    agents: { listPolicyGrants: mocks.list },
+    authClients: { list: mocks.clients },
+  }),
   useSlugs: () => ({ orgSlug: "org" }),
 }));
 vi.mock("@/pages/access/useResourceLinkMaps", () => ({
@@ -76,6 +79,15 @@ afterEach(cleanup);
 beforeEach(() => {
   vi.clearAllMocks();
   mocks.list.mockResolvedValue([]);
+  mocks.clients.mockImplementation(async () =>
+    (async function* () {
+      yield {
+        result: {
+          items: [{ id: "client_token", name: "Engineering token" }],
+        },
+      };
+    })(),
+  );
 });
 describe("Agent profile permissions", () => {
   it("opens the shared permission editor without a separate inference card", async () => {
@@ -227,6 +239,40 @@ describe("Agent profile permissions", () => {
     expect(
       screen.queryByText(/Permissions changed while you were editing/),
     ).toBeNull();
+  });
+  it("names what each sign-in grant lets the agent use", async () => {
+    mocks.list.mockResolvedValue([
+      {
+        id: "personal_auth",
+        scope: "mcp:auth",
+        effect: "allow",
+        selector: {
+          resourceKind: "mcp_auth_client",
+          resourceId: "*",
+          clientType: "remote_session",
+          connectionOwner: "$represented_user",
+        },
+      },
+      {
+        id: "shared_auth",
+        scope: "mcp:auth",
+        effect: "allow",
+        selector: {
+          resourceKind: "mcp_auth_client",
+          resourceId: "client_token",
+        },
+      },
+    ]);
+    setup();
+    await screen.findByText("mcp:auth");
+    expect(
+      screen.getByText(
+        "Own connections of the person each credential acts for",
+      ),
+    ).toBeTruthy();
+    expect(await screen.findByText("Engineering token")).toBeTruthy();
+    expect(screen.queryByText("All resources")).toBeNull();
+    expect(screen.queryByText(/client_t/)).toBeNull();
   });
   it("does not claim the agent has no permissions when loading fails", async () => {
     mocks.list.mockRejectedValue(new Error("Unavailable"));

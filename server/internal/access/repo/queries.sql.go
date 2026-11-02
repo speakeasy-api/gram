@@ -2060,6 +2060,45 @@ func (q *Queries) ListAssignableAgents(ctx context.Context, organizationID strin
 	return items, nil
 }
 
+const listAuthClientTypes = `-- name: ListAuthClientTypes :many
+SELECT id, client_type
+FROM mcp_auth_clients
+WHERE organization_id = $1
+  AND id = ANY($2::uuid[])
+`
+
+type ListAuthClientTypesParams struct {
+	OrganizationID string
+	Ids            []uuid.UUID
+}
+
+type ListAuthClientTypesRow struct {
+	ID         uuid.UUID
+	ClientType string
+}
+
+// The type of each named auth client in the organization, deleted ones
+// included: a client's type never changes. Unknown ids are absent.
+func (q *Queries) ListAuthClientTypes(ctx context.Context, arg ListAuthClientTypesParams) ([]ListAuthClientTypesRow, error) {
+	rows, err := q.db.Query(ctx, listAuthClientTypes, arg.OrganizationID, arg.Ids)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListAuthClientTypesRow
+	for rows.Next() {
+		var i ListAuthClientTypesRow
+		if err := rows.Scan(&i.ID, &i.ClientType); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listChallengeResolutions = `-- name: ListChallengeResolutions :many
 
 SELECT id, organization_id, challenge_id, principal_urn, scope, resource_kind, resource_id, resolution_type, role_slug, resolved_by, created_at FROM authz_challenge_resolutions

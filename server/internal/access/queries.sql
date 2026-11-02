@@ -1138,6 +1138,14 @@ SELECT project_id FROM (
 ) AS owning
 LIMIT 1;
 
+-- name: ListAuthClientTypes :many
+-- The type of each named auth client in the organization, deleted ones
+-- included: a client's type never changes. Unknown ids are absent.
+SELECT id, client_type
+FROM mcp_auth_clients
+WHERE organization_id = @organization_id
+  AND id = ANY(@ids::uuid[]);
+
 -- name: FindMCPResourceProjects :many
 -- FindMCPResourceProject for many resources at once; unknown ids are absent.
 SELECT resource_id::uuid AS resource_id, project_id::uuid AS project_id FROM (

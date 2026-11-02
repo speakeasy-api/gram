@@ -88,6 +88,14 @@ func (s *Service) ListDelegableGrants(ctx context.Context, payload *gen.ListDele
 		if err != nil {
 			return fmt.Errorf("load delegable owner policy: %w", err)
 		}
+		agentPolicy, err = authz.PinAuthClientRestrictionTypes(ctx, tx, human.Auth.ActiveOrganizationID, agentPolicy)
+		if err != nil {
+			return fmt.Errorf("pin delegable agent policy: %w", err)
+		}
+		ownerPolicy, err = authz.PinAuthClientRestrictionTypes(ctx, tx, human.Auth.ActiveOrganizationID, ownerPolicy)
+		if err != nil {
+			return fmt.Errorf("pin delegable owner policy: %w", err)
+		}
 		// Carrying keeps a wildcard that one blocked server overlaps, such as
 		// "every server in the project" for an owner blocked from one of them.
 		// A key that stores the wildcard reaches servers added after it is

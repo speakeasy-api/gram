@@ -147,6 +147,10 @@ func (a *Authorizer) lockHumanMemberships(ctx context.Context, dbtx repo.DBTX, a
 	if err != nil {
 		return HumanContext{}, fmt.Errorf("load live authorization grants: %w", err)
 	}
+	grants, err = authz.PinAuthClientRestrictionTypes(ctx, dbtx, authCtx.ActiveOrganizationID, grants)
+	if err != nil {
+		return HumanContext{}, fmt.Errorf("pin live authorization grants: %w", err)
+	}
 
 	human := HumanContext{Auth: authCtx, grants: grants, overridden: false, overrideGrants: nil}
 	if a.authz != nil {

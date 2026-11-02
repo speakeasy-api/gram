@@ -310,6 +310,14 @@ func (s *Service) authorizeAgentKeyIssuance(ctx context.Context, tx pgx.Tx, agen
 	if err != nil {
 		return agentmanagement.HumanContext{}, oops.E(oops.CodeUnexpected, err, "load live agent owner policy").LogError(ctx, s.logger)
 	}
+	agentPolicy, err = authz.PinAuthClientRestrictionTypes(ctx, tx, human.Auth.ActiveOrganizationID, agentPolicy)
+	if err != nil {
+		return agentmanagement.HumanContext{}, oops.E(oops.CodeUnexpected, err, "pin live agent policy").LogError(ctx, s.logger)
+	}
+	ownerPolicy, err = authz.PinAuthClientRestrictionTypes(ctx, tx, human.Auth.ActiveOrganizationID, ownerPolicy)
+	if err != nil {
+		return agentmanagement.HumanContext{}, oops.E(oops.CodeUnexpected, err, "pin live agent owner policy").LogError(ctx, s.logger)
+	}
 
 	// Reuse the live caller policy loaded by RequireAgentOwnerForUpdate in
 	// this transaction; management authority alone cannot delegate access.
