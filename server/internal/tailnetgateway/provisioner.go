@@ -201,7 +201,15 @@ func (p *Provisioner) Apply(ctx context.Context, desired k8s.NetworkIngressDesir
 	}
 	now := p.cfg.Now()
 	for _, node := range nodes {
-		if node.RetiredAt.Valid || node.Slot >= p.cfg.Slots {
+		if node.RetiredAt.Valid {
+			// A retired slot whose host has stopped is purged: its device leaves
+			// the tailnet and a later slot count increase starts a fresh identity.
+			if err := p.purgeRetiredSlot(ctx, creds, desired.ID, desired.OrganizationID, node, now); err != nil {
+				return errorObservation(""), err
+			}
+			continue
+		}
+		if node.Slot >= p.cfg.Slots {
 			continue
 		}
 		store, err := NewPostgresStateStore(p.db, p.enc, desired.ID, desired.OrganizationID, node.Slot)
@@ -249,6 +257,31 @@ func (p *Provisioner) Apply(ctx context.Context, desired k8s.NetworkIngressDesir
 		return errorObservation(""), fmt.Errorf("mark ingress runtime: %w", err)
 	}
 	return p.observe(ctx, desired.ID, desired.OrganizationID)
+}
+
+// purgeRetiredSlot deletes a retired slot's device and rows once no host is
+// still reporting it live.
+func (p *Provisioner) purgeRetiredSlot(ctx context.Context, creds tailscaleapi.Credentials, ingressID uuid.UUID, organizationID string, node repo.NetworkIngressNode, now time.Time) error {
+	if node.LastSeenAt.Valid && node.LastSeenAt.Time.After(now.Add(-p.cfg.StaleAfter)) {
+		switch node.Status {
+		case string(NodeStatusStopped), string(NodeStatusPending), string(NodeStatusError):
+		default:
+			return nil
+		}
+	}
+	if node.NodeID.Valid && node.NodeID.String != "" {
+		if err := p.api.DeleteDevice(ctx, creds, node.NodeID.String); err != nil {
+			return mapAPIError(err)
+		}
+	}
+	queries := repo.New(p.db)
+	if err := queries.DeleteNetworkIngressNodeSlotStates(ctx, repo.DeleteNetworkIngressNodeSlotStatesParams{NetworkIngressID: ingressID, OrganizationID: organizationID, Slot: node.Slot}); err != nil {
+		return fmt.Errorf("purge retired slot state: %w", err)
+	}
+	if err := queries.DeleteNetworkIngressNodeSlot(ctx, repo.DeleteNetworkIngressNodeSlotParams{NetworkIngressID: ingressID, OrganizationID: organizationID, Slot: node.Slot}); err != nil {
+		return fmt.Errorf("purge retired slot: %w", err)
+	}
+	return nil
 }
 
 // deleteRenamedServices removes services advertised under a previous label.

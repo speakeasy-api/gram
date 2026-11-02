@@ -66,6 +66,7 @@ func newNetworkIngressExecutor(logger *slog.Logger, meterProvider metric.MeterPr
 		AttestorRequired:     !config.Gateway.Enabled,
 		PublicationRequester: publicationRequester,
 		PublicationActor:     "",
+		Logger:               logger,
 		CanApply: func(context.Context) error {
 			if !config.MutationReady() {
 				return fmt.Errorf("network ingress provider mutations disabled")

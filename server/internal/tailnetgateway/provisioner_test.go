@@ -140,6 +140,46 @@ func TestProvisionerApplyDefinesServiceAndMintsKeysPerSlot(t *testing.T) {
 	require.NotContains(t, f.api.Services(), "svc:private", "the previous label's service is deleted")
 }
 
+func TestProvisionerScaleDownPurgesRetiredSlotsAfterHostsStop(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newProvisionerFixture(t, "tailnetprovscale")
+	_, err := f.provisioner.Apply(ctx, f.desired(t))
+	require.NoError(t, err)
+	f.heartbeat(t, 2, tailnetgateway.NodeStatusOnline, "nTHREE")
+
+	smaller, err := tailnetgateway.NewProvisioner(f.db, f.enc, f.api, tailnetgateway.ProvisionerConfig{
+		Tag: tailnetgateway.DefaultTag, Slots: 2, AuthKeyTTL: 24 * time.Hour, StaleAfter: 2 * time.Minute, Now: time.Now,
+	})
+	require.NoError(t, err)
+	_, err = smaller.Apply(ctx, f.desired(t))
+	require.NoError(t, err)
+	nodes, err := repo.New(f.db).ListNetworkIngressNodes(ctx, repo.ListNetworkIngressNodesParams{NetworkIngressID: f.ingressID, OrganizationID: f.orgID})
+	require.NoError(t, err)
+	require.Len(t, nodes, 3)
+	require.True(t, nodes[2].RetiredAt.Valid, "slot 2 is retired while its host is still live")
+	require.Empty(t, f.api.DeletedDevices(), "a live host is not deleted from under the pod")
+
+	// The pod stops hosting the retired slot; the next apply removes it.
+	f.heartbeat(t, 2, tailnetgateway.NodeStatusStopped, "nTHREE")
+	_, err = smaller.Apply(ctx, f.desired(t))
+	require.NoError(t, err)
+	require.Equal(t, []string{"nTHREE"}, f.api.DeletedDevices())
+	nodes, err = repo.New(f.db).ListNetworkIngressNodes(ctx, repo.ListNetworkIngressNodesParams{NetworkIngressID: f.ingressID, OrganizationID: f.orgID})
+	require.NoError(t, err)
+	require.Len(t, nodes, 2)
+
+	// Raising the count again creates slot 2 as a fresh identity with a new key.
+	_, err = f.provisioner.Apply(ctx, f.desired(t))
+	require.NoError(t, err)
+	nodes, err = repo.New(f.db).ListNetworkIngressNodes(ctx, repo.ListNetworkIngressNodesParams{NetworkIngressID: f.ingressID, OrganizationID: f.orgID})
+	require.NoError(t, err)
+	require.Len(t, nodes, 3)
+	require.False(t, nodes[2].RetiredAt.Valid)
+	require.False(t, nodes[2].NodeID.Valid)
+	require.Len(t, f.api.Keys(), 4)
+}
+
 func TestProvisionerApplyRejectsBadCredentialsAndInput(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
