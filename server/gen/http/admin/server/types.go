@@ -640,6 +640,12 @@ type DisableUpstreamAuthEnforcementRequestBody struct {
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 }
 
+// StartMemoryEvalRunRequestBody is the type of the "admin" service
+// "startMemoryEvalRun" endpoint HTTP request body.
+type StartMemoryEvalRunRequestBody struct {
+	Config *AdminMemoryEvalRunConfigRequestBody `form:"config,omitempty" json:"config,omitempty" xml:"config,omitempty"`
+}
+
 // GetSessionResponseBody is the type of the "admin" service "getSession"
 // endpoint HTTP response body.
 type GetSessionResponseBody struct {
@@ -2859,6 +2865,70 @@ type DisableUpstreamAuthEnforcementResponseBody struct {
 type BackfillMcpAuthGrantsResponseBody struct {
 	// How many principals gained the mcp:auth grant.
 	Granted int64 `form:"granted" json:"granted" xml:"granted"`
+}
+
+// GetMemoryEvalOptionsResponseBody is the type of the "admin" service
+// "getMemoryEvalOptions" endpoint HTTP response body.
+type GetMemoryEvalOptionsResponseBody struct {
+	Defaults *AdminMemoryEvalRunConfigResponseBody `form:"defaults" json:"defaults" xml:"defaults"`
+	// Models a run may use.
+	AllowedModels []string `form:"allowed_models" json:"allowed_models" xml:"allowed_models"`
+	// Runs allowed per rolling 24 hours, across all staff.
+	DailyRunLimit int `form:"daily_run_limit" json:"daily_run_limit" xml:"daily_run_limit"`
+	// Runs started in the last 24 hours.
+	RunsToday int `form:"runs_today" json:"runs_today" xml:"runs_today"`
+}
+
+// ListMemoryEvalRunsResponseBody is the type of the "admin" service
+// "listMemoryEvalRuns" endpoint HTTP response body.
+type ListMemoryEvalRunsResponseBody struct {
+	Runs []*AdminMemoryEvalRunResponseBody `form:"runs" json:"runs" xml:"runs"`
+	// Pass as cursor for the next page; absent on the last page.
+	NextCursor *string `form:"next_cursor,omitempty" json:"next_cursor,omitempty" xml:"next_cursor,omitempty"`
+}
+
+// GetMemoryEvalRunResponseBody is the type of the "admin" service
+// "getMemoryEvalRun" endpoint HTTP response body.
+type GetMemoryEvalRunResponseBody struct {
+	// Run ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Where the run is.
+	Status string                                `form:"status" json:"status" xml:"status"`
+	Config *AdminMemoryEvalRunConfigResponseBody `form:"config" json:"config" xml:"config"`
+	// Model spend the run reported across preparation, answers and grading.
+	CostUsd *float64 `form:"cost_usd,omitempty" json:"cost_usd,omitempty" xml:"cost_usd,omitempty"`
+	// Why a failed run stopped.
+	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
+	// Email of the staff member who started the run.
+	RequestedBy string `form:"requested_by" json:"requested_by" xml:"requested_by"`
+	// The scored report as JSON: scores per answer model and arm, preparation
+	// spend, judge spend. Set on get only, once the run succeeded.
+	ReportJSON *string `form:"report_json,omitempty" json:"report_json,omitempty" xml:"report_json,omitempty"`
+	StartedAt  *string `form:"started_at,omitempty" json:"started_at,omitempty" xml:"started_at,omitempty"`
+	FinishedAt *string `form:"finished_at,omitempty" json:"finished_at,omitempty" xml:"finished_at,omitempty"`
+	CreatedAt  string  `form:"created_at" json:"created_at" xml:"created_at"`
+}
+
+// StartMemoryEvalRunResponseBody is the type of the "admin" service
+// "startMemoryEvalRun" endpoint HTTP response body.
+type StartMemoryEvalRunResponseBody struct {
+	// Run ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Where the run is.
+	Status string                                `form:"status" json:"status" xml:"status"`
+	Config *AdminMemoryEvalRunConfigResponseBody `form:"config" json:"config" xml:"config"`
+	// Model spend the run reported across preparation, answers and grading.
+	CostUsd *float64 `form:"cost_usd,omitempty" json:"cost_usd,omitempty" xml:"cost_usd,omitempty"`
+	// Why a failed run stopped.
+	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
+	// Email of the staff member who started the run.
+	RequestedBy string `form:"requested_by" json:"requested_by" xml:"requested_by"`
+	// The scored report as JSON: scores per answer model and arm, preparation
+	// spend, judge spend. Set on get only, once the run succeeded.
+	ReportJSON *string `form:"report_json,omitempty" json:"report_json,omitempty" xml:"report_json,omitempty"`
+	StartedAt  *string `form:"started_at,omitempty" json:"started_at,omitempty" xml:"started_at,omitempty"`
+	FinishedAt *string `form:"finished_at,omitempty" json:"finished_at,omitempty" xml:"finished_at,omitempty"`
+	CreatedAt  string  `form:"created_at" json:"created_at" xml:"created_at"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -22789,6 +22859,742 @@ type BackfillMcpAuthGrantsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetMemoryEvalOptionsUnauthorizedResponseBody is the type of the "admin"
+// service "getMemoryEvalOptions" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetMemoryEvalOptionsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryEvalOptionsForbiddenResponseBody is the type of the "admin" service
+// "getMemoryEvalOptions" endpoint HTTP response body for the "forbidden" error.
+type GetMemoryEvalOptionsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryEvalOptionsBadRequestResponseBody is the type of the "admin"
+// service "getMemoryEvalOptions" endpoint HTTP response body for the
+// "bad_request" error.
+type GetMemoryEvalOptionsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryEvalOptionsNotFoundResponseBody is the type of the "admin" service
+// "getMemoryEvalOptions" endpoint HTTP response body for the "not_found" error.
+type GetMemoryEvalOptionsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryEvalOptionsConflictResponseBody is the type of the "admin" service
+// "getMemoryEvalOptions" endpoint HTTP response body for the "conflict" error.
+type GetMemoryEvalOptionsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryEvalOptionsUnsupportedMediaResponseBody is the type of the "admin"
+// service "getMemoryEvalOptions" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetMemoryEvalOptionsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryEvalOptionsInvalidResponseBody is the type of the "admin" service
+// "getMemoryEvalOptions" endpoint HTTP response body for the "invalid" error.
+type GetMemoryEvalOptionsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryEvalOptionsInvariantViolationResponseBody is the type of the
+// "admin" service "getMemoryEvalOptions" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetMemoryEvalOptionsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryEvalOptionsUnexpectedResponseBody is the type of the "admin"
+// service "getMemoryEvalOptions" endpoint HTTP response body for the
+// "unexpected" error.
+type GetMemoryEvalOptionsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryEvalOptionsGatewayErrorResponseBody is the type of the "admin"
+// service "getMemoryEvalOptions" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetMemoryEvalOptionsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMemoryEvalRunsUnauthorizedResponseBody is the type of the "admin"
+// service "listMemoryEvalRuns" endpoint HTTP response body for the
+// "unauthorized" error.
+type ListMemoryEvalRunsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMemoryEvalRunsForbiddenResponseBody is the type of the "admin" service
+// "listMemoryEvalRuns" endpoint HTTP response body for the "forbidden" error.
+type ListMemoryEvalRunsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMemoryEvalRunsBadRequestResponseBody is the type of the "admin" service
+// "listMemoryEvalRuns" endpoint HTTP response body for the "bad_request" error.
+type ListMemoryEvalRunsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMemoryEvalRunsNotFoundResponseBody is the type of the "admin" service
+// "listMemoryEvalRuns" endpoint HTTP response body for the "not_found" error.
+type ListMemoryEvalRunsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMemoryEvalRunsConflictResponseBody is the type of the "admin" service
+// "listMemoryEvalRuns" endpoint HTTP response body for the "conflict" error.
+type ListMemoryEvalRunsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMemoryEvalRunsUnsupportedMediaResponseBody is the type of the "admin"
+// service "listMemoryEvalRuns" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListMemoryEvalRunsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMemoryEvalRunsInvalidResponseBody is the type of the "admin" service
+// "listMemoryEvalRuns" endpoint HTTP response body for the "invalid" error.
+type ListMemoryEvalRunsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMemoryEvalRunsInvariantViolationResponseBody is the type of the "admin"
+// service "listMemoryEvalRuns" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListMemoryEvalRunsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMemoryEvalRunsUnexpectedResponseBody is the type of the "admin" service
+// "listMemoryEvalRuns" endpoint HTTP response body for the "unexpected" error.
+type ListMemoryEvalRunsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ListMemoryEvalRunsGatewayErrorResponseBody is the type of the "admin"
+// service "listMemoryEvalRuns" endpoint HTTP response body for the
+// "gateway_error" error.
+type ListMemoryEvalRunsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryEvalRunUnauthorizedResponseBody is the type of the "admin" service
+// "getMemoryEvalRun" endpoint HTTP response body for the "unauthorized" error.
+type GetMemoryEvalRunUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryEvalRunForbiddenResponseBody is the type of the "admin" service
+// "getMemoryEvalRun" endpoint HTTP response body for the "forbidden" error.
+type GetMemoryEvalRunForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryEvalRunBadRequestResponseBody is the type of the "admin" service
+// "getMemoryEvalRun" endpoint HTTP response body for the "bad_request" error.
+type GetMemoryEvalRunBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryEvalRunNotFoundResponseBody is the type of the "admin" service
+// "getMemoryEvalRun" endpoint HTTP response body for the "not_found" error.
+type GetMemoryEvalRunNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryEvalRunConflictResponseBody is the type of the "admin" service
+// "getMemoryEvalRun" endpoint HTTP response body for the "conflict" error.
+type GetMemoryEvalRunConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryEvalRunUnsupportedMediaResponseBody is the type of the "admin"
+// service "getMemoryEvalRun" endpoint HTTP response body for the
+// "unsupported_media" error.
+type GetMemoryEvalRunUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryEvalRunInvalidResponseBody is the type of the "admin" service
+// "getMemoryEvalRun" endpoint HTTP response body for the "invalid" error.
+type GetMemoryEvalRunInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryEvalRunInvariantViolationResponseBody is the type of the "admin"
+// service "getMemoryEvalRun" endpoint HTTP response body for the
+// "invariant_violation" error.
+type GetMemoryEvalRunInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryEvalRunUnexpectedResponseBody is the type of the "admin" service
+// "getMemoryEvalRun" endpoint HTTP response body for the "unexpected" error.
+type GetMemoryEvalRunUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryEvalRunGatewayErrorResponseBody is the type of the "admin" service
+// "getMemoryEvalRun" endpoint HTTP response body for the "gateway_error" error.
+type GetMemoryEvalRunGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartMemoryEvalRunUnauthorizedResponseBody is the type of the "admin"
+// service "startMemoryEvalRun" endpoint HTTP response body for the
+// "unauthorized" error.
+type StartMemoryEvalRunUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartMemoryEvalRunForbiddenResponseBody is the type of the "admin" service
+// "startMemoryEvalRun" endpoint HTTP response body for the "forbidden" error.
+type StartMemoryEvalRunForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartMemoryEvalRunBadRequestResponseBody is the type of the "admin" service
+// "startMemoryEvalRun" endpoint HTTP response body for the "bad_request" error.
+type StartMemoryEvalRunBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartMemoryEvalRunNotFoundResponseBody is the type of the "admin" service
+// "startMemoryEvalRun" endpoint HTTP response body for the "not_found" error.
+type StartMemoryEvalRunNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartMemoryEvalRunConflictResponseBody is the type of the "admin" service
+// "startMemoryEvalRun" endpoint HTTP response body for the "conflict" error.
+type StartMemoryEvalRunConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartMemoryEvalRunUnsupportedMediaResponseBody is the type of the "admin"
+// service "startMemoryEvalRun" endpoint HTTP response body for the
+// "unsupported_media" error.
+type StartMemoryEvalRunUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartMemoryEvalRunInvalidResponseBody is the type of the "admin" service
+// "startMemoryEvalRun" endpoint HTTP response body for the "invalid" error.
+type StartMemoryEvalRunInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartMemoryEvalRunInvariantViolationResponseBody is the type of the "admin"
+// service "startMemoryEvalRun" endpoint HTTP response body for the
+// "invariant_violation" error.
+type StartMemoryEvalRunInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartMemoryEvalRunUnexpectedResponseBody is the type of the "admin" service
+// "startMemoryEvalRun" endpoint HTTP response body for the "unexpected" error.
+type StartMemoryEvalRunUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// StartMemoryEvalRunGatewayErrorResponseBody is the type of the "admin"
+// service "startMemoryEvalRun" endpoint HTTP response body for the
+// "gateway_error" error.
+type StartMemoryEvalRunGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -24264,6 +25070,43 @@ type AdminUpstreamOAuthMigrationStatusResponseBody struct {
 	Enforcement *AdminUpstreamAuthEnforcementResponseBody `form:"enforcement,omitempty" json:"enforcement,omitempty" xml:"enforcement,omitempty"`
 }
 
+// AdminMemoryEvalRunConfigResponseBody is used to define fields on response
+// body types.
+type AdminMemoryEvalRunConfigResponseBody struct {
+	// Models that answer the eval questions; each is scored in every arm.
+	AnswerModels []string `form:"answer_models" json:"answer_models" xml:"answer_models"`
+	// Model that grades answers. Pick a different family from the answer models.
+	JudgeModel string `form:"judge_model" json:"judge_model" xml:"judge_model"`
+	// Model that writes the masked chat summaries team memory reads.
+	SummaryModel string `form:"summary_model" json:"summary_model" xml:"summary_model"`
+	// Model that writes day, week and month digests.
+	DigestModel string `form:"digest_model" json:"digest_model" xml:"digest_model"`
+	// Repeats per answer model and arm.
+	Runs int `form:"runs" json:"runs" xml:"runs"`
+}
+
+// AdminMemoryEvalRunResponseBody is used to define fields on response body
+// types.
+type AdminMemoryEvalRunResponseBody struct {
+	// Run ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Where the run is.
+	Status string                                `form:"status" json:"status" xml:"status"`
+	Config *AdminMemoryEvalRunConfigResponseBody `form:"config" json:"config" xml:"config"`
+	// Model spend the run reported across preparation, answers and grading.
+	CostUsd *float64 `form:"cost_usd,omitempty" json:"cost_usd,omitempty" xml:"cost_usd,omitempty"`
+	// Why a failed run stopped.
+	Error *string `form:"error,omitempty" json:"error,omitempty" xml:"error,omitempty"`
+	// Email of the staff member who started the run.
+	RequestedBy string `form:"requested_by" json:"requested_by" xml:"requested_by"`
+	// The scored report as JSON: scores per answer model and arm, preparation
+	// spend, judge spend. Set on get only, once the run succeeded.
+	ReportJSON *string `form:"report_json,omitempty" json:"report_json,omitempty" xml:"report_json,omitempty"`
+	StartedAt  *string `form:"started_at,omitempty" json:"started_at,omitempty" xml:"started_at,omitempty"`
+	FinishedAt *string `form:"finished_at,omitempty" json:"finished_at,omitempty" xml:"finished_at,omitempty"`
+	CreatedAt  string  `form:"created_at" json:"created_at" xml:"created_at"`
+}
+
 // SupportDraftRequestBody is used to define fields on request body types.
 type SupportDraftRequestBody struct {
 	Mappings   map[string]*SupportMappingRequestBody         `json:"mappings"`
@@ -24298,6 +25141,21 @@ type AdminOnboardingStackVendorRequestBody struct {
 	// The plan the organization is on with this vendor. Absent for a vendor with
 	// no plans.
 	PlanSlug *string `form:"plan_slug,omitempty" json:"plan_slug,omitempty" xml:"plan_slug,omitempty"`
+}
+
+// AdminMemoryEvalRunConfigRequestBody is used to define fields on request body
+// types.
+type AdminMemoryEvalRunConfigRequestBody struct {
+	// Models that answer the eval questions; each is scored in every arm.
+	AnswerModels []string `form:"answer_models,omitempty" json:"answer_models,omitempty" xml:"answer_models,omitempty"`
+	// Model that grades answers. Pick a different family from the answer models.
+	JudgeModel *string `form:"judge_model,omitempty" json:"judge_model,omitempty" xml:"judge_model,omitempty"`
+	// Model that writes the masked chat summaries team memory reads.
+	SummaryModel *string `form:"summary_model,omitempty" json:"summary_model,omitempty" xml:"summary_model,omitempty"`
+	// Model that writes day, week and month digests.
+	DigestModel *string `form:"digest_model,omitempty" json:"digest_model,omitempty" xml:"digest_model,omitempty"`
+	// Repeats per answer model and arm.
+	Runs *int `form:"runs,omitempty" json:"runs,omitempty" xml:"runs,omitempty"`
 }
 
 // NewGetSessionResponseBody builds the HTTP response body from the result of
@@ -26906,6 +27764,88 @@ func NewDisableUpstreamAuthEnforcementResponseBody(res *admin.AdminUpstreamOAuth
 func NewBackfillMcpAuthGrantsResponseBody(res *admin.AdminBackfillMCPAuthGrantsResult) *BackfillMcpAuthGrantsResponseBody {
 	body := &BackfillMcpAuthGrantsResponseBody{
 		Granted: res.Granted,
+	}
+	return body
+}
+
+// NewGetMemoryEvalOptionsResponseBody builds the HTTP response body from the
+// result of the "getMemoryEvalOptions" endpoint of the "admin" service.
+func NewGetMemoryEvalOptionsResponseBody(res *admin.AdminMemoryEvalOptions) *GetMemoryEvalOptionsResponseBody {
+	body := &GetMemoryEvalOptionsResponseBody{
+		DailyRunLimit: res.DailyRunLimit,
+		RunsToday:     res.RunsToday,
+	}
+	if res.Defaults != nil {
+		body.Defaults = marshalAdminAdminMemoryEvalRunConfigToAdminMemoryEvalRunConfigResponseBody(res.Defaults)
+	}
+	if res.AllowedModels != nil {
+		body.AllowedModels = make([]string, len(res.AllowedModels))
+		for i, val := range res.AllowedModels {
+			body.AllowedModels[i] = val
+		}
+	} else {
+		body.AllowedModels = []string{}
+	}
+	return body
+}
+
+// NewListMemoryEvalRunsResponseBody builds the HTTP response body from the
+// result of the "listMemoryEvalRuns" endpoint of the "admin" service.
+func NewListMemoryEvalRunsResponseBody(res *admin.ListMemoryEvalRunsResult) *ListMemoryEvalRunsResponseBody {
+	body := &ListMemoryEvalRunsResponseBody{
+		NextCursor: res.NextCursor,
+	}
+	if res.Runs != nil {
+		body.Runs = make([]*AdminMemoryEvalRunResponseBody, len(res.Runs))
+		for i, val := range res.Runs {
+			if val == nil {
+				body.Runs[i] = nil
+				continue
+			}
+			body.Runs[i] = marshalAdminAdminMemoryEvalRunToAdminMemoryEvalRunResponseBody(val)
+		}
+	} else {
+		body.Runs = []*AdminMemoryEvalRunResponseBody{}
+	}
+	return body
+}
+
+// NewGetMemoryEvalRunResponseBody builds the HTTP response body from the
+// result of the "getMemoryEvalRun" endpoint of the "admin" service.
+func NewGetMemoryEvalRunResponseBody(res *admin.AdminMemoryEvalRun) *GetMemoryEvalRunResponseBody {
+	body := &GetMemoryEvalRunResponseBody{
+		ID:          res.ID,
+		Status:      res.Status,
+		CostUsd:     res.CostUsd,
+		Error:       res.Error,
+		RequestedBy: res.RequestedBy,
+		ReportJSON:  res.ReportJSON,
+		StartedAt:   res.StartedAt,
+		FinishedAt:  res.FinishedAt,
+		CreatedAt:   res.CreatedAt,
+	}
+	if res.Config != nil {
+		body.Config = marshalAdminAdminMemoryEvalRunConfigToAdminMemoryEvalRunConfigResponseBody(res.Config)
+	}
+	return body
+}
+
+// NewStartMemoryEvalRunResponseBody builds the HTTP response body from the
+// result of the "startMemoryEvalRun" endpoint of the "admin" service.
+func NewStartMemoryEvalRunResponseBody(res *admin.AdminMemoryEvalRun) *StartMemoryEvalRunResponseBody {
+	body := &StartMemoryEvalRunResponseBody{
+		ID:          res.ID,
+		Status:      res.Status,
+		CostUsd:     res.CostUsd,
+		Error:       res.Error,
+		RequestedBy: res.RequestedBy,
+		ReportJSON:  res.ReportJSON,
+		StartedAt:   res.StartedAt,
+		FinishedAt:  res.FinishedAt,
+		CreatedAt:   res.CreatedAt,
+	}
+	if res.Config != nil {
+		body.Config = marshalAdminAdminMemoryEvalRunConfigToAdminMemoryEvalRunConfigResponseBody(res.Config)
 	}
 	return body
 }
@@ -42541,6 +43481,582 @@ func NewBackfillMcpAuthGrantsGatewayErrorResponseBody(res *goa.ServiceError) *Ba
 	return body
 }
 
+// NewGetMemoryEvalOptionsUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getMemoryEvalOptions" endpoint of the "admin"
+// service.
+func NewGetMemoryEvalOptionsUnauthorizedResponseBody(res *goa.ServiceError) *GetMemoryEvalOptionsUnauthorizedResponseBody {
+	body := &GetMemoryEvalOptionsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryEvalOptionsForbiddenResponseBody builds the HTTP response body
+// from the result of the "getMemoryEvalOptions" endpoint of the "admin"
+// service.
+func NewGetMemoryEvalOptionsForbiddenResponseBody(res *goa.ServiceError) *GetMemoryEvalOptionsForbiddenResponseBody {
+	body := &GetMemoryEvalOptionsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryEvalOptionsBadRequestResponseBody builds the HTTP response body
+// from the result of the "getMemoryEvalOptions" endpoint of the "admin"
+// service.
+func NewGetMemoryEvalOptionsBadRequestResponseBody(res *goa.ServiceError) *GetMemoryEvalOptionsBadRequestResponseBody {
+	body := &GetMemoryEvalOptionsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryEvalOptionsNotFoundResponseBody builds the HTTP response body
+// from the result of the "getMemoryEvalOptions" endpoint of the "admin"
+// service.
+func NewGetMemoryEvalOptionsNotFoundResponseBody(res *goa.ServiceError) *GetMemoryEvalOptionsNotFoundResponseBody {
+	body := &GetMemoryEvalOptionsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryEvalOptionsConflictResponseBody builds the HTTP response body
+// from the result of the "getMemoryEvalOptions" endpoint of the "admin"
+// service.
+func NewGetMemoryEvalOptionsConflictResponseBody(res *goa.ServiceError) *GetMemoryEvalOptionsConflictResponseBody {
+	body := &GetMemoryEvalOptionsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryEvalOptionsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getMemoryEvalOptions" endpoint of the "admin"
+// service.
+func NewGetMemoryEvalOptionsUnsupportedMediaResponseBody(res *goa.ServiceError) *GetMemoryEvalOptionsUnsupportedMediaResponseBody {
+	body := &GetMemoryEvalOptionsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryEvalOptionsInvalidResponseBody builds the HTTP response body
+// from the result of the "getMemoryEvalOptions" endpoint of the "admin"
+// service.
+func NewGetMemoryEvalOptionsInvalidResponseBody(res *goa.ServiceError) *GetMemoryEvalOptionsInvalidResponseBody {
+	body := &GetMemoryEvalOptionsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryEvalOptionsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getMemoryEvalOptions" endpoint of the
+// "admin" service.
+func NewGetMemoryEvalOptionsInvariantViolationResponseBody(res *goa.ServiceError) *GetMemoryEvalOptionsInvariantViolationResponseBody {
+	body := &GetMemoryEvalOptionsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryEvalOptionsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "getMemoryEvalOptions" endpoint of the "admin"
+// service.
+func NewGetMemoryEvalOptionsUnexpectedResponseBody(res *goa.ServiceError) *GetMemoryEvalOptionsUnexpectedResponseBody {
+	body := &GetMemoryEvalOptionsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryEvalOptionsGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getMemoryEvalOptions" endpoint of the "admin"
+// service.
+func NewGetMemoryEvalOptionsGatewayErrorResponseBody(res *goa.ServiceError) *GetMemoryEvalOptionsGatewayErrorResponseBody {
+	body := &GetMemoryEvalOptionsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMemoryEvalRunsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listMemoryEvalRuns" endpoint of the "admin" service.
+func NewListMemoryEvalRunsUnauthorizedResponseBody(res *goa.ServiceError) *ListMemoryEvalRunsUnauthorizedResponseBody {
+	body := &ListMemoryEvalRunsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMemoryEvalRunsForbiddenResponseBody builds the HTTP response body
+// from the result of the "listMemoryEvalRuns" endpoint of the "admin" service.
+func NewListMemoryEvalRunsForbiddenResponseBody(res *goa.ServiceError) *ListMemoryEvalRunsForbiddenResponseBody {
+	body := &ListMemoryEvalRunsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMemoryEvalRunsBadRequestResponseBody builds the HTTP response body
+// from the result of the "listMemoryEvalRuns" endpoint of the "admin" service.
+func NewListMemoryEvalRunsBadRequestResponseBody(res *goa.ServiceError) *ListMemoryEvalRunsBadRequestResponseBody {
+	body := &ListMemoryEvalRunsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMemoryEvalRunsNotFoundResponseBody builds the HTTP response body from
+// the result of the "listMemoryEvalRuns" endpoint of the "admin" service.
+func NewListMemoryEvalRunsNotFoundResponseBody(res *goa.ServiceError) *ListMemoryEvalRunsNotFoundResponseBody {
+	body := &ListMemoryEvalRunsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMemoryEvalRunsConflictResponseBody builds the HTTP response body from
+// the result of the "listMemoryEvalRuns" endpoint of the "admin" service.
+func NewListMemoryEvalRunsConflictResponseBody(res *goa.ServiceError) *ListMemoryEvalRunsConflictResponseBody {
+	body := &ListMemoryEvalRunsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMemoryEvalRunsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listMemoryEvalRuns" endpoint of the "admin"
+// service.
+func NewListMemoryEvalRunsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListMemoryEvalRunsUnsupportedMediaResponseBody {
+	body := &ListMemoryEvalRunsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMemoryEvalRunsInvalidResponseBody builds the HTTP response body from
+// the result of the "listMemoryEvalRuns" endpoint of the "admin" service.
+func NewListMemoryEvalRunsInvalidResponseBody(res *goa.ServiceError) *ListMemoryEvalRunsInvalidResponseBody {
+	body := &ListMemoryEvalRunsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMemoryEvalRunsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listMemoryEvalRuns" endpoint of the "admin"
+// service.
+func NewListMemoryEvalRunsInvariantViolationResponseBody(res *goa.ServiceError) *ListMemoryEvalRunsInvariantViolationResponseBody {
+	body := &ListMemoryEvalRunsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMemoryEvalRunsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listMemoryEvalRuns" endpoint of the "admin" service.
+func NewListMemoryEvalRunsUnexpectedResponseBody(res *goa.ServiceError) *ListMemoryEvalRunsUnexpectedResponseBody {
+	body := &ListMemoryEvalRunsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListMemoryEvalRunsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listMemoryEvalRuns" endpoint of the "admin" service.
+func NewListMemoryEvalRunsGatewayErrorResponseBody(res *goa.ServiceError) *ListMemoryEvalRunsGatewayErrorResponseBody {
+	body := &ListMemoryEvalRunsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryEvalRunUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "getMemoryEvalRun" endpoint of the "admin" service.
+func NewGetMemoryEvalRunUnauthorizedResponseBody(res *goa.ServiceError) *GetMemoryEvalRunUnauthorizedResponseBody {
+	body := &GetMemoryEvalRunUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryEvalRunForbiddenResponseBody builds the HTTP response body from
+// the result of the "getMemoryEvalRun" endpoint of the "admin" service.
+func NewGetMemoryEvalRunForbiddenResponseBody(res *goa.ServiceError) *GetMemoryEvalRunForbiddenResponseBody {
+	body := &GetMemoryEvalRunForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryEvalRunBadRequestResponseBody builds the HTTP response body from
+// the result of the "getMemoryEvalRun" endpoint of the "admin" service.
+func NewGetMemoryEvalRunBadRequestResponseBody(res *goa.ServiceError) *GetMemoryEvalRunBadRequestResponseBody {
+	body := &GetMemoryEvalRunBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryEvalRunNotFoundResponseBody builds the HTTP response body from
+// the result of the "getMemoryEvalRun" endpoint of the "admin" service.
+func NewGetMemoryEvalRunNotFoundResponseBody(res *goa.ServiceError) *GetMemoryEvalRunNotFoundResponseBody {
+	body := &GetMemoryEvalRunNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryEvalRunConflictResponseBody builds the HTTP response body from
+// the result of the "getMemoryEvalRun" endpoint of the "admin" service.
+func NewGetMemoryEvalRunConflictResponseBody(res *goa.ServiceError) *GetMemoryEvalRunConflictResponseBody {
+	body := &GetMemoryEvalRunConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryEvalRunUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "getMemoryEvalRun" endpoint of the "admin"
+// service.
+func NewGetMemoryEvalRunUnsupportedMediaResponseBody(res *goa.ServiceError) *GetMemoryEvalRunUnsupportedMediaResponseBody {
+	body := &GetMemoryEvalRunUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryEvalRunInvalidResponseBody builds the HTTP response body from
+// the result of the "getMemoryEvalRun" endpoint of the "admin" service.
+func NewGetMemoryEvalRunInvalidResponseBody(res *goa.ServiceError) *GetMemoryEvalRunInvalidResponseBody {
+	body := &GetMemoryEvalRunInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryEvalRunInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "getMemoryEvalRun" endpoint of the "admin"
+// service.
+func NewGetMemoryEvalRunInvariantViolationResponseBody(res *goa.ServiceError) *GetMemoryEvalRunInvariantViolationResponseBody {
+	body := &GetMemoryEvalRunInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryEvalRunUnexpectedResponseBody builds the HTTP response body from
+// the result of the "getMemoryEvalRun" endpoint of the "admin" service.
+func NewGetMemoryEvalRunUnexpectedResponseBody(res *goa.ServiceError) *GetMemoryEvalRunUnexpectedResponseBody {
+	body := &GetMemoryEvalRunUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryEvalRunGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "getMemoryEvalRun" endpoint of the "admin" service.
+func NewGetMemoryEvalRunGatewayErrorResponseBody(res *goa.ServiceError) *GetMemoryEvalRunGatewayErrorResponseBody {
+	body := &GetMemoryEvalRunGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartMemoryEvalRunUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "startMemoryEvalRun" endpoint of the "admin" service.
+func NewStartMemoryEvalRunUnauthorizedResponseBody(res *goa.ServiceError) *StartMemoryEvalRunUnauthorizedResponseBody {
+	body := &StartMemoryEvalRunUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartMemoryEvalRunForbiddenResponseBody builds the HTTP response body
+// from the result of the "startMemoryEvalRun" endpoint of the "admin" service.
+func NewStartMemoryEvalRunForbiddenResponseBody(res *goa.ServiceError) *StartMemoryEvalRunForbiddenResponseBody {
+	body := &StartMemoryEvalRunForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartMemoryEvalRunBadRequestResponseBody builds the HTTP response body
+// from the result of the "startMemoryEvalRun" endpoint of the "admin" service.
+func NewStartMemoryEvalRunBadRequestResponseBody(res *goa.ServiceError) *StartMemoryEvalRunBadRequestResponseBody {
+	body := &StartMemoryEvalRunBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartMemoryEvalRunNotFoundResponseBody builds the HTTP response body from
+// the result of the "startMemoryEvalRun" endpoint of the "admin" service.
+func NewStartMemoryEvalRunNotFoundResponseBody(res *goa.ServiceError) *StartMemoryEvalRunNotFoundResponseBody {
+	body := &StartMemoryEvalRunNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartMemoryEvalRunConflictResponseBody builds the HTTP response body from
+// the result of the "startMemoryEvalRun" endpoint of the "admin" service.
+func NewStartMemoryEvalRunConflictResponseBody(res *goa.ServiceError) *StartMemoryEvalRunConflictResponseBody {
+	body := &StartMemoryEvalRunConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartMemoryEvalRunUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "startMemoryEvalRun" endpoint of the "admin"
+// service.
+func NewStartMemoryEvalRunUnsupportedMediaResponseBody(res *goa.ServiceError) *StartMemoryEvalRunUnsupportedMediaResponseBody {
+	body := &StartMemoryEvalRunUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartMemoryEvalRunInvalidResponseBody builds the HTTP response body from
+// the result of the "startMemoryEvalRun" endpoint of the "admin" service.
+func NewStartMemoryEvalRunInvalidResponseBody(res *goa.ServiceError) *StartMemoryEvalRunInvalidResponseBody {
+	body := &StartMemoryEvalRunInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartMemoryEvalRunInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "startMemoryEvalRun" endpoint of the "admin"
+// service.
+func NewStartMemoryEvalRunInvariantViolationResponseBody(res *goa.ServiceError) *StartMemoryEvalRunInvariantViolationResponseBody {
+	body := &StartMemoryEvalRunInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartMemoryEvalRunUnexpectedResponseBody builds the HTTP response body
+// from the result of the "startMemoryEvalRun" endpoint of the "admin" service.
+func NewStartMemoryEvalRunUnexpectedResponseBody(res *goa.ServiceError) *StartMemoryEvalRunUnexpectedResponseBody {
+	body := &StartMemoryEvalRunUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewStartMemoryEvalRunGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "startMemoryEvalRun" endpoint of the "admin" service.
+func NewStartMemoryEvalRunGatewayErrorResponseBody(res *goa.ServiceError) *StartMemoryEvalRunGatewayErrorResponseBody {
+	body := &StartMemoryEvalRunGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLoginPayload builds a admin service login endpoint payload.
 func NewLoginPayload(returnTo *string, prompt *string) *admin.LoginPayload {
 	v := &admin.LoginPayload{}
@@ -43935,6 +45451,46 @@ func NewBackfillMcpAuthGrantsPayload(adminSessionToken *string) *admin.BackfillM
 	return v
 }
 
+// NewGetMemoryEvalOptionsPayload builds a admin service getMemoryEvalOptions
+// endpoint payload.
+func NewGetMemoryEvalOptionsPayload(adminSessionToken *string) *admin.GetMemoryEvalOptionsPayload {
+	v := &admin.GetMemoryEvalOptionsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewListMemoryEvalRunsPayload builds a admin service listMemoryEvalRuns
+// endpoint payload.
+func NewListMemoryEvalRunsPayload(cursor *string, limit int, adminSessionToken *string) *admin.ListMemoryEvalRunsPayload {
+	v := &admin.ListMemoryEvalRunsPayload{}
+	v.Cursor = cursor
+	v.Limit = limit
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewGetMemoryEvalRunPayload builds a admin service getMemoryEvalRun endpoint
+// payload.
+func NewGetMemoryEvalRunPayload(id string, adminSessionToken *string) *admin.GetMemoryEvalRunPayload {
+	v := &admin.GetMemoryEvalRunPayload{}
+	v.ID = id
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewStartMemoryEvalRunPayload builds a admin service startMemoryEvalRun
+// endpoint payload.
+func NewStartMemoryEvalRunPayload(body *StartMemoryEvalRunRequestBody, adminSessionToken *string) *admin.StartMemoryEvalRunPayload {
+	v := &admin.StartMemoryEvalRunPayload{}
+	v.Config = unmarshalAdminMemoryEvalRunConfigRequestBodyToAdminAdminMemoryEvalRunConfig(body.Config)
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // ValidateSetOrganizationFeatureRequestBody runs the validations defined on
 // SetOrganizationFeatureRequestBody
 func ValidateSetOrganizationFeatureRequestBody(body *SetOrganizationFeatureRequestBody) (err error) {
@@ -44930,6 +46486,20 @@ func ValidateDisableUpstreamAuthEnforcementRequestBody(body *DisableUpstreamAuth
 	return
 }
 
+// ValidateStartMemoryEvalRunRequestBody runs the validations defined on
+// StartMemoryEvalRunRequestBody
+func ValidateStartMemoryEvalRunRequestBody(body *StartMemoryEvalRunRequestBody) (err error) {
+	if body.Config == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("config", "body"))
+	}
+	if body.Config != nil {
+		if err2 := ValidateAdminMemoryEvalRunConfigRequestBody(body.Config); err2 != nil {
+			err = goa.MergeErrors(err, err2)
+		}
+	}
+	return
+}
+
 // ValidateSupportDraftRequestBody runs the validations defined on
 // SupportDraftRequestBody
 func ValidateSupportDraftRequestBody(body *SupportDraftRequestBody) (err error) {
@@ -45032,6 +46602,43 @@ func ValidateAdminExternalMcpMigrationRequestRequestBody(body *AdminExternalMcpM
 func ValidateAdminOnboardingStackVendorRequestBody(body *AdminOnboardingStackVendorRequestBody) (err error) {
 	if body.Vendor == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("vendor", "body"))
+	}
+	return
+}
+
+// ValidateAdminMemoryEvalRunConfigRequestBody runs the validations defined on
+// AdminMemoryEvalRunConfigRequestBody
+func ValidateAdminMemoryEvalRunConfigRequestBody(body *AdminMemoryEvalRunConfigRequestBody) (err error) {
+	if body.AnswerModels == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("answer_models", "body"))
+	}
+	if body.JudgeModel == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("judge_model", "body"))
+	}
+	if body.SummaryModel == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("summary_model", "body"))
+	}
+	if body.DigestModel == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("digest_model", "body"))
+	}
+	if body.Runs == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("runs", "body"))
+	}
+	if len(body.AnswerModels) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.answer_models", body.AnswerModels, len(body.AnswerModels), 1, true))
+	}
+	if len(body.AnswerModels) > 4 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.answer_models", body.AnswerModels, len(body.AnswerModels), 4, false))
+	}
+	if body.Runs != nil {
+		if *body.Runs < 1 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.runs", *body.Runs, 1, true))
+		}
+	}
+	if body.Runs != nil {
+		if *body.Runs > 3 {
+			err = goa.MergeErrors(err, goa.InvalidRangeError("body.runs", *body.Runs, 3, false))
+		}
 	}
 	return
 }
