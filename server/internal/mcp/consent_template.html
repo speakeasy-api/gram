@@ -29,9 +29,8 @@
       <section class="bg-card border">
         <header class="flex flex-col gap-2 border-b px-6 py-6 sm:px-8">
           {{if and .Gateway .Gateway.Focus}}
-          {{/* One server's connect page. Connecting a service is the whole
-          job here: the gateway is approved on its own page, so this page
-          has no approve step of its own. */}}
+          {{/* One server's connect page. Connecting a service completes this
+          focused flow, including any consent for the requesting catalogue. */}}
           <p class="text-eyebrow">Connect a server</p>
           <h1 class="text-display-xs break-all">{{.Gateway.Focus.Name}}</h1>
           <p class="text-sm text-muted-foreground">

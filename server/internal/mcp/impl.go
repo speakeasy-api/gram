@@ -934,6 +934,9 @@ func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Reque
 		return err //nolint:wrapcheck // the manager's errors already carry the response
 	}
 	if result.Grant != nil {
+		if err := s.completeCodeReconnect(r, *result.Grant); err != nil {
+			return fmt.Errorf("complete code reconnect: %w", err)
+		}
 		if err := s.recordConnectionPopupGrant(r.Context(), *result.Grant); err != nil {
 			// OAuth already committed and consumed its callback. Keep the normal
 			// redirect; attachment completion stays fail-closed and can be retried

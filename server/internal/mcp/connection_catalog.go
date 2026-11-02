@@ -28,9 +28,9 @@ import (
 )
 
 const (
-	// connectionCatalogVersion identifies the immutable record format.
+	// connectionCatalogVersion identifies the record format.
 	connectionCatalogVersion = 1
-	// connectionCatalogMaxBytes bounds one immutable Redis value to 16 MiB.
+	// connectionCatalogMaxBytes bounds one Redis value to 16 MiB.
 	connectionCatalogMaxBytes = 16 << 20
 )
 
@@ -93,12 +93,13 @@ type connectionCatalogAuth struct {
 	RegistrationID uuid.NullUUID `json:"registration_id"`
 }
 
-// connectionCatalog is immutable data, bound to one approved OAuth connection.
+// connectionCatalog freezes discovery for one approved OAuth connection.
+// Explicit member reconnect consent can update just that member.
 // Session validation and live authorization remain separate from this record.
 type connectionCatalog struct {
 	// Version controls the stored data contract.
 	Version int `json:"version"`
-	// ID identifies this exact immutable catalog.
+	// ID identifies this connection's catalog.
 	ID uuid.UUID `json:"id"`
 	// OrganizationID isolates the record's tenant.
 	OrganizationID string `json:"organization_id"`

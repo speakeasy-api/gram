@@ -66,3 +66,15 @@ func TestCodeConnectionAuthenticationMetadata(t *testing.T) {
 		require.Empty(t, state.Instructions)
 	}
 }
+
+func TestCodeReconnectCatalogPending(t *testing.T) {
+	t.Parallel()
+	var absent *CodeReconnectBinding
+	require.False(t, absent.catalogPending())
+	b := &CodeReconnectBinding{}
+	require.False(t, b.catalogPending())
+	b.CatalogID = uuid.New()
+	require.True(t, b.catalogPending())
+	b.CatalogComplete = true
+	require.False(t, b.catalogPending())
+}

@@ -764,6 +764,14 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			}
 		}
 	}
+	// Reconnecting a frozen catalogue also approves this member for the client.
+	// Require the provider round trip even if a previous upstream grant exists.
+	if challengeState.CodeReconnect.catalogPending() {
+		autoConnectCards = append([]remoteSessionCard(nil), autoConnectCards...)
+		for i := range autoConnectCards {
+			autoConnectCards[i].Connected = false
+		}
+	}
 	autoConnect := gateway == nil || (gateway.Focus != nil && challengeState.FirstParty && challengeState.FocusServer == gateway.Focus.Slug)
 	if len(agentOptions) == 0 && autoConnect {
 		if redirected, err := s.maybeAutoConnect(ctx, w, r, logger, endpoint, challengeState, autoConnectCards, focusServer); err != nil {
@@ -940,7 +948,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		FirstParty:              challengeState.FirstParty,
 		ClientIDOrigin:          clientIDOrigin,
 		LoopbackRedirectWarning: loopbackRedirectWarning,
-		AutoClose:               shouldAutoCloseFirstParty(challengeState.FirstParty, cards),
+		AutoClose:               !challengeState.CodeReconnect.catalogPending() && shouldAutoCloseFirstParty(challengeState.FirstParty, cards),
 		SessionDurationOptions:  durationOptions,
 		AutoRefreshPolicy:       autoRefreshPolicy,
 		AutoRefreshOn:           autoRefreshOn,

@@ -45,7 +45,7 @@ Python discovery/call examples and the caller's permitted member prefixes. Speak
 builds the host from its own admitted identity; the runner receives only Python,
 limits and callback results. Existing hosted, remote and tunnel dispatchers own
 credentials and tool telemetry. All tools (frozen) and Specific tools reuse the
-immutable catalogue captured at consent for servers, search, and describe,
+catalogue captured at consent for servers, search, and describe,
 without upstream discovery or token resolution. All tools (live) refreshes only
 the members approved at consent. Invocation always refreshes authorization and
 uses the existing live dispatcher, with the same approved catalogue boundary.
@@ -458,7 +458,10 @@ generic refusal, when a user-bound link can be issued for that member.
 An authenticated code-mode connection whose catalogue expired can run these
 recovery helpers, but cannot invoke or discover business tools. Expired or
 revoked gateway credentials still fail normal MCP authentication. Upstream
-sign-in does not replace the immutable catalogue on an existing OAuth grant:
+sign-in through a bound Code Mode reconnect refreshes the selected server in
+the existing catalogue after successful OAuth consent, without expanding other
+servers or extending the connection lifetime. Verification alone never changes
+consent. Connections without a usable catalogue still need a full reconnect:
 when `client_reconnect_required` is true, the user must reconnect the gateway
 in their MCP client and approve the member. The agent returns the link, ends
 execution, and checks access in a fresh execution after the user finishes.

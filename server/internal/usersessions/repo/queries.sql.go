@@ -1814,6 +1814,42 @@ func (q *Queries) GetProjectUserSessionIssuerByID(ctx context.Context, arg GetPr
 	return i, err
 }
 
+const getReconnectSessionPolicy = `-- name: GetReconnectSessionPolicy :one
+SELECT us.tool_selection
+FROM user_sessions AS us
+JOIN user_session_clients AS c ON c.id = us.user_session_client_id
+WHERE COALESCE(us.credential_id, us.id) = $1::uuid
+  AND us.user_session_issuer_id = $2::uuid
+  AND us.subject_urn = $3
+  AND c.client_id = $4::text
+  AND c.deleted IS FALSE
+  AND us.deleted IS FALSE
+  AND (us.expires_at > clock_timestamp() OR us.refresh_expires_at > clock_timestamp())
+ORDER BY us.created_at DESC
+LIMIT 1
+`
+
+type GetReconnectSessionPolicyParams struct {
+	CredentialID        uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	SubjectUrn          urn.SessionSubject
+	ClientID            string
+}
+
+// Resolve the original credential across refresh rotation, without reviving
+// revoked/expired connections or borrowing another client's catalogue.
+func (q *Queries) GetReconnectSessionPolicy(ctx context.Context, arg GetReconnectSessionPolicyParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getReconnectSessionPolicy,
+		arg.CredentialID,
+		arg.UserSessionIssuerID,
+		arg.SubjectUrn,
+		arg.ClientID,
+	)
+	var tool_selection []byte
+	err := row.Scan(&tool_selection)
+	return tool_selection, err
+}
+
 const getSharedUserSessionIssuerByID = `-- name: GetSharedUserSessionIssuerByID :one
 SELECT
     issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.use_authentication_host, issuer.authorization_server_mode, issuer.pinned_issuer_url, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted,
@@ -4906,6 +4942,70 @@ func (q *Queries) PurgeUserSessionClientCIMDCache(ctx context.Context, arg Purge
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const reconnectUpstreamClientSelection = `-- name: ReconnectUpstreamClientSelection :execrows
+INSERT INTO upstream_client_selections (
+  project_id, organization_id, credential_kind, credential_id, mcp_server_id,
+  remote_session_client_id, client_attachment_scope, no_auth,
+  auth_client_id, auth_client_attachment_scope, source
+)
+SELECT s.project_id, p.organization_id, 'user_session', $1::uuid, s.id,
+       reg.id, reg.attachment_scope, false, ac.id, ac.attachment_scope, 'issuance'
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id AND p.deleted IS FALSE
+JOIN remote_session_clients AS reg ON reg.id = $2::uuid AND reg.deleted IS FALSE
+LEFT JOIN mcp_auth_clients AS ac ON ac.id = $3::uuid
+  AND ac.organization_id = p.organization_id
+  AND (ac.project_id IS NULL OR ac.project_id = s.project_id)
+  AND ac.remote_session_client_id = reg.id AND ac.deleted IS FALSE AND ac.enabled
+WHERE s.id = $4::uuid AND s.deleted IS FALSE
+  AND p.organization_id = $5::text
+  AND (
+    (ac.id IS NOT NULL AND EXISTS (
+      SELECT 1 FROM mcp_server_auth_clients AS link
+      WHERE link.mcp_server_id = s.id AND link.auth_client_id = ac.id
+        AND link.organization_id = p.organization_id AND link.deleted IS FALSE
+    )) OR ($3::uuid IS NULL AND EXISTS (
+      SELECT 1 FROM mcp_server_remote_session_clients AS link
+      JOIN remote_session_client_user_session_issuers AS issuer_link
+        ON issuer_link.remote_session_client_id = link.remote_session_client_id
+      WHERE link.mcp_server_id = s.id AND link.remote_session_client_id = reg.id
+        AND link.deleted IS FALSE AND issuer_link.user_session_issuer_id = $6::uuid
+    ))
+  )
+ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE
+DO UPDATE SET remote_session_client_id = EXCLUDED.remote_session_client_id,
+              client_attachment_scope = EXCLUDED.client_attachment_scope,
+              no_auth = false, auth_client_id = EXCLUDED.auth_client_id,
+              auth_client_attachment_scope = EXCLUDED.auth_client_attachment_scope,
+              source = EXCLUDED.source, updated_at = clock_timestamp()
+`
+
+type ReconnectUpstreamClientSelectionParams struct {
+	CredentialID          uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	AuthClientID          uuid.NullUUID
+	McpServerID           uuid.UUID
+	OrganizationID        string
+	UserSessionIssuerID   uuid.UUID
+}
+
+// Successful member-scoped OAuth consent may replace precisely this member's
+// choice. It never reselects the other members of the credential.
+func (q *Queries) ReconnectUpstreamClientSelection(ctx context.Context, arg ReconnectUpstreamClientSelectionParams) (int64, error) {
+	result, err := q.db.Exec(ctx, reconnectUpstreamClientSelection,
+		arg.CredentialID,
+		arg.RemoteSessionClientID,
+		arg.AuthClientID,
+		arg.McpServerID,
+		arg.OrganizationID,
+		arg.UserSessionIssuerID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const recordUpstreamClientSelections = `-- name: RecordUpstreamClientSelections :execrows

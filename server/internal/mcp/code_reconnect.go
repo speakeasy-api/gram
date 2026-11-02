@@ -11,13 +11,22 @@ import (
 )
 
 // CodeReconnectBinding binds an upstream sign-in to the user and member that
-// requested it through code mode. It does not approve a new tool catalogue.
+// requested it through code mode. A catalog binding scopes successful consent
+// to the requesting connection, without issuing a new downstream session.
 type CodeReconnectBinding struct {
-	UserID    string    `json:"user_id"`
-	Server    string    `json:"server"`
-	ServerID  uuid.UUID `json:"server_id"`
-	ExpiresAt time.Time `json:"expires_at"`
-	Ticket    bool      `json:"ticket,omitempty"`
+	UserID          string    `json:"user_id"`
+	Server          string    `json:"server"`
+	ServerID        uuid.UUID `json:"server_id"`
+	ExpiresAt       time.Time `json:"expires_at"`
+	Ticket          bool      `json:"ticket,omitempty"`
+	CatalogID       uuid.UUID `json:"catalog_id,omitempty"`
+	CredentialID    uuid.UUID `json:"credential_id,omitempty"`
+	ClientID        string    `json:"client_id,omitempty"`
+	CatalogComplete bool      `json:"catalog_complete,omitempty"`
+}
+
+func (b *CodeReconnectBinding) catalogPending() bool {
+	return b != nil && b.CatalogID != uuid.Nil && !b.CatalogComplete
 }
 
 func (b *CodeReconnectBinding) authorize(userID string, impersonated bool, now time.Time) error {
