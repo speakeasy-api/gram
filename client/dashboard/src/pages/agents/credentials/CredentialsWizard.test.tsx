@@ -1886,6 +1886,24 @@ describe("Editing an agent that already exists", () => {
     expect(mocks.createGrant).not.toHaveBeenCalled();
   });
 
+  it("gives no sign-in grant to an edited agent that reaches no server", async () => {
+    mocks.authEnforced = true;
+    mocks.checkAuthGrant.mockResolvedValue({
+      results: [{ allowed: false, limitedBy: "caller" }],
+    });
+    const { onDone } = editing({ grants: [], withoutAuth: true });
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Renamed Bot" },
+    });
+    await nameChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await authenticationSave());
+
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
+    expect(mocks.checkAuthGrant).not.toHaveBeenCalled();
+    expect(mocks.createGrant).not.toHaveBeenCalled();
+  });
+
   it("opens on the agent's own name, which it lets you change", () => {
     editing();
     const field = screen.getByLabelText("Name") as HTMLInputElement;

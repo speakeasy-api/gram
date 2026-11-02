@@ -697,10 +697,13 @@ export function CredentialsWizard({
             : "Checking that you can reach the servers you chose…"
           : null;
   // The blanket sign-in grant is written when the agent is created, and on
-  // an edit only when the agent holds no mcp:auth yet. Whether the person
-  // saving may give it is asked once, up front.
+  // an edit only when the agent reaches a server and holds no mcp:auth yet:
+  // an agent that reaches nothing has no auth client to use. Whether the
+  // person saving may give it is asked once, up front.
+  const reachesServers = allServers || selected.length > 0;
   const writesAuthGrant = editing
-    ? (grants ?? []).every((grant) => grant.scope !== AUTH_GRANT.scope)
+    ? reachesServers &&
+      (grants ?? []).every((grant) => grant.scope !== AUTH_GRANT.scope)
     : !existing;
   const features = useProductFeatures(
     { organizationId: organization.id },
@@ -999,6 +1002,7 @@ export function CredentialsWizard({
       }
       if (
         includeAuthGrant &&
+        reachesServers &&
         ![...appliedPolicies.current.values()].some(
           (grant) => grant.scope === AUTH_GRANT.scope,
         )

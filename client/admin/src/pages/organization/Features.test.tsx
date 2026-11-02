@@ -80,6 +80,7 @@ const FEATURES_RESPONSE = {
   skills_enabled: true,
   sso_enabled: true,
   tool_io_logs_enabled: true,
+  upstream_auth_enforced: false,
 };
 
 const TOGGLE_FEATURES = [
