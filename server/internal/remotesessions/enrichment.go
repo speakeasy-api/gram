@@ -932,7 +932,7 @@ func (m *ChallengeManager) backfillRefreshDeadline(ctx context.Context, q *remot
 	if !access.ok() || !hasRefreshToken(sess) || sess.RefreshExpiresAt.Valid {
 		return nil
 	}
-	if prior, asked := storedInterfaceRecords(sess.Enrichment)[interfaceRefreshIntrospection]; asked && (prior.Status == interfaceStatusOK || prior.Reason == interfaceReasonNoExp) {
+	if prior, asked := storedInterfaceRecords(sess.Enrichment)[interfaceRefreshIntrospection]; asked && (prior.Status == interfaceStatusOK || prior.Reason == interfaceReasonNoExp || prior.Reason == interfaceReasonExpPassed) {
 		return nil
 	}
 	refreshToken, err := m.enc.Decrypt(sess.RefreshTokenEncrypted.String)

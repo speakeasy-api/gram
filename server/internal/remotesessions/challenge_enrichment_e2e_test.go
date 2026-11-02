@@ -556,6 +556,11 @@ func TestEnrichRemoteSessionRefreshIntrospectionIgnoresPastExp(t *testing.T) {
 	require.False(t, sess.RefreshExpiresAt.Valid)
 	doc := decodeEnrichment(t, sess.Enrichment)
 	require.Equal(t, "exp passed", doc.Interfaces["refresh_introspection"].Reason)
+	require.ElementsMatch(t, []string{"access_token", "refresh_token"}, introspectionHints(as.drain()))
+
+	_, err = env.mgr.EnrichRemoteSession(ctx, env.ref(sess))
+	require.NoError(t, err)
+	require.Equal(t, []string{"access_token"}, introspectionHints(as.drain()), "a provider that reported a past exp is not asked again")
 }
 
 func introspectionHints(requests []enrichmentRequest) []string {
