@@ -2,7 +2,6 @@ package tailnetgateway
 
 import (
 	"context"
-	"encoding/base64"
 	"encoding/json"
 	"errors"
 	"fmt"
@@ -59,15 +58,11 @@ func (s *PostgresStateStore) ReadState(id ipn.StateKey) ([]byte, error) {
 		return nil, fmt.Errorf("read tailnet node state: %w", err)
 	}
 
-	encoded, err := s.enc.Decrypt(ciphertext)
+	value, err := s.enc.Decrypt(ciphertext)
 	if err != nil {
 		return nil, fmt.Errorf("decrypt tailnet node state: %w", err)
 	}
-	value, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil {
-		return nil, fmt.Errorf("decode tailnet node state: %w", err)
-	}
-	return value, nil
+	return []byte(value), nil
 }
 
 // WriteState encrypts and upserts bs under id. A nil value deletes the key.
@@ -85,7 +80,7 @@ func (s *PostgresStateStore) WriteState(id ipn.StateKey, bs []byte) error {
 		return nil
 	}
 
-	ciphertext, err := s.enc.Encrypt([]byte(base64.StdEncoding.EncodeToString(bs)))
+	ciphertext, err := s.enc.Encrypt(bs)
 	if err != nil {
 		return fmt.Errorf("encrypt tailnet node state: %w", err)
 	}
@@ -102,6 +97,8 @@ func (s *PostgresStateStore) WriteState(id ipn.StateKey, bs []byte) error {
 // state behind; only a persisted login profile proves the node has a device
 // identity and no longer needs a one-shot auth key.
 func (s *PostgresStateStore) Registered(ctx context.Context) (bool, error) {
+	ctx, cancel := context.WithTimeout(ctx, stateStoreTimeout)
+	defer cancel()
 	ciphertext, err := repo.New(s.db).GetNetworkIngressNodeState(ctx, repo.GetNetworkIngressNodeStateParams{
 		NetworkIngressID: s.ingressID, OrganizationID: s.orgID, Slot: s.slot, StateKey: string(ipn.KnownProfilesStateKey),
 	})
@@ -111,16 +108,12 @@ func (s *PostgresStateStore) Registered(ctx context.Context) (bool, error) {
 	if err != nil {
 		return false, fmt.Errorf("read tailnet login profiles: %w", err)
 	}
-	encoded, err := s.enc.Decrypt(ciphertext)
+	raw, err := s.enc.Decrypt(ciphertext)
 	if err != nil {
 		return false, fmt.Errorf("decrypt tailnet login profiles: %w", err)
 	}
-	raw, err := base64.StdEncoding.DecodeString(encoded)
-	if err != nil {
-		return false, fmt.Errorf("decode tailnet login profiles: %w", err)
-	}
 	var profiles []json.RawMessage
-	if err := json.Unmarshal(raw, &profiles); err != nil {
+	if err := json.Unmarshal([]byte(raw), &profiles); err != nil {
 		return false, fmt.Errorf("parse tailnet login profiles: %w", err)
 	}
 	return len(profiles) > 0, nil
@@ -129,6 +122,8 @@ func (s *PostgresStateStore) Registered(ctx context.Context) (bool, error) {
 // Reset deletes every persisted key so the next start registers afresh. It is
 // used after a failed first login left partial state behind.
 func (s *PostgresStateStore) Reset(ctx context.Context) error {
+	ctx, cancel := context.WithTimeout(ctx, stateStoreTimeout)
+	defer cancel()
 	if err := repo.New(s.db).DeleteNetworkIngressNodeSlotStates(ctx, repo.DeleteNetworkIngressNodeSlotStatesParams{
 		NetworkIngressID: s.ingressID, OrganizationID: s.orgID, Slot: s.slot,
 	}); err != nil {
