@@ -142,7 +142,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		return nil, fmt.Errorf("create private ingress encryption client: %w", err)
 	}
 	env := environments.NewEnvironmentEntries(logger, db, enc, metadatarepo.New(db))
-	r.Kubernetes, err = k8s.InitializeK8sClient(ctx, logger, c.String("environment"), "", "")
+	r.Kubernetes, err = k8s.InitializeK8sClient(ctx, logger, c.String("environment"), "", "", "")
 	if err != nil {
 		return nil, fmt.Errorf("create private ingress Kubernetes client: %w", err)
 	}
