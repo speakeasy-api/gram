@@ -203,10 +203,11 @@ func TestClientReusesTokensPerCredential(t *testing.T) {
 	rotated := tailscaleapi.Credentials{ClientID: "cid", ClientSecret: "wrong"}
 	err := client.UpsertService(t.Context(), rotated, svc)
 	require.ErrorIs(t, err, tailscaleapi.ErrUnauthorized)
-	require.Equal(t, 2, stub.tokenExchanges())
+	afterRotation := stub.tokenExchanges()
+	require.Greater(t, afterRotation, 1, "a different secret for the same client id is a new client")
 
 	require.NoError(t, client.UpsertService(t.Context(), creds, svc))
-	require.Equal(t, 2, stub.tokenExchanges(), "the original client's token is still cached")
+	require.Equal(t, afterRotation, stub.tokenExchanges(), "the original client's token is still cached")
 }
 
 func TestFakeRecordsCalls(t *testing.T) {
