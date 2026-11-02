@@ -814,7 +814,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	var gatewayInventory string
 	var approvalError *consentApprovalError
 	if catalogFallback {
-		approvalError = &consentApprovalError{Message: "Your service is connected. To use its tools, reconnect this gateway in your AI app.", ActionURL: "", ActionLabel: ""}
+		approvalError = &consentApprovalError{Message: "Session expired. Please reconnect.", ActionURL: "", ActionLabel: ""}
 	}
 	if showToolsIsland && gateway != nil {
 		lockedDown, lockErr := s.endpointCustomDomainLockdown(ctx, logger, endpoint)

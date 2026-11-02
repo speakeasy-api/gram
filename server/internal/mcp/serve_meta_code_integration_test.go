@@ -646,7 +646,7 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 				require.Equal(t, "required", redirect.Query().Get("catalog_reconnect"))
 				page := httptest.NewRecorder()
 				require.NoError(t, ti.service.ServeConsent(page, httptest.NewRequest(http.MethodGet, redirect.String(), nil).WithContext(ctx), endpoint))
-				require.Contains(t, page.Body.String(), "To use its tools, reconnect this gateway in your AI app.")
+				require.Contains(t, page.Body.String(), "Session expired. Please reconnect.")
 				require.NotContains(t, page.Body.String(), "data-auto-close")
 				return
 			}
