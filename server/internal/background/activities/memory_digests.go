@@ -191,6 +191,9 @@ func (m *MemoryDigests) Build(ctx context.Context, args BuildMemoryDigestsArgs) 
 // period older than the lookback is deleted but not rebuilt; its sources then
 // fall back to search.
 func (m *MemoryDigests) Invalidate(ctx context.Context) error {
+	stopHeartbeat := startActivityHeartbeat(ctx)
+	defer stopHeartbeat()
+
 	ids, err := m.repo.DeleteStaleDayDigests(ctx)
 	if err != nil {
 		return fmt.Errorf("invalidate day digests: %w", err)
