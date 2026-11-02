@@ -459,17 +459,24 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		return
 	}
 
+	if reason := r.enqueue(row); reason != "" {
+		r.drop(ctx, reason, 1, nil)
+	}
+}
+
+// enqueue holds the lock only for a non-blocking send, and reports any drop after releasing it.
+func (r *Recorder) enqueue(row Row) dropReason {
 	r.stopMu.RLock()
 	defer r.stopMu.RUnlock()
 
 	if r.stopped {
-		r.drop(ctx, dropShutdown, 1, nil)
-		return
+		return dropShutdown
 	}
 	select {
 	case r.queue <- row:
+		return ""
 	default:
-		r.drop(ctx, dropQueueFull, 1, nil)
+		return dropQueueFull
 	}
 }
 
