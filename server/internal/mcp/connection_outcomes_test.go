@@ -409,3 +409,81 @@ func seedSiblingToolset(t *testing.T, ctx context.Context, ti *testInstance, too
 	other = setToolsetIssuer(t, ctx, ti.conn, toolset.ProjectID, other, issuerID)
 	return other.McpSlug.String
 }
+
+// A recovery link has one sign-in and no consent page: reaching the provider opens the attempt, and its callback ends it.
+func TestConnectionOutcome_RecoveryLinkEndsAtTheProvider(t *testing.T) {
+	t.Parallel()
+
+	f := newConnectionRecoveryFixture(t)
+	rec := mcpconnectionattemptstest.New(t)
+	f.ti.service.SetConnectionRecorder(rec.Recorder)
+	manager := f.ti.service.RemoteChallengeManager()
+	remotesessions.WithConnectionRecorder(rec.Recorder)(manager)
+
+	path, err := f.ti.service.IssueConnectionRecovery(f.ctx, f.link)
+	require.NoError(t, err)
+	location, _ := f.start(t, path, f.userID)
+
+	start := rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.ResultAccepted)
+	require.Equal(t, mcpconnectionattempts.AppRecoveryLink.String(), start.AppKey)
+	rec.RequireNotEnded()
+
+	callback := httptest.NewRequestWithContext(f.ctx, http.MethodGet, "/mcp/remote_login_callback?error=access_denied&state="+url.QueryEscape(location.Query().Get("state"))+"&iss="+url.QueryEscape(location.Query().Get("iss")), nil)
+	_, err = manager.CompleteRemoteLogin(callback)
+	require.Error(t, err)
+
+	rec.RequireEnded(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderDenied)
+	rec.RequireOneAttempt()
+}
+
+// An expired or foreign code mode ticket is a row on the server, not a silent 4xx.
+func TestConnectionOutcome_CodeModeLinkThatCannotBeUsed(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{buildAuthURLResult: &url.URL{Scheme: "https", Host: "idp.example.com"}})
+	rec := recordConnections(t, ti)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := toolset.McpSlug.String
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", slug)
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/connect/first-party?code_reconnect="+uuid.NewString(), nil)
+	require.Error(t, ti.service.HandleFirstPartyConnect(httptest.NewRecorder(), req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))))
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeExpired)
+	require.Equal(t, mcpconnectionattempts.AppCodeMode.String(), row.AppKey)
+}
+
+func TestConnectionOutcome_RegistrationRefused(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	rec := recordConnections(t, ti)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, ti.service.Service, nil)
+	w := httptest.NewRecorder()
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/register", strings.NewReader("not json"))
+	req.Header.Set("Content-Type", "application/json")
+	router.ServeHTTP(w, req)
+	require.Equal(t, http.StatusBadRequest, w.Code)
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeRegistrationInvalid)
+	require.Equal(t, string(mcpconnectionattempts.WhoApp), row.WhoFixes)
+}
+
+func TestConnectionOutcome_AuthorizeSignInServiceDownEndsTheAttempt(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{buildAuthURLErr: context.DeadlineExceeded})
+	rec := recordConnections(t, ti)
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	q := url.Values{"response_type": {"code"}, "client_id": {client.ClientID}, "redirect_uri": {client.RedirectUris[0]}, "state": {"s"}, "code_challenge": {"challenge"}, "code_challenge_method": {"S256"}}
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+toolset.McpSlug.String+"/authorize?"+q.Encode(), nil)
+	require.Error(t, ti.service.HandleAuthorize(httptest.NewRecorder(), req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))))
+
+	rec.RequireStep(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted)
+	rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeIDPUnavailable)
+	rec.RequireOneAttempt()
+}

@@ -231,8 +231,9 @@ func (s *Service) recordMemberListing(ctx context.Context, gate *metaGateContext
 	if clientID, ok := contextvalues.GetOAuthClientID(ctx); ok {
 		app = mcpconnectionattempts.AppOf(clientID)
 	}
+	// Project gateways share the organization gateway's route, so the project decides.
 	scope := mcpconnectionattempts.GatewayScope(gate.organizationID, gate.projectID, gate.metaServerID, app)
-	if gate.organizationGateway {
+	if gate.projectID == uuid.Nil {
 		scope = mcpconnectionattempts.OrganizationGatewayScope(gate.organizationID, gate.metaServerID, app)
 	}
 	attempt := mcpconnectionattempts.Begin(scope)

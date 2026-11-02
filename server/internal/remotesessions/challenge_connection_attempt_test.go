@@ -89,7 +89,7 @@ func TestCompleteRemoteLogin_CarriesTheAttemptThroughProviderSignIn(t *testing.T
 	require.NoError(t, recorder.Shutdown(ctx))
 
 	var rows []attemptRow
-	require.NoError(t, conn.Select(ctx, &rows, selectAttemptRows+`WHERE attempt_id = ?`, attempt.ID()))
+	require.NoError(t, conn.Select(ctx, &rows, selectAttemptRows+`WHERE attempt_id = ? AND step_result = 'signed_in'`, attempt.ID()))
 	require.Len(t, rows, 1)
 	require.WithinDuration(t, started, rows[0].AttemptStartedAt, time.Microsecond, "the clock started at /authorize")
 	require.Equal(t, fx.parent.OrganizationID, rows[0].OrganizationID)
@@ -291,4 +291,26 @@ func rowFor(t *testing.T, rec *mcpconnectionattemptstest.Recording, what mcpconn
 	}
 	require.Failf(t, "not recorded", "%s in %+v", what, rec.Rows())
 	return mcpconnectionattempts.Row{}
+}
+
+// A sign-in with its own destination is the whole attempt, so success ends it Connected.
+func TestCompleteRemoteLogin_SignInWithAFinalDestinationEndsConnected(t *testing.T) {
+	t.Parallel()
+
+	var spy upstreamSpy
+	ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-final", &spy)
+	rec := mcpconnectionattemptstest.New(t)
+	remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
+	parent := fx.parent
+	parent.FinalRedirectURI = "https://app.example.com/done"
+	parent.Attempt = mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope(fx.parent.OrganizationID, fx.parent.ProjectID, uuid.New(), mcpconnectionattempts.AppRecoveryLink))
+
+	authURL, err := fx.mgr.BuildAuthorizationUrl(ctx, parent, fx.clients[0])
+	require.NoError(t, err)
+	complete(t, ctx, fx, "code=fake-code&state="+url.QueryEscape(loginState(t, authURL)))
+	require.NoError(t, spy.handlerErr)
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.ResultSignedIn)
+	require.Equal(t, string(mcpconnectionattempts.OutcomeConnected), row.Outcome)
+	rec.RequireOneAttempt()
 }

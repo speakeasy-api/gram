@@ -180,10 +180,20 @@ func TestRecordMemberListing(t *testing.T) {
 		service.recordMemberListing(ctx, gate, members, results)
 		rec.RequireNothing()
 	})
+	t.Run("a project gateway on the organization route keeps its project", func(t *testing.T) {
+		t.Parallel()
+		projectGate := *gate
+		projectGate.organizationGateway = true
+		rec := mcpconnectionattemptstest.New(t)
+		service := &Service{connections: rec.Recorder}
+		service.recordMemberListing(t.Context(), &projectGate, members, results)
+		require.Equal(t, gate.projectID, rec.RequireEnded(mcpconnectionattempts.StepDiscoveryListing, mcpconnectionattempts.ResultComplete).ProjectID)
+	})
 	t.Run("the organization gateway has no project", func(t *testing.T) {
 		t.Parallel()
 		orgGate := *gate
 		orgGate.organizationGateway = true
+		orgGate.projectID = uuid.Nil
 		rec := mcpconnectionattemptstest.New(t)
 		service := &Service{connections: rec.Recorder}
 		service.recordMemberListing(t.Context(), &orgGate, members, results)
