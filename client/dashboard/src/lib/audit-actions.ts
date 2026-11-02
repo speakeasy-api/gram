@@ -1018,7 +1018,7 @@ export function staticActionPhrase(action: AuditAction): string {
       return "archived spend rule";
 
     case "team_memory:read":
-      return "read team memory in";
+      return "read team memory for";
     case "memory_memo:create":
       return "saved team memo";
 
