@@ -62,6 +62,49 @@ func TestReserve_ConcurrentPresentationsOneWinner(t *testing.T) {
 	require.Equal(t, 1, winners, "exactly one of %d simultaneous presentations may win", callers)
 }
 
+func TestRelease_IdentifierCanBeReservedAgain(t *testing.T) {
+	t.Parallel()
+
+	guard, _ := newTestGuard(t, time.Hour)
+	key := testKey(t, "jti-released")
+
+	holdUntil := time.Now().Add(time.Minute)
+	claimed, err := guard.ReserveOwned(t.Context(), key, holdUntil, "first")
+	require.NoError(t, err)
+	require.True(t, claimed)
+
+	require.NoError(t, guard.Release(t.Context(), key, "someone-else"))
+	claimed, err = guard.ReserveOwned(t.Context(), key, holdUntil, "second")
+	require.NoError(t, err)
+	require.False(t, claimed, "only the owner can release")
+
+	require.NoError(t, guard.Release(t.Context(), key, "first"))
+	claimed, err = guard.ReserveOwned(t.Context(), key, holdUntil, "second")
+	require.NoError(t, err)
+	require.True(t, claimed, "a released identifier is unspent")
+
+	claimed, err = guard.ReserveOwned(t.Context(), key, holdUntil, "third")
+	require.NoError(t, err)
+	require.False(t, claimed, "and single use applies again")
+}
+
+// A reply lost after the store made the claim, so that a retry loses to itself.
+func TestReserveOwned_RetryAfterLostReplyCountsAsClaimed(t *testing.T) {
+	t.Parallel()
+
+	guard, _ := newTestGuard(t, time.Hour)
+	key := testKey(t, "jti-lost-reply")
+	holdUntil := time.Now().Add(time.Minute)
+
+	claimed, err := guard.ReserveOwned(t.Context(), key, holdUntil, "owner")
+	require.NoError(t, err)
+	require.True(t, claimed)
+
+	claimed, err = guard.ReserveOwned(t.Context(), key, holdUntil, "owner")
+	require.NoError(t, err)
+	require.True(t, claimed)
+}
+
 // Distinct identifiers do not interfere, so a client making concurrent
 // requests is not rate limited by its own earlier assertions.
 func TestReserve_DistinctIdentifiersIndependent(t *testing.T) {

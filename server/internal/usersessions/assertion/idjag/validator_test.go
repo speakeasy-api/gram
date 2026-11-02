@@ -72,6 +72,15 @@ func (g *testGuard) Reserve(_ context.Context, key replay.Key, _ time.Time) (boo
 	return true, nil
 }
 
+func (g *testGuard) ReserveOwned(ctx context.Context, key replay.Key, holdUntil time.Time, _ string) (bool, error) {
+	return g.Reserve(ctx, key, holdUntil)
+}
+
+func (g *testGuard) Release(_ context.Context, key replay.Key, _ string) error {
+	delete(g.claimed, key.ID)
+	return nil
+}
+
 type testAssertion struct {
 	signer jose.Signer
 	key    *jose.JSONWebKey
@@ -146,6 +155,34 @@ func TestValidateAcceptsProvisionedIDJAGAndRejectsReplay(t *testing.T) {
 	require.Equal(t, 1, guard.calls)
 	_, err = validator.Validate(t.Context(), raw, request)
 	require.Equal(t, ReasonReplayed, ReasonOf(err))
+}
+
+func TestIsOutage(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "directory down", err: reject(ReasonSubjectUnavailable, errors.New("db")), want: true},
+		{name: "replay store down", err: reject(ReasonReplayStoreUnavailable, errors.New("redis")), want: true},
+		{name: "keys down", err: reject(ReasonKeyUnresolvable, errors.New("jwks")), want: true},
+		{name: "key store down", err: reject(ReasonKeyStoreUnavailable, errors.New("redis")), want: true},
+		{name: "unusable keys", err: reject(ReasonKeyUnusable, errors.New("alg mismatch")), want: false},
+		{name: "trust read down", err: reject(ReasonTrustUnavailable, errors.New("db")), want: true},
+		{name: "no trust link", err: reject(ReasonTrustUnavailable, ErrNoTrustedIssuer), want: false},
+		{name: "trust link has no keys", err: reject(ReasonTrustUnavailable, ErrTrustedIssuerHasNoJWKS), want: false},
+		{name: "replayed", err: reject(ReasonReplayed, errors.New("jti")), want: false},
+		{name: "bad signature", err: reject(ReasonSignatureInvalid, errors.New("sig")), want: false},
+		{name: "misconfigured", err: reject(ReasonVerifierMisconfigured, errors.New("cfg")), want: false},
+		{name: "another error", err: errors.New("other"), want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, IsOutage(tc.err))
+		})
+	}
 }
 
 func TestValidateChecksTypeBeforeKeys(t *testing.T) {

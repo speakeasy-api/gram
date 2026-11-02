@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
 
@@ -10,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 )
 
@@ -53,11 +55,26 @@ func (e *idJAGExchange) reject(reason mcpmetrics.IDJAGRejectionReason, err error
 	return attrs
 }
 
+// idJAGOutageMessage answers an exchange a dependency outage stopped.
+const idJAGOutageMessage = "Speakeasy can't check this sign-in right now. Retry shortly."
+
+// idJAGServerFault reports a failure after validation that refused nothing.
+func idJAGServerFault(err error) bool {
+	if _, refused := errors.AsType[*oops.OAuthError](err); refused {
+		return false
+	}
+	shareable, ok := errors.AsType[*oops.ShareableError](err)
+	if !ok {
+		return true
+	}
+	return shareable.Code.IsTemporary()
+}
+
 // idJAGInfrastructureReason reports a validator refusal caused by a
 // Speakeasy or identity provider failure rather than the assertion.
 func idJAGInfrastructureReason(reason idjag.Reason) bool {
 	switch reason {
-	case idjag.ReasonTrustUnavailable, idjag.ReasonKeyUnresolvable, idjag.ReasonSubjectUnavailable, idjag.ReasonReplayStoreUnavailable, idjag.ReasonVerifierMisconfigured:
+	case idjag.ReasonTrustUnavailable, idjag.ReasonKeyUnresolvable, idjag.ReasonKeyStoreUnavailable, idjag.ReasonSubjectUnavailable, idjag.ReasonReplayStoreUnavailable, idjag.ReasonVerifierMisconfigured:
 		return true
 	default:
 		return false

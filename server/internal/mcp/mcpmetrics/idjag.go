@@ -66,6 +66,8 @@ var idJAGValidatorReasons = map[idjag.Reason]struct{}{
 	idjag.ReasonIssuerMismatch:         {},
 	idjag.ReasonKeyUnknown:             {},
 	idjag.ReasonKeyUnresolvable:        {},
+	idjag.ReasonKeyStoreUnavailable:    {},
+	idjag.ReasonKeyUnusable:            {},
 	idjag.ReasonSignatureInvalid:       {},
 	idjag.ReasonClaimsMalformed:        {},
 	idjag.ReasonAudienceMismatch:       {},
@@ -95,6 +97,14 @@ func IDJAGRejectionFromValidator(reason idjag.Reason) IDJAGRejectionReason {
 		return IDJAGRejectionReason(reason)
 	}
 	return IDJAGRejectionAssertionOther
+}
+
+// RecordIDJAGReleaseFailed counts an assertion a failed exchange could not give back.
+func (m *Metrics) RecordIDJAGReleaseFailed(ctx context.Context, issuerID string) {
+	if m == nil || m.oauthIDJAGReleaseFailedCounter == nil {
+		return
+	}
+	m.oauthIDJAGReleaseFailedCounter.Add(ctx, 1, metric.WithAttributes(attr.UserSessionIssuerID(issuerID)))
 }
 
 // RecordIDJAGExchange records one ID-JAG token exchange. reason is set for a

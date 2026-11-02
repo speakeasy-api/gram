@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
@@ -564,7 +565,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 	baseURL string,
 	presentedAuthMethod string,
 	logger *slog.Logger,
-) error {
+) (retErr error) {
 	exchange, logger := s.startIDJAGExchange(endpoint, logger)
 	defer exchange.record(ctx)
 	// Only a CIMD client the issuer's admission gate let through may exchange
@@ -609,10 +610,32 @@ func (s *Service) handleTokenJWTBearerGrant(
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, oautherr.CodeInvalidTarget, exchange.rejectAssertion(err)...)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, sharedResourceDescription(sharedResourceMissing))
 	}
+	if idjag.IsOutage(err) {
+		// Not judged and unspent, so the same request can succeed later.
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request deferred", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, oautherr.CodeTemporarilyUnavailable, exchange.rejectAssertion(err)...)
+		if idjag.ReasonOf(err) == idjag.ReasonKeyUnresolvable {
+			// The customer's identity provider is down, so this doesn't alert on-call.
+			w.Header().Set(constants.HeaderProxiedResponse, "1")
+			return outageError(w, err, idJAGOutageMessage).LogWarn(ctx, logger)
+		}
+		return outageError(w, err, idJAGOutageMessage).LogError(ctx, logger)
+	}
 	if err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "invalid_grant", exchange.rejectAssertion(err)...)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "assertion is invalid")
 	}
+	// A failure here before commit delivers no token, so it gives the identifier back.
+	committed := false
+	defer func() {
+		if committed || retErr == nil || !idJAGServerFault(retErr) {
+			return
+		}
+		if rerr := s.idJAGValidator.Release(context.WithoutCancel(ctx), result); rerr != nil {
+			logger.ErrorContext(ctx, "release ID-JAG assertion after failed exchange", attr.SlogError(rerr))
+			s.metrics.RecordIDJAGReleaseFailed(ctx, endpoint.UserSessionIssuerID.String())
+		}
+		retErr = outageError(w, retErr, idJAGOutageMessage)
+	}()
 
 	// The session does not exist yet, but authz treats an AuthContext without a
 	// session as an internal call. A namespaced assertion JTI makes this context
@@ -690,6 +713,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit ID-JAG session exchange").LogError(ctx, logger)
 	}
+	committed = true
 	exchange.accept()
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request completed", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "", exchange.acceptedAttrs()...)
 

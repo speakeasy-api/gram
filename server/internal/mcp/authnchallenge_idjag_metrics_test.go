@@ -3,6 +3,9 @@ package mcp_test
 import (
 	"bufio"
 	"context"
+	"crypto/ecdsa"
+	"crypto/elliptic"
+	"crypto/rand"
 	"crypto/x509"
 	"encoding/json"
 	"log/slog"
@@ -10,9 +13,11 @@ import (
 	"net/http/httptest"
 	"net/url"
 	"strings"
+	"sync/atomic"
 	"testing"
 
 	"github.com/go-chi/chi/v5"
+	"github.com/go-jose/go-jose/v4"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
@@ -20,13 +25,20 @@ import (
 
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
@@ -121,6 +133,174 @@ func TestTokenIDJAGExchangeRecordsOutcomeAndRejectionReason(t *testing.T) {
 		string(mcpmetrics.IDJAGExchangeAccepted) + "/":                                                             1,
 		string(mcpmetrics.IDJAGExchangeRejected) + "/" + string(mcpmetrics.IDJAGRejectionUpstreamCredentialChoice): 1,
 	}, idJAGExchangeCounts(t, reader, issuer.ID))
+}
+
+// idJAGOutageFixture is a toolset an app exchanges ID-JAGs for, with a key set
+// that can be taken down.
+type idJAGOutageFixture struct {
+	ti       *testInstance
+	slug     string
+	clientID string
+	issuerID uuid.UUID
+	resource string
+	jwksURL  string
+	signer   idJAGTestAssertion
+	down     *atomic.Bool
+	fetches  *atomic.Int32
+	reader   *sdkmetric.ManualReader
+}
+
+const idJAGOutageIssuer = "https://identity.example.test"
+
+func newIDJAGOutageFixture(t *testing.T, granted bool) (context.Context, idJAGOutageFixture) {
+	t.Helper()
+
+	signer := newIDJAGTestAssertion(t)
+	down, fetches := &atomic.Bool{}, &atomic.Int32{}
+	jwksServer := httptest.NewTLSServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		fetches.Add(1)
+		if down.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write(signer.jwks)
+	}))
+	t.Cleanup(jwksServer.Close)
+	rootCAs := x509.NewCertPool()
+	rootCAs.AddCert(jwksServer.Certificate())
+	reader := sdkmetric.NewManualReader()
+	ctx, ti := newTestMCPServiceWithMeterProviderAndGuardianOptions(t, sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), guardian.WithTLSRootCAs(rootCAs))
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	issuer := createTrustedIDJAGIssuer(t, ctx, ti, authCtx.ActiveOrganizationID, idJAGOutageIssuer, jwksServer.URL)
+	toolset = setToolsetIssuer(t, ctx, ti.conn, *authCtx.ProjectID, toolset, issuer.ID)
+	client := seedCIMDClient(t, ctx, ti, issuer.ID, codexCIMDClientID)
+	seedIDJAGDirectoryUser(t, ctx, ti, authCtx.ActiveOrganizationID)
+	if granted {
+		seedPrincipalMCPConnectGrant(t, ctx, ti, authCtx.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), toolset.ID)
+	}
+	resource, _ := fetchAdvertisedIssuer(t, ctx, ti, toolset.McpSlug.String)
+
+	return ctx, idJAGOutageFixture{ti: ti, slug: toolset.McpSlug.String, clientID: client.ClientID, issuerID: issuer.ID, resource: resource, jwksURL: jwksServer.URL, signer: signer, down: down, fetches: fetches, reader: reader}
+}
+
+func (f idJAGOutageFixture) assertion(t *testing.T) string {
+	t.Helper()
+	return f.signer.sign(t, idJAGOutageIssuer, f.resource, f.resource, f.clientID, mockidp.MockUserEmail, uuid.NewString())
+}
+
+func (f idJAGOutageFixture) post(t *testing.T, ctx context.Context, assertion string) *httptest.ResponseRecorder {
+	t.Helper()
+	return postIDJAGTokenHandled(t, ctx, f.ti, f.slug, f.clientID, assertion)
+}
+
+func requireIDJAGOutage(t *testing.T, w *httptest.ResponseRecorder) {
+	t.Helper()
+	require.Equal(t, http.StatusServiceUnavailable, w.Code, w.Body.String())
+	require.NotEmpty(t, w.Header().Get("Retry-After"))
+	require.Contains(t, w.Body.String(), "temporarily_unavailable")
+	require.NotContains(t, w.Body.String(), "invalid_grant")
+}
+
+// A key outage leaves the assertion unjudged and unspent, and the failed fetch
+// is held back for a new issuer too.
+func TestTokenIDJAGExchangeRetriesSameAssertionAfterKeyOutage(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newIDJAGOutageFixture(t, true)
+	f.down.Store(true)
+	assertion := f.assertion(t)
+
+	first := f.post(t, ctx, assertion)
+	requireIDJAGOutage(t, first)
+	require.Equal(t, "1", first.Header().Get(constants.HeaderProxiedResponse), "the customer's key set being down doesn't alert on-call")
+	require.EqualValues(t, 1, f.fetches.Load())
+
+	f.down.Store(false)
+	requireIDJAGOutage(t, f.post(t, ctx, assertion))
+	require.EqualValues(t, 1, f.fetches.Load(), "the failed fetch is held back")
+
+	rows, err := testrepo.New(f.ti.conn).ClearRemoteSessionIssuerJWKSConsultFailureFixture(ctx, conv.ToPGText(f.jwksURL))
+	require.NoError(t, err)
+	require.EqualValues(t, 1, rows)
+
+	retried := f.post(t, ctx, assertion)
+	require.Equal(t, http.StatusOK, retried.Code, "the retry is not refused as a replay: %s", retried.Body.String())
+
+	replayed := f.post(t, ctx, assertion)
+	require.Equal(t, http.StatusBadRequest, replayed.Code, replayed.Body.String())
+	require.Contains(t, replayed.Body.String(), "invalid_grant")
+}
+
+// A forged token can't turn a permanent key failure into a retry, or learn
+// from the status whether its issuer and key id matched.
+func TestTokenIDJAGExchangeForgedAlgorithmStaysInvalidGrant(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newIDJAGOutageFixture(t, true)
+	forger, err := ecdsa.GenerateKey(elliptic.P384(), rand.Reader)
+	require.NoError(t, err)
+	signer, err := jose.NewSigner(
+		jose.SigningKey{Algorithm: jose.ES384, Key: forger},
+		(&jose.SignerOptions{}).WithType(jose.ContentType(idjag.Type)).WithHeader(jose.HeaderKey("kid"), "id-jag-test-key"),
+	)
+	require.NoError(t, err)
+	forged := idJAGTestAssertion{signer: signer, jwks: nil}.sign(t, idJAGOutageIssuer, f.resource, f.resource, f.clientID, mockidp.MockUserEmail, uuid.NewString())
+
+	w := f.post(t, ctx, forged)
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+	require.JSONEq(t, `{"error":"invalid_grant","error_description":"assertion is invalid"}`, w.Body.String())
+	require.Empty(t, w.Header().Get("Retry-After"))
+	require.Equal(t, map[string]int64{
+		string(mcpmetrics.IDJAGExchangeRejected) + "/" + string(idjag.ReasonKeyUnusable): 1,
+	}, idJAGExchangeCounts(t, f.reader, f.issuerID))
+}
+
+// failingAuthzEngine reads a closed database, so it reaches no decision.
+func failingAuthzEngine(t *testing.T) *authz.Engine {
+	t.Helper()
+	closed, err := infra.CloneTestDatabase(t, "idjag_outage")
+	require.NoError(t, err)
+	closed.Close()
+	return authz.NewEngine(testenv.NewLogger(t), closed, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{})
+}
+
+// A failure past the reservation delivers no token, so it gives the identifier
+// back. Ours, so it stays counted.
+func TestTokenIDJAGExchangeReleasesAssertionAfterLaterOutage(t *testing.T) {
+	t.Parallel()
+
+	_, f := newIDJAGOutageFixture(t, true)
+	// No caller grants on the request, as in production, so the engine is consulted.
+	ctx := t.Context()
+	assertion := f.assertion(t)
+	working := f.ti.authzEngine
+	f.ti.service.SetAuthzEngine(failingAuthzEngine(t))
+
+	w := f.post(t, ctx, assertion)
+	requireIDJAGOutage(t, w)
+	require.Empty(t, w.Header().Get(constants.HeaderProxiedResponse), "our own dependency stays counted")
+
+	f.ti.service.SetAuthzEngine(working)
+	retried := f.post(t, ctx, assertion)
+	require.Equal(t, http.StatusOK, retried.Code, retried.Body.String())
+}
+
+// Refusing the subject is a verdict, so the assertion stays spent.
+func TestTokenIDJAGExchangeForbiddenSubjectStaysSpent(t *testing.T) {
+	t.Parallel()
+
+	ctx, f := newIDJAGOutageFixture(t, false)
+	ctx = authztest.WithExactGrants(t, ctx)
+	assertion := f.assertion(t)
+
+	require.Equal(t, http.StatusBadRequest, f.post(t, ctx, assertion).Code)
+	require.Equal(t, http.StatusBadRequest, f.post(t, ctx, assertion).Code)
+	require.EqualValues(t, 1, idJAGExchangeCounts(t, f.reader, f.issuerID)[string(mcpmetrics.IDJAGExchangeRejected)+"/"+string(idjag.ReasonReplayed)])
 }
 
 func TestTokenIDJAGExchangeRecordsClientNotAllowed(t *testing.T) {
@@ -258,9 +438,9 @@ func TestTokenIDJAGExchangeRecordsInfrastructureRefusalAsError(t *testing.T) {
 	resource, _ := fetchAdvertisedIssuer(t, ctx, ti, toolset.McpSlug.String)
 
 	assertion := assertionSigner.sign(t, upstreamIssuer, resource, resource, client.ClientID, mockidp.MockUserEmail, uuid.NewString())
-	w := postIDJAGToken(t, ctx, ti, toolset.McpSlug.String, client.ClientID, assertion)
-	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-	require.Contains(t, w.Body.String(), "invalid_grant")
+	w := postIDJAGTokenHandled(t, ctx, ti, toolset.McpSlug.String, client.ClientID, assertion)
+	require.Equal(t, http.StatusServiceUnavailable, w.Code, w.Body.String())
+	require.NotContains(t, w.Body.String(), "invalid_grant")
 
 	require.Equal(t, map[string]int64{
 		string(mcpmetrics.IDJAGExchangeError) + "/" + string(idjag.ReasonKeyUnresolvable): 1,

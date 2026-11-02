@@ -437,12 +437,8 @@ const (
 	remoteSessionUnavailableMessage = "The upstream authorization server for this MCP server is temporarily unavailable. Retry shortly."
 )
 
-// remoteSessionUnavailableRetryAfter is the Retry-After on a 503 for a
-// temporarily unavailable upstream token endpoint. Refresh attempts for one
-// session are single-flighted, so retrying sooner mostly queues behind the
-// same failing attempt; 30 seconds lets a brief upstream outage pass without
-// holding a user's request for long.
-const remoteSessionUnavailableRetryAfter = 30 * time.Second
+// outageRetryAfter matches the 30s key set and refresh hold-backs, so a sooner retry can't succeed.
+const outageRetryAfter = 30 * time.Second
 
 func issuerGateFailureReason(err error) string {
 	switch {
@@ -891,7 +887,7 @@ func (s *Service) contextForSessionSubject(
 				return nil, fmt.Errorf("%w: %w", errIssuerGateCallerProfile, err)
 			}
 			if profile == nil || profile.UserID != subject.ID {
-				return nil, fmt.Errorf("%w: profile does not match session subject", errIssuerGateCallerProfile)
+				return nil, fmt.Errorf("%w: %w: profile does not match session subject", errCredentialRejected, errIssuerGateCallerProfile)
 			}
 			authCtx.Email = &profile.Email
 		}
@@ -1293,8 +1289,21 @@ func clientCredentialMisconfiguredError(err error) *oops.ShareableError {
 // required upstream token endpoint that is temporarily unavailable, so every
 // path that hits one tells the client the same thing and paces its retries.
 func remoteSessionUnavailableError(w http.ResponseWriter, err error) *oops.ShareableError {
-	w.Header().Set("Retry-After", strconv.Itoa(int(remoteSessionUnavailableRetryAfter.Seconds())))
-	return oops.E(oops.CodeUnavailable, err, "%s", remoteSessionUnavailableMessage)
+	outage := outageError(w, err, remoteSessionUnavailableMessage)
+	if wait := remotesessions.RetryAfter(err); wait > outageRetryAfter {
+		w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())))
+	}
+	return outage
+}
+
+// outageError is a 503 with Retry-After: RFC 6749 and RFC 6750 define no outage code here.
+func outageError(w http.ResponseWriter, err error, message string) *oops.ShareableError {
+	setOutageRetryAfter(w)
+	return oops.E(oops.CodeUnavailable, err, "%s", message)
+}
+
+func setOutageRetryAfter(w http.ResponseWriter) {
+	w.Header().Set("Retry-After", strconv.Itoa(int(outageRetryAfter.Seconds())))
 }
 
 // recordRemoteSessionRejection logs and counts an issuer-gate rejection whose

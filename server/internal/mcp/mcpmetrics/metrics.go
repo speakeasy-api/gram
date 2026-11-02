@@ -26,6 +26,9 @@ const InstrumentMCPRequestRejected = "mcp.request.rejected"
 // resource check happen earlier and are not counted.
 const InstrumentOAuthIDJAGExchange = "oauth.id_jag.exchange"
 
+// InstrumentOAuthIDJAGReleaseFailed counts assertions a failed exchange could not give back.
+const InstrumentOAuthIDJAGReleaseFailed = "oauth.id_jag.release_failed"
+
 // RequestRejectionReason is the closed set of reasons [Metrics] records on
 // mcp.request.rejected under gram.mcp.rejection_reason. It stays coarse so
 // the counter's per-server URL dimension does not multiply into many series.
@@ -200,6 +203,9 @@ type Metrics struct {
 	// outcome, and rejection reason.
 	oauthIDJAGExchangeCounter metric.Int64Counter
 
+	// oauthIDJAGReleaseFailedCounter counts assertions left spent by a failed release.
+	oauthIDJAGReleaseFailedCounter metric.Int64Counter
+
 	// tunnelPublicRejectedCounter counts anonymous public tunnel requests the
 	// admission gate rejected with 429 before they reached the tunnel gateway.
 	tunnelPublicRejectedCounter metric.Int64Counter
@@ -319,6 +325,15 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(InstrumentOAuthIDJAGExchange), attr.SlogError(err))
 	}
 
+	oauthIDJAGReleaseFailedCounter, err := meter.Int64Counter(
+		InstrumentOAuthIDJAGReleaseFailed,
+		metric.WithDescription("ID-JAG assertions a failed exchange could not return to unused, so their retry is refused as a replay"),
+		metric.WithUnit("{assertion}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(InstrumentOAuthIDJAGReleaseFailed), attr.SlogError(err))
+	}
+
 	mcpRequestRejectedCounter, err := meter.Int64Counter(
 		InstrumentMCPRequestRejected,
 		metric.WithDescription("MCP requests rejected before dispatch by the Session OAuth authentication gate or by request validation, by rejection reason, OAuth failure reason, server URL, serving surface, and public/private network surface"),
@@ -394,6 +409,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		oauthAuthorityUnavailableCounter:     oauthAuthorityUnavailableCounter,
 		oauthResourceRejectedCounter:         oauthResourceRejectedCounter,
 		oauthIDJAGExchangeCounter:            oauthIDJAGExchangeCounter,
+		oauthIDJAGReleaseFailedCounter:       oauthIDJAGReleaseFailedCounter,
 		tunnelPublicRejectedCounter:          tunnelPublicRejectedCounter,
 	}
 }

@@ -12,6 +12,8 @@ const (
 	ReasonIssuerMismatch         Reason = "assertion_issuer_mismatch"
 	ReasonKeyUnknown             Reason = "assertion_key_unknown"
 	ReasonKeyUnresolvable        Reason = "assertion_key_unresolvable"
+	ReasonKeyStoreUnavailable    Reason = "assertion_key_store_unavailable"
+	ReasonKeyUnusable            Reason = "assertion_key_unusable"
 	ReasonSignatureInvalid       Reason = "assertion_signature_invalid"
 	ReasonClaimsMalformed        Reason = "assertion_claims_malformed"
 	ReasonAudienceMismatch       Reason = "assertion_audience_mismatch"
@@ -32,6 +34,18 @@ const (
 	ReasonReplayStoreUnavailable Reason = "assertion_replay_store_unavailable"
 	ReasonVerifierMisconfigured  Reason = "assertion_verifier_misconfigured"
 )
+
+// IsOutage reports a refusal caused by a dependency being down, not the assertion or configuration.
+func IsOutage(err error) bool {
+	switch ReasonOf(err) {
+	case ReasonKeyUnresolvable, ReasonKeyStoreUnavailable, ReasonSubjectUnavailable, ReasonReplayStoreUnavailable:
+		return true
+	case ReasonTrustUnavailable:
+		return !errors.Is(err, ErrNoTrustedIssuer) && !errors.Is(err, ErrTrustedIssuerHasNoJWKS)
+	default:
+		return false
+	}
+}
 
 // ReasonOf returns the rejection reason, or an empty value for another error.
 func ReasonOf(err error) Reason {

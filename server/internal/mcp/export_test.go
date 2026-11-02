@@ -184,6 +184,11 @@ func (s *Service) VerifyConnectionRecoveryCompletion(r *http.Request, remote rem
 	return s.verifyConnectionRecoveryCompletion(r, remote)
 }
 
+// SetAuthzEngine swaps the authorization engine, to make it fail.
+func (s *Service) SetAuthzEngine(engine *authz.Engine) {
+	s.authz = engine
+}
+
 // ConnectionRecoveryRoute and ConnectionRecoveryDonePath expose the link's routes.
 const (
 	ConnectionRecoveryRoute    = connectionRecoveryRoute

@@ -2415,3 +2415,9 @@ UPDATE api_keys
 SET created_by_user_id = @created_by_user_id
 WHERE id = @id
   AND organization_id = @organization_id;
+
+-- name: ClearRemoteSessionIssuerJWKSConsultFailureFixture :execrows
+UPDATE remote_session_issuers
+SET jwks_last_error = NULL,
+    jwks_last_error_at = NULL
+WHERE jwks_uri = @jwks_uri;
