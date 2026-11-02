@@ -121,6 +121,9 @@ type authClientResolution struct {
 	// headers are the client's own headers, loaded only when it serves.
 	headers []proxy.ConfiguredHeader
 
+	// noAuthChoice is a recorded choice that the server needs no upstream auth.
+	noAuthChoice bool
+
 	// noAuthAllowed is a server that needs no upstream authentication: it
 	// offers no enabled auth client and has no upstream credentials an auth
 	// client does not record yet.
@@ -145,6 +148,11 @@ type authClientResolution struct {
 // with no bearer to acquire.
 func (r *authClientResolution) headersOnly() bool {
 	return r.outcome == authClientResolved && isHeadersOnlyType(r.clientType)
+}
+
+// staleNoAuth reports a no-auth choice the server has outgrown.
+func (r *authClientResolution) staleNoAuth() bool {
+	return r.outcome == authClientGap && r.noAuthChoice
 }
 
 // sendsClientHeaders reports whether the request sends the client's own
@@ -242,7 +250,7 @@ func (p mandatoryPermitter) Permitted(ctx context.Context, req authClientPermitR
 // gapResolution is a choice that cannot be used, for reason.
 func gapResolution(reason string) authClientResolution {
 	none := upstreamChoice{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
-	return authClientResolution{outcome: authClientGap, reason: reason, clientID: uuid.Nil, clientType: "", serverName: "", tunneled: false, choice: none, headers: nil, noAuthAllowed: false, attachedSession: uuid.Nil, authorizerOwner: "", connectionOwner: ""}
+	return authClientResolution{outcome: authClientGap, reason: reason, clientID: uuid.Nil, clientType: "", serverName: "", tunneled: false, choice: none, headers: nil, noAuthChoice: false, noAuthAllowed: false, attachedSession: uuid.Nil, authorizerOwner: "", connectionOwner: ""}
 }
 
 // decideAuthClient resolves a recorded choice without side effects.
@@ -262,6 +270,7 @@ func decideAuthClient(row upstreamclientsrepo.GetAuthClientSelectionRow) authCli
 			res.reason = authClientReasonUnmapped
 			return res
 		}
+		res.noAuthChoice = true
 		switch {
 		case row.ServerHasHeaderClients && !row.ServerHasOauthClients:
 			// A no-auth choice from before the backfill gave the server its

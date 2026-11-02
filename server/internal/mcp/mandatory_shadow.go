@@ -57,23 +57,22 @@ const (
 
 	mandatoryShadowTimeout = 250 * time.Millisecond
 
-	mandatoryShadowLogTTL  = 10 * time.Minute
-	mandatoryShadowLogSize = 4096
+	onceLogTTL  = 10 * time.Minute
+	onceLogSize = 4096
 )
 
-// mandatoryShadowLog dedupes disagreement logs: the counter has every
-// occurrence, the log names each distinct one.
-type mandatoryShadowLog struct {
+// onceLog keeps one log line per key per window; counters see every occurrence.
+type onceLog struct {
 	mu   sync.Mutex
 	seen *expirable.LRU[string, struct{}]
 }
 
-func newMandatoryShadowLog() *mandatoryShadowLog {
-	return &mandatoryShadowLog{mu: sync.Mutex{}, seen: expirable.NewLRU[string, struct{}](mandatoryShadowLogSize, nil, mandatoryShadowLogTTL)}
+func newOnceLog() *onceLog {
+	return &onceLog{mu: sync.Mutex{}, seen: expirable.NewLRU[string, struct{}](onceLogSize, nil, onceLogTTL)}
 }
 
 // first reports whether key is new, and remembers it.
-func (l *mandatoryShadowLog) first(key string) bool {
+func (l *onceLog) first(key string) bool {
 	if l == nil {
 		return true
 	}

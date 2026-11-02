@@ -128,6 +128,10 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 	probe.chainUpstream = nil
 	dial, _, err := s.routeMetaMember(ctx, logger, probe, member, "")
 	if err != nil {
+		if _, stale := errors.AsType[memberStaleChoiceError](err); stale {
+			message, _ := s.staleChoiceMessage(ctx, logger, gate, member)
+			return metamcp.SignInError, message
+		}
 		return metamcp.SignInError, memberErrorMessage(err)
 	}
 	if !dial.anonymous {

@@ -70,8 +70,8 @@ func (s *Service) handleMetaDescribeServerCall(
 	}
 	catalog, err := s.describeMetaMember(ctx, logger, gate, member)
 	if err != nil {
-		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
-			return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
+		if _, ok := errors.AsType[*metaMemberError](err); ok {
+			return marshalMetaToolError(ctx, logger, req.ID, s.memberFailureMessage(ctx, logger, gate, member, err))
 		}
 		return nil, err
 	}
@@ -167,8 +167,8 @@ func (s *Service) handleMetaDescribeToolsCall(
 		if err != nil {
 			// A member outage degrades only that member: its names land in
 			// failed while every other member is still described.
-			if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
-				failed = append(failed, metamcp.FailedServer{Server: mr.member.slug, Message: memberErr.message})
+			if _, ok := errors.AsType[*metaMemberError](err); ok {
+				failed = append(failed, metamcp.FailedServer{Server: mr.member.slug, Message: s.memberFailureMessage(ctx, logger, gate, mr.member, err)})
 				continue
 			}
 			return nil, err
@@ -247,8 +247,8 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 		return nil, unknownMetaMemberError(ctx, logger, gate, serverSlug)
 	}
 	if err := s.validateCatalogMember(ctx, gate, member); err != nil {
-		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
-			return marshalMetaMemberFailure(ctx, logger, req.ID, err, memberErr.message)
+		if _, ok := errors.AsType[*metaMemberError](err); ok {
+			return marshalMetaMemberFailure(ctx, logger, req.ID, err, s.memberFailureMessage(ctx, logger, gate, member, err))
 		}
 		if denied, ok := errors.AsType[*oops.ShareableError](err); ok && (denied.Code == oops.CodeForbidden || denied.Code == oops.CodeNotFound) {
 			return nil, err
@@ -648,7 +648,9 @@ func marshalMetaToolCallResult(ctx context.Context, logger *slog.Logger, id mcpj
 // records, for Code Mode, whether connecting the member is its remedy.
 func marshalMetaMemberFailure(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID, err error, message string) (json.RawMessage, error) {
 	if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
-		_, invocation.credential = errors.AsType[memberCredentialError](err)
+		_, credential := errors.AsType[memberCredentialError](err)
+		_, stale := errors.AsType[memberStaleChoiceError](err)
+		invocation.credential = credential && !stale
 	}
 	return marshalMetaToolError(ctx, logger, id, message)
 }

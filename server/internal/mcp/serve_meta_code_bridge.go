@@ -222,7 +222,7 @@ func (b *metaCodeBackend) currentState(ctx context.Context, execute, recovery bo
 // codeHelperFailure keeps a member that needs a new consent distinguishable
 // from one that is merely unavailable.
 func codeHelperFailure(err error) error {
-	if _, consent := errors.AsType[catalogConsentError](err); consent {
+	if needsNewConsent(err) {
 		return codemode.ErrConsentRequired
 	}
 	return codemode.ErrToolUnavailable
@@ -351,7 +351,14 @@ func (b *metaCodeBackend) call(ctx context.Context, path string, arguments json.
 	callGate := *gate
 	if slug, _, splitErr := metamcp.SplitQualifiedName(path); splitErr == nil {
 		if member, ok := findMetaMember(members, slug); ok {
-			if _, consent := errors.AsType[catalogConsentError](b.service.validateCatalogMember(ctx, &callGate, member)); consent {
+			if stale, ok := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); ok {
+				b.service.noteStaleChoiceCall(ctx, b.service.logger, &callGate, member, stale)
+				if message, reconnect := b.service.staleChoiceMessage(ctx, b.service.logger, &callGate, member); !reconnect {
+					return nil, &codemode.DispatchError{BeforeInvoke: true, Code: "tool_call_rejected", Rejection: message}
+				}
+				return nil, codemode.ErrConsentRequired
+			}
+			if needsNewConsent(b.service.validateCatalogMember(ctx, &callGate, member)) {
 				return nil, codemode.ErrConsentRequired
 			}
 		}

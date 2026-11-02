@@ -57,6 +57,8 @@ type catalogUpstream struct {
 	future      atomic.Bool
 	tools       int
 	callHeader  atomic.Value
+	// callAuthorization is the Authorization header of the last tools/call.
+	callAuthorization atomic.Value
 	// holdNextList parks the next tools/list until its release closes.
 	holdNextList atomic.Pointer[catalogListHold]
 }
@@ -115,6 +117,7 @@ func newCatalogUpstream(t *testing.T, tools int) *catalogUpstream {
 			result = map[string]any{"tools": tools}
 		case "tools/call":
 			upstream.callHeader.Store(r.Header.Get("X-Typed-Key"))
+			upstream.callAuthorization.Store(r.Header.Get("Authorization"))
 			upstream.calls.Add(1)
 			result = map[string]any{"content": []map[string]any{{"type": "text", "text": "executed live"}}}
 		case "ping":

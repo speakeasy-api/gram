@@ -455,6 +455,15 @@ type catalogConsentError struct{ *metaMemberError }
 
 func (e catalogConsentError) Unwrap() error { return e.metaMemberError }
 
+// needsNewConsent reports a member failure only a new consent fixes.
+func needsNewConsent(err error) bool {
+	if _, consent := errors.AsType[catalogConsentError](err); consent {
+		return true
+	}
+	_, stale := errors.AsType[memberStaleChoiceError](err)
+	return stale
+}
+
 func (s *Service) catalogMemberConfigurations(ctx context.Context, organizationID string, ids []uuid.UUID) (map[uuid.UUID]string, error) {
 	hashes := make(map[uuid.UUID]string, len(ids))
 	if len(ids) == 0 {

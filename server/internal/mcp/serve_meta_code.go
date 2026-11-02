@@ -4,7 +4,6 @@ import (
 	"bytes"
 	"context"
 	"encoding/json"
-	"errors"
 	"fmt"
 	"io"
 	"log/slog"
@@ -117,7 +116,7 @@ func (s *Service) codeCallableMembers(ctx context.Context, gate *metaGateContext
 	callable := make([]metaMember, 0, len(selected))
 	for _, member := range selected {
 		if err := s.validateCatalogMember(ctx, gate, member); err != nil {
-			if _, consent := errors.AsType[catalogConsentError](err); !consent || !keepConsentRequired {
+			if !needsNewConsent(err) || !keepConsentRequired {
 				continue
 			}
 		}

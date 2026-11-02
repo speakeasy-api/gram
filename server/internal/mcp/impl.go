@@ -192,7 +192,7 @@ type Service struct {
 	// provider in local development, feature.InMemory in tests.
 	features feature.Provider
 	// mandatoryShadowLog dedupes mandatory authz shadow disagreement logs.
-	mandatoryShadowLog *mandatoryShadowLog
+	mandatoryShadowLog *onceLog
 	// prepareMandatory replaces authz PrepareMandatory for the shadow when
 	// set; tests use it to observe admissions.
 	prepareMandatory func(context.Context) (authz.MandatoryAuthorization, error)
@@ -272,6 +272,8 @@ type Service struct {
 	consentToolInventoryCache cache.TypedCacheObject[consentToolInventory]
 	// connectionCatalogCache retains immutable approved catalogs for a grant's lifetime.
 	connectionCatalogCache cache.Cache
+	// staleNoAuthLog dedupes stale no-auth choice warnings.
+	staleNoAuthLog *onceLog
 	// sessionClientInfo holds the MCP client identity captured at initialize
 	// so tools/call on the same session can resolve it. Always usable: without
 	// Redis it records nothing and every caller resolves as unknown.
@@ -625,7 +627,7 @@ func NewService(
 		siteURL:                   siteURL,
 		posthog:                   posthog,
 		features:                  features,
-		mandatoryShadowLog:        newMandatoryShadowLog(),
+		mandatoryShadowLog:        newOnceLog(),
 		prepareMandatory:          nil,
 		cimdResolver:              cimd.NewResolver(guardianPolicy, meterProvider, logger),
 		cimdAdmissionMetrics:      admission.NewMetrics(meterProvider, logger),
@@ -700,6 +702,7 @@ func NewService(
 			cache.SuffixNone,
 		),
 		connectionCatalogCache: cacheImpl,
+		staleNoAuthLog:         newOnceLog(),
 		codeExecutor:           codeExecutor,
 		codeSessions:           newCodeMemberSessions(logger, codeSessionIdleTTL, codeSessionMaxAge, codeSessionPingAfter, codeSessionMaxEntries),
 		sessionClientInfo:      sessionClientInfo,

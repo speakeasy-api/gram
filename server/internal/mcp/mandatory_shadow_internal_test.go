@@ -55,7 +55,7 @@ func newShadowHarness(t *testing.T, enabled bool) shadowHarness {
 			logger:             slog.New(slog.NewJSONHandler(&logs, &slog.HandlerOptions{Level: slog.LevelDebug})),
 			metrics:            mcpmetrics.NewMetrics(sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)).Meter("test"), testenv.NewLogger(t)),
 			features:           flags,
-			mandatoryShadowLog: newMandatoryShadowLog(),
+			mandatoryShadowLog: newOnceLog(),
 			authz:              authz.NewEngine(testenv.NewLogger(t), nil, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient()),
 		},
 		reader: reader,
