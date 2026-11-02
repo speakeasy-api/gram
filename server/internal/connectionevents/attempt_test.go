@@ -2,6 +2,7 @@ package connectionevents
 
 import (
 	"encoding/json"
+	"strings"
 	"testing"
 	"time"
 
@@ -52,18 +53,16 @@ func TestNormalizeProviderHost(t *testing.T) {
 func TestAppOf(t *testing.T) {
 	t.Parallel()
 
-	long := "https://client.example.com/"
-	for len(long) <= maxAppKeyBytes {
-		long += "padding/"
-	}
+	long := "https://" + strings.Repeat("a", maxProviderHostBytes) + ".example.com/m"
 	cases := []struct {
 		name     string
 		clientID string
 		want     App
 	}{
-		{"metadata url", "https://Client.Example.com/meta.json", App{"https://client.example.com/meta.json"}},
-		{"query and fragment dropped", "https://client.example.com/meta.json?a=b#c", App{"https://client.example.com/meta.json"}},
-		{"credentials dropped", "https://user:secret@client.example.com/m", App{"https://client.example.com/m"}},
+		{"host only", "https://Client.Example.com/path/meta.json", App{"client.example.com"}},
+		{"query and fragment dropped", "https://client.example.com/meta.json?a=b#c", App{"client.example.com"}},
+		{"caller text in the path dropped", "https://client.example.com/anything/a/caller/chooses", App{"client.example.com"}},
+		{"credentials dropped", "https://user:secret@client.example.com/m", App{"client.example.com"}},
 		{"dynamically registered", "3fa85f64-5717-4562-b3fc-2c963f66afa6", AppDCR},
 		{"dashboard", "", AppFirstParty},
 		{"too long", long, AppUnverified},
@@ -84,20 +83,6 @@ func testScope() Scope {
 type signInState struct {
 	ID      string  `json:"id"`
 	Attempt Attempt `json:"attempt,omitzero"`
-}
-
-func TestAttempt_StateWithoutOneBeginsANewOne(t *testing.T) {
-	t.Parallel()
-
-	var old signInState
-	require.NoError(t, json.Unmarshal([]byte(`{"id":"state-from-before-attempts"}`), &old))
-	require.True(t, old.Attempt.IsZero())
-
-	scope := testScope()
-	begun := old.Attempt.OrBegin(scope)
-	require.False(t, begun.IsZero())
-	require.Equal(t, scope, begun.scope)
-	require.WithinDuration(t, time.Now(), begun.StartedAt(), time.Minute)
 }
 
 // A value this code cannot read must never fail the sign-in whose state holds it.
@@ -129,7 +114,6 @@ func TestAttempt_SurvivesSignInStateUnchanged(t *testing.T) {
 	require.Equal(t, attempt.ID(), decoded.Attempt.ID())
 	require.Equal(t, attempt.scope, decoded.Attempt.scope)
 	require.True(t, attempt.StartedAt().Equal(decoded.Attempt.StartedAt()))
-	require.Equal(t, decoded.Attempt, decoded.Attempt.OrBegin(testScope()), "a carried attempt is not replaced")
 
 	empty, err := json.Marshal(signInState{ID: "s", Attempt: NoAttempt})
 	require.NoError(t, err)
@@ -149,24 +133,31 @@ func TestScope_OrganizationGatewayHasNoProject(t *testing.T) {
 func TestScope_ProviderSessionHasNoServer(t *testing.T) {
 	t.Parallel()
 
-	row, err := RowAt(Begin(ProviderSessionScope("org-test", uuid.New(), AppBackground)), StepProviderRefresh, ResultRefreshed, true, time.Now())
+	row, err := RowAt(Begin(ProviderSessionScope("org-test", uuid.New(), AppDCR)), StepProviderRefresh, ResultRefreshed, true, time.Now())
 	require.NoError(t, err)
 	require.Empty(t, row.ServerID)
 	require.Equal(t, serverKindProviderSession, row.ServerKind)
-	require.Equal(t, AppBackground.key, row.AppKey)
 }
 
-func TestScopeFrom(t *testing.T) {
+// Renewing a company sign-in reaches an identity provider, with no project or server.
+func TestScope_IdentityProviderHasNoProjectOrServer(t *testing.T) {
 	t.Parallel()
 
-	fallback, marked := testScope(), testScope()
-	require.Equal(t, fallback, ScopeFrom(t.Context(), fallback))
-	require.Equal(t, marked, ScopeFrom(WithScope(t.Context(), marked), fallback))
+	row, err := RowAt(Begin(IdentityProviderScope("org-test", AppDCR)), StepSignInRenewal, ResultRenewed, true, time.Now())
+	require.NoError(t, err)
+	require.Empty(t, row.ServerID)
+	require.Equal(t, uuid.Nil, row.ProjectID)
+	require.Equal(t, serverKindIdentityProvider, row.ServerKind)
 }
 
 type cachedSignInState struct {
-	ID      string  `json:"id"`
-	Attempt Attempt `json:"attempt,omitzero"`
+	ID      string
+	Attempt Attempt `msgpack:",omitempty"`
+}
+
+// stateWithoutAttempt is the same state on a replica without the field.
+type stateWithoutAttempt struct {
+	ID string
 }
 
 func (c cachedSignInState) CacheKey() string   { return "connectionAttemptTest:" + c.ID }
@@ -202,4 +193,47 @@ func TestAttempt_UnreadableBytesReadAsZero(t *testing.T) {
 	require.True(t, attempt.IsZero())
 	require.NoError(t, attempt.UnmarshalBinary(nil))
 	require.True(t, attempt.IsZero())
+}
+
+// CompareAndSwap compares encoded bytes, so a zero attempt must encode as if the
+// field were not there, in both directions of a rollout.
+func TestAttempt_ZeroEncodesAsNoFieldForCompareAndSwap(t *testing.T) {
+	t.Parallel()
+
+	client, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	adapter := cache.NewRedisCacheAdapter(client)
+
+	key := "connectionAttemptTest:" + uuid.NewString()
+	require.NoError(t, adapter.Set(t.Context(), key, cachedSignInState{ID: "s", Attempt: NoAttempt}, time.Minute))
+	swapped, err := adapter.CompareAndSwap(t.Context(), key, stateWithoutAttempt{ID: "s"}, stateWithoutAttempt{ID: "s"}, time.Minute)
+	require.NoError(t, err)
+	require.True(t, swapped, "written with the field, compared without it")
+
+	swapped, err = adapter.CompareAndSwap(t.Context(), key, cachedSignInState{ID: "s", Attempt: NoAttempt}, cachedSignInState{ID: "s", Attempt: NoAttempt}, time.Minute)
+	require.NoError(t, err)
+	require.True(t, swapped, "written without the field, compared with it")
+}
+
+// An attempt read back from Redis encodes to the same bytes, so swaps on it work.
+func TestAttempt_RoundTripEncodesTheSameForCompareAndSwap(t *testing.T) {
+	t.Parallel()
+
+	states := cache.NewTypedObjectCache[cachedSignInState](testenv.NewLogger(t), redisCache(t), cache.SuffixNone)
+	state := cachedSignInState{ID: uuid.NewString(), Attempt: Begin(testScope())}
+	require.NoError(t, states.Store(t.Context(), state))
+
+	read, err := states.Get(t.Context(), "connectionAttemptTest:"+state.ID)
+	require.NoError(t, err)
+	swapped, err := states.CompareAndSwap(t.Context(), read, read)
+	require.NoError(t, err)
+	require.True(t, swapped)
+}
+
+func redisCache(t *testing.T) cache.Cache {
+	t.Helper()
+
+	client, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	return cache.NewRedisCacheAdapter(client)
 }

@@ -12,7 +12,6 @@
 package connectionevents
 
 import (
-	"context"
 	"encoding/json"
 	"net"
 	"net/url"
@@ -25,23 +24,18 @@ import (
 )
 
 const (
-	serverKindMCP             = "mcp"
-	serverKindMeta            = "meta"
-	serverKindToolset         = "toolset"
-	serverKindProviderSession = "provider_session"
+	serverKindMCP              = "mcp"
+	serverKindMeta             = "meta"
+	serverKindToolset          = "toolset"
+	serverKindProviderSession  = "provider_session"
+	serverKindIdentityProvider = "identity_provider"
 )
 
-const (
-	// maxProviderHostBytes is the DNS limit on a host name plus room for a port.
-	maxProviderHostBytes = 261
+// maxProviderHostBytes is the DNS limit on a host name plus room for a port.
+const maxProviderHostBytes = 261
 
-	// maxAppKeyBytes bounds a client metadata URL. Real ones are under 200 bytes.
-	maxAppKeyBytes = 512
-)
-
-// App identifies the app behind an attempt. A DCR client ID is per install and
-// an unvalidated client_id is caller-chosen, so neither is stored: app_key is a
-// rollup sort key and has to stay small.
+// App identifies the app behind an attempt. app_key is a rollup sort key that a
+// caller can reach before sign-in, so it holds a host or a kind and nothing else.
 type App struct{ key string }
 
 var (
@@ -54,16 +48,18 @@ var (
 	// AppUnverified is a client that has not been validated yet.
 	AppUnverified = App{"unverified_client"}
 
-	// AppWorkload is a workload presenting its own assertion.
+	// AppWorkload is a sign-in started for a workload's connection.
 	AppWorkload = App{"workload"}
 
-	// AppBackground is a background job acting for a stored session.
-	AppBackground = App{"background"}
+	// AppCodeMode is a sign-in started from a code mode connection link.
+	AppCodeMode = App{"code_mode"}
+
+	// AppRecoveryLink is a sign-in started from a link an assistant was given.
+	AppRecoveryLink = App{"recovery_link"}
 )
 
-// AppOf returns the App of a validated client_id: its client metadata URL
-// without credentials, query or fragment, or AppDCR. An empty client_id is the
-// dashboard. Use AppUnverified for a client not validated yet.
+// AppOf returns the App of a validated client_id: the host of its client
+// metadata URL, or AppDCR. An empty client_id is the dashboard.
 func AppOf(clientID string) App {
 	if clientID == "" {
 		return AppFirstParty
@@ -71,20 +67,18 @@ func AppOf(clientID string) App {
 	if !cimd.IsClientIDURL(clientID) {
 		return AppDCR
 	}
-	parsed, err := url.Parse(clientID)
-	if err != nil || parsed.Host == "" {
+	host := NormalizeProviderHost(clientID)
+	if host == "" {
 		return AppUnverified
 	}
-	key := "https://" + strings.ToLower(parsed.Host) + parsed.EscapedPath()
-	if len(key) > maxAppKeyBytes {
-		return AppUnverified
-	}
-	return App{key}
+	return App{host}
 }
 
+// String is the stored app_key.
+func (a App) String() string { return a.key }
+
 // Scope is what stays the same on every step of an attempt. Build it with one
-// of the constructors. An empty organization or a nil server records nothing
-// but a dropped-row count.
+// of the constructors. An empty organization or nil server drops the row.
 type Scope struct {
 	organizationID string
 	projectID      uuid.UUID
@@ -120,31 +114,20 @@ func ProviderSessionScope(organizationID string, projectID uuid.UUID, app App) S
 	return Scope{organizationID, projectID, serverKindProviderSession, uuid.Nil, app.key}
 }
 
+// IdentityProviderScope is an attempt that reaches an organization's identity
+// provider and no server or project, such as renewing a company sign-in.
+func IdentityProviderScope(organizationID string, app App) Scope {
+	return Scope{organizationID, uuid.Nil, serverKindIdentityProvider, uuid.Nil, app.key}
+}
+
 func (s Scope) valid() bool {
 	if s.organizationID == "" || s.serverKind == "" {
 		return false
 	}
-	return s.serverID != uuid.Nil || s.serverKind == serverKindProviderSession
+	return s.serverID != uuid.Nil || s.serverKind == serverKindProviderSession || s.serverKind == serverKindIdentityProvider
 }
 
-type scopeKey struct{}
-
-// WithScope marks a request's scope for code that has no endpoint in hand.
-func WithScope(ctx context.Context, scope Scope) context.Context {
-	return context.WithValue(ctx, scopeKey{}, scope)
-}
-
-// ScopeFrom returns the request's scope, or fallback when there is none.
-func ScopeFrom(ctx context.Context, fallback Scope) Scope {
-	if scope, ok := ctx.Value(scopeKey{}).(Scope); ok {
-		return scope
-	}
-	return fallback
-}
-
-// Attempt is one connection attempt. It travels in sign-in state as one value
-// and its fields are set once, so a later step cannot stamp a different server,
-// project or start time.
+// Attempt is one connection attempt. Its fields are set once, so every step stamps the same values.
 type Attempt struct {
 	scope     Scope
 	id        uuid.UUID
@@ -156,7 +139,8 @@ func Begin(scope Scope) Attempt {
 	return AttemptAt(uuid.New(), time.Now(), scope)
 }
 
-// AttemptAt is an attempt with a chosen id and start, for seed data and tests.
+// AttemptAt is an attempt with a known id and start: one derived from sign-in
+// state, or seed data.
 func AttemptAt(id uuid.UUID, startedAt time.Time, scope Scope) Attempt {
 	return Attempt{scope: scope, id: id, startedAt: startedAt.UTC()}
 }
@@ -167,17 +151,8 @@ func (a Attempt) ID() uuid.UUID { return a.id }
 // StartedAt is when the attempt started.
 func (a Attempt) StartedAt() time.Time { return a.startedAt }
 
-// IsZero reports an attempt that was never started, such as one read from
-// sign-in state written before attempts existed.
+// IsZero reports an attempt that was never begun. Recording on it does nothing.
 func (a Attempt) IsZero() bool { return a.id == uuid.Nil }
-
-// OrBegin returns the attempt, or begins one when it is zero.
-func (a Attempt) OrBegin(scope Scope) Attempt {
-	if !a.IsZero() {
-		return a
-	}
-	return Begin(scope)
-}
 
 // attemptJSON is how an attempt is stored in sign-in state.
 type attemptJSON struct {
@@ -204,13 +179,11 @@ func (a Attempt) MarshalJSON() ([]byte, error) {
 	})
 }
 
-// UnmarshalJSON implements json.Unmarshaler. A value it cannot read becomes a
-// zero attempt rather than an error, because an error would fail the sign-in
-// whose state carries it.
+// UnmarshalJSON implements json.Unmarshaler. Unreadable values become a zero attempt, so they can't fail a sign-in.
 func (a *Attempt) UnmarshalJSON(data []byte) error {
 	var stored attemptJSON
 	if err := json.Unmarshal(data, &stored); err != nil {
-		*a = Attempt{scope: Scope{}, id: uuid.Nil, startedAt: time.Time{}} //nolint:exhaustruct // the zero scope
+		*a = NoAttempt
 		return nil
 	}
 	*a = Attempt{
@@ -221,8 +194,7 @@ func (a *Attempt) UnmarshalJSON(data []byte) error {
 	return nil
 }
 
-// MarshalBinary implements encoding.BinaryMarshaler, which is what the Redis
-// cache encodes sign-in state with. Its encoding skips unexported fields.
+// MarshalBinary implements encoding.BinaryMarshaler. The Redis cache's msgpack skips unexported fields.
 func (a Attempt) MarshalBinary() ([]byte, error) {
 	if a.IsZero() {
 		return nil, nil
@@ -230,23 +202,20 @@ func (a Attempt) MarshalBinary() ([]byte, error) {
 	return a.MarshalJSON()
 }
 
-// UnmarshalBinary implements encoding.BinaryUnmarshaler. As with UnmarshalJSON,
-// a value it cannot read becomes a zero attempt.
+// UnmarshalBinary implements encoding.BinaryUnmarshaler, like UnmarshalJSON.
 func (a *Attempt) UnmarshalBinary(data []byte) error {
 	return a.UnmarshalJSON(data)
 }
 
-// NoAttempt is the zero Attempt, for flows that begin one later.
+// NoAttempt is the zero Attempt, for a login that is not a connection attempt.
 var NoAttempt = Attempt{
 	scope:     Scope{organizationID: "", projectID: uuid.Nil, serverKind: "", serverID: uuid.Nil, appKey: ""},
 	id:        uuid.Nil,
 	startedAt: time.Time{},
 }
 
-// NormalizeProviderHost reduces an issuer URL or bare host to the host people
-// and rollups group by: lowercase, no scheme, path, credentials, trailing dot
-// or default port. A tenant subdomain stays. It returns "" for input with no
-// usable host, and normalizing twice changes nothing.
+// NormalizeProviderHost reduces a URL or bare host to lowercase host, without scheme, path,
+// credentials, trailing dot or port 80/443. A tenant subdomain stays. No usable host returns "".
 func NormalizeProviderHost(issuer string) string {
 	issuer = strings.TrimSpace(issuer)
 	if issuer == "" {
@@ -263,8 +232,7 @@ func NormalizeProviderHost(issuer string) string {
 	if host == "" {
 		return ""
 	}
-	// 443 and 80 both drop on any scheme: an output is reparsed as https, so
-	// keeping http's :443 would normalize differently the second time.
+	// Both drop on any scheme, so normalizing twice gives the same result.
 	port := parsed.Port()
 	if port == "443" || port == "80" {
 		port = ""
@@ -280,6 +248,3 @@ func NormalizeProviderHost(issuer string) string {
 	}
 	return host
 }
-
-// String is the stored app_key.
-func (a App) String() string { return a.key }

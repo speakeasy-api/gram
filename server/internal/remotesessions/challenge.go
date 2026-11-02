@@ -124,7 +124,7 @@ type ParentChallenge struct {
 	// from the host holding the parent challenge's callback cookie.
 	BrowserCookieID string
 	BrowserHash     string
-	// Attempt is the connection attempt this login belongs to. Zero starts one.
+	// Attempt is the connection attempt this login belongs to. Zero records nothing.
 	Attempt connectionevents.Attempt
 }
 
@@ -195,9 +195,10 @@ type RemoteLoginState struct {
 	BrowserCookieID string    `json:"browser_cookie_id,omitempty"`
 	BrowserHash     string    `json:"browser_hash,omitempty"`
 	CreatedAt       time.Time `json:"created_at"`
-	// Attempt joins this login to the Speakeasy sign-in that led to it. Zero
-	// for states minted before it existed; the callback then starts a new one.
-	Attempt connectionevents.Attempt `json:"attempt,omitzero"`
+	// Attempt joins this login to the connection attempt that led to it. Zero records nothing.
+	Attempt connectionevents.Attempt `json:"attempt,omitzero" msgpack:",omitempty"`
+	// ResourceMcpServerID is the gateway member this login qualified to.
+	ResourceMcpServerID uuid.NullUUID `json:"resource_mcp_server_id,omitzero"`
 	// ProviderHost is the normalized host of the issuer this login went to.
 	ProviderHost string `json:"provider_host,omitempty"`
 	// RemoteSessionIssuerID is the issuer this login went to.
@@ -223,7 +224,7 @@ func (s RemoteLoginState) parent() ParentChallenge {
 		McpServerID:         s.McpServerID,
 		MetaMcpServerID:     s.MetaMcpServerID,
 		// The retry leg reuses the first leg's scopes, so it reads no resource.
-		ResourceMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ResourceMcpServerID: s.ResourceMcpServerID,
 		AutoRefresh:         s.AutoRefresh,
 		Authority:           s.Authority,
 		BrowserCookieID:     s.BrowserCookieID,
@@ -232,32 +233,17 @@ func (s RemoteLoginState) parent() ParentChallenge {
 	}
 }
 
-// loginAttemptScope is the scope of an attempt begun from a login, for logins
-// nothing began one for.
-func loginAttemptScope(organizationID string, projectID uuid.UUID, routeBase mcproute.Base, mcpServerID, metaServerID uuid.NullUUID) connectionevents.Scope {
-	switch {
-	case routeBase == mcproute.OrganizationGateway:
-		return connectionevents.OrganizationGatewayScope(organizationID, metaServerID.UUID, connectionevents.AppFirstParty)
-	case metaServerID.Valid:
-		return connectionevents.GatewayScope(organizationID, projectID, metaServerID.UUID, connectionevents.AppFirstParty)
-	case mcpServerID.Valid:
-		return connectionevents.ServerScope(organizationID, projectID, mcpServerID.UUID, connectionevents.AppFirstParty)
-	default:
-		return connectionevents.ProviderSessionScope(organizationID, projectID, connectionevents.AppFirstParty)
-	}
-}
-
 // recordSignInStep records the end of a provider sign-in. A login with a final
 // destination ends its attempt here. One returning to consent does not, because
 // the person can still finish connecting.
 func (m *ChallengeManager) recordSignInStep(ctx context.Context, state RemoteLoginState, what connectionevents.Happened) {
-	attempt := state.Attempt.OrBegin(loginAttemptScope(state.OrganizationID, state.ProjectID, state.RouteBase, state.McpServerID, state.MetaMcpServerID))
 	record := m.connections.Step
 	if state.FinalRedirectURI != "" {
 		record = m.connections.End
 	}
-	record(ctx, attempt, connectionevents.StepProviderSignIn, what,
+	record(ctx, state.Attempt, connectionevents.StepProviderSignIn, what,
 		connectionevents.Provider(state.ProviderHost),
+		connectionevents.Member(state.ResourceMcpServerID.UUID),
 		connectionevents.RemoteSessionIssuer(state.RemoteSessionIssuerID),
 		connectionevents.UserSessionIssuer(state.UserSessionIssuerID),
 		connectionevents.RemoteSessionClient(state.RemoteSessionClientID),
@@ -1472,7 +1458,8 @@ func (m *ChallengeManager) mintAuthorization(
 		BrowserCookieID:       parent.BrowserCookieID,
 		BrowserHash:           parent.BrowserHash,
 		CreatedAt:             time.Now(),
-		Attempt:               parent.Attempt.OrBegin(loginAttemptScope(parent.OrganizationID, parent.ProjectID, parent.RouteBase, parent.McpServerID, parent.MetaMcpServerID)),
+		Attempt:               parent.Attempt,
+		ResourceMcpServerID:   parent.ResourceMcpServerID,
 		ProviderHost:          connectionevents.NormalizeProviderHost(client.IssuerURL),
 		RemoteSessionIssuerID: client.RemoteSessionIssuerID,
 	}
@@ -1625,7 +1612,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 
 	if errCode != "" {
 		if errCode == oautherr.CodeAccessDenied {
-			m.recordSignInStep(ctx, state, connectionevents.CodeCanceled)
+			m.recordSignInStep(ctx, state, connectionevents.CodeProviderDenied)
 			// Final destinations acknowledge a completed connection, so a canceled
 			// flow must stay on the callback page instead of claiming success.
 			if state.FinalRedirectURI != "" {

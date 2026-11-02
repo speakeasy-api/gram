@@ -221,10 +221,6 @@ type AuthnChallengeState struct {
 	// for, so the consent page lands on that server's connect page. Empty
 	// lands on the gateway's own page.
 	FocusServer string `json:"focus_server,omitempty"`
-	// Attempt is the connection attempt started at /authorize. It survives the
-	// cache key rotation like FlowID. Zero for in-flight states minted before it
-	// and for flows no /authorize started; the provider sign-in then starts one.
-	Attempt connectionevents.Attempt `json:"attempt,omitzero"`
 }
 
 var _ cache.CacheableObject[AuthnChallengeState] = (*AuthnChallengeState)(nil)
@@ -275,9 +271,8 @@ type UserSessionGrant struct {
 	// completing end-to-end correlation. Empty for grants minted before this
 	// field landed (rolling deploy).
 	FlowID string `json:"flow_id,omitempty"`
-	// Attempt carries the connection attempt to /token. Zero for grants minted
-	// before it, and /token then starts a new one.
-	Attempt             connectionevents.Attempt `json:"attempt,omitzero"`
+	// Attempt is the connection attempt this grant belongs to. Zero records nothing.
+	Attempt             connectionevents.Attempt `json:"attempt,omitzero" msgpack:",omitempty"`
 	UserSessionIssuerID uuid.UUID                `json:"user_session_issuer_id"`
 	UserSessionClientID uuid.UUID                `json:"user_session_client_id"`
 	ClientID            string                   `json:"client_id"`
@@ -1475,6 +1470,23 @@ func consentChallengeCacheError(ctx context.Context, logger *slog.Logger, err er
 		return fmt.Errorf("load consent challenge: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger), oauthui.ReasonExpired))
 	}
 	return oops.E(oops.CodeUnavailable, err, "authn challenge state is temporarily unavailable").LogError(ctx, logger)
+}
+
+// connectionAttempt reads the attempt from FlowID and CreatedAt, which survive rotation.
+// A stored field would break CompareAndSwap, which compares bytes, across replica versions.
+func (a AuthnChallengeState) connectionAttempt(endpoint *ResolvedMcpEndpoint) connectionevents.Attempt {
+	id, err := uuid.Parse(a.FlowID)
+	if err != nil || a.CreatedAt.IsZero() {
+		return connectionevents.NoAttempt
+	}
+	app := connectionevents.AppOf(a.ClientID)
+	switch {
+	case a.WorkloadReconnect != nil:
+		app = connectionevents.AppWorkload
+	case a.CodeReconnect != nil:
+		app = connectionevents.AppCodeMode
+	}
+	return connectionevents.AttemptAt(id, a.CreatedAt, connectionScope(endpoint, app))
 }
 
 // connectionScope is what stays the same on every step of a connection attempt

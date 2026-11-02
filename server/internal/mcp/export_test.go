@@ -16,6 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/connectionevents"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -25,6 +26,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 )
+
+// SetConnectionRecorder replaces the connection attempt recorder.
+func (s *Service) SetConnectionRecorder(recorder *connectionevents.Recorder) {
+	s.connections = recorder
+}
+
+// ConnectionAttempt exposes the state's connection attempt.
+func (a AuthnChallengeState) ConnectionAttempt(endpoint *ResolvedMcpEndpoint) connectionevents.Attempt {
+	return a.connectionAttempt(endpoint)
+}
 
 // SetCIMDResolver replaces the client metadata document resolver.
 func (s *Service) SetCIMDResolver(resolver *cimd.Resolver) {

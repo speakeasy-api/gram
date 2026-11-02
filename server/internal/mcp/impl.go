@@ -289,7 +289,7 @@ type Service struct {
 	// interactive /connect cards and the /remote_login_callback handler.
 	remoteChallengeMgr *remotesessions.ChallengeManager
 
-	// connections records connection attempt steps. Nil records nothing.
+	// connections records connection attempt steps.
 	connections    *connectionevents.Recorder
 	bindingRefresh *remotesessions.BindingRefreshAttempts
 	// validationMetrics counts the consent page's live validation probes.
@@ -552,6 +552,7 @@ func NewService(
 	tunnelPublicConfig TunnelPublicConfig,
 	metaRuntimeConfig MetaRuntimeConfig,
 	codeExecutor codemode.Executor,
+	connections *connectionevents.Recorder,
 ) (*Service, error) {
 	if codeExecutor == nil {
 		codeExecutor = codemode.Disabled{}
@@ -712,7 +713,7 @@ func NewService(
 		identityValidator:      mcpidentity.NewValidatorBoundary(),
 		userSessionSigner:      userSessionSigner,
 		remoteChallengeMgr:     remoteChallengeMgr,
-		connections:            nil,
+		connections:            connections,
 		validationMetrics:      remotesessionmetrics.NewValidation(logger, meterProvider),
 		validationLimiter:      newValidationLimiter(redisClient, meterProvider),
 		autoVerifications:      newAutoVerifications(),
@@ -723,11 +724,6 @@ func NewService(
 		metaRuntime:            metaRuntimeConfig.withDefaults(),
 	}
 	return service, nil
-}
-
-// SetConnectionRecorder records connection attempt steps.
-func (s *Service) SetConnectionRecorder(recorder *connectionevents.Recorder) {
-	s.connections = recorder
 }
 
 // SetCallbackOrigins pins the IdP callback URLs and assistants' CIMD client

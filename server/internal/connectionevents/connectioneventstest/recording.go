@@ -10,23 +10,15 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/connectionevents"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
-// LogsOn is a feature checker for an organization with logs on. Pass it to
+// LogsOn is a logs check for an organization with logs on. Pass it to
 // connectionevents.NewRecorder in tests that write to real ClickHouse.
-type LogsOn struct{}
-
-// IsFeatureEnabled implements connectionevents.FeatureChecker.
-func (LogsOn) IsFeatureEnabled(context.Context, string, productfeatures.Feature) (bool, error) {
+func LogsOn(context.Context, string) (bool, error) {
 	return true, nil
 }
 
-// logsOff is a feature checker for an organization with logs off.
-type logsOff struct{}
-
-// IsFeatureEnabled implements connectionevents.FeatureChecker.
-func (logsOff) IsFeatureEnabled(context.Context, string, productfeatures.Feature) (bool, error) {
+func logsOff(context.Context, string) (bool, error) {
 	return false, nil
 }
 
@@ -43,17 +35,17 @@ type Recording struct {
 // New returns an empty recording for an organization with logs on.
 func New(t *testing.T) *Recording {
 	t.Helper()
-	return newRecording(t, LogsOn{})
+	return newRecording(t, LogsOn)
 }
 
 // NewLogsOff returns a recording for an organization with logs off. A flow's
 // test can run with it and assert RequireNothing.
 func NewLogsOff(t *testing.T) *Recording {
 	t.Helper()
-	return newRecording(t, logsOff{})
+	return newRecording(t, logsOff)
 }
 
-func newRecording(t *testing.T, features connectionevents.FeatureChecker) *Recording {
+func newRecording(t *testing.T, logsEnabled func(context.Context, string) (bool, error)) *Recording {
 	t.Helper()
 
 	rec := &Recording{Recorder: nil, t: t, mu: sync.Mutex{}, rows: nil}
@@ -61,7 +53,7 @@ func newRecording(t *testing.T, features connectionevents.FeatureChecker) *Recor
 		rec.mu.Lock()
 		defer rec.mu.Unlock()
 		rec.rows = append(rec.rows, row)
-	}, features)
+	}, logsEnabled)
 	t.Cleanup(rec.requireOneEndingPerAttempt)
 	return rec
 }

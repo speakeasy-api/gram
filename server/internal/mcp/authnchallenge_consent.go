@@ -1377,7 +1377,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	grant := UserSessionGrant{
 		Code:                        code,
 		FlowID:                      challengeState.FlowID,
-		Attempt:                     challengeState.Attempt,
+		Attempt:                     challengeState.connectionAttempt(endpoint),
 		UserSessionIssuerID:         endpoint.UserSessionIssuerID,
 		UserSessionClientID:         clientRow.ID,
 		ClientID:                    challengeState.ClientID,

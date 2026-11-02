@@ -139,25 +139,6 @@ func MeaningOf(reason string) (Meaning, bool) {
 	return meaning, ok
 }
 
-// CodeNamed returns the code with this name, for a chokepoint on main that
-// already holds a reason as a string. Unknown names return false and the zero
-// Code, which records nothing but a dropped-row count.
-func CodeNamed(name string) (Code, bool) {
-	if _, ok := catalog[name]; !ok {
-		return Code{}, false //nolint:exhaustruct // the zero Code is the refusal
-	}
-	return Code{name}, true
-}
-
-// Codes returns every known code.
-func Codes() []Code {
-	codes := make([]Code, 0, len(catalog))
-	for name := range catalog {
-		codes = append(codes, Code{name})
-	}
-	return codes
-}
-
 func define(name string, outcome Outcome, who WhoFixes, what, todo string) Code {
 	return defineResult(name, resultFor(outcome), outcome, who, what, todo)
 }
@@ -184,19 +165,6 @@ func resultFor(outcome Outcome) Result {
 
 // Each line is the code, its outcome, who fixes it, what happened, what to do.
 var (
-	// OutcomeAbandoned is an attempt with no final row. Readers derive it, so
-
-	// the recorder has no way to write it.
-
-	// Outcome is the attempt's result when this code ends it.
-
-	// WhoFixes is the usual party to act. A caller that knows better, because
-
-	// the party depends on the stage, sets Event.WhoFixes.
-
-	// WhatHappened says what went wrong in one short sentence.
-
-	// WhatToDo says what to do next in one short sentence.
 
 	// App signs in to Speakeasy.
 	CodeCIMDAdmissionDenied    = define("cimd_admission_denied", OutcomeBlocked, WhoAdmin, "Your organization does not allow this app.", "Ask for the app to be added to the allowed list.")
@@ -206,13 +174,12 @@ var (
 	CodeNetworkDenied          = define("network_denied", OutcomeBlocked, WhoAdmin, "Your organization only allows this server from certain networks.", "Connect from an allowed network, or ask for yours to be added.")
 	CodeCustomDomainRequired   = define("custom_domain_required", OutcomeBlocked, WhoPerson, "This server only works through its custom domain.", "Connect using the server's custom domain address.")
 	CodeCustomDomainNotReady   = define("custom_domain_not_ready", OutcomeFailed, WhoAdmin, "This server's custom domain is not ready yet.", "Finish verifying the custom domain, then try again.")
-	CodeIDPMisconfigured       = define("idp_misconfigured", OutcomeFailed, WhoAdmin, "Company sign-in is not set up correctly.", "Check the identity provider settings for this server.")
 	CodeIDPUnavailable         = define("idp_unavailable", OutcomeFailed, WhoSpeakeasy, "The sign-in service could not be reached.", "Try again in a few minutes.")
 	CodeAIToolCheckUnavailable = define("ai_tool_check_unavailable", OutcomeFailed, WhoSpeakeasy, "We could not check whether this app is allowed.", "Try again in a few minutes.")
 	CodeCIMDFetchFailed        = define("cimd_fetch_failed", OutcomeFailed, WhoApp, "We could not read this app's public details.", "Try again later. If it keeps failing, the app needs fixing.")
 	CodeCIMDMetadataInvalid    = define("cimd_metadata_invalid", OutcomeFailed, WhoApp, "This app's public details are not valid.", "Update the app, or report the problem to its makers.")
 	CodeRegistrationInvalid    = define("registration_invalid", OutcomeFailed, WhoApp, "This app could not register with the server.", "Update the app, or report the problem to its makers.")
-	CodeUnknownClientID        = define("unknown_client_id", OutcomeFailed, WhoApp, "The server does not recognize this app.", "Remove the server from your app and add it again.")
+	CodeUnknownClientID        = define("unknown_client_id", OutcomeFailed, WhoPerson, "The server does not recognize this app.", "Remove the server from your app and add it again.")
 	CodeRedirectURIMismatch    = define("redirect_uri_mismatch", OutcomeFailed, WhoApp, "The app asked to return to an address it did not register.", "Update the app, or report the problem to its makers.")
 	CodeResourceMismatch       = define("resource_mismatch", OutcomeFailed, WhoApp, "The app asked to connect to a different server than this one.", "Check the server address set in your app.")
 	CodePKCEMismatch           = define("pkce_mismatch", OutcomeFailed, WhoApp, "The app could not complete a sign-in safety check.", "Try again. If it keeps failing, the app needs fixing.")
@@ -223,17 +190,10 @@ var (
 	CodeCanceled               = define("canceled", OutcomeDeclined, WhoPerson, "The sign-in was canceled.", "Connect again if you still want access.")
 
 	// Enterprise-managed sign-in to Speakeasy.
-	CodeClientNotAdmitted              = define("client_not_admitted", OutcomeBlocked, WhoAdmin, "Your organization does not allow this app.", "Ask for the app to be added to the allowed list.")
-	CodeClientBlocked                  = define("client_blocked", OutcomeBlocked, WhoAdmin, "Your organization has blocked this AI app.", "Use an approved app, or ask for this one to be approved.")
-	CodeEndpointNotAgentAddressable    = define("endpoint_not_agent_addressable", OutcomeBlocked, WhoAdmin, "This gateway doesn't accept this workload.", "Ask your administrator.")
-	CodeSubjectNotAdmitted             = define("subject_not_admitted", OutcomeBlocked, WhoAdmin, "This identity is not allowed to connect here.", "Ask your administrator.")
-	CodeIssuerUntrusted                = define("issuer_untrusted", OutcomeBlocked, WhoAdmin, "Speakeasy does not trust the service that signed this request.", "Ask your administrator.")
+	CodeEndpointNotAgentAddressable    = define("endpoint_not_agent_addressable", OutcomeBlocked, WhoAdmin, "This gateway doesn't accept this kind of connection.", "Ask for it to be allowed.")
+	CodeSubjectNotAdmitted             = define("subject_not_admitted", OutcomeBlocked, WhoAdmin, "This identity is not allowed to connect here.", "Ask for this identity to be allowed.")
 	CodeClientNotCIMD                  = define("client_not_cimd", OutcomeBlocked, WhoApp, "This app cannot use this kind of sign-in.", "Use an app that publishes its details at a public address.")
 	CodeSubjectNotProvisioned          = define("subject_not_provisioned", OutcomeBlocked, WhoAdmin, "This account is not set up in the organization's directory.", "Ask to be added to the directory and the organization.")
-	CodeSubjectNotAuthorized           = define("subject_not_authorized", OutcomeBlocked, WhoAdmin, "This account does not have access to this server.", "Ask for access to the server.")
-	CodeClientInvalid                  = define("client_invalid", OutcomeFailed, WhoApp, "This app's sign-in details are not valid.", "Update the app, or report the problem to its makers.")
-	CodeClientMetadataUnavailable      = define("client_metadata_unavailable", OutcomeFailed, WhoApp, "We could not reach this app's public details.", "Try again later. If it keeps failing, the app needs fixing.")
-	CodeClientCheckUnavailable         = define("client_check_unavailable", OutcomeFailed, WhoSpeakeasy, "We could not check whether this app is allowed.", "Try again in a few minutes.")
 	CodeInvalidRequest                 = define("invalid_request", OutcomeFailed, WhoApp, "The app sent a request we could not understand.", "Update the app, or report the problem to its makers.")
 	CodeResourceNotAvailable           = define("resource_not_available", OutcomeFailed, WhoAdmin, "This account has no server it can use here.", "Ask for access to a server.")
 	CodeAssertionInvalid               = define("assertion_invalid", OutcomeFailed, WhoApp, "The sign-in proof was not accepted.", "Try again. If it keeps failing, check the sign-in setup.")
@@ -248,8 +208,8 @@ var (
 	CodeProviderOAuthInvalidClient = define("provider_oauth_invalid_client", OutcomeFailed, WhoAdmin, "The service rejected Speakeasy's sign-in details for it.", "Check the client ID and secret set for this service.")
 	CodeProviderOAuthInvalidScope  = define("provider_oauth_invalid_scope", OutcomeFailed, WhoAdmin, "The service rejected the permissions we asked for.", "Check the permissions set for this service.")
 	CodeProviderOAuthInvalidGrant  = define("provider_oauth_invalid_grant", OutcomeFailed, WhoPerson, "The service did not accept this sign-in.", "Try signing in again.")
+	CodeProviderDenied             = define("provider_denied", OutcomeDeclined, WhoPerson, "The service refused the sign-in, or you canceled it.", "Try again. If it keeps happening, ask your admin.")
 	CodeIssuerMismatch             = define("issuer_mismatch", OutcomeFailed, WhoAdmin, "The sign-in answer came from a different service than expected.", "Check the sign-in address set for this service.")
-	CodeTunnelUnreachable          = define("tunnel_unreachable", OutcomeFailed, WhoAdmin, "The private connection to this service is down.", "Check the tunnel for this service is running.")
 	CodeConnectionChanged          = define("connection_changed", OutcomeFailed, WhoAdmin, "This service's connection was changed during sign-in.", "Check the connection still exists, then try again.")
 	CodeUnrenewableToken           = define("unrenewable_token", OutcomeFailed, WhoAdmin, "The service gave a sign-in that expires and cannot be renewed.", "Set the service up to allow renewing sign-ins.")
 	CodeRejectedByMember           = define("rejected_by_member", OutcomeFailed, WhoAdmin, "Sign-in worked, but the server rejected the new access.", "Check the server accepts sign-ins from this service.")
@@ -266,7 +226,6 @@ var (
 	CodeAccessDenied             = define("access_denied", OutcomeBlocked, WhoAdmin, "Your company sign-in service refused access to this server.", "Check this person is assigned to the app there.")
 	CodeScopePolicyDenied        = define("scope_policy_denied", OutcomeBlocked, WhoAdmin, "Your company sign-in service refused these permissions.", "Check the permissions allowed for this server.")
 	CodeInvalidTarget            = define("invalid_target", OutcomeFailed, WhoAdmin, "Your company sign-in service does not know this server.", "Check the server's connection in the sign-in service.")
-	CodeInvalidClient            = define("invalid_client", OutcomeFailed, WhoAdmin, "The service rejected Speakeasy's sign-in details for it.", "Check the client details set for this service.")
 	CodeMalformedAssertion       = define("malformed_assertion", OutcomeFailed, WhoAdmin, "The sign-in proof did not match this server's setup.", "Check the sign-in setup for this server.")
 	CodeInsufficientScope        = define("insufficient_scope", OutcomeFailed, WhoAdmin, "The sign-in did not include the permissions needed.", "Check the permissions allowed for this server.")
 	CodeMalformedResponse        = define("malformed_response", OutcomeFailed, WhoAdmin, "The sign-in service sent an answer we could not read.", "Check the sign-in setup for this server.")
@@ -303,18 +262,15 @@ var (
 	CodeUpstreamEMARefused               = define("upstream_ema_refused", OutcomeFailed, WhoAdmin, "The service refused to renew the managed sign-in.", "Check the service's setup for managed sign-in.")
 	CodeInvalidGrant                     = define("invalid_grant", OutcomeFailed, WhoPerson, "The service no longer accepts this sign-in.", "Reconnect to the service.")
 	CodeNoGrant                          = define("no_grant", OutcomeFailed, WhoPerson, "There is no saved sign-in to renew.", "Reconnect to the service.")
-	CodeRejected                         = define("rejected", OutcomeFailed, WhoAdmin, "The service refused to renew the connection.", "Check the connection settings for this service.")
-	CodeUpstreamError                    = define("upstream_error", OutcomeFailed, WhoProvider, "The service had an error renewing the connection.", "Wait a few minutes and try again.")
-	CodeRateLimited                      = define("rate_limited", OutcomeFailed, WhoProvider, "The service is limiting requests right now.", "Wait a few minutes and try again.")
-	CodeUnreachable                      = define("unreachable", OutcomeFailed, WhoProvider, "We could not reach the service.", "Wait a few minutes and try again.")
+	CodeRefreshRejected                  = define("refresh_rejected", OutcomeFailed, WhoAdmin, "The service refused to renew the connection.", "Check the connection settings for this service.")
 	CodeInternalError                    = define("internal_error", OutcomeFailed, WhoSpeakeasy, "Something went wrong on our side.", "Try again in a few minutes.")
 	CodeOfflineNotRequested              = define("offline_not_requested", OutcomeFailed, WhoAdmin, "Company sign-in is not set to stay signed in.", "Turn on offline access in the sign-in setup.")
 	CodeOfflineUnsupported               = define("offline_unsupported", OutcomeFailed, WhoAdmin, "The company sign-in service cannot keep people signed in.", "Check whether the sign-in service can allow offline access.")
-	CodeRefused                          = define("refused", OutcomeFailed, WhoPerson, "The company sign-in service did not allow staying signed in.", "Sign in again when asked.")
-	CodeConfiguration                    = define("configuration", OutcomeFailed, WhoAdmin, "Company sign-in renewal is not set up correctly.", "Check the sign-in setup for this organization.")
+	CodeRenewalRefused                   = define("renewal_refused", OutcomeFailed, WhoPerson, "The company sign-in service did not allow staying signed in.", "Sign in again when asked.")
+	CodeRenewalMisconfigured             = define("renewal_misconfigured", OutcomeFailed, WhoAdmin, "Company sign-in renewal is not set up correctly.", "Check the sign-in setup for this organization.")
 	CodeInvalidIdentity                  = define("invalid_identity", OutcomeFailed, WhoAdmin, "The company sign-in did not return a usable identity.", "Check the sign-in setup for this organization.")
-	CodeRetryable                        = define("retryable", OutcomeFailed, WhoProvider, "The company sign-in service had a brief problem.", "Try again in a minute.")
-	CodeAmbiguous                        = define("ambiguous", OutcomeFailed, WhoPerson, "We could not tell if your company sign-in was renewed.", "Sign in again.")
+	CodeRenewalRetryable                 = define("renewal_retryable", OutcomeFailed, WhoProvider, "The company sign-in service had a brief problem.", "Try again in a minute.")
+	CodeRenewalAmbiguous                 = define("renewal_ambiguous", OutcomeFailed, WhoPerson, "We could not tell if your company sign-in was renewed.", "Sign in again.")
 
 	// Gateway members.
 	CodeNeedsSignIn        = defineResult("needs_sign_in", resultNeedsSignIn, OutcomeBlocked, WhoPerson, "You have not signed in to this service yet.", "Connect to the service.")

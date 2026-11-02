@@ -9,6 +9,7 @@ import (
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 
 	"github.com/speakeasy-api/gram/server/internal/connectionevents"
+	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -19,6 +20,15 @@ const (
 
 	// connectionAttemptsPerDay gives every server and result rows on most days.
 	connectionAttemptsPerDay = 12
+
+	// connectionAttemptWindowSeconds spreads each day's attempts across 20 hours of it.
+	connectionAttemptWindowSeconds = 20 * 60 * 60
+
+	// connectionAttemptLength is how long a seeded attempt takes to reach its end.
+	connectionAttemptLength = 45 * time.Second
+
+	// abandonedOneIn makes one attempt in this many stop with no final row.
+	abandonedOneIn = 10
 
 	// demoConnectionProvider and demoConnectionApp are fictional example hosts.
 	demoConnectionProvider = "https://auth.provider.example.com/oauth"
@@ -41,7 +51,7 @@ var connectionEndings = []connectionEnding{
 	{connectionevents.StepInboundToken, connectionevents.CodeCodeNotFoundOrExpired},
 	{connectionevents.StepProviderSignIn, connectionevents.CodeProviderOAuthInvalidClient},
 	{connectionevents.StepProviderSignIn, connectionevents.CodeProviderRateLimited},
-	{connectionevents.StepProviderSignIn, connectionevents.CodeTunnelUnreachable},
+	{connectionevents.StepProviderSignIn, connectionevents.CodeTunnelUnavailable},
 	{connectionevents.StepProviderSignIn, connectionevents.CodeCanceled},
 	{connectionevents.StepInboundSignIn, connectionevents.CodeNotOrgMember},
 }
@@ -62,10 +72,10 @@ func (s *seeder) chConnectionEvents(ctx context.Context, ch driver.Conn) error {
 		for n := range connectionAttemptsPerDay {
 			key := "connection-attempt-" + strconv.Itoa(day) + "-" + strconv.Itoa(n)
 			scope := scopes[hash64(s.name(key), "scope")%uint64(len(scopes))]
-			started := s.now.AddDate(0, 0, -day-1).Add(time.Duration(hash64(s.name(key), "at")%(20*3600)) * time.Second)
+			started := s.now.AddDate(0, 0, -day-1).Add(time.Duration(hash64(s.name(key), "at")%connectionAttemptWindowSeconds) * time.Second)
 			attempt := connectionevents.AttemptAt(s.det(key), started, scope)
 			ending := connectionEndings[hash64(s.name(key), "ending")%uint64(len(connectionEndings))]
-			abandoned := hash64(s.name(key), "abandoned")%10 == 0
+			abandoned := hash64(s.name(key), "abandoned")%abandonedOneIn == 0
 
 			attemptRows, err := s.connectionAttemptRows(attempt, key, ending, abandoned)
 			if err != nil {
@@ -114,9 +124,9 @@ func (s *seeder) connectionAttemptRows(attempt connectionevents.Attempt, key str
 		opts = append(opts, connectionevents.Provider(demoConnectionProvider))
 	}
 	if ending.what == connectionevents.ResultCodeIssued {
-		opts = append(opts, connectionevents.Grant("authorization_code"))
+		opts = append(opts, connectionevents.Grant(oauthwire.GrantTypeAuthorizationCode))
 	}
-	last, err := connectionevents.RowAt(attempt, ending.step, ending.what, true, attempt.StartedAt().Add(45*time.Second), opts...)
+	last, err := connectionevents.RowAt(attempt, ending.step, ending.what, true, attempt.StartedAt().Add(connectionAttemptLength), opts...)
 	if err != nil {
 		return nil, fmt.Errorf("build connection event: %w", err)
 	}

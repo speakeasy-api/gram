@@ -1,9 +1,12 @@
 package connectionevents
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"log/slog"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -15,7 +18,6 @@ import (
 	"go.opentelemetry.io/otel/sdk/metric/metricdata"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -29,35 +31,36 @@ func testConfig() config {
 		flushInterval: 10 * time.Millisecond,
 		insertTimeout: 10 * time.Second,
 
-		featureCheckTimeout: 10 * time.Second,
+		logsCheckTimeout: 10 * time.Second,
 	}
 }
 
-// fixedFeatures answers every logs check the same way.
-type fixedFeatures struct {
+// logsCheck answers every logs check the same way.
+type logsCheck struct {
 	enabled bool
 	err     error
 	block   chan struct{}
+	panics  bool
 	checks  atomic.Int64
 }
 
-func (f *fixedFeatures) IsFeatureEnabled(ctx context.Context, _ string, feature productfeatures.Feature) (bool, error) {
-	f.checks.Add(1)
-	if feature != productfeatures.FeatureLogs {
-		return false, errors.New("unexpected feature")
+func (c *logsCheck) check(ctx context.Context, _ string) (bool, error) {
+	c.checks.Add(1)
+	if c.panics {
+		panic("logs check panicked")
 	}
-	if f.block != nil {
+	if c.block != nil {
 		select {
-		case <-f.block:
+		case <-c.block:
 		case <-ctx.Done():
-			return false, fmt.Errorf("feature check: %w", ctx.Err())
+			return false, fmt.Errorf("logs check: %w", ctx.Err())
 		}
 	}
-	return f.enabled, f.err
+	return c.enabled, c.err
 }
 
-func logsOn() *fixedFeatures {
-	return &fixedFeatures{enabled: true, err: nil, block: nil, checks: atomic.Int64{}}
+func logsOn(context.Context, string) (bool, error) {
+	return true, nil
 }
 
 type testRecorder struct {
@@ -65,17 +68,17 @@ type testRecorder struct {
 	reader *sdkmetric.ManualReader
 }
 
-func newTestRecorder(t *testing.T, conn driver.Conn, cacheImpl cache.Cache, cfg config) testRecorder {
+func newTestRecorder(t *testing.T, conn driver.Conn, cfg config) testRecorder {
 	t.Helper()
-	return newTestRecorderWithFeatures(t, conn, cacheImpl, logsOn(), cfg)
+	return newTestRecorderWithLogs(t, conn, logsOn, cfg)
 }
 
-func newTestRecorderWithFeatures(t *testing.T, conn driver.Conn, cacheImpl cache.Cache, features FeatureChecker, cfg config) testRecorder {
+func newTestRecorderWithLogs(t *testing.T, conn driver.Conn, logsEnabled func(context.Context, string) (bool, error), cfg config) testRecorder {
 	t.Helper()
 
 	reader := sdkmetric.NewManualReader()
 	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
-	recorder := newRecorder(testenv.NewLogger(t), provider, conn, cacheImpl, features, cfg)
+	recorder := newRecorder(testenv.NewLogger(t), provider, conn, logsEnabled, cfg)
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -84,7 +87,7 @@ func newTestRecorderWithFeatures(t *testing.T, conn driver.Conn, cacheImpl cache
 	return testRecorder{Recorder: recorder, reader: reader}
 }
 
-func (r testRecorder) dropped(t *testing.T, reason DropReason) int64 {
+func (r testRecorder) dropped(t *testing.T, reason dropReason) int64 {
 	t.Helper()
 
 	var collected metricdata.ResourceMetrics
@@ -114,14 +117,6 @@ func clickhouseConn(t *testing.T) driver.Conn {
 	conn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
 	return conn
-}
-
-func redisCache(t *testing.T) cache.Cache {
-	t.Helper()
-
-	client, err := infra.NewRedisClient(t, 0)
-	require.NoError(t, err)
-	return cache.NewRedisCacheAdapter(client)
 }
 
 type storedRow struct {
@@ -159,7 +154,7 @@ func TestRecord_StepsLandWithTenantFieldsAndFeedTheRollup(t *testing.T) {
 	t.Parallel()
 
 	conn := clickhouseConn(t)
-	recorder := newTestRecorder(t, conn, redisCache(t), testConfig())
+	recorder := newTestRecorder(t, conn, testConfig())
 	attempt := Begin(testScope())
 	subject := urn.NewUserSubject("user-test")
 
@@ -205,7 +200,7 @@ func TestRecord_OrganizationGatewayStoresNilProject(t *testing.T) {
 	t.Parallel()
 
 	conn := clickhouseConn(t)
-	recorder := newTestRecorder(t, conn, redisCache(t), testConfig())
+	recorder := newTestRecorder(t, conn, testConfig())
 	attempt := Begin(OrganizationGatewayScope("org-gateway-test", uuid.New(), AppDCR))
 
 	recorder.Step(t.Context(), attempt, StepInboundAuthorize, ResultAccepted)
@@ -221,7 +216,7 @@ func TestOnce_IsOneFinalRow(t *testing.T) {
 	t.Parallel()
 
 	conn := clickhouseConn(t)
-	recorder := newTestRecorder(t, conn, redisCache(t), testConfig())
+	recorder := newTestRecorder(t, conn, testConfig())
 	scope := testScope()
 
 	recorder.Once(t.Context(), scope, StepMCPRequest, CodeInvalidBearerToken)
@@ -233,49 +228,6 @@ func TestOnce_IsOneFinalRow(t *testing.T) {
 	require.True(t, rows[0].IsFinal)
 	require.Equal(t, string(OutcomeFailed), rows[0].Outcome)
 	require.Equal(t, string(WhoPerson), rows[0].WhoFixes)
-}
-
-// Two replicas can each see the same ending: a resubmitted page, a raced callback.
-func TestEnd_SecondEndingIsNotWrittenAcrossReplicas(t *testing.T) {
-	t.Parallel()
-
-	conn := clickhouseConn(t)
-	sharedCache := redisCache(t)
-	first := newTestRecorder(t, conn, sharedCache, testConfig())
-	second := newTestRecorder(t, conn, sharedCache, testConfig())
-	attempt := Begin(testScope())
-
-	first.End(t.Context(), attempt, StepInboundConsent, CodeCanceled)
-	require.NoError(t, first.Shutdown(t.Context()))
-	second.End(t.Context(), attempt, StepInboundToken, ResultCodeIssued)
-	second.Step(t.Context(), attempt, StepInboundToken, ResultAccepted)
-	require.NoError(t, second.Shutdown(t.Context()))
-
-	rows := readRows(t, conn, attempt.ID())
-	require.Len(t, rows, 2, "the later step lands, the later ending does not")
-	finals := 0
-	for _, row := range rows {
-		if row.IsFinal {
-			finals++
-			require.Equal(t, string(OutcomeDeclined), row.Outcome, "the first ending wins")
-		}
-	}
-	require.Equal(t, 1, finals)
-	require.Equal(t, int64(1), second.dropped(t, DropDuplicateEnd))
-}
-
-// Losing an ending is worse than a duplicate the rollup counts once anyway.
-func TestEnd_FailedEndingCheckStillWritesTheRow(t *testing.T) {
-	t.Parallel()
-
-	conn := clickhouseConn(t)
-	recorder := newTestRecorder(t, conn, nil, testConfig())
-	attempt := Begin(testScope())
-
-	recorder.End(t.Context(), attempt, StepInboundConsent, CodeCanceled)
-	require.NoError(t, recorder.Shutdown(t.Context()))
-
-	require.Len(t, readRows(t, conn, attempt.ID()), 1)
 }
 
 func TestRowAt_OutcomeOnlyOnAFinalRow(t *testing.T) {
@@ -329,9 +281,8 @@ func TestRowAt_CatalogSetsTheFailureResult(t *testing.T) {
 func TestRecord_AbandonedCannotBeWritten(t *testing.T) {
 	t.Parallel()
 
-	for _, code := range Codes() {
-		meaning, _ := MeaningOf(code.String())
-		require.NotEqual(t, OutcomeAbandoned, meaning.Outcome, code)
+	for name, meaning := range catalog {
+		require.NotEqual(t, OutcomeAbandoned, meaning.Outcome, name)
 	}
 }
 
@@ -383,7 +334,7 @@ func TestOptions_AreSafeOnNilAndZero(t *testing.T) {
 	t.Parallel()
 
 	row, err := RowAt(Begin(testScope()), StepMCPRequest, ResultAllowed, false, time.Now(),
-		nil, Subject(nil), Member(uuid.Nil), Provider(""), RemoteSession(uuid.Nil), UserSession(uuid.Nil), AuthClient(uuid.Nil))
+		Option{apply: nil}, Subject(nil), Member(uuid.Nil), Provider(""), RemoteSession(uuid.Nil), UserSession(uuid.Nil), AuthClient(uuid.Nil))
 	require.NoError(t, err)
 	require.Empty(t, row.SubjectURN)
 	require.Empty(t, row.MemberID)
@@ -395,13 +346,27 @@ func TestRecord_InvalidEventIsCountedNotWritten(t *testing.T) {
 	t.Parallel()
 
 	conn := &scriptedConn{Conn: nil, block: nil, err: nil, prepares: atomic.Int64{}}
-	recorder := newTestRecorder(t, conn, cache.NoopCache, testConfig())
+	recorder := newTestRecorder(t, conn, testConfig())
 
-	recorder.End(t.Context(), NoAttempt, StepInboundToken, ResultCodeIssued)
 	recorder.Step(t.Context(), Begin(testScope()), StepInboundToken, nil)
+	recorder.Once(t.Context(), ServerScope("", uuid.New(), uuid.New(), AppDCR), StepInboundToken, ResultCodeIssued)
 	require.NoError(t, recorder.Shutdown(t.Context()))
 
-	require.Equal(t, int64(2), recorder.dropped(t, DropInvalidEvent))
+	require.Equal(t, int64(2), recorder.dropped(t, dropInvalidEvent))
+	require.Zero(t, conn.prepares.Load())
+}
+
+// A login that is no connection attempt, such as a provider setup, records nothing.
+func TestRecord_ZeroAttemptDoesNothing(t *testing.T) {
+	t.Parallel()
+
+	conn := &scriptedConn{Conn: nil, block: nil, err: nil, prepares: atomic.Int64{}}
+	recorder := newTestRecorder(t, conn, testConfig())
+
+	recorder.End(t.Context(), NoAttempt, StepInboundToken, ResultCodeIssued)
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	require.Zero(t, recorder.dropped(t, dropInvalidEvent))
 	require.Zero(t, conn.prepares.Load())
 }
 
@@ -411,7 +376,7 @@ func TestRecord_MissingTableDropsAndCounts(t *testing.T) {
 
 	cfg := testConfig()
 	cfg.table = "mcp_connection_events_not_migrated_yet"
-	recorder := newTestRecorder(t, clickhouseConn(t), redisCache(t), cfg)
+	recorder := newTestRecorder(t, clickhouseConn(t), cfg)
 	attempt := Begin(testScope())
 
 	for range 3 {
@@ -419,7 +384,7 @@ func TestRecord_MissingTableDropsAndCounts(t *testing.T) {
 	}
 	require.NoError(t, recorder.Shutdown(t.Context()))
 
-	require.Equal(t, int64(3), recorder.dropped(t, DropTableMissing))
+	require.Equal(t, int64(3), recorder.dropped(t, dropTableMissing))
 }
 
 // scriptedConn stands in for a ClickHouse that stalls or refuses. Real
@@ -456,7 +421,7 @@ func TestRecord_NeverBlocksWhileClickHouseStalls(t *testing.T) {
 	cfg.queueSize = 4
 	cfg.maxBatch = 1
 	cfg.insertTimeout = time.Minute
-	recorder := newTestRecorder(t, conn, cache.NoopCache, cfg)
+	recorder := newTestRecorder(t, conn, cfg)
 	attempt := Begin(testScope())
 
 	require.Eventually(t, func() bool {
@@ -464,7 +429,7 @@ func TestRecord_NeverBlocksWhileClickHouseStalls(t *testing.T) {
 		return conn.prepares.Load() == 1
 	}, 10*time.Second, time.Millisecond)
 
-	before := recorder.dropped(t, DropQueueFull)
+	before := recorder.dropped(t, dropQueueFull)
 	finished := make(chan struct{})
 	go func() {
 		defer close(finished)
@@ -477,7 +442,7 @@ func TestRecord_NeverBlocksWhileClickHouseStalls(t *testing.T) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("Step blocked on a stalled ClickHouse")
 	}
-	require.GreaterOrEqual(t, recorder.dropped(t, DropQueueFull)-before, int64(1000-cfg.queueSize))
+	require.GreaterOrEqual(t, recorder.dropped(t, dropQueueFull)-before, int64(1000-cfg.queueSize))
 
 	close(release)
 }
@@ -488,12 +453,12 @@ func TestRecord_StalledInsertIsAbandonedAtItsTimeout(t *testing.T) {
 	conn := &scriptedConn{Conn: nil, block: make(chan struct{}), err: nil, prepares: atomic.Int64{}}
 	cfg := testConfig()
 	cfg.insertTimeout = 20 * time.Millisecond
-	recorder := newTestRecorder(t, conn, cache.NoopCache, cfg)
+	recorder := newTestRecorder(t, conn, cfg)
 
 	recorder.Step(t.Context(), Begin(testScope()), StepInboundAuthorize, ResultAccepted)
 	require.NoError(t, recorder.Shutdown(t.Context()))
 
-	require.Equal(t, int64(1), recorder.dropped(t, DropInsertFailed))
+	require.Equal(t, int64(1), recorder.dropped(t, dropInsertFailed))
 }
 
 // A retried insert would double count step_events, so a failed batch gets one try.
@@ -504,7 +469,7 @@ func TestRecord_FailedInsertIsNotRetried(t *testing.T) {
 	cfg := testConfig()
 	cfg.maxBatch = 2
 	cfg.flushInterval = time.Hour
-	recorder := newTestRecorder(t, conn, cache.NoopCache, cfg)
+	recorder := newTestRecorder(t, conn, cfg)
 
 	attempt := Begin(testScope())
 	for range 2 {
@@ -513,19 +478,19 @@ func TestRecord_FailedInsertIsNotRetried(t *testing.T) {
 	require.NoError(t, recorder.Shutdown(t.Context()))
 
 	require.Equal(t, int64(1), conn.prepares.Load())
-	require.Equal(t, int64(2), recorder.dropped(t, DropInsertFailed))
+	require.Equal(t, int64(2), recorder.dropped(t, dropInsertFailed))
 }
 
 func TestRecord_AfterShutdownDropsAndCounts(t *testing.T) {
 	t.Parallel()
 
 	conn := &scriptedConn{Conn: nil, block: nil, err: nil, prepares: atomic.Int64{}}
-	recorder := newTestRecorder(t, conn, cache.NoopCache, testConfig())
+	recorder := newTestRecorder(t, conn, testConfig())
 	require.NoError(t, recorder.Shutdown(t.Context()))
 
 	recorder.Step(t.Context(), Begin(testScope()), StepInboundAuthorize, ResultAccepted)
 
-	require.Equal(t, int64(1), recorder.dropped(t, DropShutdown))
+	require.Equal(t, int64(1), recorder.dropped(t, dropShutdown))
 }
 
 func TestRecord_NilRecorderDoesNothing(t *testing.T) {
@@ -534,22 +499,21 @@ func TestRecord_NilRecorderDoesNothing(t *testing.T) {
 	var recorder *Recorder
 	recorder.Step(t.Context(), NoAttempt, StepInboundToken, ResultCodeIssued)
 	recorder.End(t.Context(), NoAttempt, StepInboundToken, nil)
-	recorder.Once(t.Context(), testScope(), StepInboundToken, CodeCanceled, nil)
+	recorder.Once(t.Context(), testScope(), StepInboundToken, CodeCanceled)
 	bound := recorder.End
 	bound(t.Context(), NoAttempt, StepInboundToken, ResultCodeIssued)
 	require.NoError(t, recorder.Shutdown(t.Context()))
 }
 
-func TestRecord_MetricHasItsTagsAndNoPersonOrOrg(t *testing.T) {
+func TestRecord_MetricHasItsTagsAndNoPersonOrgOrHost(t *testing.T) {
 	t.Parallel()
 
 	conn := &scriptedConn{Conn: nil, block: nil, err: errors.New("refused"), prepares: atomic.Int64{}}
-	recorder := newTestRecorder(t, conn, cache.NoopCache, testConfig())
+	recorder := newTestRecorder(t, conn, testConfig())
 	subject := urn.NewUserSubject("user-test")
 
 	recorder.End(t.Context(), Begin(testScope()), StepProviderSignIn, CodeProviderRateLimited,
 		Provider("https://login.example.com/oauth"), Subject(&subject))
-	require.NoError(t, recorder.Shutdown(t.Context()))
 
 	var collected metricdata.ResourceMetrics
 	require.NoError(t, recorder.reader.Collect(t.Context(), &collected))
@@ -569,11 +533,10 @@ func TestRecord_MetricHasItsTagsAndNoPersonOrOrg(t *testing.T) {
 		}
 	}
 	require.Equal(t, map[string]string{
-		string(attr.ConnectionOutcomeKey):      string(OutcomeFailed),
-		string(attr.ConnectionStepKey):         StepProviderSignIn.String(),
-		string(attr.ConnectionReasonKey):       "provider_rate_limited",
-		string(attr.ConnectionWhoFixesKey):     string(WhoProvider),
-		string(attr.ConnectionProviderHostKey): "login.example.com",
+		string(attr.ConnectionOutcomeKey):  string(OutcomeFailed),
+		string(attr.ConnectionStepKey):     StepProviderSignIn.String(),
+		string(attr.ConnectionReasonKey):   "provider_rate_limited",
+		string(attr.ConnectionWhoFixesKey): string(WhoProvider),
 	}, keys)
 }
 
@@ -593,13 +556,13 @@ func stepsCounted(t *testing.T, recorder testRecorder) int {
 	return total
 }
 
-// recordAttemptWithFeatures runs one attempt through real ClickHouse and returns
-// how many event and rollup rows it left.
-func recordAttemptWithFeatures(t *testing.T, features FeatureChecker, organizationID string) (testRecorder, uint64, uint64) {
+// recordAttemptWithLogs runs one attempt through real ClickHouse and returns how
+// many event and rollup rows it left.
+func recordAttemptWithLogs(t *testing.T, logsEnabled func(context.Context, string) (bool, error), organizationID string) (testRecorder, uint64, uint64) {
 	t.Helper()
 
 	conn := clickhouseConn(t)
-	recorder := newTestRecorderWithFeatures(t, conn, redisCache(t), features, testConfig())
+	recorder := newTestRecorderWithLogs(t, conn, logsEnabled, testConfig())
 	scope := ServerScope(organizationID, uuid.New(), uuid.New(), AppDCR)
 	attempt := Begin(scope)
 	recorder.Step(t.Context(), attempt, StepInboundAuthorize, ResultAccepted)
@@ -623,6 +586,12 @@ func realFeatures(t *testing.T) *productfeatures.Client {
 	return productfeatures.NewClient(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, client)
 }
 
+func realLogsCheck(features *productfeatures.Client) func(context.Context, string) (bool, error) {
+	return func(ctx context.Context, organizationID string) (bool, error) {
+		return features.IsFeatureEnabled(ctx, organizationID, productfeatures.FeatureLogs)
+	}
+}
+
 func TestLogs_OnWrites(t *testing.T) {
 	t.Parallel()
 
@@ -630,10 +599,10 @@ func TestLogs_OnWrites(t *testing.T) {
 	organizationID := "org-logs-on-" + uuid.NewString()
 	require.NoError(t, features.SetFeatureEnabled(t.Context(), organizationID, productfeatures.FeatureLogs, true))
 
-	recorder, events, rollup := recordAttemptWithFeatures(t, features, organizationID)
+	recorder, events, rollup := recordAttemptWithLogs(t, realLogsCheck(features), organizationID)
 	require.Equal(t, uint64(3), events)
 	require.NotZero(t, rollup)
-	require.Zero(t, recorder.dropped(t, DropLogsOff))
+	require.Zero(t, recorder.dropped(t, dropLogsOff))
 }
 
 func TestLogs_TurnedOffWritesNothing(t *testing.T) {
@@ -644,42 +613,42 @@ func TestLogs_TurnedOffWritesNothing(t *testing.T) {
 	require.NoError(t, features.SetFeatureEnabled(t.Context(), organizationID, productfeatures.FeatureLogs, true))
 	require.NoError(t, features.SetFeatureEnabled(t.Context(), organizationID, productfeatures.FeatureLogs, false))
 
-	recorder, events, rollup := recordAttemptWithFeatures(t, features, organizationID)
+	recorder, events, rollup := recordAttemptWithLogs(t, realLogsCheck(features), organizationID)
 	require.Zero(t, events)
 	require.Zero(t, rollup)
-	require.Equal(t, int64(3), recorder.dropped(t, DropLogsOff))
-	require.Zero(t, stepsCounted(t, recorder), "no step metric for an organization with logs off")
+	require.Equal(t, int64(3), recorder.dropped(t, dropLogsOff))
+	require.Equal(t, 1, stepsCounted(t, recorder), "the step metric has no org, so it has no gap")
 }
 
 func TestLogs_NeverConfiguredWritesNothing(t *testing.T) {
 	t.Parallel()
 
 	organizationID := "org-logs-unset-" + uuid.NewString()
-	recorder, events, rollup := recordAttemptWithFeatures(t, realFeatures(t), organizationID)
+	recorder, events, rollup := recordAttemptWithLogs(t, realLogsCheck(realFeatures(t)), organizationID)
 	require.Zero(t, events)
 	require.Zero(t, rollup)
-	require.Equal(t, int64(3), recorder.dropped(t, DropLogsOff))
+	require.Equal(t, int64(3), recorder.dropped(t, dropLogsOff))
 }
 
 // A failed check never guesses on, and the caller never sees it.
 func TestLogs_LookupErrorWritesNothing(t *testing.T) {
 	t.Parallel()
 
-	failing := &fixedFeatures{enabled: true, err: errors.New("lookup failed"), block: nil, checks: atomic.Int64{}}
+	failing := &logsCheck{enabled: true, err: errors.New("lookup failed"), block: nil, panics: false, checks: atomic.Int64{}}
 	organizationID := "org-logs-error-" + uuid.NewString()
-	recorder, events, rollup := recordAttemptWithFeatures(t, failing, organizationID)
+	recorder, events, rollup := recordAttemptWithLogs(t, failing.check, organizationID)
 	require.Zero(t, events)
 	require.Zero(t, rollup)
-	require.Equal(t, int64(3), recorder.dropped(t, DropLogsCheck))
+	require.Equal(t, int64(3), recorder.dropped(t, dropLogsCheck))
 }
 
-func TestLogs_NoCheckerWritesNothing(t *testing.T) {
+func TestLogs_NoCheckWritesNothing(t *testing.T) {
 	t.Parallel()
 
 	organizationID := "org-logs-nil-" + uuid.NewString()
-	recorder, events, _ := recordAttemptWithFeatures(t, nil, organizationID)
+	recorder, events, _ := recordAttemptWithLogs(t, nil, organizationID)
 	require.Zero(t, events)
-	require.Equal(t, int64(3), recorder.dropped(t, DropLogsOff))
+	require.Equal(t, int64(3), recorder.dropped(t, dropLogsOff))
 }
 
 func TestLogs_SlowLookupDoesNotBlockTheRequestPath(t *testing.T) {
@@ -687,12 +656,12 @@ func TestLogs_SlowLookupDoesNotBlockTheRequestPath(t *testing.T) {
 
 	release := make(chan struct{})
 	defer close(release)
-	slow := &fixedFeatures{enabled: true, err: nil, block: release, checks: atomic.Int64{}}
+	slow := &logsCheck{enabled: true, err: nil, block: release, panics: false, checks: atomic.Int64{}}
 	conn := &scriptedConn{Conn: nil, block: nil, err: errors.New("refused"), prepares: atomic.Int64{}}
 	cfg := testConfig()
 	cfg.queueSize = 4
-	cfg.featureCheckTimeout = time.Minute
-	recorder := newTestRecorderWithFeatures(t, conn, cache.NoopCache, slow, cfg)
+	cfg.logsCheckTimeout = time.Minute
+	recorder := newTestRecorderWithLogs(t, conn, slow.check, cfg)
 	attempt := Begin(testScope())
 
 	require.Eventually(t, func() bool {
@@ -719,16 +688,16 @@ func TestLogs_SlowLookupDoesNotBlockTheRequestPath(t *testing.T) {
 func TestLogs_LookupTimeoutWritesNothing(t *testing.T) {
 	t.Parallel()
 
-	slow := &fixedFeatures{enabled: true, err: nil, block: make(chan struct{}), checks: atomic.Int64{}}
+	slow := &logsCheck{enabled: true, err: nil, block: make(chan struct{}), panics: false, checks: atomic.Int64{}}
 	conn := &scriptedConn{Conn: nil, block: nil, err: nil, prepares: atomic.Int64{}}
 	cfg := testConfig()
-	cfg.featureCheckTimeout = 20 * time.Millisecond
-	recorder := newTestRecorderWithFeatures(t, conn, cache.NoopCache, slow, cfg)
+	cfg.logsCheckTimeout = 20 * time.Millisecond
+	recorder := newTestRecorderWithLogs(t, conn, slow.check, cfg)
 
 	recorder.Step(t.Context(), Begin(testScope()), StepInboundAuthorize, ResultAccepted)
 	require.NoError(t, recorder.Shutdown(t.Context()))
 
-	require.Equal(t, int64(1), recorder.dropped(t, DropLogsCheck))
+	require.Equal(t, int64(1), recorder.dropped(t, dropLogsCheck))
 	require.Zero(t, conn.prepares.Load())
 }
 
@@ -736,12 +705,12 @@ func TestLogs_LookupTimeoutWritesNothing(t *testing.T) {
 func TestLogs_CheckedOncePerFlush(t *testing.T) {
 	t.Parallel()
 
-	features := logsOn()
+	check := &logsCheck{enabled: true, err: nil, block: nil, panics: false, checks: atomic.Int64{}}
 	conn := &scriptedConn{Conn: nil, block: nil, err: errors.New("refused"), prepares: atomic.Int64{}}
 	cfg := testConfig()
 	cfg.maxBatch = 1000
 	cfg.flushInterval = time.Hour
-	recorder := newTestRecorderWithFeatures(t, conn, cache.NoopCache, features, cfg)
+	recorder := newTestRecorderWithLogs(t, conn, check.check, cfg)
 
 	attempt := Begin(testScope())
 	for range 20 {
@@ -749,5 +718,37 @@ func TestLogs_CheckedOncePerFlush(t *testing.T) {
 	}
 	require.NoError(t, recorder.Shutdown(t.Context()))
 
-	require.Equal(t, int64(1), features.checks.Load())
+	require.Equal(t, int64(1), check.checks.Load())
+}
+
+func TestRecord_PanicOnTheWriterIsCountedAndSurvived(t *testing.T) {
+	t.Parallel()
+
+	check := &logsCheck{enabled: true, err: nil, block: nil, panics: true, checks: atomic.Int64{}}
+	conn := &scriptedConn{Conn: nil, block: nil, err: nil, prepares: atomic.Int64{}}
+	recorder := newTestRecorderWithLogs(t, conn, check.check, testConfig())
+
+	recorder.Step(t.Context(), Begin(testScope()), StepInboundAuthorize, ResultAccepted)
+	require.NoError(t, recorder.Shutdown(t.Context()), "the writer finished normally")
+
+	require.Equal(t, int64(1), recorder.dropped(t, dropPanic))
+}
+
+// During an outage one reason must not hide another in the logs.
+func TestDrop_LogsAreThrottledPerReason(t *testing.T) {
+	t.Parallel()
+
+	var logged bytes.Buffer
+	logger := slog.New(slog.NewTextHandler(&logged, nil))
+	recorder := newRecorder(logger, sdkmetric.NewMeterProvider(), &scriptedConn{Conn: nil, block: nil, err: nil, prepares: atomic.Int64{}}, logsOn, testConfig())
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	recorder.drop(t.Context(), dropQueueFull, 1, nil)
+	recorder.drop(t.Context(), dropQueueFull, 1, nil)
+	recorder.drop(t.Context(), dropTableMissing, 1, nil)
+	recorder.drop(t.Context(), dropLogsOff, 1, nil)
+
+	require.Equal(t, 1, strings.Count(logged.String(), string(dropQueueFull)))
+	require.Equal(t, 1, strings.Count(logged.String(), string(dropTableMissing)))
+	require.NotContains(t, logged.String(), string(dropLogsOff))
 }

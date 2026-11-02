@@ -17,9 +17,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
-	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -39,8 +37,7 @@ const (
 
 	eventsTable = "mcp_connection_events"
 
-	// defaultQueueSize holds about 2 MiB of rows. Sign-ins arrive at a few per
-	// second, so this covers a long ClickHouse stall before rows drop.
+	// defaultQueueSize holds about 2 MiB of rows, enough for a long ClickHouse stall.
 	defaultQueueSize = 4096
 
 	// defaultMaxBatch keeps one insert small enough to never be slow to send.
@@ -49,129 +46,117 @@ const (
 	// defaultFlushInterval is how long a row waits in memory when traffic is low.
 	defaultFlushInterval = time.Second
 
-	// defaultInsertTimeout bounds one insert, so a stalled ClickHouse costs
-	// queued rows and never a growing pile of goroutines.
+	// defaultInsertTimeout bounds one insert, so a stalled ClickHouse only costs queued rows.
 	defaultInsertTimeout = 3 * time.Second
 
-	// dropLogInterval limits drop logging during an outage, when every flush fails.
+	// dropLogInterval limits logging per reason during an outage.
 	dropLogInterval = time.Minute
 
-	// defaultFeatureCheckTimeout bounds one organization's logs check. A cache miss
-	// can take a lock and query Postgres. A slow check delays the queue, never a
-	// request, and then that organization's rows are not written.
-	defaultFeatureCheckTimeout = 500 * time.Millisecond
+	// defaultLogsCheckTimeout bounds one logs lookup. Releasing its lock can add up to 5s on the writer.
+	defaultLogsCheckTimeout = 500 * time.Millisecond
 
-	// endingCheckTimeout bounds the check that an attempt has not already ended.
-	// A slow check costs a queue delay, never a request, and then fails open.
-	endingCheckTimeout = 200 * time.Millisecond
-
-	// endedAttemptTTL outlives an attempt: a browser attempt can stay live about
-	// 50 minutes, and readers wait 90 before calling one abandoned.
-	endedAttemptTTL = 2 * time.Hour
-
-	// unknownTableCode is ClickHouse's UNKNOWN_TABLE: code rolled out before the
-	// migration that adds the table.
+	// unknownTableCode is ClickHouse's UNKNOWN_TABLE, seen when code ships before its migration.
 	unknownTableCode = 60
 )
 
-// DropReason says why rows were not written.
-type DropReason string
+// dropReason says why rows were not written.
+type dropReason string
 
 const (
-	DropQueueFull    DropReason = "queue_full"
-	DropTableMissing DropReason = "table_missing"
-	DropInsertFailed DropReason = "insert_failed"
-	DropInvalidEvent DropReason = "invalid_event"
-	DropShutdown     DropReason = "shutdown"
-	DropDuplicateEnd DropReason = "duplicate_ending"
-	DropLogsOff      DropReason = "logs_off"
-	DropLogsCheck    DropReason = "logs_check_failed"
+	dropQueueFull    dropReason = "queue_full"
+	dropTableMissing dropReason = "table_missing"
+	dropInsertFailed dropReason = "insert_failed"
+	dropInvalidEvent dropReason = "invalid_event"
+	dropShutdown     dropReason = "shutdown"
+	dropLogsOff      dropReason = "logs_off"
+	dropLogsCheck    dropReason = "logs_check_failed"
+	dropPanic        dropReason = "panic"
 )
 
 // shortLabel is the shape of a sub-reason or grant type. It is what keeps a raw
 // provider error message out of those columns.
 var shortLabel = regexp.MustCompile(`^[a-zA-Z0-9_:.-]{1,128}$`)
 
-// Option adds a detail to a step. Options are safe on nil and zero values.
-type Option func(*Row)
+// Option adds a detail to a step. Options are safe on zero values.
+type Option struct{ apply func(*Row) }
 
 // Subject is the session subject once known. Nil stores empty.
 func Subject(subject *urn.SessionSubject) Option {
-	return func(row *Row) {
+	return Option{apply: func(row *Row) {
 		if subject != nil && !subject.IsZero() {
 			row.SubjectURN = subject.String()
 		}
-	}
-}
-
-// Provider is the provider's issuer URL or host, normalized here.
-func Provider(issuer string) Option {
-	return func(row *Row) { row.ProviderHost = NormalizeProviderHost(issuer) }
-}
-
-// Member is the gateway member for member-level steps.
-func Member(id uuid.UUID) Option {
-	return func(row *Row) { row.MemberID = idString(id) }
+	}}
 }
 
 // Grant is the OAuth grant type on token steps. A value that is not a short
 // identifier is left out and the row is kept.
 func Grant(grantType string) Option {
-	return func(row *Row) {
+	return Option{apply: func(row *Row) {
 		if shortLabel.MatchString(grantType) {
 			row.GrantType = grantType
 		}
-	}
+	}}
 }
 
 // Detail is a finer label within the reason, such as org_lookup_failed. A value
 // that is not a short identifier is left out and the row is kept.
 func Detail(subReason string) Option {
-	return func(row *Row) {
+	return Option{apply: func(row *Row) {
 		if shortLabel.MatchString(subReason) {
 			row.SubReason = subReason
 		}
-	}
+	}}
+}
+
+// Provider is the provider's issuer URL or host, normalized here.
+func Provider(issuer string) Option {
+	return Option{apply: func(row *Row) { row.ProviderHost = NormalizeProviderHost(issuer) }}
+}
+
+// Member is the gateway member for member-level steps.
+func Member(id uuid.UUID) Option {
+	return Option{apply: func(row *Row) { row.MemberID = idString(id) }}
 }
 
 // Retries is how many retries this step spent.
 func Retries(n uint32) Option {
-	return func(row *Row) { row.Retries = n }
+	return Option{apply: func(row *Row) { row.Retries = n }}
 }
 
 // AuthClient is the mcp_auth_clients row.
 func AuthClient(id uuid.UUID) Option {
-	return func(row *Row) { row.AuthClientID = idString(id) }
+	return Option{apply: func(row *Row) { row.AuthClientID = idString(id) }}
 }
 
 // RemoteSessionIssuer is the upstream provider's remote_session_issuers row.
 func RemoteSessionIssuer(id uuid.UUID) Option {
-	return func(row *Row) { row.RemoteSessionIssuerID = idString(id) }
+	return Option{apply: func(row *Row) { row.RemoteSessionIssuerID = idString(id) }}
 }
 
 // UserSessionIssuer is the Speakeasy issuer's user_session_issuers row.
 func UserSessionIssuer(id uuid.UUID) Option {
-	return func(row *Row) { row.UserSessionIssuerID = idString(id) }
+	return Option{apply: func(row *Row) { row.UserSessionIssuerID = idString(id) }}
 }
 
 // UserSessionClient is the AI app's user_session_clients row.
 func UserSessionClient(id uuid.UUID) Option {
-	return func(row *Row) { row.UserSessionClientID = idString(id) }
+	return Option{apply: func(row *Row) { row.UserSessionClientID = idString(id) }}
 }
 
 // RemoteSessionClient is the remote_session_clients row.
 func RemoteSessionClient(id uuid.UUID) Option {
-	return func(row *Row) { row.RemoteSessionClientID = idString(id) }
+	return Option{apply: func(row *Row) { row.RemoteSessionClientID = idString(id) }}
 }
 
 // UserSession is the user_sessions row.
 func UserSession(id uuid.UUID) Option {
-	return func(row *Row) { row.UserSessionID = idString(id) }
+	return Option{apply: func(row *Row) { row.UserSessionID = idString(id) }}
 }
 
 // RemoteSession is the remote_sessions row.
 func RemoteSession(id uuid.UUID) Option {
-	return func(row *Row) { row.RemoteSessionID = idString(id) }
+	return Option{apply: func(row *Row) { row.RemoteSessionID = idString(id) }}
 }
 
 // Row is one mcp_connection_events row.
@@ -209,8 +194,7 @@ type Row struct {
 var errInvalidEvent = errors.New("invalid connection event")
 
 // RowAt builds a row without recording it, for seed data. Flows use Step, End
-// and Once. Outcome, result, reason and who fixes it come from what happened
-// and the catalog, and outcome is only ever set on a final row.
+// and Once. Outcome is only ever set on a final row.
 func RowAt(attempt Attempt, step Step, what Happened, final bool, at time.Time, opts ...Option) (Row, error) {
 	var none Row
 	if attempt.IsZero() || attempt.startedAt.IsZero() || !attempt.scope.valid() {
@@ -276,8 +260,8 @@ func RowAt(attempt Attempt, step Step, what Happened, final bool, at time.Time, 
 		AppKey:                appKey,
 	}
 	for _, opt := range opts {
-		if opt != nil {
-			opt(&row)
+		if opt.apply != nil {
+			opt.apply(&row)
 		}
 	}
 	return row, nil
@@ -322,81 +306,67 @@ func appendRowsInto(ctx context.Context, conn driver.Conn, table string, rows []
 	return nil
 }
 
-// endedAttempt marks that an attempt's ending was written, across replicas.
-type endedAttempt struct {
-	ID string `json:"id"`
-}
-
-var _ cache.CacheableObject[endedAttempt] = (*endedAttempt)(nil)
-
-func (e endedAttempt) CacheKey() string   { return "connectionAttemptEnded:" + e.ID }
-func (e endedAttempt) TTL() time.Duration { return endedAttemptTTL }
-
-// queuedRow is a row waiting for the writer.
-type queuedRow struct {
-	row Row
-
-	// checkEnding is set for an ending on an attempt that can span requests.
-	checkEnding bool
-}
-
-// FeatureChecker reads an organization's product features.
-type FeatureChecker interface {
-	IsFeatureEnabled(ctx context.Context, organizationID string, feature productfeatures.Feature) (bool, error)
-}
-
 // config holds the write path's bounds.
 type config struct {
-	table               string
-	queueSize           int
-	maxBatch            int
-	flushInterval       time.Duration
-	insertTimeout       time.Duration
-	featureCheckTimeout time.Duration
+	table            string
+	queueSize        int
+	maxBatch         int
+	flushInterval    time.Duration
+	insertTimeout    time.Duration
+	logsCheckTimeout time.Duration
 }
 
-// Recorder writes connection events. Its methods only queue a row: one
-// goroutine inserts, the queue is bounded, and rows that cannot be written are
-// dropped and counted. It never retries, has no error for a caller to handle,
-// and a nil Recorder does nothing. Rows of an organization with logs off are not
-// written, which the writer checks so no call site has to.
+// Recorder writes connection events. Its methods only queue a row. One goroutine checks the
+// logs setting and inserts, never retrying. Rows it can't write drop and count. Nil does nothing.
 type Recorder struct {
-	logger   *slog.Logger
-	conn     driver.Conn
-	features FeatureChecker
-	ended    cache.TypedCacheObject[endedAttempt]
-	capture  func(Row)
-	cfg      config
-	steps    metric.Int64Counter
-	dropped  metric.Int64Counter
+	logger      *slog.Logger
+	conn        driver.Conn
+	logsEnabled func(context.Context, string) (bool, error)
+	capture     func(Row)
+	cfg         config
+	steps       metric.Int64Counter
+	dropped     metric.Int64Counter
 
-	queue    chan queuedRow
+	queue    chan Row
 	stop     chan struct{}
 	done     chan struct{}
 	stopOnce sync.Once
 	stopped  atomic.Bool
-	lastDrop atomic.Int64
+	lastDrop map[dropReason]*atomic.Int64
 }
 
-// NewRecorder starts a recorder. Stop it with Shutdown. The cache enforces one
-// ending per attempt across replicas. Without a feature checker nothing is written.
-func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn driver.Conn, cacheImpl cache.Cache, features FeatureChecker) *Recorder {
-	return newRecorder(logger, meterProvider, conn, cacheImpl, features, config{
-		table:               eventsTable,
-		queueSize:           defaultQueueSize,
-		maxBatch:            defaultMaxBatch,
-		flushInterval:       defaultFlushInterval,
-		insertTimeout:       defaultInsertTimeout,
-		featureCheckTimeout: defaultFeatureCheckTimeout,
+func lastDropTimes() map[dropReason]*atomic.Int64 {
+	return map[dropReason]*atomic.Int64{
+		dropQueueFull:    {},
+		dropTableMissing: {},
+		dropInsertFailed: {},
+		dropInvalidEvent: {},
+		dropShutdown:     {},
+		dropLogsOff:      {},
+		dropLogsCheck:    {},
+		dropPanic:        {},
+	}
+}
+
+// NewRecorder starts a recorder. Stop it with Shutdown. Without logsEnabled
+// nothing is written.
+func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn driver.Conn, logsEnabled func(context.Context, string) (bool, error)) *Recorder {
+	return newRecorder(logger, meterProvider, conn, logsEnabled, config{
+		table:            eventsTable,
+		queueSize:        defaultQueueSize,
+		maxBatch:         defaultMaxBatch,
+		flushInterval:    defaultFlushInterval,
+		insertTimeout:    defaultInsertTimeout,
+		logsCheckTimeout: defaultLogsCheckTimeout,
 	})
 }
 
-func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn driver.Conn, cacheImpl cache.Cache, features FeatureChecker, cfg config) *Recorder {
+func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn driver.Conn, logsEnabled func(context.Context, string) (bool, error), cfg config) *Recorder {
 	logger = logger.With(attr.SlogComponent("connection_events"))
 	meter := meterProvider.Meter(meterScope)
 
 	steps, err := meter.Int64Counter(meterSteps,
-		metric.WithDescription("MCP connection attempt steps by outcome, step, reason, who fixes it and provider host."),
+		metric.WithDescription("MCP connection attempt steps by outcome, step, reason and who fixes it."),
 		metric.WithUnit("{step}"))
 	if err != nil {
 		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName(meterSteps), attr.SlogError(err))
@@ -409,93 +379,88 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 	}
 
 	r := &Recorder{
-		logger:   logger,
-		conn:     conn,
-		features: features,
-		ended:    cache.NewTypedObjectCache[endedAttempt](logger.With(attr.SlogCacheNamespace("connection_attempt_ended")), cacheImpl, cache.SuffixNone),
-		capture:  nil,
-		cfg:      cfg,
-		steps:    steps,
-		dropped:  dropped,
-		queue:    make(chan queuedRow, cfg.queueSize),
-		stop:     make(chan struct{}),
-		done:     make(chan struct{}),
-		stopOnce: sync.Once{},
-		stopped:  atomic.Bool{},
-		lastDrop: atomic.Int64{},
+		logger:      logger,
+		conn:        conn,
+		logsEnabled: logsEnabled,
+		capture:     nil,
+		cfg:         cfg,
+		steps:       steps,
+		dropped:     dropped,
+		queue:       make(chan Row, cfg.queueSize),
+		stop:        make(chan struct{}),
+		done:        make(chan struct{}),
+		stopOnce:    sync.Once{},
+		stopped:     atomic.Bool{},
+		lastDrop:    lastDropTimes(),
 	}
 	go r.run()
 	return r
 }
 
 // NewCapturing returns a recorder that hands each row to capture instead of
-// writing it, for tests. Use connectioneventstest rather than calling this.
-func NewCapturing(capture func(Row), features FeatureChecker) *Recorder {
+// writing it. Use connectioneventstest rather than calling this.
+func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (bool, error)) *Recorder {
 	return &Recorder{
-		logger:   slog.New(slog.DiscardHandler),
-		conn:     nil,
-		features: features,
-		ended:    cache.TypedCacheObject[endedAttempt]{},
-		capture:  capture,
-		cfg:      config{table: "", queueSize: 0, maxBatch: 0, flushInterval: 0, insertTimeout: 0, featureCheckTimeout: time.Second},
-		steps:    nil,
-		dropped:  nil,
-		queue:    nil,
-		stop:     nil,
-		done:     nil,
-		stopOnce: sync.Once{},
-		stopped:  atomic.Bool{},
-		lastDrop: atomic.Int64{},
+		logger:      slog.New(slog.DiscardHandler),
+		conn:        nil,
+		logsEnabled: logsEnabled,
+		capture:     capture,
+		cfg:         config{table: "", queueSize: 0, maxBatch: 0, flushInterval: 0, insertTimeout: 0, logsCheckTimeout: time.Second},
+		steps:       nil,
+		dropped:     nil,
+		queue:       nil,
+		stop:        nil,
+		done:        nil,
+		stopOnce:    sync.Once{},
+		stopped:     atomic.Bool{},
+		lastDrop:    lastDropTimes(),
 	}
 }
 
 // Step records a step that does not end the attempt.
 func (r *Recorder) Step(ctx context.Context, attempt Attempt, step Step, what Happened, opts ...Option) {
-	r.record(ctx, attempt, step, what, false, false, opts)
+	r.record(ctx, attempt, step, what, false, opts)
 }
 
-// End records the step that ends the attempt. Its outcome comes from what
-// happened: Connected for a Result, and the catalog's outcome for a Code. Only
-// the first ending of an attempt is written.
+// End records the step that ends the attempt. Its outcome is Connected for a
+// Result and the catalog's outcome for a Code. A flow ends an attempt once.
 func (r *Recorder) End(ctx context.Context, attempt Attempt, step Step, what Happened, opts ...Option) {
-	r.record(ctx, attempt, step, what, true, true, opts)
+	r.record(ctx, attempt, step, what, true, opts)
 }
 
 // Once records an attempt that is one request: one row, final.
 func (r *Recorder) Once(ctx context.Context, scope Scope, step Step, what Happened, opts ...Option) {
-	if r == nil {
-		return
-	}
-	r.record(ctx, Begin(scope), step, what, true, false, opts)
+	r.End(ctx, Begin(scope), step, what, opts...)
 }
 
-func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what Happened, final, checkEnding bool, opts []Option) {
-	if r == nil {
+func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what Happened, final bool, opts []Option) {
+	if r == nil || attempt.IsZero() {
 		return
 	}
 	row, err := RowAt(attempt, step, what, final, time.Now(), opts...)
 	if err != nil {
-		r.drop(ctx, DropInvalidEvent, 1, err)
+		r.drop(ctx, dropInvalidEvent, 1, err)
 		return
 	}
 	if spanCtx := trace.SpanContextFromContext(ctx); spanCtx.HasTraceID() {
 		row.TraceID = spanCtx.TraceID().String()
 	}
+	r.countStep(ctx, row)
 	if r.capture != nil {
-		if r.checkOrganization(row.OrganizationID) == "" {
+		if reason, _ := r.organizationAllowed(row.OrganizationID); reason == "" {
 			r.capture(row)
 		}
 		return
 	}
 
 	if r.stopped.Load() {
-		r.drop(ctx, DropShutdown, 1, nil)
+		r.drop(ctx, dropShutdown, 1, nil)
 		return
 	}
 	select {
-	case r.queue <- queuedRow{row: row, checkEnding: checkEnding}:
+	case r.queue <- row:
 	default:
-		r.drop(ctx, DropQueueFull, 1, nil)
+		r.drop(ctx, dropQueueFull, 1, nil)
 	}
 }
 
@@ -522,48 +487,50 @@ func (r *Recorder) run() {
 	ticker := time.NewTicker(r.cfg.flushInterval)
 	defer ticker.Stop()
 
-	// organizations holds each organization's logs check for one flush, so busy
-	// traffic costs one lookup per interval and a setting change applies quickly.
-	organizations := map[string]DropReason{}
+	// organizations holds each logs check for one flush: one lookup per organization per interval.
+	organizations := map[string]dropReason{}
 	batch := make([]Row, 0, r.cfg.maxBatch)
 	flush := func() {
 		clear(organizations)
-		if len(batch) > 0 {
-			r.insert(batch)
-			batch = batch[:0]
+		rows := batch
+		batch = make([]Row, 0, r.cfg.maxBatch)
+		if len(rows) > 0 {
+			r.surviving(len(rows), func() { r.insert(rows) })
 		}
 	}
-	add := func(queued queuedRow) {
-		ctx := context.Background()
-		reason, checked := organizations[queued.row.OrganizationID]
-		if !checked {
-			reason = r.checkOrganization(queued.row.OrganizationID)
-			organizations[queued.row.OrganizationID] = reason
-		}
-		if reason != "" {
-			r.drop(ctx, reason, 1, nil)
-			return
-		}
-		if queued.checkEnding && r.alreadyEnded(queued.row) {
-			return
-		}
-		r.countStep(ctx, queued.row)
-		batch = append(batch, queued.row)
+	add := func(row Row) {
+		r.surviving(1, func() {
+			reason, checked := organizations[row.OrganizationID]
+			if !checked {
+				var err error
+				reason, err = r.organizationAllowed(row.OrganizationID)
+				organizations[row.OrganizationID] = reason
+				if err != nil {
+					r.drop(context.Background(), reason, 1, err)
+					return
+				}
+			}
+			if reason != "" {
+				r.drop(context.Background(), reason, 1, nil)
+				return
+			}
+			batch = append(batch, row)
+		})
 		if len(batch) >= r.cfg.maxBatch {
 			flush()
 		}
 	}
 	for {
 		select {
-		case queued := <-r.queue:
-			add(queued)
+		case row := <-r.queue:
+			add(row)
 		case <-ticker.C:
 			flush()
 		case <-r.stop:
 			for {
 				select {
-				case queued := <-r.queue:
-					add(queued)
+				case row := <-r.queue:
+					add(row)
 				default:
 					flush()
 					return
@@ -573,69 +540,49 @@ func (r *Recorder) run() {
 	}
 }
 
-// recordingEnabled decides whether an organization's attempts are stored. It
-// follows the organization's logs setting, and is the only place that does.
-func (r *Recorder) recordingEnabled(ctx context.Context, organizationID string) (bool, error) {
-	if r.features == nil {
-		return false, nil
-	}
-	enabled, err := r.features.IsFeatureEnabled(ctx, organizationID, productfeatures.FeatureLogs)
-	if err != nil {
-		return false, fmt.Errorf("check logs feature: %w", err)
-	}
-	return enabled, nil
+// surviving runs fn and counts its rows as dropped if it panics.
+func (r *Recorder) surviving(rows int, fn func()) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			r.drop(context.Background(), dropPanic, rows, fmt.Errorf("connection events writer: %v", recovered))
+		}
+	}()
+	fn()
 }
 
-// checkOrganization runs off the request path on its own context. It returns
-// why the organization's rows are not written, or "" to write them. A check that
-// fails or times out means do not write.
-func (r *Recorder) checkOrganization(organizationID string) DropReason {
-	ctx, cancel := context.WithTimeout(context.Background(), r.cfg.featureCheckTimeout)
+// organizationAllowed is the one place that decides whether an organization's attempts
+// are stored. It returns why not, or "" to store them. A check that fails means do not store.
+func (r *Recorder) organizationAllowed(organizationID string) (dropReason, error) {
+	if r.logsEnabled == nil {
+		return dropLogsOff, nil
+	}
+	ctx, cancel := context.WithTimeout(context.Background(), r.cfg.logsCheckTimeout)
 	defer cancel()
 
-	enabled, err := r.recordingEnabled(ctx, organizationID)
+	enabled, err := r.logsEnabled(ctx, organizationID)
 	switch {
 	case err != nil:
-		r.logger.WarnContext(ctx, "check connection events allowed", attr.SlogError(err))
-		return DropLogsCheck
+		return dropLogsCheck, fmt.Errorf("check logs setting: %w", err)
 	case !enabled:
-		return DropLogsOff
+		return dropLogsOff, nil
 	default:
-		return ""
+		return "", nil
 	}
 }
 
-// alreadyEnded claims the attempt's ending. A failed check lets the row through:
-// the rollup counts an attempt once anyway, and losing an ending is worse.
-func (r *Recorder) alreadyEnded(row Row) bool {
-	ctx, cancel := context.WithTimeout(context.Background(), endingCheckTimeout)
-	defer cancel()
-
-	first, err := r.ended.StoreIfAbsent(ctx, endedAttempt{ID: row.AttemptID.String()})
-	if err != nil {
-		r.logger.WarnContext(ctx, "check connection attempt ending", attr.SlogError(err))
-		return false
-	}
-	if !first {
-		r.drop(ctx, DropDuplicateEnd, 1, nil)
-	}
-	return !first
-}
-
-// insert writes one batch once. async_insert=1 with no wait setting leaves the
-// wait to the connection: production acks once ClickHouse has queued the rows.
+// insert writes one batch once and waits for the commit, so failures are counted.
 func (r *Recorder) insert(rows []Row) {
 	ctx, cancel := context.WithTimeout(context.Background(), r.cfg.insertTimeout)
 	defer cancel()
 
-	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{"async_insert": 1}))
+	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{"async_insert": 1, "wait_for_async_insert": 1}))
 	err := appendRowsInto(ctx, r.conn, r.cfg.table, rows)
 	if err == nil {
 		return
 	}
-	reason := DropInsertFailed
+	reason := dropInsertFailed
 	if exception, ok := errors.AsType[*clickhouse.Exception](err); ok && exception.Code == unknownTableCode {
-		reason = DropTableMissing
+		reason = dropTableMissing
 	}
 	r.drop(ctx, reason, len(rows), err)
 }
@@ -649,21 +596,21 @@ func (r *Recorder) countStep(ctx context.Context, row Row) {
 		attr.ConnectionStep(row.Step),
 		attr.ConnectionReason(row.Reason),
 		attr.ConnectionWhoFixes(row.WhoFixes),
-		attr.ConnectionProviderHost(row.ProviderHost),
 	))
 }
 
-func (r *Recorder) drop(ctx context.Context, reason DropReason, rows int, cause error) {
+func (r *Recorder) drop(ctx context.Context, reason dropReason, rows int, cause error) {
 	if r.dropped != nil {
 		r.dropped.Add(ctx, int64(rows), metric.WithAttributes(attr.ConnectionDropReason(string(reason))))
 	}
-	if reason == DropLogsOff {
-		// Expected for any organization with logs off, so it is only counted.
+	// Expected for any organization with logs off, so it is only counted.
+	if reason == dropLogsOff {
 		return
 	}
+	last := r.lastDrop[reason]
 	now := time.Now().UnixNano()
-	last := r.lastDrop.Load()
-	if now-last < int64(dropLogInterval) || !r.lastDrop.CompareAndSwap(last, now) {
+	previous := last.Load()
+	if now-previous < int64(dropLogInterval) || !last.CompareAndSwap(previous, now) {
 		return
 	}
 	attrs := []any{attr.SlogConnectionDropReason(string(reason))}

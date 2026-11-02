@@ -1,6 +1,8 @@
 package connectionevents
 
 import (
+	"maps"
+	"slices"
 	"strings"
 	"testing"
 
@@ -18,7 +20,6 @@ var frozenCodes = []string{
 	"network_denied",
 	"custom_domain_required",
 	"custom_domain_not_ready",
-	"idp_misconfigured",
 	"idp_unavailable",
 	"ai_tool_check_unavailable",
 	"cimd_fetch_failed",
@@ -33,17 +34,10 @@ var frozenCodes = []string{
 	"expired",
 	"session_changed",
 	"canceled",
-	"client_not_admitted",
-	"client_blocked",
 	"endpoint_not_agent_addressable",
 	"subject_not_admitted",
-	"issuer_untrusted",
 	"client_not_cimd",
 	"subject_not_provisioned",
-	"subject_not_authorized",
-	"client_invalid",
-	"client_metadata_unavailable",
-	"client_check_unavailable",
 	"invalid_request",
 	"resource_not_available",
 	"assertion_invalid",
@@ -56,8 +50,8 @@ var frozenCodes = []string{
 	"provider_oauth_invalid_client",
 	"provider_oauth_invalid_scope",
 	"provider_oauth_invalid_grant",
+	"provider_denied",
 	"issuer_mismatch",
-	"tunnel_unreachable",
 	"connection_changed",
 	"unrenewable_token",
 	"rejected_by_member",
@@ -72,7 +66,6 @@ var frozenCodes = []string{
 	"access_denied",
 	"scope_policy_denied",
 	"invalid_target",
-	"invalid_client",
 	"malformed_assertion",
 	"insufficient_scope",
 	"malformed_response",
@@ -105,18 +98,15 @@ var frozenCodes = []string{
 	"upstream_ema_refused",
 	"invalid_grant",
 	"no_grant",
-	"rejected",
-	"upstream_error",
-	"rate_limited",
-	"unreachable",
+	"refresh_rejected",
 	"internal_error",
 	"offline_not_requested",
 	"offline_unsupported",
-	"refused",
-	"configuration",
+	"renewal_refused",
+	"renewal_misconfigured",
 	"invalid_identity",
-	"retryable",
-	"ambiguous",
+	"renewal_retryable",
+	"renewal_ambiguous",
 	"needs_sign_in",
 	"consent_not_approved",
 }
@@ -169,10 +159,7 @@ const (
 func TestCatalog_CodesAreAppendOnly(t *testing.T) {
 	t.Parallel()
 
-	got := make([]string, 0, len(frozenCodes))
-	for _, code := range Codes() {
-		got = append(got, code.String())
-	}
+	got := slices.Collect(maps.Keys(catalog))
 	for _, name := range frozenCodes {
 		require.Contains(t, got, name, "code was renamed or removed")
 	}
@@ -197,7 +184,7 @@ func TestCatalog_ResultsAndStepsAreNotRenamed(t *testing.T) {
 func TestCatalog_RetiredNamesStayRetired(t *testing.T) {
 	t.Parallel()
 
-	for _, retired := range []string{"credential_blocked", "consent_blocked", "unknown", "session-changed"} {
+	for _, retired := range []string{"credential_blocked", "consent_blocked", "unknown", "session-changed", "ambiguous", "retryable", "configuration", "refused", "rejected"} {
 		_, ok := MeaningOf(retired)
 		require.False(t, ok, retired)
 		require.NotContains(t, frozenResults, retired)
@@ -207,12 +194,10 @@ func TestCatalog_RetiredNamesStayRetired(t *testing.T) {
 func TestCatalog_EveryCodeHasAMeaningPeopleCanRead(t *testing.T) {
 	t.Parallel()
 
-	for _, code := range Codes() {
-		t.Run(code.String(), func(t *testing.T) {
+	for name, meaning := range catalog {
+		t.Run(name, func(t *testing.T) {
 			t.Parallel()
 
-			meaning, ok := MeaningOf(code.String())
-			require.True(t, ok)
 			require.Contains(t, []Outcome{OutcomeConnected, OutcomeFailed, OutcomeBlocked, OutcomeDeclined}, meaning.Outcome)
 			require.NotEmpty(t, meaning.WhatHappened)
 			require.NotEmpty(t, meaning.WhatToDo)
@@ -251,13 +236,12 @@ func TestCatalog_StageDependentPartiesAreSeparateCodes(t *testing.T) {
 	}
 }
 
-func TestCodeNamed(t *testing.T) {
+// The merged pairs each had one meaning and one party, so one code stands for both.
+func TestCatalog_SameMeaningHasOneCode(t *testing.T) {
 	t.Parallel()
 
-	code, ok := CodeNamed("provider_rate_limited")
-	require.True(t, ok)
-	require.Equal(t, CodeProviderRateLimited, code)
-
-	_, ok = CodeNamed("made_up")
-	require.False(t, ok)
+	for _, merged := range []string{"issuer_untrusted", "client_not_admitted", "client_blocked", "subject_not_authorized", "invalid_client", "rate_limited", "unreachable", "client_check_unavailable", "client_metadata_unavailable", "client_invalid", "tunnel_unreachable", "upstream_error", "idp_misconfigured"} {
+		_, ok := MeaningOf(merged)
+		require.False(t, ok, merged)
+	}
 }

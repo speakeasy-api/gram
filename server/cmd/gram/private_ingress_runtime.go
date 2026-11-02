@@ -297,7 +297,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		return nil, fmt.Errorf("build tunnel http client: %w", err)
 	}
 	protectedResources := protectedresource.NewProber(db, guardianPolicy)
-	connectionRecorder := connectionevents.NewRecorder(logger, meterProvider, chDB, cacheImpl, productFeatures)
+	connectionRecorder := connectionevents.NewRecorder(logger, meterProvider, chDB, logsEnabled)
 	r.cleanup = append(r.cleanup, connectionRecorder.Shutdown)
 	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags, connectionRecorder)
 	if err != nil {
@@ -308,6 +308,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	tunnelCollector, stopTunnelMetrics := newTunnelMetrics(ctx, logger, broker)
 	r.cleanup = append(r.cleanup, stopTunnelMetrics)
 	mcpService, err := newMCPService(c, mcpServiceDependencies{
+		Connections:      connectionRecorder,
 		CallerAssertions: callerAssertions,
 		IssuerGate:       issuerGate, IssuerSigner: issuerSigner,
 		Logger: logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
@@ -326,7 +327,6 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	if err != nil {
 		return nil, err
 	}
-	mcpService.SetConnectionRecorder(connectionRecorder)
 	// The private ingress serves no authentication host routes, but must know
 	// the host to derive the shared authorization servers issuers pin there.
 	mcp.RecordAuthenticationHost(authenticationHost, mcpService)

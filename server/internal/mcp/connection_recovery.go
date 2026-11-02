@@ -221,7 +221,7 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 		Authority:           networkingress.Authority{Surface: "", BaseURL: "", OrganizationID: "", NetworkIngressID: uuid.Nil, NamespaceKind: "", CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}},
 		BrowserCookieID:     "",
 		BrowserHash:         "",
-		Attempt:             connectionevents.NoAttempt,
+		Attempt:             connectionevents.Begin(connectionevents.ServerScope(recovery.OrganizationID, recovery.ProjectID, recovery.McpServerID, connectionevents.AppRecoveryLink)),
 	}, clients[0])
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "start connection login").LogError(ctx, s.logger)

@@ -364,7 +364,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		return fmt.Errorf("build tunnel http client: %w", err)
 	}
 	protectedResources := protectedresource.NewProber(db, guardianPolicy)
-	connectionRecorder := connectionevents.NewRecorder(logger, meterProvider, chDB, cacheImpl, productFeatures)
+	connectionRecorder := connectionevents.NewRecorder(logger, meterProvider, chDB, logsEnabled)
 	shutdown.funcs = append(shutdown.funcs, connectionRecorder.Shutdown)
 	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags, connectionRecorder)
 	if err != nil {
@@ -376,6 +376,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		return errors.Join(stopTunnelMetrics(ctx), stopClient(ctx))
 	}
 	mcpService, err := newMCPService(c, mcpServiceDependencies{
+		Connections:      connectionRecorder,
 		CallerAssertions: callerAssertions,
 		IssuerGate:       issuerGate, IssuerSigner: issuerSigner,
 		Logger: logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
@@ -394,7 +395,6 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	if err != nil {
 		return err
 	}
-	mcpService.SetConnectionRecorder(connectionRecorder)
 	// Consent runs on this tier in production. Compose the same attachment
 	// service and transactional owner authorizer as gram start, without mounting
 	// its dashboard RPC routes or introducing a Temporal client.

@@ -1184,7 +1184,7 @@ func newStartCommand() *cli.Command {
 
 			// One prober per replica, shared by the proxy's on-use refresh and the login's probe.
 			protectedResources := protectedresource.NewProber(db, guardianPolicy)
-			connectionRecorder := connectionevents.NewRecorder(logger, meterProvider, chDB, cache.NewRedisCacheAdapter(redisClient), productFeatures)
+			connectionRecorder := connectionevents.NewRecorder(logger, meterProvider, chDB, logsEnabled)
 			shutdownFuncs = append(shutdownFuncs, connectionRecorder.Shutdown)
 			remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags, connectionRecorder)
 			if err != nil {
@@ -1243,6 +1243,7 @@ func newStartCommand() *cli.Command {
 			tunnelCollector, stopTunnelMetrics := newTunnelMetrics(ctx, logger, psbroker)
 			tunnelMetricsShutdown = stopTunnelMetrics
 			mcpService, err := newMCPService(c, mcpServiceDependencies{
+				Connections:      connectionRecorder,
 				CallerAssertions: callerAssertions,
 				IssuerGate:       issuerGate, IssuerSigner: issuerSigner,
 				Logger: logger, Tracer: tracerProvider, Meter: meterProvider, DB: db, Redis: redisClient,
@@ -1261,7 +1262,6 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
-			mcpService.SetConnectionRecorder(connectionRecorder)
 			// The keepalive re-check runs on the API process: the probe needs the runtime's endpoint routing and proxy builders.
 			mcpService.StartRemoteSessionRecheck(ctx)
 
