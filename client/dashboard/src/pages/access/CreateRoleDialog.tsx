@@ -305,6 +305,7 @@ export function CreateRoleDialog({
           current,
           baseline: initialGrants,
           stored: storedGrants,
+          scopes: scopesData?.scopes ?? [],
         }),
       );
       setInitialGrants(storedGrants);

@@ -187,4 +187,27 @@ describe("following the role after it is read again", () => {
 
     expect(next.remote_session).toBe("unset");
   });
+
+  it("does not remove a type the role gained elsewhere when saving", () => {
+    const refreshed = role([
+      {
+        scope: "mcp:auth",
+        selectors: [
+          {
+            resourceKind: "mcp_auth_client",
+            resourceId: "*",
+            clientType: "service_account",
+          },
+        ],
+      },
+    ]);
+    const next = rebaseClientTypeRules({
+      current: { remote_session: "allow" },
+      baseline: {},
+      stored: clientTypeRulesFromRole(refreshed),
+    });
+
+    const { removeGrants } = clientTypeGrantChanges(refreshed, next);
+    expect(removeGrants).toEqual([]);
+  });
 });
