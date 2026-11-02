@@ -144,7 +144,13 @@ describe("create connection reauthentication", () => {
           }}
         />,
       );
-      // The only row, so it starts expanded.
+      // Rows start closed; the badge alone says how it signs in.
+      expect(
+        screen.queryByRole("button", {
+          name: status === "missing" ? "Connect account" : "Reauthenticate",
+        }),
+      ).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: /^Example server/ }));
       fireEvent.click(
         screen.getByRole("button", {
           name: status === "missing" ? "Connect account" : "Reauthenticate",

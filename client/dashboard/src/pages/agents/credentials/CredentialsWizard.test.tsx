@@ -290,7 +290,7 @@ function setup(initialPlatformKey?: string, initialEntry = "/") {
 }
 
 async function continueFromAuthentication() {
-  await screen.findByRole("heading", { name: "MCP Authentication" });
+  await screen.findByRole("heading", { name: "MCP sign-in" });
   const next = screen.getByRole("button", { name: "Continue" });
   await waitFor(() => expect(next.hasAttribute("disabled")).toBe(false));
   fireEvent.click(next);
@@ -1764,8 +1764,8 @@ describe("Editing an agent that already exists", () => {
     // Marked done rather than ahead: an agent that exists has settled what
     // it signs in with. The state is asserted, not merely the label: a cell
     // carries its state in its own accessible name.
-    const credential = screen.getByRole("button", { name: /Credential/ });
-    expect(credential.getAttribute("aria-label")).toBe("Credential (done)");
+    const credential = screen.getByRole("button", { name: /Agent sign-in/ });
+    expect(credential.getAttribute("aria-label")).toBe("Agent sign-in (done)");
     expect(credential.textContent).not.toContain("Current");
     // The step the reader is on keeps its place even though everything from
     // the credential on is settled.
@@ -1778,8 +1778,8 @@ describe("Editing an agent that already exists", () => {
     editing();
     // Settled steps are still destinations, and a reader standing on one has
     // to be able to see where they are.
-    fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
-    const credential = screen.getByRole("button", { name: /Credential/ });
+    fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
+    const credential = screen.getByRole("button", { name: /Agent sign-in/ });
     expect(credential.getAttribute("aria-current")).toBe("step");
     expect(credential.textContent).toContain("Current");
   });
@@ -2132,7 +2132,7 @@ describe("Editing an agent that already exists", () => {
     // "All servers" names the reach it actually has, not the agent's project.
     expect(screen.getByText(/Every server in Example Org/)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Issue key" }));
 
     // Discovery offers no wildcard here, only the servers one by one, so the
@@ -2180,7 +2180,7 @@ describe("Editing an agent that already exists", () => {
     const all = await screen.findByRole("checkbox", { name: "All servers" });
     await waitFor(() => expect(all.getAttribute("data-state")).toBe("checked"));
 
-    fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Issue key" }));
 
     await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
@@ -2371,7 +2371,7 @@ describe("Editing an agent that already exists", () => {
 
     async function reachWorkloadStep() {
       editing();
-      fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+      fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
       fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
       await screen.findByRole("heading", { name: "Your cluster" });
       fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -2443,7 +2443,7 @@ describe("Editing an agent that already exists", () => {
 
     it("trusts a new cluster and moves the rule to it", async () => {
       editing();
-      fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+      fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
       fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
       await screen.findByRole("heading", { name: "Your cluster" });
       fireEvent.change(screen.getByLabelText("Cluster name"), {
@@ -2605,7 +2605,7 @@ describe("Editing an agent that already exists", () => {
         },
       ]);
       editing();
-      fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+      fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
       fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
       await screen.findByRole("heading", { name: "Anthropic organization" });
       const field = screen.getByLabelText(
@@ -2647,7 +2647,7 @@ describe("Editing an agent that already exists", () => {
         },
       ]);
       editing();
-      fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+      fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
       fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
       await screen.findByRole("heading", { name: "Identity provider" });
       fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -2681,7 +2681,7 @@ describe("Editing an agent that already exists", () => {
         },
       ]);
       editing();
-      fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+      fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
       fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
       await screen.findByRole("heading", { name: "Identity provider" });
       fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -2776,7 +2776,7 @@ describe("Servers that sign in as a person", () => {
     expect(screen.queryByText(/owner@upstream.test/)).toBeNull();
     fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP Authentication" });
+    await screen.findByRole("heading", { name: "MCP sign-in" });
     expect(
       (await screen.findAllByText(/Your connection|Uses your connection/))
         .length,
@@ -2924,7 +2924,7 @@ describe("Servers that sign in as a person", () => {
       await waitFor(() => expect(server.hasAttribute("disabled")).toBe(false));
       fireEvent.click(server);
       fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-      await screen.findByRole("heading", { name: "MCP Authentication" });
+      await screen.findByRole("heading", { name: "MCP sign-in" });
       const next = screen.getByRole("button", { name: "Continue" });
       await waitFor(() => expect(next.hasAttribute("disabled")).toBe(true));
       fireEvent.click(next);
@@ -2939,10 +2939,12 @@ describe("Servers that sign in as a person", () => {
       const open = vi
         .spyOn(window, "open")
         .mockReturnValue(popup as unknown as Window);
-      // The first row starts expanded.
-      screen.getByRole("button", {
-        name: /Linear.*(?:Expired|Requires connection)/,
-      });
+      // Rows start closed: open Linear's to reach its connection.
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: /Linear.*(?:Expired|Requires connection)/,
+        }),
+      );
       fireEvent.click(
         await screen.findByRole("button", {
           name: state === "expired" ? "Reauthenticate" : "Connect account",
@@ -3026,11 +3028,9 @@ describe("Servers that sign in as a person", () => {
     await reachServers();
     fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP Authentication" });
+    await screen.findByRole("heading", { name: "MCP sign-in" });
     fireEvent.click(screen.getByRole("button", { name: "Remove Linear" }));
-    expect(
-      screen.getByRole("heading", { name: "MCP Authentication" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "MCP sign-in" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Remove Linear" })).toBeNull();
     expect(
       screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
@@ -3042,7 +3042,7 @@ describe("Servers that sign in as a person", () => {
     await reachServers();
     fireEvent.click(await enabledAllServers());
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP Authentication" });
+    await screen.findByRole("heading", { name: "MCP sign-in" });
     expect(
       (await screen.findByText(/No usable connection available for/))
         .textContent,
