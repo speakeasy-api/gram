@@ -7,6 +7,15 @@ import type { AdminOnboardingStep } from "@gram/admin-client/models/components/a
 import { PlaybookStepEditor } from "@/components/onboarding/PlaybookStepEditor";
 import { Button } from "@/components/ui/button";
 import {
+  Select,
+  SelectContent,
+  SelectGroup,
+  SelectItem,
+  SelectLabel,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/select";
+import {
   Dialog,
   DialogContent,
   DialogDescription,
@@ -15,6 +24,7 @@ import {
   DialogTitle,
 } from "@/components/ui/dialog";
 import { organizationQuery } from "@/lib/adminQueries";
+import { onboardingPresets } from "@/lib/onboardingPresets";
 import { errorMessage } from "@/lib/gramAdminApi";
 import {
   assignAdminOrganizationOnboardingPlaybook,
@@ -53,7 +63,12 @@ export function OnboardingRoute(): JSX.Element {
 }
 
 type DraftChoice =
-  | { kind: "custom"; steps: string[]; current?: AdminOnboardingPlaybook }
+  | {
+      kind: "custom";
+      steps: string[];
+      current?: AdminOnboardingPlaybook;
+      presetName?: string;
+    }
   | { kind: "template"; template: AdminOnboardingPlaybook };
 
 type Draft = DraftChoice & { base: string };
@@ -323,6 +338,13 @@ export function Onboarding({
     templates.data?.playbooks.filter((template) => !template.organizationId) ??
     [];
   const selected = shared.find((template) => template.id === templateId);
+  const selectedPreset = onboardingPresets.find(
+    (preset) => `preset:${preset.id}` === templateId,
+  );
+  const presetAvailable = (stepSlugs: readonly string[]) =>
+    stepSlugs.every((slug) =>
+      steps.data?.steps.some((step) => step.slug === slug && !step.parentSlug),
+    );
   const readFailed = assignment.isError || steps.isError;
   const ready = !readFailed && !!assignment.data && !!steps.data;
   const busy = save.isPending;
@@ -398,8 +420,11 @@ export function Onboarding({
           <>
             {draft?.kind === "custom" ? (
               <>
+                {draft.presetName && (
+                  <h3 className="font-medium">Review {draft.presetName}</h3>
+                )}
                 <p>
-                  Changes apply immediately to this organization. Existing
+                  Saving applies these changes to this organization. Existing
                   progress and assignees are kept.
                 </p>
                 {!draft.current ||
@@ -517,8 +542,8 @@ export function Onboarding({
             Use a template
           </h2>
           <p className="text-muted-foreground text-sm">
-            Start from a shared template, copied for this organization. No
-            shared template is edited here.
+            Start from a built-in preset or a shared template. Review before
+            saving; shared templates are never edited here.
           </p>
           {templates.isError ? (
             <div role="alert">
@@ -532,32 +557,78 @@ export function Onboarding({
           ) : (
             <>
               <label className="block" htmlFor="onboarding-template">
-                Shared template
+                Onboarding template
               </label>
-              <select
-                id="onboarding-template"
-                className="border-input bg-background rounded-md border p-2"
+              <Select
                 value={templateId}
                 disabled={busy}
-                onChange={(event) => setTemplateId(event.target.value)}
+                onValueChange={setTemplateId}
               >
-                <option value="">Choose a template</option>
-                {shared.map((template) => (
-                  <option key={template.id} value={template.id}>
-                    {template.useCaseName ? `${template.useCaseName} — ` : ""}
-                    {template.name}
-                  </option>
-                ))}
-              </select>
+                <SelectTrigger
+                  id="onboarding-template"
+                  className="w-full max-w-md"
+                >
+                  <SelectValue placeholder="Choose a template" />
+                </SelectTrigger>
+                <SelectContent>
+                  <SelectGroup>
+                    <SelectLabel>Presets</SelectLabel>
+                    {onboardingPresets.map((preset) => (
+                      <SelectItem
+                        key={preset.id}
+                        value={`preset:${preset.id}`}
+                        disabled={!presetAvailable(preset.stepSlugs)}
+                      >
+                        {preset.name}
+                      </SelectItem>
+                    ))}
+                  </SelectGroup>
+                  {shared.length > 0 && (
+                    <SelectGroup>
+                      <SelectLabel>Shared templates</SelectLabel>
+                      {shared.map((template) => (
+                        <SelectItem key={template.id} value={template.id}>
+                          {template.useCaseName
+                            ? `${template.useCaseName} — `
+                            : ""}
+                          {template.name}
+                        </SelectItem>
+                      ))}
+                    </SelectGroup>
+                  )}
+                </SelectContent>
+              </Select>
+              {selectedPreset && (
+                <p className="text-muted-foreground text-sm">
+                  {selectedPreset.description}
+                </p>
+              )}
               {shared.length === 0 && <p>No shared templates are available.</p>}
               <Button
                 variant="outline"
-                disabled={!selected || !ready || busy}
+                disabled={
+                  (!selected && !selectedPreset) ||
+                  !ready ||
+                  busy ||
+                  (!!selectedPreset &&
+                    !presetAvailable(selectedPreset.stepSlugs))
+                }
                 onClick={() => {
-                  if (selected) begin({ kind: "template", template: selected });
+                  if (
+                    selectedPreset &&
+                    presetAvailable(selectedPreset.stepSlugs)
+                  ) {
+                    begin({
+                      kind: "custom",
+                      current,
+                      steps: [...selectedPreset.stepSlugs],
+                      presetName: selectedPreset.name,
+                    });
+                  } else if (selected)
+                    begin({ kind: "template", template: selected });
                 }}
               >
-                Review template
+                {selectedPreset ? "Review preset" : "Review template"}
               </Button>
             </>
           )}

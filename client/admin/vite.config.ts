@@ -111,6 +111,7 @@ export default defineConfig(({ command }) => {
       },
     },
     server: {
+      host: process.env["GRAM_BIND_IP"] || "127.0.0.1",
       // Fail on a taken port rather than sliding to the next one: the port is
       // part of the origin, and GRAM_ADMIN_ALLOWED_ORIGINS has to name it
       // exactly.

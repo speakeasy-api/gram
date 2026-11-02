@@ -9,6 +9,7 @@ import { QueryClient } from "@tanstack/react-query";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { Onboarding } from "./Onboarding";
 import { renderWithApp } from "@/test/harness";
+import { onboardingPresets } from "@/lib/onboardingPresets";
 
 const api = vi.hoisted(() => ({
   assignment: vi.fn(),
@@ -101,10 +102,10 @@ const edit = async () =>
     await screen.findByRole("button", { name: "Edit wizard steps" }),
   );
 const chooseTemplate = async () => {
-  await screen.findByRole("option", { name: "Shared wizard" });
-  fireEvent.change(screen.getByLabelText("Shared template"), {
-    target: { value: "shared" },
-  });
+  fireEvent.click(
+    await screen.findByRole("combobox", { name: "Onboarding template" }),
+  );
+  fireEvent.click(await screen.findByRole("option", { name: "Shared wizard" }));
   fireEvent.click(screen.getByRole("button", { name: "Review template" }));
 };
 
@@ -112,7 +113,14 @@ describe("tenant onboarding", () => {
   it("explains default fallback and exposes only shared templates", async () => {
     await render();
     await screen.findByText(/saved task selection and catalog defaults/);
+    fireEvent.click(
+      await screen.findByRole("combobox", { name: "Onboarding template" }),
+    );
+    expect(
+      await screen.findByRole("option", { name: "Shared wizard" }),
+    ).toBeTruthy();
     expect(screen.queryByRole("option", { name: "Our wizard" })).toBeNull();
+    fireEvent.keyDown(screen.getByRole("listbox"), { key: "Escape" });
     expect(
       screen
         .getByRole("link", { name: "Manage shared templates" })
@@ -120,6 +128,59 @@ describe("tenant onboarding", () => {
     ).toBe("/onboarding-playbooks");
     expect(screen.getByText("Stack editor")).toBeTruthy();
     expect(screen.queryByRole("button", { name: /reset|delete/i })).toBeNull();
+  });
+  it.each(onboardingPresets)(
+    "stages and saves the $name preset in order",
+    async (preset) => {
+      api.assignment.mockResolvedValue({ playbook: owned });
+      api.steps.mockResolvedValue({
+        steps: [
+          ...catalog,
+          ...[
+            ...new Set(
+              onboardingPresets.flatMap((item) => [...item.stepSlugs]),
+            ),
+          ].map((slug) => ({ slug, title: slug })),
+        ],
+      });
+      await render();
+      fireEvent.click(
+        await screen.findByRole("combobox", { name: "Onboarding template" }),
+      );
+      fireEvent.click(await screen.findByRole("option", { name: preset.name }));
+      expect(screen.getByText(preset.description)).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Review preset" }));
+      await screen.findByRole("heading", { name: `Review ${preset.name}` });
+      expect(api.update).not.toHaveBeenCalled();
+      expect(api.create).not.toHaveBeenCalled();
+      expect(api.assign).not.toHaveBeenCalled();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Save wizard steps" }),
+      );
+      await screen.findByText("Onboarding saved.");
+      expect(api.update).toHaveBeenCalledExactlyOnceWith({
+        organizationId: "org_test",
+        playbookId: owned.id,
+        name: owned.name,
+        description: owned.description,
+        stepSlugs: [...preset.stepSlugs],
+      });
+      expect(api.assign).not.toHaveBeenCalled();
+    },
+  );
+  it("disables presets when the step catalog is missing required steps", async () => {
+    await render();
+    fireEvent.click(
+      await screen.findByRole("combobox", { name: "Onboarding template" }),
+    );
+    for (const preset of onboardingPresets) {
+      expect(
+        (await screen.findByRole("option", { name: preset.name })).getAttribute(
+          "aria-disabled",
+        ),
+      ).toBe("true");
+    }
+    expect(api.update).not.toHaveBeenCalled();
   });
   it("shows group children and stages ordered edits until save", async () => {
     api.assignment.mockResolvedValue({ playbook: owned });
