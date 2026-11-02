@@ -90,6 +90,10 @@ export type ProductFeatures = {
    */
   skillsEnabled: boolean;
   /**
+   * Whether staff turned on serving managed skills over MCP for the organization. Skills over MCP is also on when the organization is in the skills-over-mcp rollout flag.
+   */
+  skillsOverMcpEnabled: boolean;
+  /**
    * Whether SSO setup is enabled for the organization
    */
   ssoEnabled: boolean;
@@ -125,6 +129,7 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
     signals_intelligence_enabled: z.boolean(),
     skill_capture_metadata_only: z.boolean(),
     skills_enabled: z.boolean(),
+    skills_over_mcp_enabled: z.boolean(),
     sso_enabled: z.boolean(),
     tool_io_logs_enabled: z.boolean(),
   }),
@@ -153,6 +158,7 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
       "signals_intelligence_enabled": "signalsIntelligenceEnabled",
       "skill_capture_metadata_only": "skillCaptureMetadataOnly",
       "skills_enabled": "skillsEnabled",
+      "skills_over_mcp_enabled": "skillsOverMcpEnabled",
       "sso_enabled": "ssoEnabled",
       "tool_io_logs_enabled": "toolIoLogsEnabled",
     });

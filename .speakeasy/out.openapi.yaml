@@ -107036,6 +107036,9 @@ components:
         skills_enabled:
           type: boolean
           description: Whether the Skills page is enabled for the organization
+        skills_over_mcp_enabled:
+          type: boolean
+          description: Whether staff turned on serving managed skills over MCP for the organization. Skills over MCP is also on when the organization is in the skills-over-mcp rollout flag.
         sso_enabled:
           type: boolean
           description: Whether SSO setup is enabled for the organization
@@ -107064,6 +107067,7 @@ components:
         - signals_intelligence_enabled
         - organization_gateway_disabled
         - code_mode_enabled
+        - skills_over_mcp_enabled
         - device_agent
     Project:
       type: object
@@ -113226,6 +113230,7 @@ components:
             - signals_intelligence
             - organization_gateway_disabled
             - code_mode
+            - skills_over_mcp
           maxLength: 60
         organization_id:
           type: string
