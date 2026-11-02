@@ -2989,11 +2989,15 @@ describe("Servers that sign in as a person", () => {
     await reachServers();
     fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP Authentication" });
+    await screen.findByRole("heading", { name: "MCP sign-in" });
     expect(
       await screen.findByRole("button", { name: /Linear.*Shared credential/ }),
     ).toBeTruthy();
     expect(screen.queryByText("Requires connection")).toBeNull();
+    // The summary does not claim an assigned connection for it either.
+    expect(
+      screen.queryByText("all tools, using an assigned connection"),
+    ).toBeNull();
     await continueFromAuthentication();
     fireEvent.click(
       await screen.findByRole("button", { name: "Create agent" }),
@@ -3013,7 +3017,7 @@ describe("Servers that sign in as a person", () => {
     await reachServers();
     fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP Authentication" });
+    await screen.findByRole("heading", { name: "MCP sign-in" });
     expect(
       await screen.findByRole("button", {
         name: /Linear.*Could not check connection/,

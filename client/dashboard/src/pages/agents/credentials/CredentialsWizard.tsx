@@ -1452,9 +1452,13 @@ export function CredentialsWizard({
           : selected.map((entry) => ({
               id: entry.server.id,
               name: entry.server.name,
-              detail: entry.server.issuerId
-                ? "all tools, using an assigned connection"
-                : "all tools",
+              // A server with an issuer can still use a shared credential.
+              detail:
+                entry.server.issuerId &&
+                connections.byServer.get(entry.server.id)?.status !==
+                  "not-required"
+                  ? "all tools, using an assigned connection"
+                  : "all tools",
             }))
       }
     />
