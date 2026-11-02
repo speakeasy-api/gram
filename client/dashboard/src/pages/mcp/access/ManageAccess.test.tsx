@@ -1,6 +1,12 @@
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // What the page sends when a row changes. The rules the surface writes are the
@@ -836,4 +842,31 @@ it("keeps an unsupported principal visible with all audience edits disabled", ()
       .hasAttribute("disabled"),
   ).toBe(true);
   expect(mutate).not.toHaveBeenCalled();
+});
+
+it("forwards remote discovery failures and retry into the actual narrowing dialog", () => {
+  const retry = vi.fn<() => void>();
+  render(
+    <TooltipProvider>
+      <ManageAccess
+        resourceId="server-1"
+        resourceName="Example server"
+        entries={[entry({})]}
+        version="v1"
+        isLoading={false}
+        toolSource={{ status: "error", retry }}
+      />
+    </TooltipProvider>,
+  );
+  expandFirstRow();
+  fireEvent.pointerDown(screen.getByRole("button", { name: /All tools/ }), {
+    button: 0,
+    ctrlKey: false,
+  });
+  fireEvent.click(screen.getByRole("menuitem", { name: "Specific tools…" }));
+  const dialog = within(screen.getByRole("dialog"));
+  fireEvent.click(dialog.getByRole("button", { name: "By tool" }));
+  expect(dialog.getByText("Couldn't load this server's tools.")).toBeTruthy();
+  fireEvent.click(dialog.getByRole("button", { name: "Retry" }));
+  expect(retry).toHaveBeenCalledOnce();
 });
