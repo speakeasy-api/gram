@@ -16,10 +16,10 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/chatredact"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/scanners/gitleaks"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -63,7 +63,7 @@ type ChatSearchService struct {
 	audit      *audit.Logger
 	budget     OperationBudget
 	references *subjectReferenceCodec
-	scanner    *gitleaks.Scanner
+	redactor   *chatredact.Redactor
 }
 
 // NewChatSearchService composes the external-only transcript tools. Missing
@@ -73,11 +73,11 @@ func NewChatSearchService(db *pgxpool.Pool, engine *authz.Engine, auditLogger *a
 	if db == nil || engine == nil || auditLogger == nil || !budget.valid() || err != nil {
 		return nil
 	}
-	return &ChatSearchService{db: db, engine: engine, audit: auditLogger, budget: budget, references: codec, scanner: gitleaks.NewScanner()}
+	return &ChatSearchService{db: db, engine: engine, audit: auditLogger, budget: budget, references: codec, redactor: chatredact.New()}
 }
 
 func (s *ChatSearchService) valid() bool {
-	return s != nil && s.db != nil && s.engine != nil && s.audit != nil && s.budget.valid() && s.references != nil && s.scanner != nil
+	return s != nil && s.db != nil && s.engine != nil && s.audit != nil && s.budget.valid() && s.references != nil && s.redactor != nil
 }
 
 // SearchChatsInput selects an explicit project and date interval.
