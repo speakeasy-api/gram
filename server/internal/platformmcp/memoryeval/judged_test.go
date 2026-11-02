@@ -91,8 +91,20 @@ func TestMemoryEvalJudged(t *testing.T) { //nolint:paralleltest // one long run 
 	searchArm, err := bench.SearchChatsArm(testenv.NewLogger(t), loaded.target())
 	require.NoError(t, err)
 
-	report, err := bench.Run(t.Context(), client, corpus, []bench.Arm{bench.NoMemoryArm(), searchArm}, cfg)
+	// Team memory is written by the summary and digest models under test
+	// before the arms that read it run.
+	models := bench.MemoryModels{
+		Summary: envOr("MEMORYEVAL_SUMMARY_MODEL", bench.DefaultMemoryModels.Summary),
+		Digest:  envOr("MEMORYEVAL_DIGEST_MODEL", bench.DefaultMemoryModels.Digest),
+	}
+	prep, err := bench.Prepare(t.Context(), testenv.NewLogger(t), client, loaded.target(), models, cfg.Concurrency)
 	require.NoError(t, err)
+	memoryArm, err := bench.SearchTeamMemoryArm(testenv.NewLogger(t), loaded.target())
+	require.NoError(t, err)
+
+	report, err := bench.Run(t.Context(), client, corpus, []bench.Arm{bench.NoMemoryArm(), searchArm, memoryArm}, cfg)
+	require.NoError(t, err)
+	report.Preparation = &prep
 	markdown := report.Markdown()
 	t.Log("\n" + markdown)
 	if out := os.Getenv("MEMORYEVAL_OUT"); out != "" {

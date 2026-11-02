@@ -2,7 +2,6 @@ package memoryeval_test
 
 import (
 	"context"
-	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -12,7 +11,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
-	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval/bench"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -41,28 +39,6 @@ func (l loadedCorpus) target() bench.Target {
 		projects[key] = bench.Project{ID: project.ID, Slug: project.Slug}
 	}
 	return bench.Target{DB: l.db, Corpus: l.corpus, OrganizationID: l.organizationID, Projects: projects, UserID: l.userID}
-}
-
-// writeProxySummaries stands in for the background summary job until it
-// lands: every chat gets its whole transcript, masked by the same redaction
-// search_chats uses, as its summary. A real summary carries less than this,
-// so leaks and isolation measured here are an upper bound.
-func writeProxySummaries(t *testing.T, loaded loadedCorpus) {
-	t.Helper()
-	ctx := t.Context()
-	redactor := platformmcp.NewChatSearchRedactor()
-	for _, chat := range loaded.corpus.Chats {
-		var body strings.Builder
-		for _, m := range chat.Messages {
-			body.WriteString(m.Text)
-			body.WriteString("\n")
-		}
-		summary, _, err := redactor.Text(ctx, body.String())
-		require.NoError(t, err, chat.Key)
-		last := chat.Messages[len(chat.Messages)-1].At
-		_, err = loaded.db.Exec(ctx, `UPDATE chats SET summary = $2, summary_generated_at = $3, summary_redacted = true WHERE id = $1`, chat.ID, summary, last)
-		require.NoError(t, err, chat.Key)
-	}
 }
 
 // loadCorpus writes the corpus into a fresh database: one organization, both

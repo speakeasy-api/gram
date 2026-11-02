@@ -22,6 +22,10 @@ Synthetic corpus, questions and checks for team chat memory in the Platform MCP.
   `--models` takes a comma separated list of answering models, and the report
   has one row per model and arm with accuracy, tokens, cost and latency, so a
   run can compare models as well as arms.
+  Before the arms run, `bench.Prepare` writes every team chat's masked summary
+  and the day, week and month digests with `--summary-model` and
+  `--digest-model` (defaults: the live jobs' models), and the report shows
+  what that cost, so summary and digest models can be compared too.
 - **Runner** (`bench`): arms, the agent loop, judging and scoring live in a
   plain package that takes a corpus already loaded into a database, so the
   tests and future scheduled runs share one implementation.

@@ -5,6 +5,8 @@
 
 #USAGE flag "--runs <n>" env="MEMORYEVAL_RUNS" default="3" help="Runs per arm"
 #USAGE flag "--models <list>" env="MEMORYEVAL_ANSWER_MODELS" help="Comma separated answering models to compare (default anthropic/claude-sonnet-5.5)"
+#USAGE flag "--summary-model <model>" env="MEMORYEVAL_SUMMARY_MODEL" help="Model that writes chat summaries before the memory arms run (default: the live summary model)"
+#USAGE flag "--digest-model <model>" env="MEMORYEVAL_DIGEST_MODEL" help="Model that writes day, week and month digests (default: the live digest model)"
 #USAGE flag "--out <file>" env="MEMORYEVAL_OUT" help="Also write the markdown report to this file"
 
 set -euo pipefail
@@ -17,6 +19,12 @@ fi
 export MEMORYEVAL_RUNS="${usage_runs:-${MEMORYEVAL_RUNS:-3}}"
 if [ -n "${usage_models:-}" ]; then
   export MEMORYEVAL_ANSWER_MODELS="$usage_models"
+fi
+if [ -n "${usage_summary_model:-}" ]; then
+  export MEMORYEVAL_SUMMARY_MODEL="$usage_summary_model"
+fi
+if [ -n "${usage_digest_model:-}" ]; then
+  export MEMORYEVAL_DIGEST_MODEL="$usage_digest_model"
 fi
 if [ -n "${usage_out:-}" ]; then
   out_dir="$(dirname "$usage_out")"

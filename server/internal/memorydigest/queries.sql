@@ -278,3 +278,11 @@ WHERE m.id = ANY(@ids::uuid[])
   AND m.deleted IS FALSE
   AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
 ORDER BY m.created_at;
+
+-- name: DeleteProjectDigests :execrows
+-- Every digest of one organization's projects. Only the team memory eval
+-- uses it: it rebuilds a synthetic corpus's digests with each model it
+-- compares, so digests written by an earlier model must not survive.
+DELETE FROM memory_digests
+WHERE organization_id = @organization_id
+  AND project_id = ANY(@project_ids::uuid[]);

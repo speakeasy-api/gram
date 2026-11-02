@@ -44,6 +44,28 @@ func (q *Queries) DeleteOrphanedRollups(ctx context.Context, level string) ([]uu
 	return items, nil
 }
 
+const deleteProjectDigests = `-- name: DeleteProjectDigests :execrows
+DELETE FROM memory_digests
+WHERE organization_id = $1
+  AND project_id = ANY($2::uuid[])
+`
+
+type DeleteProjectDigestsParams struct {
+	OrganizationID string
+	ProjectIds     []uuid.UUID
+}
+
+// Every digest of one organization's projects. Only the team memory eval
+// uses it: it rebuilds a synthetic corpus's digests with each model it
+// compares, so digests written by an earlier model must not survive.
+func (q *Queries) DeleteProjectDigests(ctx context.Context, arg DeleteProjectDigestsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, deleteProjectDigests, arg.OrganizationID, arg.ProjectIds)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const deleteStaleDayDigests = `-- name: DeleteStaleDayDigests :many
 DELETE FROM memory_digests d
 WHERE d.level = 'day'

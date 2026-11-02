@@ -15,6 +15,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
+	"go.temporal.io/sdk/activity"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
@@ -28,10 +29,10 @@ import (
 )
 
 const (
-	// memoryDigestModel writes day, week and month digests. Digests are a
+	// MemoryDigestModel writes day, week and month digests. Digests are a
 	// few calls per active project per day that synthesize many summaries,
 	// so a mid-tier model fits; the memory eval confirms or replaces it.
-	memoryDigestModel = "anthropic/claude-sonnet-5.5"
+	MemoryDigestModel = "anthropic/claude-sonnet-5.5"
 
 	// memoryDigestMaxOutputTokens caps one digest. The longest word budget
 	// is 250 words, about 330 tokens; the cap leaves room for a model that
@@ -70,6 +71,7 @@ type MemoryDigests struct {
 	repo       *repo.Queries
 	chatClient openrouter.CompletionClient
 	flags      feature.Provider
+	model      string
 }
 
 func NewMemoryDigests(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter.CompletionClient, flags feature.Provider) *MemoryDigests {
@@ -79,7 +81,17 @@ func NewMemoryDigests(logger *slog.Logger, db *pgxpool.Pool, chatClient openrout
 		repo:       repo.New(db),
 		chatClient: chatClient,
 		flags:      flags,
+		model:      MemoryDigestModel,
 	}
+}
+
+// WithModel returns a copy that writes digests with model. The team memory
+// eval uses it to compare digest models; the scheduled job always uses
+// MemoryDigestModel.
+func (m *MemoryDigests) WithModel(model string) *MemoryDigests {
+	copied := *m
+	copied.model = model
+	return &copied
 }
 
 // BuildMemoryDigestsArgs selects one level of one rollup run.
@@ -126,8 +138,12 @@ func (m *MemoryDigests) Build(ctx context.Context, args BuildMemoryDigestsArgs) 
 		return result, fmt.Errorf("parse digest level: %w", err)
 	}
 
-	stopHeartbeat := startActivityHeartbeat(ctx)
-	defer stopHeartbeat()
+	// The memory eval calls Build outside an activity, where there is no
+	// heartbeat to record.
+	if activity.IsActivity(ctx) {
+		stopHeartbeat := startActivityHeartbeat(ctx)
+		defer stopHeartbeat()
+	}
 
 	// Invalidation runs before anything else and for every organization, so
 	// a source removed from memory leaves every digest that folded it even
@@ -306,7 +322,7 @@ func (m *MemoryDigests) buildOne(ctx context.Context, level memorydigest.Level, 
 		ChatIds:        []uuid.UUID{},
 		MemoIds:        []uuid.UUID{},
 		ChildDigestIds: []uuid.UUID{},
-		Model:          conv.ToPGText(memoryDigestModel),
+		Model:          conv.ToPGText(m.model),
 		InputTokens:    pgtype.Int4{Int32: 0, Valid: false},
 		OutputTokens:   pgtype.Int4{Int32: 0, Valid: false},
 	}
@@ -443,7 +459,7 @@ func (m *MemoryDigests) complete(ctx context.Context, c memoryDigestCandidate, s
 		Tools:                     nil,
 		ToolChoice:                nil,
 		Temperature:               nil,
-		Model:                     memoryDigestModel,
+		Model:                     m.model,
 		Stream:                    false,
 		UsageSource:               billing.ModelUsageSourceGram,
 		KeyType:                   openrouter.KeyTypeInternal,
