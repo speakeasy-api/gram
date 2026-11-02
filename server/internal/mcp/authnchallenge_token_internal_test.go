@@ -36,6 +36,7 @@ func TestWriteRefreshTokenReplayRejectsDifferentCacheKey(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPost, "/mcp/test/token", nil)
 	err := service.writeRefreshTokenReplay(
 		t.Context(),
+nil,
 		w,
 		r,
 		endpoint,
@@ -59,6 +60,7 @@ func TestWriteRefreshTokenReplayRejectsExpiredCredentials(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
 	err := service.writeRefreshTokenReplay(
 		t.Context(),
+nil,
 		w,
 		r,
 		endpoint,
@@ -83,7 +85,7 @@ func TestWriteRefreshTokenReplayRecomputesRemainingLifetimes(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/mcp/test/token", nil)
 	err := service.writeRefreshTokenReplay(
-		t.Context(), w, r, endpoint, clientRow, "https://gram.example", "none",
+		t.Context(), nil, w, r, endpoint, clientRow, "https://gram.example", "none",
 		"userSessionRefreshReplay:expected", replay, testenv.NewLogger(t),
 	)
 	require.NoError(t, err)
@@ -114,7 +116,7 @@ func TestWriteRefreshTokenReplayFailurePrecedesClientBinding(t *testing.T) {
 	w := httptest.NewRecorder()
 	r := httptest.NewRequest(http.MethodPost, "/mcp/test/token", nil)
 	err = service.writeRefreshTokenReplay(
-		t.Context(), w, r, endpoint, clientRow, "https://gram.example", "none",
+		t.Context(), nil, w, r, endpoint, clientRow, "https://gram.example", "none",
 		"userSessionRefreshReplay:expected", replay, testenv.NewLogger(t),
 	)
 	require.NoError(t, err)
@@ -161,6 +163,7 @@ func TestWriteRefreshTokenReplayRecordsServedEvent(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
 	err := service.writeRefreshTokenReplay(
 		t.Context(),
+nil,
 		w,
 		r,
 		endpoint,
