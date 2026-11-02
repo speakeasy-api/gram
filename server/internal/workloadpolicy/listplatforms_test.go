@@ -38,9 +38,8 @@ func TestListPlatforms_ReturnsTheCatalogPolicy(t *testing.T) {
 	require.Equal(t, "hidden", claudeTag.Issuer.Visibility)
 	require.True(t, claudeTag.Subject.Wildcard)
 	require.Equal(t, "org_id", claudeTag.Variables[0].Key)
-	// Empty rather than absent, as every other unset field is.
+	// Empty where there are none.
 	require.Empty(t, claudeTag.Subject.Label)
-	require.NotNil(t, claudeTag.Subject.Alternatives)
 	require.Empty(t, claudeTag.Subject.Alternatives)
 }
 

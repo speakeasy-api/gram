@@ -16,9 +16,9 @@ import {
  */
 export type WorkloadPlatformSubject = {
   /**
-   * Other rules the operator may choose instead, in the order they are offered. Empty where there are none.
+   * Other rules the operator may choose instead, in the order they are offered. Absent where there are none.
    */
-  alternatives: Array<WorkloadPlatformSubjectAlternative>;
+  alternatives?: Array<WorkloadPlatformSubjectAlternative> | undefined;
   /**
    * Names the default rule beside its alternatives. Empty where there are none.
    */
@@ -38,8 +38,10 @@ export const WorkloadPlatformSubject$inboundSchema: z.ZodMiniType<
   WorkloadPlatformSubject,
   unknown
 > = z.object({
-  alternatives: z.array(WorkloadPlatformSubjectAlternative$inboundSchema),
-  label: z.string(),
+  alternatives: z.optional(
+    z.array(WorkloadPlatformSubjectAlternative$inboundSchema),
+  ),
+  label: z._default(z.string(), ""),
   template: z.string(),
   wildcard: z.boolean(),
 });

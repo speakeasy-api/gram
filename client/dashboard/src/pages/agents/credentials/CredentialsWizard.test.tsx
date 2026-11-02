@@ -731,11 +731,10 @@ const platform = {
       patternMessage: "",
     },
   ],
+  // No label or alternatives, as a server that predates them sends.
   subject: {
     template: "spiffe://example/org/{org_id}/agent/",
     wildcard: true,
-    label: "",
-    alternatives: [],
   },
 };
 

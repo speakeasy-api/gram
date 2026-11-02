@@ -163,9 +163,11 @@ function toCatalogEntry(platform: WorkloadPlatform): CatalogEntry {
       pattern: optional(variable.pattern),
       patternMessage: optional(variable.patternMessage),
     })),
+    // A server that predates alternatives does not send them.
     subject: {
       ...platform.subject,
       label: optional(platform.subject.label),
+      alternatives: platform.subject.alternatives ?? [],
     },
   };
 }

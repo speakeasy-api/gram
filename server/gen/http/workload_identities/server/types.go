@@ -2640,8 +2640,8 @@ type WorkloadPlatformSubjectResponseBody struct {
 	// Names the default rule beside its alternatives. Empty where there are none.
 	Label string `form:"label" json:"label" xml:"label"`
 	// Other rules the operator may choose instead, in the order they are offered.
-	// Empty where there are none.
-	Alternatives []*WorkloadPlatformSubjectAlternativeResponseBody `form:"alternatives" json:"alternatives" xml:"alternatives"`
+	// Absent where there are none.
+	Alternatives []*WorkloadPlatformSubjectAlternativeResponseBody `form:"alternatives,omitempty" json:"alternatives,omitempty" xml:"alternatives,omitempty"`
 }
 
 // WorkloadPlatformSubjectAlternativeResponseBody is used to define fields on

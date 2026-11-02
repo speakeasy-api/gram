@@ -2638,7 +2638,7 @@ type WorkloadPlatformSubjectResponseBody struct {
 	// Names the default rule beside its alternatives. Empty where there are none.
 	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
 	// Other rules the operator may choose instead, in the order they are offered.
-	// Empty where there are none.
+	// Absent where there are none.
 	Alternatives []*WorkloadPlatformSubjectAlternativeResponseBody `form:"alternatives,omitempty" json:"alternatives,omitempty" xml:"alternatives,omitempty"`
 }
 
@@ -8301,12 +8301,6 @@ func ValidateWorkloadPlatformSubjectResponseBody(body *WorkloadPlatformSubjectRe
 	}
 	if body.Wildcard == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("wildcard", "body"))
-	}
-	if body.Label == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("label", "body"))
-	}
-	if body.Alternatives == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("alternatives", "body"))
 	}
 	for _, e := range body.Alternatives {
 		if e != nil {

@@ -453,7 +453,7 @@ type WorkloadPlatformSubject struct {
 	// Names the default rule beside its alternatives. Empty where there are none.
 	Label string
 	// Other rules the operator may choose instead, in the order they are offered.
-	// Empty where there are none.
+	// Absent where there are none.
 	Alternatives []*WorkloadPlatformSubjectAlternative
 }
 
