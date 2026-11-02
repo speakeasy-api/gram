@@ -89,6 +89,8 @@ type metaGateContext struct {
 	consentDiagnostics *consentDiagnostics
 	// catalogRef is the authenticated consent reference and discovery mode.
 	catalogRef *toolfilter.CatalogReference
+	// catalogRecoveryOnly admits recovery helpers without any tool authorization.
+	catalogRecoveryOnly bool
 	// authentication retains validated endpoint identity for lazy catalogue loading.
 	authentication *issuerGateAuthentication
 	// unapprovedMembers are current members the catalog did not approve. They
@@ -226,10 +228,11 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	if gate.catalogRef != nil && (req.Method == mcpversions.MethodToolsCall || (req.Method == mcpversions.MethodToolsList && (gate.discoveryMode == metamcp.DiscoveryModeDirect || gate.discoveryMode == metamcp.DiscoveryModeCode)) || (metaSkillMethod(&req) && s.metaSkillsEnabled(ctx, gate))) {
 		authentication := gate.authentication
 		catalog, err := s.loadConnectionCatalog(ctx, authentication.endpoint, authentication.subject, gate.catalogRef, time.Now())
-		if errors.Is(err, errConnectionCatalogExpired) {
+		if errors.Is(err, errConnectionCatalogExpired) && gate.discoveryMode == metamcp.DiscoveryModeCode {
+			gate.catalogRecoveryOnly = true
+		} else if errors.Is(err, errConnectionCatalogExpired) {
 			return WriteAuthenticateChallenge(w, authentication.protectedResourceURL, err.Error())
-		}
-		if err != nil {
+		} else if err != nil {
 			return oops.E(oops.CodeUnavailable, err, "could not load approved tools; retry shortly").LogError(ctx, logger)
 		}
 		gate.catalog = catalog
@@ -809,6 +812,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 		catalog:             nil,
 		consentDiagnostics:  nil,
 		catalogRef:          nil,
+		catalogRecoveryOnly: false,
 		authentication:      gateAuthentication,
 		unapprovedMembers:   nil,
 		hiddenMembers:       nil,

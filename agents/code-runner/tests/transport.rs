@@ -54,9 +54,9 @@ async fn upgrade(addr: std::net::SocketAddr, token: &str, version: u32) -> (TcpS
 #[tokio::test(flavor = "multi_thread")]
 async fn authenticates_and_negotiates_before_accepting_yamux() {
     let (addr, cancel, task) = fixture().await;
-    let (_, response) = upgrade(addr, "invalid", 1).await;
+    let (_, response) = upgrade(addr, "invalid", 2).await;
     assert!(response.starts_with("HTTP/1.1 401"));
-    let (_, response) = upgrade(addr, TOKEN, 2).await;
+    let (_, response) = upgrade(addr, TOKEN, 1).await;
     assert!(response.starts_with("HTTP/1.1 426"));
     cancel.cancel();
     task.await.unwrap();
@@ -65,7 +65,7 @@ async fn authenticates_and_negotiates_before_accepting_yamux() {
 #[tokio::test(flavor = "multi_thread")]
 async fn multiplexes_fresh_executions_on_one_authenticated_connection() {
     let (addr, cancel, task) = fixture().await;
-    let (socket, response) = upgrade(addr, TOKEN, 1).await;
+    let (socket, response) = upgrade(addr, TOKEN, 2).await;
     assert!(response.starts_with("HTTP/1.1 101"), "{response}");
     assert!(
         response
@@ -91,7 +91,7 @@ async fn multiplexes_fresh_executions_on_one_authenticated_connection() {
     for stream in [first, second] {
         jobs.push(tokio::spawn(async move {
             let mut stream = stream.compat();
-            write_frame(&mut stream, &ClientFrame::Start { version: 1, execution_id: Uuid::new_v4().to_string(), code: "sum(range(10))".into(), wall_ms: 5000 }).await.unwrap();
+            write_frame(&mut stream, &ClientFrame::Start { version: 2, execution_id: Uuid::new_v4().to_string(), code: "sum(range(10))".into(), wall_ms: 5000 }).await.unwrap();
             assert!(matches!(read_frame::<_, ServerFrame>(&mut stream).await.unwrap().0, ServerFrame::Started { .. }));
             assert!(matches!(read_frame::<_, ServerFrame>(&mut stream).await.unwrap().0, ServerFrame::Complete { value, .. } if value == serde_json::json!(45)));
         }));
@@ -110,7 +110,7 @@ async fn multiplexes_fresh_executions_on_one_authenticated_connection() {
 #[tokio::test(flavor = "multi_thread")]
 async fn shutdown_drains_an_active_callback() {
     let (addr, cancel, task) = fixture().await;
-    let (socket, response) = upgrade(addr, TOKEN, 1).await;
+    let (socket, response) = upgrade(addr, TOKEN, 2).await;
     assert!(response.starts_with("HTTP/1.1 101"));
     let mut connection = yamux::Connection::new(
         socket.compat(),
@@ -127,7 +127,7 @@ async fn shutdown_drains_an_active_callback() {
     write_frame(
         &mut stream,
         &ClientFrame::Start {
-            version: 1,
+            version: 2,
             execution_id: Uuid::new_v4().to_string(),
             code: "await tools.call('a--write', {})".into(),
             wall_ms: 5000,
