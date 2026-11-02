@@ -1608,13 +1608,26 @@ SET pinned_at = CASE WHEN @pinned::boolean THEN COALESCE(pinned_at, NOW()) ELSE 
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
 
 -- name: UpdateChatSummary :one
--- Persist an on-demand LLM session summary. Project-scoped so a summarize write
--- can never touch another project's chat. Returns the updated row timestamps.
+-- Persist an LLM session summary. Project-scoped so a summarize write can
+-- never touch another project's chat. summary_redacted records whether the
+-- summary was built from the risk-redacted transcript; team memory reads only
+-- redacted summaries. covered_through is the newest message the summary read:
+-- when a newer message landed while the summary was generated, the summary is
+-- stamped with covered_through instead of NOW() so the chat still reads as
+-- changed and is summarized again. Otherwise summary_generated_at is the write
+-- time, which the sweep's daily cap counts. Returns the updated row timestamps.
 UPDATE chats
 SET summary = @summary,
-    summary_generated_at = NOW(),
+    summary_generated_at = CASE
+      WHEN sqlc.narg(covered_through)::timestamptz IS NOT NULL AND EXISTS (
+        SELECT 1 FROM chat_messages m
+        WHERE m.chat_id = chats.id AND m.created_at > sqlc.narg(covered_through)::timestamptz
+      ) THEN sqlc.narg(covered_through)::timestamptz
+      ELSE NOW()
+    END,
+    summary_redacted = @summary_redacted,
     updated_at = NOW()
-WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
+WHERE chats.id = @id AND chats.project_id = @project_id AND chats.deleted IS FALSE
 RETURNING summary, summary_generated_at;
 
 -- name: GetToolCallSummaryContext :one
@@ -2226,3 +2239,26 @@ UPDATE api_keys SET scopes = ARRAY[]::text[], subject_urn = @subject_urn,
   delegated_grants = @delegated_grants::jsonb, delegated_grants_version = @delegated_grants_version,
   expires_at = clock_timestamp() + interval '1 hour'
 WHERE id = @api_key_id AND project_id = @project_id;
+
+-- name: MarkChatSummaryEmpty :exec
+-- Records that a chat had nothing to summarize, so it reads as covered until
+-- new messages arrive. Project-scoped like UpdateChatSummary.
+UPDATE chats
+SET summary = NULL,
+    summary_generated_at = NOW(),
+    summary_redacted = TRUE,
+    updated_at = NOW()
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;
+
+-- name: GetChatMemorySummaryEligibility :one
+-- Whether the background summary judge may summarize a chat: live, not
+-- excluded from memory, and not a session of a personal account or of an
+-- account whose type is not known yet. Matches the team memory readers' rule.
+SELECT (
+  c.deleted IS FALSE
+  AND c.memory_excluded_at IS NULL
+  AND (ua.id IS NULL OR (ua.account_type IS NOT NULL AND ua.account_type <> 'personal'))
+)::boolean AS eligible
+FROM chats c
+LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
+WHERE c.id = @id AND c.project_id = @project_id;
