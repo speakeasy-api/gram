@@ -49,6 +49,7 @@ import {
 import { keyCredentialChoices } from "./keyCredentialChoices";
 import { StepVerify, type VerifyState } from "./StepVerify";
 import { CredentialPicker } from "./CredentialPicker";
+import { SignInPath } from "./SignInPath";
 import { StepWorkload } from "./StepWorkload";
 import { useWorkloadSetup } from "./useWorkloadSetup";
 import { CUSTOM_PLATFORM_KEY } from "./CustomSetupInstructions";
@@ -103,8 +104,8 @@ import {
 const STEPS = [
   { label: "Name", short: "Name" },
   { label: "MCP Selection", short: "MCPs" },
-  { label: "MCP Authentication", short: "Authentication" },
-  { label: "Credential", short: "Credential" },
+  { label: "MCP sign-in", short: "MCP sign-in" },
+  { label: "Agent sign-in", short: "Agent sign-in" },
   { label: "Install", short: "Install" },
   { label: "Verify", short: "Verify" },
 ];
@@ -1360,7 +1361,7 @@ export function CredentialsWizard({
               },
             ]),
         {
-          label: "Credential",
+          label: "Agent sign-in",
           value: credential === "api-key" ? "API key" : "Workload identity",
         },
         // The platform, and what it was pinned to, are decisions like the
@@ -1575,9 +1576,10 @@ export function CredentialsWizard({
         return (
           <div className="space-y-6">
             <WizardStepHeader
-              title="Credential"
-              description="How the agent proves who it is when it connects."
+              title="Agent sign-in"
+              description="Pick how the agent proves who it is to Speakeasy."
             />
+            <SignInPath hop="agent" />
             <CredentialPicker
               credential={credential}
               platformKey={platformKey}
@@ -1594,7 +1596,7 @@ export function CredentialsWizard({
               disabled={editing}
               onChooseApiKey={() => {
                 setCredential("api-key");
-                setHighlight("Credential");
+                setHighlight("Agent sign-in");
               }}
               onChoosePlatform={(key) => {
                 setCredential("workload");

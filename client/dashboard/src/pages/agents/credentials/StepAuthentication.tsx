@@ -17,6 +17,7 @@ import {
 } from "@/components/sessions/connection-lifetime";
 import { useOAuthPopup } from "@/components/sessions/useOAuthPopup";
 import { AlertTriangle, Check, LockKeyhole, RefreshCw, X } from "lucide-react";
+import { SignInPath } from "./SignInPath";
 import { WizardStepHeader } from "./WizardChrome";
 import type { OwnerConnections } from "./useOwnerConnections";
 import type { InventoryServer } from "./useServerInventory";
@@ -60,9 +61,10 @@ export function StepAuthentication({
   return (
     <div className="space-y-5">
       <WizardStepHeader
-        title="MCP Authentication"
-        description="Choose how the agent connects to each selected MCP server. Open a row to manage its connection, or remove a server here."
+        title="MCP sign-in"
+        description="Choose how Speakeasy signs in to each selected MCP server when the agent calls it. Open a row to manage its connection, or remove a server here."
       />
+      <SignInPath hop="mcp" />
       {allServers && missing.length > 0 && (
         <Text role="alert" warning small>
           No usable connection available for:{" "}
@@ -139,10 +141,14 @@ export function StepAuthentication({
                       />
                     )}
                     <Badge
+                      // Blue, like the step's MCP sign-in arrow: each pill
+                      // says how Speakeasy signs in to that server.
                       variant={
                         expired || connection?.status === "missing"
                           ? "warning"
-                          : "neutral"
+                          : shared || connection?.status === "ready"
+                            ? "information"
+                            : "neutral"
                       }
                       size="sm"
                     >
