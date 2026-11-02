@@ -5,11 +5,44 @@ import (
 	"fmt"
 	"testing"
 
+	"github.com/jackc/pgx/v5"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 )
+
+func TestIssuerGateCheckUnavailable(t *testing.T) {
+	t.Parallel()
+
+	cause := errors.New("connection refused")
+	for _, tc := range []struct {
+		name string
+		err  error
+		want bool
+	}{
+		{name: "revocation store down", err: fmt.Errorf("%w: %w", sessiontokens.ErrRevocationUnavailable, cause), want: true},
+		{name: "organization lookup", err: fmt.Errorf("%w: %w", errIssuerGateOrgLookup, cause), want: true},
+		{name: "issuer lookup", err: fmt.Errorf("%w: %w", errIssuerGateIssuerLookup, cause), want: true},
+		{name: "caller profile", err: fmt.Errorf("%w: %w", errIssuerGateCallerProfile, cause), want: true},
+		{name: "policy store down", err: fmt.Errorf("%w: %w: %w", errToolSelectionLoad, errSessionPolicyStoreUnavailable, cause), want: true},
+		{name: "agent session load", err: fmt.Errorf("%w: %w", errAgentSessionCredentialLoad, cause), want: true},
+		{name: "workload session load", err: fmt.Errorf("%w: %w", errWorkloadSessionCredentialLoad, cause), want: true},
+		{name: "workload admission load", err: fmt.Errorf("%w: %w", errWorkloadSessionAdmissionLoad, cause), want: true},
+		{name: "malformed stored policy", err: fmt.Errorf("%w: %w", errToolSelectionLoad, cause), want: false},
+		{name: "selection for another endpoint", err: errToolSelectionResourceMismatch, want: false},
+		{name: "missing profile row", err: fmt.Errorf("%w: %w", errIssuerGateCallerProfile, pgx.ErrNoRows), want: false},
+		{name: "profile for another subject", err: fmt.Errorf("%w: %w", errCredentialRejected, errIssuerGateCallerProfile), want: false},
+		{name: "revoked token", err: fmt.Errorf("%w: %w", errCredentialRejected, sessiontokens.ErrTokenRevoked), want: false},
+		{name: "bad token", err: errors.New("validate token: bad signature"), want: false},
+		{name: "no credentials", err: nil, want: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Equal(t, tc.want, issuerGateCheckUnavailable(tc.err))
+		})
+	}
+}
 
 func TestIssuerGateFailureReason_ToolSelectionLoad(t *testing.T) {
 	t.Parallel()

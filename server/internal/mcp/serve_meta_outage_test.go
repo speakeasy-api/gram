@@ -12,14 +12,19 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -179,4 +184,31 @@ func TestServePublic_MetaEndpoint_RefreshOutageWithoutRecordedResourceIsRetryabl
 	require.True(t, isError)
 	require.Contains(t, text, "Retry in about")
 	require.NotContains(t, text, "not connected")
+}
+
+// A revocation store outage judges nothing: the app keeps its token and retries
+// the same request, which works once the store is back.
+func TestServePublic_RevocationCheckOutageIsRetryableThenRecovers(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := newMemberRefreshOutageFixture(t, ctx, ti, func(upstream string) string { return upstream })
+	body := makeMetaRPCBody(t, "tools/list", map[string]any{})
+
+	broken := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1", MaxRetries: -1})
+	require.NoError(t, broken.Close())
+	ti.service.SetChatSessionsManager(chatsessions.NewManager(testenv.NewLogger(t), broken, "test-jwt-secret"))
+
+	w, err := servePublicHTTP(t, ctx, ti, f.metaSlug, body, f.bearer, nil)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeUnavailable, shareable.Code)
+	require.NotEmpty(t, w.Header().Get("Retry-After"))
+	require.Empty(t, w.Header().Get("WWW-Authenticate"), "an outage never restarts sign-in")
+	require.Empty(t, w.Header().Get(constants.HeaderProxiedResponse), "our own dependency stays counted")
+
+	ti.service.SetChatSessionsManager(ti.chatSessionsManager)
+	w, err = servePublicHTTP(t, ctx, ti, f.metaSlug, body, f.bearer, nil)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
 }

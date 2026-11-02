@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/auth/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"net/http"
 	"slices"
@@ -187,6 +188,11 @@ func (s *Service) VerifyConnectionRecoveryCompletion(r *http.Request, remote rem
 // SetAuthzEngine swaps the authorization engine, to make it fail.
 func (s *Service) SetAuthzEngine(engine *authz.Engine) {
 	s.authz = engine
+}
+
+// SetChatSessionsManager swaps the store revocation checks read, to take it down.
+func (s *Service) SetChatSessionsManager(manager *chatsessions.Manager) {
+	s.chatSessionsManager = manager
 }
 
 // ConnectionRecoveryRoute and ConnectionRecoveryDonePath expose the link's routes.

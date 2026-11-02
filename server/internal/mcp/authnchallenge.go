@@ -469,6 +469,31 @@ func issuerGateFailureReason(err error) string {
 	}
 }
 
+// issuerGateCheckUnavailableMessage answers a credential check that could not finish.
+const issuerGateCheckUnavailableMessage = "Speakeasy can't check your sign-in right now. You don't need to sign in again. Retry shortly."
+
+// issuerGateCheckUnavailable reports a credential never judged; a gone row is an answer, not an outage.
+func issuerGateCheckUnavailable(err error) bool {
+	if errors.Is(err, errCredentialRejected) || errors.Is(err, pgx.ErrNoRows) {
+		return false
+	}
+	for _, operational := range []error{
+		sessiontokens.ErrRevocationUnavailable,
+		errIssuerGateOrgLookup,
+		errIssuerGateIssuerLookup,
+		errIssuerGateCallerProfile,
+		errSessionPolicyStoreUnavailable,
+		errAgentSessionCredentialLoad,
+		errWorkloadSessionCredentialLoad,
+		errWorkloadSessionAdmissionLoad,
+	} {
+		if errors.Is(err, operational) {
+			return true
+		}
+	}
+	return false
+}
+
 // issuerGateReasonWorkloadSessionOutOfReach: a live workload session minted
 // for all of its issuer's MCP servers was presented to one it does not reach.
 const issuerGateReasonWorkloadSessionOutOfReach = "workload_session_out_of_reach"
@@ -1162,6 +1187,9 @@ func (s *Service) authenticateIssuerGate(
 			)
 		}
 		s.metrics.RecordMCPRequestRejected(ctx, reason, mcpURL, surface)
+		if issuerGateCheckUnavailable(valErr) {
+			return ctx, nil, nil, outageError(w, valErr, issuerGateCheckUnavailableMessage)
+		}
 		if errors.Is(valErr, errWorkloadSessionOutOfReach) {
 			return ctx, nil, nil, writeInsufficientScopeChallenge(w, protectedResourceURL, "access token does not grant access to this MCP server")
 		}
