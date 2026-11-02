@@ -3,6 +3,7 @@ package memoryeval_test
 import (
 	"context"
 	"fmt"
+	"hash/fnv"
 	"slices"
 	"strings"
 	"testing"
@@ -134,6 +135,58 @@ func TestSearchTeamMemoryMechanical(t *testing.T) {
 	}
 	require.Empty(t, card.privateCanaries, "personal-account sessions never reach team memory")
 	require.Empty(t, card.otherProjectCanaries, "team memory is scoped to one project")
+}
+
+// hashEmbedder is a deterministic bag-of-words embedder for CI: each word
+// adds one to a hashed dimension. It shares words the way full-text search
+// does, so it says nothing about semantic quality, but it exercises the
+// hybrid arm's loading, filtering and fusion without a model.
+type hashEmbedder struct{}
+
+func (hashEmbedder) Embed(_ context.Context, inputs []string) ([][]float32, error) {
+	vectors := make([][]float32, len(inputs))
+	for i, input := range inputs {
+		vector := make([]float32, 256)
+		for _, word := range strings.Fields(strings.ToLower(input)) {
+			h := fnv.New32a()
+			_, _ = h.Write([]byte(word))
+			vector[h.Sum32()%256]++
+		}
+		vectors[i] = vector
+	}
+	return vectors, nil
+}
+
+// TestHybridTeamMemoryMechanical holds the hybrid arm to the same bar as
+// search_team_memory. A vector search returns its nearest items for any
+// query, so the sweep reaches every item the arm can show: none of them may
+// leak a secret, come from a personal-account session or another project.
+func TestHybridTeamMemoryMechanical(t *testing.T) {
+	t.Parallel()
+	corpus := memoryeval.Build(corpusNow)
+	loaded := loadCorpus(t, "memoryeval_hybrid_team_memory", corpus)
+	_, err := bench.Prepare(t.Context(), testenv.NewLogger(t), &echoModel{}, loaded.target(), bench.DefaultMemoryModels, 8)
+	require.NoError(t, err)
+	hybridArm, err := bench.HybridTeamMemoryArm(t.Context(), testenv.NewLogger(t), hashEmbedder{}, loaded.target())
+	require.NoError(t, err)
+
+	card := probe(t.Context(), t, corpus, hybridArm)
+	t.Log("\n" + card.String())
+
+	for category, leaks := range card.leaks {
+		require.Empty(t, leaks, "hybrid search leaked %s", category)
+	}
+	require.Empty(t, card.privateCanaries, "personal-account sessions never reach team memory")
+	require.Empty(t, card.otherProjectCanaries, "team memory is scoped to one project")
+
+	// The hash embedder only shares words, so this recall is a plumbing check;
+	// the judged eval measures it with a real embedding model.
+	memoryArm, err := bench.SearchTeamMemoryArm(testenv.NewLogger(t), loaded.target())
+	require.NoError(t, err)
+	recall, err := bench.QuestionRecall(t.Context(), corpus, []bench.Arm{memoryArm, hybridArm})
+	require.NoError(t, err)
+	require.Len(t, recall.Rows, 2)
+	t.Log("\n" + recall.Markdown())
 }
 
 // TestSearchChatsBaselineMechanical scores today's search_chats on the

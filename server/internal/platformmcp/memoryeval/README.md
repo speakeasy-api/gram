@@ -32,7 +32,14 @@ Synthetic corpus, questions and checks for team chat memory in the Platform MCP.
 
 Arms: A has no memory tools, B is today's `search_chats` and `read_chat`.
 Arms C (`search_team_memory`) and D (`recall_team_history` + `zoom` +
-`search_team_memory`) are added by the PRs that ship those tools.
+`search_team_memory`) are added by the PRs that ship those tools. Arm E is
+`search_team_memory` with hybrid retrieval: the same masked items are embedded
+in memory (`--embedding-model`, default the business memory model) and each
+query fuses the vector ranks with the full-text ranks (reciprocal rank
+fusion). It needs no schema change and decides whether team memory needs
+embeddings at all. The judged report adds a retrieval recall table for arms C
+and E, querying with evidence words and with each question's own text, so
+retrieval can be compared without the answering agent.
 
 The flag turns on when arm D reaches at least 80% accuracy and beats arm B by
 15 points, cites valid sources at least 95% of the time, leaks no secret,

@@ -101,11 +101,18 @@ func TestMemoryEvalJudged(t *testing.T) { //nolint:paralleltest // one long run 
 	require.NoError(t, err)
 	memoryArm, err := bench.SearchTeamMemoryArm(testenv.NewLogger(t), loaded.target())
 	require.NoError(t, err)
+	// Arm E embeds the same masked items and fuses vector with full-text
+	// ranks, to decide whether team memory needs embeddings at all.
+	embedder := bench.NewOpenRouterEmbedder(client, loaded.organizationID, envOr("MEMORYEVAL_EMBEDDING_MODEL", bench.DefaultEmbeddingModel))
+	hybridArm, err := bench.HybridTeamMemoryArm(t.Context(), testenv.NewLogger(t), embedder, loaded.target())
+	require.NoError(t, err)
+	recall, err := bench.QuestionRecall(t.Context(), corpus, []bench.Arm{memoryArm, hybridArm})
+	require.NoError(t, err)
 
-	report, err := bench.Run(t.Context(), client, corpus, []bench.Arm{bench.NoMemoryArm(), searchArm, memoryArm}, cfg)
+	report, err := bench.Run(t.Context(), client, corpus, []bench.Arm{bench.NoMemoryArm(), searchArm, memoryArm, hybridArm}, cfg)
 	require.NoError(t, err)
 	report.Preparation = &prep
-	markdown := report.Markdown()
+	markdown := report.Markdown() + "\n" + recall.Markdown()
 	t.Log("\n" + markdown)
 	if out := os.Getenv("MEMORYEVAL_OUT"); out != "" {
 		require.NoError(t, os.WriteFile(out, []byte(markdown), 0o600))

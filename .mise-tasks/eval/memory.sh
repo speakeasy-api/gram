@@ -7,6 +7,7 @@
 #USAGE flag "--models <list>" env="MEMORYEVAL_ANSWER_MODELS" help="Comma separated answering models to compare (default anthropic/claude-sonnet-5.5)"
 #USAGE flag "--summary-model <model>" env="MEMORYEVAL_SUMMARY_MODEL" help="Model that writes chat summaries before the memory arms run (default: the live summary model)"
 #USAGE flag "--digest-model <model>" env="MEMORYEVAL_DIGEST_MODEL" help="Model that writes day, week and month digests (default: the live digest model)"
+#USAGE flag "--embedding-model <model>" env="MEMORYEVAL_EMBEDDING_MODEL" help="Embedding model for the hybrid search arm (default perplexity/pplx-embed-v1-0.6b)"
 #USAGE flag "--out <file>" env="MEMORYEVAL_OUT" help="Also write the markdown report to this file"
 
 set -euo pipefail
@@ -25,6 +26,9 @@ if [ -n "${usage_summary_model:-}" ]; then
 fi
 if [ -n "${usage_digest_model:-}" ]; then
   export MEMORYEVAL_DIGEST_MODEL="$usage_digest_model"
+fi
+if [ -n "${usage_embedding_model:-}" ]; then
+  export MEMORYEVAL_EMBEDDING_MODEL="$usage_embedding_model"
 fi
 if [ -n "${usage_out:-}" ]; then
   out_dir="$(dirname "$usage_out")"
