@@ -3437,10 +3437,13 @@ type UpdateGlobalIssuerPayload struct {
 type UpdateOnboardingPlaybookPayload struct {
 	AdminSessionToken *string
 	PlaybookID        string
-	Name              string
-	Description       *string
-	IsDefault         *bool
-	StepSlugs         []string
+	// When provided, require the playbook to belong to this organization. Omit for
+	// global library edits.
+	OrganizationID *string
+	Name           string
+	Description    *string
+	IsDefault      *bool
+	StepSlugs      []string
 }
 
 // UpdateOnboardingUseCasePayload is the payload type of the admin service

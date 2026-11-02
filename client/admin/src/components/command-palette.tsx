@@ -63,7 +63,7 @@ const RECORD_PAGES = [
     to: "/organizations/$idOrSlug/onboarding",
     label: "Onboarding",
     icon: ListChecksIcon,
-    keywords: "setup wizard playbook stack customize",
+    keywords: "setup wizard playbook stack customize steps template",
   },
   {
     to: "/organizations/$idOrSlug/activity",

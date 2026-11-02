@@ -136,6 +136,7 @@ describe("tenant onboarding", () => {
     fireEvent.click(screen.getByRole("button", { name: "Save wizard steps" }));
     await screen.findByText("Onboarding saved.");
     expect(api.update).toHaveBeenCalledExactlyOnceWith({
+      organizationId: "org_test",
       playbookId: "owned",
       name: "Our wizard",
       description: "Keep description",
@@ -184,6 +185,148 @@ describe("tenant onboarding", () => {
       screen.getByRole("button", { name: "Confirm template assignment" }),
     ).toBeTruthy();
     expect(api.remove).not.toHaveBeenCalled();
+  });
+  it("recognizes a shared-template copy after a committed assignment response is lost", async () => {
+    api.assign.mockImplementationOnce(async () => {
+      api.assignment.mockResolvedValue({
+        playbook: {
+          ...template,
+          id: "copied",
+          organizationId: "org_test",
+          isDefault: false,
+        },
+      });
+      throw new Error("Response lost");
+    });
+    await render();
+    await chooseTemplate();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirm template assignment" }),
+    );
+    await screen.findByText("Onboarding saved.");
+    expect(api.assign).toHaveBeenCalledTimes(1);
+    expect(api.create).not.toHaveBeenCalled();
+  });
+  it("recognizes a committed template copy on retry after reconciliation reads fail", async () => {
+    api.assign.mockImplementationOnce(async () => {
+      api.assignment.mockRejectedValue(new Error("Read unavailable"));
+      throw new Error("Response lost");
+    });
+    await render();
+    await chooseTemplate();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Confirm template assignment" }),
+    );
+    await screen.findByText(/Your draft is retained/);
+    api.assignment.mockResolvedValue({
+      playbook: {
+        ...template,
+        id: "copied",
+        organizationId: "org_test",
+        isDefault: false,
+      },
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Retry wizard steps" }));
+    fireEvent.click(
+      await screen.findByRole("button", {
+        name: "Confirm template assignment",
+      }),
+    );
+    await screen.findByText("Onboarding saved.");
+    expect(api.assign).toHaveBeenCalledTimes(1);
+  });
+  it.each([
+    { organizationId: "org_other" },
+    { name: "Another wizard" },
+    { description: "Changed description" },
+    { steps: [second] },
+  ])(
+    "does not accept a mismatched copy after ambiguous template assignment: %j",
+    async (change) => {
+      api.assign.mockImplementationOnce(async () => {
+        api.assignment.mockResolvedValue({
+          playbook: {
+            ...template,
+            id: "copied",
+            organizationId: "org_test",
+            ...change,
+          },
+        });
+        throw new Error("Response lost");
+      });
+      await render();
+      await chooseTemplate();
+      fireEvent.click(
+        screen.getByRole("button", { name: "Confirm template assignment" }),
+      );
+      await screen.findByText(/Your draft is retained/);
+      expect(screen.queryByText("Onboarding saved.")).toBeNull();
+    },
+  );
+  it("recovers a created plan after its response is lost without creating another", async () => {
+    api.assignment.mockResolvedValue({ playbook: template });
+    api.create.mockImplementationOnce(
+      async (request: { stepSlugs: string[] }) => {
+        api.templates.mockResolvedValue({
+          playbooks: [
+            template,
+            owned,
+            {
+              ...owned,
+              id: "recovered",
+              name: "Example organization onboarding",
+              description: "Tenant-specific setup wizard steps",
+              steps: request.stepSlugs.map((slug) =>
+                catalog.find((step) => step.slug === slug)!,
+              ),
+            },
+          ],
+        });
+        throw new Error("Response lost");
+      },
+    );
+    await render();
+    await edit();
+    fireEvent.click(screen.getByRole("button", { name: "Save wizard steps" }));
+    await screen.findByText(/Your draft is retained/);
+    fireEvent.click(screen.getByRole("button", { name: "Save wizard steps" }));
+    await screen.findByText("Onboarding saved.");
+    expect(api.create).toHaveBeenCalledTimes(1);
+    expect(api.assign).toHaveBeenCalledExactlyOnceWith({
+      organizationId: "org_test",
+      playbookId: "recovered",
+    });
+  });
+  it("does not repeat ambiguous creation while its result cannot be discovered", async () => {
+    api.assignment.mockResolvedValue({ playbook: template });
+    api.create.mockRejectedValueOnce(new Error("Response lost"));
+    await render();
+    await edit();
+    fireEvent.click(screen.getByRole("button", { name: "Save wizard steps" }));
+    await screen.findByText(/Your draft is retained/);
+    fireEvent.click(screen.getByRole("button", { name: "Save wizard steps" }));
+    await screen.findByText(/Creation could not be verified/);
+    expect(api.create).toHaveBeenCalledTimes(1);
+    expect(api.assign).not.toHaveBeenCalled();
+  });
+  it("does not reuse a pre-existing identical plan after ambiguous creation", async () => {
+    const identical = {
+      ...owned,
+      name: "Example organization onboarding",
+      description: "Tenant-specific setup wizard steps",
+      steps: [group],
+    };
+    api.templates.mockResolvedValue({ playbooks: [template, identical] });
+    api.assignment.mockResolvedValue({ playbook: template });
+    api.create.mockRejectedValueOnce(new Error("Response lost"));
+    await render();
+    await edit();
+    fireEvent.click(screen.getByRole("button", { name: "Save wizard steps" }));
+    await screen.findByText(/Your draft is retained/);
+    fireEvent.click(screen.getByRole("button", { name: "Save wizard steps" }));
+    await screen.findByText(/Creation could not be verified/);
+    expect(api.create).toHaveBeenCalledTimes(1);
+    expect(api.assign).not.toHaveBeenCalled();
   });
   it("keeps template load errors separate from the assigned editor", async () => {
     api.templates.mockRejectedValue(new Error("Templates unavailable"));
@@ -344,6 +487,7 @@ describe("tenant onboarding", () => {
     await screen.findByText("Onboarding saved.");
     expect(api.create).toHaveBeenCalledTimes(1);
     expect(api.update).toHaveBeenCalledExactlyOnceWith({
+      organizationId: "org_test",
       playbookId: "created",
       name: "Our wizard",
       description: "Keep description",
@@ -491,7 +635,14 @@ describe("tenant onboarding", () => {
     await render();
     await edit();
     fireEvent.click(screen.getByRole("button", { name: "Save wizard steps" }));
-    fireEvent.click(await screen.findByRole("button", { name: "Saving…" }));
+    expect(
+      (
+        (await screen.findByRole("button", {
+          name: "Saving…",
+        })) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+    await waitFor(() => expect(api.update).toHaveBeenCalledTimes(1));
     expect(api.update).toHaveBeenCalledTimes(1);
     expect(
       (

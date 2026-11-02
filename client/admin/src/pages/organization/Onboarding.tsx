@@ -71,6 +71,18 @@ function snapshot(plan?: AdminOnboardingPlaybook): string {
   );
 }
 
+function contentSnapshot(plan: {
+  name: string;
+  description?: string;
+  steps: { slug: string }[];
+}): string {
+  return JSON.stringify([
+    plan.name,
+    plan.description,
+    plan.steps.map((step) => step.slug),
+  ]);
+}
+
 function StepSummary({
   slugs,
   steps,
@@ -118,6 +130,10 @@ export function Onboarding({
   const [saved, setSaved] = useState(false);
   const saving = useRef(false);
   const createdPlan = useRef<AdminOnboardingPlaybook | null>(null);
+  const pendingCreation = useRef<{
+    knownIds: string[];
+    content: string;
+  } | null>(null);
   const blocker = useBlocker({
     shouldBlockFn: () => draft !== null || saving.current,
     enableBeforeUnload: draft !== null,
@@ -153,6 +169,13 @@ export function Onboarding({
           "The previously saved selection is already assigned, but your draft has changed. Reload the current plan and review it before saving.",
         );
       }
+      if (
+        value.kind === "template" &&
+        latest.data?.playbook?.organizationId === organizationId &&
+        contentSnapshot(latest.data.playbook) ===
+          contentSnapshot(value.template)
+      )
+        return;
       if (snapshot(latest.data?.playbook) !== value.base) {
         throw new Error(
           "The current plan changed since editing began. Reload the current plan and review it before saving. Your draft has not been applied.",
@@ -172,26 +195,68 @@ export function Onboarding({
         }
       }
       if (value.kind === "template") {
-        await assignAdminOrganizationOnboardingPlaybook({
-          organizationId,
-          playbookId: value.template.id,
-        });
+        try {
+          await assignAdminOrganizationOnboardingPlaybook({
+            organizationId,
+            playbookId: value.template.id,
+          });
+        } catch (error) {
+          // Shared assignment creates a tenant copy, so its ID is different.
+          const reconciled = await assignment.refetch();
+          const copied = reconciled.data?.playbook;
+          if (
+            !reconciled.isError &&
+            copied?.organizationId === organizationId &&
+            contentSnapshot(copied) === contentSnapshot(value.template)
+          )
+            return;
+          throw error;
+        }
       } else if (value.current?.organizationId === organizationId) {
         await updateAdminOnboardingPlaybook({
+          organizationId,
           playbookId: value.current.id,
           name: value.current.name,
           description: value.current.description,
           stepSlugs: value.steps,
         });
       } else {
+        if (!createdPlan.current && pendingCreation.current) {
+          const library = await templates.refetch({ throwOnError: true });
+          const attempt = pendingCreation.current;
+          const matches =
+            library.data?.playbooks.filter(
+              (plan) =>
+                plan.organizationId === organizationId &&
+                !attempt.knownIds.includes(plan.id) &&
+                contentSnapshot(plan) === attempt.content,
+            ) ?? [];
+          if (matches.length !== 1) {
+            throw new Error(
+              "Creation could not be verified. Retry checks for the previously created plan without creating another. Review the plan library before starting over.",
+            );
+          }
+          createdPlan.current = matches[0]!;
+        }
         if (!createdPlan.current) {
-          createdPlan.current = await createAdminOnboardingPlaybook({
+          const library = await templates.refetch({ throwOnError: true });
+          const request = {
             organizationId,
             name: `${organizationName ?? "Organization"} onboarding`,
             description: "Tenant-specific setup wizard steps",
             isDefault: false,
             stepSlugs: value.steps,
-          });
+          };
+          // Remember the pre-write library and original content even if the response
+          // is lost. Until discovery succeeds, retries must not issue another create.
+          pendingCreation.current = {
+            knownIds: library.data?.playbooks.map((plan) => plan.id) ?? [],
+            content: contentSnapshot({
+              ...request,
+              steps: value.steps.map((slug) => ({ slug })),
+            }),
+          };
+          createdPlan.current = await createAdminOnboardingPlaybook(request);
         }
         if (
           JSON.stringify(value.steps) !==
@@ -201,6 +266,7 @@ export function Onboarding({
           // transactional: another actor may assign it between read and update.
           const retained = createdPlan.current;
           createdPlan.current = await updateAdminOnboardingPlaybook({
+            organizationId,
             playbookId: retained.id,
             name: retained.name,
             description: retained.description,
@@ -242,6 +308,7 @@ export function Onboarding({
   });
   const begin = (value: DraftChoice) => {
     createdPlan.current = null;
+    pendingCreation.current = null;
     save.reset();
     setSaved(false);
     setDraft({ ...value, base: snapshot(assignment.data?.playbook) });

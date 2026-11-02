@@ -13315,6 +13315,9 @@ components:
           type: boolean
         name:
           type: string
+        organization_id:
+          type: string
+          description: When provided, require the playbook to belong to this organization. Omit for global library edits.
         playbook_id:
           type: string
         step_slugs:

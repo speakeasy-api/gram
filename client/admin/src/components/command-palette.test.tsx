@@ -604,16 +604,20 @@ describe("CommandPalette", () => {
     });
   });
 
-  it.each([ORG.id, ORG.slug])(
-    "finds onboarding by wizard keywords and preserves %s",
-    async (idOrSlug) => {
+  it.each(
+    [ORG.id, ORG.slug].flatMap((idOrSlug) =>
+      ["wizard", "steps", "template"].map((keyword) => ({ idOrSlug, keyword })),
+    ),
+  )(
+    "finds onboarding by $keyword and preserves $idOrSlug",
+    async ({ idOrSlug, keyword }) => {
       const { router } = await renderRouteTree(routeTree, {
         initialPath: `/organizations/${idOrSlug}`,
       });
       await screen.findByText(ORG.name);
       pressTheShortcut();
       await screen.findByRole("dialog");
-      type("wizard");
+      type(keyword);
       fireEvent.click(
         await within(palette()).findByRole("option", { name: "Onboarding" }),
       );

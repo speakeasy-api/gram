@@ -34977,7 +34977,7 @@ func adminUpdateOnboardingPlaybookUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin update-onboarding-playbook --body '{\n      \"description\": \"abc123\",\n      \"is_default\": false,\n      \"name\": \"abc123\",\n      \"playbook_id\": \"abc123\",\n      \"step_slugs\": [\n         \"abc123\"\n      ]\n   }' --admin-session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "admin update-onboarding-playbook --body '{\n      \"description\": \"abc123\",\n      \"is_default\": false,\n      \"name\": \"abc123\",\n      \"organization_id\": \"abc123\",\n      \"playbook_id\": \"abc123\",\n      \"step_slugs\": [\n         \"abc123\"\n      ]\n   }' --admin-session-token \"abc123\"")
 }
 
 func adminDeleteOnboardingPlaybookUsage() {

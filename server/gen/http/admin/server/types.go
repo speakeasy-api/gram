@@ -557,11 +557,14 @@ type CreateOnboardingPlaybookRequestBody struct {
 // UpdateOnboardingPlaybookRequestBody is the type of the "admin" service
 // "updateOnboardingPlaybook" endpoint HTTP request body.
 type UpdateOnboardingPlaybookRequestBody struct {
-	PlaybookID  *string  `form:"playbook_id,omitempty" json:"playbook_id,omitempty" xml:"playbook_id,omitempty"`
-	Name        *string  `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
-	Description *string  `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	IsDefault   *bool    `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
-	StepSlugs   []string `form:"step_slugs,omitempty" json:"step_slugs,omitempty" xml:"step_slugs,omitempty"`
+	PlaybookID *string `form:"playbook_id,omitempty" json:"playbook_id,omitempty" xml:"playbook_id,omitempty"`
+	// When provided, require the playbook to belong to this organization. Omit for
+	// global library edits.
+	OrganizationID *string  `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	Name           *string  `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	Description    *string  `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	IsDefault      *bool    `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	StepSlugs      []string `form:"step_slugs,omitempty" json:"step_slugs,omitempty" xml:"step_slugs,omitempty"`
 }
 
 // DeleteOnboardingPlaybookRequestBody is the type of the "admin" service
@@ -43742,10 +43745,11 @@ func NewCreateOnboardingPlaybookPayload(body *CreateOnboardingPlaybookRequestBod
 // updateOnboardingPlaybook endpoint payload.
 func NewUpdateOnboardingPlaybookPayload(body *UpdateOnboardingPlaybookRequestBody, adminSessionToken *string) *admin.UpdateOnboardingPlaybookPayload {
 	v := &admin.UpdateOnboardingPlaybookPayload{
-		PlaybookID:  *body.PlaybookID,
-		Name:        *body.Name,
-		Description: body.Description,
-		IsDefault:   body.IsDefault,
+		PlaybookID:     *body.PlaybookID,
+		OrganizationID: body.OrganizationID,
+		Name:           *body.Name,
+		Description:    body.Description,
+		IsDefault:      body.IsDefault,
 	}
 	v.StepSlugs = make([]string, len(body.StepSlugs))
 	for i, val := range body.StepSlugs {

@@ -3137,7 +3137,7 @@ func BuildUpdateOnboardingPlaybookPayload(adminUpdateOnboardingPlaybookBody stri
 	{
 		err = json.Unmarshal([]byte(adminUpdateOnboardingPlaybookBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"is_default\": false,\n      \"name\": \"abc123\",\n      \"playbook_id\": \"abc123\",\n      \"step_slugs\": [\n         \"abc123\"\n      ]\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"description\": \"abc123\",\n      \"is_default\": false,\n      \"name\": \"abc123\",\n      \"organization_id\": \"abc123\",\n      \"playbook_id\": \"abc123\",\n      \"step_slugs\": [\n         \"abc123\"\n      ]\n   }'")
 		}
 		if body.StepSlugs == nil {
 			err = goa.MergeErrors(err, goa.MissingFieldError("step_slugs", "body"))
@@ -3153,10 +3153,11 @@ func BuildUpdateOnboardingPlaybookPayload(adminUpdateOnboardingPlaybookBody stri
 		}
 	}
 	v := &admin.UpdateOnboardingPlaybookPayload{
-		PlaybookID:  body.PlaybookID,
-		Name:        body.Name,
-		Description: body.Description,
-		IsDefault:   body.IsDefault,
+		PlaybookID:     body.PlaybookID,
+		OrganizationID: body.OrganizationID,
+		Name:           body.Name,
+		Description:    body.Description,
+		IsDefault:      body.IsDefault,
 	}
 	if body.StepSlugs != nil {
 		v.StepSlugs = make([]string, len(body.StepSlugs))

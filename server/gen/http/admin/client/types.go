@@ -557,11 +557,14 @@ type CreateOnboardingPlaybookRequestBody struct {
 // UpdateOnboardingPlaybookRequestBody is the type of the "admin" service
 // "updateOnboardingPlaybook" endpoint HTTP request body.
 type UpdateOnboardingPlaybookRequestBody struct {
-	PlaybookID  string   `form:"playbook_id" json:"playbook_id" xml:"playbook_id"`
-	Name        string   `form:"name" json:"name" xml:"name"`
-	Description *string  `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
-	IsDefault   *bool    `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
-	StepSlugs   []string `form:"step_slugs" json:"step_slugs" xml:"step_slugs"`
+	PlaybookID string `form:"playbook_id" json:"playbook_id" xml:"playbook_id"`
+	// When provided, require the playbook to belong to this organization. Omit for
+	// global library edits.
+	OrganizationID *string  `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	Name           string   `form:"name" json:"name" xml:"name"`
+	Description    *string  `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	IsDefault      *bool    `form:"is_default,omitempty" json:"is_default,omitempty" xml:"is_default,omitempty"`
+	StepSlugs      []string `form:"step_slugs" json:"step_slugs" xml:"step_slugs"`
 }
 
 // DeleteOnboardingPlaybookRequestBody is the type of the "admin" service
@@ -24949,10 +24952,11 @@ func NewCreateOnboardingPlaybookRequestBody(p *admin.CreateOnboardingPlaybookPay
 // payload of the "updateOnboardingPlaybook" endpoint of the "admin" service.
 func NewUpdateOnboardingPlaybookRequestBody(p *admin.UpdateOnboardingPlaybookPayload) *UpdateOnboardingPlaybookRequestBody {
 	body := &UpdateOnboardingPlaybookRequestBody{
-		PlaybookID:  p.PlaybookID,
-		Name:        p.Name,
-		Description: p.Description,
-		IsDefault:   p.IsDefault,
+		PlaybookID:     p.PlaybookID,
+		OrganizationID: p.OrganizationID,
+		Name:           p.Name,
+		Description:    p.Description,
+		IsDefault:      p.IsDefault,
 	}
 	if p.StepSlugs != nil {
 		body.StepSlugs = make([]string, len(p.StepSlugs))
