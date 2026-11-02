@@ -69,8 +69,8 @@ type CheckHealthPayload struct {
 type CreateIngressPayload struct {
 	SessionToken *string
 	Provider     string
-	// Lowercase DNS label
-	Hostname          string
+	// Lowercase DNS label; defaults to speakeasy
+	Hostname          *string
 	OauthClientID     string
 	OauthClientSecret string
 	IdentityRequired  *bool

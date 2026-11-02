@@ -26,7 +26,7 @@ import (
 func TestCreateIngressRequiresEntitlement(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
-	payload := &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: "private-mcp", OauthClientID: "client", OauthClientSecret: "secret"}
+	payload := &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: new("private-mcp"), OauthClientID: "client", OauthClientSecret: "secret"}
 
 	productfeaturestest.Disable(t, ctx, ti.conn, ti.features, ti.orgID, productfeatures.FeatureNetworkIngress)
 	_, err := ti.service.CreateIngress(ctx, payload)
@@ -81,7 +81,7 @@ func TestDeleteRetainsCleanupIdentityAndBlocksReplacement(t *testing.T) {
 	require.Equal(t, "deleting", visible.Ingress.Status)
 	require.False(t, visible.Ingress.Enabled)
 
-	_, err = ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: "replacement", OauthClientID: "next", OauthClientSecret: "next-secret"})
+	_, err = ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: new("replacement"), OauthClientID: "next", OauthClientSecret: "next-secret"})
 	requireOopsCode(t, err, oops.CodeConflict)
 
 	// Repeated delete resumes cleanup rather than returning not-found.
@@ -198,12 +198,20 @@ func TestDeleteImpactCountsModes(t *testing.T) {
 func TestCreateIngressRejectsInvalidHostnameAndProvider(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
-	_, err := ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{Provider: "other", Hostname: "private", OauthClientID: "id", OauthClientSecret: "secret"})
+	_, err := ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{Provider: "other", Hostname: new("private"), OauthClientID: "id", OauthClientSecret: "secret"})
 	requireOopsCode(t, err, oops.CodeBadRequest)
-	_, err = ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: "Not Valid", OauthClientID: "id", OauthClientSecret: "secret"})
+	_, err = ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: new("Not Valid"), OauthClientID: "id", OauthClientSecret: "secret"})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 }
 
 // compile-time coverage for generated nullable custom-domain shape.
 var _ = pgtype.Text{}
 var _ context.Context
+
+func TestCreateDefaultsHostnameToSpeakeasy(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created, err := ti.service.CreateIngress(ctx, &gen.CreateIngressPayload{Provider: networkingress.ProviderTailscale, Hostname: nil, OauthClientID: "client", OauthClientSecret: "secret"})
+	require.NoError(t, err)
+	require.Equal(t, networkingress.DefaultHostname, created.Hostname)
+}

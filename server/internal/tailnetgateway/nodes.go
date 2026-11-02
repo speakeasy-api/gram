@@ -46,9 +46,6 @@ const (
 	// in their policy file and scope the OAuth client to it.
 	DefaultTag = "tag:speakeasy"
 
-	// DefaultHostname is the Tailscale Service label for new ingresses.
-	DefaultHostname = "speakeasy"
-
 	// nodeHostnamePrefix precedes the slot number in a node's hostname.
 	nodeHostnamePrefix = "speakeasy-gw-"
 )

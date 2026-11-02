@@ -180,3 +180,9 @@ SELECT runtime
 FROM network_ingresses
 WHERE id = @id
   AND organization_id = @organization_id;
+
+-- name: GetNetworkIngressGatewayOwner :one
+-- Tombstones are included: teardown needs the owner and label after soft delete.
+SELECT organization_id, hostname, runtime
+FROM network_ingresses
+WHERE id = @id;

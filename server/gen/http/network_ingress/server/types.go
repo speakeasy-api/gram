@@ -16,7 +16,7 @@ import (
 // "createIngress" endpoint HTTP request body.
 type CreateIngressRequestBody struct {
 	Provider *string `form:"provider,omitempty" json:"provider,omitempty" xml:"provider,omitempty"`
-	// Lowercase DNS label
+	// Lowercase DNS label; defaults to speakeasy
 	Hostname          *string `form:"hostname,omitempty" json:"hostname,omitempty" xml:"hostname,omitempty"`
 	OauthClientID     *string `form:"oauth_client_id,omitempty" json:"oauth_client_id,omitempty" xml:"oauth_client_id,omitempty"`
 	OauthClientSecret *string `form:"oauth_client_secret,omitempty" json:"oauth_client_secret,omitempty" xml:"oauth_client_secret,omitempty"`
@@ -2697,7 +2697,7 @@ func NewGetIngressPayload(sessionToken *string) *networkingress.GetIngressPayloa
 func NewCreateIngressPayload(body *CreateIngressRequestBody, sessionToken *string) *networkingress.CreateIngressPayload {
 	v := &networkingress.CreateIngressPayload{
 		Provider:          *body.Provider,
-		Hostname:          *body.Hostname,
+		Hostname:          body.Hostname,
 		OauthClientID:     *body.OauthClientID,
 		OauthClientSecret: *body.OauthClientSecret,
 		IdentityRequired:  body.IdentityRequired,
@@ -2764,9 +2764,6 @@ func NewCheckHealthPayload(sessionToken *string) *networkingress.CheckHealthPayl
 func ValidateCreateIngressRequestBody(body *CreateIngressRequestBody) (err error) {
 	if body.Provider == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("provider", "body"))
-	}
-	if body.Hostname == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("hostname", "body"))
 	}
 	if body.OauthClientID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("oauth_client_id", "body"))
