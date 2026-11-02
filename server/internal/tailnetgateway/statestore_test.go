@@ -1,6 +1,7 @@
 package tailnetgateway_test
 
 import (
+	"encoding/json"
 	"testing"
 
 	"github.com/google/uuid"
@@ -116,17 +117,31 @@ func TestPostgresStateStoreRegisteredAndReset(t *testing.T) {
 	store, err := tailnetgateway.NewPostgresStateStore(db, enc, ingressID, orgID, 0)
 	require.NoError(t, err)
 
-	// A failed login leaves a machine key and an empty profile list behind.
+	// A failed login leaves a machine key and an empty profile map behind.
 	require.NoError(t, store.WriteState(ipn.MachineKeyStateKey, []byte("machine")))
-	require.NoError(t, store.WriteState(ipn.KnownProfilesStateKey, []byte("[]")))
+	require.NoError(t, store.WriteState(ipn.KnownProfilesStateKey, []byte("{}")))
 	registered, err := store.Registered(ctx)
 	require.NoError(t, err)
 	require.False(t, registered)
 
-	require.NoError(t, store.WriteState(ipn.KnownProfilesStateKey, []byte(`[{"ID":"p1","Name":"speakeasy-gw-0"}]`)))
+	// tailscaled persists known profiles as a map keyed by profile id, in the
+	// shape ipn.LoginProfile serializes to.
+	profile := ipn.LoginProfile{ID: "profile-1", Name: "speakeasy-gw-0", Key: ipn.StateKey("profile-1")} //nolint:exhaustruct // only identifying fields matter
+	encoded, err := json.Marshal(map[ipn.ProfileID]ipn.LoginProfile{profile.ID: profile})
+	require.NoError(t, err)
+	require.NoError(t, store.WriteState(ipn.KnownProfilesStateKey, encoded))
 	registered, err = store.Registered(ctx)
 	require.NoError(t, err)
 	require.True(t, registered)
+
+	// The list shape older builds wrote is still recognised.
+	require.NoError(t, store.WriteState(ipn.KnownProfilesStateKey, []byte(`[{"ID":"p1"}]`)))
+	registered, err = store.Registered(ctx)
+	require.NoError(t, err)
+	require.True(t, registered)
+	require.NoError(t, store.WriteState(ipn.KnownProfilesStateKey, []byte("not json")))
+	_, err = store.Registered(ctx)
+	require.Error(t, err)
 
 	require.NoError(t, store.Reset(ctx))
 	registered, err = store.Registered(ctx)

@@ -97,13 +97,23 @@ WHERE network_ingress_id = @network_ingress_id
 
 -- name: RetireNetworkIngressNodes :exec
 -- Marks every slot at or above min_slot as retired so gateway pods stop
--- hosting it and the reconciler deletes its device.
+-- hosting it. Retirement is permanent for that node identity: once the host
+-- has stopped, the reconciler deletes the device and purges the slot, and a
+-- later slot count increase recreates it as a fresh identity.
 UPDATE network_ingress_nodes
 SET retired_at = COALESCE(retired_at, clock_timestamp()),
     updated_at = clock_timestamp()
 WHERE network_ingress_id = @network_ingress_id
   AND organization_id = @organization_id
   AND slot >= @min_slot;
+
+-- name: DeleteNetworkIngressNodeSlot :exec
+-- Hard delete of one retired slot after its device left the tailnet.
+DELETE FROM network_ingress_nodes
+WHERE network_ingress_id = @network_ingress_id
+  AND organization_id = @organization_id
+  AND slot = @slot
+  AND retired_at IS NOT NULL;
 
 -- name: DeleteNetworkIngressNodes :exec
 -- Hard delete: the devices have been removed from the tailnet, so the slot
