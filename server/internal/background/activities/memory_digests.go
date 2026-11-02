@@ -138,6 +138,10 @@ func (m *MemoryDigests) Build(ctx context.Context, args BuildMemoryDigestsArgs) 
 		return result, nil
 	}
 
+	if err := m.invalidate(ctx, level, orgIDs); err != nil {
+		return result, err
+	}
+
 	candidates, err := m.listCandidates(ctx, level, now, orgIDs)
 	if err != nil {
 		return result, err
@@ -170,11 +174,39 @@ func (m *MemoryDigests) Build(ctx context.Context, args BuildMemoryDigestsArgs) 
 		})
 	}
 	_ = group.Wait() // Workers never return errors; failures are counted.
+	// A cancelled or timed-out attempt is not a set of per-period failures:
+	// return the error so Temporal retries it. Writes are idempotent.
+	if err := ctx.Err(); err != nil {
+		return result, fmt.Errorf("build memory digests: %w", err)
+	}
 
 	result.Built = int(built.Load())
 	result.Skipped = int(skipped.Load())
 	result.Failed = int(failed.Load())
 	return result, nil
+}
+
+// invalidate deletes digests at level whose sources changed after they were
+// written, so this run rebuilds them: day digests that folded a chat or memo
+// no longer eligible, and week or month digests that folded a deleted child.
+// Levels run in order, so a stale day removes its week and month in the same
+// run. A period older than the lookback is deleted but not rebuilt; its
+// sources then fall back to search.
+func (m *MemoryDigests) invalidate(ctx context.Context, level memorydigest.Level, orgIDs []string) error {
+	var ids []uuid.UUID
+	var err error
+	if level == memorydigest.LevelDay {
+		ids, err = m.repo.DeleteStaleDayDigests(ctx, orgIDs)
+	} else {
+		ids, err = m.repo.DeleteOrphanedRollups(ctx, repo.DeleteOrphanedRollupsParams{Level: string(level), OrganizationIds: orgIDs})
+	}
+	if err != nil {
+		return fmt.Errorf("invalidate %s digests: %w", level, err)
+	}
+	if len(ids) > 0 {
+		m.logger.InfoContext(ctx, "invalidated stale memory digests", attr.SlogDBDeletedRowsCount(int64(len(ids))))
+	}
+	return nil
 }
 
 func (m *MemoryDigests) listCandidates(ctx context.Context, level memorydigest.Level, now time.Time, orgIDs []string) ([]memoryDigestCandidate, error) {

@@ -231,6 +231,23 @@ func TestMemoryDigests_DayDigestFoldsOnlyEligibleSources(t *testing.T) {
 	require.NoError(t, err)
 	require.Zero(t, result.Built)
 	require.Len(t, enabled.digests(t, conn, "day"), 1)
+
+	// Excluding a folded chat afterwards invalidates the day, and the next
+	// run rebuilds it from the sources still eligible.
+	err = memorydigesttest.New(conn).SetChatMemorySummaryFixture(ctx, memorydigesttest.SetChatMemorySummaryFixtureParams{
+		Summary:            pgtype.Text{String: "picked queue X", Valid: true},
+		SummaryGeneratedAt: pgtype.Timestamptz{Time: at, Valid: true, InfinityModifier: pgtype.Finite},
+		SummaryRedacted:    true,
+		MemoryExcludedAt:   pgtype.Timestamptz{Time: now, Valid: true, InfinityModifier: pgtype.Finite},
+		ID:                 kept1,
+	})
+	require.NoError(t, err)
+	result, err = job.Build(ctx, activities.BuildMemoryDigestsArgs{Level: "day", Now: now})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Built)
+	rebuilt := enabled.digestSources(t, conn, "day", day)
+	require.Len(t, rebuilt.ChatIds, 2)
+	require.NotContains(t, rebuilt.ChatIds, kept1)
 }
 
 func TestMemoryDigests_RollupsWaitForClosedPeriods(t *testing.T) {
@@ -281,4 +298,17 @@ func TestMemoryDigests_RollupsWaitForClosedPeriods(t *testing.T) {
 	months := p.digests(t, conn, "month")
 	require.Len(t, months, 1)
 	require.Equal(t, digestDay(2026, 10, 1), months[0].PeriodStart.Time)
+
+	// A deleted child orphans its week and month: both are rebuilt from the
+	// remaining children.
+	require.NoError(t, memorydigesttest.New(conn).DeleteDigestFixture(ctx, dayIDs[0]))
+	later := time.Date(2026, 11, 3, 1, 0, 0, 0, time.UTC)
+	result, err = job.Build(ctx, activities.BuildMemoryDigestsArgs{Level: "week", Now: later})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Built)
+	require.Equal(t, dayIDs[1:], p.digestSources(t, conn, "week", digestDay(2026, 10, 26)).ChildDigestIds)
+	result, err = job.Build(ctx, activities.BuildMemoryDigestsArgs{Level: "month", Now: later})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Built)
+	require.NotEqual(t, months[0].ID, p.digests(t, conn, "month")[0].ID)
 }

@@ -12,6 +12,15 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const deleteDigestFixture = `-- name: DeleteDigestFixture :exec
+DELETE FROM memory_digests WHERE id = $1
+`
+
+func (q *Queries) DeleteDigestFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, deleteDigestFixture, id)
+	return err
+}
+
 const getDigestSourcesFixture = `-- name: GetDigestSourcesFixture :one
 SELECT chat_ids, memo_ids, child_digest_ids
 FROM memory_digests
