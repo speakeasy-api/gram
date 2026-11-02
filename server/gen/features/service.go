@@ -116,6 +116,10 @@ type ProductFeatures struct {
 	OrganizationGatewayDisabled bool
 	// Whether the organization has the staff-managed gateway Code Mode entitlement
 	CodeModeEnabled bool
+	// Whether staff turned on serving managed skills over MCP for the
+	// organization. Skills over MCP is also on when the organization is in the
+	// skills-over-mcp rollout flag.
+	SkillsOverMcpEnabled bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -274,6 +278,9 @@ func newProductFeatures(vres *featuresviews.ProductFeaturesView) *ProductFeature
 	if vres.CodeModeEnabled != nil {
 		res.CodeModeEnabled = *vres.CodeModeEnabled
 	}
+	if vres.SkillsOverMcpEnabled != nil {
+		res.SkillsOverMcpEnabled = *vres.SkillsOverMcpEnabled
+	}
 	if vres.DeviceAgent != nil {
 		res.DeviceAgent = *vres.DeviceAgent
 	}
@@ -305,6 +312,7 @@ func newProductFeaturesView(res *ProductFeatures) *featuresviews.ProductFeatures
 		SignalsIntelligenceEnabled:              &res.SignalsIntelligenceEnabled,
 		OrganizationGatewayDisabled:             &res.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         &res.CodeModeEnabled,
+		SkillsOverMcpEnabled:                    &res.SkillsOverMcpEnabled,
 		DeviceAgent:                             &res.DeviceAgent,
 	}
 	return vres

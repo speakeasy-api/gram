@@ -41,7 +41,7 @@ func TestFlagEnabled_UsesOnlyLocalEvaluation(t *testing.T) {
 	t.Parallel()
 
 	provider := &recordingFlagProvider{localResult: true}
-	on := mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), provider, "org_1", "acme")
+	on := mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), provider, nil, "org_1", "acme")
 	require.True(t, on)
 	require.Equal(t, 1, provider.localCalls)
 	require.Zero(t, provider.remoteCalls, "the handshake must never wait on a remote flag evaluation")
@@ -54,26 +54,89 @@ func TestFlagEnabled_FailsClosed(t *testing.T) {
 	t.Run("provider error", func(t *testing.T) {
 		t.Parallel()
 		provider := &recordingFlagProvider{localResult: true, localErr: errors.New("definitions unavailable")}
-		require.False(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), provider, "org_1", "acme"))
+		require.False(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), provider, nil, "org_1", "acme"))
 		require.Zero(t, provider.remoteCalls)
 	})
 
 	t.Run("no provider", func(t *testing.T) {
 		t.Parallel()
-		require.False(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), nil, "org_1", "acme"))
+		require.False(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), nil, nil, "org_1", "acme"))
 	})
 
 	t.Run("no organization", func(t *testing.T) {
 		t.Parallel()
 		provider := &recordingFlagProvider{localResult: true}
-		require.False(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), provider, "", "acme"))
+		require.False(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), provider, nil, "", "acme"))
 		require.Zero(t, provider.localCalls)
 	})
 
 	t.Run("unknown slug evaluates by id alone", func(t *testing.T) {
 		t.Parallel()
 		provider := &recordingFlagProvider{localResult: true}
-		require.True(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), provider, "org_1", ""))
+		require.True(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), provider, nil, "org_1", ""))
 		require.Nil(t, provider.lastGroups)
+	})
+}
+
+func TestFlagEnabled_ProductFeature(t *testing.T) {
+	t.Parallel()
+
+	entitled := func(want bool, calls *int, gotFeature *string) mcpskills.FeatureChecker {
+		return func(_ context.Context, _ string, feature string) bool {
+			*calls++
+			*gotFeature = feature
+			return want
+		}
+	}
+
+	t.Run("product feature turns it on when the flag is off", func(t *testing.T) {
+		t.Parallel()
+		var calls int
+		var got string
+		provider := &recordingFlagProvider{localResult: false}
+		require.True(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), provider, entitled(true, &calls, &got), "org_1", "acme"))
+		require.Equal(t, 1, calls)
+		require.Equal(t, "skills_over_mcp", got)
+		require.Zero(t, provider.remoteCalls)
+	})
+
+	t.Run("product feature still applies when the flag errors", func(t *testing.T) {
+		t.Parallel()
+		var calls int
+		var got string
+		provider := &recordingFlagProvider{localErr: errors.New("definitions unavailable")}
+		require.True(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), provider, entitled(true, &calls, &got), "org_1", "acme"))
+	})
+
+	t.Run("flag on skips the product feature lookup", func(t *testing.T) {
+		t.Parallel()
+		var calls int
+		var got string
+		provider := &recordingFlagProvider{localResult: true}
+		require.True(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), provider, entitled(false, &calls, &got), "org_1", "acme"))
+		require.Zero(t, calls)
+	})
+
+	t.Run("both off", func(t *testing.T) {
+		t.Parallel()
+		var calls int
+		var got string
+		provider := &recordingFlagProvider{localResult: false}
+		require.False(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), provider, entitled(false, &calls, &got), "org_1", "acme"))
+	})
+
+	t.Run("no flag provider", func(t *testing.T) {
+		t.Parallel()
+		var calls int
+		var got string
+		require.True(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), nil, entitled(true, &calls, &got), "org_1", "acme"))
+	})
+
+	t.Run("no organization", func(t *testing.T) {
+		t.Parallel()
+		var calls int
+		var got string
+		require.False(t, mcpskills.FlagEnabled(t.Context(), testenv.NewLogger(t), nil, entitled(true, &calls, &got), "", "acme"))
+		require.Zero(t, calls)
 	})
 }

@@ -24,12 +24,13 @@ func (s *Service) skillsOverMCPEnabled(ctx context.Context, payload *mcpInputs) 
 }
 
 // skillsOverMCPEnabledForOrganization evaluates the skills-over-MCP rollout
-// flag for the organization that owns a served toolset. The flag is targeted
-// by organization: the distinct id is the organization id and the PostHog
-// group is its slug, so the slug is loaded for the group and a lookup failure
+// for the organization that owns a served toolset: the PostHog flag or the
+// staff-managed skills_over_mcp product feature. The flag is targeted by
+// organization: the distinct id is the organization id and the PostHog group
+// is its slug, so the slug is loaded for the group and a lookup failure
 // degrades to id-only evaluation.
 func (s *Service) skillsOverMCPEnabledForOrganization(ctx context.Context, organizationID string) bool {
-	if s.features == nil || organizationID == "" {
+	if (s.features == nil && s.platformFeatureChecker == nil) || organizationID == "" {
 		return false
 	}
 
@@ -41,7 +42,7 @@ func (s *Service) skillsOverMCPEnabledForOrganization(ctx context.Context, organ
 		slug = org.Slug
 	}
 
-	return mcpskills.FlagEnabled(ctx, s.logger, s.features, organizationID, slug)
+	return mcpskills.FlagEnabled(ctx, s.logger, s.features, mcpskills.FeatureChecker(s.platformFeatureChecker), organizationID, slug)
 }
 
 // hostedExtensions lists the extension capability labels the hosted surface

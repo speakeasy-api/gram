@@ -703,6 +703,10 @@ type GetOrganizationFeaturesResponseBody struct {
 	OrganizationGatewayDisabled *bool `form:"organization_gateway_disabled,omitempty" json:"organization_gateway_disabled,omitempty" xml:"organization_gateway_disabled,omitempty"`
 	// Whether the organization has the staff-managed gateway Code Mode entitlement
 	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
+	// Whether staff turned on serving managed skills over MCP for the
+	// organization. Skills over MCP is also on when the organization is in the
+	// skills-over-mcp rollout flag.
+	SkillsOverMcpEnabled *bool `form:"skills_over_mcp_enabled,omitempty" json:"skills_over_mcp_enabled,omitempty" xml:"skills_over_mcp_enabled,omitempty"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -765,6 +769,10 @@ type SetOrganizationFeatureResponseBody struct {
 	OrganizationGatewayDisabled *bool `form:"organization_gateway_disabled,omitempty" json:"organization_gateway_disabled,omitempty" xml:"organization_gateway_disabled,omitempty"`
 	// Whether the organization has the staff-managed gateway Code Mode entitlement
 	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
+	// Whether staff turned on serving managed skills over MCP for the
+	// organization. Skills over MCP is also on when the organization is in the
+	// skills-over-mcp rollout flag.
+	SkillsOverMcpEnabled *bool `form:"skills_over_mcp_enabled,omitempty" json:"skills_over_mcp_enabled,omitempty" xml:"skills_over_mcp_enabled,omitempty"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -25703,6 +25711,7 @@ func NewGetOrganizationFeaturesProductFeaturesOK(body *GetOrganizationFeaturesRe
 		SignalsIntelligenceEnabled:              body.SignalsIntelligenceEnabled,
 		OrganizationGatewayDisabled:             body.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         body.CodeModeEnabled,
+		SkillsOverMcpEnabled:                    body.SkillsOverMcpEnabled,
 		DeviceAgent:                             body.DeviceAgent,
 	}
 
@@ -25884,6 +25893,7 @@ func NewSetOrganizationFeatureProductFeaturesOK(body *SetOrganizationFeatureResp
 		SignalsIntelligenceEnabled:              body.SignalsIntelligenceEnabled,
 		OrganizationGatewayDisabled:             body.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         body.CodeModeEnabled,
+		SkillsOverMcpEnabled:                    body.SkillsOverMcpEnabled,
 		DeviceAgent:                             body.DeviceAgent,
 	}
 

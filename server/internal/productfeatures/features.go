@@ -61,6 +61,12 @@ const (
 	// deployment with the runtime configured. Without it, Code Mode gateways
 	// serve Progressive discovery.
 	FeatureCodeMode Feature = "code_mode"
+	// FeatureSkillsOverMCP is the staff-managed per-organization switch for
+	// serving managed skills over MCP. It is ORed with the skills-over-mcp
+	// PostHog flag (see mcpskills.FlagEnabled), so staff can turn the feature
+	// on for one organization from the admin dashboard without editing flag
+	// targeting. Never included in default bundles.
+	FeatureSkillsOverMCP Feature = "skills_over_mcp"
 	// FeatureUpstreamAuthEnforced serves the organization's direct proxied
 	// servers through the typed auth client resolver and requires mcp:auth on
 	// the chosen auth client. Staff turn it on through the admin enforcement

@@ -56,6 +56,9 @@ vi.mock("@/hooks/useFeatureFlag", () => ({
         : "disabled",
   }),
 }));
+vi.mock("@gram/client/react-query/productFeatures.js", () => ({
+  useProductFeatures: () => ({ data: undefined }),
+}));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-a" }),
   useProject: () => ({ id: "project-a", slug: "project-slug" }),

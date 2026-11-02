@@ -74,6 +74,10 @@ type ProductFeaturesView struct {
 	OrganizationGatewayDisabled *bool
 	// Whether the organization has the staff-managed gateway Code Mode entitlement
 	CodeModeEnabled *bool
+	// Whether staff turned on serving managed skills over MCP for the
+	// organization. Skills over MCP is also on when the organization is in the
+	// skills-over-mcp rollout flag.
+	SkillsOverMcpEnabled *bool
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
@@ -106,6 +110,7 @@ var (
 			"signals_intelligence_enabled",
 			"organization_gateway_disabled",
 			"code_mode_enabled",
+			"skills_over_mcp_enabled",
 			"device_agent",
 		},
 	}
@@ -188,6 +193,9 @@ func ValidateProductFeaturesView(result *ProductFeaturesView) (err error) {
 	}
 	if result.CodeModeEnabled == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("code_mode_enabled", "result"))
+	}
+	if result.SkillsOverMcpEnabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("skills_over_mcp_enabled", "result"))
 	}
 	if result.DeviceAgent == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("device_agent", "result"))

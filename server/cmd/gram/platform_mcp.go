@@ -644,13 +644,18 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 }
 
 // withPlatformMCPSkills serves the embedded Platform MCP skills over the
-// Skills extension on the external endpoint, behind the skills-over-mcp flag.
+// Skills extension on the external endpoint, behind the skills-over-mcp flag
+// or the staff-managed skills_over_mcp product feature.
 func withPlatformMCPSkills(runtime *platformmcp.Runtime, config platformMCPConfig) (*platformmcp.Runtime, error) {
 	catalog, err := mcpskills.NewEmbeddedCatalog()
 	if err != nil {
 		return nil, fmt.Errorf("load embedded skill catalog: %w", err)
 	}
-	return runtime.WithSkills(catalog, platformmcp.NewFeatureSkillsGate(config.Logger, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB)))
+	var entitled mcpskills.FeatureChecker
+	if config.ProductFeatures != nil {
+		entitled = config.ProductFeatures.PlatformFeatureCheck
+	}
+	return runtime.WithSkills(catalog, platformmcp.NewFeatureSkillsGate(config.Logger, config.FeatureFlags, entitled, platformmcp.NewPostgresOrganizationSlugResolver(config.DB)))
 }
 
 // attachShadowInventory keeps the Shadow MCP tools registered on both browser

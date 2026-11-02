@@ -165,6 +165,7 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		{"default environment", localEnvironmentSQL, []any{spec.OrgID, spec.ProjectID(), localEnvironmentID()}},
 		{"mcp registry", localMCPRegistrySQL, nil},
 		{"enable code mode", localCodeModeFeatureSQL, []any{spec.OrgID}},
+		{"enable skills over mcp", localSkillsOverMCPFeatureSQL, []any{spec.OrgID}},
 		{"code mode gateway", localCodeModeGatewaySQL, []any{spec.OrgID, spec.ProjectID()}},
 		{"mcp app asset", localMCPAppAssetSQL, []any{
 			localMCPAppAssetID(), spec.ProjectID(), spec.OrgID, app.url, app.size, app.sha256,
@@ -292,6 +293,7 @@ func bustLocalCaches(ctx context.Context, logger *slog.Logger, cache *redis.Clie
 		productfeatures.FeatureSkills,
 		productfeatures.FeaturePlatformMCP,
 		productfeatures.FeatureCodeMode,
+		productfeatures.FeatureSkillsOverMCP,
 		productfeatures.FeatureSSO,
 		productfeatures.FeatureSCIM,
 	} {
@@ -399,6 +401,16 @@ ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
 const localCodeModeFeatureSQL = `
 INSERT INTO organization_features (organization_id, feature_name)
 VALUES ($1, 'code_mode')
+ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+`
+
+// Skills over MCP is a staff-managed switch (ORed with the skills-over-mcp
+// rollout flag); enabled locally so hosted MCP servers and gateways serve
+// skills without a local flag override. The shared demo org stays off until
+// the rollout widens.
+const localSkillsOverMCPFeatureSQL = `
+INSERT INTO organization_features (organization_id, feature_name)
+VALUES ($1, 'skills_over_mcp')
 ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
 `
 

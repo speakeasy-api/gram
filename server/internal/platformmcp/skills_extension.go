@@ -25,22 +25,24 @@ type SkillsGate interface {
 	SkillsEnabled(ctx context.Context, organizationID string) bool
 }
 
-// FeatureSkillsGate evaluates the skills-over-mcp rollout flag the way the
-// hosted and assistant surfaces do: by organization id, with the
+// FeatureSkillsGate evaluates the skills-over-mcp rollout the way the hosted
+// and assistant surfaces do: the PostHog flag by organization id, with the
 // organization's slug as its PostHog group, from locally cached definitions
-// only, failing closed. A slug lookup failure degrades to id-only evaluation.
+// only, or the staff-managed skills_over_mcp product feature, failing closed.
+// A slug lookup failure degrades to id-only evaluation.
 type FeatureSkillsGate struct {
 	logger   *slog.Logger
 	features feature.Provider
+	entitled mcpskills.FeatureChecker
 	slugs    OrganizationSlugResolver
 }
 
-func NewFeatureSkillsGate(logger *slog.Logger, features feature.Provider, slugs OrganizationSlugResolver) *FeatureSkillsGate {
-	return &FeatureSkillsGate{logger: logger, features: features, slugs: slugs}
+func NewFeatureSkillsGate(logger *slog.Logger, features feature.Provider, entitled mcpskills.FeatureChecker, slugs OrganizationSlugResolver) *FeatureSkillsGate {
+	return &FeatureSkillsGate{logger: logger, features: features, entitled: entitled, slugs: slugs}
 }
 
 func (g *FeatureSkillsGate) SkillsEnabled(ctx context.Context, organizationID string) bool {
-	if g == nil || g.features == nil || organizationID == "" {
+	if g == nil || (g.features == nil && g.entitled == nil) || organizationID == "" {
 		return false
 	}
 
@@ -54,7 +56,7 @@ func (g *FeatureSkillsGate) SkillsEnabled(ctx context.Context, organizationID st
 		}
 	}
 
-	return mcpskills.FlagEnabled(ctx, g.logger, g.features, organizationID, slug)
+	return mcpskills.FlagEnabled(ctx, g.logger, g.features, g.entitled, organizationID, slug)
 }
 
 // skillsListParams is the params of skills/list. The catalog fits in one

@@ -25,6 +25,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/skills/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -43,12 +44,20 @@ func (s *Service) WithFeatureProvider(flags feature.Provider) *Service {
 var ErrSkillsOverMCPDisabled = errors.New("skills over mcp is not enabled for this organization")
 
 // requireSkillsOverMCP refuses the request unless the organization is in the
-// skills-over-mcp rollout. It fails closed: a missing provider or a flag
+// skills-over-mcp rollout: the PostHog flag or the staff-managed
+// skills_over_mcp product feature. It fails closed: a missing provider or an
 // evaluation error reads as off.
 func (s *Service) requireSkillsOverMCP(ctx context.Context, authCtx *contextvalues.AuthContext, logger *slog.Logger) error {
 	disabled := oops.E(oops.CodeForbidden, ErrSkillsOverMCPDisabled, "serving skills over MCP is not enabled for this organization")
+	if s.skillsOverMCPFlagEnabled(ctx, authCtx, logger) || s.skillsOverMCPEntitled(ctx, authCtx.ActiveOrganizationID, logger) {
+		return nil
+	}
+	return disabled
+}
+
+func (s *Service) skillsOverMCPFlagEnabled(ctx context.Context, authCtx *contextvalues.AuthContext, logger *slog.Logger) bool {
 	if s.flags == nil {
-		return disabled
+		return false
 	}
 	// The flag targets the organization group by slug. Callers that build
 	// their own auth context, such as the Platform MCP, may not carry it.
@@ -65,12 +74,21 @@ func (s *Service) requireSkillsOverMCP(ctx context.Context, authCtx *contextvalu
 	enabled, err := s.flags.IsFlagEnabled(ctx, feature.FlagSkillsOverMCP, authCtx.ActiveOrganizationID, groups)
 	if err != nil {
 		logger.WarnContext(ctx, "skills-over-mcp flag check failed; treating as disabled", attr.SlogError(err))
-		return disabled
+		return false
 	}
-	if !enabled {
-		return disabled
+	return enabled
+}
+
+func (s *Service) skillsOverMCPEntitled(ctx context.Context, organizationID string, logger *slog.Logger) bool {
+	if s.features == nil || organizationID == "" {
+		return false
 	}
-	return nil
+	enabled, err := s.features.IsFeatureEnabled(ctx, organizationID, productfeatures.FeatureSkillsOverMCP)
+	if err != nil {
+		logger.WarnContext(ctx, "skills_over_mcp product feature check failed; treating as disabled", attr.SlogError(err))
+		return false
+	}
+	return enabled
 }
 
 // mcpGrantResourceID is the resource id mcp grants name for a stored MCP

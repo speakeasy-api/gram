@@ -41,6 +41,7 @@ func TestProductFeatureNameContract(t *testing.T) {
 		productfeatures.FeatureSignalsIntelligence,
 		productfeatures.FeatureOrganizationGatewayDisabled,
 		productfeatures.FeatureCodeMode,
+		productfeatures.FeatureSkillsOverMCP,
 	}, document.Components.Schemas["SetOrganizationFeatureRequestBody"].Properties["feature_name"].Enum)
 }
 

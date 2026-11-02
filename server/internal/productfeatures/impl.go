@@ -259,6 +259,7 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		SignalsIntelligenceEnabled:              snapshot.SignalsIntelligenceEnabled,
 		OrganizationGatewayDisabled:             snapshot.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         snapshot.CodeModeEnabled,
+		SkillsOverMcpEnabled:                    snapshot.SkillsOverMcpEnabled,
 		DeviceAgent:                             snapshot.DeviceAgent,
 	}, nil
 }

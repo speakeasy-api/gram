@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -256,6 +257,29 @@ func TestSkillLinkRefusedWhenFlagOff(t *testing.T) {
 	ti.service.WithFeatureProvider(nil)
 	_, err = ti.service.ListLinks(ctx, listLinks(gen.ListLinksPayload{}))
 	requireOopsCode(t, err, oops.CodeForbidden) // without a flag provider the methods fail closed
+}
+
+func TestSkillLinkAllowedByProductFeatureWhenFlagOff(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, flags := newLinkTestService(t)
+	flags.SetFlag(feature.FlagSkillsOverMCP, ti.authContext.ActiveOrganizationID, false)
+	_, err := ti.service.ListLinks(ctx, listLinks(gen.ListLinksPayload{}))
+	requireOopsCode(t, err, oops.CodeForbidden)
+
+	require.NoError(t, ti.features.SetFeatureEnabled(ctx, ti.authContext.ActiveOrganizationID, productfeatures.FeatureSkillsOverMCP, true))
+	created := createSkill(t, ctx, ti, "entitled-link", "Valid.")
+	server := createLinkServer(t, ctx, ti, ti.projectID, "entitled-server")
+	_, err = ti.service.Link(ctx, linkToServer(created.Skill.ID, server.id, nil))
+	require.NoError(t, err)
+
+	ti.service.WithFeatureProvider(nil)
+	_, err = ti.service.ListLinks(ctx, listLinks(gen.ListLinksPayload{}))
+	require.NoError(t, err, "the product feature alone admits the organization")
+
+	require.NoError(t, ti.features.SetFeatureEnabled(ctx, ti.authContext.ActiveOrganizationID, productfeatures.FeatureSkillsOverMCP, false))
+	_, err = ti.service.ListLinks(ctx, listLinks(gen.ListLinksPayload{}))
+	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
 func TestSkillLinkRBAC(t *testing.T) {
