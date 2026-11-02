@@ -81,6 +81,10 @@ type WorkerOptions struct {
 	// CatalogPromotions runs staff catalogue discovery and durable delivery.
 	CatalogPromotions CatalogPromotionJobs
 
+	// MemoryEvals executes staff-started team memory eval runs. Nil makes a
+	// scheduled run fail with a configuration error.
+	MemoryEvals MemoryEvalRunner
+
 	// CatalogPromotionDeliveryPaused suspends external guide writes without dropping jobs.
 	CatalogPromotionDeliveryPaused bool
 
@@ -209,6 +213,7 @@ func ForDeploymentProcessing(
 		PublicationRequests:            plugins.PublicationRequests{Enabled: false},
 		FleetHealthCache:               nil,
 		CatalogPromotions:              nil,
+		MemoryEvals:                    nil,
 		CatalogPromotionDeliveryPaused: false,
 		DB:                             db,
 		GuardianPolicy:                 guardianPolicy,
@@ -310,6 +315,7 @@ func NewTemporalWorker(
 		PublicationRequests:            plugins.PublicationRequests{Enabled: false},
 		FleetHealthCache:               nil,
 		CatalogPromotions:              nil,
+		MemoryEvals:                    nil,
 		CatalogPromotionDeliveryPaused: false,
 		MCPCatalog:                     nil,
 		GuardianPolicy:                 nil,
@@ -370,6 +376,7 @@ func NewTemporalWorker(
 		opts = &WorkerOptions{
 			FleetHealthCache:               conv.Default(o.FleetHealthCache, opts.FleetHealthCache),
 			CatalogPromotions:              conv.Default(o.CatalogPromotions, opts.CatalogPromotions),
+			MemoryEvals:                    conv.Default(o.MemoryEvals, opts.MemoryEvals),
 			CatalogPromotionDeliveryPaused: o.CatalogPromotionDeliveryPaused || opts.CatalogPromotionDeliveryPaused,
 			GuardianPolicy:                 conv.Default(o.GuardianPolicy, opts.GuardianPolicy),
 			TunnelHTTPClient:               conv.Default(o.TunnelHTTPClient, opts.TunnelHTTPClient),
@@ -541,6 +548,7 @@ func NewTemporalWorker(
 		opts.StartupSeeds,
 		signInEpochs(opts.RedisClient),
 	)
+	activities.memoryEvalRunner = opts.MemoryEvals
 
 	if opts.FleetHealthCache != nil {
 		temporalWorker.RegisterActivityWithOptions(opts.FleetHealthCache.Refresh, activity.RegisterOptions{Name: fleetHealthCacheActivity})
@@ -661,6 +669,8 @@ func NewTemporalWorker(
 	temporalWorker.RegisterActivity(activities.DemoteExpiredTrial)
 	temporalWorker.RegisterActivity(activities.RunMcpResearch)
 	temporalWorker.RegisterActivity(activities.MarkMcpResearchInterrupted)
+	temporalWorker.RegisterActivity(activities.RunMemoryEval)
+	temporalWorker.RegisterActivity(activities.MarkMemoryEvalInterrupted)
 	temporalWorker.RegisterActivity(activities.SendTrialLifecycleEmail)
 	temporalWorker.RegisterActivity(activities.ResolveTrialEndingReminder)
 	temporalWorker.RegisterActivity(activities.SendTrialEndingSoonEmail)
@@ -824,6 +834,7 @@ func NewTemporalWorker(
 	temporalWorker.RegisterWorkflow(SkillEfficacySweepWorkflow)
 	// Chat analysis workflows
 	temporalWorker.RegisterWorkflow(McpResearchWorkflow)
+	temporalWorker.RegisterWorkflow(MemoryEvalRunWorkflow)
 	temporalWorker.RegisterWorkflow(ChatAnalysisCoordinatorWorkflow)
 	temporalWorker.RegisterWorkflow(ChatAnalysisSweepWorkflow)
 	// Pre-emptive remote session refresh workflows
