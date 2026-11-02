@@ -27,6 +27,7 @@ import (
 	"goa.design/goa/v3/security"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/connectionevents"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
@@ -287,7 +288,10 @@ type Service struct {
 	// remoteChallengeMgr drives the per-remote OAuth authn leg used by the
 	// interactive /connect cards and the /remote_login_callback handler.
 	remoteChallengeMgr *remotesessions.ChallengeManager
-	bindingRefresh     *remotesessions.BindingRefreshAttempts
+
+	// connections records connection attempt steps. Nil records nothing.
+	connections    *connectionevents.Recorder
+	bindingRefresh *remotesessions.BindingRefreshAttempts
 	// validationMetrics counts the consent page's live validation probes.
 	validationMetrics *remotesessionmetrics.Validation
 	// validationLimiter paces verifies per consent challenge; nil without Redis.
@@ -708,6 +712,7 @@ func NewService(
 		identityValidator:      mcpidentity.NewValidatorBoundary(),
 		userSessionSigner:      userSessionSigner,
 		remoteChallengeMgr:     remoteChallengeMgr,
+		connections:            nil,
 		validationMetrics:      remotesessionmetrics.NewValidation(logger, meterProvider),
 		validationLimiter:      newValidationLimiter(redisClient, meterProvider),
 		autoVerifications:      newAutoVerifications(),
@@ -718,6 +723,11 @@ func NewService(
 		metaRuntime:            metaRuntimeConfig.withDefaults(),
 	}
 	return service, nil
+}
+
+// SetConnectionRecorder records connection attempt steps.
+func (s *Service) SetConnectionRecorder(recorder *connectionevents.Recorder) {
+	s.connections = recorder
 }
 
 // SetCallbackOrigins pins the IdP callback URLs and assistants' CIMD client

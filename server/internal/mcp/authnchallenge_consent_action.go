@@ -18,6 +18,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/connectionevents"
 	"github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
@@ -413,6 +414,7 @@ func (s *Service) buildRemoteConnectURL(
 		Authority:           challengeState.Endpoint.Authority,
 		BrowserCookieID:     "",
 		BrowserHash:         "",
+		Attempt:             challengeState.Attempt.OrBegin(connectionScope(endpoint, connectionevents.AppOf(challengeState.ClientID))),
 	}
 	challengeURL, hop, berr := s.startRemoteLogin(ctx, challengeState, s.remoteChallengeMgr.RemoteLoginCallbackOrigin(client), parent, func(parent remotesessions.ParentChallenge) (string, error) {
 		return s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, parent, client)

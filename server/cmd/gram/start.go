@@ -61,6 +61,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chatanalysis"
 	chatsessionssvc "github.com/speakeasy-api/gram/server/internal/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/cliauth"
+	"github.com/speakeasy-api/gram/server/internal/connectionevents"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -1183,7 +1184,9 @@ func newStartCommand() *cli.Command {
 
 			// One prober per replica, shared by the proxy's on-use refresh and the login's probe.
 			protectedResources := protectedresource.NewProber(db, guardianPolicy)
-			remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags)
+			connectionRecorder := connectionevents.NewRecorder(logger, meterProvider, chDB, cache.NewRedisCacheAdapter(redisClient), productFeatures)
+			shutdownFuncs = append(shutdownFuncs, connectionRecorder.Shutdown)
+			remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags, connectionRecorder)
 			if err != nil {
 				return err
 			}
@@ -1258,6 +1261,7 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
+			mcpService.SetConnectionRecorder(connectionRecorder)
 			// The keepalive re-check runs on the API process: the probe needs the runtime's endpoint routing and proxy builders.
 			mcpService.StartRemoteSessionRecheck(ctx)
 

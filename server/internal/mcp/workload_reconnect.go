@@ -14,6 +14,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/connectionevents"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
@@ -131,6 +132,7 @@ func (s *Service) serveWorkloadReconnect(w http.ResponseWriter, r *http.Request,
 	}
 	now := time.Now()
 	ticket := AuthnChallengeState{
+		Attempt:                  connectionevents.NoAttempt,
 		ConsentBrowserHash:       "",
 		FederatedBinding:         nil,
 		DelegationRetryUsed:      false,

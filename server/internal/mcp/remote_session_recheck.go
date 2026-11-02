@@ -21,6 +21,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/connectionevents"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
@@ -374,7 +375,7 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 		}
 		subject := sess.SubjectUrn
 		// A synthetic first-party state: the probe reads only the subject, the id it keys its session on, and the endpoint.
-		state := AuthnChallengeState{CodeReconnect: nil, WorkloadReconnect: nil, ConsentBrowserHash: "", FederatedBinding: nil, DelegationRetryUsed: false,
+		state := AuthnChallengeState{Attempt: connectionevents.NoAttempt, CodeReconnect: nil, WorkloadReconnect: nil, ConsentBrowserHash: "", FederatedBinding: nil, DelegationRetryUsed: false,
 			Browser:                  nil,
 			Federation:               nil,
 			ID:                       "keepalive:" + sess.ID.String(),

@@ -40,6 +40,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/connectionevents"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
@@ -220,6 +221,10 @@ type AuthnChallengeState struct {
 	// for, so the consent page lands on that server's connect page. Empty
 	// lands on the gateway's own page.
 	FocusServer string `json:"focus_server,omitempty"`
+	// Attempt is the connection attempt started at /authorize. It survives the
+	// cache key rotation like FlowID. Zero for in-flight states minted before it
+	// and for flows no /authorize started; the provider sign-in then starts one.
+	Attempt connectionevents.Attempt `json:"attempt,omitzero"`
 }
 
 var _ cache.CacheableObject[AuthnChallengeState] = (*AuthnChallengeState)(nil)
@@ -269,14 +274,17 @@ type UserSessionGrant struct {
 	// AuthnChallengeState into the grant so /token can stamp it on its logs,
 	// completing end-to-end correlation. Empty for grants minted before this
 	// field landed (rolling deploy).
-	FlowID              string             `json:"flow_id,omitempty"`
-	UserSessionIssuerID uuid.UUID          `json:"user_session_issuer_id"`
-	UserSessionClientID uuid.UUID          `json:"user_session_client_id"`
-	ClientID            string             `json:"client_id"`
-	RedirectURI         string             `json:"redirect_uri"`
-	CodeChallenge       string             `json:"code_challenge"`
-	CodeChallengeMethod string             `json:"code_challenge_method"`
-	Subject             urn.SessionSubject `json:"subject"`
+	FlowID string `json:"flow_id,omitempty"`
+	// Attempt carries the connection attempt to /token. Zero for grants minted
+	// before it, and /token then starts a new one.
+	Attempt             connectionevents.Attempt `json:"attempt,omitzero"`
+	UserSessionIssuerID uuid.UUID                `json:"user_session_issuer_id"`
+	UserSessionClientID uuid.UUID                `json:"user_session_client_id"`
+	ClientID            string                   `json:"client_id"`
+	RedirectURI         string                   `json:"redirect_uri"`
+	CodeChallenge       string                   `json:"code_challenge"`
+	CodeChallengeMethod string                   `json:"code_challenge_method"`
+	Subject             urn.SessionSubject       `json:"subject"`
 	// Endpoint pins new authorization codes to the exact endpoint authority
 	// consented by the subject. Nil is accepted only for grants minted before
 	// this field landed; authorization-code TTL bounds that compatibility window.
@@ -1467,4 +1475,19 @@ func consentChallengeCacheError(ctx context.Context, logger *slog.Logger, err er
 		return fmt.Errorf("load consent challenge: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger), oauthui.ReasonExpired))
 	}
 	return oops.E(oops.CodeUnavailable, err, "authn challenge state is temporarily unavailable").LogError(ctx, logger)
+}
+
+// connectionScope is what stays the same on every step of a connection attempt
+// to this endpoint.
+func connectionScope(endpoint *ResolvedMcpEndpoint, app connectionevents.App) connectionevents.Scope {
+	switch {
+	case endpoint.IsOrganizationGateway():
+		return connectionevents.OrganizationGatewayScope(endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, app)
+	case endpoint.MetaMcpServerID.Valid:
+		return connectionevents.GatewayScope(endpoint.OrganizationID, endpoint.ProjectID, endpoint.MetaMcpServerID.UUID, app)
+	case endpoint.McpServerID.Valid:
+		return connectionevents.ServerScope(endpoint.OrganizationID, endpoint.ProjectID, endpoint.McpServerID.UUID, app)
+	default:
+		return connectionevents.ToolsetScope(endpoint.OrganizationID, endpoint.ProjectID, endpoint.ToolsetID.UUID, app)
+	}
 }

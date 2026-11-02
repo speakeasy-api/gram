@@ -1,0 +1,195 @@
+package remotesessions_test
+
+import (
+	"context"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"testing"
+	"time"
+
+	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
+	"github.com/google/uuid"
+	"github.com/stretchr/testify/require"
+
+	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/connectionevents"
+	"github.com/speakeasy-api/gram/server/internal/connectionevents/connectioneventstest"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+)
+
+type attemptRow struct {
+	AttemptID        uuid.UUID `ch:"attempt_id"`
+	AttemptStartedAt time.Time `ch:"attempt_started_at"`
+	OrganizationID   string    `ch:"organization_id"`
+	ServerID         string    `ch:"server_id"`
+	Step             string    `ch:"step"`
+	StepResult       string    `ch:"step_result"`
+	IsFinal          bool      `ch:"is_final"`
+	ProviderHost     string    `ch:"provider_host"`
+	SubjectURN       string    `ch:"subject_urn"`
+}
+
+const selectAttemptRows = `SELECT attempt_id, attempt_started_at, organization_id, server_id, step, step_result, is_final, provider_host, subject_urn FROM mcp_connection_events `
+
+func realRecorder(t *testing.T, fx resourceDanceFixture) (*connectionevents.Recorder, driver.Conn) {
+	t.Helper()
+
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	recorder := connectionevents.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, fx.ti.redisCache, connectioneventstest.LogsOn{})
+	t.Cleanup(func() {
+		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_ = recorder.Shutdown(ctx)
+	})
+	remotesessions.WithConnectionRecorder(recorder)(fx.mgr)
+	return recorder, conn
+}
+
+func loginState(t *testing.T, authURL string) string {
+	t.Helper()
+
+	parsed, err := url.Parse(authURL)
+	require.NoError(t, err)
+	state := parsed.Query().Get("state")
+	require.NotEmpty(t, state)
+	return state
+}
+
+func complete(t *testing.T, ctx context.Context, fx resourceDanceFixture, query string) remotesessions.RemoteLoginResult {
+	t.Helper()
+
+	req := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?"+query, nil)
+	result, err := fx.mgr.CompleteRemoteLogin(req.WithContext(ctx))
+	require.NoError(t, err)
+	return result
+}
+
+// Both flows join one attempt: the id and start time from the Speakeasy sign-in
+// state reach ClickHouse from the provider's callback.
+func TestCompleteRemoteLogin_CarriesTheAttemptThroughProviderSignIn(t *testing.T) {
+	t.Parallel()
+
+	var spy upstreamSpy
+	ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-carry", &spy)
+	recorder, conn := realRecorder(t, fx)
+
+	started := time.Now().Add(-5 * time.Minute)
+	serverID := uuid.New()
+	attempt := connectionevents.AttemptAt(uuid.New(), started, connectionevents.ServerScope(fx.parent.OrganizationID, fx.parent.ProjectID, serverID, connectionevents.AppDCR))
+	parent := fx.parent
+	parent.Attempt = attempt
+
+	authURL, err := fx.mgr.BuildAuthorizationUrl(ctx, parent, fx.clients[0])
+	require.NoError(t, err)
+	complete(t, ctx, fx, "code=fake-code&state="+url.QueryEscape(loginState(t, authURL)))
+	require.NoError(t, spy.handlerErr)
+	require.NoError(t, recorder.Shutdown(ctx))
+
+	var rows []attemptRow
+	require.NoError(t, conn.Select(ctx, &rows, selectAttemptRows+`WHERE attempt_id = ?`, attempt.ID()))
+	require.Len(t, rows, 1)
+	require.WithinDuration(t, started, rows[0].AttemptStartedAt, time.Microsecond, "the clock started at /authorize")
+	require.Equal(t, fx.parent.OrganizationID, rows[0].OrganizationID)
+	require.Equal(t, serverID.String(), rows[0].ServerID)
+	require.Equal(t, connectionevents.StepProviderSignIn.String(), rows[0].Step)
+	require.Equal(t, connectionevents.ResultSignedIn.String(), rows[0].StepResult)
+	require.False(t, rows[0].IsFinal, "the login returns to consent, so the attempt goes on")
+	require.NotEmpty(t, rows[0].ProviderHost)
+	require.Equal(t, fx.parent.Subject.String(), rows[0].SubjectURN)
+}
+
+// A login in flight across the deploy has no attempt. It still completes, and a
+// new attempt is begun for it.
+func TestCompleteRemoteLogin_OldStateWithoutAnAttemptStillWorks(t *testing.T) {
+	t.Parallel()
+
+	var spy upstreamSpy
+	ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-old", &spy)
+	recorder, conn := realRecorder(t, fx)
+
+	authURL, err := fx.mgr.BuildAuthorizationUrl(ctx, fx.parent, fx.clients[0])
+	require.NoError(t, err)
+	stateID := loginState(t, authURL)
+
+	states := cache.NewTypedObjectCache[remotesessions.RemoteLoginState](testenv.NewLogger(t), fx.ti.redisCache, cache.SuffixNone)
+	state, err := states.Get(ctx, "remoteLogin:"+stateID)
+	require.NoError(t, err)
+	require.False(t, state.Attempt.IsZero(), "a login minted with no parent attempt begins its own")
+	state.Attempt = connectionevents.NoAttempt
+	require.NoError(t, states.Store(ctx, state))
+
+	result := complete(t, ctx, fx, "code=fake-code&state="+url.QueryEscape(stateID))
+	require.NoError(t, spy.handlerErr)
+	require.NotNil(t, result.Grant, "the login completes")
+	require.NoError(t, recorder.Shutdown(ctx))
+
+	var rows []attemptRow
+	require.NoError(t, conn.Select(ctx, &rows, selectAttemptRows+`WHERE organization_id = ? AND subject_urn = ?`, fx.parent.OrganizationID, fx.parent.Subject.String()))
+	require.Len(t, rows, 1)
+	require.NotEqual(t, uuid.Nil, rows[0].AttemptID)
+}
+
+// The login state holds the attempt, so the invalid_target retry leg keeps it.
+func TestConnectionAttempt_IsKeptInTheLoginState(t *testing.T) {
+	t.Parallel()
+
+	var spy upstreamSpy
+	ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-state", &spy)
+	attempt := connectionevents.Begin(connectionevents.ServerScope(fx.parent.OrganizationID, fx.parent.ProjectID, uuid.New(), connectionevents.AppDCR))
+	parent := fx.parent
+	parent.Attempt = attempt
+
+	authURL, err := fx.mgr.BuildAuthorizationUrl(ctx, parent, fx.clients[0])
+	require.NoError(t, err)
+
+	states := cache.NewTypedObjectCache[remotesessions.RemoteLoginState](testenv.NewLogger(t), fx.ti.redisCache, cache.SuffixNone)
+	state, err := states.Get(ctx, "remoteLogin:"+loginState(t, authURL))
+	require.NoError(t, err)
+	require.Equal(t, attempt.ID(), state.Attempt.ID())
+	require.NotEmpty(t, state.ProviderHost)
+	require.Equal(t, fx.issuerID, state.RemoteSessionIssuerID)
+}
+
+// Back at consent the person can still finish, so a cancel does not end the attempt.
+func TestCompleteRemoteLogin_CancelReturningToConsentDoesNotEndTheAttempt(t *testing.T) {
+	t.Parallel()
+
+	var spy upstreamSpy
+	ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-cancel", &spy)
+	rec := connectioneventstest.New(t)
+	remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
+
+	authURL, err := fx.mgr.BuildAuthorizationUrl(ctx, fx.parent, fx.clients[0])
+	require.NoError(t, err)
+	complete(t, ctx, fx, "error=access_denied&state="+url.QueryEscape(loginState(t, authURL)))
+
+	row := rec.RequireStep(connectionevents.StepProviderSignIn, connectionevents.CodeCanceled)
+	require.Equal(t, string(connectionevents.WhoPerson), row.WhoFixes)
+	require.Empty(t, row.Outcome)
+	rec.RequireNotEnded()
+}
+
+// A login with its own final destination has no consent page to return to, so
+// a cancel ends the attempt there.
+func TestCompleteRemoteLogin_CancelWithAFinalDestinationEndsTheAttempt(t *testing.T) {
+	t.Parallel()
+
+	var spy upstreamSpy
+	ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-cancel-final", &spy)
+	rec := connectioneventstest.New(t)
+	remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
+	parent := fx.parent
+	parent.FinalRedirectURI = "https://app.example.com/done"
+
+	authURL, err := fx.mgr.BuildAuthorizationUrl(ctx, parent, fx.clients[0])
+	require.NoError(t, err)
+	req := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?error=access_denied&state="+url.QueryEscape(loginState(t, authURL)), nil)
+	_, err = fx.mgr.CompleteRemoteLogin(req.WithContext(ctx))
+	require.Error(t, err, "a canceled login stays on the callback page")
+
+	row := rec.RequireEnded(connectionevents.StepProviderSignIn, connectionevents.CodeCanceled)
+	require.Equal(t, string(connectionevents.OutcomeDeclined), row.Outcome)
+}

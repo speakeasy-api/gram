@@ -19,6 +19,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
+	"github.com/speakeasy-api/gram/server/internal/connectionevents"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
@@ -237,7 +238,8 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		return oops.E(oops.CodeBadRequest, err, "capture OAuth endpoint authority").LogWarn(ctx, logger)
 	}
 	agentTarget, _ := agentAuthorizationTarget(endpoint)
-	challengeState := AuthnChallengeState{CodeReconnect: nil, WorkloadReconnect: nil, ConsentBrowserHash: "", FederatedBinding: nil, DelegationRetryUsed: false,
+	attempt := connectionevents.Begin(connectionScope(endpoint, connectionevents.AppOf(req.ClientID)))
+	challengeState := AuthnChallengeState{Attempt: attempt, CodeReconnect: nil, WorkloadReconnect: nil, ConsentBrowserHash: "", FederatedBinding: nil, DelegationRetryUsed: false,
 		Browser:                  nil,
 		Federation:               nil,
 		ID:                       challengeID,
@@ -280,6 +282,11 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// companion completion-ratio monitor divides terminal outcomes against.
 	s.metrics.RecordOAuthFlowStarted(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug)
 	logger.InfoContext(ctx, "oauth flow started")
+	s.connections.Step(ctx, attempt, connectionevents.StepInboundAuthorize, connectionevents.ResultAccepted,
+		connectionevents.UserSessionIssuer(endpoint.UserSessionIssuerID),
+		connectionevents.UserSessionClient(client.ID),
+		connectionevents.Subject(subject),
+	)
 
 	if forceIDP {
 		federatedURL, err := s.prepareFederatedLogin(w, r, endpoint, &challengeState)
