@@ -21,6 +21,7 @@ import {
   ChartColumnStackedIcon,
   ArrowRightLeftIcon,
   ActivityIcon,
+  FlaskConicalIcon,
 } from "lucide-react";
 
 import { McpIcon } from "@/components/ui/mcp-icon";
@@ -108,6 +109,13 @@ export const ADMIN_NAV_GROUPS = [
         label: "External MCP migration",
         keywords: "external mcp attachments remote servers migrate cutover",
         icon: ArrowRightLeftIcon,
+      },
+      {
+        to: "/memory-evals",
+        label: "Organizational Memory evals",
+        keywords:
+          "organizational memory team memory eval evals benchmark models summary digest accuracy compare",
+        icon: FlaskConicalIcon,
       },
       {
         to: "/fleet-health",
