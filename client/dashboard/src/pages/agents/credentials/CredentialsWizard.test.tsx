@@ -21,6 +21,7 @@ const mocks = vi.hoisted(() => ({
   listKeys: vi.fn(),
   listDelegableGrants: vi.fn(),
   checkPolicyGrants: vi.fn(),
+  serverChoices: vi.fn(),
   mcpServers: vi.fn(),
   toolsets: vi.fn(),
   fetch: vi.fn(),
@@ -100,7 +101,9 @@ vi.mock("@/contexts/Sdk", () => ({
       checkPolicyGrants: mocks.checkPolicyGrants,
     },
     keys: { create: mocks.createKey, list: mocks.listKeys },
-    authClients: { listMcpServerChoices: async () => ({ choices: [] }) },
+    authClients: {
+      listMcpServerChoices: (request: object) => mocks.serverChoices(request),
+    },
     // A person's own connections, read once per project before the agent
     // exists and as the agent's candidates once it does.
     remoteSessions: {
@@ -249,6 +252,19 @@ const grant = {
   },
 };
 
+// Sign-in through the represented user's own connections, which every agent
+// that reaches a server is given.
+const PERSONAL_AUTH = {
+  effect: "allow",
+  scope: "mcp:auth",
+  selector: {
+    resourceKind: "mcp_auth_client",
+    resourceId: "*",
+    clientType: "remote_session",
+    connectionOwner: "$represented_user",
+  },
+};
+
 function setup(initialPlatformKey?: string, initialEntry = "/") {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false } },
@@ -305,10 +321,10 @@ function answerChecks(refuse: Record<string, "caller" | "owner"> = {}) {
   return (request: CheckRequest) =>
     Promise.resolve({
       results: request.checkAgentPolicyGrantsForm.policyGrants.map((grant) => {
-        // Server checks are keyed by server id; the auth clients grant, whose
-        // id is also "*", by its scope.
+        // Server and shared credential checks are keyed by their id; the
+        // personal sign-in grant, whose id is also "*", by its scope.
         const limitedBy =
-          grant.scope === "mcp:auth"
+          grant.scope === "mcp:auth" && grant.selector.resourceId === "*"
             ? refuse["mcp:auth"]
             : refuse[grant.selector.resourceId];
         return limitedBy === undefined
@@ -350,6 +366,7 @@ beforeEach(() => {
   mocks.withdrawSubject.mockResolvedValue({});
   mocks.workloadIssuers.mockReturnValue([]);
   mocks.workloadAdmissions.mockReturnValue([]);
+  mocks.serverChoices.mockResolvedValue({ choices: [] });
   vi.stubGlobal("fetch", mocks.fetch);
   mocks.mcpServers.mockResolvedValue({
     mcpServers: [
@@ -438,65 +455,14 @@ describe("Provisioning a new agent", () => {
 
     fireEvent.focus(screen.getByText("Call its servers"));
     expect(
-      (await screen.findAllByText("mcp:auth on all auth clients")).length,
+      (
+        await screen.findAllByText(
+          "mcp:auth on your own connections and the shared credentials the selected servers use",
+        )
+      ).length,
     ).toBeGreaterThan(0);
     expect(
       screen.getAllByText("mcp:connect on the selected servers").length,
-    ).toBeGreaterThan(0);
-  });
-
-  it("leaves out of its scopes the auth clients grant its creator may not give", async () => {
-    mocks.checkPolicyGrants.mockImplementation(
-      answerChecks({ "mcp:auth": "caller" }),
-    );
-    await reachCredentialStep();
-
-    fireEvent.focus(screen.getByText("Call its servers"));
-    expect(
-      (await screen.findAllByText("mcp:connect on the selected servers"))
-        .length,
-    ).toBeGreaterThan(0);
-    // Matched loosely: until the check answers, the line carries a caveat.
-    await waitFor(() =>
-      expect(
-        screen.queryAllByText(/mcp:auth on all auth clients/),
-      ).toHaveLength(0),
-    );
-  });
-
-  it("keeps the auth clients grant's caveat when its check fails", async () => {
-    const answer = answerChecks();
-    mocks.checkPolicyGrants.mockImplementation((request: CheckRequest) =>
-      request.checkAgentPolicyGrantsForm.policyGrants.some(
-        (grant) => grant.scope === "mcp:auth",
-      )
-        ? Promise.reject(new Error("network down"))
-        : answer(request),
-    );
-    await reachCredentialStep();
-    // Let the failed check settle: the caveat also shows while it is asked.
-    await waitFor(() =>
-      expect(
-        mocks.checkPolicyGrants.mock.calls.some(([request]) =>
-          (
-            request as CheckRequest
-          ).checkAgentPolicyGrantsForm.policyGrants.some(
-            (grant) => grant.scope === "mcp:auth",
-          ),
-        ),
-      ).toBe(true),
-    );
-    await new Promise((resolve) => {
-      setTimeout(resolve, 50);
-    });
-
-    fireEvent.focus(screen.getByText("Call its servers"));
-    expect(
-      (
-        await screen.findAllByText(
-          "mcp:auth on all auth clients, if your role allows it",
-        )
-      ).length,
     ).toBeGreaterThan(0);
   });
 
@@ -528,7 +494,7 @@ describe("Provisioning a new agent", () => {
     ).toBeGreaterThan(0);
   });
 
-  it("creates the agent without the auth clients grant its creator may not give", async () => {
+  it("creates the agent without the personal sign-in its creator may not give", async () => {
     mocks.checkPolicyGrants.mockImplementation(
       answerChecks({ "mcp:auth": "caller" }),
     );
@@ -560,11 +526,7 @@ describe("Provisioning a new agent", () => {
           projectId: "project_one",
         },
       },
-      {
-        effect: "allow",
-        scope: "mcp:auth",
-        selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
-      },
+      PERSONAL_AUTH,
     ]);
     expect(
       mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.projectId,
@@ -1642,11 +1604,7 @@ describe("Agent project", () => {
           projectId: "project_one",
         },
       },
-      {
-        effect: "allow",
-        scope: "mcp:auth",
-        selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
-      },
+      PERSONAL_AUTH,
     ]);
   });
 });
@@ -1679,10 +1637,8 @@ describe("Editing an agent that already exists", () => {
 
   // Agents the wizard saved hold mcp:auth beside their server grants.
   const AUTH = {
+    ...PERSONAL_AUTH,
     id: "grant_auth",
-    effect: "allow",
-    scope: "mcp:auth",
-    selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
     createdAt: new Date(),
     updatedAt: new Date(),
   };
@@ -2250,6 +2206,33 @@ describe("Editing an agent that already exists", () => {
     );
   });
 
+  it("adds no sign-in to an agent that may already use every auth client", async () => {
+    const { onDone } = editing({
+      auth: false,
+      grants: [
+        ...(grants as never[]),
+        {
+          id: "grant_every_client",
+          effect: "allow",
+          scope: "mcp:auth",
+          selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("checkbox", { name: "GitHub" });
+    fireEvent.click(await authenticationSave());
+
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(
+      mocks.createGrant.mock.calls.map(
+        ([request]) => request.request.createAgentPolicyGrantForm.scope,
+      ),
+    ).not.toContain("mcp:auth");
+  });
+
   it("does not give the auth grant to an agent left with no servers", async () => {
     const { onDone } = editing({ auth: false });
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -2710,6 +2693,52 @@ describe("Servers that sign in as a person", () => {
     ]);
   });
 
+  async function createWithLinear() {
+    mocks.sessions.mockResolvedValue([mine]);
+    await reachServers();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create agent" }),
+    );
+  }
+
+  const teamBot = {
+    id: "client_team_bot",
+    name: "Team bot",
+    clientType: "service_account",
+  };
+
+  it("lets the agent sign in with the one shared credential its server uses", async () => {
+    mocks.serverChoices.mockResolvedValue({ choices: [teamBot] });
+    await createWithLinear();
+
+    await waitFor(() => expect(mocks.createAgent).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants,
+    ).toContainEqual({
+      effect: "allow",
+      scope: "mcp:auth",
+      selector: { resourceKind: "mcp_auth_client", resourceId: teamBot.id },
+    });
+  });
+
+  it("names the shared credential its creator may not give, and creates nothing", async () => {
+    mocks.serverChoices.mockResolvedValue({ choices: [teamBot] });
+    mocks.checkPolicyGrants.mockImplementation(
+      answerChecks({ [teamBot.id]: "caller" }),
+    );
+    await createWithLinear();
+
+    expect(
+      await screen.findByText(
+        /You may not let this agent sign in with Team bot on Linear/,
+      ),
+    ).toBeTruthy();
+    expect(mocks.createAgent).not.toHaveBeenCalled();
+  });
+
   it("uses the creator's own connection, says when it ends, and attaches it before the key", async () => {
     mocks.sessions.mockResolvedValue([mine]);
     await reachServers();
@@ -2747,11 +2776,7 @@ describe("Servers that sign in as a person", () => {
           projectId: "project_one",
         },
       },
-      {
-        effect: "allow",
-        scope: "mcp:auth",
-        selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
-      },
+      PERSONAL_AUTH,
     ]);
     // The issuer's sign-ins are read in the server's own project, before the
     // agent exists and again while attaching.

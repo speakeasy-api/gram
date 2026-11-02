@@ -44,6 +44,13 @@ import {
   type ServerSelection,
 } from "./StepServers";
 import { keyCredentialChoices } from "./keyCredentialChoices";
+import {
+  AUTH_SCOPE,
+  holdsAuthGrant,
+  PERSONAL_AUTH_GRANT,
+  sharedAuthGrants,
+  type AuthGrant,
+} from "./agentAuthGrants";
 import { StepVerify, type VerifyState } from "./StepVerify";
 import { CredentialPicker } from "./CredentialPicker";
 import { StepWorkload } from "./StepWorkload";
@@ -110,17 +117,6 @@ type Credential = "api-key" | "workload";
 
 /** Keys live 90 days unless the agent page rotates them sooner. */
 const KEY_LIFETIME_DAYS = 90;
-
-// Stopgap (AIM-862): an agent that may connect to servers cannot sign in to
-// them without mcp:auth, and nothing here can choose auth clients yet, so it is
-// given all of them. Replace this with an auth client selector, made an
-// explicit choice when the agent is created, and grant only the clients chosen
-// there.
-const AUTH_GRANT = {
-  effect: "allow",
-  scope: "mcp:auth",
-  selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
-} as const;
 
 /** The most grants agents.checkPolicyGrants answers in one request. */
 const CHECK_BATCH_SIZE = 100;
@@ -573,31 +569,52 @@ export function CredentialsWizard({
     throwOnError: false,
   });
   const refetchPolicyCheck = policyCheck.refetch;
-  // AUTH_GRANT covers every auth client, so a role that denies any one of
-  // them would refuse the whole save. It is written only when the server says
-  // this person, and the agent's owner, may give it. When the check itself
-  // fails the grant is still sent, and the save reports the refusal.
-  const checkAuthGrant = async (forAgent: string | undefined) => {
-    const { results } = await sdk.agents.checkPolicyGrants({
-      checkAgentPolicyGrantsForm: {
-        ...(forAgent ? { agentId: forAgent } : {}),
-        policyGrants: [AUTH_GRANT],
-      },
-    });
-    return results[0]?.allowed !== false;
+  // An agent that may connect to a server cannot sign in to it without
+  // mcp:auth. It gets its owner's own connections and the shared credential
+  // each chosen server uses, never every auth client: few roles may give
+  // that, and none by default. Each grant is checked first. A refused
+  // personal default is left out, since the agent then signs in no more than
+  // its owner could. A refused shared credential stops the save and is named,
+  // since its server cannot work without it. When the check itself fails the
+  // grants are still sent, and the save reports any refusal.
+  const authGrantsToWrite = async (
+    forAgent: string | undefined,
+  ): Promise<AuthGrant[]> => {
+    if (!allServers && selected.length === 0) return [];
+    const shared = allServers
+      ? []
+      : await sharedAuthGrants(
+          sdk,
+          selected.map((entry) => ({
+            ...entry.server,
+            authClientId: entry.authClientId,
+          })),
+        );
+    const wanted = [PERSONAL_AUTH_GRANT, ...shared.map((entry) => entry.grant)];
+    const results = await sdk.agents
+      .checkPolicyGrants({
+        checkAgentPolicyGrantsForm: {
+          ...(forAgent ? { agentId: forAgent } : {}),
+          policyGrants: wanted,
+        },
+      })
+      .then((answer) => answer.results)
+      .catch(() => undefined);
+    if (!results) return wanted;
+    const refused = shared.filter(
+      (_, index) => results[index + 1]?.allowed === false,
+    );
+    if (refused.length > 0) {
+      throw new Error(
+        `You may not let this agent sign in with ${refused
+          .map((entry) => `${entry.credentialName} on ${entry.serverName}`)
+          .join(
+            ", ",
+          )}. Choose another credential there, or ask an administrator for access.`,
+      );
+    }
+    return results[0]?.allowed === false ? wanted.slice(1) : wanted;
   };
-  const mayGrantAuth = (forAgent: string | undefined) =>
-    checkAuthGrant(forAgent).catch(() => true);
-  // The same answer ahead of time, so the summary names only the grants a
-  // new agent will get. Creating asks again rather than trusting this one.
-  // It waits until the servers are chosen, so it never sits in front of the
-  // server checks that step depends on. A failed check leaves the summary's
-  // caveat in place rather than claiming the grant.
-  const authCheck = useQuery({
-    queryKey: ["agent-auth-grant-check", organization.id, user.id],
-    queryFn: () => checkAuthGrant(undefined),
-    enabled: !existing && step >= 2,
-  });
   const recheck = useCallback(() => {
     if (checkedSelectors.length > 0) void refetchPolicyCheck();
   }, [checkedSelectors, refetchPolicyCheck]);
@@ -791,7 +808,7 @@ export function CredentialsWizard({
             projectId: entry.server.projectId,
           })),
     };
-    const authGrants = (await mayGrantAuth(undefined)) ? [AUTH_GRANT] : [];
+    const authGrants = await authGrantsToWrite(undefined);
     const created = await sdk.agents.create({
       createAgentForm: {
         name: name.trim(),
@@ -920,18 +937,13 @@ export function CredentialsWizard({
           projectId: server.projectId,
         });
       }
-      // Only an agent that reaches a server needs to sign in to one; an edit
-      // that adds a server later adds the grant then.
-      if (
-        (allServers || selected.length > 0) &&
-        ![...appliedPolicies.current.values()].some(
-          (grant) => grant.scope === AUTH_GRANT.scope,
-        ) &&
-        (await mayGrantAuth(agent.id))
-      ) {
+      // Only the sign-in the agent lacks is added. Sign-in for servers it no
+      // longer reaches is left: without the connect grant it reaches nothing.
+      for (const grant of await authGrantsToWrite(agent.id)) {
+        if (holdsAuthGrant(appliedPolicies.current.values(), grant)) continue;
         const created = await createGrant.mutateAsync({
           request: {
-            createAgentPolicyGrantForm: { agentId: agent.id, ...AUTH_GRANT },
+            createAgentPolicyGrantForm: { agentId: agent.id, ...grant },
           },
         });
         appliedPolicies.current.set(created.id, created);
@@ -1309,13 +1321,9 @@ export function CredentialsWizard({
                       allServers
                         ? `${CONNECT_SCOPE} on all servers in the project`
                         : `${CONNECT_SCOPE} on the selected servers`,
-                      ...(authCheck.data === false
-                        ? []
-                        : [
-                            authCheck.data === true
-                              ? `${AUTH_GRANT.scope} on all auth clients`
-                              : `${AUTH_GRANT.scope} on all auth clients, if your role allows it`,
-                          ]),
+                      allServers
+                        ? `${AUTH_SCOPE} on your own connections`
+                        : `${AUTH_SCOPE} on your own connections and the shared credentials the selected servers use`,
                       ...(hookEvents ? [HOOKS_INGEST_SCOPE] : []),
                     ]}
                   >
