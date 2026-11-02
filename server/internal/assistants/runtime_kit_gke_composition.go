@@ -201,7 +201,7 @@ func (s *ServiceCore) kitPersistedMCP(ctx context.Context, db assistantrepo.DBTX
 			continue
 		}
 		seen[row.McpServerID] = true
-		selected = assistantMCPServerRow{ServerSlug: pgtype.Text{String: "", Valid: false}, ToolsetSlug: pgtype.Text{String: "", Valid: false}, DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false}, EnvironmentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, EnvironmentSlug: pgtype.Text{String: "", Valid: false}, MCPServerID: row.McpServerID, EndpointSlug: row.EndpointSlug, EndpointDomain: row.EndpointDomain, Visibility: row.Visibility}
+		selected = assistantMCPServerRow{ServerSlug: pgtype.Text{String: "", Valid: false}, ToolsetSlug: pgtype.Text{String: "", Valid: false}, DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false}, EnvironmentID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, EnvironmentSlug: pgtype.Text{String: "", Valid: false}, MCPServerID: row.McpServerID, EndpointSlug: row.EndpointSlug, EndpointDomain: row.EndpointDomain, EndpointIsDomainRoot: row.EndpointIsDomainRoot, Visibility: row.Visibility}
 	}
 	if len(seen) != 1 || selected.EndpointSlug == "" || s.serverURL == nil || s.serverURL.Scheme != "https" {
 		return nil, uuid.Nil, errKitMCPIneligible

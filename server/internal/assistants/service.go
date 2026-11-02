@@ -264,6 +264,7 @@ type assistantMCPServerRow struct {
 	Visibility             string
 	EndpointSlug           string
 	EndpointDomain         string // custom-domain host; "" for platform endpoints
+	EndpointIsDomainRoot   bool   // the endpoint serves at its custom domain's root
 	DefaultEnvironmentSlug pgtype.Text
 	EnvironmentID          uuid.NullUUID
 	EnvironmentSlug        pgtype.Text
@@ -1308,6 +1309,7 @@ func (s *ServiceCore) loadAssistantMcpServers(ctx context.Context, projectID uui
 			Visibility:             row.Visibility,
 			EndpointSlug:           row.EndpointSlug,
 			EndpointDomain:         row.EndpointDomain,
+			EndpointIsDomainRoot:   row.EndpointIsDomainRoot,
 			DefaultEnvironmentSlug: row.DefaultEnvironmentSlug,
 			EnvironmentID:          row.EnvironmentID,
 			EnvironmentSlug:        row.EnvironmentSlug,
@@ -3799,9 +3801,12 @@ func unreachableReason(m assistantMCPServerRow) string {
 	return "disabled"
 }
 
-// endpointURL is the server's own MCP address; platform endpoints live under base.
-// Platform-first selection (not endpointaddr.PrimaryEndpoint) keeps existing URLs stable.
+// endpointURL is the server's own MCP address; platform endpoints live under base. A hosted row's domain root is the
+// bare domain, as endpointaddr.EndpointURL renders it; other rows keep /mcp/{slug} so configured Kit resources match.
 func (m assistantMCPServerRow) endpointURL(base *url.URL) *url.URL {
+	if m.EndpointDomain != "" && m.EndpointIsDomainRoot && m.ToolsetSlug.Valid {
+		return &url.URL{Scheme: "https", Host: m.EndpointDomain}
+	}
 	if m.EndpointDomain != "" {
 		return (&url.URL{Scheme: "https", Host: m.EndpointDomain}).JoinPath("mcp", m.EndpointSlug)
 	}
