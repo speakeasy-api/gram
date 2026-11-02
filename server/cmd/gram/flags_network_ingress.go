@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
+	"github.com/speakeasy-api/gram/server/internal/tailnetgateway"
 )
 
 const (
@@ -130,6 +131,26 @@ func networkIngressProviderFlags() []cli.Flag {
 			Name: "network-ingress-kubernetes-api-port", Usage: "Kubernetes API destination port for private ingress NetworkPolicies",
 			EnvVars: []string{"GRAM_NETWORK_INGRESS_KUBERNETES_API_PORT"}, Action: validateNetworkIngressPort,
 		},
+		&cli.BoolFlag{
+			Name: "network-ingress-gateway-enabled", Usage: "Host new private ingresses on the tsnet tailnet gateway instead of the Tailscale operator",
+			EnvVars: []string{"GRAM_NETWORK_INGRESS_GATEWAY_ENABLED"}, Value: false,
+		},
+		&cli.StringFlag{
+			Name: "network-ingress-gateway-tag", Usage: "Tailscale tag carried by gateway auth keys and services",
+			EnvVars: []string{"GRAM_NETWORK_INGRESS_GATEWAY_TAG"}, Value: tailnetgateway.DefaultTag, Action: validateNetworkIngressTag,
+		},
+		&cli.IntFlag{
+			Name: "network-ingress-gateway-slots", Usage: "Node identities (gateway pod ordinals) hosting each ingress",
+			EnvVars: []string{"GRAM_NETWORK_INGRESS_GATEWAY_SLOTS"}, Value: tailnetgateway.DefaultSlots,
+		},
+		&cli.StringFlag{
+			Name: "network-ingress-tailscale-api-url", Usage: "Tailscale API base URL override for tests",
+			EnvVars: []string{"GRAM_NETWORK_INGRESS_TAILSCALE_API_URL"},
+		},
+		&cli.BoolFlag{
+			Name: "network-ingress-operator-provider-enabled", Usage: "Keep the Tailscale Kubernetes operator provider registered for existing ingresses and their teardown",
+			EnvVars: []string{"GRAM_NETWORK_INGRESS_OPERATOR_PROVIDER_ENABLED"}, Value: true,
+		},
 		&cli.StringSliceFlag{
 			Name: "network-ingress-cluster-cidrs", Usage: "Cluster destination CIDRs excluded from proxy internet egress",
 			EnvVars: []string{"GRAM_NETWORK_INGRESS_CLUSTER_CIDRS"},
@@ -182,6 +203,13 @@ func networkIngressConfigFromCLI(c *cli.Context) (networkingress.RuntimeConfig, 
 		BackendPort:    int32(backendPort), // #nosec G115 -- validated port range before conversion.
 		IngressClass:   c.String("network-ingress-class"),
 		TokenAudience:  c.String("network-ingress-token-audience"),
+		Gateway: networkingress.GatewayRuntimeConfig{
+			Enabled: c.Bool("network-ingress-gateway-enabled"),
+			Tag:     c.String("network-ingress-gateway-tag"),
+			Slots:   int32(min(max(c.Int("network-ingress-gateway-slots"), 0), 1<<15)), // #nosec G115 -- clamped before conversion.
+			APIURL:  c.String("network-ingress-tailscale-api-url"),
+		},
+		OperatorProviderEnabled: c.Bool("network-ingress-operator-provider-enabled"),
 	}
 	if err := config.Validate(); err != nil {
 		return config, fmt.Errorf("validate network ingress configuration: %w", err)

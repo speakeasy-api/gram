@@ -62,3 +62,13 @@ func TestCheckNetworkIngressWorkerKubernetesRequiresInventoryRBAC(t *testing.T) 
 		})
 	}
 }
+
+func TestNetworkIngressWorkerExposesGatewayFlags(t *testing.T) {
+	t.Parallel()
+	for _, name := range []string{
+		"network-ingress-gateway-enabled", "network-ingress-gateway-tag", "network-ingress-gateway-slots",
+		"network-ingress-tailscale-api-url", "network-ingress-operator-provider-enabled",
+	} {
+		requireFlag(t, newNetworkIngressWorkerCommand().Flags, name)
+	}
+}

@@ -64,11 +64,11 @@ var _ = Service("networkIngress", func() {
 		Payload(func() {
 			security.SessionPayload()
 			Attribute("provider", String, func() { Enum("tailscale") })
-			Attribute("hostname", String, "Lowercase DNS label")
+			Attribute("hostname", String, "Lowercase DNS label; defaults to speakeasy")
 			Attribute("oauth_client_id", String)
 			Attribute("oauth_client_secret", String)
 			Attribute("identity_required", Boolean)
-			Required("provider", "hostname", "oauth_client_id", "oauth_client_secret")
+			Required("provider", "oauth_client_id", "oauth_client_secret")
 		})
 		Result(NetworkIngress)
 		HTTP(func() {
