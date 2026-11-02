@@ -69,3 +69,16 @@ func TestParseAuditKitRuntimeSecurityFlagsRejectsOtherFallbackHosts(t *testing.T
 	_, err := parseAuditKitRuntimeSecurityFlags(apply, getenv)
 	require.ErrorContains(t, err, "single host")
 }
+
+func TestParseAuditKitRuntimeSecurityFlagsRejectsAFallbackOnAnotherPort(t *testing.T) {
+	t.Parallel()
+	apply := []string{"-apply", "-environment=staging", "-confirm-environment=staging", "-confirm-target=db.internal:5432/gram", "-confirm-apply=audit-kit-runtime-security"}
+	getenv := func(string) string {
+		return "postgres://user@db.internal:5432,db.internal:6432/gram?sslmode=require"
+	}
+
+	// Another port on the same host can be another server, so the check
+	// compares the port too, not only the hostname.
+	_, err := parseAuditKitRuntimeSecurityFlags(apply, getenv)
+	require.ErrorContains(t, err, "single host")
+}
