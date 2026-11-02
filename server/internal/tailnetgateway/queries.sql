@@ -43,8 +43,8 @@ VALUES (@network_ingress_id, @organization_id, @slot)
 ON CONFLICT (network_ingress_id, slot) DO NOTHING;
 
 -- name: SetNetworkIngressNodeAuthKey :execrows
--- Installs a fresh one-shot auth key for a slot that has no persisted node
--- state yet. Retired slots never receive keys.
+-- Installs a fresh one-shot auth key for a slot that has not completed a
+-- login (no persisted profile list). Retired slots never receive keys.
 UPDATE network_ingress_nodes
 SET auth_key_encrypted = @auth_key_encrypted,
     auth_key_expires_at = @auth_key_expires_at,
@@ -54,7 +54,15 @@ SET auth_key_encrypted = @auth_key_encrypted,
 WHERE network_ingress_id = @network_ingress_id
   AND organization_id = @organization_id
   AND slot = @slot
-  AND retired_at IS NULL;
+  AND retired_at IS NULL
+  AND NOT EXISTS (
+    SELECT 1
+    FROM network_ingress_node_states s
+    WHERE s.network_ingress_id = network_ingress_nodes.network_ingress_id
+      AND s.organization_id = network_ingress_nodes.organization_id
+      AND s.slot = network_ingress_nodes.slot
+      AND s.state_key = '_profiles'
+  );
 
 -- name: ClearNetworkIngressNodeAuthKey :exec
 UPDATE network_ingress_nodes
@@ -67,7 +75,9 @@ WHERE network_ingress_id = @network_ingress_id
 
 -- name: HeartbeatNetworkIngressNode :execrows
 -- Written by the gateway pod hosting the slot. updated_at tracks the latest
--- heartbeat; the reconciler treats stale last_seen_at as an offline host.
+-- heartbeat; the reconciler treats stale last_seen_at as an offline host. A
+-- retired slot only accepts the draining and stopped beats of the host that
+-- is shutting it down, so a late beat can never resurrect it.
 UPDATE network_ingress_nodes
 SET pod_name = sqlc.narg('pod_name'),
     status = @status,
@@ -82,7 +92,8 @@ SET pod_name = sqlc.narg('pod_name'),
     updated_at = clock_timestamp()
 WHERE network_ingress_id = @network_ingress_id
   AND organization_id = @organization_id
-  AND slot = @slot;
+  AND slot = @slot
+  AND (retired_at IS NULL OR @status::text IN ('draining', 'stopped'));
 
 -- name: RetireNetworkIngressNodes :exec
 -- Marks every slot at or above min_slot as retired so gateway pods stop

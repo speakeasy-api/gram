@@ -2,6 +2,7 @@ package tailnetgateway_test
 
 import (
 	"net/http"
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -52,6 +53,18 @@ func TestSetIdentityHeadersEncodesNonASCII(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "zoë@example.com", identity.Login)
 	require.Equal(t, "Zoë Çelik", identity.Name)
+}
+
+func TestSetIdentityHeadersEncodesEncodedWordMarkers(t *testing.T) {
+	t.Parallel()
+	headers := http.Header{}
+	kind := tailnetgateway.SetIdentityHeaders(headers, userResponse("alice@example.com", "Alice =?not-an-encoded-word?=", ""))
+	require.Equal(t, tailnetgateway.IdentityKindUser, kind)
+	require.True(t, strings.HasPrefix(headers.Get(netingress.TailscaleUserNameHeader), "=?utf-8?"), "ASCII containing =? is encoded so the parser accepts it")
+
+	identity, err := netingress.TailscaleIdentityParser{}.ParseIdentity(headers)
+	require.NoError(t, err)
+	require.Equal(t, "Alice =?not-an-encoded-word?=", identity.Name)
 }
 
 func TestSetIdentityHeadersForTaggedNode(t *testing.T) {
