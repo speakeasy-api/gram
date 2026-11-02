@@ -895,3 +895,42 @@ async fn a_preopened_stream_cannot_start_execution_after_shutdown() {
     drop(stream);
     task.await.unwrap().unwrap();
 }
+
+#[tokio::test(flavor = "multi_thread")]
+async fn server_verification_arguments_round_trip() {
+    let mut run = Run::new(
+        state(1).await,
+        Uuid::new_v4().to_string(),
+        "await tools.servers(server='linear', verify=True)",
+        5000,
+    )
+    .await;
+    run.started().await;
+    let ServerFrame::Callback {
+        id,
+        method,
+        arguments,
+    } = run.next().await
+    else {
+        panic!("expected callback")
+    };
+    assert_eq!(method, "servers");
+    assert_eq!(
+        arguments,
+        json!({"limit":10,"cursor":null,"server":"linear","verify":true})
+    );
+    write_frame(
+        &mut run.stream,
+        &ClientFrame::CallbackResult {
+            id,
+            value: Some(json!({"items":[]})),
+            error: None,
+        },
+    )
+    .await
+    .unwrap();
+    assert!(
+        matches!(run.next().await, ServerFrame::Complete { value, .. } if value == json!({"items":[]}))
+    );
+    run.close().await.unwrap();
+}

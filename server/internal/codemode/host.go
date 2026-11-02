@@ -138,6 +138,9 @@ func (h *CatalogHost) members(ctx context.Context) ([]Server, Lister, error) {
 
 // Servers lists visible members independently of the tool invocation allowlist.
 func (h *CatalogHost) Servers(ctx context.Context, args PageArgs) (*ServerPage, error) {
+	if args.Server != "" && !validConnectionServer(args.Server) {
+		return nil, ErrToolUnavailable
+	}
 	var servers []Server
 	var err error
 	if backend, ok := h.backend.(ConnectionBackend); ok {
@@ -153,11 +156,38 @@ func (h *CatalogHost) Servers(ctx context.Context, args PageArgs) (*ServerPage, 
 	}
 	visible := make([]Server, 0, len(servers))
 	for _, server := range servers {
-		if server.Slug != "" && !strings.Contains(server.Slug, pathSeparator) {
+		if server.Slug != "" && !strings.Contains(server.Slug, pathSeparator) && (args.Server == "" || server.Slug == args.Server) {
 			visible = append(visible, server)
 		}
 	}
-	return PaginateServers(h.scope, args, visible)
+	page, err := PaginateServers(h.scope+"\x00"+args.Server, args, visible)
+	if err != nil {
+		return nil, err
+	}
+	if args.Verify {
+		verifier, ok := h.backend.(ConnectionVerifier)
+		if !ok {
+			return nil, fmt.Errorf("live verification unavailable")
+		}
+		group, verifyCtx := errgroup.WithContext(ctx)
+		group.SetLimit(discoveryConcurrency)
+		for i := range page.Items {
+			group.Go(func() error {
+				probeCtx, cancel := context.WithTimeout(verifyCtx, memberDeadline)
+				defer cancel()
+				connection, err := verifier.VerifyConnection(probeCtx, page.Items[i].Slug)
+				if err != nil {
+					return fmt.Errorf("verify server %s: %w", page.Items[i].Slug, err)
+				}
+				page.Items[i].Connection = connection
+				return nil
+			})
+		}
+		if err := group.Wait(); err != nil {
+			return nil, fmt.Errorf("verify server page: %w", err)
+		}
+	}
+	return page, nil
 }
 
 // Search enumerates relevant members on demand and bounds upstream concurrency.
@@ -378,4 +408,9 @@ func (h *CatalogHost) Connect(ctx context.Context, server string) (*ConnectionAc
 		return nil, fmt.Errorf("connect server: %w", err)
 	}
 	return result, nil
+}
+
+// ConnectionVerifier probes one visible member without widening consent.
+type ConnectionVerifier interface {
+	VerifyConnection(context.Context, string) (*ConnectionState, error)
 }

@@ -10,6 +10,8 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
+	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -37,7 +39,7 @@ func (b *metaCodeBackend) DiscoveryServers(ctx context.Context) ([]codemode.Serv
 }
 
 func (b *metaCodeBackend) knownConnectionState(ctx context.Context, gate *metaGateContext, member metaMember) *codemode.ConnectionState {
-	state := &codemode.ConnectionState{Consent: "not_required", Authentication: "unknown", Instructions: ""}
+	state := &codemode.ConnectionState{Consent: "not_required", Authentication: "unknown", Instructions: "", CheckedAt: nil}
 	if member.backend == metaMemberBackendHosted && !member.remoteSessionIssuerID.Valid {
 		state.Authentication = "not_required"
 	}
@@ -129,4 +131,56 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 type codeConnections struct {
 	mu      sync.Mutex
 	actions map[string]*codemode.ConnectionAction
+}
+
+// VerifyConnection uses the consent page's live MCP probe, bypassing the frozen
+// tool catalogue while preserving the admitted identity and routing boundary.
+func (b *metaCodeBackend) VerifyConnection(ctx context.Context, server string) (*codemode.ConnectionState, error) {
+	ctx, gate, members, err := b.connectionMembers(ctx)
+	if err != nil {
+		return nil, err
+	}
+	member, ok := findMetaMember(members, server)
+	if !ok {
+		return nil, codemode.ErrToolUnavailable
+	}
+	state := b.knownConnectionState(ctx, gate, member)
+	if b.service.validationLimiter != nil {
+		allowed, err := b.service.validationLimiter.Allow(ctx, "code:"+gate.userID+":"+member.serverID.String())
+		if err != nil || !allowed.Allowed {
+			return nil, errValidationRateLimited
+		}
+	}
+	// Resolve credentials afresh instead of treating consent-time verification as current.
+	probeGate := *gate
+	if gate.authentication != nil && gate.authentication.subject.Kind == urn.SessionSubjectKindUser {
+		probeGate.chainUpstream = b.service.gatewayMemberChainer(gate, mcpidentity.KindUserSession, uuid.Nil)
+	}
+	dial, err := b.service.dialMetaMember(ctx, b.service.logger, probeGate, member, codeCallerIdentity(ctx, gate))
+	now := time.Now().UTC()
+	state.CheckedAt = &now
+	if err != nil {
+		if errors.Is(err, remotesessions.ErrNoValidToken) && !errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) && !errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
+			state.Authentication = "reauth_required"
+			state.Instructions = "Call tools.connect(server=...) to reconnect, then verify again in a fresh execution."
+		} else {
+			state.Authentication = "unknown"
+			state.Instructions = "Connection verification could not complete; try again later."
+		}
+		return state, nil
+	}
+	verdict, _ := b.service.probeUpstream(ctx, b.service.logger, probeProxyBuilder(dial.build), member.name)
+	now = time.Now().UTC()
+	state.CheckedAt = &now
+	switch verdict {
+	case remotesessions.ValidationOutcomeValid:
+		state.Authentication = "connected"
+	case remotesessions.ValidationOutcomeRejectedByMember, remotesessions.ValidationOutcomeInactive:
+		state.Authentication = "reauth_required"
+		state.Instructions = "Call tools.connect(server=...) to reconnect, then verify again in a fresh execution."
+	default:
+		state.Authentication = "unreachable"
+		state.Instructions = "The upstream could not be verified; try again later."
+	}
+	return state, nil
 }

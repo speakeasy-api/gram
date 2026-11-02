@@ -255,3 +255,28 @@ func TestCodeReconnectConsentGETKeepsBoundFocus(t *testing.T) {
 	require.Contains(t, response.Body.String(), "Bound tracker")
 	require.NotContains(t, response.Body.String(), "Other server")
 }
+
+func TestCodeServersVerifyProbesWithoutCallingBusinessTools(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	issuer := createUserSessionIssuer(t, ctx, ti.conn, *auth.ProjectID)
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "verify-"+uuid.NewString(), issuer)
+	upstream := newRecordingUpstream(t, "ping")
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Remote", "remote", 0, upstream.url)
+	host := mcp.NewTestMetaCodeHost(t, ctx, ti.service.Service, gateway.ID)
+	before := upstream.requestCount()
+	page, err := host.Servers(ctx, codemode.PageArgs{})
+	require.NoError(t, err)
+	require.Len(t, page.Items, 1)
+	require.Nil(t, page.Items[0].Connection.CheckedAt)
+	require.Equal(t, before, upstream.requestCount())
+	page, err = host.Servers(ctx, codemode.PageArgs{Server: "remote", Verify: true})
+	require.NoError(t, err)
+	require.Equal(t, "connected", page.Items[0].Connection.Authentication)
+	require.NotNil(t, page.Items[0].Connection.CheckedAt)
+	require.Greater(t, upstream.requestCount(), before)
+	for _, request := range upstream.journal() {
+		require.NotEqual(t, "tools/call", request.rpcMethod)
+	}
+}

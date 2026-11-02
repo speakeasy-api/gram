@@ -74,3 +74,34 @@ func TestCodeServerPaginationIgnoresConnectionChanges(t *testing.T) {
 	_, err = PaginateServers("different-scope", PageArgs{Limit: 1, Cursor: first.NextCursor}, servers)
 	require.Error(t, err, "cursor cannot cross authorization scope")
 }
+
+type verifyingRecoveryFixture struct {
+	recoveryFixture
+	verified []string
+}
+
+func (b *verifyingRecoveryFixture) VerifyConnection(_ context.Context, server string) (*ConnectionState, error) {
+	b.verified = append(b.verified, server)
+	return &ConnectionState{Consent: "required", Authentication: "connected"}, nil
+}
+func TestServerVerificationIsExplicitAndPreservesConsent(t *testing.T) {
+	t.Parallel()
+	backend := &verifyingRecoveryFixture{}
+	host, err := NewHost(t.Context(), backend, "scope", []string{})
+	require.NoError(t, err)
+	_, err = host.Servers(t.Context(), PageArgs{})
+	require.NoError(t, err)
+	require.Empty(t, backend.verified)
+	page, err := host.Servers(t.Context(), PageArgs{Server: "tracker", Verify: true})
+	require.NoError(t, err)
+	require.Equal(t, []string{"tracker"}, backend.verified)
+	require.Equal(t, "connected", page.Items[0].Connection.Authentication)
+	require.Equal(t, "required", page.Items[0].Connection.Consent)
+	_, err = host.Call(t.Context(), "tracker--read", []byte(`{}`))
+	require.Error(t, err)
+	require.Empty(t, backend.calls)
+	page, err = host.Servers(t.Context(), PageArgs{Server: "hidden", Verify: true})
+	require.NoError(t, err)
+	require.Empty(t, page.Items)
+	require.Equal(t, []string{"tracker"}, backend.verified)
+}

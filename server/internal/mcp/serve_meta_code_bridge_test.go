@@ -155,10 +155,21 @@ func TestCodeBridgeObservesEndpointAndGrantRevocation(t *testing.T) {
 				_, err = accessrepo.New(ti.conn).DeletePrincipalGrantsByPrincipal(ctx, accessrepo.DeletePrincipalGrantsByPrincipalParams{OrganizationID: auth.ActiveOrganizationID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, auth.UserID)})
 			}
 			require.NoError(t, err)
-			before := upstream.requestCount()
+			// Only business calls are relevant: asynchronous metadata/session cleanup
+			// from the admitted call may finish after revocation.
+			calls := func() int {
+				count := 0
+				for _, request := range upstream.journal() {
+					if request.rpcMethod == "tools/call" {
+						count++
+					}
+				}
+				return count
+			}
+			before := calls()
 			_, err = host.Call(ctx, "remote--ping", json.RawMessage(`{}`))
 			require.Error(t, err)
-			require.Equal(t, before, upstream.requestCount())
+			require.Equal(t, before, calls())
 		})
 	}
 }

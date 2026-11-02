@@ -73,7 +73,7 @@ func Rank(scope string, args SearchArgs, documents []Document, failed []FailedMe
 		}
 	}
 	slices.SortStableFunc(matches, func(a, b ranked) int { return b.score - a.score })
-	start, end, next, err := pageBounds(fingerprint, PageArgs{Limit: args.Limit, Cursor: args.Cursor}, len(matches))
+	start, end, next, err := pageBounds(fingerprint, PageArgs{Limit: args.Limit, Cursor: args.Cursor, Server: "", Verify: false}, len(matches))
 	if err != nil {
 		return nil, err
 	}

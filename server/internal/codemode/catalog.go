@@ -36,6 +36,10 @@ type Host interface {
 
 // PageArgs bounds a discovery response; cursors never grant access.
 type PageArgs struct {
+	// Server restricts server discovery to one exact visible member.
+	Server string `json:"server,omitempty"`
+	// Verify requests a live connection probe for returned members.
+	Verify bool `json:"verify,omitempty"`
 	// Limit is the requested item count, or zero for the default.
 	Limit int `json:"limit,omitempty"`
 	// Cursor identifies an offset in an unchanged inventory.
@@ -144,9 +148,11 @@ type ToolResult struct {
 
 // ConnectionState never treats stored consent as proof of upstream access.
 type ConnectionState struct {
-	Consent        string `json:"consent"`
-	Authentication string `json:"authentication"`
-	Instructions   string `json:"instructions,omitempty"`
+	// CheckedAt identifies a live verification rather than historical consent.
+	CheckedAt      *time.Time `json:"checked_at,omitempty"`
+	Consent        string     `json:"consent"`
+	Authentication string     `json:"authentication"`
+	Instructions   string     `json:"instructions,omitempty"`
 }
 
 // ConnectionAction contains no credentials. The URL starts a browser login.

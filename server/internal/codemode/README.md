@@ -474,3 +474,18 @@ member admission snapshot, or immutable client catalogue grant. It cannot safely
 mint this user-and-member-bound recovery ticket or renew that client's consent.
 The gateway's `servers` / `connect` helpers own that scoped handoff; the focused
 recovery tests verify its identity and admission boundaries.
+
+### Live connection verification
+
+`await tools.servers(server="linear", verify=True)` verifies the selected visible
+member through the same MCP handshake/tools-list probe used by the consent UI.
+Without `server`, only the returned page is probed, with bounded concurrency and
+per-member deadlines. Ordinary `servers()` remains metadata-only. Verified
+connection results include `checked_at` and an authentication state of
+`connected`, `reauth_required`, `unreachable`, or `unknown`. Transient failures
+must not be presented as a successful login or a need to reauthenticate.
+
+Verification may resolve or refresh the caller's upstream credential, but does
+not call business tools, grant consent, or replace the frozen tool catalogue.
+After following a `connect()` URL, start a fresh execution and verify before
+continuing. A successful connection check does not override `consent=required`.
