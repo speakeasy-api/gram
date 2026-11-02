@@ -342,25 +342,27 @@ function RunsTable(props: {
             <TableCell>
               <Badge variant={statusVariant[run.status]}>{run.status}</Badge>
               {run.error && (
-                <p className="mt-1 max-w-xs text-xs text-destructive">
+                <p className="mt-1 max-w-xs text-xs whitespace-normal text-destructive">
                   {run.error}
                 </p>
               )}
             </TableCell>
-            <TableCell className="text-xs">
+            <TableCell className="max-w-64 text-xs whitespace-normal">
               {run.config.answer_models.join(", ")}
+              <br />
               <span className="text-muted-foreground">
-                {" "}
-                · ×{run.config.runs}, judged by {run.config.judge_model}
+                ×{run.config.runs}, judged by {run.config.judge_model}
               </span>
             </TableCell>
-            <TableCell className="text-xs">
+            <TableCell className="max-w-64 text-xs whitespace-normal">
               {run.config.summary_model}
               <br />
               {run.config.digest_model}
             </TableCell>
             <TableCell>{usd(run.cost_usd)}</TableCell>
-            <TableCell className="text-xs">{run.requested_by}</TableCell>
+            <TableCell className="max-w-64 text-xs whitespace-normal">
+              {run.requested_by}
+            </TableCell>
           </TableRow>
         ))}
       </TableBody>
@@ -423,7 +425,6 @@ function Comparison(props: { runIds: string[] }): JSX.Element {
               <TableHead>Valid citations</TableHead>
               <TableHead>Leaks</TableHead>
               <TableHead>Errors</TableHead>
-              <TableHead>Tokens in / out</TableHead>
               <TableHead>Cost</TableHead>
               <TableHead>p95 latency</TableHead>
             </TableRow>
@@ -435,8 +436,10 @@ function Comparison(props: { runIds: string[] }): JSX.Element {
                 className={row.unsafe ? "bg-destructive/10" : undefined}
               >
                 <TableCell>{row.score.arm}</TableCell>
-                <TableCell className="text-xs">{row.score.model}</TableCell>
-                <TableCell className="text-xs">
+                <TableCell className="max-w-64 text-xs whitespace-normal">
+                  {row.score.model}
+                </TableCell>
+                <TableCell className="max-w-64 text-xs whitespace-normal">
                   {row.score.has_tools ? (
                     <>
                       {row.summaryModel}
@@ -459,11 +462,11 @@ function Comparison(props: { runIds: string[] }): JSX.Element {
                     (row.score.isolation_violations?.length ?? 0)}
                 </TableCell>
                 <TableCell>{row.score.errors}</TableCell>
-                <TableCell className="text-xs">
-                  {row.score.prompt_tokens.toLocaleString()} /{" "}
-                  {row.score.completion_tokens.toLocaleString()}
+                <TableCell
+                  title={`${row.score.prompt_tokens.toLocaleString()} tokens in, ${row.score.completion_tokens.toLocaleString()} out`}
+                >
+                  {usd(row.score.cost_usd)}
                 </TableCell>
-                <TableCell>{usd(row.score.cost_usd)}</TableCell>
                 <TableCell>{row.score.latency_p95_ms} ms</TableCell>
               </TableRow>
             ))}

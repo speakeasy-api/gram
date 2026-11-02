@@ -127,7 +127,7 @@ export function comparisonRows(
     for (const s of report.scores) {
       rows.push({
         runId: run.id,
-        runLabel: runLabel(run),
+        runLabel: shortRunLabel(run),
         summaryModel:
           report.preparation?.models.summary_model ?? run.config.summary_model,
         digestModel:
@@ -152,6 +152,11 @@ export function runLabel(
 ): string {
   const day = run.created_at.slice(0, 16).replace("T", " ");
   return `${day} · ${run.id.slice(0, 8)}`;
+}
+
+/** shortRunLabel fits a comparison cell: day and time, no ID. */
+export function shortRunLabel(run: Pick<MemoryEvalRun, "created_at">): string {
+  return run.created_at.slice(5, 16).replace("T", " ");
 }
 
 export function percent(value: number): string {
