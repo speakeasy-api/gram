@@ -128,6 +128,11 @@ type memberDial struct {
 	// sessionKey fingerprints the route and credential the build sends, so
 	// a shared member session never outlives either.
 	sessionKey string
+
+	// credential names the auth client the build signs the member in
+	// upstream with; hasCredential is false when routing recorded none.
+	credential    contextvalues.UpstreamCredential
+	hasCredential bool
 }
 
 func memberSessionKey(route any, token string) string {
@@ -199,6 +204,9 @@ func (s *Service) routeMetaMember(
 	if err != nil {
 		return memberDial{}, "", fmt.Errorf("load meta MCP member server: %w", err)
 	}
+	// Collect what an agent's member authorization served, so the routed
+	// token can be named on the call's log row.
+	gate.servedCredentials = map[uuid.UUID]contextvalues.UpstreamCredential{}
 	tokens, err := s.resolveMemberTokens(ctx, &gate, member)
 	if err != nil {
 		return memberDial{}, "", err
@@ -245,7 +253,8 @@ func (s *Service) routeMetaMember(
 		if member.authClient != nil && member.authClient.outcome != authClientLegacy {
 			authHeaders = member.authClient.headers
 		}
-		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, connectURL: "", sessionKey: memberSessionKey([]any{remoteServer.Url, remoteServer.TransportType, headers, authHeaders}, upstreamToken), build: func(context.Context) (*proxy.Proxy, error) {
+		credential, hasCredential := memberServedCredential(gate, member, routed)
+		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, connectURL: "", sessionKey: memberSessionKey([]any{remoteServer.Url, remoteServer.TransportType, headers, authHeaders}, upstreamToken), credential: credential, hasCredential: hasCredential, build: func(context.Context) (*proxy.Proxy, error) {
 			// No WWW-Authenticate relay: a member's auth challenge must not
 			// invite the client to re-authenticate against the meta MCP.
 			p := s.remoteProxyManager.Build(logger, &remoteServer, member.serverID.String(), headers, member.visibility, gate.organizationID, member.projectID.String(), upstreamToken, "", nil, options...)
@@ -274,7 +283,8 @@ func (s *Service) routeMetaMember(
 		// Per-member namespace so one caller's handshake, calls, and DELETE
 		// land on one tunnel gateway.
 		affinity := tunnelrouting.HashedClientAffinityKey("meta:"+member.serverID.String(), callerIdentity)
-		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, connectURL: "", sessionKey: memberSessionKey([]any{member.tunneledResourceIdentifier, affinity}, upstreamToken), build: func(ctx context.Context) (*proxy.Proxy, error) {
+		credential, hasCredential := memberServedCredential(gate, member, routed)
+		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, connectURL: "", sessionKey: memberSessionKey([]any{member.tunneledResourceIdentifier, affinity}, upstreamToken), credential: credential, hasCredential: hasCredential, build: func(ctx context.Context) (*proxy.Proxy, error) {
 			p, berr := s.tunnelManager.buildProxy(ctx, logger, buildProxyParams{
 				ClientAffinityKey:  affinity,
 				ProjectID:          member.projectID,
@@ -431,6 +441,11 @@ func (s *Service) executeProxiedMemberTool(
 			return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "dial meta MCP member").LogError(ctx, logger)
+	}
+	// The remotemcp interceptor writes this call's log row and never sees the
+	// gate, so carry down which auth client signs the member in.
+	if dial.hasCredential {
+		ctx = contextvalues.SetUpstreamCredential(ctx, dial.credential)
 	}
 
 	// The caller's _meta stays on our side of the wire: WireMeta is a lossy
