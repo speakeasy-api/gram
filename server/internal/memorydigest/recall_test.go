@@ -16,7 +16,9 @@ func TestUncoveredShowsEachPeriodAtItsMostCompressedLevel(t *testing.T) {
 
 	chatInDay := uuid.New()
 	chatToday := uuid.New()
-	dayInWeek := memorydigest.Digest{ID: uuid.New(), Level: memorydigest.LevelDay, PeriodStart: date(2026, 10, 5), Content: "day in covered week", ChatIDs: []uuid.UUID{chatInDay}}
+	memoInDay := uuid.New()
+	memoToday := uuid.New()
+	dayInWeek := memorydigest.Digest{ID: uuid.New(), Level: memorydigest.LevelDay, PeriodStart: date(2026, 10, 5), Content: "day in covered week", ChatIDs: []uuid.UUID{chatInDay}, MemoIDs: []uuid.UUID{memoInDay}}
 	weekInMonth := memorydigest.Digest{ID: uuid.New(), Level: memorydigest.LevelWeek, PeriodStart: date(2026, 10, 5), Content: "week in month", ChildDigestIDs: []uuid.UUID{dayInWeek.ID}}
 	month := memorydigest.Digest{ID: uuid.New(), Level: memorydigest.LevelMonth, PeriodStart: date(2026, 10, 1), Content: "October", ChildDigestIDs: []uuid.UUID{weekInMonth.ID}}
 	openWeek := memorydigest.Digest{ID: uuid.New(), Level: memorydigest.LevelWeek, PeriodStart: date(2026, 11, 2), Content: "first week of November"}
@@ -26,7 +28,11 @@ func TestUncoveredShowsEachPeriodAtItsMostCompressedLevel(t *testing.T) {
 		[]memorydigest.Digest{openDay, dayInWeek, month, openWeek, weekInMonth},
 		[]memorydigest.ChatNote{
 			{ID: chatInDay, SummarizedAt: date(2026, 10, 5), Summary: "covered"},
-			{ID: chatToday, Title: "Retry\n## queue", SummarizedAt: date(2026, 11, 10), Summary: "Picked queue X.\n\nMore detail."},
+			{ID: chatToday, SummarizedAt: date(2026, 11, 10), Summary: "Picked queue X.\n\nMore detail."},
+		},
+		[]memorydigest.MemoNote{
+			{ID: memoInDay, CreatedAt: date(2026, 10, 5), Content: "covered memo"},
+			{ID: memoToday, CreatedAt: date(2026, 11, 11), Content: " Queue X because of ordering. "},
 		},
 	)
 
@@ -34,11 +40,14 @@ func TestUncoveredShowsEachPeriodAtItsMostCompressedLevel(t *testing.T) {
 	for _, e := range entries {
 		ids = append(ids, e.ID)
 	}
-	require.Equal(t, []uuid.UUID{month.ID, openWeek.ID, openDay.ID, chatToday}, ids)
+	require.Equal(t, []uuid.UUID{month.ID, openWeek.ID, openDay.ID, chatToday, memoToday}, ids)
 	require.Equal(t, "October 2026 (month digest)", entries[0].Heading)
 	require.Equal(t, memorydigest.SourceChat, entries[3].Kind)
-	require.Equal(t, "Chat 2026-11-10: Retry ## queue", entries[3].Heading)
+	require.Equal(t, "Chat 2026-11-10", entries[3].Heading)
 	require.Equal(t, "Picked queue X.", entries[3].Text)
+	require.Equal(t, memorydigest.SourceMemo, entries[4].Kind)
+	require.Equal(t, "Memo 2026-11-11", entries[4].Heading)
+	require.Equal(t, "Queue X because of ordering.", entries[4].Text)
 }
 
 func TestBudgetDropsOldestFirst(t *testing.T) {
@@ -79,7 +88,7 @@ func TestChatSnippetIsCut(t *testing.T) {
 
 	entries := memorydigest.Uncovered(nil, []memorydigest.ChatNote{
 		{ID: uuid.New(), SummarizedAt: time.Now(), Summary: strings.Repeat("y", 2_000)},
-	})
+	}, nil)
 	require.Len(t, entries, 1)
 	require.Len(t, []rune(entries[0].Text), 600)
 	require.True(t, strings.HasSuffix(entries[0].Text, "…"))
@@ -115,4 +124,46 @@ func TestBudgetBoundsRenderedBlock(t *testing.T) {
 		kept, dropped := memorydigest.Budget(entries, budget)
 		require.LessOrEqual(t, memorydigest.EstimateTokens(memorydigest.Render(kept, dropped)), budget, "budget %d", budget)
 	}
+}
+
+func TestEstimateTokensErrsHighForNonASCII(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, 2, memorydigest.EstimateTokens("abcdefgh"))
+	require.Equal(t, 4, memorydigest.EstimateTokens("記憶検索"))
+}
+
+func TestBudgetKeepsEverythingWithoutReservingTheNotice(t *testing.T) {
+	t.Parallel()
+
+	entries := []memorydigest.Entry{
+		{Kind: memorydigest.SourceChat, ID: uuid.New(), Heading: "Chat 2026-10-01", At: date(2026, 10, 1), Text: "a"},
+		{Kind: memorydigest.SourceChat, ID: uuid.New(), Heading: "Chat 2026-10-02", At: date(2026, 10, 2), Text: "b"},
+	}
+	need := memorydigest.EstimateTokens(memorydigest.Render(entries, 0))
+	kept, dropped := memorydigest.Budget(entries, need+2)
+	require.Len(t, kept, 2)
+	require.Zero(t, dropped)
+}
+
+func TestBudgetKeepsNothingWhenNewestEntryAloneIsTooBig(t *testing.T) {
+	t.Parallel()
+
+	entries := []memorydigest.Entry{
+		{Kind: memorydigest.SourceChat, ID: uuid.New(), Heading: "Chat 2026-10-01", At: date(2026, 10, 1), Text: strings.Repeat("x", 4_000)},
+	}
+	kept, dropped := memorydigest.Budget(entries, 100)
+	require.Empty(t, kept)
+	require.Equal(t, 1, dropped)
+}
+
+func TestMemoSnippetIsCutWithMarker(t *testing.T) {
+	t.Parallel()
+
+	entries := memorydigest.Uncovered(nil, nil, []memorydigest.MemoNote{
+		{ID: uuid.New(), CreatedAt: time.Now(), Content: strings.Repeat("m", 2_000)},
+	})
+	require.Len(t, entries, 1)
+	require.Len(t, []rune(entries[0].Text), 600)
+	require.True(t, strings.HasSuffix(entries[0].Text, "…"))
 }
