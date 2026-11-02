@@ -129,6 +129,7 @@ type Service struct {
 	loadBinding     func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error)
 	loadProvider    func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error)
 	refreshIdentity func(context.Context, Provider, string, string, string) (*RefreshResult, error)
+	refreshPaused   func(context.Context, Provider) bool
 }
 
 func New(db *pgxpool.Pool, enc *encryption.Client, dependencies Dependencies) *Service {
@@ -136,7 +137,7 @@ func New(db *pgxpool.Pool, enc *encryption.Client, dependencies Dependencies) *S
 	if now == nil {
 		now = time.Now
 	}
-	return &Service{store: &delegationRepository{db: db}, enc: enc, now: now, loadBinding: dependencies.LoadBinding, loadProvider: dependencies.LoadProvider, refreshIdentity: dependencies.RefreshIdentity}
+	return &Service{store: &delegationRepository{db: db}, enc: enc, now: now, loadBinding: dependencies.LoadBinding, loadProvider: dependencies.LoadProvider, refreshIdentity: dependencies.RefreshIdentity, refreshPaused: dependencies.RefreshPaused}
 }
 func delegationBinding(p Provider, humanID string) Binding { return p.Binding(humanID) }
 func validDelegationBinding(b Binding) bool {
@@ -519,6 +520,10 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	}
 	if !usableRefresh(c, now) {
 		return Assertion{}, ErrReauthentication
+	}
+	// This says nothing about this person's token, so it must not touch their row.
+	if s.refreshPaused != nil && s.refreshPaused(ctx, p) {
+		return Assertion{}, ErrConfiguration
 	}
 	claim := uuid.New()
 	acquired, err := s.store.claim(ctx, b, c.generation, claim, now)

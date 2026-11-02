@@ -856,6 +856,56 @@ func TestDelegationConfigurationFailureThenInvalidIdentityStaysErased(t *testing
 	require.Equal(t, 1, posts)
 }
 
+func TestDelegationClientPauseWritesNothing(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		fixture func(*testing.T) (*Service, *delegationMemoryStore, *fixtureProvider, Binding, Authorizer)
+	}{
+		{name: "healthy row", fixture: func(t *testing.T) (*Service, *delegationMemoryStore, *fixtureProvider, Binding, Authorizer) {
+			t.Helper()
+			s, store, p, b, allow := newDelegationUnitFixture(t)
+			require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+			return s, store, p, b, allow
+		}},
+		{name: "row waiting to retry", fixture: func(t *testing.T) (*Service, *delegationMemoryStore, *fixtureProvider, Binding, Authorizer) {
+			t.Helper()
+			s, store, p, b, allow := failedConfigurationFixture(t)
+			delegationMoveClock(s, configurationRetryDelay)
+			return s, store, p, b, allow
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s, store, p, b, allow := tc.fixture(t)
+			posts := 0
+			s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+				posts++
+				return delegationRenewal(p, s.now(), "new-id", "rotated-refresh"), nil
+			}
+			paused := true
+			s.refreshPaused = func(context.Context, Provider) bool { return paused }
+			before, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			claims := store.claims
+
+			_, err = s.Resolve(t.Context(), b, allow)
+			require.ErrorIs(t, err, ErrConfiguration)
+			require.Zero(t, posts)
+			require.Equal(t, claims, store.claims)
+			after, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			require.Equal(t, before, after)
+
+			paused = false
+			a, err := s.Resolve(t.Context(), b, allow)
+			require.NoError(t, err)
+			require.Equal(t, "new-id", a.Value())
+			require.Equal(t, 1, posts)
+		})
+	}
+}
+
 func TestDelegationConfigurationFailureSignInLiftsThePause(t *testing.T) {
 	t.Parallel()
 	s, store, p, b, allow := failedConfigurationFixture(t)

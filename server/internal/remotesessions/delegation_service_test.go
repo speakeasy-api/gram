@@ -32,10 +32,11 @@ type delegationAdapterFixture struct {
 	loadBinding     func(context.Context, string, uuid.UUID, uuid.UUID) (*FederatedProvider, error)
 	loadProvider    func(context.Context, string, uuid.UUID, uuid.UUID) (*FederatedProvider, error)
 	refreshIdentity func(context.Context, *FederatedProvider, string, string, string) (*FederatedRefreshResult, error)
+	refreshPaused   func(context.Context, *FederatedProvider) bool
 }
 
 func (s *delegationAdapterFixture) service() *DelegationService {
-	return &DelegationService{service: delegation.New(s.db, s.enc, delegationDependencies(s.loadBinding, s.loadProvider, s.refreshIdentity, func() time.Time { return s.now() }))}
+	return &DelegationService{service: delegation.New(s.db, s.enc, delegationDependencies(s.loadBinding, s.loadProvider, s.refreshIdentity, s.refreshPaused, func() time.Time { return s.now() }))}
 }
 func (s *delegationAdapterFixture) RetainVerifiedLogin(ctx context.Context, p *FederatedProvider, human string, i *FederatedIdentity, requested bool) error {
 	return s.service().RetainVerifiedLogin(ctx, p, human, i, requested)
@@ -105,6 +106,7 @@ func newDelegationUnitFixture(t *testing.T) (*delegationAdapterFixture, *delegat
 	s.refreshIdentity = func(context.Context, *FederatedProvider, string, string, string) (*FederatedRefreshResult, error) {
 		return nil, errors.New("unexpected refresh")
 	}
+	s.refreshPaused = func(context.Context, *FederatedProvider) bool { return false }
 	allow := delegationTestAuthority(func(_ context.Context, got DelegationBinding) error {
 		if got != b {
 			return errors.New("not authorized")

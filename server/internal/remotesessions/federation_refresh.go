@@ -13,6 +13,7 @@ import (
 	redisCache "github.com/go-redis/cache/v9"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 )
 
@@ -69,10 +70,6 @@ func (m *ChallengeManager) RefreshFederatedIdentity(ctx context.Context, p *Fede
 	if p == nil || refreshToken == "" || expectedSubject == "" {
 		return nil, &FederatedRefreshError{Kind: FederatedRefreshConfiguration}
 	}
-	logger := m.logger.With(attr.SlogOrganizationID(p.organizationID), attr.SlogRemoteSessionIssuerID(p.issuer.ID.String()), attr.SlogRemoteSessionClientID(p.client.ID.String()))
-	if m.federatedClientPaused(ctx, logger, p) {
-		return nil, &FederatedRefreshError{Kind: FederatedRefreshClientRejected}
-	}
 	if err := m.preflightFederatedSigner(p); err != nil {
 		return nil, federatedRefreshSetupError(err)
 	}
@@ -90,6 +87,7 @@ func (m *ChallengeManager) RefreshFederatedIdentity(ctx context.Context, p *Fede
 	if err != nil {
 		return nil, federatedRefreshSetupError(classifyFederatedExchangeError(err))
 	}
+	logger := m.logger.With(attr.SlogOrganizationID(p.organizationID), attr.SlogRemoteSessionIssuerID(p.issuer.ID.String()), attr.SlogRemoteSessionClientID(p.client.ID.String()))
 	tok, receivedAt, err := postFederatedRefresh(logger, doer, req)
 	if err != nil {
 		var failure *FederatedRefreshError
@@ -168,14 +166,14 @@ func federatedClientPauseKey(p *FederatedProvider) string {
 }
 
 // A cache failure must not stop refreshes, so it reads as not paused.
-func (m *ChallengeManager) federatedClientPaused(ctx context.Context, logger *slog.Logger, p *FederatedProvider) bool {
+func (m *ChallengeManager) federatedClientPaused(ctx context.Context, p *FederatedProvider) bool {
 	if m.locks == nil {
 		return false
 	}
 	var paused bool
 	err := m.locks.Get(ctx, federatedClientPauseKey(p), &paused)
 	if err != nil && !errors.Is(err, redisCache.ErrCacheMiss) {
-		logger.WarnContext(ctx, "read federated client pause", attr.SlogError(err))
+		m.logger.WarnContext(ctx, "read federated client pause", attr.SlogRemoteSessionClientID(p.client.ID.String()), attr.SlogError(err))
 	}
 	return err == nil && paused
 }
@@ -184,7 +182,14 @@ func (m *ChallengeManager) pauseFederatedClient(ctx context.Context, logger *slo
 	if m.locks == nil {
 		return
 	}
-	if err := m.locks.Set(ctx, federatedClientPauseKey(p), true, federatedClientPause); err != nil {
+	// The first rejection sets the window, so late rejections cannot extend it.
+	var err error
+	if conditional, ok := m.locks.(cache.ConditionalCache); ok {
+		_, err = conditional.SetIfAbsent(ctx, federatedClientPauseKey(p), true, federatedClientPause)
+	} else {
+		err = m.locks.Set(ctx, federatedClientPauseKey(p), true, federatedClientPause)
+	}
+	if err != nil {
 		logger.WarnContext(ctx, "record federated client pause", attr.SlogError(err))
 	}
 }

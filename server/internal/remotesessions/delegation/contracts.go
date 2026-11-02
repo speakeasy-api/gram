@@ -60,6 +60,9 @@ type Dependencies struct {
 	LoadBinding     func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error)
 	LoadProvider    func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error)
 	RefreshIdentity func(context.Context, Provider, string, string, string) (*RefreshResult, error)
+
+	// RefreshPaused reports that the provider recently rejected the client itself.
+	RefreshPaused func(context.Context, Provider) bool
 }
 
 type RefreshFailure string

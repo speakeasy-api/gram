@@ -14,6 +14,8 @@ import (
 	"testing"
 	"time"
 
+	"github.com/alicebob/miniredis/v2"
+	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -82,6 +84,7 @@ func rejectionFixture(t *testing.T, locks cache.Cache) (*delegationAdapterFixtur
 	logs := &bytes.Buffer{}
 	manager := &ChallengeManager{enc: s.enc, policy: policy, logger: slog.New(slog.NewJSONHandler(logs, nil)), locks: locks}
 	s.refreshIdentity = manager.RefreshFederatedIdentity
+	s.refreshPaused = manager.federatedClientPaused
 	start := time.Now().UTC().Truncate(time.Microsecond).Add(-refusalRetryWait)
 	s.now = func() time.Time { return start }
 	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, start, "secret-id", "secret-refresh", 30*time.Second), true))
@@ -159,14 +162,69 @@ func TestDelegationClientRejectionPausesEveryRefreshForThatClient(t *testing.T) 
 	_, err := s.Resolve(t.Context(), b, allow)
 	require.ErrorIs(t, err, ErrDelegationConfiguration)
 	require.Len(t, endpoint.received(), 1)
+	before, err := store.load(t.Context(), b)
+	require.NoError(t, err)
 
 	moveDelegationClock(s)
 	_, err = s.Resolve(t.Context(), b, allow)
 	require.ErrorIs(t, err, ErrDelegationConfiguration)
 	require.Len(t, endpoint.received(), 1, "the client pause must stop the request")
-	row, err := store.load(t.Context(), b)
+	after, err := store.load(t.Context(), b)
 	require.NoError(t, err)
-	require.Equal(t, "secret-refresh", delegationPlain(t, s, row.RefreshTokenEncrypted.String))
+	require.Equal(t, before, after)
+	require.Equal(t, "secret-refresh", delegationPlain(t, s, after.RefreshTokenEncrypted.String))
+}
+
+func TestDelegationClientPauseLeavesHealthyRowUnchanged(t *testing.T) {
+	t.Parallel()
+	mr := miniredis.RunT(t)
+	rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { require.NoError(t, rc.Close()) })
+	locks := cache.NewRedisCacheAdapter(rc)
+	s, store, b, allow, endpoint, _ := rejectionFixture(t, locks)
+	p, err := s.loadProvider(t.Context(), b.OrganizationID, b.IssuerID, b.ClientID)
+	require.NoError(t, err)
+	// The assertion is inside the renewal window but unexpired, so no expiry cleanup runs.
+	now := time.Now().UTC().Truncate(time.Microsecond)
+	s.now = func() time.Time { return now }
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, now, "secret-id", "secret-refresh", 30*time.Second), true))
+	before, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Equal(t, "durable_credential_present", before.ObservationStatus.String)
+	require.NoError(t, locks.Set(t.Context(), federatedClientPauseKey(p), true, federatedClientPause))
+
+	_, err = s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrDelegationConfiguration)
+	require.Empty(t, endpoint.received())
+	after, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Equal(t, before, after, "the row must not change, including its generation and timestamps")
+
+	mr.FastForward(federatedClientPause)
+	endpoint.answer(http.StatusOK, `{"access_token":"secret-access","refresh_token":"secret-rotated"}`)
+	_, err = s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrDelegationReauthentication, "this response has no ID token to renew the assertion with")
+	require.Equal(t, []string{"secret-refresh"}, endpoint.received())
+	after, err = store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.Equal(t, "secret-rotated", delegationPlain(t, s, after.RefreshTokenEncrypted.String))
+}
+
+func TestFederatedClientPauseIsNotExtendedByLateRejections(t *testing.T) {
+	t.Parallel()
+	mr := miniredis.RunT(t)
+	rc := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+	t.Cleanup(func() { require.NoError(t, rc.Close()) })
+	logger := testenv.NewLogger(t)
+	m := &ChallengeManager{locks: cache.NewRedisCacheAdapter(rc), logger: logger}
+	p := federatedFixture(t)
+	m.pauseFederatedClient(t.Context(), logger, p)
+	require.True(t, m.federatedClientPaused(t.Context(), p))
+	mr.FastForward(federatedClientPause - time.Second)
+	m.pauseFederatedClient(t.Context(), logger, p)
+	require.True(t, m.federatedClientPaused(t.Context(), p))
+	mr.FastForward(time.Second)
+	require.False(t, m.federatedClientPaused(t.Context(), p))
 }
 
 func TestDelegationOtherRejectionDoesNotPauseTheClient(t *testing.T) {

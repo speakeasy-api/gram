@@ -30,10 +30,10 @@ var (
 type DelegationService struct{ service *delegation.Service }
 
 func NewDelegationService(db *pgxpool.Pool, enc *encryption.Client, manager *ChallengeManager) *DelegationService {
-	return &DelegationService{service: delegation.New(db, enc, delegationDependencies(manager.LoadFederatedDelegationProvider, manager.LoadFederatedProvider, manager.RefreshFederatedIdentity, nil))}
+	return &DelegationService{service: delegation.New(db, enc, delegationDependencies(manager.LoadFederatedDelegationProvider, manager.LoadFederatedProvider, manager.RefreshFederatedIdentity, manager.federatedClientPaused, nil))}
 }
 
-func delegationDependencies(binding, provider func(context.Context, string, uuid.UUID, uuid.UUID) (*FederatedProvider, error), refresh func(context.Context, *FederatedProvider, string, string, string) (*FederatedRefreshResult, error), now func() time.Time) delegation.Dependencies {
+func delegationDependencies(binding, provider func(context.Context, string, uuid.UUID, uuid.UUID) (*FederatedProvider, error), refresh func(context.Context, *FederatedProvider, string, string, string) (*FederatedRefreshResult, error), paused func(context.Context, *FederatedProvider) bool, now func() time.Time) delegation.Dependencies {
 	adaptLoader := func(load func(context.Context, string, uuid.UUID, uuid.UUID) (*FederatedProvider, error)) func(context.Context, string, uuid.UUID, uuid.UUID) (delegation.Provider, error) {
 		return func(ctx context.Context, org string, issuer, client uuid.UUID) (delegation.Provider, error) {
 			p, err := load(ctx, org, issuer, client)
@@ -46,7 +46,10 @@ func delegationDependencies(binding, provider func(context.Context, string, uuid
 			return delegationProvider{p}, nil
 		}
 	}
-	return delegation.Dependencies{Now: now, LoadBinding: adaptLoader(binding), LoadProvider: adaptLoader(provider), RefreshIdentity: func(ctx context.Context, provider delegation.Provider, token, subject, nonce string) (*delegation.RefreshResult, error) {
+	return delegation.Dependencies{Now: now, LoadBinding: adaptLoader(binding), LoadProvider: adaptLoader(provider), RefreshPaused: func(ctx context.Context, provider delegation.Provider) bool {
+		p, ok := provider.(delegationProvider)
+		return ok && paused(ctx, p.p)
+	}, RefreshIdentity: func(ctx context.Context, provider delegation.Provider, token, subject, nonce string) (*delegation.RefreshResult, error) {
 		p, ok := provider.(delegationProvider)
 		if !ok {
 			return nil, &delegation.RefreshError{Kind: delegation.RefreshConfiguration}
