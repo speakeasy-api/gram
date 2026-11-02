@@ -8,6 +8,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/url"
 	"strings"
@@ -111,12 +112,32 @@ func New(policy *guardian.Policy, baseURL string) (*HTTPClient, error) {
 		baseURL = DefaultBaseURL
 	}
 	parsed, err := url.Parse(baseURL)
-	if err != nil || parsed.Scheme == "" || parsed.Host == "" {
+	if err != nil || parsed.Host == "" {
 		return nil, fmt.Errorf("invalid tailscale api base url %q", baseURL)
+	}
+	if err := RequireTLS(parsed); err != nil {
+		return nil, err
 	}
 	httpClient := policy.PooledClient()
 	httpClient.Timeout = requestTimeout
 	return &HTTPClient{baseURL: parsed, http: httpClient}, nil
+}
+
+// RequireTLS rejects a base URL that would carry the customer's OAuth client
+// in the clear. Plain HTTP is accepted only for loopback hosts, which is what
+// in-process test servers use.
+func RequireTLS(u *url.URL) error {
+	if u == nil {
+		return errors.New("tailscale api base url is required")
+	}
+	if strings.EqualFold(u.Scheme, "https") {
+		return nil
+	}
+	host := u.Hostname()
+	if strings.EqualFold(u.Scheme, "http") && (host == "localhost" || net.ParseIP(host) != nil && net.ParseIP(host).IsLoopback()) {
+		return nil
+	}
+	return fmt.Errorf("tailscale api base url %q must use https", u.String())
 }
 
 func (c *HTTPClient) api(creds Credentials) (*tailscale.Client, error) {

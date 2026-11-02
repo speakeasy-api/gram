@@ -2,8 +2,10 @@ package tailscaleapi
 
 import (
 	"context"
+	"errors"
 	"fmt"
 	"maps"
+	"strings"
 	"sync"
 	"time"
 )
@@ -48,6 +50,9 @@ func (f *Fake) CreateAuthKey(_ context.Context, creds Credentials, req AuthKeyRe
 	if err := f.check(creds); err != nil {
 		return AuthKey{}, err
 	}
+	if req.Tag == "" || req.TTL <= 0 {
+		return AuthKey{}, errors.New("auth key request requires a tag and a ttl")
+	}
 	key := AuthKey{
 		ID:      fmt.Sprintf("k%d", len(f.keys)+1),
 		Key:     fmt.Sprintf("tskey-auth-fake-%d-%s", len(f.keys)+1, req.Tag),
@@ -64,6 +69,9 @@ func (f *Fake) DeleteDevice(_ context.Context, creds Credentials, nodeID string)
 	if err := f.check(creds); err != nil {
 		return err
 	}
+	if strings.TrimSpace(nodeID) == "" {
+		return errors.New("device deletion requires a node id")
+	}
 	f.deleted = append(f.deleted, nodeID)
 	return nil
 }
@@ -75,6 +83,9 @@ func (f *Fake) UpsertService(_ context.Context, creds Credentials, svc Service) 
 	if err := f.check(creds); err != nil {
 		return err
 	}
+	if !strings.HasPrefix(svc.Name, "svc:") || len(svc.Ports) == 0 {
+		return errors.New("service definition requires a svc: name and at least one port")
+	}
 	f.services[svc.Name] = svc
 	return nil
 }
@@ -85,6 +96,9 @@ func (f *Fake) DeleteService(_ context.Context, creds Credentials, name string) 
 	defer f.mu.Unlock()
 	if err := f.check(creds); err != nil {
 		return err
+	}
+	if !strings.HasPrefix(name, "svc:") {
+		return errors.New("service deletion requires a svc: name")
 	}
 	delete(f.services, name)
 	return nil
