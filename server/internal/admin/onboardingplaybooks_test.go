@@ -70,4 +70,6 @@ func TestUpdateOnboardingPlaybookOrganizationOwnership(t *testing.T) {
 	require.Nil(t, updated.OrganizationID)
 	require.True(t, updated.IsDefault)
 	require.Equal(t, "Updated template", updated.Name)
+	require.Len(t, updated.Steps, 1)
+	require.Equal(t, "platform-mcp", updated.Steps[0].Slug)
 }
