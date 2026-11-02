@@ -457,6 +457,7 @@ func TestGKEReapDeletesClaimIdempotently(t *testing.T) {
 }
 
 func TestGKEResolveRunnerPodAssignedSandbox(t *testing.T) {
+	t.Parallel()
 	for _, tc := range []struct {
 		name      string
 		conflict  string
@@ -471,6 +472,7 @@ func TestGKEResolveRunnerPodAssignedSandbox(t *testing.T) {
 		{name: "multiple matching pods", count: 2, wantError: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 			dyn := newGKEFakeDynamic()
 			claim := &unstructured.Unstructured{Object: map[string]any{
 				"apiVersion": "extensions.agents.x-k8s.io/v1alpha1", "kind": "SandboxClaim",
