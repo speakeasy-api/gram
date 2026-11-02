@@ -231,6 +231,19 @@ func (s chatSpec) build(now time.Time, ordinal int, secrets []Secret) Chat {
 	}
 }
 
+// WithChatIDs returns a copy of the corpus whose chats carry the IDs id
+// returns for their keys. Questions name chats by key, so answer keys and
+// citation checks still hold. A loader that shares a database with other
+// tenants, such as the demo seed, uses it to keep chat IDs unique.
+func (c *Corpus) WithChatIDs(id func(key string) uuid.UUID) *Corpus {
+	copied := *c
+	copied.Chats = slices.Clone(c.Chats)
+	for i := range copied.Chats {
+		copied.Chats[i].ID = id(copied.Chats[i].Key)
+	}
+	return &copied
+}
+
 // ChatID is the deterministic chat ID for a corpus key.
 func ChatID(key string) uuid.UUID {
 	return uuid.NewSHA1(chatNamespace, []byte(key))
