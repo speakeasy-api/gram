@@ -577,20 +577,29 @@ export function CredentialsWizard({
   // its owner could. A refused shared credential stops the save and is named,
   // since its server cannot work without it. When the check itself fails the
   // grants are still sent, and the save reports any refusal.
+  // What the agent already holds is never asked about again: an editor who
+  // may not give a grant someone else gave leaves it in place.
   const authGrantsToWrite = async (
     forAgent: string | undefined,
+    held: AgentPolicyGrant[] = [],
   ): Promise<AuthGrant[]> => {
     if (!allServers && selected.length === 0) return [];
-    const shared = allServers
+    const shared = (
+      allServers
+        ? []
+        : await sharedAuthGrants(
+            sdk,
+            selected.map((entry) => ({
+              ...entry.server,
+              authClientId: entry.authClientId,
+            })),
+          )
+    ).filter((entry) => !holdsAuthGrant(held, entry.grant));
+    const personal = holdsAuthGrant(held, PERSONAL_AUTH_GRANT)
       ? []
-      : await sharedAuthGrants(
-          sdk,
-          selected.map((entry) => ({
-            ...entry.server,
-            authClientId: entry.authClientId,
-          })),
-        );
-    const wanted = [PERSONAL_AUTH_GRANT, ...shared.map((entry) => entry.grant)];
+      : [PERSONAL_AUTH_GRANT];
+    const wanted = [...personal, ...shared.map((entry) => entry.grant)];
+    if (wanted.length === 0) return [];
     const results = await sdk.agents
       .checkPolicyGrants({
         checkAgentPolicyGrantsForm: {
@@ -602,7 +611,7 @@ export function CredentialsWizard({
       .catch(() => undefined);
     if (!results) return wanted;
     const refused = shared.filter(
-      (_, index) => results[index + 1]?.allowed === false,
+      (_, index) => results[index + personal.length]?.allowed === false,
     );
     if (refused.length > 0) {
       throw new Error(
@@ -613,7 +622,9 @@ export function CredentialsWizard({
           )}. Choose another credential there, or ask an administrator for access.`,
       );
     }
-    return results[0]?.allowed === false ? wanted.slice(1) : wanted;
+    return personal.length > 0 && results[0]?.allowed === false
+      ? wanted.slice(1)
+      : wanted;
   };
   const recheck = useCallback(() => {
     if (checkedSelectors.length > 0) void refetchPolicyCheck();
@@ -939,8 +950,9 @@ export function CredentialsWizard({
       }
       // Only the sign-in the agent lacks is added. Sign-in for servers it no
       // longer reaches is left: without the connect grant it reaches nothing.
-      for (const grant of await authGrantsToWrite(agent.id)) {
-        if (holdsAuthGrant(appliedPolicies.current.values(), grant)) continue;
+      for (const grant of await authGrantsToWrite(agent.id, [
+        ...appliedPolicies.current.values(),
+      ])) {
         const created = await createGrant.mutateAsync({
           request: {
             createAgentPolicyGrantForm: { agentId: agent.id, ...grant },

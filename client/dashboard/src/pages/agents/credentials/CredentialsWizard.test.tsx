@@ -2206,6 +2206,64 @@ describe("Editing an agent that already exists", () => {
     );
   });
 
+  it("keeps a shared credential someone else gave without asking for it again", async () => {
+    mocks.mcpServers.mockResolvedValue({
+      mcpServers: [
+        {
+          id: "server_one",
+          name: "GitHub",
+          slug: "github",
+          projectId: "project_one",
+          remoteMcpServerId: "remote_github",
+          visibility: "private",
+          networkAccessMode: "dual",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+    });
+    mocks.serverChoices.mockResolvedValue({
+      choices: [
+        { id: "client_x", name: "Team bot", clientType: "service_account" },
+      ],
+    });
+    // The editor may not give the credential the agent already holds.
+    mocks.checkPolicyGrants.mockImplementation(
+      answerChecks({ client_x: "caller" }),
+    );
+    const { onDone } = editing({
+      grants: [
+        {
+          id: "grant_server_one",
+          effect: "allow",
+          scope: "mcp:connect",
+          selector: {
+            resourceKind: "mcp",
+            resourceId: "server_one",
+            projectId: "project_one",
+          },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: "grant_client_x",
+          effect: "allow",
+          scope: "mcp:auth",
+          selector: { resourceKind: "mcp_auth_client", resourceId: "client_x" },
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("checkbox", { name: "GitHub" });
+    fireEvent.click(await authenticationSave());
+
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(screen.queryByText(/You may not let this agent sign in/)).toBeNull();
+    expect(mocks.createGrant).not.toHaveBeenCalled();
+  });
+
   it("adds no sign-in to an agent that may already use every auth client", async () => {
     const { onDone } = editing({
       auth: false,
