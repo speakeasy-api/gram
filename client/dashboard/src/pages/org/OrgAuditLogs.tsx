@@ -1270,7 +1270,9 @@ function OrgAuditLogsInner() {
                           />
                         );
                       });
-                      if (run.logs.length < 2) return rows;
+                      // A lone entry is returned as its own keyed row, not an
+                      // array, so a new entry at the top doesn't remount it.
+                      if (run.logs.length < 2) return rows[0];
                       return (
                         <ActorRunRow
                           key={run.key}
