@@ -101,6 +101,20 @@ vi.mock("@/routes", () => ({
 vi.mock("react-router", () => ({
   useParams: () => ({ mcpServerSlug: "server-a" }),
   useLocation: () => ({ pathname: "/mcp/server-a" }),
+  Link: ({
+    to,
+    children,
+    ...rest
+  }: {
+    to: string;
+    children: ReactNode;
+    "aria-label"?: string;
+    className?: string;
+  }) => (
+    <a href={to} {...rest}>
+      {children}
+    </a>
+  ),
 }));
 vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
   useGetMcpServer: () => ({ data: state.mcpServer }),
@@ -173,6 +187,28 @@ vi.mock("@gram/client/react-query/remoteMcpServerHeaders.js", () => ({
     isError: false,
   }),
 }));
+// The organization's upstream auth enforcement state and the server's
+// credentials status, read by the sidebar's Identity summary.
+const identityGate = vi.hoisted(() => ({
+  features: {
+    isPending: false,
+    isError: false,
+    data: { upstreamAuthEnforced: false } as
+      | { upstreamAuthEnforced?: boolean }
+      | undefined,
+  },
+  authentication: {
+    isPending: false,
+    isError: false,
+    data: { status: "configured" } as { status: string } | undefined,
+  },
+}));
+vi.mock("@gram/client/react-query/productFeatures.js", () => ({
+  useProductFeatures: () => identityGate.features,
+}));
+vi.mock("@gram/client/react-query/mcpServerAuthentication.js", () => ({
+  useMcpServerAuthentication: () => identityGate.authentication,
+}));
 vi.mock("@/components/sources/SourceCard", () => ({
   SourceMcpIcon: () => null,
 }));
@@ -193,15 +229,18 @@ vi.mock("@/components/detail/detail-sidebar-nav", () => ({
   DetailSidebarNav: ({
     items,
     topContent,
+    cardContent,
   }: {
     items: { title: string }[];
     topContent: ReactNode;
+    cardContent: ReactNode;
   }) => (
     <>
       {items.map((item) => (
         <span key={item.title}>{item.title}</span>
       ))}
       {topContent}
+      {cardContent}
     </>
   ),
 }));
@@ -456,4 +495,72 @@ describe("MCP server readiness", () => {
     // The Overview polls; the sidebar reads the same cached snapshot.
     expect(state.tunnelConnections).toHaveBeenCalledWith("tunnel-a");
   });
+});
+
+describe("remote MCP server Identity summary", () => {
+  const remote = {
+    id: "server-a",
+    name: "Server",
+    remoteMcpServerId: "remote-source-a",
+  };
+  function setFeatures(features: typeof identityGate.features): void {
+    identityGate.features = features;
+  }
+  afterEach(() => {
+    setFeatures({
+      isPending: false,
+      isError: false,
+      data: { upstreamAuthEnforced: false },
+    });
+  });
+
+  it("reports the credentials status when enforcement is on", () => {
+    state.mcpServer = remote;
+    setFeatures({
+      isPending: false,
+      isError: false,
+      data: { upstreamAuthEnforced: true },
+    });
+    render(<McpServerXSidebarNav />);
+    expect(
+      screen.getByRole("link", { name: /Identity: Credentials set up/ }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /Identity: Manual/ })).toBeNull();
+  });
+
+  it("keeps the legacy identity mode when enforcement is off", () => {
+    state.mcpServer = remote;
+    render(<McpServerXSidebarNav />);
+    expect(screen.getByRole("link", { name: /Identity: Manual/ })).toBeTruthy();
+    expect(
+      screen.queryByRole("link", { name: /Credentials set up/ }),
+    ).toBeNull();
+  });
+
+  it.each([
+    [
+      "loading",
+      { isPending: true, isError: false, data: undefined },
+      "Loading…",
+    ],
+    [
+      "failed",
+      { isPending: false, isError: true, data: undefined },
+      "Identity unavailable",
+    ],
+    [
+      "unreadable",
+      { isPending: false, isError: false, data: {} },
+      "Identity unavailable",
+    ],
+  ] as const)(
+    "shows no identity mode while enforcement is %s",
+    (_state, features, text) => {
+      state.mcpServer = remote;
+      setFeatures(features);
+      render(<McpServerXSidebarNav />);
+      expect(screen.getByText(text)).toBeTruthy();
+      expect(screen.queryByRole("link", { name: /^Identity:/ })).toBeNull();
+    },
+  );
 });
