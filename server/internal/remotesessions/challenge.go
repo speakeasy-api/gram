@@ -2239,9 +2239,15 @@ func exchangeFailure(ctx context.Context, logger *slog.Logger, err error, tunnel
 // exchangeFailureCode answers a provider outage with 503 or 502 rather than blaming the user's credentials with 401.
 func exchangeFailureCode(status int, oauthCode string) oops.Code {
 	switch {
-	case oauthCode == oautherr.CodeTemporarilyUnavailable, status == http.StatusServiceUnavailable, status == http.StatusTooManyRequests:
+	case oauthCode == oautherr.CodeTemporarilyUnavailable:
 		return oops.CodeUnavailable
-	case oauthCode == oautherr.CodeServerError, status >= http.StatusInternalServerError:
+	case oauthCode == oautherr.CodeServerError:
+		return oops.CodeGatewayError
+	case oauthCode != "":
+		return oops.CodeUnauthorized
+	case status == http.StatusServiceUnavailable, status == http.StatusTooManyRequests:
+		return oops.CodeUnavailable
+	case status >= http.StatusInternalServerError:
 		return oops.CodeGatewayError
 	default:
 		return oops.CodeUnauthorized

@@ -63,6 +63,13 @@ func TestExchangeFailure_FixedReasons(t *testing.T) {
 			wantCode: oops.CodeUnavailable,
 		},
 		{
+			name:     "parsed refusal under a 429 stays a refusal",
+			err:      newTokenEndpointError(http.StatusTooManyRequests, "429 Too Many Requests", []byte(`{"error":"invalid_grant"}`)),
+			tunneled: false,
+			want:     "token exchange with the identity provider failed: invalid_grant",
+			wantCode: oops.CodeUnauthorized,
+		},
+		{
 			name:     "no tunnel route",
 			err:      &tokenExchangeUnavailableError{err: fmt.Errorf("post token: %w", tunnelrouting.ErrNoTunnelRoute)},
 			tunneled: true,
