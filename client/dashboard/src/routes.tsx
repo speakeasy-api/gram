@@ -1604,6 +1604,11 @@ const ORG_ROUTE_STRUCTURE = {
     component: DeviceAgentRoot,
     indexComponent: DeviceAgent,
     subPages: {
+      devices: {
+        title: "Devices",
+        url: "devices",
+        component: DeviceAgent,
+      },
       configuration: {
         title: "Configuration",
         url: "configuration",
