@@ -211,6 +211,17 @@ WHERE subject_type = 'workload_admission'
   AND actor_type = 'system'
   AND actor_id = 'kit-runtime';
 
+-- name: ListKitRuntimeAuditOrganizations :many
+-- Lists the organizations holding entries MoveKitRuntimeAuditLogs would move,
+-- in one scan, so the move can batch within one organization at a time.
+SELECT DISTINCT organization_id
+FROM audit_logs
+WHERE subject_type = 'workload_admission'
+  AND action IN ('workload-admission:admit', 'workload-admission:withdraw')
+  AND actor_type = 'system'
+  AND actor_id = 'kit-runtime'
+ORDER BY organization_id;
+
 -- name: MoveKitRuntimeAuditLogs :execrows
 -- Moves the admit and withdraw entries a Kit runtime wrote for its own
 -- workload admissions from audit_logs to security_audit_logs. Withdrawals a
@@ -218,12 +229,15 @@ WHERE subject_type = 'workload_admission'
 -- from a direct withdrawal, and a direct one is a configuration change.
 -- Entries keep every column, including seq, which sits below the security
 -- log's identity range so moved entries sort before the ones written there
--- directly, in their original order. Moves at most batch_size rows; callers
--- repeat until no rows move.
+-- directly, in their original order. Moves at most batch_size rows of one
+-- organization; callers repeat until no rows move. Naming the organization
+-- lets each batch use an organization-first index instead of scanning the
+-- whole table.
 WITH batch AS (
   SELECT id
   FROM audit_logs
-  WHERE subject_type = 'workload_admission'
+  WHERE audit_logs.organization_id = sqlc.arg(organization_id)
+    AND subject_type = 'workload_admission'
     AND action IN ('workload-admission:admit', 'workload-admission:withdraw')
     AND actor_type = 'system'
     AND actor_id = 'kit-runtime'

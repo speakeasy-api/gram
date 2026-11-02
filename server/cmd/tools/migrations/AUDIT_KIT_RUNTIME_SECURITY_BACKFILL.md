@@ -26,7 +26,7 @@ GRAM_DATABASE_URL=... go run ./cmd/tools/migrations audit-kit-runtime-security \
   -confirm-apply=audit-kit-runtime-security
 ```
 
-`-confirm-target` must exactly match the host, port, and database parsed from `GRAM_DATABASE_URL`. The URL must name a single host and require TLS (`sslmode=require`, `verify-ca` or `verify-full`). Rows move in batches of `-batch-size` (default 1000): each batch deletes its rows from `audit_logs` and inserts them into `security_audit_logs` in one statement, so a row is never in both tables or neither, and each batch commits on its own until none remain. The run is idempotent: an interrupted run can be restarted and continues with the rows still in `audit_logs`.
+`-confirm-target` must exactly match the host, port, and database parsed from `GRAM_DATABASE_URL`. The URL must name a single host and require TLS (`sslmode=require`, `verify-ca` or `verify-full`). The run first finds, in one scan, the organizations that hold such entries, then moves each organization's rows in batches of `-batch-size` (default 1000), so every batch reads one organization's rows through an index instead of scanning `audit_logs`. Each batch deletes its rows from `audit_logs` and inserts them into `security_audit_logs` in one statement, so a row is never in both tables or neither, and each batch commits on its own until none remain. The run is idempotent: an interrupted run can be restarted and continues with the rows still in `audit_logs`.
 
 ## Output
 

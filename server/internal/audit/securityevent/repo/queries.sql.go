@@ -119,6 +119,38 @@ func (q *Queries) InsertSecurityAuditLog(ctx context.Context, arg InsertSecurity
 	return i, err
 }
 
+const listKitRuntimeAuditOrganizations = `-- name: ListKitRuntimeAuditOrganizations :many
+SELECT DISTINCT organization_id
+FROM audit_logs
+WHERE subject_type = 'workload_admission'
+  AND action IN ('workload-admission:admit', 'workload-admission:withdraw')
+  AND actor_type = 'system'
+  AND actor_id = 'kit-runtime'
+ORDER BY organization_id
+`
+
+// Lists the organizations holding entries MoveKitRuntimeAuditLogs would move,
+// in one scan, so the move can batch within one organization at a time.
+func (q *Queries) ListKitRuntimeAuditOrganizations(ctx context.Context) ([]string, error) {
+	rows, err := q.db.Query(ctx, listKitRuntimeAuditOrganizations)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var organization_id string
+		if err := rows.Scan(&organization_id); err != nil {
+			return nil, err
+		}
+		items = append(items, organization_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listRuntimeAdmittedSubjects = `-- name: ListRuntimeAdmittedSubjects :many
 SELECT s.subject_id
 FROM security_audit_logs s
@@ -511,12 +543,13 @@ const moveKitRuntimeAuditLogs = `-- name: MoveKitRuntimeAuditLogs :execrows
 WITH batch AS (
   SELECT id
   FROM audit_logs
-  WHERE subject_type = 'workload_admission'
+  WHERE audit_logs.organization_id = $1
+    AND subject_type = 'workload_admission'
     AND action IN ('workload-admission:admit', 'workload-admission:withdraw')
     AND actor_type = 'system'
     AND actor_id = 'kit-runtime'
   ORDER BY seq
-  LIMIT $1
+  LIMIT $2
   FOR UPDATE SKIP LOCKED
 ), moved AS (
   DELETE FROM audit_logs
@@ -568,16 +601,23 @@ SELECT
 FROM moved
 `
 
+type MoveKitRuntimeAuditLogsParams struct {
+	OrganizationID string
+	BatchSize      int32
+}
+
 // Moves the admit and withdraw entries a Kit runtime wrote for its own
 // workload admissions from audit_logs to security_audit_logs. Withdrawals a
 // person made stay: older entries cannot tell an issuer withdrawal's cascade
 // from a direct withdrawal, and a direct one is a configuration change.
 // Entries keep every column, including seq, which sits below the security
 // log's identity range so moved entries sort before the ones written there
-// directly, in their original order. Moves at most batch_size rows; callers
-// repeat until no rows move.
-func (q *Queries) MoveKitRuntimeAuditLogs(ctx context.Context, batchSize int32) (int64, error) {
-	result, err := q.db.Exec(ctx, moveKitRuntimeAuditLogs, batchSize)
+// directly, in their original order. Moves at most batch_size rows of one
+// organization; callers repeat until no rows move. Naming the organization
+// lets each batch use an organization-first index instead of scanning the
+// whole table.
+func (q *Queries) MoveKitRuntimeAuditLogs(ctx context.Context, arg MoveKitRuntimeAuditLogsParams) (int64, error) {
+	result, err := q.db.Exec(ctx, moveKitRuntimeAuditLogs, arg.OrganizationID, arg.BatchSize)
 	if err != nil {
 		return 0, err
 	}

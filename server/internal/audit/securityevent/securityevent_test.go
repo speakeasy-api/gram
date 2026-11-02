@@ -179,6 +179,10 @@ func TestMoveKitRuntimeAuditLogs(t *testing.T) {
 	insertConfiguration(orgID, "user", "user-1", audit.ActionWorkloadAdmissionWithdraw, human)
 	insertConfiguration(uuid.NewString(), "user", "user-1", audit.ActionWorkloadAdmissionWithdraw, runtimeSubjects[0])
 
+	// Another organization's runtime entry, which its own batches move.
+	otherOrgID := uuid.NewString()
+	otherRuntime := insertConfiguration(otherOrgID, "system", "kit-runtime", audit.ActionWorkloadAdmissionAdmit, uuid.NewString())
+
 	before, err := configuration.ListAuditLogs(ctx, auditrepo.ListAuditLogsParams{OrganizationID: orgID})
 	require.NoError(t, err)
 	seqByID := make(map[uuid.UUID]int64, len(before))
@@ -193,17 +197,28 @@ func TestMoveKitRuntimeAuditLogs(t *testing.T) {
 
 	pending, err := q.CountKitRuntimeAuditLogs(ctx)
 	require.NoError(t, err)
-	require.EqualValues(t, 5, pending)
+	require.EqualValues(t, 6, pending)
 
-	n, err := q.MoveKitRuntimeAuditLogs(ctx, 3)
+	organizations, err := q.ListKitRuntimeAuditOrganizations(ctx)
 	require.NoError(t, err)
-	require.EqualValues(t, 3, n, "one statement moves at most batch_size rows")
-	n, err = q.MoveKitRuntimeAuditLogs(ctx, 3)
+	require.ElementsMatch(t, []string{orgID, otherOrgID}, organizations,
+		"only organizations holding runtime entries are listed")
+
+	move := func(organizationID string) int64 {
+		t.Helper()
+		n, err := q.MoveKitRuntimeAuditLogs(ctx, repo.MoveKitRuntimeAuditLogsParams{OrganizationID: organizationID, BatchSize: 3})
+		require.NoError(t, err)
+		return n
+	}
+	require.EqualValues(t, 3, move(orgID), "one statement moves at most batch_size rows")
+	require.EqualValues(t, 2, move(orgID))
+	require.EqualValues(t, 0, move(orgID), "a finished organization moves nothing on rerun")
+
+	otherLeft, err := configuration.ListAuditLogs(ctx, auditrepo.ListAuditLogsParams{OrganizationID: otherOrgID})
 	require.NoError(t, err)
-	require.EqualValues(t, 2, n)
-	n, err = q.MoveKitRuntimeAuditLogs(ctx, 3)
-	require.NoError(t, err)
-	require.EqualValues(t, 0, n, "a finished backfill moves nothing on rerun")
+	require.Len(t, otherLeft, 1, "a batch moves only its own organization's entries")
+	require.Equal(t, otherRuntime, otherLeft[0].ID)
+	require.EqualValues(t, 1, move(otherOrgID))
 
 	admitted, err = securityevent.RuntimeAdmittedSubjects(ctx, conn, orgID, []uuid.UUID{uuid.MustParse(runtimeSubjects[2]), nativeSubject, uuid.MustParse(human)})
 	require.NoError(t, err)

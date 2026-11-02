@@ -96,8 +96,8 @@ func requiresTLS(config *pgx.ConnConfig) bool {
 
 // backfillAuditKitRuntimeSecurity moves the Kit runtime's own workload
 // admission entries from audit_logs to security_audit_logs. A dry run only
-// counts them. Each batch commits on its own, so an interrupted run resumes
-// where it stopped.
+// counts them. Batches move one organization's entries at a time, and each
+// commits on its own, so an interrupted run resumes where it stopped.
 func backfillAuditKitRuntimeSecurity(ctx context.Context, db securityrepo.DBTX, apply bool, batchSize int32) (int64, error) {
 	q := securityrepo.New(db)
 	if !apply {
@@ -108,20 +108,31 @@ func backfillAuditKitRuntimeSecurity(ctx context.Context, db securityrepo.DBTX, 
 		return pending, nil
 	}
 
+	// One scan finds the organizations to move; each batch then stays within
+	// one of them, so it reads that organization's rows through an index
+	// rather than scanning the busiest audit table once per batch.
+	organizations, err := q.ListKitRuntimeAuditOrganizations(ctx)
+	if err != nil {
+		return 0, fmt.Errorf("list organizations with kit runtime admission entries: %w", err)
+	}
+
 	var moved int64
-	for {
-		n, err := q.MoveKitRuntimeAuditLogs(ctx, batchSize)
-		if err != nil {
-			return moved, fmt.Errorf("move kit runtime admission entries: %w", err)
-		}
-		moved += n
-		if n == 0 {
-			return moved, nil
-		}
-		if err := ctx.Err(); err != nil {
-			return moved, fmt.Errorf("move kit runtime admission entries: %w", err)
+	for _, organizationID := range organizations {
+		for {
+			n, err := q.MoveKitRuntimeAuditLogs(ctx, securityrepo.MoveKitRuntimeAuditLogsParams{OrganizationID: organizationID, BatchSize: batchSize})
+			if err != nil {
+				return moved, fmt.Errorf("move kit runtime admission entries: %w", err)
+			}
+			moved += n
+			if n == 0 {
+				break
+			}
+			if err := ctx.Err(); err != nil {
+				return moved, fmt.Errorf("move kit runtime admission entries: %w", err)
+			}
 		}
 	}
+	return moved, nil
 }
 
 func runAuditKitRuntimeSecurity(args []string, stdout io.Writer, getenv func(string) string) int {
