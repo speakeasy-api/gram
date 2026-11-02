@@ -1763,7 +1763,7 @@ CREATE TABLE IF NOT EXISTS mcp_connection_events (
     outcome LowCardinality(String) COMMENT 'Overall result of the attempt, set on its final step only: connected, failed, blocked or declined. Abandoned is never stored, it is worked out when read.\n@access: confidential',
     reason LowCardinality(String) COMMENT 'Reason code for the step result, empty for success.\n@access: confidential',
     sub_reason LowCardinality(String) COMMENT 'Finer label within the reason, such as org_lookup_failed for a gate, empty otherwise.\n@access: confidential',
-    who_fixes LowCardinality(String) COMMENT 'Party that has to act: person, admin, provider or speakeasy. Empty when nothing needs fixing.\n@access: confidential',
+    who_fixes LowCardinality(String) COMMENT 'Party that has to act: person, admin, app, provider or speakeasy. Empty when nothing needs fixing.\n@access: confidential',
     grant_type LowCardinality(String) COMMENT 'OAuth grant type for token steps, empty otherwise.\n@access: confidential',
     is_final Bool COMMENT 'True on the row that ends the attempt. An attempt with no such row is unfinished or abandoned.\n@access: confidential',
     retries UInt32 COMMENT 'Retries spent within this step.\n@access: confidential',
@@ -1798,7 +1798,7 @@ CREATE TABLE IF NOT EXISTS mcp_connection_attempt_summaries (
     step_result LowCardinality(String) COMMENT 'How the step ended.\n@access: confidential',
     outcome LowCardinality(String) COMMENT 'Overall result of the attempt on final steps, empty on other steps.\n@access: confidential',
     reason LowCardinality(String) COMMENT 'Reason code for the step result, empty for success.\n@access: confidential',
-    who_fixes LowCardinality(String) COMMENT 'Party that has to act: person, admin, provider or speakeasy.\n@access: confidential',
+    who_fixes LowCardinality(String) COMMENT 'Party that has to act: person, admin, app, provider or speakeasy.\n@access: confidential',
     grant_type LowCardinality(String) COMMENT 'OAuth grant type for token steps, empty otherwise.\n@access: confidential',
     member_id String COMMENT 'Gateway member MCP server ID for member-level steps, empty otherwise.\n@access: confidential',
     provider_host String COMMENT 'Normalized issuer host of the provider. A tenant host can name the customer.\n@access: restricted',
@@ -1852,14 +1852,29 @@ CREATE TABLE IF NOT EXISTS mcp_connection_outcomes_daily (
     outcome LowCardinality(String) COMMENT 'Overall result of the attempt, including abandoned.\n@access: confidential',
     reason LowCardinality(String) COMMENT 'Reason code, empty for success.\n@access: confidential',
     fixed_by LowCardinality(String) COMMENT 'What fixed the failure: admin_change, system_change, reconnect or retry. Empty when it was not fixed or nothing failed.\n@access: confidential',
-    attempts UInt64 COMMENT 'Attempts counted.\n@access: confidential',
-    computed_at DateTime64(9, 'UTC') COMMENT 'Time of the daily job run that wrote this row. Every row of a run for a day shares one value, and readers keep only the latest run per day.\n@access: confidential'
+    attempts UInt64 COMMENT 'Attempts counted.\n@access: confidential'
 ) ENGINE = MergeTree
-PARTITION BY toYYYYMM(day)
-ORDER BY (provider, app, step, day, outcome, reason, fixed_by, computed_at)
+PARTITION BY day
+ORDER BY (provider, app, step, day, outcome, reason, fixed_by)
 TTL day + INTERVAL 13 MONTH
-SETTINGS index_granularity = 8192
-COMMENT 'Long-term daily counts of connection outcomes per provider and app, for trends beyond raw retention. No org, project or person. Written by a daily job, and readers keep only the latest run per day. Kept 13 months.';
+SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1
+COMMENT 'Long-term daily counts of connection outcomes per provider and app, for trends beyond raw retention. No org, project or person. A daily job replaces each whole day atomically, so a day always holds one complete result. Kept 13 months.';
+
+CREATE TABLE IF NOT EXISTS mcp_connection_outcomes_daily_staging (
+    day Date COMMENT 'UTC day the attempts started.\n@access: confidential',
+    provider LowCardinality(String) COMMENT 'Known vendor, otherwise other. Only the daily job enforces that a value cannot name a customer.\n@access: opaque-confidential',
+    app LowCardinality(String) COMMENT 'Known app, otherwise other. Only the daily job enforces that a value cannot name a customer.\n@access: opaque-confidential',
+    step LowCardinality(String) COMMENT 'Step the attempt ended at.\n@access: confidential',
+    outcome LowCardinality(String) COMMENT 'Overall result of the attempt, including abandoned.\n@access: confidential',
+    reason LowCardinality(String) COMMENT 'Reason code, empty for success.\n@access: confidential',
+    fixed_by LowCardinality(String) COMMENT 'What fixed the failure: admin_change, system_change, reconnect or retry. Empty when it was not fixed or nothing failed.\n@access: confidential',
+    attempts UInt64 COMMENT 'Attempts counted.\n@access: confidential'
+) ENGINE = MergeTree
+PARTITION BY day
+ORDER BY (provider, app, step, day, outcome, reason, fixed_by)
+TTL day + INTERVAL 13 MONTH
+SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1
+COMMENT 'Holds one day of mcp_connection_outcomes_daily while the daily job builds it. Never read directly. Its TTL must match the main table because REPLACE PARTITION copies TTL info onto the main table, so a shorter TTL here deletes main table rows.';
 
 CREATE TABLE IF NOT EXISTS authz_challenge_bucket_summaries (
     challenge_date Date COMMENT 'UTC date of the summarized challenge rows.\n@access: confidential',

@@ -18,7 +18,7 @@ CREATE TABLE `gram`.`mcp_connection_attempt_summaries` (
 @access: confidential',
   `reason` LowCardinality(String) COMMENT 'Reason code for the step result, empty for success.
 @access: confidential',
-  `who_fixes` LowCardinality(String) COMMENT 'Party that has to act: person, admin, provider or speakeasy.
+  `who_fixes` LowCardinality(String) COMMENT 'Party that has to act: person, admin, app, provider or speakeasy.
 @access: confidential',
   `grant_type` LowCardinality(String) COMMENT 'OAuth grant type for token steps, empty otherwise.
 @access: confidential',
@@ -72,7 +72,7 @@ CREATE TABLE `gram`.`mcp_connection_events` (
 @access: confidential',
   `sub_reason` LowCardinality(String) COMMENT 'Finer label within the reason, such as org_lookup_failed for a gate, empty otherwise.
 @access: confidential',
-  `who_fixes` LowCardinality(String) COMMENT 'Party that has to act: person, admin, provider or speakeasy. Empty when nothing needs fixing.
+  `who_fixes` LowCardinality(String) COMMENT 'Party that has to act: person, admin, app, provider or speakeasy. Empty when nothing needs fixing.
 @access: confidential',
   `grant_type` LowCardinality(String) COMMENT 'OAuth grant type for token steps, empty otherwise.
 @access: confidential',
@@ -123,10 +123,28 @@ CREATE TABLE `gram`.`mcp_connection_outcomes_daily` (
   `fixed_by` LowCardinality(String) COMMENT 'What fixed the failure: admin_change, system_change, reconnect or retry. Empty when it was not fixed or nothing failed.
 @access: confidential',
   `attempts` UInt64 COMMENT 'Attempts counted.
-@access: confidential',
-  `computed_at` DateTime64(9, 'UTC') COMMENT 'Time of the daily job run that wrote this row. Every row of a run for a day shares one value, and readers keep only the latest run per day.
 @access: confidential'
 ) ENGINE = MergeTree
-PRIMARY KEY (`provider`, `app`, `step`, `day`, `outcome`, `reason`, `fixed_by`, `computed_at`) ORDER BY (`provider`, `app`, `step`, `day`, `outcome`, `reason`, `fixed_by`, `computed_at`) PARTITION BY (toYYYYMM(day)) TTL day + toIntervalMonth(13) SETTINGS index_granularity = 8192 COMMENT 'Long-term daily counts of connection outcomes per provider and app, for trends beyond raw retention. No org, project or person. Written by a daily job, and readers keep only the latest run per day. Kept 13 months.';
+PRIMARY KEY (`provider`, `app`, `step`, `day`, `outcome`, `reason`, `fixed_by`) ORDER BY (`provider`, `app`, `step`, `day`, `outcome`, `reason`, `fixed_by`) PARTITION BY (`day`) TTL day + toIntervalMonth(13) SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1 COMMENT 'Long-term daily counts of connection outcomes per provider and app, for trends beyond raw retention. No org, project or person. A daily job replaces each whole day atomically, so a day always holds one complete result. Kept 13 months.';
+-- Create "mcp_connection_outcomes_daily_staging" table
+CREATE TABLE `gram`.`mcp_connection_outcomes_daily_staging` (
+  `day` Date COMMENT 'UTC day the attempts started.
+@access: confidential',
+  `provider` LowCardinality(String) COMMENT 'Known vendor, otherwise other. Only the daily job enforces that a value cannot name a customer.
+@access: opaque-confidential',
+  `app` LowCardinality(String) COMMENT 'Known app, otherwise other. Only the daily job enforces that a value cannot name a customer.
+@access: opaque-confidential',
+  `step` LowCardinality(String) COMMENT 'Step the attempt ended at.
+@access: confidential',
+  `outcome` LowCardinality(String) COMMENT 'Overall result of the attempt, including abandoned.
+@access: confidential',
+  `reason` LowCardinality(String) COMMENT 'Reason code, empty for success.
+@access: confidential',
+  `fixed_by` LowCardinality(String) COMMENT 'What fixed the failure: admin_change, system_change, reconnect or retry. Empty when it was not fixed or nothing failed.
+@access: confidential',
+  `attempts` UInt64 COMMENT 'Attempts counted.
+@access: confidential'
+) ENGINE = MergeTree
+PRIMARY KEY (`provider`, `app`, `step`, `day`, `outcome`, `reason`, `fixed_by`) ORDER BY (`provider`, `app`, `step`, `day`, `outcome`, `reason`, `fixed_by`) PARTITION BY (`day`) TTL day + toIntervalMonth(13) SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1 COMMENT 'Holds one day of mcp_connection_outcomes_daily while the daily job builds it. Never read directly. Its TTL must match the main table because REPLACE PARTITION copies TTL info onto the main table, so a shorter TTL here deletes main table rows.';
 -- Create "mcp_connection_attempt_summaries_mv" view
 CREATE MATERIALIZED VIEW `gram`.`mcp_connection_attempt_summaries_mv` TO `gram`.`mcp_connection_attempt_summaries` AS SELECT organization_id, project_id, server_kind, server_id, toStartOfInterval(toDateTime(attempt_started_at, 'UTC'), toIntervalMinute(30)) AS bucket, step, step_result, outcome, reason, who_fixes, grant_type, member_id, provider_host, app_key, toUInt64(count()) AS step_events, uniqExactState(attempt_id) AS attempts_seen, uniqExactStateIf(attempt_id, is_final) AS attempts_ended, sum(toUInt64(mcp_connection_events.retries)) AS retries, toUInt64(countIf((step = 'discovery_member') AND (step_result = 'listed') AND (mcp_connection_events.retries > 0))) AS recovered, min(event_time) AS first_seen, max(event_time) AS last_seen FROM gram.mcp_connection_events GROUP BY organization_id, project_id, server_kind, server_id, bucket, step, step_result, outcome, reason, who_fixes, grant_type, member_id, provider_host, app_key;
