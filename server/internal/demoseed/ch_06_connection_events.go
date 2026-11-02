@@ -8,7 +8,7 @@ import (
 
 	"github.com/ClickHouse/clickhouse-go/v2/lib/driver"
 
-	"github.com/speakeasy-api/gram/server/internal/connectionevents"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -37,43 +37,43 @@ const (
 
 // connectionEnding is how one seeded attempt ends.
 type connectionEnding struct {
-	step connectionevents.Step
-	what connectionevents.Happened
+	step mcpconnectionattempts.Step
+	what mcpconnectionattempts.Happened
 }
 
 var connectionEndings = []connectionEnding{
-	{connectionevents.StepInboundToken, connectionevents.ResultCodeIssued},
-	{connectionevents.StepInboundToken, connectionevents.ResultCodeIssued},
-	{connectionevents.StepInboundToken, connectionevents.ResultCodeIssued},
-	{connectionevents.StepInboundToken, connectionevents.ResultCodeIssued},
-	{connectionevents.StepInboundConsent, connectionevents.CodeCanceled},
-	{connectionevents.StepInboundAuthorize, connectionevents.CodeCIMDAdmissionDenied},
-	{connectionevents.StepInboundToken, connectionevents.CodeCodeNotFoundOrExpired},
-	{connectionevents.StepProviderSignIn, connectionevents.CodeProviderOAuthInvalidClient},
-	{connectionevents.StepProviderSignIn, connectionevents.CodeProviderRateLimited},
-	{connectionevents.StepProviderSignIn, connectionevents.CodeTunnelUnavailable},
-	{connectionevents.StepProviderSignIn, connectionevents.CodeProviderDenied},
-	{connectionevents.StepInboundSignIn, connectionevents.CodeNotOrgMember},
+	{mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued},
+	{mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued},
+	{mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued},
+	{mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued},
+	{mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeCanceled},
+	{mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeCIMDAdmissionDenied},
+	{mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeCodeNotFoundOrExpired},
+	{mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderOAuthInvalidClient},
+	{mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderRateLimited},
+	{mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeTunnelUnavailable},
+	{mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderDenied},
+	{mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeNotOrgMember},
 }
 
 // chConnectionEvents seeds connection attempts on a project server, a project
 // gateway and the organization gateway. Every tenth attempt stops with no final
 // row, which is how readers see an abandoned sign-in.
 func (s *seeder) chConnectionEvents(ctx context.Context, ch driver.Conn) error {
-	app := connectionevents.AppOf(demoConnectionApp)
-	scopes := []connectionevents.Scope{
-		connectionevents.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), app),
-		connectionevents.GatewayScope(s.orgID(), s.projectID(), s.det("metamcp-1"), connectionevents.AppDCR),
-		connectionevents.OrganizationGatewayScope(s.orgID(), orggateway.GatewayID(s.orgID()), app),
+	app := mcpconnectionattempts.AppOf(demoConnectionApp)
+	scopes := []mcpconnectionattempts.Scope{
+		mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), app),
+		mcpconnectionattempts.GatewayScope(s.orgID(), s.projectID(), s.det("metamcp-1"), mcpconnectionattempts.AppDCR),
+		mcpconnectionattempts.OrganizationGatewayScope(s.orgID(), orggateway.GatewayID(s.orgID()), app),
 	}
 
-	rows := make([]connectionevents.Row, 0, connectionAttemptDays*connectionAttemptsPerDay*2)
+	rows := make([]mcpconnectionattempts.Row, 0, connectionAttemptDays*connectionAttemptsPerDay*2)
 	for day := range connectionAttemptDays {
 		for n := range connectionAttemptsPerDay {
 			key := "connection-attempt-" + strconv.Itoa(day) + "-" + strconv.Itoa(n)
 			scope := scopes[hash64(s.name(key), "scope")%uint64(len(scopes))]
 			started := s.now.AddDate(0, 0, -day-1).Add(time.Duration(hash64(s.name(key), "at")%connectionAttemptWindowSeconds) * time.Second)
-			attempt := connectionevents.AttemptAt(s.det(key), started, scope)
+			attempt := mcpconnectionattempts.AttemptAt(s.det(key), started, scope)
 			ending := connectionEndings[hash64(s.name(key), "ending")%uint64(len(connectionEndings))]
 			abandoned := hash64(s.name(key), "abandoned")%abandonedOneIn == 0
 
@@ -84,7 +84,7 @@ func (s *seeder) chConnectionEvents(ctx context.Context, ch driver.Conn) error {
 			rows = append(rows, attemptRows...)
 		}
 	}
-	if err := connectionevents.AppendRows(ctx, ch, rows); err != nil {
+	if err := mcpconnectionattempts.AppendRows(ctx, ch, rows); err != nil {
 		return fmt.Errorf("seed connection events: %w", err)
 	}
 	return s.chRunChecks(ctx, ch, []chCheck{
@@ -108,28 +108,28 @@ func (s *seeder) chConnectionEvents(ctx context.Context, ch driver.Conn) error {
 
 // connectionAttemptRows builds one attempt: the authorize step, then its ending
 // unless it was abandoned there.
-func (s *seeder) connectionAttemptRows(attempt connectionevents.Attempt, key string, ending connectionEnding, abandoned bool) ([]connectionevents.Row, error) {
-	first, err := connectionevents.RowAt(attempt, connectionevents.StepInboundAuthorize, connectionevents.ResultAccepted, false, attempt.StartedAt())
+func (s *seeder) connectionAttemptRows(attempt mcpconnectionattempts.Attempt, key string, ending connectionEnding, abandoned bool) ([]mcpconnectionattempts.Row, error) {
+	first, err := mcpconnectionattempts.RowAt(attempt, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted, false, attempt.StartedAt())
 	if err != nil {
 		return nil, fmt.Errorf("build connection event: %w", err)
 	}
 	first.TraceID = md5Hex(s.name(key + "-authorize"))
 	if abandoned {
-		return []connectionevents.Row{first}, nil
+		return []mcpconnectionattempts.Row{first}, nil
 	}
 
 	subject := urn.NewUserSubject(s.userID("amara"))
-	opts := []connectionevents.Option{connectionevents.Subject(&subject)}
-	if ending.step == connectionevents.StepProviderSignIn {
-		opts = append(opts, connectionevents.Provider(demoConnectionProvider))
+	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&subject)}
+	if ending.step == mcpconnectionattempts.StepProviderSignIn {
+		opts = append(opts, mcpconnectionattempts.Provider(demoConnectionProvider))
 	}
-	if ending.what == connectionevents.ResultCodeIssued {
-		opts = append(opts, connectionevents.Grant(oauthwire.GrantTypeAuthorizationCode))
+	if ending.what == mcpconnectionattempts.ResultCodeIssued {
+		opts = append(opts, mcpconnectionattempts.Grant(oauthwire.GrantTypeAuthorizationCode))
 	}
-	last, err := connectionevents.RowAt(attempt, ending.step, ending.what, true, attempt.StartedAt().Add(connectionAttemptLength), opts...)
+	last, err := mcpconnectionattempts.RowAt(attempt, ending.step, ending.what, true, attempt.StartedAt().Add(connectionAttemptLength), opts...)
 	if err != nil {
 		return nil, fmt.Errorf("build connection event: %w", err)
 	}
 	last.TraceID = md5Hex(s.name(key + "-ending"))
-	return []connectionevents.Row{first, last}, nil
+	return []mcpconnectionattempts.Row{first, last}, nil
 }

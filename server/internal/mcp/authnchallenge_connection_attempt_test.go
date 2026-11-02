@@ -16,11 +16,11 @@ import (
 	"github.com/stretchr/testify/require"
 	goahttp "goa.design/goa/v3/http"
 
-	"github.com/speakeasy-api/gram/server/internal/connectionevents"
-	"github.com/speakeasy-api/gram/server/internal/connectionevents/connectioneventstest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
@@ -40,7 +40,7 @@ func TestAuthorize_BeginsTheConnectionAttempt(t *testing.T) {
 
 	conn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	recorder := connectionevents.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, connectioneventstest.LogsOn)
+	recorder := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, mcpconnectionattemptstest.LogsOn)
 	t.Cleanup(func() {
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -100,10 +100,10 @@ func TestAuthorize_BeginsTheConnectionAttempt(t *testing.T) {
 	require.WithinDuration(t, stored.CreatedAt, rows[0].AttemptStartedAt, time.Microsecond)
 	require.Equal(t, toolset.ID.String(), rows[0].ServerID)
 	require.Equal(t, "toolset", rows[0].ServerKind)
-	require.Equal(t, connectionevents.StepInboundAuthorize.String(), rows[0].Step)
-	require.Equal(t, connectionevents.ResultAccepted.String(), rows[0].StepResult)
+	require.Equal(t, mcpconnectionattempts.StepInboundAuthorize.String(), rows[0].Step)
+	require.Equal(t, mcpconnectionattempts.ResultAccepted.String(), rows[0].StepResult)
 	require.False(t, rows[0].IsFinal)
-	require.Equal(t, connectionevents.AppDCR.String(), rows[0].AppKey)
+	require.Equal(t, mcpconnectionattempts.AppDCR.String(), rows[0].AppKey)
 	require.Empty(t, rows[0].ProviderHost, "Speakeasy sign-in has no provider")
 }
 
@@ -117,7 +117,7 @@ func TestAuthorize_OrganizationGatewayRecordsNoProject(t *testing.T) {
 
 	conn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	recorder := connectionevents.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, connectioneventstest.LogsOn)
+	recorder := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, mcpconnectionattemptstest.LogsOn)
 	t.Cleanup(func() {
 		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -151,7 +151,7 @@ func TestAuthorize_OrganizationGatewayRecordsNoProject(t *testing.T) {
 	require.Len(t, rows, 1)
 	require.Equal(t, uuid.Nil, rows[0].ProjectID)
 	require.Equal(t, "meta", rows[0].ServerKind)
-	require.Equal(t, connectionevents.AppDCR.String(), rows[0].AppKey)
+	require.Equal(t, mcpconnectionattempts.AppDCR.String(), rows[0].AppKey)
 }
 
 // A sign-in for a member the organization gateway claimed names that member, so
@@ -203,14 +203,14 @@ func TestConsentConnect_OrganizationGatewayMemberIsRecorded(t *testing.T) {
 	loc, err := url.Parse(w.Header().Get("Location"))
 	require.NoError(t, err)
 
-	rec := connectioneventstest.New(t)
+	rec := mcpconnectionattemptstest.New(t)
 	manager := ti.service.RemoteChallengeManager()
 	remotesessions.WithConnectionRecorder(rec.Recorder)(manager)
 	callback := httptest.NewRequestWithContext(ctx, http.MethodGet, "/mcp/remote_login_callback?error=access_denied&state="+url.QueryEscape(loc.Query().Get("state")), nil)
 	_, err = manager.CompleteRemoteLogin(callback)
 	require.NoError(t, err)
 
-	row := rec.RequireStep(connectionevents.StepProviderSignIn, connectionevents.CodeProviderDenied)
+	row := rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderDenied)
 	require.Equal(t, member.ID.String(), row.MemberID)
 	require.Equal(t, endpoint.MetaMcpServerID.UUID.String(), row.ServerID)
 	require.Equal(t, uuid.Nil, row.ProjectID)
@@ -280,25 +280,25 @@ func TestChallengeState_AttemptNamesTheApp(t *testing.T) {
 	base := mcp.AuthnChallengeState{FlowID: uuid.NewString(), CreatedAt: time.Now()}
 	app := func(state mcp.AuthnChallengeState) string {
 		t.Helper()
-		row, err := connectionevents.RowAt(state.ConnectionAttempt(endpoint), connectionevents.StepInboundConsent, connectionevents.ResultAccepted, false, time.Now())
+		row, err := mcpconnectionattempts.RowAt(state.ConnectionAttempt(endpoint), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultAccepted, false, time.Now())
 		require.NoError(t, err)
 		require.Equal(t, state.FlowID, row.AttemptID.String())
 		return row.AppKey
 	}
 
-	require.Equal(t, connectionevents.AppFirstParty.String(), app(base))
+	require.Equal(t, mcpconnectionattempts.AppFirstParty.String(), app(base))
 	workload := base
 	workload.WorkloadReconnect = &mcp.WorkloadReconnectBinding{}
-	require.Equal(t, connectionevents.AppWorkload.String(), app(workload))
+	require.Equal(t, mcpconnectionattempts.AppWorkload.String(), app(workload))
 	codeMode := base
 	codeMode.CodeReconnect = &mcp.CodeReconnectBinding{}
-	require.Equal(t, connectionevents.AppCodeMode.String(), app(codeMode))
+	require.Equal(t, mcpconnectionattempts.AppCodeMode.String(), app(codeMode))
 	cimdClient := base
 	cimdClient.ClientID = "https://client.example.com/some/path"
 	require.Equal(t, "client.example.com", app(cimdClient))
 	dcrClient := base
 	dcrClient.ClientID = "registered-client"
-	require.Equal(t, connectionevents.AppDCR.String(), app(dcrClient))
+	require.Equal(t, mcpconnectionattempts.AppDCR.String(), app(dcrClient))
 }
 
 func TestChallengeState_FromBeforeAttemptsDecodes(t *testing.T) {

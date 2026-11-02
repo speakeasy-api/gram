@@ -19,9 +19,9 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/identity"
-	"github.com/speakeasy-api/gram/server/internal/connectionevents"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
@@ -281,10 +281,10 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// companion completion-ratio monitor divides terminal outcomes against.
 	s.metrics.RecordOAuthFlowStarted(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug)
 	logger.InfoContext(ctx, "oauth flow started")
-	s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), connectionevents.StepInboundAuthorize, connectionevents.ResultAccepted,
-		connectionevents.UserSessionIssuer(endpoint.UserSessionIssuerID),
-		connectionevents.UserSessionClient(client.ID),
-		connectionevents.Subject(subject),
+	s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted,
+		mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID),
+		mcpconnectionattempts.UserSessionClient(client.ID),
+		mcpconnectionattempts.Subject(subject),
 	)
 
 	if forceIDP {

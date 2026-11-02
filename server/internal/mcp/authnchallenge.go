@@ -40,12 +40,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
-	"github.com/speakeasy-api/gram/server/internal/connectionevents"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -272,14 +272,14 @@ type UserSessionGrant struct {
 	// field landed (rolling deploy).
 	FlowID string `json:"flow_id,omitempty"`
 	// Attempt is the connection attempt this grant belongs to. Zero records nothing.
-	Attempt             connectionevents.Attempt `json:"attempt,omitzero" msgpack:",omitempty"`
-	UserSessionIssuerID uuid.UUID                `json:"user_session_issuer_id"`
-	UserSessionClientID uuid.UUID                `json:"user_session_client_id"`
-	ClientID            string                   `json:"client_id"`
-	RedirectURI         string                   `json:"redirect_uri"`
-	CodeChallenge       string                   `json:"code_challenge"`
-	CodeChallengeMethod string                   `json:"code_challenge_method"`
-	Subject             urn.SessionSubject       `json:"subject"`
+	Attempt             mcpconnectionattempts.Attempt `json:"attempt,omitzero" msgpack:",omitempty"`
+	UserSessionIssuerID uuid.UUID                     `json:"user_session_issuer_id"`
+	UserSessionClientID uuid.UUID                     `json:"user_session_client_id"`
+	ClientID            string                        `json:"client_id"`
+	RedirectURI         string                        `json:"redirect_uri"`
+	CodeChallenge       string                        `json:"code_challenge"`
+	CodeChallengeMethod string                        `json:"code_challenge_method"`
+	Subject             urn.SessionSubject            `json:"subject"`
 	// Endpoint pins new authorization codes to the exact endpoint authority
 	// consented by the subject. Nil is accepted only for grants minted before
 	// this field landed; authorization-code TTL bounds that compatibility window.
@@ -1474,32 +1474,32 @@ func consentChallengeCacheError(ctx context.Context, logger *slog.Logger, err er
 
 // connectionAttempt reads the attempt from FlowID and CreatedAt, which survive rotation.
 // A stored field would break CompareAndSwap, which compares bytes, across replica versions.
-func (a AuthnChallengeState) connectionAttempt(endpoint *ResolvedMcpEndpoint) connectionevents.Attempt {
+func (a AuthnChallengeState) connectionAttempt(endpoint *ResolvedMcpEndpoint) mcpconnectionattempts.Attempt {
 	id, err := uuid.Parse(a.FlowID)
 	if err != nil || a.CreatedAt.IsZero() {
-		return connectionevents.NoAttempt
+		return mcpconnectionattempts.NoAttempt
 	}
-	app := connectionevents.AppOf(a.ClientID)
+	app := mcpconnectionattempts.AppOf(a.ClientID)
 	switch {
 	case a.WorkloadReconnect != nil:
-		app = connectionevents.AppWorkload
+		app = mcpconnectionattempts.AppWorkload
 	case a.CodeReconnect != nil:
-		app = connectionevents.AppCodeMode
+		app = mcpconnectionattempts.AppCodeMode
 	}
-	return connectionevents.AttemptAt(id, a.CreatedAt, connectionScope(endpoint, app))
+	return mcpconnectionattempts.AttemptAt(id, a.CreatedAt, connectionScope(endpoint, app))
 }
 
 // connectionScope is what stays the same on every step of a connection attempt
 // to this endpoint.
-func connectionScope(endpoint *ResolvedMcpEndpoint, app connectionevents.App) connectionevents.Scope {
+func connectionScope(endpoint *ResolvedMcpEndpoint, app mcpconnectionattempts.App) mcpconnectionattempts.Scope {
 	switch {
 	case endpoint.IsOrganizationGateway():
-		return connectionevents.OrganizationGatewayScope(endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, app)
+		return mcpconnectionattempts.OrganizationGatewayScope(endpoint.OrganizationID, endpoint.MetaMcpServerID.UUID, app)
 	case endpoint.MetaMcpServerID.Valid:
-		return connectionevents.GatewayScope(endpoint.OrganizationID, endpoint.ProjectID, endpoint.MetaMcpServerID.UUID, app)
+		return mcpconnectionattempts.GatewayScope(endpoint.OrganizationID, endpoint.ProjectID, endpoint.MetaMcpServerID.UUID, app)
 	case endpoint.McpServerID.Valid:
-		return connectionevents.ServerScope(endpoint.OrganizationID, endpoint.ProjectID, endpoint.McpServerID.UUID, app)
+		return mcpconnectionattempts.ServerScope(endpoint.OrganizationID, endpoint.ProjectID, endpoint.McpServerID.UUID, app)
 	default:
-		return connectionevents.ToolsetScope(endpoint.OrganizationID, endpoint.ProjectID, endpoint.ToolsetID.UUID, app)
+		return mcpconnectionattempts.ToolsetScope(endpoint.OrganizationID, endpoint.ProjectID, endpoint.ToolsetID.UUID, app)
 	}
 }

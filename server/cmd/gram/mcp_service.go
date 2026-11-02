@@ -24,7 +24,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
-	"github.com/speakeasy-api/gram/server/internal/connectionevents"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/functions"
@@ -34,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
@@ -74,7 +74,7 @@ func newToolCallLogs(publisher gcp.Publisher[*otelv1.InboundLogRecord]) *otelpub
 }
 
 type mcpServiceDependencies struct {
-	Connections    *connectionevents.Recorder
+	Connections    *mcpconnectionattempts.Recorder
 	TunnelMetrics  *metrics.Collector
 	Logger         *slog.Logger
 	Tracer         trace.TracerProvider

@@ -1,4 +1,4 @@
-package connectionevents
+package mcpconnectionattempts
 
 import (
 	"encoding/json"

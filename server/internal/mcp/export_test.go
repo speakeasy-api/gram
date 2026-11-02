@@ -16,7 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agent/aitargets"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agent/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/connectionevents"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpriskscan"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -28,12 +28,12 @@ import (
 )
 
 // SetConnectionRecorder replaces the connection attempt recorder.
-func (s *Service) SetConnectionRecorder(recorder *connectionevents.Recorder) {
+func (s *Service) SetConnectionRecorder(recorder *mcpconnectionattempts.Recorder) {
 	s.connections = recorder
 }
 
 // ConnectionAttempt exposes the state's connection attempt.
-func (a AuthnChallengeState) ConnectionAttempt(endpoint *ResolvedMcpEndpoint) connectionevents.Attempt {
+func (a AuthnChallengeState) ConnectionAttempt(endpoint *ResolvedMcpEndpoint) mcpconnectionattempts.Attempt {
 	return a.connectionAttempt(endpoint)
 }
 

@@ -33,7 +33,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
-	"github.com/speakeasy-api/gram/server/internal/connectionevents"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -43,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/internalsessionissuers"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
 	"github.com/speakeasy-api/gram/server/internal/memory"
@@ -364,7 +364,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		return fmt.Errorf("build tunnel http client: %w", err)
 	}
 	protectedResources := protectedresource.NewProber(db, guardianPolicy)
-	connectionRecorder := connectionevents.NewRecorder(logger, meterProvider, chDB, logsEnabled)
+	connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled)
 	shutdown.funcs = append(shutdown.funcs, connectionRecorder.Shutdown)
 	remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, enc, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags, connectionRecorder)
 	if err != nil {

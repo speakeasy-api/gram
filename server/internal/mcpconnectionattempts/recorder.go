@@ -1,4 +1,4 @@
-package connectionevents
+package mcpconnectionattempts
 
 import (
 	"context"
@@ -22,7 +22,7 @@ import (
 )
 
 const (
-	meterScope = "github.com/speakeasy-api/gram/server/internal/connectionevents"
+	meterScope = "github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 
 	meterSteps   = "mcp.connection.steps"
 	meterDropped = "mcp.connection.events.dropped"
@@ -362,7 +362,7 @@ func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 }
 
 func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn driver.Conn, logsEnabled func(context.Context, string) (bool, error), cfg config) *Recorder {
-	logger = logger.With(attr.SlogComponent("connection_events"))
+	logger = logger.With(attr.SlogComponent("mcp_connection_attempts"))
 	meter := meterProvider.Meter(meterScope)
 
 	steps, err := meter.Int64Counter(meterSteps,
@@ -398,7 +398,7 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 }
 
 // NewCapturing returns a recorder that hands each row to capture instead of
-// writing it. Use connectioneventstest rather than calling this.
+// writing it. Use mcpconnectionattemptstest rather than calling this.
 func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (bool, error)) *Recorder {
 	return &Recorder{
 		logger:      slog.New(slog.DiscardHandler),

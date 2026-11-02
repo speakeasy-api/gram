@@ -1,6 +1,6 @@
-// Package connectioneventstest lets a flow's test assert what was recorded in
+// Package mcpconnectionattemptstest lets a flow's test assert what was recorded in
 // one line.
-package connectioneventstest
+package mcpconnectionattemptstest
 
 import (
 	"context"
@@ -9,11 +9,11 @@ import (
 
 	"github.com/stretchr/testify/require"
 
-	"github.com/speakeasy-api/gram/server/internal/connectionevents"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 )
 
 // LogsOn is a logs check for an organization with logs on. Pass it to
-// connectionevents.NewRecorder in tests that write to real ClickHouse.
+// mcpconnectionattempts.NewRecorder in tests that write to real ClickHouse.
 func LogsOn(context.Context, string) (bool, error) {
 	return true, nil
 }
@@ -25,11 +25,11 @@ func logsOff(context.Context, string) (bool, error) {
 // Recording captures rows in memory and fails the test if an attempt ends twice.
 type Recording struct {
 	// Recorder is what to hand to the code under test.
-	Recorder *connectionevents.Recorder
+	Recorder *mcpconnectionattempts.Recorder
 
 	t    *testing.T
 	mu   sync.Mutex
-	rows []connectionevents.Row
+	rows []mcpconnectionattempts.Row
 }
 
 // New returns an empty recording for an organization with logs on.
@@ -49,7 +49,7 @@ func newRecording(t *testing.T, logsEnabled func(context.Context, string) (bool,
 	t.Helper()
 
 	rec := &Recording{Recorder: nil, t: t, mu: sync.Mutex{}, rows: nil}
-	rec.Recorder = connectionevents.NewCapturing(func(row connectionevents.Row) {
+	rec.Recorder = mcpconnectionattempts.NewCapturing(func(row mcpconnectionattempts.Row) {
 		rec.mu.Lock()
 		defer rec.mu.Unlock()
 		rec.rows = append(rec.rows, row)
@@ -59,20 +59,20 @@ func newRecording(t *testing.T, logsEnabled func(context.Context, string) (bool,
 }
 
 // Rows returns what was recorded, in order.
-func (r *Recording) Rows() []connectionevents.Row {
+func (r *Recording) Rows() []mcpconnectionattempts.Row {
 	r.mu.Lock()
 	defer r.mu.Unlock()
-	return append([]connectionevents.Row(nil), r.rows...)
+	return append([]mcpconnectionattempts.Row(nil), r.rows...)
 }
 
 // RequireStep asserts a non-final row for this step and what happened.
-func (r *Recording) RequireStep(step connectionevents.Step, what connectionevents.Happened) connectionevents.Row {
+func (r *Recording) RequireStep(step mcpconnectionattempts.Step, what mcpconnectionattempts.Happened) mcpconnectionattempts.Row {
 	r.t.Helper()
 	return r.require(step, what, false)
 }
 
 // RequireEnded asserts the final row for this step and what happened.
-func (r *Recording) RequireEnded(step connectionevents.Step, what connectionevents.Happened) connectionevents.Row {
+func (r *Recording) RequireEnded(step mcpconnectionattempts.Step, what mcpconnectionattempts.Happened) mcpconnectionattempts.Row {
 	r.t.Helper()
 	return r.require(step, what, true)
 }
@@ -107,14 +107,14 @@ func (r *Recording) RequireOneAttempt() {
 	}
 }
 
-func (r *Recording) require(step connectionevents.Step, what connectionevents.Happened, final bool) connectionevents.Row {
+func (r *Recording) require(step mcpconnectionattempts.Step, what mcpconnectionattempts.Happened, final bool) mcpconnectionattempts.Row {
 	r.t.Helper()
 
 	result, reason := "", ""
 	switch happened := what.(type) {
-	case connectionevents.Result:
+	case mcpconnectionattempts.Result:
 		result = happened.String()
-	case connectionevents.Code:
+	case mcpconnectionattempts.Code:
 		reason = happened.String()
 	}
 	rows := r.Rows()
@@ -125,7 +125,7 @@ func (r *Recording) require(step connectionevents.Step, what connectionevents.Ha
 		}
 	}
 	require.Failf(r.t, "not recorded", "want step %s result %q reason %q final %t, got %+v", step, result, reason, final, rows)
-	var none connectionevents.Row
+	var none mcpconnectionattempts.Row
 	return none
 }
 

@@ -1,15 +1,15 @@
-// Package connectionevents records MCP connection attempts in ClickHouse: one
+// Package mcpconnectionattempts records MCP connection attempts in ClickHouse: one
 // row per step, shared by every flow. It holds metadata only and never holds a
 // request up.
 //
 // A call site names what happened and nothing else:
 //
-//	attempt := connectionevents.Begin(scope)
-//	recorder.Step(ctx, attempt, connectionevents.StepInboundAuthorize, connectionevents.ResultAccepted)
-//	recorder.End(ctx, attempt, connectionevents.StepInboundConsent, connectionevents.CodeCanceled)
+//	attempt := mcpconnectionattempts.Begin(scope)
+//	recorder.Step(ctx, attempt, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted)
+//	recorder.End(ctx, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeCanceled)
 //
-//	recorder.Once(ctx, scope, connectionevents.StepMCPRequest, connectionevents.CodeInvalidBearerToken)
-package connectionevents
+//	recorder.Once(ctx, scope, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidBearerToken)
+package mcpconnectionattempts
 
 import (
 	"encoding/json"

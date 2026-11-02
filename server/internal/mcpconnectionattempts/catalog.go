@@ -1,4 +1,4 @@
-package connectionevents
+package mcpconnectionattempts
 
 // Outcome is the overall result of an attempt, stored on its final step only.
 type Outcome string

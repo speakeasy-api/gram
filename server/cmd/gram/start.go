@@ -61,7 +61,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chatanalysis"
 	chatsessionssvc "github.com/speakeasy-api/gram/server/internal/chatsessions"
 	"github.com/speakeasy-api/gram/server/internal/cliauth"
-	"github.com/speakeasy-api/gram/server/internal/connectionevents"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/control"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -105,6 +104,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/remoteprobe"
 	"github.com/speakeasy-api/gram/server/internal/mcpapproval/repometa"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata"
 	mcpmetadata_repo "github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
@@ -1184,7 +1184,7 @@ func newStartCommand() *cli.Command {
 
 			// One prober per replica, shared by the proxy's on-use refresh and the login's probe.
 			protectedResources := protectedresource.NewProber(db, guardianPolicy)
-			connectionRecorder := connectionevents.NewRecorder(logger, meterProvider, chDB, logsEnabled)
+			connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled)
 			shutdownFuncs = append(shutdownFuncs, connectionRecorder.Shutdown)
 			remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags, connectionRecorder)
 			if err != nil {

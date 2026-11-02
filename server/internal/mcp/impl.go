@@ -27,10 +27,10 @@ import (
 	"goa.design/goa/v3/security"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
-	"github.com/speakeasy-api/gram/server/internal/connectionevents"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
@@ -290,7 +290,7 @@ type Service struct {
 	remoteChallengeMgr *remotesessions.ChallengeManager
 
 	// connections records connection attempt steps.
-	connections    *connectionevents.Recorder
+	connections    *mcpconnectionattempts.Recorder
 	bindingRefresh *remotesessions.BindingRefreshAttempts
 	// validationMetrics counts the consent page's live validation probes.
 	validationMetrics *remotesessionmetrics.Validation
@@ -552,7 +552,7 @@ func NewService(
 	tunnelPublicConfig TunnelPublicConfig,
 	metaRuntimeConfig MetaRuntimeConfig,
 	codeExecutor codemode.Executor,
-	connections *connectionevents.Recorder,
+	connections *mcpconnectionattempts.Recorder,
 ) (*Service, error) {
 	if codeExecutor == nil {
 		codeExecutor = codemode.Disabled{}
