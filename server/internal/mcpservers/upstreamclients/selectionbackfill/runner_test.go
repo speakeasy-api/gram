@@ -760,3 +760,56 @@ func TestExplicitHeaderPickIsNeverReplaced(t *testing.T) {
 	require.Equal(t, uuid.NullUUID{UUID: headers, Valid: true}, named.AuthClientID, "the backfill keeps the explicit choice")
 	require.False(t, f.selection(issuer, credential, server).RemoteSessionClientID.Valid)
 }
+
+// A dashboard mint picks nothing. On a server whose only client is a static
+// credential an administrator added, the no-auth choice it records names that
+// client: its headers are the server's own configuration, not a copy of the
+// source's headers, so they are never compared with them. Recording it
+// unmapped left an enforcing organization with a gap that reconnecting
+// recorded again.
+func TestIssuanceWithoutAPickNamesTheAdminHeaderClient(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuer := f.projectIssuer()
+	server := f.server(issuer)
+	headers := uuid.New()
+	require.NoError(t, f.q.SeedLinkedHeaderAuthClientFixture(t.Context(), SeedLinkedHeaderAuthClientFixtureParams{
+		ID:             headers,
+		OrganizationID: f.orgID,
+		ProjectID:      uuid.NullUUID{UUID: f.projectID, Valid: true},
+		McpServerID:    server,
+	}))
+	credential := f.session(issuer)
+
+	require.Equal(t, int64(1), f.record(issuer, credential))
+	named := f.namedAuthClient(credential, server)
+	require.Equal(t, uuid.NullUUID{UUID: headers, Valid: true}, named.AuthClientID)
+	require.False(t, named.NoAuth)
+	require.True(t, f.selection(issuer, credential, server).Usable)
+}
+
+// A no-auth choice recorded unmapped before the fix is mapped by the auth
+// client backfill onto the static credential an administrator added, the same
+// client issuance now names.
+func TestBackfillMapsANoAuthChoiceOntoTheAdminHeaderClient(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	issuer := f.projectIssuer()
+	server := f.server(issuer)
+	credential := f.session(issuer)
+	require.Equal(t, int64(1), f.record(issuer, credential))
+	require.False(t, f.namedAuthClient(credential, server).AuthClientID.Valid)
+
+	headers := uuid.New()
+	require.NoError(t, f.q.SeedLinkedHeaderAuthClientFixture(t.Context(), SeedLinkedHeaderAuthClientFixtureParams{
+		ID:             headers,
+		OrganizationID: f.orgID,
+		ProjectID:      uuid.NullUUID{UUID: f.projectID, Valid: true},
+		McpServerID:    server,
+	}))
+	report, err := authclientbackfill.Run(t.Context(), f.pool, authclientbackfill.Options{OrganizationID: f.orgID, Apply: true, PageSize: 0})
+	require.NoError(t, err)
+	require.Empty(t, report.PhaseErrors)
+	require.Equal(t, 1, report.SelectionsMapped)
+	require.Equal(t, uuid.NullUUID{UUID: headers, Valid: true}, f.namedAuthClient(credential, server).AuthClientID)
+}
