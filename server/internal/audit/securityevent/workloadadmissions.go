@@ -34,7 +34,7 @@ func LogWorkloadAdmissionAdmit(ctx context.Context, dbtx repo.DBTX, event audit.
 		Action: string(action),
 
 		SubjectID:          event.AdmissionURN.ID.String(),
-		SubjectType:        subjectTypeWorkloadAdmission,
+		SubjectType:        audit.SubjectTypeWorkloadAdmission,
 		SubjectDisplayName: conv.ToPGTextEmpty(event.AdmissionDisplayName),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 
@@ -68,7 +68,7 @@ func LogWorkloadAdmissionWithdraw(ctx context.Context, dbtx repo.DBTX, event aud
 		Action: string(action),
 
 		SubjectID:          event.AdmissionURN.ID.String(),
-		SubjectType:        subjectTypeWorkloadAdmission,
+		SubjectType:        audit.SubjectTypeWorkloadAdmission,
 		SubjectDisplayName: conv.ToPGTextEmpty(event.AdmissionDisplayName),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 

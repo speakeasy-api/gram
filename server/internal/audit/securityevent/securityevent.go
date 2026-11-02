@@ -27,10 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
 )
 
-// Subject types share their values with the audit package so both logs filter
-// and render a subject alike.
-const subjectTypeWorkloadAdmission = "workload_admission"
-
 // record writes one security entry and publishes its webhook event in the
 // caller's transaction. Request attribution and the webhook payload come from
 // the audit package, so both logs stamp and publish entries alike; the two

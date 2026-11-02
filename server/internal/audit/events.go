@@ -94,6 +94,10 @@ const (
 	subjectTypeWorkloadIssuer          subjectType = "workload_issuer"
 )
 
+// SubjectTypeWorkloadAdmission is the workload admission subject type, for the
+// security log, which records these entries outside this package.
+const SubjectTypeWorkloadAdmission = string(subjectTypeWorkloadAdmission)
+
 type Action string
 
 // Category says which log an entry belongs to.
