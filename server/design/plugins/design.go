@@ -110,11 +110,18 @@ var _ = Service("plugins", func() {
 
 		Result(PluginModel)
 
+		// Refused when turning auto sync off while the plugin has unsynced
+		// changes, or when changing the slug while auto sync is off.
+		Error(string(oops.CodeFailedPrecondition), func() { Description(oops.CodeFailedPrecondition.UserMessage()) })
+
 		HTTP(func() {
 			PUT("/rpc/plugins.updatePlugin")
 			security.SessionHeader()
 			security.ProjectHeader()
 			Response(StatusOK)
+			Response(string(oops.CodeFailedPrecondition), StatusPreconditionFailed, func() {
+				ContentType("application/json")
+			})
 		})
 
 		Meta("openapi:operationId", "updatePlugin")
@@ -566,7 +573,7 @@ var PluginAudienceModel = Type("PluginAudience", func() {
 
 // PluginModel is the full plugin representation.
 var PluginModel = Type("Plugin", func() {
-	Required("id", "name", "slug", "auto_created", "agent_plugins_v1_compatible", "created_at", "updated_at")
+	Required("id", "name", "slug", "auto_created", "auto_sync_enabled", "agent_plugins_v1_compatible", "created_at", "updated_at")
 
 	Attribute("id", String, func() {
 		Description("Unique plugin identifier.")
@@ -577,6 +584,7 @@ var PluginModel = Type("Plugin", func() {
 	Attribute("description", String, "Optional description.")
 	Attribute("is_default", Boolean, "Whether this is the project's fallback plugin that new servers attach to.")
 	Attribute("auto_created", Boolean, "Whether automatic role distribution created this plugin. Read-only; preserved after edits and reuse.")
+	Attribute("auto_sync_enabled", Boolean, "Whether changes to this plugin publish to the marketplace automatically. When false, they wait until someone syncs the marketplace by hand.")
 	Attribute("server_count", Int64, "Number of active servers in this plugin.")
 	Attribute("skill_count", Int64, "Number of active skills in this plugin.")
 	Attribute("assignment_count", Int64, "Number of role/user assignments.")
@@ -599,6 +607,7 @@ var CreatePluginForm = Type("CreatePluginForm", func() {
 	Attribute("name", String, "Display name for the plugin.")
 	Attribute("slug", String, "Optional URL-safe identifier. Auto-generated from name if omitted.")
 	Attribute("description", String, "Optional description.")
+	Attribute("auto_sync_enabled", Boolean, "Whether changes to this plugin publish to the marketplace automatically. Defaults to true. When false, the plugin stays out of the marketplace until someone syncs it by hand.")
 })
 
 var UpdatePluginForm = Type("UpdatePluginForm", func() {
@@ -610,6 +619,7 @@ var UpdatePluginForm = Type("UpdatePluginForm", func() {
 	Attribute("name", String, "Updated display name.")
 	Attribute("slug", String, "Updated slug.")
 	Attribute("description", String, "Updated description.")
+	Attribute("auto_sync_enabled", Boolean, "Whether changes to this plugin publish to the marketplace automatically. Omit to keep the current setting. Turning it off is refused while the plugin has changes that haven't been synced, and the slug can't change while it is off.")
 })
 
 var AddPluginServerForm = Type("AddPluginServerForm", func() {
@@ -699,12 +709,22 @@ var PublishStatusResult = Type("PublishStatusResult", func() {
 	Attribute("codex_observability_plugin", String, "Slug of the generated Codex observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.")
 	Attribute("cursor_observability_plugin", String, "Slug of the generated Cursor observability plugin in the published marketplace — the value to mark required in Cursor's team marketplace. Present when connected.")
 	Attribute("has_collaborators", Boolean, "Whether the repo has at least one directly-added GitHub collaborator (excludes access granted via org membership/teams). Absent when the project is not connected.")
-	Attribute("up_to_date", Boolean, "Whether the project's current plugin state matches what was last published to GitHub. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).")
+	Attribute("up_to_date", Boolean, "Whether the project's current plugin state matches what was last published to GitHub, including changes of plugins whose auto sync is off that wait for a manual sync. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).")
+	Attribute("automatic_sync_pending", Boolean, "Whether an automatic publish would change the published marketplace. False while the only pending changes belong to plugins whose auto sync is off, which publish only on a manual sync. Absent when up_to_date is absent.")
+	Attribute("plugins", ArrayOf(PluginPublishStatus), "Each live plugin's own freshness. Absent when up_to_date is absent.")
 	Attribute("last_published_at", String, func() {
 		Description("When the project was last published to GitHub. Absent when the project is not connected.")
 		Format(FormatDateTime)
 	})
 	Attribute("live_version", String, "Version stamped into the currently published plugin.json manifests (e.g. 0.1.1783692954) — the version plugin clients such as Claude Code report for installed plugins. Absent when the project is not connected or the live version could not be determined.")
+})
+
+var PluginPublishStatus = Type("PluginPublishStatus", func() {
+	Required("slug", "up_to_date", "awaiting_manual_sync")
+
+	Attribute("slug", String, "The plugin's slug.")
+	Attribute("up_to_date", Boolean, "Whether the plugin's published package is current. With auto sync on: an automatic publish would push nothing new for it, its package and the marketplace manifests alike. With auto sync off: its package matches what it was last published with.")
+	Attribute("awaiting_manual_sync", Boolean, "Whether the plugin's auto sync is off and it has changes, or has never been published, so only a manual sync publishes it.")
 })
 
 var PublishPluginsResult = Type("PublishPluginsResult", func() {

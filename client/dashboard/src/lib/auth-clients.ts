@@ -49,10 +49,27 @@ type StatusPresentation = {
   tone: "success" | "warning" | "neutral";
 };
 
-export const UNDECIDED_STATUS: StatusPresentation = {
-  label: "Not decided",
-  hint: "Say whether the upstream needs credentials, so a server with none is never mistaken for one that needs none.",
+const NO_AUTH_STATUS: StatusPresentation = {
+  label: "No authentication required",
+  hint: "Speakeasy sends no credentials upstream. Callers still need access to the server itself.",
   tone: "neutral",
+};
+
+/**
+ * The upstream asks for sign-in, but the server has no credential turned on to
+ * send it.
+ */
+export const SIGN_IN_DETECTED_STATUS: StatusPresentation = {
+  label: "Authentication setup incomplete",
+  hint: "The upstream needs credentials, but none is set up and turned on. Add or turn on a credential below.",
+  tone: "warning",
+};
+
+/** A status this dashboard does not know, never read as needing none. */
+export const UNKNOWN_STATUS: StatusPresentation = {
+  label: "Status unavailable",
+  hint: "Refresh the page to load the upstream's sign-in status.",
+  tone: "warning",
 };
 
 export const UPSTREAM_AUTH_STATUS: Record<string, StatusPresentation> = {
@@ -63,15 +80,10 @@ export const UPSTREAM_AUTH_STATUS: Record<string, StatusPresentation> = {
   },
   setup_incomplete: {
     label: "Authentication setup incomplete",
-    hint: "The upstream needs credentials, but none is turned on. Callers can't use this server until one is.",
+    hint: "This server signs in to the upstream in a way no credential below records yet. Add a credential for it.",
     tone: "warning",
   },
-  no_auth_required: {
-    label: "No authentication required",
-    hint: "Speakeasy sends no credentials upstream. Callers still need access to the server itself.",
-    tone: "neutral",
-  },
-  undecided: UNDECIDED_STATUS,
+  no_auth_required: NO_AUTH_STATUS,
 };
 
 /** The other servers a change to this client also changes. */

@@ -11,6 +11,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { invalidateAgentPolicy } from "../agent-policy-grants";
 import { CredentialsWizard } from "./CredentialsWizard";
@@ -39,10 +40,12 @@ const mocks = vi.hoisted(() => ({
   renameAgent: vi.fn(),
   createGrant: vi.fn(),
   deleteGrant: vi.fn(),
+  extendAgentKeys: vi.fn(),
   agentList: vi.fn(),
   nameCheckFails: false,
   sessions: vi.fn(),
   sessionClients: vi.fn(),
+  serverAuth: vi.fn(),
   bindings: vi.fn(),
   attach: vi.fn(),
   detach: vi.fn(),
@@ -114,9 +117,17 @@ vi.mock("@/contexts/Sdk", () => ({
       listPolicyGrants: mocks.listPolicyGrants,
       checkPolicyGrants: mocks.checkPolicyGrants,
     },
-    keys: { create: mocks.createKey, list: mocks.listKeys },
+    keys: {
+      create: mocks.createKey,
+      list: mocks.listKeys,
+      extendAgentKeys: mocks.extendAgentKeys,
+    },
     plugins: { getPlugin: mocks.getPlugin },
-    authClients: { listMcpServerChoices: async () => ({ choices: [] }) },
+    authClients: {
+      listMcpServerChoices: async () => ({ choices: [] }),
+      // How each server signs in upstream, read from its own auth clients.
+      getMcpServerAuthentication: mocks.serverAuth,
+    },
     // A person's own connections, read once per project before the agent
     // exists and as the agent's candidates once it does.
     remoteSessions: {
@@ -298,7 +309,7 @@ function setup(initialPlatformKey?: string, initialEntry = "/") {
 }
 
 async function continueFromAuthentication() {
-  await screen.findByRole("heading", { name: "MCP Authentication" });
+  await screen.findByRole("heading", { name: "MCP sign-in" });
   const next = screen.getByRole("button", { name: "Continue" });
   await waitFor(() => expect(next.hasAttribute("disabled")).toBe(false));
   fireEvent.click(next);
@@ -377,6 +388,7 @@ beforeEach(() => {
   mocks.renameAgent.mockResolvedValue({});
   mocks.createGrant.mockResolvedValue({});
   mocks.deleteGrant.mockResolvedValue({});
+  mocks.extendAgentKeys.mockResolvedValue({ keys: [] });
   mocks.registerIssuer.mockResolvedValue({});
   mocks.admitSubject.mockResolvedValue({});
   mocks.withdrawSubject.mockResolvedValue({});
@@ -401,6 +413,12 @@ beforeEach(() => {
   mocks.toolsets.mockResolvedValue({ toolsets: [] });
   mocks.sessions.mockResolvedValue([]);
   mocks.sessionClients.mockResolvedValue([]);
+  mocks.serverAuth.mockResolvedValue({
+    status: "configured",
+    clients: [
+      { id: "auth_personal", clientType: "remote_session", enabled: true },
+    ],
+  });
   mocks.bindings.mockResolvedValue([]);
   mocks.attach.mockResolvedValue({});
   mocks.plugins.mockReturnValue([]);
@@ -1769,8 +1787,8 @@ describe("Editing an agent that already exists", () => {
     // Marked done rather than ahead: an agent that exists has settled what
     // it signs in with. The state is asserted, not merely the label: a cell
     // carries its state in its own accessible name.
-    const credential = screen.getByRole("button", { name: /Credential/ });
-    expect(credential.getAttribute("aria-label")).toBe("Credential (done)");
+    const credential = screen.getByRole("button", { name: /Agent sign-in/ });
+    expect(credential.getAttribute("aria-label")).toBe("Agent sign-in (done)");
     expect(credential.textContent).not.toContain("Current");
     // The step the reader is on keeps its place even though everything from
     // the credential on is settled.
@@ -1783,8 +1801,8 @@ describe("Editing an agent that already exists", () => {
     editing();
     // Settled steps are still destinations, and a reader standing on one has
     // to be able to see where they are.
-    fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
-    const credential = screen.getByRole("button", { name: /Credential/ });
+    fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
+    const credential = screen.getByRole("button", { name: /Agent sign-in/ });
     expect(credential.getAttribute("aria-current")).toBe("step");
     expect(credential.textContent).toContain("Current");
   });
@@ -1908,6 +1926,68 @@ describe("Editing an agent that already exists", () => {
       },
     });
     expect(mocks.deleteGrant).not.toHaveBeenCalled();
+  });
+
+  it("gives the agent's keys the servers it was just granted", async () => {
+    const { onDone } = editing({ grants: [] });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(await authenticationSave());
+
+    await waitFor(() => expect(mocks.extendAgentKeys).toHaveBeenCalledTimes(1));
+    // A key stores what it was issued with, so the gateway its runtime calls
+    // lists a new server only once the key holds the grant too.
+    expect(mocks.extendAgentKeys.mock.calls[0]?.[0]).toEqual({
+      extendAgentKeysForm: {
+        agentId: "agent_one",
+        requestedGrants: [
+          {
+            effect: "allow",
+            scope: "mcp:connect",
+            selector: {
+              resourceKind: "mcp",
+              resourceId: "toolset_one",
+              projectId: "project_one",
+            },
+          },
+        ],
+        authClientChoices: [],
+      },
+    });
+    expect(mocks.createGrant).toHaveBeenCalledTimes(1);
+    expect(mocks.createGrant.mock.invocationCallOrder.at(-1) ?? 0).toBeLessThan(
+      mocks.extendAgentKeys.mock.invocationCallOrder[0] ?? 0,
+    );
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
+  });
+
+  it("leaves the keys alone when no server was added", async () => {
+    const { onDone } = editing();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("checkbox", { name: "GitHub" });
+    fireEvent.click(await authenticationSave());
+
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
+    expect(mocks.extendAgentKeys).not.toHaveBeenCalled();
+  });
+
+  it("still finishes the edit when the keys cannot follow", async () => {
+    mocks.extendAgentKeys.mockRejectedValue(new Error("forbidden"));
+    const warning = vi.spyOn(toast, "warning");
+    const { onDone } = editing({ grants: [] });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(await authenticationSave());
+
+    // The grants are saved by then, so the edit is not undone over the keys.
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
+    expect(mocks.createGrant).toHaveBeenCalled();
+    expect(warning).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "existing keys still reach only their old servers",
+      ),
+    );
+    warning.mockRestore();
   });
 
   it("leaves an unavailable assignment for an explicit detach when saving", async () => {
@@ -2137,7 +2217,7 @@ describe("Editing an agent that already exists", () => {
     // "All servers" names the reach it actually has, not the agent's project.
     expect(screen.getByText(/Every server in Example Org/)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Issue key" }));
 
     // Discovery offers no wildcard here, only the servers one by one, so the
@@ -2185,7 +2265,7 @@ describe("Editing an agent that already exists", () => {
     const all = await screen.findByRole("checkbox", { name: "All servers" });
     await waitFor(() => expect(all.getAttribute("data-state")).toBe("checked"));
 
-    fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Issue key" }));
 
     await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
@@ -2376,7 +2456,7 @@ describe("Editing an agent that already exists", () => {
 
     async function reachWorkloadStep() {
       editing();
-      fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+      fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
       fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
       await screen.findByRole("heading", { name: "Your cluster" });
       fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -2448,7 +2528,7 @@ describe("Editing an agent that already exists", () => {
 
     it("trusts a new cluster and moves the rule to it", async () => {
       editing();
-      fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+      fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
       fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
       await screen.findByRole("heading", { name: "Your cluster" });
       fireEvent.change(screen.getByLabelText("Cluster name"), {
@@ -2610,7 +2690,7 @@ describe("Editing an agent that already exists", () => {
         },
       ]);
       editing();
-      fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+      fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
       fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
       await screen.findByRole("heading", { name: "Anthropic organization" });
       const field = screen.getByLabelText(
@@ -2652,7 +2732,7 @@ describe("Editing an agent that already exists", () => {
         },
       ]);
       editing();
-      fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+      fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
       fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
       await screen.findByRole("heading", { name: "Identity provider" });
       fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -2686,7 +2766,7 @@ describe("Editing an agent that already exists", () => {
         },
       ]);
       editing();
-      fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+      fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
       fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
       await screen.findByRole("heading", { name: "Identity provider" });
       fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -2781,7 +2861,7 @@ describe("Servers that sign in as a person", () => {
     expect(screen.queryByText(/owner@upstream.test/)).toBeNull();
     fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP Authentication" });
+    await screen.findByRole("heading", { name: "MCP sign-in" });
     expect(
       (await screen.findAllByText(/Your connection|Uses your connection/))
         .length,
@@ -2929,7 +3009,7 @@ describe("Servers that sign in as a person", () => {
       await waitFor(() => expect(server.hasAttribute("disabled")).toBe(false));
       fireEvent.click(server);
       fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-      await screen.findByRole("heading", { name: "MCP Authentication" });
+      await screen.findByRole("heading", { name: "MCP sign-in" });
       const next = screen.getByRole("button", { name: "Continue" });
       await waitFor(() => expect(next.hasAttribute("disabled")).toBe(true));
       fireEvent.click(next);
@@ -2944,10 +3024,12 @@ describe("Servers that sign in as a person", () => {
       const open = vi
         .spyOn(window, "open")
         .mockReturnValue(popup as unknown as Window);
-      // The first row starts expanded.
-      screen.getByRole("button", {
-        name: /Linear.*(?:Expired|Requires connection)/,
-      });
+      // Rows start closed: open Linear's to reach its connection.
+      fireEvent.click(
+        screen.getByRole("button", {
+          name: /Linear.*(?:Expired|Requires connection)/,
+        }),
+      );
       fireEvent.click(
         await screen.findByRole("button", {
           name: state === "expired" ? "Reauthenticate" : "Connect account",
@@ -2980,15 +3062,64 @@ describe("Servers that sign in as a person", () => {
     },
   );
 
+  it("treats a server whose own auth is a shared credential as shared, whatever its issuer lists", async () => {
+    // The issuer is shared across the organization: its personal sign-in
+    // belongs to another server, not this one.
+    mocks.serverAuth.mockResolvedValue({
+      status: "configured",
+      clients: [
+        { id: "auth_token", clientType: "static_credential", enabled: true },
+      ],
+    });
+    await reachServers();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "MCP sign-in" });
+    expect(
+      await screen.findByRole("button", { name: /Linear.*Shared credential/ }),
+    ).toBeTruthy();
+    expect(screen.queryByText("Requires connection")).toBeNull();
+    // The summary does not claim an assigned connection for it either.
+    expect(
+      screen.queryByText("all tools, using an assigned connection"),
+    ).toBeNull();
+    await continueFromAuthentication();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create agent" }),
+    );
+    await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+    expect(mocks.serverAuth).toHaveBeenCalledWith(
+      { mcpServerId: "server_linear" },
+      undefined,
+      expect.anything(),
+    );
+    expect(mocks.attach).not.toHaveBeenCalled();
+  });
+
+  it("keeps Continue locked when a server's auth cannot be read", async () => {
+    mocks.sessions.mockResolvedValue([mine]);
+    mocks.serverAuth.mockRejectedValue(new Error("network down"));
+    await reachServers();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "MCP sign-in" });
+    expect(
+      await screen.findByRole("button", {
+        name: /Linear.*Could not check connection/,
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
   it("removes a selected server from authentication without backtracking", async () => {
     await reachServers();
     fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP Authentication" });
+    await screen.findByRole("heading", { name: "MCP sign-in" });
     fireEvent.click(screen.getByRole("button", { name: "Remove Linear" }));
-    expect(
-      screen.getByRole("heading", { name: "MCP Authentication" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "MCP sign-in" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Remove Linear" })).toBeNull();
     expect(
       screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
@@ -3000,7 +3131,7 @@ describe("Servers that sign in as a person", () => {
     await reachServers();
     fireEvent.click(await enabledAllServers());
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP Authentication" });
+    await screen.findByRole("heading", { name: "MCP sign-in" });
     expect(
       (await screen.findByText(/No usable connection available for/))
         .textContent,

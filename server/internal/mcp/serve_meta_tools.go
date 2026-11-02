@@ -248,7 +248,7 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 	}
 	if err := s.validateCatalogMember(ctx, gate, member); err != nil {
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
-			return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
+			return marshalMetaMemberFailure(ctx, logger, req.ID, err, memberErr.message)
 		}
 		if denied, ok := errors.AsType[*oops.ShareableError](err); ok && (denied.Code == oops.CodeForbidden || denied.Code == oops.CodeNotFound) {
 			return nil, err
@@ -642,6 +642,15 @@ func marshalMetaToolCallResult(ctx context.Context, logger *slog.Logger, id mcpj
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to serialize tools/call response").LogError(ctx, logger)
 	}
 	return bs, nil
+}
+
+// marshalMetaMemberFailure is marshalMetaToolError for a member failure that
+// records, for Code Mode, whether connecting the member is its remedy.
+func marshalMetaMemberFailure(ctx context.Context, logger *slog.Logger, id mcpjsonrpc.ID, err error, message string) (json.RawMessage, error) {
+	if invocation, ok := ctx.Value(metaCodeInvocationKey{}).(*metaCodeInvocation); ok {
+		_, invocation.credential = errors.AsType[memberCredentialError](err)
+	}
+	return marshalMetaToolError(ctx, logger, id, message)
 }
 
 // marshalMetaToolError emits a member-scoped failure as an isError tool

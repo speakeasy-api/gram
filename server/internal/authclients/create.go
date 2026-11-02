@@ -402,8 +402,6 @@ func attachTx(ctx context.Context, queries *repo.Queries, organizationID string,
 		return server, &AttachRefusedError{Code: AttachInvalid, Message: "tunneled MCP servers are not sent a client's headers; offer them an OAuth-backed client instead"}
 	case client.ProjectID.Valid && client.ProjectID.UUID != server.ProjectID:
 		return server, &AttachRefusedError{Code: AttachInvalid, Message: "this client belongs to another project; only clients shared across the organization can be offered on servers in other projects"}
-	case client.Enabled && server.RequiresUpstreamAuth.Valid && !server.RequiresUpstreamAuth.Bool:
-		return server, &AttachRefusedError{Code: AttachConflict, Message: "the server declares that its upstream needs no authentication; change that declaration before offering it an auth client"}
 	}
 
 	if _, err := queries.AttachAuthClientToServer(ctx, repo.AttachAuthClientToServerParams{
