@@ -115376,6 +115376,8 @@ components:
                         - chat:write
                         - inference:execute
                         - log:read
+                        - memory:read
+                        - memory:write
                         - agent:read
                         - agent:write
                         - agent:authorize
@@ -115433,6 +115435,8 @@ components:
                             - chat:write
                             - inference:execute
                             - log:read
+                            - memory:read
+                            - memory:write
                             - agent:read
                             - agent:write
                             - agent:authorize
@@ -125272,6 +125276,8 @@ components:
                         - chat:write
                         - inference:execute
                         - log:read
+                        - memory:read
+                        - memory:write
                         - agent:read
                         - agent:write
                         - agent:authorize
@@ -125713,6 +125719,8 @@ components:
                         - chat:write
                         - inference:execute
                         - log:read
+                        - memory:read
+                        - memory:write
                         - agent:read
                         - agent:write
                         - agent:authorize
@@ -125793,6 +125801,8 @@ components:
                             - chat:write
                             - inference:execute
                             - log:read
+                            - memory:read
+                            - memory:write
                             - agent:read
                             - agent:write
                             - agent:authorize

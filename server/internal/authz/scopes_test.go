@@ -193,6 +193,33 @@ func TestLogReadNotImpliedByProjectOrOrgScopes(t *testing.T) {
 	require.Equal(t, ResourceKindProject, ResourceKindForScope(ScopeLogRead))
 }
 
+// memory:read and memory:write are not defaults for any system role. Team
+// memory summarizes every member's sessions, so it must be granted explicitly
+// per project; neither project access nor org:admin implies it.
+func TestSystemRolesExcludeMemoryScopes(t *testing.T) {
+	t.Parallel()
+
+	for _, role := range []string{SystemRoleAdmin, SystemRoleMember} {
+		for _, grant := range SystemRoleGrants[role] {
+			require.NotEqual(t, string(ScopeMemoryRead), grant.Scope, role)
+			require.NotEqual(t, string(ScopeMemoryWrite), grant.Scope, role)
+		}
+	}
+}
+
+func TestMemoryScopesProjectScopedAndNotImpliedByProjectOrOrgScopes(t *testing.T) {
+	t.Parallel()
+
+	for _, scope := range []Scope{ScopeProjectRead, ScopeProjectWrite, ScopeOrgRead, ScopeOrgAdmin, ScopeChatRead, ScopeChatWrite} {
+		require.NotContains(t, ScopeImplicationClosure(scope), ScopeMemoryRead, scope)
+		require.NotContains(t, ScopeImplicationClosure(scope), ScopeMemoryWrite, scope)
+	}
+	require.Contains(t, ScopeImplicationClosure(ScopeMemoryWrite), ScopeMemoryRead)
+	require.NotContains(t, ScopeImplicationClosure(ScopeMemoryRead), ScopeMemoryWrite)
+	require.Equal(t, ResourceKindProject, ResourceKindForScope(ScopeMemoryRead))
+	require.Equal(t, ResourceKindProject, ResourceKindForScope(ScopeMemoryWrite))
+}
+
 // environment:read is not a member default: environment values include secrets,
 // so viewing them must be granted explicitly via a custom role. Admins retain
 // environment:read/write via adminScopes.
