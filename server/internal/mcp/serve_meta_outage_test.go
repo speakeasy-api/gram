@@ -35,6 +35,7 @@ import (
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
+	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -191,6 +192,36 @@ func TestServePublic_MetaEndpoint_RefreshOutageIsRetryableThenRecovers(t *testin
 	require.Contains(t, text, "rejected the user's credential", "after the outage the member receives the refreshed token")
 	require.Equal(t, "Bearer refreshed-token", f.upstream.Load())
 	require.Equal(t, metamcp.SignInConnected, f.connectionStatus(t, ctx).Servers[0].Status)
+}
+
+// A tunnel-bound provider's connect page has no Reconnect, so the message doesn't send people there.
+func TestServePublic_MetaEndpoint_TunnelBoundOutageDoesNotOfferReconnect(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := newMemberRefreshOutageFixture(t, ctx, ti, func(upstream string) string { return upstream })
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	tunnel, err := tunneledmcprepo.New(ti.conn).CreateServer(ctx, tunneledmcprepo.CreateServerParams{
+		ID: uuid.New(), ProjectID: *authCtx.ProjectID, Name: "outage-tunnel-" + uuid.NewString(), KeyHash: "hash-" + uuid.NewString(), KeyPrefix: "test",
+		ResourceIdentifier: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	_, err = remotesessions_repo.New(ti.conn).UpdateRemoteSessionIssuer(ctx, remotesessions_repo.UpdateRemoteSessionIssuerParams{
+		ID: clientRemoteIssuerID(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, f.clientID), ProjectID: conv.ToNullUUID(*authCtx.ProjectID), TunneledMcpServerID: conv.ToPGText(tunnel.ID.String()),
+	})
+	require.NoError(t, err)
+
+	text, isError := metaToolResultText(t, executeMetaTool(t, ti, f.metaSlug, f.bearer, "member--ping"))
+	require.True(t, isError)
+	require.Contains(t, text, "is not reachable right now")
+	require.Contains(t, text, "Retry")
+	require.NotContains(t, text, "reconnect")
+	require.NotContains(t, text, "provider")
+
+	status := f.connectionStatus(t, ctx)
+	require.Equal(t, metamcp.SignInUnavailable, status.Servers[0].Status)
+	require.NotContains(t, status.Servers[0].Detail, "reconnect")
 }
 
 // A grant from before resources were recorded still belongs to its member.

@@ -3,6 +3,7 @@ package remotesessions_test
 import (
 	"context"
 	"net/http"
+	"net/http/httptest"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -243,6 +244,43 @@ func TestConnectionOutage_TunneledProviderRecordsTunnel(t *testing.T) {
 	kind, tunnel := env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
 	require.Equal(t, remotesessions.RefreshOutageTunnel, kind)
 	require.Equal(t, tunnelID, tunnel.UUID)
+}
+
+// Tunnel up, provider behind it failing: still no Reconnect, since an exchange takes the same path.
+func TestConnectionOutage_ProviderBehindLiveTunnelRecordsTunnel(t *testing.T) {
+	t.Parallel()
+
+	var down atomic.Bool
+	upstream := http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		if down.Load() {
+			w.WriteHeader(http.StatusServiceUnavailable)
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"expired-access","refresh_token":"live-refresh"}`))
+	})
+	gateway := &tunnelGateway{paths: make(chan string, 8), upstream: upstream}
+	gatewayServer := httptest.NewServer(gateway.handler())
+	t.Cleanup(gatewayServer.Close)
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	routes := route.NewRouteTable()
+	tunnels := tunnelrouting.NewHTTPClient(routes, "forward-token", policy, nil)
+	ctx, env := newSyntheticExpiryEnv(t, "refresh-outage-live-tunnel", upstream, withTunnels(tunnels))
+	tunnelID := bindIssuerToTunnel(t, env)
+	require.NoError(t, routes.Publish(ctx, tunnelID.String(), gatewayServer.URL, time.Minute))
+	require.NoError(t, env.q.SetRemoteSessionAccessExpiresAt(ctx, repo.SetRemoteSessionAccessExpiresAtParams{
+		ID: env.session.ID, ProjectID: conv.ToNullUUID(env.projectID), AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)),
+	}))
+	down.Store(true)
+
+	_, err = env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+	require.Equal(t, remotesessions.RefreshOutageTunnel, remotesessions.OutageKindOf(err))
+	kind, tunnel := env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
+	require.Equal(t, remotesessions.RefreshOutageTunnel, kind)
+	require.Equal(t, tunnelID, tunnel.UUID)
+	require.NotEmpty(t, gateway.paths, "the refresh reached the provider through the live tunnel")
 }
 
 func TestResolveAccessToken_UpstreamServerErrorIsNoToken(t *testing.T) {

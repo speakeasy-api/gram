@@ -237,6 +237,8 @@ func TestServeConsent_TunnelOutageOffersNoReconnect(t *testing.T) {
 		require.Contains(t, page, "Unavailable · try again later")
 		require.NotContains(t, page, "> Reconnect </button>")
 		require.NotContains(t, page, "data-auto-close")
+		require.NotContains(t, strings.ToLower(page), "tunnel is", "the provider behind it may be what failed")
+		require.NotContains(t, strings.ToLower(page), "your tunnel")
 	}
 }
 

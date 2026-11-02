@@ -76,6 +76,9 @@ type RefreshError struct {
 	// retryAfter is how long the outage behind this failure is paced for.
 	retryAfter time.Duration
 
+	// outageKind says whether reconnecting could get past this failure's path.
+	outageKind RefreshOutageKind
+
 	err error
 }
 
@@ -463,15 +466,19 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 		err = refreshClientLoadError(err)
 		outcome := refreshOutcomeForError(ctx, err)
 		s.metrics.Record(ctx, "", trigger, outcome)
-		return zero, &RefreshError{IssuerURL: "", Outcome: outcome, retryAfter: 0, err: err}
+		return zero, &RefreshError{IssuerURL: "", Outcome: outcome, retryAfter: 0, outageKind: RefreshOutageNone, err: err}
 	}
 	s.issuerMetadata.NoteUse(ctx, issuerUseFromClientRow(client))
 
+	kind := RefreshOutageProvider
+	if client.TunneledMcpServerID.Valid {
+		kind = RefreshOutageTunnel
+	}
 	// A person asking for a refresh gets one; everything else waits out an outage.
 	if trigger != remotesessionmetrics.RefreshTriggerManual {
 		if wait := s.refreshCooldownRemaining(ctx, sess); wait > 0 {
 			s.metrics.Record(ctx, client.IssuerUrl, trigger, remotesessionmetrics.RefreshOutcomeDeferred)
-			return zero, &RefreshError{IssuerURL: client.IssuerUrl, Outcome: remotesessionmetrics.RefreshOutcomeDeferred, retryAfter: wait, err: &refreshDeferredError{wait: wait}}
+			return zero, &RefreshError{IssuerURL: client.IssuerUrl, Outcome: remotesessionmetrics.RefreshOutcomeDeferred, retryAfter: wait, outageKind: kind, err: &refreshDeferredError{wait: wait}}
 		}
 	}
 
@@ -490,10 +497,6 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 		var retryAfter time.Duration
 		switch outcome {
 		case remotesessionmetrics.RefreshOutcomeUpstreamError, remotesessionmetrics.RefreshOutcomeRateLimited, remotesessionmetrics.RefreshOutcomeUnreachable:
-			kind := RefreshOutageProvider
-			if client.TunneledMcpServerID.Valid {
-				kind = RefreshOutageTunnel
-			}
 			retryAfter = s.startRefreshCooldown(ctx, sess, kind, err)
 		case remotesessionmetrics.RefreshOutcomeDeferred:
 			if deferred, ok := errors.AsType[*refreshDeferredError](err); ok {
@@ -501,7 +504,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 			}
 		default:
 		}
-		return zero, &RefreshError{IssuerURL: issuerURL, Outcome: outcome, retryAfter: retryAfter, err: err}
+		return zero, &RefreshError{IssuerURL: issuerURL, Outcome: outcome, retryAfter: retryAfter, outageKind: kind, err: err}
 	}
 	if result.Outcome == remotesessionmetrics.RefreshOutcomeRefreshed {
 		s.clearRefreshOutage(ctx, sess)

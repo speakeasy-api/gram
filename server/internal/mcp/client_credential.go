@@ -159,6 +159,10 @@ func linkedMemberOutage(member metaMember, err error, connectURL string) error {
 	if wait := remotesessions.RetryAfter(err); wait > 0 {
 		retry = fmt.Sprintf("Retry in about %d seconds.", int(wait.Round(time.Second).Seconds()))
 	}
+	// A tunnel-bound provider's connect page has no Reconnect: it would take the same path.
+	if remotesessions.OutageKindOf(err) == remotesessions.RefreshOutageTunnel {
+		return memberUnavailableError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q is not reachable right now. %s If it keeps happening, ask your administrator to check that it's running", member.slug, retry)}, session: err}
+	}
 	fallback := "If it keeps happening, ask your administrator"
 	if connectURL != "" {
 		fallback = "If it keeps happening, reconnect at " + connectURL

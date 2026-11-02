@@ -764,6 +764,14 @@ func RetryAfter(err error) time.Duration {
 	return 0
 }
 
+// OutageKindOf says what kind of outage stopped err's refresh, none when unknown.
+func OutageKindOf(err error) RefreshOutageKind {
+	if refreshErr, ok := errors.AsType[*RefreshError](err); ok {
+		return refreshErr.outageKind
+	}
+	return RefreshOutageNone
+}
+
 // SessionUnavailable reports a subject's connection that an outage stopped refreshing.
 func (t UpstreamToken) SessionUnavailable() bool {
 	return t.CredentialOwner == CredentialOwnerSubject && errors.Is(t.ClientCredentialErr, ErrRemoteSessionUnavailable)
