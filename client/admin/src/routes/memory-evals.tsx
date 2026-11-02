@@ -3,5 +3,5 @@ import { MemoryEvalsPage } from "@/pages/memory-evals/MemoryEvals";
 
 export const Route = createFileRoute("/memory-evals")({
   component: MemoryEvalsPage,
-  staticData: { crumb: "Team memory evals" },
+  staticData: { crumb: "Organizational Memory evals" },
 });

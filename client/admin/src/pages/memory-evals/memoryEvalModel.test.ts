@@ -89,6 +89,7 @@ describe("memory eval model", () => {
     };
     const second: MemoryEvalReport = {
       ...first,
+      judge_model: "j/other",
       scores: [
         score({
           arm: "C: search_team_memory",
@@ -128,6 +129,8 @@ describe("memory eval model", () => {
     expect(memory[0]?.unsafe).toBe(true);
     expect(memory[0]?.summaryModel).toBe("s/other");
     expect(memory[1]?.summaryModel).toBe("s/sum");
+    expect(memory[0]?.judgeModel).toBe("j/other");
+    expect(memory[1]?.judgeModel).toBe("j");
     expect(rows.find((r) => r.score.arm === "A: no memory")?.best).toBe(true);
   });
 
@@ -148,5 +151,11 @@ describe("memory eval model", () => {
     expect(
       validateConfig({ ...config, judge_model: "x/unknown" }, allowed),
     ).toMatch(/not an allowed/);
+    expect(
+      validateConfig(
+        { ...config, answer_models: ["a/one", "j/judge"] },
+        allowed,
+      ),
+    ).toMatch(/judge must not also be an answer model/);
   });
 });

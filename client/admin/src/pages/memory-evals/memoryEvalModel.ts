@@ -1,4 +1,4 @@
-// Types and pure helpers for the team memory eval runs page. The report shape
+// Types and pure helpers for the Organizational Memory eval runs page. The report shape
 // mirrors server/internal/platformmcp/memoryeval/bench/report.go, which the
 // API returns as report_json.
 
@@ -106,6 +106,7 @@ export type ComparisonRow = {
   runLabel: string;
   summaryModel: string;
   digestModel: string;
+  judgeModel: string;
   score: ArmScore;
   /** Best accuracy for this arm across every compared run and model. */
   best: boolean;
@@ -132,6 +133,7 @@ export function comparisonRows(
           report.preparation?.models.summary_model ?? run.config.summary_model,
         digestModel:
           report.preparation?.models.digest_model ?? run.config.digest_model,
+        judgeModel: report.judge_model || run.config.judge_model,
         score: s,
         best: s.accuracy > 0 && s.accuracy === bestByArm.get(s.arm),
         unsafe:
@@ -183,6 +185,8 @@ export function validateConfig(
   if (new Set(cfg.answer_models).size !== cfg.answer_models.length)
     return "Each answer model can appear once.";
   if (cfg.runs < 1 || cfg.runs > 3) return "Runs must be between 1 and 3.";
+  if (cfg.answer_models.includes(cfg.judge_model))
+    return "The judge must not also be an answer model; it would grade itself.";
   const allowedSet = new Set(allowed);
   for (const model of [
     ...cfg.answer_models,

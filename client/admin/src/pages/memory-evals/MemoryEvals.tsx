@@ -1,5 +1,6 @@
 import { useState, type JSX } from "react";
 import {
+  useInfiniteQuery,
   useMutation,
   useQueries,
   useQuery,
@@ -44,6 +45,9 @@ const optionsKey = ["admin", "memory-evals", "options"];
 const runsKey = ["admin", "memory-evals", "runs"];
 const runKey = (id: string) => ["admin", "memory-evals", "run", id];
 const maxCompared = 4;
+const runsPageSize = 50;
+
+type RunsPage = { runs: MemoryEvalRun[]; next_cursor?: string };
 
 const selectClass =
   "h-9 w-full rounded-md border border-input bg-transparent px-3 text-sm shadow-xs";
@@ -73,16 +77,22 @@ export function MemoryEvalsPage(): JSX.Element {
     queryFn: () =>
       gramAdminFetch<MemoryEvalOptions>("/admin/memoryEval.options"),
   });
-  const runs = useQuery({
+  const runs = useInfiniteQuery({
     queryKey: runsKey,
-    queryFn: () =>
-      gramAdminFetch<{ runs: MemoryEvalRun[]; next_cursor?: string }>(
-        "/admin/memoryEval.runs?limit=50",
+    initialPageParam: undefined as string | undefined,
+    queryFn: ({ pageParam }) =>
+      gramAdminFetch<RunsPage>(
+        `/admin/memoryEval.runs?limit=${runsPageSize}${
+          pageParam ? `&cursor=${encodeURIComponent(pageParam)}` : ""
+        }`,
       ),
-    // A run takes up to an hour; poll while one is in flight.
+    getNextPageParam: (page) => page.next_cursor,
+    // A run takes up to an hour; poll while one is in flight. Active runs
+    // are always the newest, so they are on the first page.
     refetchInterval: (query) =>
-      query.state.data?.runs.some(isActive) ? 15_000 : false,
+      query.state.data?.pages[0]?.runs.some(isActive) ? 15_000 : false,
   });
+  const allRuns = runs.data?.pages.flatMap((page) => page.runs);
   const [compared, setCompared] = useState<string[]>([]);
   const mutation = useMutation({
     mutationFn: startRun,
@@ -94,7 +104,7 @@ export function MemoryEvalsPage(): JSX.Element {
     },
   });
 
-  const active = runs.data?.runs.some(isActive) ?? false;
+  const active = allRuns?.some(isActive) ?? false;
   const limitReached =
     options.data !== undefined &&
     options.data.runs_today >= options.data.daily_run_limit;
@@ -102,11 +112,11 @@ export function MemoryEvalsPage(): JSX.Element {
   return (
     <div className="space-y-6 p-6">
       <div>
-        <h1 className="text-2xl font-semibold">Team memory evals</h1>
+        <h1 className="text-2xl font-semibold">Organizational Memory evals</h1>
         <p className="text-muted-foreground">
-          Score answer, summary and digest models against the synthetic team
-          memory corpus in the demo organization. Runs spend model credits and
-          never read customer data.
+          Score answer, summary and digest models against the synthetic
+          Organizational Memory corpus in the demo organization. Runs spend
+          model credits and never read customer data.
         </p>
       </div>
 
@@ -136,12 +146,12 @@ export function MemoryEvalsPage(): JSX.Element {
             <Button onClick={() => void runs.refetch()}>Retry</Button>
           </div>
         )}
-        {runs.data?.runs.length === 0 && (
+        {allRuns?.length === 0 && (
           <p>No runs yet. Start one above to score the default models.</p>
         )}
-        {runs.data && runs.data.runs.length > 0 && (
+        {allRuns && allRuns.length > 0 && (
           <RunsTable
-            runs={runs.data.runs}
+            runs={allRuns}
             compared={compared}
             onToggle={(id) =>
               setCompared((current) =>
@@ -153,6 +163,15 @@ export function MemoryEvalsPage(): JSX.Element {
               )
             }
           />
+        )}
+        {runs.hasNextPage && (
+          <Button
+            variant="outline"
+            disabled={runs.isFetchingNextPage}
+            onClick={() => void runs.fetchNextPage()}
+          >
+            {runs.isFetchingNextPage ? "Loading…" : "Load more runs"}
+          </Button>
         )}
       </section>
 
@@ -333,7 +352,11 @@ function RunsTable(props: {
             <TableCell>
               <Checkbox
                 aria-label={`Compare run ${runLabel(run)}`}
-                disabled={run.status !== "succeeded"}
+                disabled={
+                  run.status !== "succeeded" ||
+                  (!props.compared.includes(run.id) &&
+                    props.compared.length >= maxCompared)
+                }
                 checked={props.compared.includes(run.id)}
                 onCheckedChange={() => props.onToggle(run.id)}
               />
@@ -393,9 +416,10 @@ function Comparison(props: { runIds: string[] }): JSX.Element {
     <section className="space-y-2">
       <h2 className="text-lg font-semibold">Comparison</h2>
       <p className="text-sm text-muted-foreground">
-        Accuracy is correct over graded answers. The best accuracy per arm is
-        bold. A red row leaked a planted secret or another project's canary,
-        which disqualifies it whatever its accuracy.
+        Accuracy is correct over graded answers, so compare runs graded by the
+        same judge. The best accuracy per arm is bold. A red row leaked a
+        planted secret or another project's canary, which disqualifies it
+        whatever its accuracy.
       </p>
       {failed?.error && <p role="alert">{errorMessage(failed.error)}</p>}
       {results.some((r) => r.isPending) && <p>Loading reports…</p>}
@@ -420,6 +444,7 @@ function Comparison(props: { runIds: string[] }): JSX.Element {
               <TableHead>Arm</TableHead>
               <TableHead>Answer model</TableHead>
               <TableHead>Summary / digest</TableHead>
+              <TableHead>Judge</TableHead>
               <TableHead>Run</TableHead>
               <TableHead>Accuracy</TableHead>
               <TableHead>Valid citations</TableHead>
@@ -449,6 +474,9 @@ function Comparison(props: { runIds: string[] }): JSX.Element {
                   ) : (
                     "—"
                   )}
+                </TableCell>
+                <TableCell className="max-w-48 text-xs whitespace-normal">
+                  {row.judgeModel}
                 </TableCell>
                 <TableCell className="font-mono text-xs">
                   {row.runLabel}

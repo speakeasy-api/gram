@@ -112,9 +112,9 @@ export const ADMIN_NAV_GROUPS = [
       },
       {
         to: "/memory-evals",
-        label: "Team memory evals",
+        label: "Organizational Memory evals",
         keywords:
-          "memory eval evals benchmark models summary digest accuracy compare",
+          "organizational memory team memory eval evals benchmark models summary digest accuracy compare",
         icon: FlaskConicalIcon,
       },
       {

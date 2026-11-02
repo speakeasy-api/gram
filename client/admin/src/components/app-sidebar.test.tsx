@@ -236,7 +236,7 @@ describe("AppSidebar", () => {
             label: "External MCP migration",
             href: "/external-mcp-migration",
           },
-          { label: "Team memory evals", href: "/memory-evals" },
+          { label: "Organizational Memory evals", href: "/memory-evals" },
           { label: "Fleet health", href: "/fleet-health" },
           { label: "Admin MCP", href: "/mcp-setup" },
           {
