@@ -35,8 +35,8 @@ jobs:
     environment: speakeasy-perf # the only subject the Speakeasy agent's rule admits
     timeout-minutes: 20
     permissions:
-      contents: read # checks out main
-      pull-requests: read # reads the pull request and its diff
+      contents: read # checks out main and reads the diff
+      pull-requests: read # reads the pull request
       id-token: write # Speakeasy and the Claude API each exchange the job's OIDC token
     outputs:
       head: ${{ steps.gate.outputs.head }}
@@ -61,17 +61,20 @@ jobs:
           esac
           mkdir -p "$RUNNER_TEMP/pr"
           gh pr view "$PR" -R "$REPO" \
-            --json number,title,body,files,baseRefName,headRefOid,state,headRepository,headRepositoryOwner \
+            --json number,title,body,files,baseRefName,baseRefOid,headRefOid,state,headRepository,headRepositoryOwner \
             >"$RUNNER_TEMP/pr/pr.json"
           # A deleted head repository reads as "<owner>/null", so it is refused too.
-          pr_info=$(jq -r '["\(.headRepositoryOwner.login)/\(.headRepository.name)", .state, .headRefOid] | @tsv' "$RUNNER_TEMP/pr/pr.json")
-          IFS=$'\t' read -r head_repo state head <<<"$pr_info"
+          pr_info=$(jq -r '["\(.headRepositoryOwner.login)/\(.headRepository.name)", .state, .baseRefOid, .headRefOid] | @tsv' "$RUNNER_TEMP/pr/pr.json")
+          IFS=$'\t' read -r head_repo state base head <<<"$pr_info"
           if [ "$head_repo" != "$REPO" ]; then
             echo "::error::Refusing a pull request from $head_repo: forks are not reviewed with production MCP access."
             exit 1
           fi
           [ "$state" = OPEN ] || { echo "::error::Pull request #$PR is $state."; exit 1; }
-          gh pr diff "$PR" -R "$REPO" >"$RUNNER_TEMP/pr/diff.patch"
+          # The diff of the head read above. gh pr diff reads the head again,
+          # so a push in between would pair a newer diff with this SHA.
+          gh api -H "Accept: application/vnd.github.diff" "repos/$REPO/compare/$base...$head" \
+            >"$RUNNER_TEMP/pr/diff.patch"
           # Last: the post job takes a head output as the gate's approval.
           echo "head=$head" >>"$GITHUB_OUTPUT"
 
@@ -190,6 +193,9 @@ jobs:
           RUN_URL: ${{ github.server_url }}/${{ github.repository }}/actions/runs/${{ github.run_id }}
         run: |
           set -euo pipefail
+          # The head now: the comment says when it has moved past HEAD_SHA.
+          LATEST_SHA=$(gh api "repos/$REPO/pulls/$PR" --jq .head.sha) || LATEST_SHA=
+          export LATEST_SHA
           # The review, or a "no verdict" notice and exit 1 when the report is
           # missing, incomplete or fails the redaction check.
           status=0
