@@ -164,25 +164,29 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 	if err != nil || recovery.expired() || recovery.ID != token {
 		return renderConnectionRecoveryPage(w, http.StatusNotFound, connectionRecoveryExpiredPage)
 	}
+	t := s.connections.Track(recoveryScope(recovery), mcpconnectionattempts.StepProviderSignIn)
+	defer t.Finish(ctx)
 	if _, err := s.verifyConnectionRecoveryUser(ctx, r, recovery); err != nil {
-		if !errors.Is(err, errRecoveryNotSignedIn) {
-			s.connections.Once(ctx, recoveryScope(recovery), mcpconnectionattempts.StepProviderSignIn, recoveryHappened(err))
+		if errors.Is(err, errRecoveryNotSignedIn) {
+			t.Continue()
 		}
+		t.Refuse(ctx, recoveryHappened(err))
 		return s.answerConnectionRecoveryRefusal(w, r, recovery, err)
 	}
 	// Used once, and only by the person it names.
 	recovery, err = s.connectionRecoveryCache.GetAndDelete(ctx, "connectionRecovery:"+token)
 	if err != nil || recovery.expired() {
+		t.Continue()
 		return renderConnectionRecoveryPage(w, http.StatusNotFound, connectionRecoveryExpiredPage)
 	}
 
 	clients, err := s.remoteChallengeMgr.ListAuthClientRegistrations(ctx, recovery.ProjectID, recovery.OrganizationID, []uuid.UUID{recovery.RegistrationID})
 	if err != nil {
-		s.connections.Once(ctx, recoveryScope(recovery), mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeInternalError)
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "load connection client").LogError(ctx, s.logger)
 	}
 	if len(clients) != 1 || clients[0].CredentialOwner == remotesessions.CredentialOwnerSelf {
-		s.connections.Once(ctx, recoveryScope(recovery), mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeConnectionChanged)
+		t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
 		return renderConnectionRecoveryPage(w, http.StatusConflict, connectionRecoveryUnavailablePage)
 	}
 	login := recovery
@@ -208,6 +212,9 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 	}
 	subject := urn.NewUserSubject(recovery.UserID)
 	attempt := mcpconnectionattempts.Begin(recoveryScope(recovery))
+	t.Attach(attempt)
+	t.Consumed()
+	t.With(mcpconnectionattempts.Subject(&subject))
 	authorizationURL, err := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
 		ConnectionPopup:     false,
 		ID:                  login.ID,
@@ -231,19 +238,20 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 		Attempt:             attempt,
 	}, clients[0])
 	if err != nil {
-		s.connections.End(ctx, attempt, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Subject(&subject))
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "start connection login").LogError(ctx, s.logger)
 	}
 	target := authorizationURL
 	if login.BrowserHop {
 		target, err = s.startConnectionRecoveryHop(ctx, login, browser, callbackOrigin, linkOrigin, authorizationURL)
 		if err != nil {
-			s.connections.End(ctx, attempt, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Subject(&subject))
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return oops.E(oops.CodeUnexpected, err, "start connection login").LogError(ctx, s.logger)
 		}
 	} else {
 		http.SetCookie(w, federatedBrowserCookie(login.BrowserCookieID, browser, int(login.TTL().Seconds())))
 	}
+	t.Continue()
 	http.Redirect(w, r, target, http.StatusFound)
 	return nil
 }

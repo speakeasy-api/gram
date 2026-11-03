@@ -150,12 +150,11 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	}
 
 	attempt := challengeState.connectionAttempt(endpoint)
-	ending := mcpconnectionattempts.CodeInternalError
-	recorded := false
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppFirstParty), mcpconnectionattempts.StepInboundAuthorize)
+	t.Attach(attempt)
+	t.Consumed()
+	defer t.Finish(ctx)
 	defer func() {
-		if retErr != nil && !recorded {
-			s.connections.End(ctx, attempt, mcpconnectionattempts.StepInboundAuthorize, ending)
-		}
 		if retErr != nil && codeReconnect != nil {
 			_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
 		}
@@ -166,8 +165,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	federatedURL, err := s.prepareFederatedLogin(w, r, endpoint, &challengeState)
 	if err != nil {
 		_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
-		recorded = true
-		s.connections.End(ctx, attempt, mcpconnectionattempts.StepInboundAuthorize, federatedHappened(err))
+		t.Refuse(ctx, federatedHappened(err))
 		failureCode, cause := federatedFailure(err)
 		return s.finishFederatedFailure(w, r, endpoint, challengeState, mcpmetrics.OAuthFlowStageAuthorize, failureCode, cause, "Federated login configuration is unavailable. Restart login or contact your administrator", false)
 	}
@@ -176,6 +174,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		callbackURL, err := endpoint.IDPCallbackURL(s.outboundOrigin().String())
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return oops.E(oops.CodeUnexpected, err, "build IDP callback URL").LogError(ctx, logger)
 		}
 		idpURL, err = s.identityResolver.BuildAuthorizationURL(ctx, identity.AuthorizationURLParams{
@@ -188,29 +187,32 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 			Prompt:          "",
 		})
 		if err != nil {
-			ending = mcpconnectionattempts.CodeIDPUnavailable
+			t.Refuse(ctx, mcpconnectionattempts.CodeIDPUnavailable)
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return oops.E(oops.CodeUnexpected, err, "build IDP authorization URL").LogError(ctx, logger)
 		}
 	}
 	// Claim only after all validation and login setup succeeded, so a failed
 	// preparation does not consume the dashboard's one-time decision.
 	if codeReconnect != nil {
-		ending = mcpconnectionattempts.CodeExpired
 		claimed, err := s.codeReconnectTicket(r, endpoint, true)
 		if err != nil {
+			t.Refuse(ctx, mcpconnectionattempts.CodeExpired)
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return err
 		}
 		if claimed == nil || *claimed != *codeReconnect {
+			t.Refuse(ctx, mcpconnectionattempts.CodeExpired)
 			s.metrics.RecordOAuthFlowFailed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug, mcpmetrics.OAuthFlowStageAuthorize)
 			return oops.E(oops.CodeBadRequest, nil, "connection request changed; request a new link")
 		}
-		ending = mcpconnectionattempts.CodeInternalError
 	}
 	if attemptID != "" {
 		if err := s.bindingRefresh.Start(ctx, attemptID, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID); err != nil {
 			_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return fmt.Errorf("start attachment refresh: %w", err)
 		}
 	}
@@ -220,6 +222,7 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 	}
 
 	logger.InfoContext(ctx, "started first-party connect flow", attr.SlogOAuthFlowID(flowID))
+	t.Continue()
 	http.Redirect(w, r, idpURL.String(), http.StatusFound)
 	return nil
 }

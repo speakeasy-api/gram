@@ -41,6 +41,7 @@ func recordConnections(t *testing.T, ti *testInstance) *mcpconnectionattemptstes
 	t.Helper()
 	rec := mcpconnectionattemptstest.New(t)
 	ti.service.SetConnectionRecorder(rec.Recorder)
+	t.Cleanup(rec.RequireNoUnclassifiedExit)
 	return rec
 }
 
@@ -371,6 +372,7 @@ func TestConnectionOutcome_PostSignInCheck(t *testing.T) {
 			state, err := fx.ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
 			require.NoError(t, err)
 			state.FlowID = uuid.NewString()
+			state.CreatedAt = time.Now()
 			require.NoError(t, fx.ti.authnChallengeCache.Store(ctx, state))
 			if tc.forbid {
 				fx.member.set(memberForbids)
@@ -710,6 +712,7 @@ func TestConnectionOutcome_ChainedFirstPartyEnds(t *testing.T) {
 	state, err := fx.ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
 	require.NoError(t, err)
 	state.FlowID = uuid.NewString()
+	state.CreatedAt = time.Now()
 	state.FirstParty = true
 	require.NoError(t, fx.ti.authnChallengeCache.Store(ctx, state))
 
@@ -729,11 +732,12 @@ func TestConnectionOutcome_ParentGoneDuringProviderSignIn(t *testing.T) {
 
 	setup := func(t *testing.T) (context.Context, consentActionFixture, *mcpconnectionattemptstest.Recording, mcp.AuthnChallengeState, string) {
 		t.Helper()
-		ctx, fx := seedMultiClientConsentEndpoint(t)
+		ctx, fx, _ := seedChainedConsentEndpoint(t, "attempt-gone-"+uuid.NewString()[:6])
 		rec := recordConnections(t, fx.ti)
 		state, err := fx.ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
 		require.NoError(t, err)
 		state.FlowID = uuid.NewString()
+		state.CreatedAt = time.Now()
 		require.NoError(t, fx.ti.authnChallengeCache.Store(ctx, state))
 		return ctx, fx, rec, state, postConnectAction(t, fx, fx.clientA).Query().Get("state")
 	}

@@ -59,6 +59,12 @@ func recoveryHappened(err error) mcpconnectionattempts.Code {
 	}
 }
 
+// refusedWithoutRow is a refusal with no proof of a real flow: a metric, never a row.
+func (s *Service) refusedWithoutRow(ctx context.Context, t *mcpconnectionattempts.Tracker, reason string) {
+	t.Continue()
+	s.metrics.RecordConnectionRefusalWithoutRow(ctx, reason)
+}
+
 // recordWrongConsentBrowser leaves the page usable for the right browser. The
 // endpoint comes from the route, so the state must belong to it before writing.
 func (s *Service) recordWrongConsentBrowser(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) {

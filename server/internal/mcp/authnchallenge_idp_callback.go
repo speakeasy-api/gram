@@ -154,14 +154,29 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 	if err != nil {
 		return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger), oauthui.ReasonExpired))
 	}
+	// The state is spent, so whatever does not redirect onward ends the attempt.
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID)), mcpconnectionattempts.StepInboundSignIn)
+	t.Attach(challengeState.connectionAttempt(endpoint))
+	t.Consumed()
+	defer t.Finish(ctx)
+	onward := func(err error) error {
+		if err != nil {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
+			return err
+		}
+		t.Continue()
+		return nil
+	}
 	// Reject identity replacement against the consumed value so invalid callbacks
 	// stay single-use without consuming state on transient authority failures.
 	if challengeState.Subject != nil || challengeState.AuthorizerUserID != "" {
+		// A replay of a callback that already resolved: its flow goes on.
+		t.Continue()
 		return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "authn challenge identity is already resolved").LogWarn(ctx, logger), oauthui.ReasonExpired))
 	}
 	// Recheck the consumed snapshot without another live lookup.
 	if err := endpoint.validateChallengeRef(challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
-		s.connections.End(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeConnectionChanged, mcpconnectionattempts.Detail("endpoint_authority"))
+		t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged, mcpconnectionattempts.Detail("endpoint_authority"))
 		return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "authn challenge endpoint authority changed while the flow was in progress").LogWarn(ctx, logger), oauthui.ReasonInvalidLink))
 	}
 
@@ -177,24 +192,8 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 	// sees the same origin whichever way the flow goes.
 	baseURL := challengeState.mintOriginOr(s.serverURL.String())
 
-	// The state is consumed from here on, so any return that is not a redirect onward ends the attempt.
-	attempt := challengeState.connectionAttempt(endpoint)
-	var signedIn *urn.SessionSubject
-	ended := false
-	end := func(what mcpconnectionattempts.Happened, opts ...mcpconnectionattempts.Option) {
-		if ended {
-			return
-		}
-		ended = true
-		s.connections.End(ctx, attempt, mcpconnectionattempts.StepInboundSignIn, what, append(opts, mcpconnectionattempts.Subject(signedIn))...)
-	}
-	defer func() {
-		if retErr != nil {
-			end(mcpconnectionattempts.CodeInternalError)
-		}
-	}()
-	finishFederation := func(what mcpconnectionattempts.Happened, code oops.Code, cause error, message string, declined bool) error {
-		end(what)
+	finishFederation := func(what mcpconnectionattempts.Code, code oops.Code, cause error, message string, declined bool) error {
+		t.Refuse(ctx, what)
 		return s.finishFederatedFailure(w, r, endpoint, challengeState, mcpmetrics.OAuthFlowStageIDPCallback, code, cause, message, declined)
 	}
 	failFederationDependency := func(err error, message string) error {
@@ -232,6 +231,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 				if err := s.prepareFederatedBrowserHandoff(w, r, endpoint, &challengeState); err != nil {
 					return failFederationDependency(err, "Federated browser handoff failed. Restart login")
 				}
+				t.Continue()
 				return nil
 			}
 			if federation.StartPhase != "ready" || validateChallengeBrowser(r, challengeState, true) != nil {
@@ -240,6 +240,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 			if err := s.startFederatedLogin(w, r, &challengeState, provider); err != nil {
 				return failFederationDependency(err, "Federated login is unavailable. Restart login or contact your administrator")
 			}
+			t.Continue()
 			return nil
 		}
 		if err := validateFederatedBrowser(r, challengeState); err != nil || federation.StartPhase != "login" || q.Get("federated_start") != "" {
@@ -275,19 +276,21 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 		// anything else is config/IDP trouble.
 		if challengeState.FirstParty {
 			if idpErr == "access_denied" {
-				end(mcpconnectionattempts.CodeCanceled)
+				t.Refuse(ctx, mcpconnectionattempts.CodeCanceled)
 				s.metrics.RecordOAuthFlowDeclined(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 				logger.InfoContext(ctx, "oauth flow declined at idp", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
 				return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeForbidden, nil, "login was declined").LogWarn(ctx, logger), oauthui.ReasonCanceled))
 			}
-			end(mcpconnectionattempts.CodeSignInProviderError, mcpconnectionattempts.Detail(oautherr.RegisteredCodeLabel(idpErr)))
+			t.Refuse(ctx, mcpconnectionattempts.CodeSignInProviderError, mcpconnectionattempts.Detail(oautherr.RegisteredCodeLabel(idpErr)))
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 			logger.InfoContext(ctx, "oauth flow failed at idp callback", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return oops.E(oops.CodeUnexpected, nil, "idp returned an error: %s", idpErr).LogError(ctx, logger)
 		}
 		issuer, err := s.issuerURL(endpoint, baseURL)
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return oops.E(oops.CodeUnexpected, err, "build authorization response issuer").LogError(ctx, logger)
 		}
 		clientRedirect, err := buildClientRedirect(clientRedirectParams{
@@ -303,6 +306,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 			// reached the client, so this flow ended on a fault. Exactly one
 			// terminal outcome is counted per started flow either way.
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return oops.E(oops.CodeUnexpected, err, "build client redirect").LogError(ctx, logger)
 		}
 		// access_denied is the user opting out at the IDP — a decline, not an
@@ -310,11 +314,11 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 		// ...) points at IDP/config trouble. Both are terminal; bucket them
 		// accordingly before bouncing the error back to the client.
 		if idpErr == "access_denied" {
-			end(mcpconnectionattempts.CodeCanceled)
+			t.Refuse(ctx, mcpconnectionattempts.CodeCanceled)
 			s.metrics.RecordOAuthFlowDeclined(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 			logger.InfoContext(ctx, "oauth flow declined at idp", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
 		} else {
-			end(mcpconnectionattempts.CodeSignInProviderError, mcpconnectionattempts.Detail(oautherr.RegisteredCodeLabel(idpErr)))
+			t.Refuse(ctx, mcpconnectionattempts.CodeSignInProviderError, mcpconnectionattempts.Detail(oautherr.RegisteredCodeLabel(idpErr)))
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 			logger.InfoContext(ctx, "oauth flow failed at idp callback", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
 		}
@@ -328,7 +332,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 			return finishFederation(mcpconnectionattempts.CodeSignInProviderError, oops.CodeBadRequest, remotesessions.ErrFederatedIdentity, "Invalid login response", false)
 		}
 		// IDP returned neither code nor error — a broken IDP redirect.
-		end(mcpconnectionattempts.CodeSignInProviderError, mcpconnectionattempts.Detail("no_code"))
+		t.Refuse(ctx, mcpconnectionattempts.CodeSignInProviderError, mcpconnectionattempts.Detail("no_code"))
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		return oops.E(oops.CodeBadRequest, nil, "code is required").LogError(ctx, logger)
 	}
@@ -369,15 +373,16 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 			if !errors.Is(err, identity.ErrCodeRejected) {
-				end(mcpconnectionattempts.CodeIDPUnavailable, mcpconnectionattempts.Detail("code_exchange"))
+				t.Refuse(ctx, mcpconnectionattempts.CodeIDPUnavailable, mcpconnectionattempts.Detail("code_exchange"))
 				return oops.E(oops.CodeUnavailable, err, "failed to exchange IDP code").LogError(ctx, logger)
 			}
-			end(mcpconnectionattempts.CodeSignInProviderError, mcpconnectionattempts.Detail("code_rejected"))
+			t.Refuse(ctx, mcpconnectionattempts.CodeSignInProviderError, mcpconnectionattempts.Detail("code_rejected"))
 			return oops.E(oops.CodeBadRequest, err, "failed to exchange IDP code").LogWarn(ctx, logger)
 		}
 		login, err := s.identityResolver.CompleteIDPLogin(ctx, idpUser, identity.IDPLoginOptions{SkipMembershipSync: false})
 		if err != nil {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return oops.E(oops.CodeUnexpected, err, "failed to bootstrap user").LogError(ctx, logger)
 		}
 		gramUserID = login.UserID
@@ -401,14 +406,14 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 	}
 
 	signedInSubject := urn.NewUserSubject(gramUserID)
-	signedIn = &signedInSubject
+	t.With(mcpconnectionattempts.Subject(&signedInSubject))
 
 	// Resolve identity first, then enforce the reconnect owner before recording
 	// a sign-in or handing federated credentials to any consumer.
 	if err := challengeState.CodeReconnect.authorize(gramUserID, impersonated, time.Now()); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		logger.WarnContext(ctx, "code reconnect owner authorization rejected", attr.SlogError(err))
-		end(mcpconnectionattempts.CodeSessionChanged, mcpconnectionattempts.Detail("reconnect_owner"))
+		t.Refuse(ctx, mcpconnectionattempts.CodeSessionChanged, mcpconnectionattempts.Detail("reconnect_owner"))
 		return err
 	}
 	if challengeState.CodeReconnect != nil {
@@ -416,14 +421,14 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 		subject := urn.NewUserSubject(gramUserID)
 		bound.Subject = &subject
 		if _, err := s.consentSubjectMembers(ctx, endpoint, bound); err != nil {
-			end(accessHappened(err))
+			t.Refuse(ctx, accessHappened(err))
 			return err
 		}
 	}
 	if err := challengeState.WorkloadReconnect.authorize(gramUserID, impersonated, time.Now()); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		logger.WarnContext(ctx, "workload reconnect owner authorization rejected", attr.SlogError(err))
-		end(mcpconnectionattempts.CodeSessionChanged, mcpconnectionattempts.Detail("reconnect_owner"))
+		t.Refuse(ctx, mcpconnectionattempts.CodeSessionChanged, mcpconnectionattempts.Detail("reconnect_owner"))
 		return err
 	}
 
@@ -439,6 +444,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 			return failFederationDependency(err, "Organization membership verification is temporarily unavailable. Restart login")
 		}
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "failed to check organization membership").LogError(ctx, logger)
 	}
 	if !member {
@@ -452,15 +458,16 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 		signInID = recorded.ID
 		if recorded.Failed && enforced {
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return oops.E(oops.CodeUnavailable, nil, "sign-in could not be recorded; try again").LogError(ctx, logger)
 		}
 		if recorded.Revoked && enforced {
 			if challengeState.FreshLoginForced {
-				end(mcpconnectionattempts.CodeSignInRevoked)
+				t.Refuse(ctx, mcpconnectionattempts.CodeSignInRevoked)
 				s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 				return oops.E(oops.CodeBadRequest, nil, "this sign-in was revoked; sign in again from the start").LogWarn(ctx, logger)
 			}
-			return s.restartRevokedSignIn(w, r, logger, endpoint, challengeState, exchange.WorkOSSessionID)
+			return onward(s.restartRevokedSignIn(w, r, logger, endpoint, challengeState, exchange.WorkOSSessionID))
 		}
 	}
 
@@ -525,7 +532,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 				if err != nil {
 					return failFederationDependency(err, "Login is unavailable. Restart login")
 				}
-				return s.startFederatedLogin(w, r, &challengeState, current)
+				return onward(s.startFederatedLogin(w, r, &challengeState, current))
 			}
 		}
 	}
@@ -551,6 +558,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 	challengeState.AuthorizerImpersonated = &impersonated
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "failed to update authn challenge state").LogError(ctx, logger)
 	}
 
@@ -560,9 +568,11 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 	consentURL, err := s.challengeConsentURL(endpoint, challengeState)
 	if err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "build consent URL").LogError(ctx, logger)
 	}
-	s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.ResultSignedIn, mcpconnectionattempts.Subject(&subject))
+	s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.ResultSignedIn, mcpconnectionattempts.Subject(&subject))
+	t.Continue()
 	http.Redirect(w, r, consentURL, http.StatusFound)
 	return nil
 }

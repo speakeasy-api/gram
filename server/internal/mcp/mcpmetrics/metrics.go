@@ -178,10 +178,11 @@ type Metrics struct {
 	// The companion Datadog monitor can therefore alert on a clean signal
 	// (failed/started, or completed/(completed+failed)) instead of per-URL
 	// status.
-	oauthFlowStartedCounter   metric.Int64Counter
-	oauthFlowCompletedCounter metric.Int64Counter
-	oauthFlowFailedCounter    metric.Int64Counter
-	oauthFlowDeclinedCounter  metric.Int64Counter
+	oauthFlowStartedCounter      metric.Int64Counter
+	oauthFlowCompletedCounter    metric.Int64Counter
+	oauthFlowFailedCounter       metric.Int64Counter
+	oauthFlowDeclinedCounter     metric.Int64Counter
+	connectionRefusalsWithoutRow metric.Int64Counter
 
 	// oauthRefreshTokenReplayServedCounter counts refresh responses served from
 	// the encrypted replay cache rather than by rotating the database session.
@@ -272,6 +273,15 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 	)
 	if err != nil {
 		logger.ErrorContext(context.Background(), "failed to create oauth flow failed counter", attr.SlogError(err))
+	}
+
+	connectionRefusalsWithoutRow, err := meter.Int64Counter(
+		"mcp.connection.refusals_without_row",
+		metric.WithDescription("Sign-in requests refused with no proof of a real flow, so no connection attempt row was written."),
+		metric.WithUnit("{request}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "create metric", attr.SlogMetricName("mcp.connection.refusals_without_row"), attr.SlogError(err))
 	}
 
 	oauthFlowDeclinedCounter, err := meter.Int64Counter(
@@ -390,6 +400,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		oauthFlowCompletedCounter:            oauthFlowCompletedCounter,
 		oauthFlowFailedCounter:               oauthFlowFailedCounter,
 		oauthFlowDeclinedCounter:             oauthFlowDeclinedCounter,
+		connectionRefusalsWithoutRow:         connectionRefusalsWithoutRow,
 		oauthRefreshTokenReplayServedCounter: oauthRefreshTokenReplayServedCounter,
 		oauthAuthorityUnavailableCounter:     oauthAuthorityUnavailableCounter,
 		oauthResourceRejectedCounter:         oauthResourceRejectedCounter,
@@ -726,6 +737,15 @@ func (m *Metrics) RecordOAuthFlowDeclined(ctx context.Context, issuerID, mcpSlug
 	}
 	kv := append(oauthFlowDimensions(issuerID, mcpSlug), attr.OAuthFlowStage(string(stage)))
 	m.oauthFlowDeclinedCounter.Add(ctx, 1, metric.WithAttributes(kv...))
+}
+
+// RecordConnectionRefusalWithoutRow counts a sign-in request refused with no proof
+// of a real flow. Reason is a fixed label.
+func (m *Metrics) RecordConnectionRefusalWithoutRow(ctx context.Context, reason string) {
+	if m == nil || m.connectionRefusalsWithoutRow == nil {
+		return
+	}
+	m.connectionRefusalsWithoutRow.Add(ctx, 1, metric.WithAttributes(attr.OAuthFailureReason(reason)))
 }
 
 // RecordOAuthAuthorityUnavailable records a retryable private endpoint

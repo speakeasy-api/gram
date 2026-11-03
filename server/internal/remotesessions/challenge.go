@@ -233,17 +233,6 @@ func (s RemoteLoginState) parent() ParentChallenge {
 	}
 }
 
-// recordSignInStep records the end of a provider sign-in. A login with a final
-// destination ends its attempt here. One returning to consent does not, because
-// the person can still finish connecting.
-func (m *ChallengeManager) recordSignInStep(ctx context.Context, state RemoteLoginState, step mcpconnectionattempts.Step, what mcpconnectionattempts.Happened, opts ...mcpconnectionattempts.Option) {
-	record := m.connections.Step
-	if state.FinalRedirectURI != "" {
-		record = m.connections.End
-	}
-	record(ctx, state.Attempt, step, what, append(opts, state.ConnectionOptions()...)...)
-}
-
 // ConnectionOptions are the details every row of this login carries.
 func (s RemoteLoginState) ConnectionOptions() []mcpconnectionattempts.Option {
 	return []mcpconnectionattempts.Option{
@@ -1562,7 +1551,7 @@ func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *h
 // /{route}/{slug}/connect?state={parent_challenge_id}, or the upstream
 // authorize URL again when the login is retried without a resource. It writes
 // nothing itself.
-func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (_ RemoteLoginResult, retErr error) {
+func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResult, error) {
 	var none RemoteLoginResult
 	ctx := r.Context()
 	routeMcpSlug := chi.URLParam(r, "mcpSlug")
@@ -1595,26 +1584,30 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (_ RemoteLoginRe
 		}
 		return none, fmt.Errorf("complete remote login: %w", oops.WithBrowserReason(oops.E(oops.CodeUnavailable, err, "remote login state is temporarily unavailable").LogError(ctx, logger), oauthui.ReasonUnavailable))
 	}
-	// The state is spent, so every error from here on is the end of this login.
-	failedStep, failure := mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeInternalError
-	var failureOpts []mcpconnectionattempts.Option
-	recorded := false
-	defer func() {
-		if retErr != nil && !recorded {
-			m.recordSignInStep(ctx, state, failedStep, failure, failureOpts...)
+	// A login with its own destination ends here. One from consent goes back to it, so the person can retry.
+	var t *mcpconnectionattempts.Tracker
+	if !state.Attempt.IsZero() {
+		t = m.connections.Track(mcpconnectionattempts.ProviderSessionScope(state.OrganizationID, state.ProjectID, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepProviderSignIn, state.ConnectionOptions()...)
+		t.Attach(state.Attempt)
+		if state.FinalRedirectURI != "" {
+			t.Consumed()
 		}
-	}()
+		defer t.Finish(ctx)
+	}
 	mcpSlug := state.McpSlug
 	if mcpSlug == "" {
 		mcpSlug = routeMcpSlug
 	}
 	if mcpSlug == "" {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return none, oops.E(oops.CodeBadRequest, nil, "mcp slug is missing from remote login state").LogError(ctx, logger)
 	}
 	if routeMcpSlug != "" && routeMcpSlug != mcpSlug {
+		t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
 		return none, oops.E(oops.CodeUnauthorized, nil, "remote login state does not match this MCP server").LogError(ctx, logger)
 	}
 	if state.McpSlug != "" && state.McpSlug != mcpSlug {
+		t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
 		return none, oops.E(oops.CodeUnauthorized, nil, "remote login state does not match this MCP server").LogError(ctx, logger)
 	}
 
@@ -1629,7 +1622,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (_ RemoteLoginRe
 	// RFC 9207 §2.4: iss must be present and match before anything in the
 	// response is trusted, denial included.
 	if state.ExpectedIssuer != "" && q.Get("iss") != state.ExpectedIssuer {
-		failure = mcpconnectionattempts.CodeIssuerMismatch
+		t.Refuse(ctx, mcpconnectionattempts.CodeIssuerMismatch)
 		return none, oops.E(oops.CodeUnauthorized, nil, "remote login callback did not identify the expected issuer").LogWarn(ctx, logger,
 			attr.SlogOAuthIssuer(state.ExpectedIssuer),
 		)
@@ -1637,8 +1630,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (_ RemoteLoginRe
 
 	if errCode != "" {
 		if errCode == oautherr.CodeAccessDenied {
-			recorded = true
-			m.recordSignInStep(ctx, state, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderDenied)
+			t.Refuse(ctx, mcpconnectionattempts.CodeProviderDenied)
 			// Final destinations acknowledge a completed connection, so a canceled
 			// flow must stay on the callback page instead of claiming success.
 			if state.FinalRedirectURI != "" {
@@ -1646,6 +1638,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (_ RemoteLoginRe
 			}
 			redirect, err := m.remoteLoginDestination(ctx, state, mcpSlug)
 			if err != nil {
+				t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 				return none, err
 			}
 			return RemoteLoginResult{RedirectURL: redirect, Grant: nil}, nil
@@ -1656,12 +1649,9 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (_ RemoteLoginRe
 				Description: truncateForMessage(q.Get("error_description")),
 				URI:         truncateForMessage(q.Get("error_uri")),
 			}
-			failure = mcpconnectionattempts.CodeProviderOAuthInvalidScope
-			failureOpts = []mcpconnectionattempts.Option{mcpconnectionattempts.Detail(oautherr.CodeInvalidTarget)}
-			return m.retryWithoutResource(ctx, logger, state, cause)
+			return m.retryLeg(ctx, t, logger, state, cause)
 		}
-		failure = providerErrorHappened(errCode)
-		failureOpts = []mcpconnectionattempts.Option{mcpconnectionattempts.Detail(oautherr.RegisteredCodeLabel(errCode))}
+		t.Refuse(ctx, providerErrorHappened(errCode), mcpconnectionattempts.Detail(oautherr.RegisteredCodeLabel(errCode)))
 		m.recordCIMDAuthorizationFailure(ctx, state, errCode, q.Get("error_description"))
 		return none, denied(ctx, logger, q)
 	}
@@ -1671,7 +1661,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (_ RemoteLoginRe
 	if state.ConsentURL == "" && state.FinalRedirectURI == "" {
 		_, ok := state.RouteBase.Resolve()
 		if !ok {
-			failure = mcpconnectionattempts.CodeExpired
+			t.Refuse(ctx, mcpconnectionattempts.CodeExpired)
 			return none, oops.E(oops.CodeUnauthorized, nil, "remote login state not found or expired").LogWarn(ctx, logger)
 		}
 	}
@@ -1681,22 +1671,22 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (_ RemoteLoginRe
 	// upstream authorization code on a request that can't produce a
 	// remote_sessions row anyway.
 	if state.Subject == nil || state.Subject.IsZero() {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return none, oops.E(oops.CodeUnauthorized, nil, "remote login requires a stamped subject on the parent challenge").LogError(ctx, logger)
 	}
 	if err := state.Authority.ValidateLive(ctx, m.db); err != nil {
-		var authorityDetail mcpconnectionattempts.Option
-		failure, authorityDetail = AuthorityHappened(err)
-		failureOpts = []mcpconnectionattempts.Option{authorityDetail}
+		code, detail := AuthorityHappened(err)
+		t.Refuse(ctx, code, detail)
 		return none, oops.E(oops.CodeUnauthorized, err, "private OAuth authority is no longer valid").LogError(ctx, logger)
 	}
 	if state.Authority.IsPrivate() {
 		if m.privateAuthorityValidator == nil {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return none, oops.E(oops.CodeUnauthorized, nil, "private MCP endpoint authority validator is unavailable").LogError(ctx, logger)
 		}
 		if err := m.privateAuthorityValidator(ctx, state); err != nil {
-			var authorityDetail mcpconnectionattempts.Option
-			failure, authorityDetail = AuthorityHappened(err)
-			failureOpts = []mcpconnectionattempts.Option{authorityDetail}
+			code, detail := AuthorityHappened(err)
+			t.Refuse(ctx, code, detail)
 			return none, oops.E(oops.CodeUnauthorized, err, "private MCP endpoint authority is no longer valid").LogError(ctx, logger)
 		}
 	}
@@ -1709,8 +1699,9 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (_ RemoteLoginRe
 	})
 	if err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			failure = mcpconnectionattempts.CodeConnectionChanged
+			t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
 		}
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return none, oops.E(oops.CodeUnexpected, err, "load remote session client").LogError(ctx, logger)
 	}
 	client := clientRow.RemoteSessionClient
@@ -1719,6 +1710,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (_ RemoteLoginRe
 	if client.ClientSecretEncrypted.Valid && client.TokenEndpointAuthMethod.String != string(TokenEndpointAuthMethodPrivateKeyJWT) {
 		decoded, derr := m.enc.Decrypt(client.ClientSecretEncrypted.String)
 		if derr != nil {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return none, oops.E(oops.CodeUnexpected, derr, "decrypt client secret").LogError(ctx, logger)
 		}
 		clientSecret = decoded
@@ -1726,7 +1718,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (_ RemoteLoginRe
 
 	authMethod, err := ResolveTokenEndpointAuthMethod(client.TokenEndpointAuthMethod.String, clientSecret)
 	if err != nil {
-		failure = mcpconnectionattempts.CodeProviderOAuthInvalidClient
+		t.Refuse(ctx, mcpconnectionattempts.CodeProviderOAuthInvalidClient)
 		return none, oops.E(oops.CodeUnauthorized, err, "the remote session client is misconfigured").LogError(ctx, logger)
 	}
 
@@ -1737,7 +1729,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (_ RemoteLoginRe
 	// whichever one they chose.
 	doer, err := upstreamHTTPDoer(noRedirectClient(m.policy.PooledClient()), m.tunnels, clientRow.TunneledMcpServerID)
 	if err != nil {
-		failure = mcpconnectionattempts.CodeTunnelUnavailable
+		t.Refuse(ctx, mcpconnectionattempts.CodeTunnelUnavailable)
 		return none, oops.E(oops.CodeUnauthorized, err, "the identity provider's tunnel transport is unavailable").LogError(ctx, logger)
 	}
 	audience := conv.FromPGTextOrEmpty[string](client.Audience)
@@ -1748,13 +1740,14 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (_ RemoteLoginRe
 		// authority; this id-only joined read only recovers its issuer metadata.
 		joined, jerr := queries.GetRemoteSessionClientWithIssuerByID(ctx, client.ID)
 		if jerr != nil {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return none, oops.E(oops.CodeUnexpected, jerr, "load the remote session client's assertion issuer").LogError(ctx, logger)
 		}
 		assertionIssuer = clientAssertionIssuer(joined.IssuerMetadata, joined.IssuerUrl)
 	}
 	assertionAudience, err := ResolveTokenEndpointAuthAudience(client.TokenEndpointAuthAudienceFormat.String, assertionIssuer, state.TokenEndpoint)
 	if err != nil && authMethod == TokenEndpointAuthMethodPrivateKeyJWT {
-		failure = mcpconnectionattempts.CodeProviderOAuthInvalidClient
+		t.Refuse(ctx, mcpconnectionattempts.CodeProviderOAuthInvalidClient)
 		return none, oops.E(oops.CodeUnauthorized, err, "the remote session client's assertion audience is misconfigured").LogError(ctx, logger)
 	}
 	tok, err := m.exchangeCode(ctx, doer, state, TokenEndpointClientAuth{
@@ -1769,11 +1762,10 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (_ RemoteLoginRe
 	}, audience, code)
 	if err != nil {
 		if oauthErr, ok := errors.AsType[oautherr.RFC6749Error](err); ok && oauthErr.Code == oautherr.CodeInvalidTarget {
-			failure = mcpconnectionattempts.CodeProviderOAuthInvalidScope
-			failureOpts = []mcpconnectionattempts.Option{mcpconnectionattempts.Detail(oautherr.CodeInvalidTarget)}
-			return m.retryWithoutResource(ctx, logger, state, err)
+			return m.retryLeg(ctx, t, logger, state, err)
 		}
-		failedStep, failure = mcpconnectionattempts.StepProviderToken, exchangeHappened(err, clientRow.TunneledMcpServerID.Valid)
+		t.At(mcpconnectionattempts.StepProviderToken)
+		t.Refuse(ctx, exchangeHappened(err, clientRow.TunneledMcpServerID.Valid))
 		m.noteExchangeTokenEndpointMissing(ctx, logger, client.ID, err)
 		return none, exchangeFailure(ctx, logger, err, clientRow.TunneledMcpServerID.Valid)
 	}
@@ -1783,7 +1775,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (_ RemoteLoginRe
 	// revocation on the exchange rather than on the first thing done with the
 	// result — encrypting it can fail too — and disarm it once the row is
 	// committed.
-	failedStep, failure = mcpconnectionattempts.StepProviderToken, mcpconnectionattempts.CodeInternalError
+	t.At(mcpconnectionattempts.StepProviderToken)
 	stranded := true
 	defer func() {
 		if !stranded {
@@ -1806,12 +1798,14 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (_ RemoteLoginRe
 
 	accessEnc, err := m.enc.Encrypt([]byte(tok.AccessToken))
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return none, oops.E(oops.CodeUnexpected, err, "encrypt access token").LogError(ctx, logger)
 	}
 	var refreshEnc *string
 	if tok.RefreshToken != "" {
 		v, eerr := m.enc.Encrypt([]byte(tok.RefreshToken))
 		if eerr != nil {
+			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return none, oops.E(oops.CodeUnexpected, eerr, "encrypt refresh token").LogError(ctx, logger)
 		}
 		refreshEnc = &v
@@ -1836,7 +1830,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (_ RemoteLoginRe
 	// is the one the request path refreshes at, and the armed revocation
 	// above returns the pair to the provider.
 	if tok.RefreshToken == "" && accessExpires != nil && !accessExpires.After(now.Add(AccessTokenExpirySkew)) {
-		failure = mcpconnectionattempts.CodeUnrenewableToken
+		t.Refuse(ctx, mcpconnectionattempts.CodeUnrenewableToken)
 		return none, oops.E(oops.CodeUnauthorized, nil, "the identity provider issued an access token that is expired or about to expire, and no refresh token to renew it").LogWarn(ctx, logger,
 			attr.SlogRemoteSessionAccessExpiresAt(*accessExpires),
 		)
@@ -1877,6 +1871,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (_ RemoteLoginRe
 	// callback leaves the revocation armed above still standing.
 	dbtx, err := m.db.Begin(ctx)
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return none, oops.E(oops.CodeUnexpected, err, "begin remote session transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
@@ -1890,15 +1885,17 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (_ RemoteLoginRe
 		ID: state.UserSessionIssuerID, ProjectID: state.ProjectID, OrganizationID: state.OrganizationID,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			failure = mcpconnectionattempts.CodeConnectionChanged
+			t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
 			return none, oops.E(oops.CodeUnauthorized, nil, "the identity provider this login was started from no longer exists").LogWarn(ctx, logger)
 		}
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return none, oops.E(oops.CodeUnexpected, err, "lock user session issuer for remote session write").LogError(ctx, logger)
 	}
 
 	// No row means the client itself is gone, which the binding recheck below
 	// rejects on its own — there is nothing left to serialize against.
 	if _, err := txQueries.LockRemoteSessionClientForSessionWrite(ctx, state.RemoteSessionClientID); err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return none, oops.E(oops.CodeUnexpected, err, "lock remote session client").LogError(ctx, logger)
 	}
 
@@ -1914,10 +1911,11 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (_ RemoteLoginRe
 		OrganizationID:        state.OrganizationID,
 	})
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return none, oops.E(oops.CodeUnexpected, err, "recheck remote session client binding").LogError(ctx, logger)
 	}
 	if !bound {
-		failure = mcpconnectionattempts.CodeConnectionChanged
+		t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
 		return none, oops.E(oops.CodeUnauthorized, nil, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
 	}
 
@@ -1943,21 +1941,24 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (_ RemoteLoginRe
 	})
 	if err != nil {
 		if errors.Is(err, errRemoteLoginWithoutOrganization) {
-			failure = mcpconnectionattempts.CodeExpired
+			t.Refuse(ctx, mcpconnectionattempts.CodeExpired)
 			return none, oops.E(oops.CodeUnauthorized, err, "this login expired, start it again").LogWarn(ctx, logger)
 		}
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return none, oops.E(oops.CodeUnexpected, err, "store remote session").LogError(ctx, logger)
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return none, oops.E(oops.CodeUnexpected, err, "commit remote session").LogError(ctx, logger)
 	}
 	stranded = false
-	recorded = true
-	m.recordSignInStep(ctx, state, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.ResultSignedIn)
+	t.At(mcpconnectionattempts.StepProviderSignIn)
+	t.Succeed(ctx, mcpconnectionattempts.ResultSignedIn)
 
 	redirect, err := m.remoteLoginDestination(ctx, state, mcpSlug)
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return none, err
 	}
 	return RemoteLoginResult{
@@ -2108,6 +2109,17 @@ func denied(ctx context.Context, logger *slog.Logger, q url.Values) error {
 		attr.SlogOAuthError(truncateForMessage(errCode)),
 		attr.SlogOAuthErrorDescription(truncateForMessage(q.Get("error_description"))),
 	)
+}
+
+// retryLeg retries a login the provider refused for its resource, which continues the attempt unless the retry is refused too.
+func (m *ChallengeManager) retryLeg(ctx context.Context, t *mcpconnectionattempts.Tracker, logger *slog.Logger, state RemoteLoginState, cause error) (RemoteLoginResult, error) {
+	result, err := m.retryWithoutResource(ctx, logger, state, cause)
+	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeProviderOAuthInvalidScope, mcpconnectionattempts.Detail(oautherr.CodeInvalidTarget))
+		return result, err
+	}
+	t.Continue()
+	return result, nil
 }
 
 // retryWithoutResource mints one resource-less leg of the same login after
