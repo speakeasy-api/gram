@@ -640,6 +640,14 @@ type DisableUpstreamAuthEnforcementRequestBody struct {
 	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 }
 
+// MoveOrganizationNetworkIngressToGatewayRequestBody is the type of the
+// "admin" service "moveOrganizationNetworkIngressToGateway" endpoint HTTP
+// request body.
+type MoveOrganizationNetworkIngressToGatewayRequestBody struct {
+	// The organization ID.
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+}
+
 // GetSessionResponseBody is the type of the "admin" service "getSession"
 // endpoint HTTP response body.
 type GetSessionResponseBody struct {
@@ -2868,6 +2876,31 @@ type DisableUpstreamAuthEnforcementResponseBody struct {
 type BackfillMcpAuthGrantsResponseBody struct {
 	// How many principals gained the mcp:auth grant.
 	Granted int64 `form:"granted" json:"granted" xml:"granted"`
+}
+
+// GetOrganizationNetworkIngressResponseBody is the type of the "admin" service
+// "getOrganizationNetworkIngress" endpoint HTTP response body.
+type GetOrganizationNetworkIngressResponseBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The ACL tag the saved OAuth client must own before the ingress can move to
+	// the tailnet gateway.
+	GatewayTag string `form:"gateway_tag" json:"gateway_tag" xml:"gateway_tag"`
+	// The organization's live ingress; absent when it has none.
+	Ingress *AdminNetworkIngressResponseBody `form:"ingress,omitempty" json:"ingress,omitempty" xml:"ingress,omitempty"`
+}
+
+// MoveOrganizationNetworkIngressToGatewayResponseBody is the type of the
+// "admin" service "moveOrganizationNetworkIngressToGateway" endpoint HTTP
+// response body.
+type MoveOrganizationNetworkIngressToGatewayResponseBody struct {
+	// The organization ID.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The ACL tag the saved OAuth client must own before the ingress can move to
+	// the tailnet gateway.
+	GatewayTag string `form:"gateway_tag" json:"gateway_tag" xml:"gateway_tag"`
+	// The organization's live ingress; absent when it has none.
+	Ingress *AdminNetworkIngressResponseBody `form:"ingress,omitempty" json:"ingress,omitempty" xml:"ingress,omitempty"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -22798,6 +22831,386 @@ type BackfillMcpAuthGrantsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetOrganizationNetworkIngressUnauthorizedResponseBody is the type of the
+// "admin" service "getOrganizationNetworkIngress" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetOrganizationNetworkIngressUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationNetworkIngressForbiddenResponseBody is the type of the
+// "admin" service "getOrganizationNetworkIngress" endpoint HTTP response body
+// for the "forbidden" error.
+type GetOrganizationNetworkIngressForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationNetworkIngressBadRequestResponseBody is the type of the
+// "admin" service "getOrganizationNetworkIngress" endpoint HTTP response body
+// for the "bad_request" error.
+type GetOrganizationNetworkIngressBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationNetworkIngressNotFoundResponseBody is the type of the "admin"
+// service "getOrganizationNetworkIngress" endpoint HTTP response body for the
+// "not_found" error.
+type GetOrganizationNetworkIngressNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationNetworkIngressConflictResponseBody is the type of the "admin"
+// service "getOrganizationNetworkIngress" endpoint HTTP response body for the
+// "conflict" error.
+type GetOrganizationNetworkIngressConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationNetworkIngressUnsupportedMediaResponseBody is the type of the
+// "admin" service "getOrganizationNetworkIngress" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetOrganizationNetworkIngressUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationNetworkIngressInvalidResponseBody is the type of the "admin"
+// service "getOrganizationNetworkIngress" endpoint HTTP response body for the
+// "invalid" error.
+type GetOrganizationNetworkIngressInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationNetworkIngressInvariantViolationResponseBody is the type of
+// the "admin" service "getOrganizationNetworkIngress" endpoint HTTP response
+// body for the "invariant_violation" error.
+type GetOrganizationNetworkIngressInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationNetworkIngressUnexpectedResponseBody is the type of the
+// "admin" service "getOrganizationNetworkIngress" endpoint HTTP response body
+// for the "unexpected" error.
+type GetOrganizationNetworkIngressUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetOrganizationNetworkIngressGatewayErrorResponseBody is the type of the
+// "admin" service "getOrganizationNetworkIngress" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetOrganizationNetworkIngressGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MoveOrganizationNetworkIngressToGatewayUnauthorizedResponseBody is the type
+// of the "admin" service "moveOrganizationNetworkIngressToGateway" endpoint
+// HTTP response body for the "unauthorized" error.
+type MoveOrganizationNetworkIngressToGatewayUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MoveOrganizationNetworkIngressToGatewayForbiddenResponseBody is the type of
+// the "admin" service "moveOrganizationNetworkIngressToGateway" endpoint HTTP
+// response body for the "forbidden" error.
+type MoveOrganizationNetworkIngressToGatewayForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MoveOrganizationNetworkIngressToGatewayBadRequestResponseBody is the type of
+// the "admin" service "moveOrganizationNetworkIngressToGateway" endpoint HTTP
+// response body for the "bad_request" error.
+type MoveOrganizationNetworkIngressToGatewayBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MoveOrganizationNetworkIngressToGatewayNotFoundResponseBody is the type of
+// the "admin" service "moveOrganizationNetworkIngressToGateway" endpoint HTTP
+// response body for the "not_found" error.
+type MoveOrganizationNetworkIngressToGatewayNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MoveOrganizationNetworkIngressToGatewayConflictResponseBody is the type of
+// the "admin" service "moveOrganizationNetworkIngressToGateway" endpoint HTTP
+// response body for the "conflict" error.
+type MoveOrganizationNetworkIngressToGatewayConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MoveOrganizationNetworkIngressToGatewayUnsupportedMediaResponseBody is the
+// type of the "admin" service "moveOrganizationNetworkIngressToGateway"
+// endpoint HTTP response body for the "unsupported_media" error.
+type MoveOrganizationNetworkIngressToGatewayUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MoveOrganizationNetworkIngressToGatewayInvalidResponseBody is the type of
+// the "admin" service "moveOrganizationNetworkIngressToGateway" endpoint HTTP
+// response body for the "invalid" error.
+type MoveOrganizationNetworkIngressToGatewayInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MoveOrganizationNetworkIngressToGatewayInvariantViolationResponseBody is the
+// type of the "admin" service "moveOrganizationNetworkIngressToGateway"
+// endpoint HTTP response body for the "invariant_violation" error.
+type MoveOrganizationNetworkIngressToGatewayInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MoveOrganizationNetworkIngressToGatewayUnexpectedResponseBody is the type of
+// the "admin" service "moveOrganizationNetworkIngressToGateway" endpoint HTTP
+// response body for the "unexpected" error.
+type MoveOrganizationNetworkIngressToGatewayUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// MoveOrganizationNetworkIngressToGatewayGatewayErrorResponseBody is the type
+// of the "admin" service "moveOrganizationNetworkIngressToGateway" endpoint
+// HTTP response body for the "gateway_error" error.
+type MoveOrganizationNetworkIngressToGatewayGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -24277,6 +24690,59 @@ type AdminUpstreamOAuthMigrationStatusResponseBody struct {
 	// Whether upstream auth enforcement is on for the organization, and whether it
 	// can be turned on.
 	Enforcement *AdminUpstreamAuthEnforcementResponseBody `form:"enforcement,omitempty" json:"enforcement,omitempty" xml:"enforcement,omitempty"`
+}
+
+// AdminNetworkIngressResponseBody is used to define fields on response body
+// types.
+type AdminNetworkIngressResponseBody struct {
+	// The ingress ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The network provider; always tailscale today.
+	Provider string `form:"provider" json:"provider" xml:"provider"`
+	// The Tailscale Service label.
+	Hostname string `form:"hostname" json:"hostname" xml:"hostname"`
+	// The name clients reach once the ingress is online.
+	DNSName *string `form:"dns_name,omitempty" json:"dns_name,omitempty" xml:"dns_name,omitempty"`
+	// What hosts the ingress: operator for the Tailscale Kubernetes operator,
+	// gateway for the tailnet gateway.
+	Runtime string `form:"runtime" json:"runtime" xml:"runtime"`
+	// The reconciled status: pending, online, degraded, error or disabled.
+	Status string `form:"status" json:"status" xml:"status"`
+	// The latest reconcile failure code, if any.
+	LastError *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	// Whether the organization has the ingress turned on.
+	Enabled bool `form:"enabled" json:"enabled" xml:"enabled"`
+	// Whether Tailscale OAuth client credentials are saved.
+	CredentialsConfigured bool `form:"credentials_configured" json:"credentials_configured" xml:"credentials_configured"`
+	// When the reconciler last observed the ingress.
+	HealthCheckedAt *string `form:"health_checked_at,omitempty" json:"health_checked_at,omitempty" xml:"health_checked_at,omitempty"`
+	// When the ingress came online.
+	ConnectedSince *string `form:"connected_since,omitempty" json:"connected_since,omitempty" xml:"connected_since,omitempty"`
+	// When the ingress was created.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The tailnet gateway node identities; empty while the operator hosts the
+	// ingress.
+	GatewayNodes []*AdminNetworkIngressGatewayNodeResponseBody `form:"gateway_nodes" json:"gateway_nodes" xml:"gateway_nodes"`
+}
+
+// AdminNetworkIngressGatewayNodeResponseBody is used to define fields on
+// response body types.
+type AdminNetworkIngressGatewayNodeResponseBody struct {
+	// The node identity index; it equals the gateway pod ordinal that hosts it.
+	Slot int32 `form:"slot" json:"slot" xml:"slot"`
+	// The latest heartbeat status: pending, starting, online, draining, error or
+	// stopped.
+	Status string `form:"status" json:"status" xml:"status"`
+	// The gateway pod that last reported this slot.
+	PodName *string `form:"pod_name,omitempty" json:"pod_name,omitempty" xml:"pod_name,omitempty"`
+	// The latest failure the pod reported, if any.
+	LastError *string `form:"last_error,omitempty" json:"last_error,omitempty" xml:"last_error,omitempty"`
+	// When the slot last heartbeated.
+	LastSeenAt *string `form:"last_seen_at,omitempty" json:"last_seen_at,omitempty" xml:"last_seen_at,omitempty"`
+	// When the slot came online.
+	ConnectedSince *string `form:"connected_since,omitempty" json:"connected_since,omitempty" xml:"connected_since,omitempty"`
+	// Whether the slot is being drained and will be removed.
+	Retired bool `form:"retired" json:"retired" xml:"retired"`
 }
 
 // SupportDraftRequestBody is used to define fields on request body types.
@@ -26923,6 +27389,34 @@ func NewDisableUpstreamAuthEnforcementResponseBody(res *admin.AdminUpstreamOAuth
 func NewBackfillMcpAuthGrantsResponseBody(res *admin.AdminBackfillMCPAuthGrantsResult) *BackfillMcpAuthGrantsResponseBody {
 	body := &BackfillMcpAuthGrantsResponseBody{
 		Granted: res.Granted,
+	}
+	return body
+}
+
+// NewGetOrganizationNetworkIngressResponseBody builds the HTTP response body
+// from the result of the "getOrganizationNetworkIngress" endpoint of the
+// "admin" service.
+func NewGetOrganizationNetworkIngressResponseBody(res *admin.AdminOrganizationNetworkIngress) *GetOrganizationNetworkIngressResponseBody {
+	body := &GetOrganizationNetworkIngressResponseBody{
+		OrganizationID: res.OrganizationID,
+		GatewayTag:     res.GatewayTag,
+	}
+	if res.Ingress != nil {
+		body.Ingress = marshalAdminAdminNetworkIngressToAdminNetworkIngressResponseBody(res.Ingress)
+	}
+	return body
+}
+
+// NewMoveOrganizationNetworkIngressToGatewayResponseBody builds the HTTP
+// response body from the result of the
+// "moveOrganizationNetworkIngressToGateway" endpoint of the "admin" service.
+func NewMoveOrganizationNetworkIngressToGatewayResponseBody(res *admin.AdminOrganizationNetworkIngress) *MoveOrganizationNetworkIngressToGatewayResponseBody {
+	body := &MoveOrganizationNetworkIngressToGatewayResponseBody{
+		OrganizationID: res.OrganizationID,
+		GatewayTag:     res.GatewayTag,
+	}
+	if res.Ingress != nil {
+		body.Ingress = marshalAdminAdminNetworkIngressToAdminNetworkIngressResponseBody(res.Ingress)
 	}
 	return body
 }
@@ -42558,6 +43052,306 @@ func NewBackfillMcpAuthGrantsGatewayErrorResponseBody(res *goa.ServiceError) *Ba
 	return body
 }
 
+// NewGetOrganizationNetworkIngressUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "getOrganizationNetworkIngress"
+// endpoint of the "admin" service.
+func NewGetOrganizationNetworkIngressUnauthorizedResponseBody(res *goa.ServiceError) *GetOrganizationNetworkIngressUnauthorizedResponseBody {
+	body := &GetOrganizationNetworkIngressUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationNetworkIngressForbiddenResponseBody builds the HTTP
+// response body from the result of the "getOrganizationNetworkIngress"
+// endpoint of the "admin" service.
+func NewGetOrganizationNetworkIngressForbiddenResponseBody(res *goa.ServiceError) *GetOrganizationNetworkIngressForbiddenResponseBody {
+	body := &GetOrganizationNetworkIngressForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationNetworkIngressBadRequestResponseBody builds the HTTP
+// response body from the result of the "getOrganizationNetworkIngress"
+// endpoint of the "admin" service.
+func NewGetOrganizationNetworkIngressBadRequestResponseBody(res *goa.ServiceError) *GetOrganizationNetworkIngressBadRequestResponseBody {
+	body := &GetOrganizationNetworkIngressBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationNetworkIngressNotFoundResponseBody builds the HTTP
+// response body from the result of the "getOrganizationNetworkIngress"
+// endpoint of the "admin" service.
+func NewGetOrganizationNetworkIngressNotFoundResponseBody(res *goa.ServiceError) *GetOrganizationNetworkIngressNotFoundResponseBody {
+	body := &GetOrganizationNetworkIngressNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationNetworkIngressConflictResponseBody builds the HTTP
+// response body from the result of the "getOrganizationNetworkIngress"
+// endpoint of the "admin" service.
+func NewGetOrganizationNetworkIngressConflictResponseBody(res *goa.ServiceError) *GetOrganizationNetworkIngressConflictResponseBody {
+	body := &GetOrganizationNetworkIngressConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationNetworkIngressUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getOrganizationNetworkIngress"
+// endpoint of the "admin" service.
+func NewGetOrganizationNetworkIngressUnsupportedMediaResponseBody(res *goa.ServiceError) *GetOrganizationNetworkIngressUnsupportedMediaResponseBody {
+	body := &GetOrganizationNetworkIngressUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationNetworkIngressInvalidResponseBody builds the HTTP response
+// body from the result of the "getOrganizationNetworkIngress" endpoint of the
+// "admin" service.
+func NewGetOrganizationNetworkIngressInvalidResponseBody(res *goa.ServiceError) *GetOrganizationNetworkIngressInvalidResponseBody {
+	body := &GetOrganizationNetworkIngressInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationNetworkIngressInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "getOrganizationNetworkIngress"
+// endpoint of the "admin" service.
+func NewGetOrganizationNetworkIngressInvariantViolationResponseBody(res *goa.ServiceError) *GetOrganizationNetworkIngressInvariantViolationResponseBody {
+	body := &GetOrganizationNetworkIngressInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationNetworkIngressUnexpectedResponseBody builds the HTTP
+// response body from the result of the "getOrganizationNetworkIngress"
+// endpoint of the "admin" service.
+func NewGetOrganizationNetworkIngressUnexpectedResponseBody(res *goa.ServiceError) *GetOrganizationNetworkIngressUnexpectedResponseBody {
+	body := &GetOrganizationNetworkIngressUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetOrganizationNetworkIngressGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "getOrganizationNetworkIngress"
+// endpoint of the "admin" service.
+func NewGetOrganizationNetworkIngressGatewayErrorResponseBody(res *goa.ServiceError) *GetOrganizationNetworkIngressGatewayErrorResponseBody {
+	body := &GetOrganizationNetworkIngressGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMoveOrganizationNetworkIngressToGatewayUnauthorizedResponseBody builds
+// the HTTP response body from the result of the
+// "moveOrganizationNetworkIngressToGateway" endpoint of the "admin" service.
+func NewMoveOrganizationNetworkIngressToGatewayUnauthorizedResponseBody(res *goa.ServiceError) *MoveOrganizationNetworkIngressToGatewayUnauthorizedResponseBody {
+	body := &MoveOrganizationNetworkIngressToGatewayUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMoveOrganizationNetworkIngressToGatewayForbiddenResponseBody builds the
+// HTTP response body from the result of the
+// "moveOrganizationNetworkIngressToGateway" endpoint of the "admin" service.
+func NewMoveOrganizationNetworkIngressToGatewayForbiddenResponseBody(res *goa.ServiceError) *MoveOrganizationNetworkIngressToGatewayForbiddenResponseBody {
+	body := &MoveOrganizationNetworkIngressToGatewayForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMoveOrganizationNetworkIngressToGatewayBadRequestResponseBody builds the
+// HTTP response body from the result of the
+// "moveOrganizationNetworkIngressToGateway" endpoint of the "admin" service.
+func NewMoveOrganizationNetworkIngressToGatewayBadRequestResponseBody(res *goa.ServiceError) *MoveOrganizationNetworkIngressToGatewayBadRequestResponseBody {
+	body := &MoveOrganizationNetworkIngressToGatewayBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMoveOrganizationNetworkIngressToGatewayNotFoundResponseBody builds the
+// HTTP response body from the result of the
+// "moveOrganizationNetworkIngressToGateway" endpoint of the "admin" service.
+func NewMoveOrganizationNetworkIngressToGatewayNotFoundResponseBody(res *goa.ServiceError) *MoveOrganizationNetworkIngressToGatewayNotFoundResponseBody {
+	body := &MoveOrganizationNetworkIngressToGatewayNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMoveOrganizationNetworkIngressToGatewayConflictResponseBody builds the
+// HTTP response body from the result of the
+// "moveOrganizationNetworkIngressToGateway" endpoint of the "admin" service.
+func NewMoveOrganizationNetworkIngressToGatewayConflictResponseBody(res *goa.ServiceError) *MoveOrganizationNetworkIngressToGatewayConflictResponseBody {
+	body := &MoveOrganizationNetworkIngressToGatewayConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMoveOrganizationNetworkIngressToGatewayUnsupportedMediaResponseBody
+// builds the HTTP response body from the result of the
+// "moveOrganizationNetworkIngressToGateway" endpoint of the "admin" service.
+func NewMoveOrganizationNetworkIngressToGatewayUnsupportedMediaResponseBody(res *goa.ServiceError) *MoveOrganizationNetworkIngressToGatewayUnsupportedMediaResponseBody {
+	body := &MoveOrganizationNetworkIngressToGatewayUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMoveOrganizationNetworkIngressToGatewayInvalidResponseBody builds the
+// HTTP response body from the result of the
+// "moveOrganizationNetworkIngressToGateway" endpoint of the "admin" service.
+func NewMoveOrganizationNetworkIngressToGatewayInvalidResponseBody(res *goa.ServiceError) *MoveOrganizationNetworkIngressToGatewayInvalidResponseBody {
+	body := &MoveOrganizationNetworkIngressToGatewayInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMoveOrganizationNetworkIngressToGatewayInvariantViolationResponseBody
+// builds the HTTP response body from the result of the
+// "moveOrganizationNetworkIngressToGateway" endpoint of the "admin" service.
+func NewMoveOrganizationNetworkIngressToGatewayInvariantViolationResponseBody(res *goa.ServiceError) *MoveOrganizationNetworkIngressToGatewayInvariantViolationResponseBody {
+	body := &MoveOrganizationNetworkIngressToGatewayInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMoveOrganizationNetworkIngressToGatewayUnexpectedResponseBody builds the
+// HTTP response body from the result of the
+// "moveOrganizationNetworkIngressToGateway" endpoint of the "admin" service.
+func NewMoveOrganizationNetworkIngressToGatewayUnexpectedResponseBody(res *goa.ServiceError) *MoveOrganizationNetworkIngressToGatewayUnexpectedResponseBody {
+	body := &MoveOrganizationNetworkIngressToGatewayUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewMoveOrganizationNetworkIngressToGatewayGatewayErrorResponseBody builds
+// the HTTP response body from the result of the
+// "moveOrganizationNetworkIngressToGateway" endpoint of the "admin" service.
+func NewMoveOrganizationNetworkIngressToGatewayGatewayErrorResponseBody(res *goa.ServiceError) *MoveOrganizationNetworkIngressToGatewayGatewayErrorResponseBody {
+	body := &MoveOrganizationNetworkIngressToGatewayGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLoginPayload builds a admin service login endpoint payload.
 func NewLoginPayload(returnTo *string, prompt *string) *admin.LoginPayload {
 	v := &admin.LoginPayload{}
@@ -43952,6 +44746,27 @@ func NewBackfillMcpAuthGrantsPayload(adminSessionToken *string) *admin.BackfillM
 	return v
 }
 
+// NewGetOrganizationNetworkIngressPayload builds a admin service
+// getOrganizationNetworkIngress endpoint payload.
+func NewGetOrganizationNetworkIngressPayload(organizationID string, adminSessionToken *string) *admin.GetOrganizationNetworkIngressPayload {
+	v := &admin.GetOrganizationNetworkIngressPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewMoveOrganizationNetworkIngressToGatewayPayload builds a admin service
+// moveOrganizationNetworkIngressToGateway endpoint payload.
+func NewMoveOrganizationNetworkIngressToGatewayPayload(body *MoveOrganizationNetworkIngressToGatewayRequestBody, adminSessionToken *string) *admin.MoveOrganizationNetworkIngressToGatewayPayload {
+	v := &admin.MoveOrganizationNetworkIngressToGatewayPayload{
+		OrganizationID: *body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // ValidateSetOrganizationFeatureRequestBody runs the validations defined on
 // SetOrganizationFeatureRequestBody
 func ValidateSetOrganizationFeatureRequestBody(body *SetOrganizationFeatureRequestBody) (err error) {
@@ -44941,6 +45756,15 @@ func ValidateEnableUpstreamAuthEnforcementRequestBody(body *EnableUpstreamAuthEn
 // ValidateDisableUpstreamAuthEnforcementRequestBody runs the validations
 // defined on DisableUpstreamAuthEnforcementRequestBody
 func ValidateDisableUpstreamAuthEnforcementRequestBody(body *DisableUpstreamAuthEnforcementRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	return
+}
+
+// ValidateMoveOrganizationNetworkIngressToGatewayRequestBody runs the
+// validations defined on MoveOrganizationNetworkIngressToGatewayRequestBody
+func ValidateMoveOrganizationNetworkIngressToGatewayRequestBody(body *MoveOrganizationNetworkIngressToGatewayRequestBody) (err error) {
 	if body.OrganizationID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
 	}

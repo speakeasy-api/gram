@@ -432,6 +432,14 @@ type Client struct {
 	// backfillMcpAuthGrants endpoint.
 	BackfillMcpAuthGrantsDoer goahttp.Doer
 
+	// GetOrganizationNetworkIngress Doer is the HTTP client used to make requests
+	// to the getOrganizationNetworkIngress endpoint.
+	GetOrganizationNetworkIngressDoer goahttp.Doer
+
+	// MoveOrganizationNetworkIngressToGateway Doer is the HTTP client used to make
+	// requests to the moveOrganizationNetworkIngressToGateway endpoint.
+	MoveOrganizationNetworkIngressToGatewayDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -556,6 +564,8 @@ func NewClient(
 		EnableUpstreamAuthEnforcementDoer:           doer,
 		DisableUpstreamAuthEnforcementDoer:          doer,
 		BackfillMcpAuthGrantsDoer:                   doer,
+		GetOrganizationNetworkIngressDoer:           doer,
+		MoveOrganizationNetworkIngressToGatewayDoer: doer,
 		RestoreResponseBody:                         restoreBody,
 		scheme:                                      scheme,
 		host:                                        host,
@@ -3060,6 +3070,54 @@ func (c *Client) BackfillMcpAuthGrants() goa.Endpoint {
 		resp, err := c.BackfillMcpAuthGrantsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "backfillMcpAuthGrants", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetOrganizationNetworkIngress returns an endpoint that makes HTTP requests
+// to the admin service getOrganizationNetworkIngress server.
+func (c *Client) GetOrganizationNetworkIngress() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetOrganizationNetworkIngressRequest(c.encoder)
+		decodeResponse = DecodeGetOrganizationNetworkIngressResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetOrganizationNetworkIngressRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetOrganizationNetworkIngressDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "getOrganizationNetworkIngress", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// MoveOrganizationNetworkIngressToGateway returns an endpoint that makes HTTP
+// requests to the admin service moveOrganizationNetworkIngressToGateway server.
+func (c *Client) MoveOrganizationNetworkIngressToGateway() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeMoveOrganizationNetworkIngressToGatewayRequest(c.encoder)
+		decodeResponse = DecodeMoveOrganizationNetworkIngressToGatewayResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildMoveOrganizationNetworkIngressToGatewayRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.MoveOrganizationNetworkIngressToGatewayDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "moveOrganizationNetworkIngressToGateway", err)
 		}
 		return decodeResponse(resp)
 	}

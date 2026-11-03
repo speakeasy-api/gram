@@ -21,16 +21,17 @@ type Fake struct {
 	// Now supplies key expiry timestamps.
 	Now func() time.Time
 
-	keys     []AuthKey
-	services map[string]Service
-	deleted  []string
+	keys        []AuthKey
+	services    map[string]Service
+	deleted     []string
+	revokedKeys []string
 }
 
 var _ Client = (*Fake)(nil)
 
 // NewFake returns an empty fake.
 func NewFake() *Fake {
-	return &Fake{mu: sync.Mutex{}, Reject: nil, Now: time.Now, keys: nil, services: make(map[string]Service), deleted: nil}
+	return &Fake{mu: sync.Mutex{}, Reject: nil, Now: time.Now, keys: nil, services: make(map[string]Service), deleted: nil, revokedKeys: nil}
 }
 
 func (f *Fake) check(creds Credentials) error {
@@ -60,6 +61,27 @@ func (f *Fake) CreateAuthKey(_ context.Context, creds Credentials, req AuthKeyRe
 	}
 	f.keys = append(f.keys, key)
 	return key, nil
+}
+
+// DeleteAuthKey records the revoked key id.
+func (f *Fake) DeleteAuthKey(_ context.Context, creds Credentials, keyID string) error {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	if err := f.check(creds); err != nil {
+		return err
+	}
+	if strings.TrimSpace(keyID) == "" {
+		return errors.New("auth key deletion requires a key id")
+	}
+	f.revokedKeys = append(f.revokedKeys, keyID)
+	return nil
+}
+
+// RevokedKeys returns every key id passed to DeleteAuthKey.
+func (f *Fake) RevokedKeys() []string {
+	f.mu.Lock()
+	defer f.mu.Unlock()
+	return append([]string(nil), f.revokedKeys...)
 }
 
 // DeleteDevice records the node id.

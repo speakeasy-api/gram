@@ -22,6 +22,9 @@ import type { AdminListRegistryPromotionCandidatesRequest } from "@gram/admin-cl
 import type { GetRegistryPromotionCandidateRequestBody } from "@gram/admin-client/models/components/getregistrypromotioncandidaterequestbody";
 import type { AdminInferenceKey } from "@gram/admin-client/models/components/admininferencekey";
 import { buildAdminGetUpstreamOAuthMigrationStatusQuery } from "@gram/admin-client/react-query/adminGetUpstreamOAuthMigrationStatus.core";
+import { buildAdminOrganizationNetworkIngressQuery } from "@gram/admin-client/react-query/adminOrganizationNetworkIngress.core";
+import { buildMoveAdminOrganizationNetworkIngressToGatewayMutation } from "@gram/admin-client/react-query/moveAdminOrganizationNetworkIngressToGateway";
+import type { AdminOrganizationNetworkIngress } from "@gram/admin-client/models/components/adminorganizationnetworkingress";
 import { buildAdminListUpstreamOAuthMigrationOrganizationsQuery } from "@gram/admin-client/react-query/adminListUpstreamOAuthMigrationOrganizations.core";
 import { buildAdminRunUpstreamOAuthMigrationMutation } from "@gram/admin-client/react-query/adminRunUpstreamOAuthMigration";
 import { buildAdminEnableUpstreamAuthEnforcementMutation } from "@gram/admin-client/react-query/adminEnableUpstreamAuthEnforcement";
@@ -1325,4 +1328,36 @@ const generatedBackfillMcpAuthGrantsMutation =
 
 export function backfillMcpAuthGrants(): Promise<AdminBackfillMCPAuthGrantsResult> {
   return redirecting(generatedBackfillMcpAuthGrantsMutation.mutationFn({}));
+}
+
+// Staff move one organization's private network ingress from the Tailscale
+// operator to the tailnet gateway. The read polls while a move settles.
+export function organizationNetworkIngressQuery(
+  organizationID: string,
+): UseQueryOptions<AdminOrganizationNetworkIngress> {
+  const generated = buildAdminOrganizationNetworkIngressQuery(
+    redirectingClient,
+    { organizationId: organizationID },
+    { retries: { strategy: "none" } },
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+    retry: false,
+  });
+}
+
+const generatedMoveNetworkIngressToGatewayMutation =
+  buildMoveAdminOrganizationNetworkIngressToGatewayMutation(redirectingClient, {
+    retries: { strategy: "none" },
+  });
+
+export function moveOrganizationNetworkIngressToGateway(
+  organizationID: string,
+): Promise<AdminOrganizationNetworkIngress> {
+  return redirecting(
+    generatedMoveNetworkIngressToGatewayMutation.mutationFn({
+      request: { organizationId: organizationID },
+    }),
+  );
 }

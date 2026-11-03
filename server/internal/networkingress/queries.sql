@@ -284,3 +284,23 @@ SET
 WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS TRUE;
+
+-- name: MoveNetworkIngressToGateway :one
+-- Staff move an operator-hosted ingress onto the tailnet gateway. updated_at
+-- is the desired-state version, so an in-flight reconcile requeues.
+UPDATE network_ingresses
+SET runtime = 'gateway',
+    status = 'pending',
+    last_error = NULL,
+    updated_at = clock_timestamp()
+WHERE organization_id = @organization_id
+  AND deleted IS FALSE
+  AND runtime IS DISTINCT FROM 'gateway'
+RETURNING *;
+
+-- name: ListNetworkIngressGatewayNodes :many
+SELECT slot, status, pod_name, node_id, last_error, last_seen_at, connected_since, retired_at
+FROM network_ingress_nodes
+WHERE network_ingress_id = @network_ingress_id
+  AND organization_id = @organization_id
+ORDER BY slot;

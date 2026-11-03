@@ -67,6 +67,7 @@ trackedFiles:
   src/funcs/adminGetOrganization.ts: {}
   src/funcs/adminGetOrganizationChatAnalysisSettings.ts: {}
   src/funcs/adminGetOrganizationFeatures.ts: {}
+  src/funcs/adminGetOrganizationNetworkIngress.ts: {}
   src/funcs/adminGetOrganizationOnboardingPlaybook.ts: {}
   src/funcs/adminGetOrganizationOnboardingStack.ts: {}
   src/funcs/adminGetOrganizationStats.ts: {}
@@ -106,6 +107,7 @@ trackedFiles:
   src/funcs/adminMarkEnterpriseTrialConverted.ts: {}
   src/funcs/adminMigrateExternalMcpServers.ts: {}
   src/funcs/adminMigrateToGlobalIssuer.ts: {}
+  src/funcs/adminMoveOrganizationNetworkIngressToGateway.ts: {}
   src/funcs/adminPreviewExternalMcpMigration.ts: {}
   src/funcs/adminPromoteRegistryCandidate.ts: {}
   src/funcs/adminRearmTrial.ts: {}
@@ -199,6 +201,8 @@ trackedFiles:
   src/models/components/adminmdmvendoroption.ts: {}
   src/models/components/adminmeterusagebucket.ts: {}
   src/models/components/adminmeterusageresponse.ts: {}
+  src/models/components/adminnetworkingress.ts: {}
+  src/models/components/adminnetworkingressgatewaynode.ts: {}
   src/models/components/adminonboardingplan.ts: {}
   src/models/components/adminonboardingplatform.ts: {}
   src/models/components/adminonboardingplaybook.ts: {}
@@ -215,6 +219,7 @@ trackedFiles:
   src/models/components/adminonboardingvendoroption.ts: {}
   src/models/components/adminorganization.ts: {}
   src/models/components/adminorganizationmember.ts: {}
+  src/models/components/adminorganizationnetworkingress.ts: {}
   src/models/components/adminorganizationonboardingplaybook.ts: {}
   src/models/components/adminorganizationstats.ts: {}
   src/models/components/adminpaygbillingsummary.ts: {}
@@ -292,6 +297,7 @@ trackedFiles:
   src/models/components/migrateexternalmcpserversrequestbody.ts: {}
   src/models/components/migrateremotesessionissuerrequestbody.ts: {}
   src/models/components/migrateremotesessionissuerresult.ts: {}
+  src/models/components/moveorganizationnetworkingresstogatewayrequestbody.ts: {}
   src/models/components/previewexternalmcpmigrationrequestbody.ts: {}
   src/models/components/productfeatures.ts: {}
   src/models/components/promoteregistrycandidaterequestbody.ts: {}
@@ -354,6 +360,7 @@ trackedFiles:
   src/models/operations/admingetorganization.ts: {}
   src/models/operations/admingetorganizationchatanalysissettings.ts: {}
   src/models/operations/admingetorganizationfeatures.ts: {}
+  src/models/operations/admingetorganizationnetworkingress.ts: {}
   src/models/operations/admingetorganizationonboardingplaybook.ts: {}
   src/models/operations/admingetorganizationonboardingstack.ts: {}
   src/models/operations/admingetpaygbillingsummary.ts: {}
@@ -493,6 +500,8 @@ trackedFiles:
   src/react-query/adminOnboardingUseCases.ts: {}
   src/react-query/adminOrganizationFeatures.core.ts: {}
   src/react-query/adminOrganizationFeatures.ts: {}
+  src/react-query/adminOrganizationNetworkIngress.core.ts: {}
+  src/react-query/adminOrganizationNetworkIngress.ts: {}
   src/react-query/adminOrganizationOnboardingPlaybook.core.ts: {}
   src/react-query/adminOrganizationOnboardingPlaybook.ts: {}
   src/react-query/adminOrganizationOnboardingStack.core.ts: {}
@@ -528,6 +537,7 @@ trackedFiles:
   src/react-query/deleteAdminOnboardingPlaybook.ts: {}
   src/react-query/deleteAdminOnboardingUseCase.ts: {}
   src/react-query/index.ts: {}
+  src/react-query/moveAdminOrganizationNetworkIngressToGateway.ts: {}
   src/react-query/setAdminOrganizationFeature.ts: {}
   src/react-query/setAdminOrganizationOnboardingStack.ts: {}
   src/react-query/updateAdminOnboardingPlaybook.ts: {}
@@ -1028,6 +1038,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  adminGetOrganizationNetworkIngress:
+    speakeasy-default-admin-get-organization-network-ingress:
+      parameters:
+        query:
+          organization_id: "<id>"
+      responses:
+        "200":
+          application/json: {"gateway_tag": "<value>", "organization_id": "<id>"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   adminGetOrganizationOnboarding:
     speakeasy-default-admin-get-organization-onboarding:
       parameters:
@@ -1499,6 +1521,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  adminMoveOrganizationNetworkIngressToGateway:
+    speakeasy-default-admin-move-organization-network-ingress-to-gateway:
+      requestBody:
+        application/json: {"organization_id": "<id>"}
+      responses:
+        "200":
+          application/json: {"gateway_tag": "<value>", "organization_id": "<id>"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   adminPreviewExternalMcpMigration:
     speakeasy-default-admin-preview-external-mcp-migration:
       requestBody:

@@ -46,6 +46,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/migration"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
@@ -64,20 +65,21 @@ import (
 )
 
 type Service struct {
-	catalogPromotion     *catalogpromotion.Service
-	registry             *mcpregistry.Service
-	remoteSessions       *remotesessions.Service
-	assets               *assets.Service
-	tracer               trace.Tracer
-	logger               *slog.Logger
-	db                   *pgxpool.Pool
-	verifier             *Verifier
-	loginStates          cache.TypedCacheObject[LoginState]
-	oidc                 *OIDCClient
-	sessions             *SessionStore
-	allowedOrigins       []string
-	dashboardURL         *url.URL
-	supportHandoffIssuer supportHandoffIssuer
+	networkIngressGateway *networkingress.GatewayMigrator
+	catalogPromotion      *catalogpromotion.Service
+	registry              *mcpregistry.Service
+	remoteSessions        *remotesessions.Service
+	assets                *assets.Service
+	tracer                trace.Tracer
+	logger                *slog.Logger
+	db                    *pgxpool.Pool
+	verifier              *Verifier
+	loginStates           cache.TypedCacheObject[LoginState]
+	oidc                  *OIDCClient
+	sessions              *SessionStore
+	allowedOrigins        []string
+	dashboardURL          *url.URL
+	supportHandoffIssuer  supportHandoffIssuer
 
 	// mcpServerURL is the public Speakeasy server origin that platform-domain MCP
 	// URLs are built on. Nil leaves those URLs out.
@@ -249,7 +251,7 @@ func NewService(
 		encryptionClient,
 	)
 
-	return &Service{catalogPromotion: nil, remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
+	return &Service{networkIngressGateway: nil, catalogPromotion: nil, remoteSessions: nil, assets: nil, mcpServerURL: nil, workosEnvironmentID: "", stripeDashboardBase: "", registry: registry,
 		newOrganizationDefaultHost: pgtype.Text{String: "", Valid: false},
 		tracer:                     tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/admin"),
 		logger:                     logger,
@@ -504,6 +506,10 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.ListUpstreamOAuthMigrationOrganizations = service.preauthorizeAdmin(server.ListUpstreamOAuthMigrationOrganizations)
 	server.GetUpstreamOAuthMigrationStatus = service.preauthorizeAdmin(server.GetUpstreamOAuthMigrationStatus)
 	server.RunUpstreamOAuthMigration = service.strictAdminJSON(server.RunUpstreamOAuthMigration, func() any { return new(adminserver.RunUpstreamOAuthMigrationRequestBody) })
+	server.GetOrganizationNetworkIngress = service.preauthorizeAdmin(server.GetOrganizationNetworkIngress)
+	server.MoveOrganizationNetworkIngressToGateway = service.strictAdminJSON(server.MoveOrganizationNetworkIngressToGateway, func() any {
+		return new(adminserver.MoveOrganizationNetworkIngressToGatewayRequestBody)
+	})
 	server.EnableUpstreamAuthEnforcement = service.strictAdminJSON(server.EnableUpstreamAuthEnforcement, func() any { return new(adminserver.EnableUpstreamAuthEnforcementRequestBody) })
 	server.DisableUpstreamAuthEnforcement = service.strictAdminJSON(server.DisableUpstreamAuthEnforcement, func() any { return new(adminserver.DisableUpstreamAuthEnforcementRequestBody) })
 	adminserver.Mount(mux, server)

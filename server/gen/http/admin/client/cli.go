@@ -3594,3 +3594,48 @@ func BuildBackfillMcpAuthGrantsPayload(adminBackfillMcpAuthGrantsAdminSessionTok
 
 	return v, nil
 }
+
+// BuildGetOrganizationNetworkIngressPayload builds the payload for the admin
+// getOrganizationNetworkIngress endpoint from CLI flags.
+func BuildGetOrganizationNetworkIngressPayload(adminGetOrganizationNetworkIngressOrganizationID string, adminGetOrganizationNetworkIngressAdminSessionToken string) (*admin.GetOrganizationNetworkIngressPayload, error) {
+	var organizationID string
+	{
+		organizationID = adminGetOrganizationNetworkIngressOrganizationID
+	}
+	var adminSessionToken *string
+	{
+		if adminGetOrganizationNetworkIngressAdminSessionToken != "" {
+			adminSessionToken = &adminGetOrganizationNetworkIngressAdminSessionToken
+		}
+	}
+	v := &admin.GetOrganizationNetworkIngressPayload{}
+	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildMoveOrganizationNetworkIngressToGatewayPayload builds the payload for
+// the admin moveOrganizationNetworkIngressToGateway endpoint from CLI flags.
+func BuildMoveOrganizationNetworkIngressToGatewayPayload(adminMoveOrganizationNetworkIngressToGatewayBody string, adminMoveOrganizationNetworkIngressToGatewayAdminSessionToken string) (*admin.MoveOrganizationNetworkIngressToGatewayPayload, error) {
+	var err error
+	var body MoveOrganizationNetworkIngressToGatewayRequestBody
+	{
+		err = json.Unmarshal([]byte(adminMoveOrganizationNetworkIngressToGatewayBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminMoveOrganizationNetworkIngressToGatewayAdminSessionToken != "" {
+			adminSessionToken = &adminMoveOrganizationNetworkIngressToGatewayAdminSessionToken
+		}
+	}
+	v := &admin.MoveOrganizationNetworkIngressToGatewayPayload{
+		OrganizationID: body.OrganizationID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}

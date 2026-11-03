@@ -104,6 +104,7 @@ type Service struct {
 // Client is the subset of the Tailscale API used by the reconciler.
 type Client interface {
 	CreateAuthKey(ctx context.Context, creds Credentials, req AuthKeyRequest) (AuthKey, error)
+	DeleteAuthKey(ctx context.Context, creds Credentials, keyID string) error
 	DeleteDevice(ctx context.Context, creds Credentials, nodeID string) error
 	UpsertService(ctx context.Context, creds Credentials, svc Service) error
 	DeleteService(ctx context.Context, creds Credentials, name string) error
@@ -230,6 +231,25 @@ func (c *HTTPClient) CreateAuthKey(ctx context.Context, creds Credentials, req A
 		return AuthKey{}, errors.New("tailscale api returned an empty auth key")
 	}
 	return AuthKey{ID: key.ID, Key: key.Key, Expires: key.Expires}, nil
+}
+
+// DeleteAuthKey revokes an auth key. A missing key is success.
+func (c *HTTPClient) DeleteAuthKey(ctx context.Context, creds Credentials, keyID string) error {
+	api, err := c.api(creds)
+	if err != nil {
+		return err
+	}
+	if strings.TrimSpace(keyID) == "" {
+		return errors.New("auth key deletion requires a key id")
+	}
+	if err := api.Keys().Delete(ctx, keyID); err != nil {
+		err = mapError("delete auth key", err)
+		if errors.Is(err, ErrNotFound) {
+			return nil
+		}
+		return err
+	}
+	return nil
 }
 
 // DeleteDevice removes a node from the tailnet. A missing device is success.

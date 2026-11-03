@@ -18,6 +18,7 @@ const (
 	ActionNetworkIngressUpdate            Action = "network_ingress:update"
 	ActionNetworkIngressRotateCredentials Action = "network_ingress:rotate_credentials"
 	ActionNetworkIngressDelete            Action = "network_ingress:delete"
+	ActionNetworkIngressMoveRuntime       Action = "network_ingress:move_runtime"
 )
 
 type NetworkIngressEventBase struct {
@@ -45,6 +46,18 @@ type LogNetworkIngressRotateCredentialsEvent struct {
 }
 
 type LogNetworkIngressDeleteEvent struct{ NetworkIngressEventBase }
+
+// LogNetworkIngressMoveRuntimeEvent records staff moving an ingress between
+// hosting runtimes, such as from the Tailscale operator to the tailnet gateway.
+type LogNetworkIngressMoveRuntimeEvent struct {
+	NetworkIngressEventBase
+
+	// From is the runtime the ingress left; "operator" covers an unset value.
+	From string
+
+	// To is the runtime that hosts the ingress from now on.
+	To string
+}
 
 func networkIngressEntry(base NetworkIngressEventBase, action Action, metadata, before, after []byte) repo.InsertAuditLogParams {
 	return repo.InsertAuditLogParams{
@@ -95,4 +108,12 @@ func (l *Logger) LogNetworkIngressRotateCredentials(ctx context.Context, dbtx re
 
 func (l *Logger) LogNetworkIngressDelete(ctx context.Context, dbtx repo.DBTX, event LogNetworkIngressDeleteEvent) error {
 	return l.log(ctx, dbtx, auditEntry{Params: networkIngressEntry(event.NetworkIngressEventBase, ActionNetworkIngressDelete, nil, nil, nil), OutboxEvent: events.NetworkIngressV1})
+}
+
+func (l *Logger) LogNetworkIngressMoveRuntime(ctx context.Context, dbtx repo.DBTX, event LogNetworkIngressMoveRuntimeEvent) error {
+	metadata, err := marshalAuditPayload(map[string]any{"from": event.From, "to": event.To})
+	if err != nil {
+		return fmt.Errorf("marshal network ingress runtime move metadata: %w", err)
+	}
+	return l.log(ctx, dbtx, auditEntry{Params: networkIngressEntry(event.NetworkIngressEventBase, ActionNetworkIngressMoveRuntime, metadata, nil, nil), OutboxEvent: events.NetworkIngressV1})
 }

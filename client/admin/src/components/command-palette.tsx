@@ -11,6 +11,7 @@ import {
   ExternalLinkIcon,
   FolderIcon,
   HistoryIcon,
+  NetworkIcon,
   SearchIcon,
   ServerIcon,
   SlidersHorizontalIcon,
@@ -82,6 +83,11 @@ const RECORD_PAGES = [
     to: "/organizations/$idOrSlug/features",
     label: "Features",
     icon: SlidersHorizontalIcon,
+  },
+  {
+    to: "/organizations/$idOrSlug/private-network",
+    label: "Private network",
+    icon: NetworkIcon,
   },
   { to: "/organizations/$idOrSlug/members", label: "Members", icon: UsersIcon },
 ] as const;

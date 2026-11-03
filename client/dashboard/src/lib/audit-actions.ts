@@ -167,6 +167,7 @@ export const AUDIT_ACTIONS = [
   "model_provider_key:upsert",
   "network_ingress:create",
   "network_ingress:delete",
+  "network_ingress:move_runtime",
   "network_ingress:rotate_credentials",
   "network_ingress:update",
   "openrouter-key:disable",
@@ -611,6 +612,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "rotated private network ingress credentials";
     case "network_ingress:delete":
       return "deleted private network ingress";
+    case "network_ingress:move_runtime":
+      return "moved private network ingress to the tailnet gateway";
 
     case "deployments:create":
       return "created deployment";

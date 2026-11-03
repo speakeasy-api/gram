@@ -380,6 +380,16 @@ type Service interface {
 	// grant, in every organization. The connect grant's selectors are ignored.
 	// Safe to run more than once.
 	BackfillMcpAuthGrants(context.Context, *BackfillMcpAuthGrantsPayload) (res *AdminBackfillMCPAuthGrantsResult, err error)
+	// Reports an organization's private network ingress, which runtime hosts it,
+	// and how its tailnet gateway nodes are doing.
+	GetOrganizationNetworkIngress(context.Context, *GetOrganizationNetworkIngressPayload) (res *AdminOrganizationNetworkIngress, err error)
+	// Moves an organization's private network ingress from the Tailscale operator
+	// to the tailnet gateway. The saved OAuth client is checked first by minting
+	// and revoking a gateway-tagged key; on success the reconciler tears down the
+	// operator resources and brings the gateway up, with a short gap in private
+	// access while the service changes hosts. Already-moved ingresses are returned
+	// unchanged.
+	MoveOrganizationNetworkIngressToGateway(context.Context, *MoveOrganizationNetworkIngressToGatewayPayload) (res *AdminOrganizationNetworkIngress, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -402,7 +412,7 @@ const ServiceName = "admin"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [104]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listExternalMcpMigrationCandidates", "previewExternalMcpMigration", "migrateExternalMcpServers", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants"}
+var MethodNames = [106]string{"login", "callback", "logout", "getSession", "getOrganizationFeatures", "setOrganizationFeature", "getOrganizationChatAnalysisSettings", "setOrganizationChatAnalysisSettings", "triggerOrganizationChatAnalysis", "openOrganizationInDashboard", "getProject", "updateOrganization", "bulkUpdateAccountType", "disableOrganization", "enableOrganization", "getOrganization", "listOrganizationMembers", "listOrganizationProjects", "listProjectMcpServers", "listOrganizationActivity", "listUsers", "listUserOrganizations", "listOrganizations", "extendTrial", "createOrganization", "rearmTrial", "getOrganizationStats", "repairInferenceKey", "getInferenceKeys", "setInferenceKeyMonthlyLimit", "getInferenceSpendHistory", "getPaygBillingSummary", "getStripeCustomer", "setStripeCustomer", "setAdoptionDashboardUrl", "getStripeSubscription", "cancelStripeSubscription", "resumeStripeSubscription", "markEnterpriseTrialConverted", "createGlobalIssuer", "getGlobalIssuerDuplicatePreflight", "listGlobalIssuers", "getGlobalIssuer", "updateGlobalIssuer", "deleteGlobalIssuer", "fetchGlobalIssuerMetadata", "refreshGlobalIssuerMetadata", "listGlobalIssuerConvergenceCandidates", "getGlobalIssuerMigratePreflight", "migrateToGlobalIssuer", "uploadPlatformImage", "serveImage", "startTrial", "changeTrialEndDate", "getMeterUsage", "getSpendBreakdown", "getSupportMatrix", "updateSupportMatrix", "getSupportCoverage", "describeMcpServerHealth", "getMcpServerToolCalls", "getHookClients", "listExternalMcpMigrationCandidates", "previewExternalMcpMigration", "migrateExternalMcpServers", "listRegistryPromotionCandidates", "getRegistryPromotionCandidate", "promoteRegistryCandidate", "curateRegistryPromotionCandidate", "retryRegistryPromotionDocs", "getRegistryOktaCandidates", "listRegistryOktaUnmapped", "listRegistryEntries", "getRegistryEntry", "createRegistryEntry", "saveRegistryEntry", "setRegistryEntryPublished", "listOnboardingSteps", "getOnboardingStackOptions", "getOrganizationOnboardingStack", "setOrganizationOnboardingStack", "listOnboardingUseCases", "createOnboardingUseCase", "updateOnboardingUseCase", "deleteOnboardingUseCase", "listOnboardingPlaybooks", "createOnboardingPlaybook", "updateOnboardingPlaybook", "deleteOnboardingPlaybook", "cloneOnboardingPlaybook", "getOrganizationOnboardingPlaybook", "assignOrganizationOnboardingPlaybook", "listSignupOffers", "createSignupOffer", "updateSignupOffer", "getStripeSubscriptionCandidate", "setStripeSubscription", "listCustomerUsage", "listUpstreamOAuthMigrationOrganizations", "getUpstreamOAuthMigrationStatus", "runUpstreamOAuthMigration", "enableUpstreamAuthEnforcement", "disableUpstreamAuthEnforcement", "backfillMcpAuthGrants", "getOrganizationNetworkIngress", "moveOrganizationNetworkIngressToGateway"}
 
 // AdminBackfillMCPAuthGrantsResult is the result type of the admin service
 // backfillMcpAuthGrants method.
@@ -1082,6 +1092,58 @@ type AdminMeterUsageResponse struct {
 	MeasurementMethod string
 }
 
+// An organization's private network ingress and the runtime that hosts it.
+type AdminNetworkIngress struct {
+	// The ingress ID.
+	ID string
+	// The network provider; always tailscale today.
+	Provider string
+	// The Tailscale Service label.
+	Hostname string
+	// The name clients reach once the ingress is online.
+	DNSName *string
+	// What hosts the ingress: operator for the Tailscale Kubernetes operator,
+	// gateway for the tailnet gateway.
+	Runtime string
+	// The reconciled status: pending, online, degraded, error or disabled.
+	Status string
+	// The latest reconcile failure code, if any.
+	LastError *string
+	// Whether the organization has the ingress turned on.
+	Enabled bool
+	// Whether Tailscale OAuth client credentials are saved.
+	CredentialsConfigured bool
+	// When the reconciler last observed the ingress.
+	HealthCheckedAt *string
+	// When the ingress came online.
+	ConnectedSince *string
+	// When the ingress was created.
+	CreatedAt string
+	// The tailnet gateway node identities; empty while the operator hosts the
+	// ingress.
+	GatewayNodes []*AdminNetworkIngressGatewayNode
+}
+
+// One tailnet gateway node identity for an ingress, as last reported by the
+// gateway pod hosting it.
+type AdminNetworkIngressGatewayNode struct {
+	// The node identity index; it equals the gateway pod ordinal that hosts it.
+	Slot int32
+	// The latest heartbeat status: pending, starting, online, draining, error or
+	// stopped.
+	Status string
+	// The gateway pod that last reported this slot.
+	PodName *string
+	// The latest failure the pod reported, if any.
+	LastError *string
+	// When the slot last heartbeated.
+	LastSeenAt *string
+	// When the slot came online.
+	ConnectedSince *string
+	// Whether the slot is being drained and will be removed.
+	Retired bool
+}
+
 type AdminOnboardingPlan struct {
 	Slug string
 	Name string
@@ -1284,6 +1346,18 @@ type AdminOrganizationMember struct {
 	LastLogin *string
 	CreatedAt string
 	UpdatedAt string
+}
+
+// AdminOrganizationNetworkIngress is the result type of the admin service
+// getOrganizationNetworkIngress method.
+type AdminOrganizationNetworkIngress struct {
+	// The organization ID.
+	OrganizationID string
+	// The ACL tag the saved OAuth client must own before the ingress can move to
+	// the tailnet gateway.
+	GatewayTag string
+	// The organization's live ingress; absent when it has none.
+	Ingress *AdminNetworkIngress
 }
 
 // AdminOrganizationOnboardingPlaybook is the result type of the admin service
@@ -2411,6 +2485,14 @@ type GetOrganizationFeaturesPayload struct {
 	OrganizationID    string
 }
 
+// GetOrganizationNetworkIngressPayload is the payload type of the admin
+// service getOrganizationNetworkIngress method.
+type GetOrganizationNetworkIngressPayload struct {
+	AdminSessionToken *string
+	// The organization ID.
+	OrganizationID string
+}
+
 // GetOrganizationOnboardingPlaybookPayload is the payload type of the admin
 // service getOrganizationOnboardingPlaybook method.
 type GetOrganizationOnboardingPlaybookPayload struct {
@@ -2945,6 +3027,14 @@ type MigrateToGlobalIssuerPayload struct {
 	// source's clients.
 	TargetID          string
 	AdminSessionToken *string
+}
+
+// MoveOrganizationNetworkIngressToGatewayPayload is the payload type of the
+// admin service moveOrganizationNetworkIngressToGateway method.
+type MoveOrganizationNetworkIngressToGatewayPayload struct {
+	AdminSessionToken *string
+	// The organization ID.
+	OrganizationID string
 }
 
 // OpenOrganizationInDashboardPayload is the payload type of the admin service

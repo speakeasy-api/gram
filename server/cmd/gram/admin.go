@@ -45,6 +45,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -54,6 +55,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/loops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
 	stripeclient "github.com/speakeasy-api/gram/server/internal/thirdparty/stripe"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/tailscaleapi"
 	"github.com/speakeasy-api/gram/server/internal/trialemails"
 	"github.com/speakeasy-api/gram/server/internal/usage"
 )
@@ -340,6 +342,8 @@ func newAdminCommand() *cli.Command {
 	flags = append(flags, orgDefaultHostFlags()...)
 	flags = append(flags, pluginPublicationEmitFlag())
 	flags = append(flags, posthogFlags()...)
+	flags = append(flags, networkIngressQueueFlags()...)
+	flags = append(flags, networkIngressGatewayAPIFlags()...)
 
 	return &cli.Command{
 		Name:  "admin",
@@ -548,6 +552,11 @@ func newAdminCommand() *cli.Command {
 			} else {
 				logger.WarnContext(ctx, "Admin issuers unavailable; no application encryption key configured")
 			}
+			if migrator, err := newAdminNetworkIngressGatewayMigrator(c, logger, db, applicationEncryption, guardianPolicy); err != nil {
+				logger.WarnContext(ctx, "Tailnet gateway migration unavailable", attr.SlogError(err))
+			} else {
+				adminService.SetNetworkIngressGatewayMigrator(migrator)
+			}
 			var platformAssets *assets.Service
 			assetOptions, err := resolveAdminAssetStorage(c.String("assets-backend"), c.String("assets-uri"))
 			if err != nil {
@@ -729,4 +738,27 @@ func newAdminIssuerEncryption(key string) (*encryption.Client, error) {
 // it, admin writes that name upstream_client always fail closed.
 func newAdminUpstreamSelectorWriteGate(ctx context.Context, c *cli.Context, logger *slog.Logger, posthogClient feature.Provider) authz.UpstreamSelectorWriteGate {
 	return feature.UpstreamSelectorWrites(newFeatureFlags(ctx, c, logger, posthogClient))
+}
+
+// newAdminNetworkIngressGatewayMigrator builds the staff tool that moves an
+// organization's private network ingress onto the tailnet gateway. It needs
+// the application key to read saved Tailscale credentials and the reconcile
+// queue to hand the move to the reconciler.
+func newAdminNetworkIngressGatewayMigrator(c *cli.Context, logger *slog.Logger, db *pgxpool.Pool, enc *encryption.Client, policy *guardian.Policy) (*networkingress.GatewayMigrator, error) {
+	if enc == nil {
+		return nil, errors.New("no application encryption key configured")
+	}
+	queue := c.String(networkIngressQueueFlag)
+	if queue == "" {
+		return nil, errors.New("no network ingress reconcile task queue configured")
+	}
+	api, err := tailscaleapi.New(policy, c.String("network-ingress-tailscale-api-url"))
+	if err != nil {
+		return nil, fmt.Errorf("configure Tailscale API client: %w", err)
+	}
+	migrator, err := networkingress.NewGatewayMigrator(logger, db, enc, api, c.String("network-ingress-gateway-tag"), networkingress.NewOutboxRequester(queue), audit.NewLogger())
+	if err != nil {
+		return nil, fmt.Errorf("configure tailnet gateway migrator: %w", err)
+	}
+	return migrator, nil
 }

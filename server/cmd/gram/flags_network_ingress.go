@@ -40,7 +40,27 @@ func networkIngressQueueFlags() []cli.Flag {
 	}
 }
 
+// networkIngressGatewayAPIFlags configure how a process talks to the Tailscale
+// API on the tailnet gateway's behalf. The reconciler and the admin server
+// both need them, so they are defined once.
+func networkIngressGatewayAPIFlags() []cli.Flag {
+	return []cli.Flag{
+		&cli.StringFlag{
+			Name: "network-ingress-gateway-tag", Usage: "Tailscale tag carried by gateway auth keys and services",
+			EnvVars: []string{"GRAM_NETWORK_INGRESS_GATEWAY_TAG"}, Value: tailnetgateway.DefaultTag, Action: validateNetworkIngressTag,
+		},
+		&cli.StringFlag{
+			Name: "network-ingress-tailscale-api-url", Usage: "Tailscale API base URL override for tests",
+			EnvVars: []string{"GRAM_NETWORK_INGRESS_TAILSCALE_API_URL"},
+		},
+	}
+}
+
 func networkIngressProviderFlags() []cli.Flag {
+	return append(networkIngressGatewayAPIFlags(), networkIngressProviderOnlyFlags()...)
+}
+
+func networkIngressProviderOnlyFlags() []cli.Flag {
 	return []cli.Flag{
 		&cli.BoolFlag{
 			Name:    networkIngressMutationFlag,
@@ -135,17 +155,9 @@ func networkIngressProviderFlags() []cli.Flag {
 			Name: "network-ingress-gateway-enabled", Usage: "Tailnet gateway pods are deployed, so the reconciler may host gateway ingresses; without it they wait as provider-unavailable",
 			EnvVars: []string{"GRAM_NETWORK_INGRESS_GATEWAY_ENABLED"}, Value: false,
 		},
-		&cli.StringFlag{
-			Name: "network-ingress-gateway-tag", Usage: "Tailscale tag carried by gateway auth keys and services",
-			EnvVars: []string{"GRAM_NETWORK_INGRESS_GATEWAY_TAG"}, Value: tailnetgateway.DefaultTag, Action: validateNetworkIngressTag,
-		},
 		&cli.IntFlag{
 			Name: "network-ingress-gateway-slots", Usage: "Node identities (gateway pod ordinals) hosting each ingress",
 			EnvVars: []string{"GRAM_NETWORK_INGRESS_GATEWAY_SLOTS"}, Value: tailnetgateway.DefaultSlots,
-		},
-		&cli.StringFlag{
-			Name: "network-ingress-tailscale-api-url", Usage: "Tailscale API base URL override for tests",
-			EnvVars: []string{"GRAM_NETWORK_INGRESS_TAILSCALE_API_URL"},
 		},
 		&cli.BoolFlag{
 			Name: "network-ingress-operator-provider-enabled", Usage: "Keep the Tailscale Kubernetes operator provider registered for existing ingresses and their teardown",

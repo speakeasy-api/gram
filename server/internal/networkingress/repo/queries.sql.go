@@ -506,6 +506,59 @@ func (q *Queries) ListDueNetworkIngresses(ctx context.Context, arg ListDueNetwor
 	return items, nil
 }
 
+const listNetworkIngressGatewayNodes = `-- name: ListNetworkIngressGatewayNodes :many
+SELECT slot, status, pod_name, node_id, last_error, last_seen_at, connected_since, retired_at
+FROM network_ingress_nodes
+WHERE network_ingress_id = $1
+  AND organization_id = $2
+ORDER BY slot
+`
+
+type ListNetworkIngressGatewayNodesParams struct {
+	NetworkIngressID uuid.UUID
+	OrganizationID   string
+}
+
+type ListNetworkIngressGatewayNodesRow struct {
+	Slot           int32
+	Status         string
+	PodName        pgtype.Text
+	NodeID         pgtype.Text
+	LastError      pgtype.Text
+	LastSeenAt     pgtype.Timestamptz
+	ConnectedSince pgtype.Timestamptz
+	RetiredAt      pgtype.Timestamptz
+}
+
+func (q *Queries) ListNetworkIngressGatewayNodes(ctx context.Context, arg ListNetworkIngressGatewayNodesParams) ([]ListNetworkIngressGatewayNodesRow, error) {
+	rows, err := q.db.Query(ctx, listNetworkIngressGatewayNodes, arg.NetworkIngressID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListNetworkIngressGatewayNodesRow
+	for rows.Next() {
+		var i ListNetworkIngressGatewayNodesRow
+		if err := rows.Scan(
+			&i.Slot,
+			&i.Status,
+			&i.PodName,
+			&i.NodeID,
+			&i.LastError,
+			&i.LastSeenAt,
+			&i.ConnectedSince,
+			&i.RetiredAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listNetworkIngressReconcileRequests = `-- name: ListNetworkIngressReconcileRequests :many
 SELECT message FROM publish_outbox
 WHERE organization_id = $1
@@ -708,6 +761,51 @@ func (q *Queries) LockNetworkIngressRowsByOrganization(ctx context.Context, orga
 		return nil, err
 	}
 	return items, nil
+}
+
+const moveNetworkIngressToGateway = `-- name: MoveNetworkIngressToGateway :one
+UPDATE network_ingresses
+SET runtime = 'gateway',
+    status = 'pending',
+    last_error = NULL,
+    updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND deleted IS FALSE
+  AND runtime IS DISTINCT FROM 'gateway'
+RETURNING id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, runtime, gateway_shard, created_at, updated_at, deleted_at, deleted
+`
+
+// Staff move an operator-hosted ingress onto the tailnet gateway. updated_at
+// is the desired-state version, so an in-flight reconcile requeues.
+func (q *Queries) MoveNetworkIngressToGateway(ctx context.Context, organizationID string) (NetworkIngress, error) {
+	row := q.db.QueryRow(ctx, moveNetworkIngressToGateway, organizationID)
+	var i NetworkIngress
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.Provider,
+		&i.Hostname,
+		&i.EndpointNamespaceKind,
+		&i.CustomDomainID,
+		&i.Enabled,
+		&i.IdentityRequired,
+		&i.CredentialsEncrypted,
+		&i.AttestorNamespace,
+		&i.AttestorServiceAccount,
+		&i.ProviderResources,
+		&i.Status,
+		&i.DnsName,
+		&i.LastError,
+		&i.HealthCheckedAt,
+		&i.ConnectedSince,
+		&i.Runtime,
+		&i.GatewayShard,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const recordDeletedNetworkIngressCleanupError = `-- name: RecordDeletedNetworkIngressCleanupError :execrows

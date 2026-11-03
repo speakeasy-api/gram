@@ -526,3 +526,13 @@ func DisableUpstreamAuthEnforcementAdminPath() string {
 func BackfillMcpAuthGrantsAdminPath() string {
 	return "/admin/mcpAuthGrants.backfill"
 }
+
+// GetOrganizationNetworkIngressAdminPath returns the URL path to the admin service getOrganizationNetworkIngress HTTP endpoint.
+func GetOrganizationNetworkIngressAdminPath() string {
+	return "/admin/organization.networkIngress"
+}
+
+// MoveOrganizationNetworkIngressToGatewayAdminPath returns the URL path to the admin service moveOrganizationNetworkIngressToGateway HTTP endpoint.
+func MoveOrganizationNetworkIngressToGatewayAdminPath() string {
+	return "/admin/organization.networkIngress.moveToGateway"
+}

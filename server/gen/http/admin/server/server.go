@@ -125,6 +125,8 @@ type Server struct {
 	EnableUpstreamAuthEnforcement           http.Handler
 	DisableUpstreamAuthEnforcement          http.Handler
 	BackfillMcpAuthGrants                   http.Handler
+	GetOrganizationNetworkIngress           http.Handler
+	MoveOrganizationNetworkIngressToGateway http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -258,6 +260,8 @@ func New(
 			{"EnableUpstreamAuthEnforcement", "POST", "/admin/upstreamOAuthMigration.enableEnforcement"},
 			{"DisableUpstreamAuthEnforcement", "POST", "/admin/upstreamOAuthMigration.disableEnforcement"},
 			{"BackfillMcpAuthGrants", "POST", "/admin/mcpAuthGrants.backfill"},
+			{"GetOrganizationNetworkIngress", "GET", "/admin/organization.networkIngress"},
+			{"MoveOrganizationNetworkIngressToGateway", "POST", "/admin/organization.networkIngress.moveToGateway"},
 		},
 		Login:                                   NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                                NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -363,6 +367,8 @@ func New(
 		EnableUpstreamAuthEnforcement:           NewEnableUpstreamAuthEnforcementHandler(e.EnableUpstreamAuthEnforcement, mux, decoder, encoder, errhandler, formatter),
 		DisableUpstreamAuthEnforcement:          NewDisableUpstreamAuthEnforcementHandler(e.DisableUpstreamAuthEnforcement, mux, decoder, encoder, errhandler, formatter),
 		BackfillMcpAuthGrants:                   NewBackfillMcpAuthGrantsHandler(e.BackfillMcpAuthGrants, mux, decoder, encoder, errhandler, formatter),
+		GetOrganizationNetworkIngress:           NewGetOrganizationNetworkIngressHandler(e.GetOrganizationNetworkIngress, mux, decoder, encoder, errhandler, formatter),
+		MoveOrganizationNetworkIngressToGateway: NewMoveOrganizationNetworkIngressToGatewayHandler(e.MoveOrganizationNetworkIngressToGateway, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -475,6 +481,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.EnableUpstreamAuthEnforcement = m(s.EnableUpstreamAuthEnforcement)
 	s.DisableUpstreamAuthEnforcement = m(s.DisableUpstreamAuthEnforcement)
 	s.BackfillMcpAuthGrants = m(s.BackfillMcpAuthGrants)
+	s.GetOrganizationNetworkIngress = m(s.GetOrganizationNetworkIngress)
+	s.MoveOrganizationNetworkIngressToGateway = m(s.MoveOrganizationNetworkIngressToGateway)
 }
 
 // MethodNames returns the methods served.
@@ -586,6 +594,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountEnableUpstreamAuthEnforcementHandler(mux, h.EnableUpstreamAuthEnforcement)
 	MountDisableUpstreamAuthEnforcementHandler(mux, h.DisableUpstreamAuthEnforcement)
 	MountBackfillMcpAuthGrantsHandler(mux, h.BackfillMcpAuthGrants)
+	MountGetOrganizationNetworkIngressHandler(mux, h.GetOrganizationNetworkIngress)
+	MountMoveOrganizationNetworkIngressToGatewayHandler(mux, h.MoveOrganizationNetworkIngressToGateway)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -6168,6 +6178,114 @@ func NewBackfillMcpAuthGrantsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "backfillMcpAuthGrants")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetOrganizationNetworkIngressHandler configures the mux to serve the
+// "admin" service "getOrganizationNetworkIngress" endpoint.
+func MountGetOrganizationNetworkIngressHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/organization.networkIngress", f)
+}
+
+// NewGetOrganizationNetworkIngressHandler creates a HTTP handler which loads
+// the HTTP request and calls the "admin" service
+// "getOrganizationNetworkIngress" endpoint.
+func NewGetOrganizationNetworkIngressHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetOrganizationNetworkIngressRequest(mux, decoder)
+		encodeResponse = EncodeGetOrganizationNetworkIngressResponse(encoder)
+		encodeError    = EncodeGetOrganizationNetworkIngressError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getOrganizationNetworkIngress")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountMoveOrganizationNetworkIngressToGatewayHandler configures the mux to
+// serve the "admin" service "moveOrganizationNetworkIngressToGateway" endpoint.
+func MountMoveOrganizationNetworkIngressToGatewayHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/admin/organization.networkIngress.moveToGateway", f)
+}
+
+// NewMoveOrganizationNetworkIngressToGatewayHandler creates a HTTP handler
+// which loads the HTTP request and calls the "admin" service
+// "moveOrganizationNetworkIngressToGateway" endpoint.
+func NewMoveOrganizationNetworkIngressToGatewayHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeMoveOrganizationNetworkIngressToGatewayRequest(mux, decoder)
+		encodeResponse = EncodeMoveOrganizationNetworkIngressToGatewayResponse(encoder)
+		encodeError    = EncodeMoveOrganizationNetworkIngressToGatewayError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "moveOrganizationNetworkIngressToGateway")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

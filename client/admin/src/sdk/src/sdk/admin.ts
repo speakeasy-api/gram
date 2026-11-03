@@ -37,6 +37,7 @@ import { adminGetOnboardingStackOptions } from "../funcs/adminGetOnboardingStack
 import { adminGetOrganization } from "../funcs/adminGetOrganization.js";
 import { adminGetOrganizationChatAnalysisSettings } from "../funcs/adminGetOrganizationChatAnalysisSettings.js";
 import { adminGetOrganizationFeatures } from "../funcs/adminGetOrganizationFeatures.js";
+import { adminGetOrganizationNetworkIngress } from "../funcs/adminGetOrganizationNetworkIngress.js";
 import { adminGetOrganizationOnboardingPlaybook } from "../funcs/adminGetOrganizationOnboardingPlaybook.js";
 import { adminGetOrganizationOnboardingStack } from "../funcs/adminGetOrganizationOnboardingStack.js";
 import { adminGetOrganizationStats } from "../funcs/adminGetOrganizationStats.js";
@@ -76,6 +77,7 @@ import { adminLogout } from "../funcs/adminLogout.js";
 import { adminMarkEnterpriseTrialConverted } from "../funcs/adminMarkEnterpriseTrialConverted.js";
 import { adminMigrateExternalMcpServers } from "../funcs/adminMigrateExternalMcpServers.js";
 import { adminMigrateToGlobalIssuer } from "../funcs/adminMigrateToGlobalIssuer.js";
+import { adminMoveOrganizationNetworkIngressToGateway } from "../funcs/adminMoveOrganizationNetworkIngressToGateway.js";
 import { adminPreviewExternalMcpMigration } from "../funcs/adminPreviewExternalMcpMigration.js";
 import { adminPromoteRegistryCandidate } from "../funcs/adminPromoteRegistryCandidate.js";
 import { adminRearmTrial } from "../funcs/adminRearmTrial.js";
@@ -132,6 +134,7 @@ import { AdminOnboardingStepList } from "../models/components/adminonboardingste
 import { AdminOnboardingUseCase } from "../models/components/adminonboardingusecase.js";
 import { AdminOnboardingUseCaseList } from "../models/components/adminonboardingusecaselist.js";
 import { AdminOrganization } from "../models/components/adminorganization.js";
+import { AdminOrganizationNetworkIngress } from "../models/components/adminorganizationnetworkingress.js";
 import { AdminOrganizationOnboardingPlaybook } from "../models/components/adminorganizationonboardingplaybook.js";
 import { AdminOrganizationStats } from "../models/components/adminorganizationstats.js";
 import { AdminPaygBillingSummary } from "../models/components/adminpaygbillingsummary.js";
@@ -181,6 +184,7 @@ import { MarkEnterpriseTrialConvertedResult } from "../models/components/markent
 import { MigrateExternalMcpServersRequestBody } from "../models/components/migrateexternalmcpserversrequestbody.js";
 import { MigrateRemoteSessionIssuerRequestBody } from "../models/components/migrateremotesessionissuerrequestbody.js";
 import { MigrateRemoteSessionIssuerResult } from "../models/components/migrateremotesessionissuerresult.js";
+import { MoveOrganizationNetworkIngressToGatewayRequestBody } from "../models/components/moveorganizationnetworkingresstogatewayrequestbody.js";
 import { PreviewExternalMcpMigrationRequestBody } from "../models/components/previewexternalmcpmigrationrequestbody.js";
 import { ProductFeatures } from "../models/components/productfeatures.js";
 import { PromoteRegistryCandidateRequestBody } from "../models/components/promoteregistrycandidaterequestbody.js";
@@ -226,6 +230,7 @@ import { AdminGetMeterUsageRequest } from "../models/operations/admingetmeterusa
 import { AdminGetOrganizationRequest } from "../models/operations/admingetorganization.js";
 import { AdminGetOrganizationChatAnalysisSettingsRequest } from "../models/operations/admingetorganizationchatanalysissettings.js";
 import { AdminGetOrganizationFeaturesRequest } from "../models/operations/admingetorganizationfeatures.js";
+import { AdminGetOrganizationNetworkIngressRequest } from "../models/operations/admingetorganizationnetworkingress.js";
 import { AdminGetOrganizationOnboardingPlaybookRequest } from "../models/operations/admingetorganizationonboardingplaybook.js";
 import { AdminGetOrganizationOnboardingStackRequest } from "../models/operations/admingetorganizationonboardingstack.js";
 import { AdminGetPaygBillingSummaryRequest } from "../models/operations/admingetpaygbillingsummary.js";
@@ -798,6 +803,40 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminListOrganizationMembersResult> {
     return unwrapAsync(adminListOrganizationMembers(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * getOrganizationNetworkIngress admin
+   *
+   * @remarks
+   * Reports an organization's private network ingress, which runtime hosts it, and how its tailnet gateway nodes are doing.
+   */
+  async getOrganizationNetworkIngress(
+    request: AdminGetOrganizationNetworkIngressRequest,
+    options?: RequestOptions,
+  ): Promise<AdminOrganizationNetworkIngress> {
+    return unwrapAsync(adminGetOrganizationNetworkIngress(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * moveOrganizationNetworkIngressToGateway admin
+   *
+   * @remarks
+   * Moves an organization's private network ingress from the Tailscale operator to the tailnet gateway. The saved OAuth client is checked first by minting and revoking a gateway-tagged key; on success the reconciler tears down the operator resources and brings the gateway up, with a short gap in private access while the service changes hosts. Already-moved ingresses are returned unchanged.
+   */
+  async moveOrganizationNetworkIngressToGateway(
+    request: MoveOrganizationNetworkIngressToGatewayRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOrganizationNetworkIngress> {
+    return unwrapAsync(adminMoveOrganizationNetworkIngressToGateway(
       this,
       request,
       options,

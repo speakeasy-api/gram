@@ -24984,6 +24984,477 @@ func DecodeBackfillMcpAuthGrantsResponse(decoder func(*http.Response) goahttp.De
 	}
 }
 
+// BuildGetOrganizationNetworkIngressRequest instantiates a HTTP request object
+// with method and path set to call the "admin" service
+// "getOrganizationNetworkIngress" endpoint
+func (c *Client) BuildGetOrganizationNetworkIngressRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetOrganizationNetworkIngressAdminPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "getOrganizationNetworkIngress", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetOrganizationNetworkIngressRequest returns an encoder for requests
+// sent to the admin getOrganizationNetworkIngress server.
+func EncodeGetOrganizationNetworkIngressRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.GetOrganizationNetworkIngressPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "getOrganizationNetworkIngress", "*admin.GetOrganizationNetworkIngressPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		values := req.URL.Query()
+		values.Add("organization_id", p.OrganizationID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetOrganizationNetworkIngressResponse returns a decoder for responses
+// returned by the admin getOrganizationNetworkIngress endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeGetOrganizationNetworkIngressResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetOrganizationNetworkIngressResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetOrganizationNetworkIngressResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationNetworkIngress", err)
+			}
+			err = ValidateGetOrganizationNetworkIngressResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationNetworkIngress", err)
+			}
+			res := NewGetOrganizationNetworkIngressAdminOrganizationNetworkIngressOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetOrganizationNetworkIngressUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationNetworkIngress", err)
+			}
+			err = ValidateGetOrganizationNetworkIngressUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationNetworkIngress", err)
+			}
+			return nil, NewGetOrganizationNetworkIngressUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetOrganizationNetworkIngressForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationNetworkIngress", err)
+			}
+			err = ValidateGetOrganizationNetworkIngressForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationNetworkIngress", err)
+			}
+			return nil, NewGetOrganizationNetworkIngressForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetOrganizationNetworkIngressBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationNetworkIngress", err)
+			}
+			err = ValidateGetOrganizationNetworkIngressBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationNetworkIngress", err)
+			}
+			return nil, NewGetOrganizationNetworkIngressBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetOrganizationNetworkIngressNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationNetworkIngress", err)
+			}
+			err = ValidateGetOrganizationNetworkIngressNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationNetworkIngress", err)
+			}
+			return nil, NewGetOrganizationNetworkIngressNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetOrganizationNetworkIngressConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationNetworkIngress", err)
+			}
+			err = ValidateGetOrganizationNetworkIngressConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationNetworkIngress", err)
+			}
+			return nil, NewGetOrganizationNetworkIngressConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetOrganizationNetworkIngressUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationNetworkIngress", err)
+			}
+			err = ValidateGetOrganizationNetworkIngressUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationNetworkIngress", err)
+			}
+			return nil, NewGetOrganizationNetworkIngressUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetOrganizationNetworkIngressInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationNetworkIngress", err)
+			}
+			err = ValidateGetOrganizationNetworkIngressInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationNetworkIngress", err)
+			}
+			return nil, NewGetOrganizationNetworkIngressInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetOrganizationNetworkIngressInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getOrganizationNetworkIngress", err)
+				}
+				err = ValidateGetOrganizationNetworkIngressInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getOrganizationNetworkIngress", err)
+				}
+				return nil, NewGetOrganizationNetworkIngressInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetOrganizationNetworkIngressUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "getOrganizationNetworkIngress", err)
+				}
+				err = ValidateGetOrganizationNetworkIngressUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "getOrganizationNetworkIngress", err)
+				}
+				return nil, NewGetOrganizationNetworkIngressUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "getOrganizationNetworkIngress", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetOrganizationNetworkIngressGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "getOrganizationNetworkIngress", err)
+			}
+			err = ValidateGetOrganizationNetworkIngressGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "getOrganizationNetworkIngress", err)
+			}
+			return nil, NewGetOrganizationNetworkIngressGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "getOrganizationNetworkIngress", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildMoveOrganizationNetworkIngressToGatewayRequest instantiates a HTTP
+// request object with method and path set to call the "admin" service
+// "moveOrganizationNetworkIngressToGateway" endpoint
+func (c *Client) BuildMoveOrganizationNetworkIngressToGatewayRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: MoveOrganizationNetworkIngressToGatewayAdminPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("admin", "moveOrganizationNetworkIngressToGateway", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeMoveOrganizationNetworkIngressToGatewayRequest returns an encoder for
+// requests sent to the admin moveOrganizationNetworkIngressToGateway server.
+func EncodeMoveOrganizationNetworkIngressToGatewayRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*admin.MoveOrganizationNetworkIngressToGatewayPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("admin", "moveOrganizationNetworkIngressToGateway", "*admin.MoveOrganizationNetworkIngressToGatewayPayload", v)
+		}
+		if p.AdminSessionToken != nil {
+			head := *p.AdminSessionToken
+			req.Header.Set("Authorization", head)
+		}
+		body := NewMoveOrganizationNetworkIngressToGatewayRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("admin", "moveOrganizationNetworkIngressToGateway", err)
+		}
+		return nil
+	}
+}
+
+// DecodeMoveOrganizationNetworkIngressToGatewayResponse returns a decoder for
+// responses returned by the admin moveOrganizationNetworkIngressToGateway
+// endpoint. restoreBody controls whether the response body should be restored
+// after having been read.
+// DecodeMoveOrganizationNetworkIngressToGatewayResponse may return the
+// following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeMoveOrganizationNetworkIngressToGatewayResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body MoveOrganizationNetworkIngressToGatewayResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "moveOrganizationNetworkIngressToGateway", err)
+			}
+			err = ValidateMoveOrganizationNetworkIngressToGatewayResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "moveOrganizationNetworkIngressToGateway", err)
+			}
+			res := NewMoveOrganizationNetworkIngressToGatewayAdminOrganizationNetworkIngressOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body MoveOrganizationNetworkIngressToGatewayUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "moveOrganizationNetworkIngressToGateway", err)
+			}
+			err = ValidateMoveOrganizationNetworkIngressToGatewayUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "moveOrganizationNetworkIngressToGateway", err)
+			}
+			return nil, NewMoveOrganizationNetworkIngressToGatewayUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body MoveOrganizationNetworkIngressToGatewayForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "moveOrganizationNetworkIngressToGateway", err)
+			}
+			err = ValidateMoveOrganizationNetworkIngressToGatewayForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "moveOrganizationNetworkIngressToGateway", err)
+			}
+			return nil, NewMoveOrganizationNetworkIngressToGatewayForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body MoveOrganizationNetworkIngressToGatewayBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "moveOrganizationNetworkIngressToGateway", err)
+			}
+			err = ValidateMoveOrganizationNetworkIngressToGatewayBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "moveOrganizationNetworkIngressToGateway", err)
+			}
+			return nil, NewMoveOrganizationNetworkIngressToGatewayBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body MoveOrganizationNetworkIngressToGatewayNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "moveOrganizationNetworkIngressToGateway", err)
+			}
+			err = ValidateMoveOrganizationNetworkIngressToGatewayNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "moveOrganizationNetworkIngressToGateway", err)
+			}
+			return nil, NewMoveOrganizationNetworkIngressToGatewayNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body MoveOrganizationNetworkIngressToGatewayConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "moveOrganizationNetworkIngressToGateway", err)
+			}
+			err = ValidateMoveOrganizationNetworkIngressToGatewayConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "moveOrganizationNetworkIngressToGateway", err)
+			}
+			return nil, NewMoveOrganizationNetworkIngressToGatewayConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body MoveOrganizationNetworkIngressToGatewayUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "moveOrganizationNetworkIngressToGateway", err)
+			}
+			err = ValidateMoveOrganizationNetworkIngressToGatewayUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "moveOrganizationNetworkIngressToGateway", err)
+			}
+			return nil, NewMoveOrganizationNetworkIngressToGatewayUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body MoveOrganizationNetworkIngressToGatewayInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "moveOrganizationNetworkIngressToGateway", err)
+			}
+			err = ValidateMoveOrganizationNetworkIngressToGatewayInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "moveOrganizationNetworkIngressToGateway", err)
+			}
+			return nil, NewMoveOrganizationNetworkIngressToGatewayInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body MoveOrganizationNetworkIngressToGatewayInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "moveOrganizationNetworkIngressToGateway", err)
+				}
+				err = ValidateMoveOrganizationNetworkIngressToGatewayInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "moveOrganizationNetworkIngressToGateway", err)
+				}
+				return nil, NewMoveOrganizationNetworkIngressToGatewayInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body MoveOrganizationNetworkIngressToGatewayUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("admin", "moveOrganizationNetworkIngressToGateway", err)
+				}
+				err = ValidateMoveOrganizationNetworkIngressToGatewayUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("admin", "moveOrganizationNetworkIngressToGateway", err)
+				}
+				return nil, NewMoveOrganizationNetworkIngressToGatewayUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("admin", "moveOrganizationNetworkIngressToGateway", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body MoveOrganizationNetworkIngressToGatewayGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("admin", "moveOrganizationNetworkIngressToGateway", err)
+			}
+			err = ValidateMoveOrganizationNetworkIngressToGatewayGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("admin", "moveOrganizationNetworkIngressToGateway", err)
+			}
+			return nil, NewMoveOrganizationNetworkIngressToGatewayGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("admin", "moveOrganizationNetworkIngressToGateway", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAdminOrganizationMemberResponseBodyToAdminAdminOrganizationMember
 // builds a value of type *admin.AdminOrganizationMember from a value of type
 // *AdminOrganizationMemberResponseBody.
@@ -26916,6 +27387,56 @@ func unmarshalAdminUpstreamOAuthMigrationStatusResponseBodyToAdminAdminUpstreamO
 	}
 	if v.Enforcement != nil {
 		res.Enforcement = unmarshalAdminUpstreamAuthEnforcementResponseBodyToAdminAdminUpstreamAuthEnforcement(v.Enforcement)
+	}
+
+	return res
+}
+
+// unmarshalAdminNetworkIngressResponseBodyToAdminAdminNetworkIngress builds a
+// value of type *admin.AdminNetworkIngress from a value of type
+// *AdminNetworkIngressResponseBody.
+func unmarshalAdminNetworkIngressResponseBodyToAdminAdminNetworkIngress(v *AdminNetworkIngressResponseBody) *admin.AdminNetworkIngress {
+	if v == nil {
+		return nil
+	}
+	res := &admin.AdminNetworkIngress{
+		ID:                    *v.ID,
+		Provider:              *v.Provider,
+		Hostname:              *v.Hostname,
+		DNSName:               v.DNSName,
+		Runtime:               *v.Runtime,
+		Status:                *v.Status,
+		LastError:             v.LastError,
+		Enabled:               *v.Enabled,
+		CredentialsConfigured: *v.CredentialsConfigured,
+		HealthCheckedAt:       v.HealthCheckedAt,
+		ConnectedSince:        v.ConnectedSince,
+		CreatedAt:             *v.CreatedAt,
+	}
+	res.GatewayNodes = make([]*admin.AdminNetworkIngressGatewayNode, len(v.GatewayNodes))
+	for i, val := range v.GatewayNodes {
+		if val == nil {
+			res.GatewayNodes[i] = nil
+			continue
+		}
+		res.GatewayNodes[i] = unmarshalAdminNetworkIngressGatewayNodeResponseBodyToAdminAdminNetworkIngressGatewayNode(val)
+	}
+
+	return res
+}
+
+// unmarshalAdminNetworkIngressGatewayNodeResponseBodyToAdminAdminNetworkIngressGatewayNode
+// builds a value of type *admin.AdminNetworkIngressGatewayNode from a value of
+// type *AdminNetworkIngressGatewayNodeResponseBody.
+func unmarshalAdminNetworkIngressGatewayNodeResponseBodyToAdminAdminNetworkIngressGatewayNode(v *AdminNetworkIngressGatewayNodeResponseBody) *admin.AdminNetworkIngressGatewayNode {
+	res := &admin.AdminNetworkIngressGatewayNode{
+		Slot:           *v.Slot,
+		Status:         *v.Status,
+		PodName:        v.PodName,
+		LastError:      v.LastError,
+		LastSeenAt:     v.LastSeenAt,
+		ConnectedSince: v.ConnectedSince,
+		Retired:        *v.Retired,
 	}
 
 	return res

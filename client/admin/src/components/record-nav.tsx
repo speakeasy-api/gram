@@ -6,6 +6,7 @@ import {
   FolderIcon,
   HistoryIcon,
   LayoutGridIcon,
+  NetworkIcon,
   ServerIcon,
   SlidersHorizontalIcon,
   UsersIcon,
@@ -119,6 +120,10 @@ export function RecordNav({
   });
   const onCoverage = !!matchRoute({
     to: "/organizations/$idOrSlug/coverage",
+    params: { idOrSlug },
+  });
+  const onPrivateNetwork = !!matchRoute({
+    to: "/organizations/$idOrSlug/private-network",
     params: { idOrSlug },
   });
 
@@ -282,6 +287,23 @@ export function RecordNav({
                 >
                   <SlidersHorizontalIcon />
                   <span>Features</span>
+                </Link>
+              </SidebarMenuButton>
+            </SidebarMenuItem>
+
+            <SidebarMenuItem>
+              <SidebarMenuButton
+                asChild
+                isActive={onPrivateNetwork}
+                tooltip="Private network"
+              >
+                <Link
+                  to="/organizations/$idOrSlug/private-network"
+                  params={{ idOrSlug }}
+                  {...currentProps(onPrivateNetwork)}
+                >
+                  <NetworkIcon />
+                  <span>Private network</span>
                 </Link>
               </SidebarMenuButton>
             </SidebarMenuItem>

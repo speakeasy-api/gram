@@ -2784,6 +2784,163 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: listOrganizationMembers
+  /admin/organization.networkIngress:
+    get:
+      description: Reports an organization's private network ingress, which runtime hosts it, and how its tailnet gateway nodes are doing.
+      operationId: adminGetOrganizationNetworkIngress
+      parameters:
+        - allowEmptyValue: true
+          description: The organization ID.
+          in: query
+          name: organization_id
+          required: true
+          schema:
+            description: The organization ID.
+            type: string
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganizationNetworkIngress'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getOrganizationNetworkIngress admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getOrganizationNetworkIngress
+      x-speakeasy-react-hook:
+        name: AdminOrganizationNetworkIngress
+  /admin/organization.networkIngress.moveToGateway:
+    post:
+      description: Moves an organization's private network ingress from the Tailscale operator to the tailnet gateway. The saved OAuth client is checked first by minting and revoking a gateway-tagged key; on success the reconciler tears down the operator resources and brings the gateway up, with a short gap in private access while the service changes hosts. Already-moved ingresses are returned unchanged.
+      operationId: adminMoveOrganizationNetworkIngressToGateway
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/MoveOrganizationNetworkIngressToGatewayRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganizationNetworkIngress'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: moveOrganizationNetworkIngressToGateway admin
+      tags:
+        - admin
+      x-speakeasy-name-override: moveOrganizationNetworkIngressToGateway
+      x-speakeasy-react-hook:
+        name: MoveAdminOrganizationNetworkIngressToGateway
   /admin/organization.onboardingPlaybook:
     get:
       description: Read the playbook assigned to an organization and how each of its steps fares against the recorded stack.
@@ -9838,6 +9995,100 @@ components:
         - buckets
         - queried_at
         - measurement_method
+    AdminNetworkIngress:
+      type: object
+      properties:
+        connected_since:
+          type: string
+          description: When the ingress came online.
+          format: date-time
+        created_at:
+          type: string
+          description: When the ingress was created.
+          format: date-time
+        credentials_configured:
+          type: boolean
+          description: Whether Tailscale OAuth client credentials are saved.
+        dns_name:
+          type: string
+          description: The name clients reach once the ingress is online.
+        enabled:
+          type: boolean
+          description: Whether the organization has the ingress turned on.
+        gateway_nodes:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminNetworkIngressGatewayNode'
+          description: The tailnet gateway node identities; empty while the operator hosts the ingress.
+        health_checked_at:
+          type: string
+          description: When the reconciler last observed the ingress.
+          format: date-time
+        hostname:
+          type: string
+          description: The Tailscale Service label.
+        id:
+          type: string
+          description: The ingress ID.
+          format: uuid
+        last_error:
+          type: string
+          description: The latest reconcile failure code, if any.
+        provider:
+          type: string
+          description: The network provider; always tailscale today.
+        runtime:
+          type: string
+          description: 'What hosts the ingress: operator for the Tailscale Kubernetes operator, gateway for the tailnet gateway.'
+          enum:
+            - operator
+            - gateway
+        status:
+          type: string
+          description: 'The reconciled status: pending, online, degraded, error or disabled.'
+      description: An organization's private network ingress and the runtime that hosts it.
+      required:
+        - id
+        - provider
+        - hostname
+        - runtime
+        - status
+        - enabled
+        - credentials_configured
+        - created_at
+        - gateway_nodes
+    AdminNetworkIngressGatewayNode:
+      type: object
+      properties:
+        connected_since:
+          type: string
+          description: When the slot came online.
+          format: date-time
+        last_error:
+          type: string
+          description: The latest failure the pod reported, if any.
+        last_seen_at:
+          type: string
+          description: When the slot last heartbeated.
+          format: date-time
+        pod_name:
+          type: string
+          description: The gateway pod that last reported this slot.
+        retired:
+          type: boolean
+          description: Whether the slot is being drained and will be removed.
+        slot:
+          type: integer
+          description: The node identity index; it equals the gateway pod ordinal that hosts it.
+          format: int32
+        status:
+          type: string
+          description: 'The latest heartbeat status: pending, starting, online, draining, error or stopped.'
+      description: One tailnet gateway node identity for an ingress, as last reported by the gateway pod hosting it.
+      required:
+        - slot
+        - status
+        - retired
     AdminOnboardingPlan:
       type: object
       properties:
@@ -10203,6 +10454,21 @@ components:
         - display_name
         - created_at
         - updated_at
+    AdminOrganizationNetworkIngress:
+      type: object
+      properties:
+        gateway_tag:
+          type: string
+          description: The ACL tag the saved OAuth client must own before the ingress can move to the tailnet gateway.
+        ingress:
+          $ref: '#/components/schemas/AdminNetworkIngress'
+        organization_id:
+          type: string
+          description: The organization ID.
+      description: One organization's private network ingress, for staff moving it to the tailnet gateway.
+      required:
+        - organization_id
+        - gateway_tag
     AdminOrganizationOnboardingPlaybook:
       type: object
       properties:
@@ -12238,6 +12504,14 @@ components:
         - issuer
         - clients_migrated
         - source_deleted
+    MoveOrganizationNetworkIngressToGatewayRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+          description: The organization ID.
+      required:
+        - organization_id
     PreviewExternalMcpMigrationRequestBody:
       type: object
       properties:
