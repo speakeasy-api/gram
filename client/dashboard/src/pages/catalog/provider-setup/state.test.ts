@@ -77,3 +77,32 @@ describe("Slack setup state", () => {
     expect(reduce(state, { type: "next" }).step).toBe("test");
   });
 });
+
+it("clears the permission-change reminder only after a successful connection test", () => {
+  const changed = reduce(
+    { ...initialState("slack"), saved: true },
+    { type: "field", field: "access", value: "read" },
+  );
+  expect(
+    reduce(changed, { type: "connection", authorized: true }).configChanged,
+  ).toBe(true);
+  expect(
+    reduce(changed, { type: "connection", tested: false }).configChanged,
+  ).toBe(true);
+  expect(
+    reduce(changed, { type: "connection", authorized: true, tested: true })
+      .configChanged,
+  ).toBe(false);
+});
+
+it("does not treat saved-configuration hydration as a permission change", () => {
+  const state = reduce(initialState("slack"), {
+    type: "field",
+    field: "access",
+    value: "read",
+    source: "configuration",
+  });
+  expect(state.values.access).toBe("read");
+  expect(state.accessChosen).toBe(false);
+  expect(state.configChanged).toBe(false);
+});

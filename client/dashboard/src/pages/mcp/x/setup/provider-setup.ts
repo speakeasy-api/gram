@@ -73,7 +73,7 @@ export function saveProviderProgress(key: string, state: State): void {
         ),
         values: {
           appChoice: state.values.appChoice,
-          access: state.values.access,
+          ...(state.accessChosen ? { access: state.values.access } : {}),
         },
       }),
     );
@@ -110,8 +110,10 @@ export function loadProviderProgress(
     if (
       "access" in values &&
       (values.access === "all" || values.access === "read")
-    )
+    ) {
       initial.values.access = values.access;
+      initial.accessChosen = true;
+    }
     // Resolve branch-specific steps after restoring choices.
     const validSteps = steps(initial).map((step) => step.id);
     if (

@@ -101,3 +101,31 @@ it("allows a waiting sign-in to be cancelled", async () => {
   await user.click(screen.getByRole("button", { name: "Cancel sign-in" }));
   expect(cancelSignIn).toHaveBeenCalledTimes(1);
 });
+
+it.each([0, 1, 2])(
+  "announces discovery of %s tools with the correct singular form",
+  (count) => {
+    const dispatch = vi.fn<() => void>();
+    render(
+      <SetupContext
+        value={{
+          s: {
+            ...initialState("slack"),
+            saved: true,
+            authorized: true,
+            tested: true,
+          },
+          dispatch,
+          live: connectionFixture(dispatch, { toolCount: count }),
+        }}
+      >
+        <ConnectionTask />
+      </SetupContext>,
+    );
+    expect(
+      screen.getByText(
+        `Connected · ${count} ${count === 1 ? "tool" : "tools"} discovered. No tools were run.`,
+      ),
+    ).toBeDefined();
+  },
+);

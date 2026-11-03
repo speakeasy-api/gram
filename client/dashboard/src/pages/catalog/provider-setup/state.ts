@@ -22,6 +22,7 @@ export type State = {
   returnToTest: boolean;
   showSecret: boolean;
   configChanged: boolean;
+  accessChosen: boolean;
 };
 export function initialState(provider: Provider): State {
   return {
@@ -37,6 +38,7 @@ export function initialState(provider: Provider): State {
     returnToTest: false,
     showSecret: false,
     configChanged: false,
+    accessChosen: false,
   };
 }
 export function steps(s: State): { id: string; title: string }[] {
@@ -71,8 +73,9 @@ export type Action =
       saved?: boolean;
       authorized?: boolean;
       tested?: boolean;
+      configChanged?: boolean;
     }
-  | { type: "field"; field: FieldName; value: string }
+  | { type: "field"; field: FieldName; value: string; source?: "configuration" }
   | { type: "goto"; step: string; correction?: boolean }
   | { type: "next" }
   | { type: "back" }
@@ -86,6 +89,8 @@ export function reduce(s: State, a: Action): State {
         saved: a.saved ?? s.saved,
         authorized: a.authorized ?? s.authorized,
         tested: a.tested ?? s.tested,
+        configChanged:
+          a.tested === true ? false : (a.configChanged ?? s.configChanged),
       };
     case "field": {
       if (s.values[a.field] === a.value) return s;
@@ -106,7 +111,10 @@ export function reduce(s: State, a: Action): State {
         next.values.clientSecret = "";
         next.showSecret = false;
       }
-      if (a.field === "access") next.configChanged = true;
+      if (a.field === "access" && a.source !== "configuration") {
+        next.configChanged = true;
+        next.accessChosen = true;
+      }
       return next;
     }
     case "goto":

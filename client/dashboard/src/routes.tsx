@@ -338,7 +338,7 @@ const ROUTE_STRUCTURE = {
         title: "MCP Server Details",
         url: ":mcpServerSlug",
         subPages: {
-          setup: { title: "Setup", url: "setup" },
+          setup: { title: "MCP Server Setup", url: "setup" },
           overview: {
             title: "MCP Server Overview",
             url: "overview",

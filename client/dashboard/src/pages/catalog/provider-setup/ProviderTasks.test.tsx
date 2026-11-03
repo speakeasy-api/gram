@@ -1,3 +1,4 @@
+import { scopesFor } from "./provider-data";
 import { connectionFixture } from "./connection-fixture";
 import { useReducer } from "react";
 import { cleanup, render, screen } from "@testing-library/react";
@@ -103,6 +104,54 @@ it.each([false, true])(
       saved
         ? "https://previous.example/callback"
         : "https://current.example/callback",
+    );
+  },
+);
+
+it.each(["all", "read"])(
+  "keeps scopes and callback consistent across Slack app instructions for %s access",
+  (access) => {
+    const initial = initialState("slack");
+    const dispatch = vi.fn<() => void>();
+    const expected = scopesFor({ values: { access } });
+    const content = (appChoice: string) => (
+      <SetupContext
+        value={{
+          s: {
+            ...initial,
+            step: "app",
+            values: { ...initial.values, appChoice, access },
+          },
+          dispatch,
+          live: connectionFixture(dispatch),
+        }}
+      >
+        <ProviderTask serverName="Slack" />
+      </SetupContext>
+    );
+    const view = render(content("new"));
+    const manifest = JSON.parse(
+      view.container.querySelector("pre")!.textContent!,
+    );
+    const href = screen
+      .getByRole("link", { name: /Create Slack app/ })
+      .getAttribute("href")!;
+    expect(
+      JSON.parse(new URL(href).searchParams.get("manifest_json")!),
+    ).toEqual(manifest);
+    expect(manifest.oauth_config.scopes.user).toEqual(expected);
+    expect(manifest.oauth_config.redirect_urls).toEqual([
+      "https://current.example/callback",
+    ]);
+    if (access === "read")
+      expect(expected.some((scope) => scope.endsWith(":write"))).toBe(false);
+    else expect(expected).toContain("chat:write");
+    view.rerender(content("existing"));
+    expect(
+      [...view.container.querySelectorAll("code")].map((el) => el.textContent),
+    ).toEqual(expected);
+    expect(screen.getByLabelText("Redirect URL").getAttribute("value")).toBe(
+      manifest.oauth_config.redirect_urls[0],
     );
   },
 );

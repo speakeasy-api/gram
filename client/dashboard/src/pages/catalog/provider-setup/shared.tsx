@@ -271,6 +271,9 @@ export function CopyAction({
       >
         <Button.Text>{copiedValue === value ? "Copied" : label}</Button.Text>
       </Button>
+      <span role="status" className="sr-only">
+        {copiedValue === value ? "Copied" : ""}
+      </span>
       {failedValue === value && (
         <FieldError>
           Couldn’t copy. Select the value and copy it manually.

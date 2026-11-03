@@ -10,7 +10,7 @@ The backend owns the staff-controlled switch and independently refuses connectio
 
 ## Backend contract
 
-The GRW-324 parent supplies the backend and generated SDK contracts. Credential saving uses `remoteSessions.commitServerIdentityConfiguration` with `targetServerOnly: true`. Saved configuration exposes the Client ID, callback and scopes, never the secret. The saved form is disabled and uses placeholder dots; Update credentials requires a new secret.
+The GRW-324 parent supplies the backend and generated SDK contracts. Credential saving uses `remoteSessions.commitServerIdentityConfiguration` with `clientMode: "manual"` and `targetServerOnly: true`. Manual client mode encrypts the supplied secret; existing-client linking does not accept or replace it. Saved configuration exposes the Client ID, callback and scopes, never the secret. The saved form is disabled and uses placeholder dots; Update credentials requires a new secret.
 
 Sign-in opens the existing first-party OAuth endpoint. Returning from the provider tab triggers `remoteSessions.testServerConnection`; only `ready` with a tool count verifies sign-in. The explicit connection test remains a separate action and never executes tools. The generated request property is `testServerConnectionRequestBody`, serialized as `{ mcp_server_id }` with the ordinary dashboard session.
 
@@ -27,3 +27,9 @@ Focused tests cover Slack state invalidation, manifest/callback consistency, sav
 The existing Platform MCP connection-status tools retain their own identity contracts; the GRW-324 live diagnostic requires a validated human browser session and intentionally excludes agents and API keys. This UI adds interactive credential entry and OAuth, not a new agent management outcome.
 
 The existing Command K MCP resource entry opens Overview; setup is a transient task within that resource, with no new named resource. No demo credentials or fake readiness are seeded. Setup-guide sidebar visibility remains deferred.
+
+## Setup entry and identity
+
+Catalog handoff is limited to installations that selected User Identity; Shared credential and Manual keep their existing installation completion paths. The optional Setup entry is a way to configure User Identity, so it is also available on unconfigured official Slack servers. `deriveIdentityMode` reports `none` until a client is linked; requiring `user` would prevent a new Slack installation from saving its first credentials. The installation choice is not stored as an enduring server mode.
+
+Opening Setup does not report a configured or verified connection. A stored Authorization header blocks the backend test with `authorization_header_conflict`, and shared issuer changes require the existing dedicated-issuer flow. These safeguards prevent an existing shared credential from being accepted as a successful User Identity connection.

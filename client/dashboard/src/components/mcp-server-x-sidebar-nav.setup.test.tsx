@@ -144,7 +144,7 @@ it.each(["disabled", "loading"] as const)(
     expect(screen.getByRole("link", { name: "Overview" })).toBeDefined();
   },
 );
-it("shows Setup only after the rollout resolves enabled, and removes it when disabled", () => {
+it("lets an unconfigured server start Setup only after enablement, and hides it when disabled", () => {
   state.rollout = "loading";
   const view = render(<Sidebar />);
   expect(screen.queryByRole("link", { name: "Setup" })).toBeNull();

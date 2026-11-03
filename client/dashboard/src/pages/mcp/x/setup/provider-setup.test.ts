@@ -37,6 +37,7 @@ describe("Slack-only setup routing", () => {
             key: "server",
             name: "Server",
             identityMode: "user",
+            remoteUrl: url,
             mcpServerId: "id",
             mcpServerParam: "server",
           },
@@ -129,6 +130,7 @@ describe("Slack progress", () => {
     saveProviderProgress(key, {
       ...state,
       step: "test",
+      accessChosen: true,
       saved: true,
       authorized: true,
       tested: true,
@@ -151,6 +153,7 @@ describe("Slack progress", () => {
     const restored = loadProviderProgress("slack", key);
     expect(restored.values.appChoice).toBe("existing");
     expect(restored.values.access).toBe("read");
+    expect(restored.accessChosen).toBe(true);
     expect(restored.values.clientId).toBe("");
     expect(restored.values.clientSecret).toBe("");
     expect([restored.saved, restored.authorized, restored.tested]).toEqual([
@@ -212,4 +215,14 @@ describe("Slack progress", () => {
       set.mockRestore();
     }
   });
+});
+
+it("does not restore an unconfirmed default as an explicit permission choice", () => {
+  const key = "unconfirmed-permissions";
+  saveProviderProgress(key, initialState("slack"));
+  expect(JSON.parse(sessionStorage.getItem(key)!).values).not.toHaveProperty(
+    "access",
+  );
+  expect(loadProviderProgress("slack", key).accessChosen).toBe(false);
+  sessionStorage.removeItem(key);
 });

@@ -12,6 +12,7 @@ import {
 } from "@/pages/catalog/provider-setup/state";
 import { scopesFor } from "@/pages/catalog/provider-setup/provider-data";
 import { useProviderConnection } from "./useProviderConnection";
+import { loadProviderProgress, saveProviderProgress } from "./provider-setup";
 
 const mocks = vi.hoisted(() => ({
   associations: vi.fn(),
@@ -1215,3 +1216,89 @@ it.each(["network", "diagnostic"] as const)(
     expect(result.current.error).toBeNull();
   },
 );
+
+describe("Slack permission choice hydration", () => {
+  it("preserves a retained read-only choice after a failed scope update and retries it after reopening", async () => {
+    const key = "failed-read-only-choice";
+    const allScopes = scopesFor(initialState("slack"));
+    const readScopes = scopesFor({ values: { access: "read" } });
+    saved("slack", allScopes);
+    mocks.updateClient.mockRejectedValueOnce(new Error("Scope update failed"));
+    const first = mount("slack", { step: "app" });
+    await waitFor(() => expect(first.result.current.state.saved).toBe(true));
+    act(() =>
+      first.result.current.changeField({ field: "access", value: "read" }),
+    );
+    await waitFor(() =>
+      expect(first.result.current.error).toContain("permissions"),
+    );
+    saveProviderProgress(key, first.result.current.state);
+    first.unmount();
+
+    const reopened = mount("slack", loadProviderProgress("slack", key));
+    await waitFor(() => expect(reopened.result.current.state.saved).toBe(true));
+    expect(reopened.result.current.state.values.access).toBe("read");
+    expect(reopened.result.current.state.configChanged).toBe(true);
+    expect(reopened.result.current.state.authorized).toBe(false);
+    expect(reopened.result.current.state.tested).toBe(false);
+    expect(mocks.updateClient).toHaveBeenCalledTimes(1);
+
+    act(() => reopened.result.current.next());
+    await waitFor(() => expect(mocks.updateClient).toHaveBeenCalledTimes(2));
+    expect(mocks.updateClient).toHaveBeenLastCalledWith({
+      updateRemoteSessionClientForm: { id: "client", scope: readScopes },
+    });
+    await waitFor(() =>
+      expect(reopened.result.current.state.step).toBe("credentials"),
+    );
+    expect(reopened.result.current.state.values.access).toBe("read");
+    sessionStorage.removeItem(key);
+  });
+
+  it("keeps an access choice made while saved configuration is loading", async () => {
+    saved("slack", scopesFor(initialState("slack")));
+    let finish!: (client: { id: string; scope: string[] }) => void;
+    mocks.client.mockReturnValueOnce(
+      new Promise((resolve) => {
+        finish = resolve;
+      }),
+    );
+    const { result } = mount("slack", { step: "app" });
+    await waitFor(() => expect(mocks.client).toHaveBeenCalled());
+    act(() => result.current.changeField({ field: "access", value: "read" }));
+    await act(async () =>
+      finish({ id: "client", scope: scopesFor(initialState("slack")) }),
+    );
+    await waitFor(() => expect(result.current.state.saved).toBe(true));
+    expect(result.current.state.values.access).toBe("read");
+    expect(mocks.updateClient).not.toHaveBeenCalled();
+  });
+
+  it("does not mark matching retained permissions as changed", async () => {
+    const key = "matching-read-only-choice";
+    const initial = initialState("slack");
+    saved("slack", scopesFor({ values: { access: "read" } }));
+    saveProviderProgress(key, {
+      ...initial,
+      accessChosen: true,
+      values: { ...initial.values, access: "read" },
+    });
+    const { result } = mount("slack", loadProviderProgress("slack", key));
+    await waitFor(() => expect(result.current.state.saved).toBe(true));
+    expect(result.current.state.values.access).toBe("read");
+    expect(result.current.state.accessChosen).toBe(true);
+    expect(result.current.state.configChanged).toBe(false);
+    expect(mocks.updateClient).not.toHaveBeenCalled();
+    sessionStorage.removeItem(key);
+  });
+
+  it("hydrates backend permissions when there is no retained or edited access choice", async () => {
+    saved("slack", scopesFor({ values: { access: "read" } }));
+    const { result } = mount("slack", { step: "app" });
+    await waitFor(() => expect(result.current.state.saved).toBe(true));
+    expect(result.current.state.values.access).toBe("read");
+    expect(result.current.state.configChanged).toBe(false);
+    expect(result.current.state.accessChosen).toBe(false);
+    expect(mocks.updateClient).not.toHaveBeenCalled();
+  });
+});

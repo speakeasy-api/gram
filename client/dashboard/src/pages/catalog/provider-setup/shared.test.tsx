@@ -36,6 +36,7 @@ describe("setup clipboard", () => {
     expect(screen.queryByText("Copied")).toBeNull();
     finish();
     await screen.findByRole("button", { name: "Copied" });
+    expect(screen.getByRole("status").textContent).toBe("Copied");
   });
   it("recovers inline from a failed clipboard write", async () => {
     const user = userEvent.setup();

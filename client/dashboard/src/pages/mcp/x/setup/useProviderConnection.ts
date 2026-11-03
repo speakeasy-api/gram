@@ -231,10 +231,11 @@ export function useProviderConnection(
     if (!status.isSuccess || hydrated.current) return;
     hydrated.current = true;
     if (status.data) {
-      if (providerKey === "slack")
+      if (providerKey === "slack" && !s.accessChosen)
         dispatch({
           type: "field",
           field: "access",
+          source: "configuration",
           value: status.data.client.scope?.includes("chat:write")
             ? "all"
             : "read",
@@ -244,9 +245,19 @@ export function useProviderConnection(
         saved: true,
         authorized: false,
         tested: false,
+        configChanged:
+          s.accessChosen &&
+          !sameScopes(status.data.client.scope, requestedScopes),
       });
     }
-  }, [status.isSuccess, status.data, dispatch, providerKey]);
+  }, [
+    status.isSuccess,
+    status.data,
+    dispatch,
+    providerKey,
+    s.accessChosen,
+    requestedScopes,
+  ]);
 
   const revokeSessions = useCallback(
     async (items: { id: string }[], run = generation.current) => {

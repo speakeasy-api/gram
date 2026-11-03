@@ -169,8 +169,9 @@ export function ConnectionTask(): JSX.Element {
           {live.toolCount != null && s.tested && (
             <tr>
               <td colSpan={2} className="pt-5 text-sm text-muted-foreground">
-                Connected · {live.toolCount} tools discovered. No tools were
-                run.
+                Connected · {live.toolCount}{" "}
+                {live.toolCount === 1 ? "tool" : "tools"} discovered. No tools
+                were run.
               </td>
             </tr>
           )}
