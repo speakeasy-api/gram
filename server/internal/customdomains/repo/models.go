@@ -43,10 +43,6 @@ type CustomDomain struct {
 	// @access: confidential
 	ConsecutiveFailures pgtype.Int4
 	// @access: confidential
-	DnsTargetToken pgtype.Text
-	// @access: confidential
-	DnsRoutingMethod pgtype.Text
-	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz
