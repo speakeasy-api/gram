@@ -186,7 +186,11 @@ function show(search = "") {
   return { ...view, refresh: () => view.rerender(tree()) };
 }
 
+// Radix scrolls the selected option into view in browsers; jsdom lacks it.
+const originalScrollIntoView = Element.prototype.scrollIntoView;
+
 beforeEach(() => {
+  Element.prototype.scrollIntoView = vi.fn<() => void>();
   mocks.admin = true;
   mocks.organizationSlug = "example";
   mocks.configured = true;
@@ -200,6 +204,7 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
+  Element.prototype.scrollIntoView = originalScrollIntoView;
 });
 
 it("does not fetch workspace data for a non-admin", () => {
@@ -280,8 +285,6 @@ it("shows None when no default project is set", () => {
 });
 
 it("saves the chosen default project for the workspace", async () => {
-  // Radix scrolls the selected option into view in browsers.
-  Element.prototype.scrollIntoView = vi.fn<() => void>();
   const user = userEvent.setup();
   show();
   await user.click(screen.getByRole("combobox", { name: "Default project" }));
@@ -299,7 +302,6 @@ it("saves the chosen default project for the workspace", async () => {
 });
 
 it("clears the default project when None is chosen", async () => {
-  Element.prototype.scrollIntoView = vi.fn<() => void>();
   mocks.defaultProjectId = "project-alpha";
   const user = userEvent.setup();
   show();
