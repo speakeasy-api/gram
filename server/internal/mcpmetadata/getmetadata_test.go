@@ -33,11 +33,9 @@ func TestService_GetMcpMetadata_WithInstructions(t *testing.T) {
 		Slug:                   "test-mcp-get",
 		Description:            conv.ToPGText("A test MCP server"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "", Valid: false},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
-	createCanonicalWrapper(t, ctx, ti, toolset)
+	createCanonicalWrapper(t, ctx, ti, toolset, mcpservers.VisibilityDisabled)
 
 	instructions := "You have tools for searching the Test Hub. Use them wisely."
 	docURL := "https://docs.example.com"
@@ -94,11 +92,9 @@ func TestService_GetMcpMetadata_WithoutInstructions(t *testing.T) {
 		Slug:                   "test-mcp-get-no-instructions",
 		Description:            conv.ToPGText("A test MCP server"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "", Valid: false},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
-	createCanonicalWrapper(t, ctx, ti, toolset)
+	createCanonicalWrapper(t, ctx, ti, toolset, mcpservers.VisibilityDisabled)
 
 	docURL := "https://docs.example.com"
 

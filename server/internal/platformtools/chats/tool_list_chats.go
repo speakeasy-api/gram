@@ -19,6 +19,7 @@ type listChatsInput struct {
 	ExternalUserID *string `json:"external_user_id,omitempty" jsonschema:"Restrict results to chats produced by this external user ID."`
 	Source         *string `json:"source,omitempty" jsonschema:"Filter by agent source. Comma-separated list of exact source values (e.g. 'claude-code,Codex,playground') matched against each session's inferred source; empty for no filter."`
 	AssistantID    *string `json:"assistant_id,omitempty" jsonschema:"Restrict results to chats produced by this assistant ID."`
+	AgentID        *string `json:"agent_id,omitempty" jsonschema:"Restrict results to chats produced by this agent ID."`
 	HasRisk        *string `json:"has_risk,omitempty" jsonschema:"Restrict to chats with ('true') or without ('false') risk findings."`
 	Pinned         *string `json:"pinned,omitempty" jsonschema:"Restrict to pinned ('true') or unpinned ('false') chats."`
 	From           *string `json:"from,omitempty" jsonschema:"Filter chats created at or after this ISO 8601 timestamp."`
@@ -38,11 +39,12 @@ func (s *ListChats) Descriptor() core.ToolDescriptor {
 		SourceSlug:  "chats",
 		HandlerName: "list_chats",
 		Name:        "platform_list_chats",
-		Description: "List chats for the current project, filterable by user, assistant, risk presence, and time window.",
+		Description: "List chats for the current project, filterable by user, assistant, agent, risk presence, and time window.",
 		InputSchema: core.BuildInputSchema[listChatsInput](
 			core.WithPropertyFormat("from", "date-time"),
 			core.WithPropertyFormat("to", "date-time"),
 			core.WithPropertyFormat("assistant_id", "uuid"),
+			core.WithPropertyFormat("agent_id", "uuid"),
 			core.WithPropertyEnum("has_risk", "", "true", "false"),
 			core.WithPropertyEnum("pinned", "", "true", "false"),
 			core.WithPropertyEnum("sort_by", "created_at", "num_messages"),
@@ -67,6 +69,7 @@ func (s *ListChats) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload 
 		ExternalUserID: nil,
 		Source:         nil,
 		AssistantID:    nil,
+		AgentID:        nil,
 		HasRisk:        nil,
 		Pinned:         nil,
 		From:           nil,
@@ -98,6 +101,7 @@ func (s *ListChats) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload 
 		UserID:            nil,
 		Source:            input.Source,
 		AssistantID:       input.AssistantID,
+		AgentID:           input.AgentID,
 		SourceKind:        nil,
 		ExcludeSourceKind: nil,
 		HasRisk:           input.HasRisk,

@@ -444,7 +444,7 @@ func TestCIMD_BuildAuthorizationUrlUsesMetadataURLAsClientID(t *testing.T) {
 func TestCIMD_CallbackAuthorizationFailureRecordsRegistrationOutcome(t *testing.T) {
 	t.Parallel()
 
-	mgr, reader, state := newCIMDCallbackFailureFixture(t)
+	mgr, reader, state, _ := newCIMDCallbackFailureFixture(t)
 	callback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?error=unauthorized_client&error_description="+url.QueryEscape(" rejected\nclient ")+"&state="+url.QueryEscape(state), nil)
 	untrustedCallback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?error=unauthorized_client&state=unknown", nil)
 
@@ -467,11 +467,19 @@ func TestCIMD_CallbackAuthorizationFailureRecordsRegistrationOutcome(t *testing.
 func TestCIMD_CallbackAccessDeniedDoesNotRecordRegistrationFailure(t *testing.T) {
 	t.Parallel()
 
-	mgr, reader, state := newCIMDCallbackFailureFixture(t)
+	mgr, reader, state, parentID := newCIMDCallbackFailureFixture(t)
 	callback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?error=access_denied&state="+url.QueryEscape(state), nil)
 
-	err := mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), callback)
-	require.Error(t, err)
+	response := httptest.NewRecorder()
+	err := mgr.HandleRemoteLoginCallback(response, callback)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusSeeOther, response.Code)
+	location, err := url.Parse(response.Header().Get("Location"))
+	require.NoError(t, err)
+	require.Equal(t, mustURL(t, cimdServerURL).Scheme, location.Scheme)
+	require.Equal(t, mustURL(t, cimdServerURL).Host, location.Host)
+	require.Equal(t, "/mcp/cimd-callback-failure/connect", location.Path)
+	require.Equal(t, parentID, location.Query().Get("state"))
 	require.Empty(t, registrationFailurePoints(t, reader))
 }
 
@@ -481,7 +489,7 @@ func TestCIMD_CallbackAccessDeniedDoesNotRecordRegistrationFailure(t *testing.T)
 func TestCIMD_CallbackUpstreamUnavailableRecordsRetryableFailure(t *testing.T) {
 	t.Parallel()
 
-	mgr, reader, state := newCIMDCallbackFailureFixture(t)
+	mgr, reader, state, _ := newCIMDCallbackFailureFixture(t)
 	callback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?error=temporarily_unavailable&state="+url.QueryEscape(state), nil)
 
 	err := mgr.HandleRemoteLoginCallback(httptest.NewRecorder(), callback)
@@ -498,7 +506,7 @@ func TestCIMD_CallbackUpstreamUnavailableRecordsRetryableFailure(t *testing.T) {
 	), points[0].Attributes)
 }
 
-func newCIMDCallbackFailureFixture(t *testing.T) (*remotesessions.ChallengeManager, *sdkmetric.ManualReader, string) {
+func newCIMDCallbackFailureFixture(t *testing.T) (*remotesessions.ChallengeManager, *sdkmetric.ManualReader, string, string) {
 	t.Helper()
 
 	ctx, ti := newTestService(t)
@@ -518,8 +526,9 @@ func newCIMDCallbackFailureFixture(t *testing.T) (*remotesessions.ChallengeManag
 	require.NoError(t, err)
 	require.Len(t, clients, 1)
 	subject := urn.NewUserSubject("cimd-callback-failure-subject")
+	parentID := uuid.NewString()
 	authorizationURL, err := mgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
-		ID:                  uuid.NewString(),
+		ID:                  parentID,
 		ProjectID:           *authCtx.ProjectID,
 		OrganizationID:      authCtx.ActiveOrganizationID,
 		UserSessionIssuerID: userIssuer,
@@ -530,7 +539,7 @@ func newCIMDCallbackFailureFixture(t *testing.T) (*remotesessions.ChallengeManag
 	parsed, err := url.Parse(authorizationURL)
 	require.NoError(t, err)
 	require.NotEmpty(t, parsed.Query().Get("state"))
-	return mgr, reader, parsed.Query().Get("state")
+	return mgr, reader, parsed.Query().Get("state"), parentID
 }
 
 func registrationFailurePoints(t *testing.T, reader *sdkmetric.ManualReader) []metricdata.DataPoint[int64] {

@@ -94,7 +94,7 @@ var Toolset = Type("Toolset", func() {
 	Attribute("custom_domain_id", String, "The ID of the custom domain to use for the toolset")
 	Attribute("origin", ToolsetOrigin, "The registry lineage for toolsets installed from an external MCP catalog")
 	Attribute("external_oauth_server", ExternalOAuthServer, "The external OAuth server details")
-	Attribute("user_session_issuer_id", String, "The id of the user_session_issuer wired to this toolset. Set via toolsets.setUserSessionIssuer; null when no USI is linked.")
+	Attribute("user_session_issuer_id", String, "The id of the user_session_issuer wired to this toolset's hosted MCP server. Set via mcpServers.update; null when no USI is linked.")
 	Attribute("user_session_issuer_slug", Slug, "The slug of the user_session_issuer wired to this toolset; present when user_session_issuer_id is.")
 	Attribute("tool_variations_group_id", String, "The id of the tool variations group enabling MCP tool filtering for this toolset. Set via toolsets.setToolVariationsGroup; null when filtering is disabled.")
 	Attribute("created_at", String, func() {

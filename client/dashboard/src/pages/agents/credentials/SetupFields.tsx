@@ -13,7 +13,8 @@ import {
 import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { ExternalLink } from "lucide-react";
-import type { JSX, ReactNode } from "react";
+import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
+import { Fragment, type JSX, type ReactNode } from "react";
 import { ConsoleRow, type ConsoleField } from "./ConsoleRow";
 import { variableProblem, type CatalogVariable } from "./workloadCatalog";
 import type { SetupValues } from "./workloadTokenEndpoints";
@@ -151,6 +152,28 @@ export function ComputedStatus({
   );
 }
 
+/** Why a step cannot go on, in the error style every setup step shares. */
+export function SetupError({ children }: { children: ReactNode }): JSX.Element {
+  return (
+    <Alert variant="error">
+      <div className="text-sm">{children}</div>
+    </Alert>
+  );
+}
+
+/** Something on a step that will not work as the reader expects. */
+export function SetupWarning({
+  children,
+}: {
+  children: ReactNode;
+}): JSX.Element {
+  return (
+    <Alert variant="warning">
+      <div className="space-y-2 text-sm">{children}</div>
+    </Alert>
+  );
+}
+
 /**
  * The documents a step points at, on one row: stacked a line each they read
  * as a reading list standing between the reader and the step.
@@ -209,5 +232,97 @@ export function Console({
         />
       ))}
     </ol>
+  );
+}
+
+/**
+ * Why a value the snippet needs is not filled in, and what stands in for it
+ * meanwhile. The reason comes first because it is what the reader acts on;
+ * the placeholder line tells them the snippet is not ready to paste yet.
+ */
+export function PendingValues({
+  placeholders,
+  children,
+}: {
+  placeholders: string[];
+  /** Why Speakeasy cannot fill the values in yet. */
+  children?: ReactNode;
+}): JSX.Element {
+  return (
+    <div className="space-y-2">
+      {children}
+      <Text muted small className="block">
+        Until then, the snippet below shows{" "}
+        {placeholders.map((placeholder, index) => (
+          <span key={placeholder}>
+            {index > 0 && " and "}
+            <code>{placeholder}</code>
+          </span>
+        ))}{" "}
+        in {placeholders.length > 1 ? "their places" : "its place"}. Replace{" "}
+        {placeholders.length > 1 ? "them" : "it"} before using it.
+      </Text>
+    </div>
+  );
+}
+
+/** A project's own issuer for the URL a catalog flow trusts organization-wide. */
+export type ProjectIssuer = {
+  project: { id: string; name: string; slug: string };
+  issuer: WorkloadIssuer;
+};
+
+/**
+ * Names every project whose own issuer takes precedence over the
+ * organization-wide rule for that project's MCP servers, and how to withdraw
+ * each one.
+ */
+export function ShadowingIssuers({
+  shadows,
+  platformName,
+}: {
+  shadows: ProjectIssuer[];
+  platformName: string;
+}): JSX.Element {
+  const one = shadows.length === 1;
+  const names = shadows.map(({ project }, index) => (
+    <Fragment key={project.id}>
+      {index > 0 && ", "}
+      <strong>{project.name || project.slug}</strong>
+    </Fragment>
+  ));
+  return (
+    <SetupWarning>
+      <p>
+        {one ? "The project " : "The projects "}
+        {names} also {one ? "trusts" : "trust"} {platformName} on{" "}
+        {one ? "its" : "their"} own, at the same issuer URL.{" "}
+        {one ? "Its" : "Their"} MCP servers check a job against the
+        project&apos;s own issuer instead of the rule saved here, so the job
+        reaches them as another identity, or not at all. Projects you cannot
+        open were not checked.
+      </p>
+      {/* DNO-1477 tracks a dashboard control for withdrawing a project's
+            own issuer; until it ships, the API is the only way. */}
+      <p>
+        Removing an agent&apos;s access does not fix this: the project&apos;s
+        own issuer has to be withdrawn, which also withdraws every rule admitted
+        under it. The dashboard has no control for that yet, so ask someone who
+        can manage workload identities to withdraw it.
+      </p>
+      <details>
+        <summary className="cursor-pointer">Technical details</summary>
+        <p className="mt-2">Withdraw each through the API:</p>
+        <ul className="mt-1 list-disc space-y-1 pl-5">
+          {shadows.map(({ project, issuer }) => (
+            <li key={issuer.id}>
+              <code>{`DELETE /rpc/workloadIdentities.withdrawIssuer?id=${issuer.id}`}</code>{" "}
+              with the header <code>Gram-Project: {project.slug}</code>, for{" "}
+              {project.name || project.slug}
+            </li>
+          ))}
+        </ul>
+      </details>
+    </SetupWarning>
   );
 }

@@ -35,12 +35,11 @@ maximum lifetime of 15 minutes. There is no refresh token: renew by signing a ne
 assertion. Every issuance and resource admission checks live agent policy.
 Session and client revocation take effect on existing access tokens as well.
 
-Native Kit composition calls the same authenticated registration mechanism for
-the assistant's existing stable agent. Kit receives configured resource and
-issuer URLs and private-key files; Kit owns OAuth discovery, connection failures,
-and token renewal. Bootstrap makes no HTTP request to an MCP resource or issuer.
-Built-in runtime tools accept ordinary agent credentials and keep their existing
-per-tool authorization. This does not add a public Platform MCP scope.
+Runtime turn credentials cannot register independent OAuth clients: doing so
+would discard their runtime binding and lifetime. Built-in runtime tools retain
+the existing runtime credential binding checks. Ordinary agent API keys may
+select a project explicitly and remain subject to per-tool authorization.
+This does not add a public Platform MCP scope.
 
 Platform MCP parity: no new tool is added. This is a machine credential bootstrap
 contract, not a new dashboard workflow. Existing client listing and revocation

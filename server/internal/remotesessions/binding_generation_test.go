@@ -15,9 +15,9 @@ import (
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
@@ -25,8 +25,12 @@ import (
 
 func configureBindingOwnerAuthorizer(ti *testInstance) {
 	authorizer := agentmanagement.NewAuthorizer(bindingOwnerOnlyEngine{})
-	ti.service.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID) error {
-		_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentAuthorize)
+	ti.service.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, write bool) error {
+		predicate := agentmanagement.OwnedAgentAuthorize
+		if write {
+			predicate = agentmanagement.OwnedAgentSetup
+		}
+		_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, predicate)
 		if err != nil {
 			return fmt.Errorf("authorize attachment owner: %w", err)
 		}
@@ -34,7 +38,7 @@ func configureBindingOwnerAuthorizer(ti *testInstance) {
 	})
 }
 
-func TestBindingsReconnectWithoutDisconnectRequiresExplicitDetach(t *testing.T) {
+func TestBindingsFollowCurrentCredentialsOnSameSourceRow(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	auth, ok := contextvalues.GetAuthContext(ctx)
@@ -67,18 +71,25 @@ func TestBindingsReconnectWithoutDisconnectRequiresExplicitDetach(t *testing.T) 
 	_, err = q.GetPrincipalRemoteSessionBinding(ctx, lookup)
 	require.NoError(t, err)
 	// The OAuth callback upsert replaces the grant on the SAME active row.
-	replacement := insertRemoteSession(t, ctx, ti.conn, subject, config.String(), client)
+	replacement, err := q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{SubjectUrn: subject, UserSessionIssuerID: config, RemoteSessionClientID: source.RemoteSessionClientID, AccessTokenEncrypted: source.AccessTokenEncrypted, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(2 * time.Hour)), Scopes: []string{"tools:read", "tools:write"}, UpstreamDisplayName: conv.ToPGText("New upstream account"), UpstreamEmail: conv.ToPGText("new@example.test")})
+	require.NoError(t, err)
 	require.Equal(t, source.ID, replacement.ID)
 	require.Equal(t, source.GrantGeneration+1, replacement.GrantGeneration)
-	_, err = q.GetPrincipalRemoteSessionBinding(ctx, lookup)
-	require.ErrorIs(t, err, pgx.ErrNoRows)
-	_, err = ti.service.AttachBinding(ctx, payload)
-	requireOopsCode(t, err, oops.CodeConflict)
+	current, err := q.GetPrincipalRemoteSessionBinding(ctx, lookup)
+	require.NoError(t, err)
+	require.Equal(t, replacement.GrantGeneration, current.GrantGeneration)
+	require.Equal(t, replacement.Scopes, current.Scopes)
+	again, err := ti.service.AttachBinding(ctx, payload)
+	require.NoError(t, err)
+	require.Equal(t, binding.ID, again.ID)
 	listed, err := ti.service.ListBindings(ctx, &gen.ListBindingsPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String()})
 	require.NoError(t, err)
-	require.Len(t, listed.Items, 1, "a stale binding remains until explicit detach")
+	require.Len(t, listed.Items, 1, "the existing source-row assignment remains")
 	require.Equal(t, binding.ID, listed.Items[0].ID)
-	require.Nil(t, listed.Items[0].RemoteSession, "a replaced grant is an unavailable binding, not a connected session")
+	require.NotNil(t, listed.Items[0].RemoteSession)
+	require.Equal(t, replacement.Scopes, listed.Items[0].RemoteSession.Scopes)
+	require.Equal(t, "New upstream account", *listed.Items[0].RemoteSession.UpstreamDisplayName)
+	require.Equal(t, "new@example.test", *listed.Items[0].RemoteSession.UpstreamEmail)
 	require.NoError(t, ti.service.DetachBinding(ctx, &gen.DetachBindingPayload{PrincipalID: agent.ID.String(), UserSessionIssuerID: config.String(), ID: binding.ID}))
 	rebound, err := ti.service.AttachBinding(ctx, payload)
 	require.NoError(t, err)
@@ -90,13 +101,13 @@ func TestBindingsReconnectWithoutDisconnectRequiresExplicitDetach(t *testing.T) 
 	var auditCount int64
 	auditCount, err = testrepo.New(ti.conn).CountAttachmentAuditEventsFixture(ctx, testrepo.CountAttachmentAuditEventsFixtureParams{ProjectID: uuid.NullUUID{UUID: *auth.ProjectID, Valid: true}, OrganizationID: auth.ActiveOrganizationID, SubjectID: source.ID.String(), ActorID: auth.UserID, PrincipalID: agent.ID.String(), BindingID: binding.ID, ReplacementBindingID: rebound.ID})
 	require.NoError(t, err)
-	require.EqualValues(t, 3, auditCount)
+	require.EqualValues(t, 4, auditCount, "initial attach, idempotent attach, detach, and explicit reattach are audited")
 }
 
 func TestResolveAuthorization_AttachmentReconnectDuringRefresh(t *testing.T) {
 	t.Parallel()
 	for _, reattach := range []bool{false, true} {
-		name := "stale-binding"
+		name := "same-source-binding"
 		if reattach {
 			name = "concurrent-reattachment"
 		}
@@ -153,12 +164,14 @@ func testAttachmentReconnectDuringRefresh(t *testing.T, reattach bool) {
 		t.Fatal("attached session did not begin refresh")
 	}
 	// Simulate the callback's fresh grant while the old grant's token request is blocked.
-	reconnected, err := env.q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{SubjectUrn: env.subject, UserSessionIssuerID: env.session.UserSessionIssuerID, RemoteSessionClientID: env.clientID, AccessTokenEncrypted: env.session.AccessTokenEncrypted, RefreshTokenEncrypted: env.session.RefreshTokenEncrypted, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: env.session.Scopes, Resource: env.session.Resource})
+	currentAccess, err := testenv.NewEncryptionClient(t).Encrypt([]byte("new-account-access"))
+	require.NoError(t, err)
+	reconnected, err := env.q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{SubjectUrn: env.subject, UserSessionIssuerID: env.session.UserSessionIssuerID, RemoteSessionClientID: env.clientID, AccessTokenEncrypted: currentAccess, RefreshTokenEncrypted: env.session.RefreshTokenEncrypted, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: env.session.Scopes, Resource: env.session.Resource})
 	require.NoError(t, err)
 	require.Equal(t, env.session.ID, reconnected.ID)
 	require.Equal(t, env.session.GrantGeneration+1, reconnected.GrantGeneration)
 	if reattach {
-		_, err = env.q.DetachPrincipalRemoteSessionBinding(ctx, repo.DetachPrincipalRemoteSessionBindingParams{ProjectID: env.projectID, OrganizationID: env.organizationID, PrincipalID: agent.ID, UserSessionIssuerID: env.session.UserSessionIssuerID, SubjectUrn: env.subject.String(), ID: binding.ID})
+		_, err = env.q.DetachPrincipalRemoteSessionBinding(ctx, repo.DetachPrincipalRemoteSessionBindingParams{ProjectID: env.projectID, OrganizationID: env.organizationID, PrincipalID: agent.ID, UserSessionIssuerID: env.session.UserSessionIssuerID, ID: binding.ID})
 		require.NoError(t, err)
 		_, err = env.q.AttachPrincipalRemoteSessionBinding(ctx, repo.AttachPrincipalRemoteSessionBindingParams{ProjectID: env.projectID, OrganizationID: env.organizationID, PrincipalID: agent.ID, UserSessionIssuerID: env.session.UserSessionIssuerID, SubjectUrn: env.subject.String(), RemoteSessionID: env.session.ID})
 		require.NoError(t, err)
@@ -171,11 +184,23 @@ func testAttachmentReconnectDuringRefresh(t *testing.T, reattach bool) {
 	case <-time.After(10 * time.Second):
 		t.Fatal("attached session refresh did not complete")
 	}
-	_, err = resolve()
+	currentAuth, err := resolve()
+	require.NoError(t, err, "a new request follows the current credentials on the assigned row")
+	require.Equal(t, "new-account-access", currentAuth.AccessToken)
+	require.Equal(t, env.session.ID, currentAuth.RemoteSessionID)
 	if reattach {
-		require.NoError(t, err, "a new request may use the explicitly reattached grant")
+		_, err = env.q.RevokeRemoteSession(ctx, repo.RevokeRemoteSessionParams{ID: env.session.ID, ProjectID: env.projectID, OrganizationID: env.organizationID})
+		require.NoError(t, err)
+		newSource, err := env.q.UpsertRemoteSession(ctx, repo.UpsertRemoteSessionParams{SubjectUrn: env.subject, UserSessionIssuerID: env.session.UserSessionIssuerID, RemoteSessionClientID: env.clientID, AccessTokenEncrypted: currentAccess, AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(time.Hour)), Scopes: []string{}})
+		require.NoError(t, err)
+		require.NotEqual(t, env.session.ID, newSource.ID)
+		_, err = resolve()
+		require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "a new row must not resurrect an assignment to a deleted source")
 	} else {
-		require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
+		_, err = env.q.DetachPrincipalRemoteSessionBinding(ctx, repo.DetachPrincipalRemoteSessionBindingParams{ProjectID: env.projectID, OrganizationID: env.organizationID, PrincipalID: agent.ID, UserSessionIssuerID: env.session.UserSessionIssuerID, ID: binding.ID})
+		require.NoError(t, err)
+		_, err = resolve()
+		require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "revoked assignments must not follow current credentials")
 	}
 }
 

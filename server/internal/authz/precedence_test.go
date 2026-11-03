@@ -240,7 +240,7 @@ func TestGrantsAuthorizeNarrowedDirectGrantOutranksRoleBlockOnlyAsFarAsItReaches
 func TestGrantsAuthorizeInferredDirectGrantNeverOutranksInheritedBlock(t *testing.T) {
 	t.Parallel()
 
-	client := MCPAuthClientCheck("client-1", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: "project-1", ConnectionOwner: ""})
+	client := MCPAuthClientCheck("client-1", MCPAuthClientDimensions{ClientType: AuthClientTypeServiceAccount, ProjectID: "project-1", ConnectionOwner: "", UpstreamClient: ""})
 	inferred := heldBy(precedenceUser, Grant{PrincipalUrn: "", Scope: ScopeMCPAuth, Selector: AuthClientSelector("client-1", ""), Inferred: true})
 	block := heldBy(precedenceRole, Grant{PrincipalUrn: "", Scope: ScopeMCPBlockedAuth, Selector: AuthClientSelector("client-1", ""), Inferred: false})
 

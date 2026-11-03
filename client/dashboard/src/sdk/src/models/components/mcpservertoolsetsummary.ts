@@ -29,6 +29,10 @@ export type McpServerToolsetSummary = {
    */
   externalOauthServerId?: string | undefined;
   /**
+   * The ID of the MCP server that stands in for the toolset: its canonical server, whose ID is the toolset's, or when it has none, its oldest live server with a live endpoint. Absent when it has neither.
+   */
+  hostingMcpServerId?: string | undefined;
+  /**
    * The ID of the toolset
    */
   id: string;
@@ -64,6 +68,7 @@ export const McpServerToolsetSummary$inboundSchema: z.ZodMiniType<
     external_mcp_proxy_only: z.boolean(),
     external_mcp_slugs: z.array(z.string()),
     external_oauth_server_id: z.optional(z.string()),
+    hosting_mcp_server_id: z.optional(z.string()),
     id: z.string(),
     name: z.string(),
     registry_specifier: z.optional(z.string()),
@@ -76,6 +81,7 @@ export const McpServerToolsetSummary$inboundSchema: z.ZodMiniType<
       "external_mcp_proxy_only": "externalMcpProxyOnly",
       "external_mcp_slugs": "externalMcpSlugs",
       "external_oauth_server_id": "externalOauthServerId",
+      "hosting_mcp_server_id": "hostingMcpServerId",
       "registry_specifier": "registrySpecifier",
       "tool_count": "toolCount",
       "tool_selection_mode": "toolSelectionMode",

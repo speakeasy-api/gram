@@ -22,7 +22,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/chatfindings"
@@ -60,7 +59,6 @@ type chatTestInstance struct {
 	sessions    *sessions.Manager
 	conn        *pgxpool.Pool
 	chConn      clickhouse.Conn
-	flags       *feature.InMemory
 	projectID   uuid.UUID
 	projectSlug string
 	orgID       string
@@ -114,7 +112,6 @@ func newTestChatServiceWithOptions(t *testing.T, completionClient openrouter.Com
 
 	chConn, err := infra.NewClickhouseClient(t)
 	require.NoError(t, err)
-	flags := &feature.InMemory{}
 
 	billingClient := billing.NewStubClient(logger, tp)
 	mgr := testenv.NewTestManager(t, logger, tp, conn, redisClient, cache.Suffix("gram-local"), billingClient)
@@ -122,14 +119,13 @@ func newTestChatServiceWithOptions(t *testing.T, completionClient openrouter.Com
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	assetStorage := assetstest.NewTestBlobStore(t)
 	svc := chat.NewService(logger, tp, conn, mgr, nil, nil, completionClient, nil, nil, nil, assetStorage, authzEngine, nil, billingClient, audit.NewLogger()).
-		WithRiskFindingsClickHouse(chatfindings.New(conn, riskchrepo.New(chConn)), flags)
+		WithRiskFindings(chatfindings.New(conn, riskchrepo.New(chConn)))
 
 	return &chatTestInstance{
 		service:     svc,
 		sessions:    mgr,
 		conn:        conn,
 		chConn:      chConn,
-		flags:       flags,
 		projectID:   project.ID,
 		projectSlug: project.Slug,
 		orgID:       orgID,

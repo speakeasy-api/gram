@@ -318,6 +318,7 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeRiskPolicyBlock, description: "Block specific shadow MCP servers under allow-by-default risk policies.", resourceType: "risk_policy"},
 		{scope: authz.ScopeChatRead, description: "Read and pin other members' agent session transcripts, and reveal secrets flagged in Risk Events. Everyone keeps their own sessions.", resourceType: "chat"},
 		{scope: authz.ScopeChatWrite, description: "Rename, delete, and give feedback on other members' agent sessions. Everyone keeps their own.", resourceType: "chat"},
+		{scope: authz.ScopeInferenceExecute, description: "Run model inference without accessing chat transcripts.", resourceType: "inference"},
 		{scope: authz.ScopeLogRead, description: "View the project's tool-call logs and traces, including tool arguments, results, and prompt text from every member. Not implied by project or organization admin access.", resourceType: "project"},
 		{scope: authz.ScopeAgentRead, description: "View agents.", resourceType: "agent"},
 		{scope: authz.ScopeAgentWrite, description: "Create, configure, and manage agents.", resourceType: "agent"},
@@ -671,6 +672,9 @@ func genSelectorToAuthz(s *gen.Selector) authz.Selector {
 	if s.ConnectionOwner != nil {
 		sel[authz.SelectorKeyConnectionOwner] = *s.ConnectionOwner
 	}
+	if s.UpstreamClient != nil {
+		sel[authz.SelectorKeyUpstreamClient] = *s.UpstreamClient
+	}
 	return sel
 }
 
@@ -684,6 +688,7 @@ func authzSelectorToGen(sel authz.Selector) *gen.Selector {
 		ServerURL:       nil,
 		ClientType:      nil,
 		ConnectionOwner: nil,
+		UpstreamClient:  nil,
 	}
 	if v, ok := sel["disposition"]; ok {
 		s.Disposition = &v
@@ -702,6 +707,9 @@ func authzSelectorToGen(sel authz.Selector) *gen.Selector {
 	}
 	if v, ok := sel[authz.SelectorKeyConnectionOwner]; ok {
 		s.ConnectionOwner = &v
+	}
+	if v, ok := sel[authz.SelectorKeyUpstreamClient]; ok {
+		s.UpstreamClient = &v
 	}
 	return s
 }
@@ -735,6 +743,7 @@ func userVisibleScopeGrants() []*gen.ListRoleGrant {
 		{Scope: string(authz.ScopeRiskPolicyEvaluate), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyBypass), Selectors: nil},
 		{Scope: string(authz.ScopeRiskPolicyBlock), Selectors: nil},
+		{Scope: string(authz.ScopeInferenceExecute), Selectors: nil},
 		{Scope: string(authz.ScopeChatRead), Selectors: nil},
 		{Scope: string(authz.ScopeChatWrite), Selectors: nil},
 		{Scope: string(authz.ScopeLogRead), Selectors: nil},

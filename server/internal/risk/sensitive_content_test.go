@@ -1,7 +1,6 @@
 package risk_test
 
 import (
-	"fmt"
 	"testing"
 	"time"
 
@@ -15,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk"
@@ -148,70 +146,62 @@ func TestRiskSensitiveContentAccess(t *testing.T) {
 
 func TestRiskListingSessionTitles(t *testing.T) {
 	t.Parallel()
-	for _, clickhouse := range []bool{false, true} {
-		t.Run(fmt.Sprintf("clickhouse=%t", clickhouse), func(t *testing.T) {
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.NewGrant(authz.ScopeOrgAdmin, orgID),
+		authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource),
+	)
+	policyID := seedUnmaskPolicy(t, ti, projectID, orgID, true)
+	chatID, msgID := seedChatWithUser(t, ti, projectID, orgID, "")
+	insertUnmaskFinding(t, ti, unmaskFinding{
+		orgID: orgID, projectID: projectID.String(), chatID: chatID.String(), chatMessageID: msgID.String(),
+		riskPolicyID: policyID.String(), matchLen: 12, matchRedacted: "<redacted>",
+	})
+	for _, session := range []string{"ordinary", "support", "workos"} {
+		t.Run(session, func(t *testing.T) {
 			t.Parallel()
-			ctx, ti := newTestRiskService(t)
-			authCtx, _ := contextvalues.GetAuthContext(ctx)
-			projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
-			ctx = withExactAccessGrants(t, ctx, ti.conn,
-				authz.NewGrant(authz.ScopeOrgAdmin, orgID),
-				authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource),
-			)
-			policyID := seedUnmaskPolicy(t, ti, projectID, orgID, true)
-			chatID, msgID := seedChatWithUser(t, ti, projectID, orgID, "")
-			seedRiskResult(t, ti, projectID, orgID, policyID, 1, msgID, true)
-			insertUnmaskFinding(t, ti, unmaskFinding{
-				orgID: orgID, projectID: projectID.String(), chatID: chatID.String(), chatMessageID: msgID.String(),
-				riskPolicyID: policyID.String(), matchLen: 12, matchRedacted: "<redacted>",
-			})
-			if clickhouse {
-				ti.flags.SetFlag(feature.FlagRiskFindingsClickHouseCutover, orgID, true)
+			sessionCtx := ctx
+			expected := "test chat"
+			copied := *authCtx
+			switch session {
+			case "support":
+				copied.IsAdmin = true
+				copied.SupportOrganizationID = orgID
+				sessionCtx = contextvalues.WithValidatedSupportSession(ctx, &copied)
+				expected = "Session " + chatID.String()[:8]
+			case "workos":
+				sessionCtx = contextvalues.WithValidatedGramSession(ctx, &copied, true)
+				expected = "Session " + chatID.String()[:8]
 			}
-			for _, session := range []string{"ordinary", "support", "workos"} {
-				t.Run(session, func(t *testing.T) {
-					sessionCtx := ctx
-					expected := "test chat"
-					copied := *authCtx
-					switch session {
-					case "support":
-						copied.IsAdmin = true
-						copied.SupportOrganizationID = orgID
-						sessionCtx = contextvalues.WithValidatedSupportSession(ctx, &copied)
-						expected = "Session " + chatID.String()[:8]
-					case "workos":
-						sessionCtx = contextvalues.WithValidatedGramSession(ctx, &copied, true)
-						expected = "Session " + chatID.String()[:8]
-					}
-					for _, filterChat := range []bool{false, true} {
-						var chatFilter *string
-						if filterChat {
-							id := chatID.String()
-							chatFilter = &id
-						}
-						results, err := ti.service.ListRiskResults(sessionCtx, &gen.ListRiskResultsPayload{ChatID: chatFilter})
-						require.NoError(t, err)
-						require.Len(t, results.Results, 1)
-						if session != "ordinary" {
-							require.Nil(t, results.Results[0].Match, "chat:read must not bypass impersonation protection")
-							require.Empty(t, results.Results[0].Spans)
-						}
-						require.NotNil(t, results.Results[0].ChatTitle)
-						require.Equal(t, expected, *results.Results[0].ChatTitle)
-						agentResults, err := ti.service.ListRiskResultsForAgent(sessionCtx, &gen.ListRiskResultsForAgentPayload{ChatID: chatFilter})
-						require.NoError(t, err)
-						require.Len(t, agentResults.Results, 1)
-						require.NotNil(t, agentResults.Results[0].ChatTitle)
-						require.Equal(t, expected, *agentResults.Results[0].ChatTitle)
-					}
-					chats, err := ti.service.ListRiskResultsByChat(sessionCtx, &gen.ListRiskResultsByChatPayload{})
-					require.NoError(t, err)
-					require.Len(t, chats.Chats, 1)
-					require.Equal(t, chatID.String(), chats.Chats[0].ChatID)
-					require.NotNil(t, chats.Chats[0].ChatTitle)
-					require.Equal(t, expected, *chats.Chats[0].ChatTitle)
-				})
+			for _, filterChat := range []bool{false, true} {
+				var chatFilter *string
+				if filterChat {
+					id := chatID.String()
+					chatFilter = &id
+				}
+				results, err := ti.service.ListRiskResults(sessionCtx, &gen.ListRiskResultsPayload{ChatID: chatFilter})
+				require.NoError(t, err)
+				require.Len(t, results.Results, 1)
+				if session != "ordinary" {
+					require.Nil(t, results.Results[0].Match, "chat:read must not bypass impersonation protection")
+					require.Empty(t, results.Results[0].Spans)
+				}
+				require.NotNil(t, results.Results[0].ChatTitle)
+				require.Equal(t, expected, *results.Results[0].ChatTitle)
+				agentResults, err := ti.service.ListRiskResultsForAgent(sessionCtx, &gen.ListRiskResultsForAgentPayload{ChatID: chatFilter})
+				require.NoError(t, err)
+				require.Len(t, agentResults.Results, 1)
+				require.NotNil(t, agentResults.Results[0].ChatTitle)
+				require.Equal(t, expected, *agentResults.Results[0].ChatTitle)
 			}
+			chats, err := ti.service.ListRiskResultsByChat(sessionCtx, &gen.ListRiskResultsByChatPayload{})
+			require.NoError(t, err)
+			require.Len(t, chats.Chats, 1)
+			require.Equal(t, chatID.String(), chats.Chats[0].ChatID)
+			require.NotNil(t, chats.Chats[0].ChatTitle)
+			require.Equal(t, expected, *chats.Chats[0].ChatTitle)
 		})
 	}
 }

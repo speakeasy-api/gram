@@ -28,17 +28,6 @@ func TestKitIdleSweepProgressAcrossBatches(t *testing.T) {
 	for i := range runtimeIdleSweepBatch + 1 {
 		project, assistant, thread := insertReapableProject(t, conn, fmt.Sprintf("kit-sweep-%d", i))
 		require.NoError(t, q.SetAssistantDesiredRuntimeVersionForTest(t.Context(), assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{RuntimeVersion: 3, AssistantID: assistant, ProjectID: project}))
-		if i == 0 {
-			chatID := uuid.New()
-			require.NoError(t, q.UpsertAssistantChat(t.Context(), assistantrepo.UpsertAssistantChatParams{
-				ChatID: chatID, ProjectID: project, OrganizationID: "org-test",
-			}))
-			thread, err = q.UpsertAssistantThread(t.Context(), assistantrepo.UpsertAssistantThreadParams{
-				AssistantID: assistant, ProjectID: project, ChatID: chatID,
-				CorrelationID: warmupCorrelationID, SourceKind: sourceKindWarmup, SourceRefJson: []byte("{}"),
-			})
-			require.NoError(t, err)
-		}
 		runtimeID := insertActiveV2RuntimeRow(t, conn, project, assistant, thread, runtimeBackendGKE, runtimeStateActive, `{"test":true}`)
 		require.NoError(t, q.SetAssistantRuntimeActive(t.Context(), assistantrepo.SetAssistantRuntimeActiveParams{ActiveState: runtimeStateActive, RuntimeID: runtimeID, ProjectID: project, WarmUntil: pgtype.Timestamptz{Time: now.Add(-time.Hour), Valid: true}}))
 		if i == 0 {
@@ -59,7 +48,7 @@ func TestKitIdleSweepProgressAcrossBatches(t *testing.T) {
 	require.False(t, row.Ended)
 	require.False(t, row.WarmUntil.Valid)
 	require.JSONEq(t, `{"test":true}`, string(row.BackendMetadataJson))
-	// Explicit warmup re-arms an already-active canonical row after Ensure.
+	// Normal admission re-arms an already-active canonical row after Ensure.
 	// There are no thread events: event completion cannot mask a missing re-arm.
 	_, err = core.ProcessThreadEvents(t.Context(), firstProject, firstThread)
 	require.NoError(t, err)

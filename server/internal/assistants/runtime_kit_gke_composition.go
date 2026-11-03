@@ -4,20 +4,22 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	tokenrepo "github.com/speakeasy-api/gram/server/internal/auth/assistanttokens/repo"
 	"net/netip"
+	"net/url"
+	"sort"
 	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
-	"github.com/speakeasy-api/gram/server/internal/conv"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // KitGKECompositionConfig opts new version-3 conversations into the production
-// runtime. It does not convert or import existing conversations. Native MCP
-// clients renew their own short-lived credentials without restarting sessions.
+// runtime. It does not convert or import existing conversations. MCP uses the
+// same issuer-bound workload registration as local Kit, never a user's token.
 type KitGKECompositionConfig struct {
 	KitLocalCompositionConfig
 	GKE       GKERuntimeConfig
@@ -55,6 +57,7 @@ func validateKitGKEComposition(c KitGKECompositionConfig) error {
 // Platform MCP parity: provisioning/checkpoint operations are internal lifecycle
 // machinery, not member operations. Existing assistant tools remain unchanged.
 func (s *ServiceCore) InstallKitGKERuntime(c KitGKECompositionConfig) error {
+	c.WorkloadNamespace = c.GKE.Namespace
 	if err := validateKitGKEComposition(c); err != nil {
 		return err
 	}
@@ -71,10 +74,9 @@ func (s *ServiceCore) InstallKitGKERuntime(c KitGKECompositionConfig) error {
 	c.Provision.GuestPort = int32(c.GKE.GuestPort)
 	backend, err := NewKitGKERuntimeBackend(KitGKERuntimeConfig{
 		GKE: c.GKE, Provision: c.Provision, Snapshots: c.Snapshots,
-		BootstrapGeneration: "native-mcp-v1",
-		AuthorityStore:      NewKitGKEPostgresAuthorityStore(s.db),
-		Fence:               s.fenceKitRuntimeAlreadyLocked,
-		Lifecycle:           s.kitGKELifecycle,
+		AuthorityStore: NewKitGKEPostgresAuthorityStore(s.db),
+		Fence:          s.fenceKitRuntimeAlreadyLocked,
+		Lifecycle:      s.kitGKELifecycle,
 		Bootstrap: func(ctx context.Context, r assistantRuntimeRecord) (KitLocalBootstrap, error) {
 			return s.kitCompositionBootstrap(ctx, r, c.KitLocalCompositionConfig)
 		},
@@ -86,7 +88,8 @@ func (s *ServiceCore) InstallKitGKERuntime(c KitGKECompositionConfig) error {
 	if err := s.installKitRuntime(backend); err != nil {
 		return err
 	}
-	// Runtime selection does not depend on attachment count or issuer mode.
+	// The deployment opts in only assistants whose persisted attachment can use
+	// this machine-auth composition. Other assistants keep the legacy default.
 	s.newAssistantRuntimeEligible = func(ctx context.Context, tx pgx.Tx, assistant assistantRecord) (bool, error) {
 		return s.kitGKEAssistantEligible(ctx, tx, assistant, c.KitLocalCompositionConfig)
 	}
@@ -112,24 +115,16 @@ func (s *ServiceCore) fenceKitRuntimeAlreadyLocked(ctx context.Context, r assist
 	if row.AssistantID != r.AssistantID || row.RuntimeVersion != 3 {
 		return ErrKitRuntimeBinding
 	}
-	if err := tokenrepo.New(db).RevokeRuntimeInferenceCredentials(ctx, tokenrepo.RevokeRuntimeInferenceCredentialsParams{ProjectID: r.ProjectID, RuntimeID: r.ID}); err != nil {
-		return fmt.Errorf("revoke kit runtime inference authority: %w", err)
+	if len(r.BackendMetadataJSON) == 0 {
+		r.BackendMetadataJSON = row.BackendMetadataJson
 	}
-	// Retirement is already a durable admission fence for workload OAuth and
-	// gateway binding reads. Do not try to issue a new gateway key for a row
-	// which the canonical credential query correctly refuses to resurrect.
+	if err := s.revokeKitWorkload(ctx, db, r); err != nil {
+		return err
+	}
+	// Withdraw before metadata can be cleared, even after identity tombstoning.
+	// Retired rows must not receive fresh gateway authority.
 	if row.Ended || row.Deleted {
 		return nil
-	}
-	a, err := q.GetAssistant(ctx, assistantrepo.GetAssistantParams{ProjectID: r.ProjectID, AssistantID: r.AssistantID})
-	if err != nil {
-		return fmt.Errorf("read kit assistant before workload fence: %w", err)
-	}
-	_, err = usersessionsrepo.New(db).RevokeAssistantRuntimeWorkloadClients(ctx, usersessionsrepo.RevokeAssistantRuntimeWorkloadClientsParams{
-		RuntimeID: uuid.NullUUID{UUID: r.ID, Valid: true}, OrganizationID: conv.ToPGText(a.OrganizationID), ProjectID: r.ProjectID,
-	})
-	if err != nil {
-		return fmt.Errorf("fence Kit workload credentials: %w", err)
 	}
 	_, err = s.rotateKitGatewayTokenAlreadyLocked(ctx, r)
 	return err
@@ -176,17 +171,100 @@ func (s *ServiceCore) kitGKELifecycle(ctx context.Context, r assistantRuntimeRec
 	return operationErr
 }
 
-// kitGKEAssistantEligible verifies the assistant exists in the selected project
-// and organization without imposing tool-availability requirements.
-// Tool availability is not runtime eligibility. Stable agent credentials and
-// native OAuth clients authorize each connection independently.
-func (s *ServiceCore) kitGKEAssistantEligible(ctx context.Context, tx pgx.Tx, assistant assistantRecord, _ KitLocalCompositionConfig) (bool, error) {
-	row, err := assistantrepo.New(tx).GetAssistant(ctx, assistantrepo.GetAssistantParams{ProjectID: assistant.ProjectID, AssistantID: assistant.ID})
-	if errors.Is(err, pgx.ErrNoRows) {
+// kitGKEAssistantEligible reads the attachment written by creation, rather than
+// trusting request flags or selecting Kit globally before attachments exist.
+func (s *ServiceCore) kitGKEAssistantEligible(ctx context.Context, tx pgx.Tx, assistant assistantRecord, c KitLocalCompositionConfig) (bool, error) {
+	resource, issuerID, err := s.kitPersistedMCP(ctx, tx, assistant)
+	if errors.Is(err, errKitMCPIneligible) {
 		return false, nil
 	}
 	if err != nil {
-		return false, fmt.Errorf("read Kit assistant eligibility: %w", err)
+		return false, err
 	}
-	return row.OrganizationID == assistant.OrganizationID, nil
+	if !c.PersistedMCP && (c.MCPResource == nil || resource == nil || c.MCPResource.String() != resource.String() || c.MCPUserSessionIssuerID != issuerID) {
+		return false, nil
+	}
+	return true, nil
+}
+
+var errKitMCPIneligible = errors.New("assistant has no supported persisted machine MCP attachment")
+
+// All connections share the projected assertion audience. Other issuer domains
+// require a separate projected assertion and are deliberately not configured.
+func (s *ServiceCore) kitPersistedMCPConnections(ctx context.Context, db assistantrepo.DBTX, assistant assistantRecord) ([]kitMCPConnection, uuid.UUID, error) {
+	rows, err := loadAssistantMcpServers(ctx, db, assistantrepo.LoadAssistantMcpServersParams{ProjectID: assistant.ProjectID, AssistantIds: []uuid.UUID{assistant.ID}})
+	if err != nil {
+		return nil, uuid.Nil, fmt.Errorf("load persisted assistant MCP servers: %w", err)
+	}
+	sort.Slice(rows, func(i, j int) bool { return rows[i].McpServerID.String() < rows[j].McpServerID.String() })
+	connections := []kitMCPConnection{}
+	seen := map[uuid.UUID]bool{}
+	issuerID := uuid.Nil
+	for _, row := range rows {
+		if row.Visibility == "disabled" || seen[row.McpServerID] || row.EndpointSlug == "" {
+			continue
+		}
+		seen[row.McpServerID] = true
+		server, err := mcpserversrepo.New(db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: row.McpServerID, ProjectID: assistant.ProjectID})
+		if err != nil {
+			return nil, uuid.Nil, fmt.Errorf("get persisted assistant MCP server: %w", err)
+		}
+		if !server.UserSessionIssuerID.Valid {
+			s.logger.WarnContext(ctx, "omitting Kit MCP connection without a shared issuer")
+			continue
+		}
+		issuer, err := usersessionsrepo.New(db).GetSharedUserSessionIssuerByID(ctx, server.UserSessionIssuerID.UUID)
+		if errors.Is(err, pgx.ErrNoRows) {
+			s.logger.WarnContext(ctx, "omitting Kit MCP connection without a live shared issuer")
+			continue
+		}
+		if err != nil {
+			return nil, uuid.Nil, fmt.Errorf("get persisted assistant session issuer: %w", err)
+		}
+		if !authserver.IssuerInSharedMode(issuer.UserSessionIssuer) || issuer.ResolvedOrganizationID != assistant.OrganizationID || (issuer.UserSessionIssuer.ProjectID.Valid && issuer.UserSessionIssuer.ProjectID.UUID != assistant.ProjectID) {
+			s.logger.WarnContext(ctx, "omitting Kit MCP connection with an unsupported issuer")
+			continue
+		}
+		selected := assistantMCPServerRow{ToolsetSlug: row.ToolsetSlug, MCPServerID: row.McpServerID, EndpointSlug: row.EndpointSlug, EndpointDomain: row.EndpointDomain, Visibility: row.Visibility, DefaultEnvironmentSlug: row.DefaultEnvironmentSlug, EnvironmentSlug: row.EnvironmentSlug}
+		if s.serverURL == nil {
+			return nil, uuid.Nil, errKitMCPIneligible
+		}
+		resource := selected.endpointURL(s.serverURL)
+		if resource.Scheme != "https" || resource.Host == "" || resource.User != nil || resource.RawQuery != "" || resource.Fragment != "" {
+			s.logger.WarnContext(ctx, "omitting Kit MCP connection with an invalid HTTPS destination")
+			continue
+		}
+		if issuerID == uuid.Nil {
+			issuerID = server.UserSessionIssuerID.UUID
+		}
+		if issuerID != server.UserSessionIssuerID.UUID {
+			s.logger.WarnContext(ctx, "omitting Kit MCP connection with another assertion audience")
+			continue
+		}
+		connections = append(connections, kitMCPConnection{Name: "attached-" + row.McpServerID.String(), Resource: resource, Environment: assistantMCPEnvironment(selected)})
+	}
+	if issuerID == uuid.Nil {
+		// A shared issuer is also an inference token endpoint. Unsupported MCP
+		// attachments must not make an otherwise authorized inference runtime fail.
+		issuers, err := usersessionsrepo.New(db).ListSharedUserSessionIssuersInOrganization(ctx, usersessionsrepo.ListSharedUserSessionIssuersInOrganizationParams{OrganizationID: assistant.OrganizationID, ProjectID: uuid.NullUUID{UUID: assistant.ProjectID, Valid: true}})
+		if err != nil {
+			return nil, uuid.Nil, fmt.Errorf("find Kit inference issuer: %w", err)
+		}
+		if len(issuers) == 0 {
+			return nil, uuid.Nil, errKitMCPIneligible
+		}
+		issuerID = issuers[0].UserSessionIssuer.ID
+	}
+	return connections, issuerID, nil
+}
+
+func (s *ServiceCore) kitPersistedMCP(ctx context.Context, db assistantrepo.DBTX, assistant assistantRecord) (*url.URL, uuid.UUID, error) {
+	connections, issuerID, err := s.kitPersistedMCPConnections(ctx, db, assistant)
+	if err != nil {
+		return nil, uuid.Nil, err
+	}
+	if len(connections) == 0 {
+		return nil, issuerID, nil
+	}
+	return connections[0].Resource, issuerID, nil
 }

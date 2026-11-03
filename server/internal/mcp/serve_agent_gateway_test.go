@@ -7,6 +7,7 @@ import (
 	"fmt"
 	"net/http"
 	"net/http/httptest"
+	"slices"
 	"sync"
 	"testing"
 	"time"
@@ -17,6 +18,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/auth"
@@ -32,6 +34,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
+	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
@@ -470,4 +475,145 @@ func TestServeAgentGateway_ListsPrivateOnlyMembersOnPrivateIngress(t *testing.T)
 	require.Contains(t, w.Body.String(), fx.granted)
 	// public_only members are the ones excluded here.
 	require.NotContains(t, w.Body.String(), fx.open)
+}
+
+// "All servers" is a project wildcard on the key as well as on the agent, so
+// a server added after the key was issued is listed without issuing a new
+// key. The owner's exclusion is carried into the key beside the wildcard, as
+// discovery hands it to the dashboard, and the blocked server stays hidden.
+func TestServeAgentGateway_AllServersKeyReachesServersAddedLater(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, "meta-"+uuid.NewString(), uuid.Nil)
+	keptSlug := "kept-" + uuid.NewString()[:8]
+	blockedSlug := "blocked-" + uuid.NewString()[:8]
+	seedMetaMember(t, ctx, ti.conn, projectID, meta.ID, "kept member", keptSlug, 0, mcpservers.VisibilityPrivate)
+	seedMetaMember(t, ctx, ti.conn, projectID, meta.ID, "blocked member", blockedSlug, 1, mcpservers.VisibilityPrivate)
+	blockedServer := mcpServerBySlug(t, ctx, ti, projectID, blockedSlug)
+
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: orgID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "All servers agent " + uuid.NewString()[:8],
+	})
+	require.NoError(t, err)
+	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
+	ownerPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID)
+
+	projectWildcard := authz.NewSelector(authz.ScopeMCPConnect, authz.WildcardResource)
+	projectWildcard[authz.SelectorKeyProjectID] = projectID.String()
+	selectors, err := projectWildcard.MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: orgID,
+		PrincipalUrn:   agentPrincipal,
+		Scope:          string(authz.ScopeMCPConnect),
+		Selectors:      selectors,
+	})
+	require.NoError(t, err)
+	seedUserMCPConnectGrant(t, ctx, ti.conn, orgID, authCtx.UserID, authz.WildcardResource)
+	seedPrincipalGrant(t, ctx, ti, orgID, ownerPrincipal, authz.ScopeMCPBlockedConnect, blockedServer.String())
+
+	// The key's policy is what discovery offers the dashboard for this agent.
+	agentPolicy, err := runtimepolicy.LoadAgentPolicy(ctx, ti.conn, orgID, agentPrincipal)
+	require.NoError(t, err)
+	ownerPolicy, err := authz.LoadGrants(ctx, ti.conn, orgID, []urn.Principal{ownerPrincipal})
+	require.NoError(t, err)
+	delegable, err := runtimepolicy.DelegableGrantsWithExclusionsFor(authCtx.UserID, agentPolicy, ownerPolicy, ownerPolicy)
+	require.NoError(t, err)
+	requested := make([]authz.Grant, 0, len(delegable))
+	for _, grant := range delegable {
+		if grant.Scope == authz.ScopeMCPConnect || grant.Scope == authz.ScopeMCPBlockedConnect {
+			requested = append(requested, grant)
+		}
+	}
+	version := runtimepolicy.IssuedDelegatedPolicyVersion
+	policy, err := runtimepolicy.NewDelegatedPolicy(version, requested)
+	require.NoError(t, err)
+	contained, err := runtimepolicy.DelegationContainedFor(authCtx.UserID, policy, agentPolicy, ownerPolicy, ownerPolicy)
+	require.NoError(t, err)
+	require.True(t, contained, "issuance must accept the wildcard with its carried exclusion")
+	require.True(t, slices.ContainsFunc(policy.Requested, func(grant runtimepolicy.DelegatedPolicyGrant) bool {
+		return grant.Scope == authz.ScopeMCPConnect && grant.Selector[authz.SelectorKeyResourceID] == authz.WildcardResource
+	}), "the key stores the wildcard, not today's servers")
+	delegated, err := runtimepolicy.EncodeDelegatedPolicy(version, policy)
+	require.NoError(t, err)
+
+	token, hash, prefix, err := auth.GenerateAPIKeyMaterial(auth.APIKeyPrefix("test"))
+	require.NoError(t, err)
+	_, err = keysrepo.New(ti.conn).CreateAgentAPIKey(ctx, keysrepo.CreateAgentAPIKeyParams{
+		OrganizationID:         orgID,
+		CreatedByUserID:        authCtx.UserID,
+		Name:                   "all servers key " + uuid.NewString()[:8],
+		KeyPrefix:              prefix,
+		KeyHash:                hash,
+		SubjectUrn:             pgtype.Text{String: urn.NewAgentSubject(agent.ID).String(), Valid: true},
+		DelegatedGrants:        delegated,
+		DelegatedGrantsVersion: pgtype.Int4{Int32: int32(version), Valid: true},
+		ExpiresAt:              pgtype.Timestamptz{Time: time.Now().Add(time.Hour), InfinityModifier: pgtype.Finite, Valid: true},
+	})
+	require.NoError(t, err)
+
+	laterSlug := "later-" + uuid.NewString()[:8]
+	seedMetaMember(t, ctx, ti.conn, projectID, meta.ID, "later member", laterSlug, 2, mcpservers.VisibilityPrivate)
+
+	w, err := serveAgentGatewayHTTP(t, ti, agent.ID.String(), token, makeMetaRPCBody(t, "tools/call", map[string]any{
+		"name":      "list_servers",
+		"arguments": map[string]any{},
+	}))
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+	body := w.Body.String()
+	require.Contains(t, body, keptSlug)
+	require.Contains(t, body, laterSlug, "a server added after the key was issued is listed")
+	require.NotContains(t, body, blockedSlug, "the owner's exclusion still hides the blocked server")
+}
+
+func TestServeAgentGateway_UsesOwnerAttachment(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	fx := seedAgentGateway(t, ctx, ti)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	projectID := *authCtx.ProjectID
+	upstream := newRecordingUpstream(t, "ping")
+	remote := remotemcptest.SeedServer(t, ctx, ti.conn, remotemcprepo.CreateServerParams{ProjectID: projectID, TransportType: "streamable-http", Url: upstream.url})
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	serverID := mcpServerBySlug(t, ctx, ti, projectID, fx.granted)
+	_, err := mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{ID: serverID, ProjectID: projectID, Name: conv.ToPGText(fx.granted), Slug: conv.ToPGText(fx.granted), RemoteMcpServerID: conv.ToNullUUID(remote.ID), UserSessionIssuerID: conv.ToNullUUID(issuerID), Visibility: mcpservers.VisibilityPrivate})
+	require.NoError(t, err)
+	q := remotesessionsrepo.New(ti.conn)
+	provider, err := q.CreateRemoteSessionIssuer(ctx, remotesessionsrepo.CreateRemoteSessionIssuerParams{ProjectID: conv.ToNullUUID(projectID), Slug: "gateway-owner-provider", Issuer: upstream.url, ScopesSupported: []string{}, GrantTypesSupported: []string{"authorization_code"}, ResponseTypesSupported: []string{"code"}, TokenEndpointAuthMethodsSupported: []string{"none"}})
+	require.NoError(t, err)
+	client, err := q.CreateRemoteSessionClient(ctx, remotesessionsrepo.CreateRemoteSessionClientParams{ProjectID: conv.ToNullUUID(projectID), RemoteSessionIssuerID: provider.ID, ClientID: "gateway-owner-client"})
+	require.NoError(t, err)
+	require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(ctx, remotesessionsrepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: client.ID, UserSessionIssuerID: issuerID}))
+	// Shared issuers do not make a client eligible for every member.
+	require.NoError(t, testrepo.New(ti.conn).InsertMCPServerRemoteSessionClientFixture(ctx, testrepo.InsertMCPServerRemoteSessionClientFixtureParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID, McpServerID: serverID, RemoteSessionClientID: client.ID}))
+	insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, client.ID, urn.NewUserSubject(authCtx.UserID), "owner-assigned-token", upstream.url)
+	sessions, err := q.ListPrincipalRemoteSessionCandidates(ctx, remotesessionsrepo.ListPrincipalRemoteSessionCandidatesParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID, UserSessionIssuerID: issuerID, SubjectUrn: urn.NewUserSubject(authCtx.UserID)})
+	require.NoError(t, err)
+	require.Len(t, sessions, 1)
+	binding, err := q.AttachPrincipalRemoteSessionBinding(ctx, remotesessionsrepo.AttachPrincipalRemoteSessionBindingParams{ProjectID: projectID, OrganizationID: authCtx.ActiveOrganizationID, PrincipalID: fx.agent.ID, UserSessionIssuerID: issuerID, SubjectUrn: urn.NewUserSubject(authCtx.UserID).String(), RemoteSessionID: sessions[0].RemoteSession.ID})
+	require.NoError(t, err)
+	body := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute_tool", "arguments": map[string]any{"name": fx.granted + "--ping", "arguments": map[string]any{}}})
+	response, err := serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, body)
+	require.NoError(t, err)
+	text, isError := metaToolResultText(t, decodeRPCResponse(t, response))
+	require.False(t, isError, text)
+	upstream.requireToolCallAuth(t, "Bearer owner-assigned-token")
+	_, err = testrepo.New(ti.conn).RevokeAttachmentByIDFixture(ctx, binding.ID)
+	require.NoError(t, err)
+	upstream.mu.Lock()
+	upstream.requests = nil
+	upstream.mu.Unlock()
+	_, err = serveAgentGatewayHTTP(t, ti, fx.agent.ID.String(), fx.token, body)
+	require.NoError(t, err)
+	upstream.requireNeverCarried(t, "Bearer owner-assigned-token")
 }

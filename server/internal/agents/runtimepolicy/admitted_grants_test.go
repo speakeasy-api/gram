@@ -148,7 +148,7 @@ func TestLegacyWorkloadSessionsKeepSharedAuthClientUse(t *testing.T) {
 	require.NoError(t, err)
 	require.NoError(t, f.engine.Require(prepared, sharedClientUse("project-p")), "a version 4 workload session keeps its server's shared clients")
 	requireDenied(t, f.engine.Require(prepared, sharedClientUse("project-q")), "but not another project's")
-	personal := authz.MCPAuthClientCheck("client-a", authz.MCPAuthClientDimensions{ClientType: authz.AuthClientTypeRemoteSession, ProjectID: "project-p", ConnectionOwner: f.ownerUserID})
+	personal := authz.MCPAuthClientCheck("client-a", authz.MCPAuthClientDimensions{ClientType: authz.AuthClientTypeRemoteSession, ProjectID: "project-p", ConnectionOwner: f.ownerUserID, UpstreamClient: "upstream-a"})
 	requireDenied(t, f.engine.Require(prepared, personal), "a workload represents no user, so no personal connection")
 
 	mandatory, err := f.engine.PrepareMandatory(ctx)
@@ -197,7 +197,7 @@ func TestLegacyCredentialsKeepTheirAuthClientUse(t *testing.T) {
 	}
 	sharedUse := sharedClientUse
 	personalUse := func(owner string) authz.Check {
-		return authz.MCPAuthClientCheck("client-a", authz.MCPAuthClientDimensions{ClientType: authz.AuthClientTypeRemoteSession, ProjectID: "project-p", ConnectionOwner: owner})
+		return authz.MCPAuthClientCheck("client-a", authz.MCPAuthClientDimensions{ClientType: authz.AuthClientTypeRemoteSession, ProjectID: "project-p", ConnectionOwner: owner, UpstreamClient: "upstream-a"})
 	}
 
 	connecting := legacyCredentialContext(t, f, authz.NewGrantWithSelector(authz.ScopeMCPConnect, connectSelector("server-1", "project-p")))

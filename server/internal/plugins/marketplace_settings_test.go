@@ -248,6 +248,13 @@ func TestPluginsService_UpdateMarketplaceSettings_OmitsObservabilityFromRepublis
 	require.Nil(t, status.ClaudeObservabilityPlugin)
 	require.Nil(t, status.CodexObservabilityPlugin)
 
+	// With no hooks subtree to carry, a dashboard publish regenerates
+	// everything and has no reason to read the existing repo.
+	mock.getRepoFilesCalled = false
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+	require.False(t, mock.getRepoFilesCalled, "a publish with nothing to carry must not fetch the existing repo")
+
 	// Re-enabling republishes the subtree: the toggle is reversible, and a
 	// disabled project's cleared hooks version makes this look like a first
 	// hooks publish rather than an unchanged one that would be skipped.

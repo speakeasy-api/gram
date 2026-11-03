@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
+	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/organizations/orgprovision"
@@ -144,7 +145,7 @@ var ErrInvitationRequiresSSO = errors.New("invitation requires signing in with S
 // OAuthHTTPConfig refuses a user with no organization instead.
 type WorkspaceProvisioner interface {
 	SuggestedWorkspaceName(ctx context.Context, userID string) (string, error)
-	ProvisionWorkspace(ctx context.Context, userID, name string) (OrganizationOption, error)
+	ProvisionWorkspace(ctx context.Context, userID, name, clientName string) (OrganizationOption, error)
 	PendingInvitations(ctx context.Context, verifiedEmail, ssoOrganizationID string) ([]WorkspaceInvitation, error)
 	JoinInvitedWorkspace(ctx context.Context, userID, verifiedEmail, ssoOrganizationID, invitationID string) (OrganizationOption, error)
 }
@@ -404,11 +405,11 @@ func (s *OAuthHTTP) AuthorizeHandler() http.Handler {
 		request := usersessions.AuthorizationRequestFromQuery(r.URL.Query())
 		request.SetDefaults()
 		if err := request.ValidateRedirectableFields(); err != nil {
-			writeRequestOAuthError(w, http.StatusBadRequest, err)
+			writeBrowserRequestOAuthError(r.Context(), w, http.StatusBadRequest, err)
 			return
 		}
 		if err := oauthwire.ValidateRedirectURI(request.RedirectURI); err != nil {
-			writeRequestOAuthError(w, http.StatusBadRequest, err)
+			writeBrowserRequestOAuthError(r.Context(), w, http.StatusBadRequest, err)
 			return
 		}
 		// URL-shaped client_ids resolve via CIMD here (admission-gated,
@@ -423,22 +424,22 @@ func (s *OAuthHTTP) AuthorizeHandler() http.Handler {
 			return
 		}
 		if !clientRedirectAllowed(client, request.RedirectURI) {
-			writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidClient, "unknown client_id or redirect_uri")
+			writeBrowserOAuthError(r.Context(), w, http.StatusBadRequest, oautherr.CodeInvalidClient, "unknown client_id or redirect_uri", oauthui.ReasonInvalidClient)
 			return
 		}
 		if err := request.ValidatePostRedirect(); err != nil {
-			redirectOAuthError(w, r, request.RedirectURI, request.State, err)
+			writePreAuthenticationOAuthError(w, r, client, request.ClientID, request.RedirectURI, request.State, err)
 			return
 		}
 
 		csrfToken, err := opaqueToken()
 		if err != nil {
-			writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not start authorization")
+			writeBrowserOAuthError(r.Context(), w, http.StatusInternalServerError, "server_error", "could not start authorization", oauthui.ReasonDefault)
 			return
 		}
 		challenge := oauthChallenge{ID: uuid.NewString(), ClientID: request.ClientID, RedirectURI: request.RedirectURI, State: request.State, CodeChallenge: request.CodeChallenge, CSRFToken: csrfToken, OrganizationID: "", Subject: "", CreatedAt: time.Now(), BaseURL: platformBaseURL(r.Context(), s.baseURL).String()}
 		if err := s.cache.Store(r.Context(), challenge); err != nil {
-			writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not start authorization")
+			writeBrowserOAuthError(r.Context(), w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not start authorization", oauthui.ReasonDefault)
 			return
 		}
 		// The identity provider only accepts registered redirect URIs, so the
@@ -447,7 +448,7 @@ func (s *OAuthHTTP) AuthorizeHandler() http.Handler {
 		callback := endpointURL(s.idpCallbackBaseURL, "idp_callback")
 		idpURL, err := s.identity.BuildAuthorizationURL(r.Context(), identity.AuthorizationURLParams{CallbackURL: callback, State: challenge.ID, Scope: "", ScopesSupported: nil})
 		if err != nil {
-			writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not start login")
+			writeBrowserOAuthError(r.Context(), w, http.StatusInternalServerError, "server_error", "could not start login", oauthui.ReasonDefault)
 			return
 		}
 		http.Redirect(w, r, idpURL.String(), http.StatusFound)
@@ -458,7 +459,7 @@ func (s *OAuthHTTP) IDPCallbackHandler() http.Handler {
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		challenge, err := s.cache.GetAndDelete(r.Context(), platformOAuthChallengePrefix+r.URL.Query().Get("state"))
 		if err != nil {
-			writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or expired")
+			writeBrowserOAuthError(r.Context(), w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or expired", oauthui.ReasonExpired)
 			return
 		}
 		if idpError := r.URL.Query().Get("error"); idpError != "" {
@@ -467,17 +468,17 @@ func (s *OAuthHTTP) IDPCallbackHandler() http.Handler {
 		}
 		idpCode := r.URL.Query().Get("code")
 		if idpCode == "" {
-			writeOAuthError(w, http.StatusBadRequest, "invalid_request", "code is required")
+			writeBrowserOAuthError(r.Context(), w, http.StatusBadRequest, "invalid_request", "code is required", oauthui.ReasonDefault)
 			return
 		}
 		idpUser, err := s.identity.ExchangeCodeForTokens(r.Context(), idpCode)
 		if err != nil {
-			writeOAuthError(w, http.StatusBadRequest, oautherr.CodeAccessDenied, "login could not be completed")
+			writeBrowserOAuthError(r.Context(), w, http.StatusBadRequest, oautherr.CodeAccessDenied, "login could not be completed", oauthui.ReasonDefault)
 			return
 		}
 		login, err := s.identity.CompleteIDPLogin(r.Context(), idpUser, identity.IDPLoginOptions{SkipMembershipSync: false})
 		if err != nil {
-			writeOAuthError(w, http.StatusInternalServerError, "server_error", "login could not be completed")
+			writeBrowserOAuthError(r.Context(), w, http.StatusInternalServerError, "server_error", "login could not be completed", oauthui.ReasonDefault)
 			return
 		}
 		challenge.ID = uuid.NewString()
@@ -487,7 +488,7 @@ func (s *OAuthHTTP) IDPCallbackHandler() http.Handler {
 			challenge.SSOOrganizationID = idpUser.OrganizationID
 		}
 		if err := s.cache.Store(r.Context(), challenge); err != nil {
-			writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not continue authorization")
+			writeBrowserOAuthError(r.Context(), w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not continue authorization", oauthui.ReasonDefault)
 			return
 		}
 		http.Redirect(w, r, endpointURL(s.challengeBaseURL(challenge), "select-organization")+"?state="+url.QueryEscape(challenge.ID), http.StatusFound)
@@ -503,7 +504,7 @@ func (s *OAuthHTTP) OrganizationSelectionHandler() http.Handler {
 			s.organizationSelectionPost(w, r)
 		default:
 			w.Header().Set("Allow", "GET, POST")
-			w.WriteHeader(http.StatusMethodNotAllowed)
+			writeBrowserOAuthError(r.Context(), w, http.StatusMethodNotAllowed, oautherr.CodeInvalidRequest, "method not allowed", oauthui.ReasonInvalidLink)
 		}
 	})
 }
@@ -511,21 +512,21 @@ func (s *OAuthHTTP) OrganizationSelectionHandler() http.Handler {
 func (s *OAuthHTTP) organizationSelectionGet(w http.ResponseWriter, r *http.Request) {
 	challenge, err := s.cache.Get(r.Context(), platformOAuthChallengePrefix+r.URL.Query().Get("state"))
 	if err != nil || challenge.Subject == "" {
-		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or expired")
+		writeBrowserOAuthError(r.Context(), w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or expired", oauthui.ReasonExpired)
 		return
 	}
 	subject, err := urn.ParseSessionSubject(challenge.Subject)
 	if err != nil || subject.Kind != urn.SessionSubjectKindUser {
-		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeAccessDenied, "authorization identity is invalid")
+		writeBrowserOAuthError(r.Context(), w, http.StatusBadRequest, oautherr.CodeAccessDenied, "authorization identity is invalid", oauthui.ReasonSessionChanged)
 		return
 	}
 	organizations, err := s.organizations.EligibleOrganizations(r.Context(), subject.ID)
 	if err != nil {
-		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not load eligible organizations")
+		writeBrowserOAuthError(r.Context(), w, http.StatusInternalServerError, "server_error", "could not load eligible organizations", oauthui.ReasonDefault)
 		return
 	}
 	if len(organizations) == 0 && s.workspaces == nil {
-		writeOAuthError(w, http.StatusForbidden, "access_denied", "no eligible organizations are available")
+		writeBrowserOAuthError(r.Context(), w, http.StatusForbidden, "access_denied", "no eligible organizations are available", oauthui.ReasonDefault)
 		return
 	}
 
@@ -534,7 +535,7 @@ func (s *OAuthHTTP) organizationSelectionGet(w http.ResponseWriter, r *http.Requ
 	// since become unreachable.
 	client, err := s.resolveClient(r.Context(), challenge.ClientID, lookupClientOnly)
 	if err != nil {
-		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidClient, "authorization client is unavailable")
+		writeBrowserOAuthError(r.Context(), w, http.StatusBadRequest, oautherr.CodeInvalidClient, "authorization client is unavailable", oauthui.ReasonInvalidClient)
 		return
 	}
 	if len(organizations) == 0 {
@@ -546,10 +547,10 @@ func (s *OAuthHTTP) organizationSelectionGet(w http.ResponseWriter, r *http.Requ
 		if err != nil {
 			s.logger.WarnContext(r.Context(), "could not suggest a Platform MCP workspace name", attr.SlogError(err))
 		}
-		s.renderWorkspacePage(w, client.Name, challenge, suggestion, "")
+		s.renderWorkspacePage(r.Context(), w, client.Name, challenge, suggestion, "")
 		return
 	}
-	s.renderOAuthPage(w, oauthPageData{
+	s.renderOAuthPage(r.Context(), w, oauthPageData{
 		Title:         "Choose an organization · Speakeasy",
 		Kind:          "organization",
 		ClientName:    client.Name,
@@ -563,26 +564,26 @@ func (s *OAuthHTTP) organizationSelectionGet(w http.ResponseWriter, r *http.Requ
 func (s *OAuthHTTP) organizationSelectionPost(w http.ResponseWriter, r *http.Request) {
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	if err := r.ParseForm(); err != nil {
-		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse organization selection")
+		writeBrowserOAuthError(r.Context(), w, http.StatusBadRequest, "invalid_request", "could not parse organization selection", oauthui.ReasonDefault)
 		return
 	}
 	challenge, err := s.cache.GetAndDelete(r.Context(), platformOAuthChallengePrefix+r.PostForm.Get("state"))
 	if err != nil || challenge.Subject == "" {
-		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or expired")
+		writeBrowserOAuthError(r.Context(), w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or expired", oauthui.ReasonExpired)
 		return
 	}
 	if challenge.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challenge.CSRFToken)) != 1 {
-		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "organization selection is invalid")
+		writeBrowserOAuthError(r.Context(), w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "organization selection is invalid", oauthui.ReasonSessionChanged)
 		return
 	}
 	subject, err := urn.ParseSessionSubject(challenge.Subject)
 	if err != nil || subject.Kind != urn.SessionSubjectKindUser {
-		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeAccessDenied, "authorization identity is invalid")
+		writeBrowserOAuthError(r.Context(), w, http.StatusBadRequest, oautherr.CodeAccessDenied, "authorization identity is invalid", oauthui.ReasonSessionChanged)
 		return
 	}
 	organizations, err := s.organizations.EligibleOrganizations(r.Context(), subject.ID)
 	if err != nil {
-		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not load eligible organizations")
+		writeBrowserOAuthError(r.Context(), w, http.StatusInternalServerError, "server_error", "could not load eligible organizations", oauthui.ReasonDefault)
 		return
 	}
 	selectedID := r.PostForm.Get("organization_id")
@@ -590,18 +591,18 @@ func (s *OAuthHTTP) organizationSelectionPost(w http.ResponseWriter, r *http.Req
 		if organization.ID == selectedID {
 			challenge.OrganizationID = selectedID
 			if err := s.cache.Store(r.Context(), challenge); err != nil {
-				writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not continue authorization")
+				writeBrowserOAuthError(r.Context(), w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not continue authorization", oauthui.ReasonDefault)
 				return
 			}
 			http.Redirect(w, r, endpointURL(s.challengeBaseURL(challenge), "connect")+"?state="+url.QueryEscape(challenge.ID), http.StatusSeeOther)
 			return
 		}
 	}
-	writeOAuthError(w, http.StatusForbidden, "access_denied", "selected organization is not available")
+	writeBrowserOAuthError(r.Context(), w, http.StatusForbidden, "access_denied", "selected organization is not available", oauthui.ReasonDefault)
 }
 
-func (s *OAuthHTTP) renderWorkspacePage(w http.ResponseWriter, clientName string, challenge oauthChallenge, name, problem string) {
-	s.renderOAuthPage(w, oauthPageData{
+func (s *OAuthHTTP) renderWorkspacePage(ctx context.Context, w http.ResponseWriter, clientName string, challenge oauthChallenge, name, problem string) {
+	s.renderOAuthPage(ctx, w, oauthPageData{
 		Title:          "Name your organization · Speakeasy",
 		Kind:           "workspace",
 		ClientName:     clientName,
@@ -613,8 +614,8 @@ func (s *OAuthHTTP) renderWorkspacePage(w http.ResponseWriter, clientName string
 	})
 }
 
-func (s *OAuthHTTP) renderInvitationPage(w http.ResponseWriter, clientName string, challenge oauthChallenge, invitations []WorkspaceInvitation) {
-	s.renderOAuthPage(w, oauthPageData{
+func (s *OAuthHTTP) renderInvitationPage(ctx context.Context, w http.ResponseWriter, clientName string, challenge oauthChallenge, invitations []WorkspaceInvitation) {
+	s.renderOAuthPage(ctx, w, oauthPageData{
 		Title:       "Join your team · Speakeasy",
 		Kind:        "invitation",
 		ClientName:  clientName,
@@ -640,14 +641,14 @@ func (s *OAuthHTTP) renderPendingInvitations(w http.ResponseWriter, r *http.Requ
 	invitations, err := s.workspaces.PendingInvitations(r.Context(), challenge.VerifiedEmail, challenge.SSOOrganizationID)
 	if err != nil {
 		s.logger.ErrorContext(r.Context(), "could not load Platform MCP workspace invitations", attr.SlogError(err))
-		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not load pending invitations")
+		writeBrowserOAuthError(r.Context(), w, http.StatusInternalServerError, "server_error", "could not load pending invitations", oauthui.ReasonDefault)
 		return true
 	}
 	if len(invitations) == 0 {
 		return false
 	}
 	if !slices.ContainsFunc(invitations, func(invitation WorkspaceInvitation) bool { return !invitation.RequiresSSO }) {
-		s.renderOAuthPage(w, oauthPageData{
+		s.renderOAuthPage(r.Context(), w, oauthPageData{
 			Title:       "Sign in with SSO · Speakeasy",
 			Kind:        "sso-required",
 			ClientName:  clientName,
@@ -655,7 +656,7 @@ func (s *OAuthHTTP) renderPendingInvitations(w http.ResponseWriter, r *http.Requ
 		})
 		return true
 	}
-	s.renderInvitationPage(w, clientName, challenge, invitations)
+	s.renderInvitationPage(r.Context(), w, clientName, challenge, invitations)
 	return true
 }
 
@@ -665,26 +666,26 @@ func (s *OAuthHTTP) renderPendingInvitations(w http.ResponseWriter, r *http.Requ
 // flow. The challenge is not consumed. ok is false once an error is written.
 func (s *OAuthHTTP) workspaceFormChallenge(w http.ResponseWriter, r *http.Request) (challenge oauthChallenge, userID string, ok bool) {
 	if s.workspaces == nil {
-		writeOAuthError(w, http.StatusNotFound, "invalid_request", "organization creation is not available")
+		writeBrowserOAuthError(r.Context(), w, http.StatusNotFound, "invalid_request", "organization creation is not available", oauthui.ReasonDefault)
 		return challenge, "", false
 	}
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	if err := r.ParseForm(); err != nil {
-		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse organization form")
+		writeBrowserOAuthError(r.Context(), w, http.StatusBadRequest, "invalid_request", "could not parse organization form", oauthui.ReasonDefault)
 		return challenge, "", false
 	}
 	challenge, err := s.cache.Get(r.Context(), platformOAuthChallengePrefix+r.PostForm.Get("state"))
 	if err != nil || challenge.Subject == "" || challenge.OrganizationID != "" {
-		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
+		writeBrowserOAuthError(r.Context(), w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired", oauthui.ReasonExpired)
 		return challenge, "", false
 	}
 	if challenge.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challenge.CSRFToken)) != 1 {
-		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "organization request is invalid")
+		writeBrowserOAuthError(r.Context(), w, http.StatusUnauthorized, "invalid_request", "organization request is invalid", oauthui.ReasonSessionChanged)
 		return challenge, "", false
 	}
 	subject, err := urn.ParseSessionSubject(challenge.Subject)
 	if err != nil || subject.Kind != urn.SessionSubjectKindUser {
-		writeOAuthError(w, http.StatusUnauthorized, "access_denied", "authorization identity is invalid")
+		writeBrowserOAuthError(r.Context(), w, http.StatusUnauthorized, "access_denied", "authorization identity is invalid", oauthui.ReasonSessionChanged)
 		return challenge, "", false
 	}
 	return challenge, subject.ID, true
@@ -697,7 +698,7 @@ func (s *OAuthHTTP) workspaceFormChallenge(w http.ResponseWriter, r *http.Reques
 func (s *OAuthHTTP) consumeWorkspaceChallenge(w http.ResponseWriter, r *http.Request) (oauthChallenge, bool) {
 	challenge, err := s.cache.GetAndDelete(r.Context(), platformOAuthChallengePrefix+r.PostForm.Get("state"))
 	if err != nil || challenge.Subject == "" || challenge.OrganizationID != "" {
-		writeOAuthError(w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired")
+		writeBrowserOAuthError(r.Context(), w, http.StatusUnauthorized, "invalid_request", "authorization state is invalid or expired", oauthui.ReasonExpired)
 		return challenge, false
 	}
 	return challenge, true
@@ -711,7 +712,7 @@ func (s *OAuthHTTP) continueWithOrganization(w http.ResponseWriter, r *http.Requ
 	challenge.ID = uuid.NewString()
 	challenge.OrganizationID = organization.ID
 	if err := s.cache.Store(r.Context(), challenge); err != nil {
-		writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not continue authorization")
+		writeBrowserOAuthError(r.Context(), w, http.StatusServiceUnavailable, "temporarily_unavailable", "could not continue authorization", oauthui.ReasonDefault)
 		return
 	}
 	http.Redirect(w, r, endpointURL(s.challengeBaseURL(challenge), "connect")+"?state="+url.QueryEscape(challenge.ID), http.StatusSeeOther)
@@ -729,7 +730,7 @@ func (s *OAuthHTTP) CreateWorkspaceHandler() http.Handler {
 
 		client, err := s.resolveClient(r.Context(), challenge.ClientID, lookupClientOnly)
 		if err != nil {
-			writeOAuthError(w, http.StatusUnauthorized, "invalid_client", "authorization client is unavailable")
+			writeBrowserOAuthError(r.Context(), w, http.StatusUnauthorized, "invalid_client", "authorization client is unavailable", oauthui.ReasonDefault)
 			return
 		}
 		if s.renderPendingInvitations(w, r, client.Name, challenge) {
@@ -745,7 +746,7 @@ func (s *OAuthHTTP) CreateWorkspaceHandler() http.Handler {
 			if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && strings.TrimSpace(submitted) != "" {
 				problem = shareable.Error()
 			}
-			s.renderWorkspacePage(w, client.Name, challenge, submitted, problem)
+			s.renderWorkspacePage(r.Context(), w, client.Name, challenge, submitted, problem)
 			return
 		}
 
@@ -753,7 +754,7 @@ func (s *OAuthHTTP) CreateWorkspaceHandler() http.Handler {
 		if !ok {
 			return
 		}
-		organization, err := s.workspaces.ProvisionWorkspace(r.Context(), userID, submitted)
+		organization, err := s.workspaces.ProvisionWorkspace(r.Context(), userID, submitted, client.Name)
 		switch {
 		case errors.Is(err, auth.ErrUserHasPendingInvitation):
 			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "You have a pending invitation to a Speakeasy organization. Accept it from the invitation email, then connect again."})
@@ -820,8 +821,8 @@ func (s *OAuthHTTP) selectedOrganization(ctx context.Context, challenge oauthCha
 // reviewed remote-session provider callback persists its tokens. It carries no
 // provider identity, tokens, state, or handoff values.
 func (s *OAuthHTTP) ProviderSetupCompleteHandler() http.Handler {
-	return http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
-		s.renderOAuthPage(w, oauthPageData{
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		s.renderOAuthPage(r.Context(), w, oauthPageData{
 			Title:     "Sign-in complete · Speakeasy",
 			Kind:      "provider-complete",
 			AutoClose: true,
@@ -838,7 +839,7 @@ func (s *OAuthHTTP) ConnectHandler() http.Handler {
 			s.connectPost(w, r)
 		default:
 			w.Header().Set("Allow", "GET, POST")
-			w.WriteHeader(http.StatusMethodNotAllowed)
+			writeBrowserOAuthError(r.Context(), w, http.StatusMethodNotAllowed, oautherr.CodeInvalidRequest, "method not allowed", oauthui.ReasonInvalidLink)
 		}
 	})
 }
@@ -846,7 +847,7 @@ func (s *OAuthHTTP) ConnectHandler() http.Handler {
 func (s *OAuthHTTP) connectGet(w http.ResponseWriter, r *http.Request) {
 	challenge, err := s.cache.Get(r.Context(), platformOAuthChallengePrefix+r.URL.Query().Get("state"))
 	if err != nil || challenge.Subject == "" || challenge.OrganizationID == "" {
-		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or incomplete")
+		writeBrowserOAuthError(r.Context(), w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or incomplete", oauthui.ReasonExpired)
 		return
 	}
 	// Lookup only: authorize already resolved and persisted any CIMD row,
@@ -854,15 +855,15 @@ func (s *OAuthHTTP) connectGet(w http.ResponseWriter, r *http.Request) {
 	// since become unreachable.
 	client, err := s.resolveClient(r.Context(), challenge.ClientID, lookupClientOnly)
 	if err != nil {
-		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidClient, "authorization client is unavailable")
+		writeBrowserOAuthError(r.Context(), w, http.StatusBadRequest, oautherr.CodeInvalidClient, "authorization client is unavailable", oauthui.ReasonInvalidClient)
 		return
 	}
 	organization, err := s.selectedOrganization(r.Context(), challenge)
 	if err != nil {
-		writeOAuthError(w, http.StatusForbidden, "access_denied", "selected organization is not available")
+		writeBrowserOAuthError(r.Context(), w, http.StatusForbidden, "access_denied", "selected organization is not available", oauthui.ReasonDefault)
 		return
 	}
-	s.renderOAuthPage(w, oauthPageData{
+	s.renderOAuthPage(r.Context(), w, oauthPageData{
 		Title:            "Connect to Speakeasy",
 		Kind:             "connect",
 		ClientName:       client.Name,
@@ -887,16 +888,16 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 
 	r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 	if err := r.ParseForm(); err != nil {
-		writeOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse authorization")
+		writeBrowserOAuthError(r.Context(), w, http.StatusBadRequest, "invalid_request", "could not parse authorization", oauthui.ReasonDefault)
 		return
 	}
 	challenge, err := s.cache.GetAndDelete(r.Context(), platformOAuthChallengePrefix+r.PostForm.Get("state"))
 	if err != nil || challenge.Subject == "" || challenge.OrganizationID == "" {
-		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or incomplete")
+		writeBrowserOAuthError(r.Context(), w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization state is invalid or incomplete", oauthui.ReasonExpired)
 		return
 	}
 	if challenge.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(r.PostForm.Get("csrf_token")), []byte(challenge.CSRFToken)) != 1 {
-		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization confirmation is invalid")
+		writeBrowserOAuthError(r.Context(), w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "authorization confirmation is invalid", oauthui.ReasonSessionChanged)
 		return
 	}
 	if r.PostForm.Get("action") != "approve" {
@@ -906,7 +907,7 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 	}
 	subject, err := urn.ParseSessionSubject(challenge.Subject)
 	if err != nil || subject.Kind != urn.SessionSubjectKindUser {
-		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeAccessDenied, "authorization identity is invalid")
+		writeBrowserOAuthError(r.Context(), w, http.StatusBadRequest, oautherr.CodeAccessDenied, "authorization identity is invalid", oauthui.ReasonSessionChanged)
 		return
 	}
 	principal := Principal{UserID: subject.ID, OrganizationID: challenge.OrganizationID, ConnectionID: "pending", Generation: "pending", ClientID: challenge.ClientID}
@@ -916,7 +917,7 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 	}
 	code, err := s.credentials.Issue(authorizationCodeCredential, challenge.OrganizationID, platformResource(s.challengeBaseURL(challenge)))
 	if err != nil {
-		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not complete authorization")
+		writeBrowserOAuthError(r.Context(), w, http.StatusInternalServerError, "server_error", "could not complete authorization", oauthui.ReasonDefault)
 		return
 	}
 	now := s.now()
@@ -941,7 +942,7 @@ func (s *OAuthHTTP) connectPost(w http.ResponseWriter, r *http.Request) {
 		Now: now,
 	})
 	if err != nil {
-		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not complete authorization")
+		writeBrowserOAuthError(r.Context(), w, http.StatusInternalServerError, "server_error", "could not complete authorization", oauthui.ReasonDefault)
 		return
 	}
 	recorded.setOAuthOutcome("succeeded")
@@ -955,6 +956,10 @@ func (s *OAuthHTTP) TokenHandler() http.Handler {
 		r.Body = http.MaxBytesReader(w, r.Body, 16<<10)
 		if err := r.ParseForm(); err != nil {
 			writeOAuthError(w, http.StatusBadRequest, "invalid_request", "could not parse token request")
+			return
+		}
+		if r.PostForm.Get(oauthwire.ParamGrantType) == "" {
+			writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidRequest, "grant_type is required")
 			return
 		}
 		operation, ok := tokenOperation(r.PostForm.Get("grant_type"))
@@ -1332,7 +1337,7 @@ func writeTokenGateError(w http.ResponseWriter, err error) {
 		writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "organization access could not be verified")
 		return
 	}
-	writeOAuthError(w, http.StatusForbidden, "access_denied", "organization access is not available")
+	writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidGrant, "organization access is not available")
 }
 
 // ProviderSetupCompletionURL is the only callback landing page accepted for
@@ -1388,11 +1393,16 @@ func (s *OAuthHTTP) writeClientResolutionError(w http.ResponseWriter, ctx contex
 	if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
 		// Policy, not a spec violation, and it carries its own actionable
 		// description. Already logged inside admitCIMDClient.
-		writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidClient, admissionErr.Description())
+		writeBrowserOAuthError(ctx, w, http.StatusBadRequest, oautherr.CodeInvalidClient, admissionErr.Description(), oauthui.ReasonOrganizationBlocked)
 		return
 	}
 	if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
-		writeOAuthError(w, http.StatusBadRequest, oauthErr.Code, oauthErr.Description)
+		reason := oauthui.ReasonDefault
+		switch oauthErr.Code {
+		case oautherr.CodeInvalidClient, oautherr.CodeInvalidClientMetadata, oautherr.CodeInvalidRedirectURI:
+			reason = oauthui.ReasonInvalidClient
+		}
+		writeBrowserOAuthError(ctx, w, http.StatusBadRequest, oauthErr.Code, oauthErr.Description, reason)
 		return
 	}
 	if errors.Is(err, errCIMDFetchFailed) {
@@ -1405,15 +1415,15 @@ func (s *OAuthHTTP) writeClientResolutionError(w http.ResponseWriter, ctx contex
 			attr.SlogOAuthClientID(truncateClientIDForLog(clientID)),
 			attr.SlogError(err),
 		)
-		writeOAuthError(w, http.StatusServiceUnavailable, "temporarily_unavailable", "failed to fetch client metadata document")
+		writeBrowserOAuthError(ctx, w, http.StatusServiceUnavailable, "temporarily_unavailable", "failed to fetch client metadata document", oauthui.ReasonDefault)
 		return
 	}
 	if !errors.Is(err, platformoauth.ErrNotFound) && !errors.Is(err, platformoauth.ErrRevoked) {
 		s.logger.ErrorContext(ctx, "resolve OAuth client", attr.SlogError(err))
-		writeOAuthError(w, http.StatusServiceUnavailable, oautherr.CodeTemporarilyUnavailable, "client lookup is temporarily unavailable")
+		writeBrowserOAuthError(ctx, w, http.StatusServiceUnavailable, oautherr.CodeTemporarilyUnavailable, "client lookup is temporarily unavailable", oauthui.ReasonDefault)
 		return
 	}
-	writeOAuthError(w, http.StatusBadRequest, oautherr.CodeInvalidClient, "unknown client_id")
+	writeBrowserOAuthError(ctx, w, http.StatusBadRequest, oautherr.CodeInvalidClient, "unknown client_id", oauthui.ReasonInvalidClient)
 }
 
 func (s *OAuthHTTP) writeClientAuthenticationFailure(w http.ResponseWriter, r *http.Request, err error) {
@@ -1476,10 +1486,10 @@ func writeJSON(w http.ResponseWriter, status int, body any) {
 	_, _ = w.Write(encoded)
 }
 
-func (s *OAuthHTTP) renderOAuthPage(w http.ResponseWriter, data oauthPageData) {
+func (s *OAuthHTTP) renderOAuthPage(ctx context.Context, w http.ResponseWriter, data oauthPageData) {
 	scriptNonce, err := opaqueToken()
 	if err != nil {
-		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not render authorization page")
+		writeBrowserOAuthError(ctx, w, http.StatusInternalServerError, "server_error", "could not render authorization page", oauthui.ReasonDefault)
 		return
 	}
 	data.ScriptNonce = scriptNonce
@@ -1487,7 +1497,7 @@ func (s *OAuthHTTP) renderOAuthPage(w http.ResponseWriter, data oauthPageData) {
 
 	var page strings.Builder
 	if err := oauthPageTemplate.Execute(&page, data); err != nil {
-		writeOAuthError(w, http.StatusInternalServerError, "server_error", "could not render authorization page")
+		writeBrowserOAuthError(ctx, w, http.StatusInternalServerError, "server_error", "could not render authorization page", oauthui.ReasonDefault)
 		return
 	}
 	w.Header().Set("Cache-Control", "no-store")
@@ -1516,6 +1526,38 @@ func writeRequestOAuthError(w http.ResponseWriter, status int, err error) {
 		return
 	}
 	writeOAuthError(w, status, "invalid_request", "invalid request")
+}
+
+// writePreAuthenticationOAuthError requires a user click for registered callbacks
+// outside loopback; later browser legs retain their existing redirect behavior.
+// clientID is the value the request presented.
+func writePreAuthenticationOAuthError(w http.ResponseWriter, r *http.Request, client platformoauth.Client, clientID, redirectURI, state string, err error) {
+	if oauthwire.MayAutoRedirectBeforeAuthentication(redirectURI) {
+		redirectOAuthError(w, r, redirectURI, state, err)
+		return
+	}
+	oauthError, ok := errors.AsType[*oauthwire.Error](err)
+	if !ok {
+		oauthError = &oauthwire.Error{Code: oautherr.CodeInvalidRequest, Description: "invalid request"}
+	}
+	setOAuthTelemetryOutcome(w, oauthError.Code)
+	callback := redirectURL(redirectURI, "", state, oauthError.Code, oauthError.Description)
+	page := oauthui.AuthorizationError{
+		Recovery:       nil,
+		Setup:          false,
+		Status:         http.StatusBadRequest,
+		Reason:         oauthui.ReasonDefault,
+		Approval:       false,
+		ErrorID:        "",
+		CallbackURL:    callback,
+		Code:           oauthError.Code,
+		Description:    oauthError.Description,
+		ClientName:     client.Name,
+		ClientID:       clientID,
+		ClientIDOrigin: clientIDOrigin(client),
+		ServerName:     "Speakeasy",
+	}
+	_ = oauthui.WriteAuthorizationError(r.Context(), w, page)
 }
 
 func redirectOAuthError(w http.ResponseWriter, r *http.Request, redirectURI, state string, err error) {
@@ -1553,4 +1595,33 @@ func opaqueToken() (string, error) {
 		return "", fmt.Errorf("generate opaque token: %w", err)
 	}
 	return base64.RawURLEncoding.EncodeToString(bytes), nil
+}
+
+// writeBrowserOAuthError preserves OAuth telemetry and wire semantics while
+// rendering a terminal navigation response without a callback.
+func writeBrowserOAuthError(ctx context.Context, w http.ResponseWriter, status int, code, description string, reason oauthui.Reason) {
+	setOAuthTelemetryOutcome(w, code)
+	_ = oauthui.WriteAuthorizationError(ctx, w, oauthui.AuthorizationError{
+		Recovery:       nil,
+		Setup:          false,
+		Status:         status,
+		Reason:         reason,
+		Approval:       false,
+		ErrorID:        "",
+		Code:           code,
+		Description:    description,
+		CallbackURL:    "",
+		ClientName:     "",
+		ClientID:       "",
+		ClientIDOrigin: "",
+		ServerName:     "Speakeasy",
+	})
+}
+
+func writeBrowserRequestOAuthError(ctx context.Context, w http.ResponseWriter, status int, err error) {
+	if oauthError, ok := errors.AsType[*oauthwire.Error](err); ok {
+		writeBrowserOAuthError(ctx, w, status, oauthError.Code, oauthError.Description, oauthui.ReasonInvalidLink)
+		return
+	}
+	writeBrowserOAuthError(ctx, w, status, oautherr.CodeInvalidRequest, "invalid request", oauthui.ReasonInvalidLink)
 }

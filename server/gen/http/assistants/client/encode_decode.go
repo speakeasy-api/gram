@@ -2375,6 +2375,483 @@ func DecodeEnsureManagedAssistantResponse(decoder func(*http.Response) goahttp.D
 	}
 }
 
+// BuildListExecutionProfilesRequest instantiates a HTTP request object with
+// method and path set to call the "assistants" service "listExecutionProfiles"
+// endpoint
+func (c *Client) BuildListExecutionProfilesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListExecutionProfilesAssistantsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("assistants", "listExecutionProfiles", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListExecutionProfilesRequest returns an encoder for requests sent to
+// the assistants listExecutionProfiles server.
+func EncodeListExecutionProfilesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*assistants.ListExecutionProfilesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("assistants", "listExecutionProfiles", "*assistants.ListExecutionProfilesPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("assistant_id", p.AssistantID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListExecutionProfilesResponse returns a decoder for responses returned
+// by the assistants listExecutionProfiles endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeListExecutionProfilesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListExecutionProfilesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListExecutionProfilesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "listExecutionProfiles", err)
+			}
+			err = ValidateListExecutionProfilesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "listExecutionProfiles", err)
+			}
+			res := NewListExecutionProfilesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListExecutionProfilesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "listExecutionProfiles", err)
+			}
+			err = ValidateListExecutionProfilesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "listExecutionProfiles", err)
+			}
+			return nil, NewListExecutionProfilesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListExecutionProfilesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "listExecutionProfiles", err)
+			}
+			err = ValidateListExecutionProfilesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "listExecutionProfiles", err)
+			}
+			return nil, NewListExecutionProfilesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListExecutionProfilesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "listExecutionProfiles", err)
+			}
+			err = ValidateListExecutionProfilesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "listExecutionProfiles", err)
+			}
+			return nil, NewListExecutionProfilesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListExecutionProfilesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "listExecutionProfiles", err)
+			}
+			err = ValidateListExecutionProfilesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "listExecutionProfiles", err)
+			}
+			return nil, NewListExecutionProfilesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListExecutionProfilesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "listExecutionProfiles", err)
+			}
+			err = ValidateListExecutionProfilesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "listExecutionProfiles", err)
+			}
+			return nil, NewListExecutionProfilesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListExecutionProfilesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "listExecutionProfiles", err)
+			}
+			err = ValidateListExecutionProfilesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "listExecutionProfiles", err)
+			}
+			return nil, NewListExecutionProfilesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListExecutionProfilesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "listExecutionProfiles", err)
+			}
+			err = ValidateListExecutionProfilesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "listExecutionProfiles", err)
+			}
+			return nil, NewListExecutionProfilesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListExecutionProfilesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assistants", "listExecutionProfiles", err)
+				}
+				err = ValidateListExecutionProfilesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assistants", "listExecutionProfiles", err)
+				}
+				return nil, NewListExecutionProfilesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListExecutionProfilesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assistants", "listExecutionProfiles", err)
+				}
+				err = ValidateListExecutionProfilesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assistants", "listExecutionProfiles", err)
+				}
+				return nil, NewListExecutionProfilesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assistants", "listExecutionProfiles", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListExecutionProfilesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "listExecutionProfiles", err)
+			}
+			err = ValidateListExecutionProfilesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "listExecutionProfiles", err)
+			}
+			return nil, NewListExecutionProfilesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("assistants", "listExecutionProfiles", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSetExecutionProfileChoiceRequest instantiates a HTTP request object
+// with method and path set to call the "assistants" service
+// "setExecutionProfileChoice" endpoint
+func (c *Client) BuildSetExecutionProfileChoiceRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetExecutionProfileChoiceAssistantsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("assistants", "setExecutionProfileChoice", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetExecutionProfileChoiceRequest returns an encoder for requests sent
+// to the assistants setExecutionProfileChoice server.
+func EncodeSetExecutionProfileChoiceRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*assistants.SetExecutionProfileChoicePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("assistants", "setExecutionProfileChoice", "*assistants.SetExecutionProfileChoicePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewSetExecutionProfileChoiceRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("assistants", "setExecutionProfileChoice", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetExecutionProfileChoiceResponse returns a decoder for responses
+// returned by the assistants setExecutionProfileChoice endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeSetExecutionProfileChoiceResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetExecutionProfileChoiceResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetExecutionProfileChoiceResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "setExecutionProfileChoice", err)
+			}
+			err = ValidateSetExecutionProfileChoiceResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "setExecutionProfileChoice", err)
+			}
+			res := NewSetExecutionProfileChoiceAssistantExecutionProfileOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetExecutionProfileChoiceUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "setExecutionProfileChoice", err)
+			}
+			err = ValidateSetExecutionProfileChoiceUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "setExecutionProfileChoice", err)
+			}
+			return nil, NewSetExecutionProfileChoiceUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetExecutionProfileChoiceForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "setExecutionProfileChoice", err)
+			}
+			err = ValidateSetExecutionProfileChoiceForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "setExecutionProfileChoice", err)
+			}
+			return nil, NewSetExecutionProfileChoiceForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetExecutionProfileChoiceBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "setExecutionProfileChoice", err)
+			}
+			err = ValidateSetExecutionProfileChoiceBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "setExecutionProfileChoice", err)
+			}
+			return nil, NewSetExecutionProfileChoiceBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetExecutionProfileChoiceNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "setExecutionProfileChoice", err)
+			}
+			err = ValidateSetExecutionProfileChoiceNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "setExecutionProfileChoice", err)
+			}
+			return nil, NewSetExecutionProfileChoiceNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetExecutionProfileChoiceConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "setExecutionProfileChoice", err)
+			}
+			err = ValidateSetExecutionProfileChoiceConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "setExecutionProfileChoice", err)
+			}
+			return nil, NewSetExecutionProfileChoiceConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetExecutionProfileChoiceUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "setExecutionProfileChoice", err)
+			}
+			err = ValidateSetExecutionProfileChoiceUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "setExecutionProfileChoice", err)
+			}
+			return nil, NewSetExecutionProfileChoiceUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetExecutionProfileChoiceInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "setExecutionProfileChoice", err)
+			}
+			err = ValidateSetExecutionProfileChoiceInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "setExecutionProfileChoice", err)
+			}
+			return nil, NewSetExecutionProfileChoiceInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetExecutionProfileChoiceInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assistants", "setExecutionProfileChoice", err)
+				}
+				err = ValidateSetExecutionProfileChoiceInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assistants", "setExecutionProfileChoice", err)
+				}
+				return nil, NewSetExecutionProfileChoiceInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetExecutionProfileChoiceUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("assistants", "setExecutionProfileChoice", err)
+				}
+				err = ValidateSetExecutionProfileChoiceUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("assistants", "setExecutionProfileChoice", err)
+				}
+				return nil, NewSetExecutionProfileChoiceUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("assistants", "setExecutionProfileChoice", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetExecutionProfileChoiceGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("assistants", "setExecutionProfileChoice", err)
+			}
+			err = ValidateSetExecutionProfileChoiceGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("assistants", "setExecutionProfileChoice", err)
+			}
+			return nil, NewSetExecutionProfileChoiceGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("assistants", "setExecutionProfileChoice", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalAssistantResponseBodyToTypesAssistant builds a value of type
 // *types.Assistant from a value of type *AssistantResponseBody.
 func unmarshalAssistantResponseBodyToTypesAssistant(v *AssistantResponseBody) *types.Assistant {
@@ -2541,6 +3018,68 @@ func marshalSendMessageAttachmentRequestBodyToAssistantsSendMessageAttachment(v 
 	res := &assistants.SendMessageAttachment{
 		AssetID: v.AssetID,
 		Name:    v.Name,
+	}
+
+	return res
+}
+
+// unmarshalAssistantExecutionProfileResponseBodyToAssistantsAssistantExecutionProfile
+// builds a value of type *assistants.AssistantExecutionProfile from a value of
+// type *AssistantExecutionProfileResponseBody.
+func unmarshalAssistantExecutionProfileResponseBodyToAssistantsAssistantExecutionProfile(v *AssistantExecutionProfileResponseBody) *assistants.AssistantExecutionProfile {
+	res := &assistants.AssistantExecutionProfile{
+		TriggerInstanceID: *v.TriggerInstanceID,
+		TriggerName:       *v.TriggerName,
+		ExecutionContext:  *v.ExecutionContext,
+		Version:           *v.Version,
+	}
+	res.Servers = make([]*assistants.ExecutionProfileServer, len(v.Servers))
+	for i, val := range v.Servers {
+		if val == nil {
+			res.Servers[i] = nil
+			continue
+		}
+		res.Servers[i] = unmarshalExecutionProfileServerResponseBodyToAssistantsExecutionProfileServer(val)
+	}
+
+	return res
+}
+
+// unmarshalExecutionProfileServerResponseBodyToAssistantsExecutionProfileServer
+// builds a value of type *assistants.ExecutionProfileServer from a value of
+// type *ExecutionProfileServerResponseBody.
+func unmarshalExecutionProfileServerResponseBodyToAssistantsExecutionProfileServer(v *ExecutionProfileServerResponseBody) *assistants.ExecutionProfileServer {
+	res := &assistants.ExecutionProfileServer{
+		McpServerID:   *v.McpServerID,
+		Chosen:        *v.Chosen,
+		AuthClientID:  v.AuthClientID,
+		NoAuthAllowed: *v.NoAuthAllowed,
+		GapReason:     v.GapReason,
+	}
+	if v.Source != nil {
+		source := assistants.ExecutionProfileChoiceSource(*v.Source)
+		res.Source = &source
+	}
+	res.Options = make([]*assistants.ExecutionProfileOption, len(v.Options))
+	for i, val := range v.Options {
+		if val == nil {
+			res.Options[i] = nil
+			continue
+		}
+		res.Options[i] = unmarshalExecutionProfileOptionResponseBodyToAssistantsExecutionProfileOption(val)
+	}
+
+	return res
+}
+
+// unmarshalExecutionProfileOptionResponseBodyToAssistantsExecutionProfileOption
+// builds a value of type *assistants.ExecutionProfileOption from a value of
+// type *ExecutionProfileOptionResponseBody.
+func unmarshalExecutionProfileOptionResponseBodyToAssistantsExecutionProfileOption(v *ExecutionProfileOptionResponseBody) *assistants.ExecutionProfileOption {
+	res := &assistants.ExecutionProfileOption{
+		AuthClientID: *v.AuthClientID,
+		Name:         *v.Name,
+		ClientType:   *v.ClientType,
 	}
 
 	return res

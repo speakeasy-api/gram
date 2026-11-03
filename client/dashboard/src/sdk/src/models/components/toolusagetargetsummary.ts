@@ -60,6 +60,10 @@ export type ToolUsageTargetSummary = {
    */
   failureRate: number;
   /**
+   * MCP server id for hosted and tunneled targets; absent for other targets
+   */
+  mcpServerId?: string | undefined;
+  /**
    * Number of successful tool usage events for the target
    */
   successCount: number;
@@ -106,6 +110,7 @@ export const ToolUsageTargetSummary$inboundSchema: z.ZodMiniType<
     event_count: z.int(),
     failure_count: z.int(),
     failure_rate: z.number(),
+    mcp_server_id: z.optional(z.string()),
     success_count: z.int(),
     target_id: z.string(),
     target_kind: ToolUsageTargetSummaryTargetKind$inboundSchema,
@@ -118,6 +123,7 @@ export const ToolUsageTargetSummary$inboundSchema: z.ZodMiniType<
       "event_count": "eventCount",
       "failure_count": "failureCount",
       "failure_rate": "failureRate",
+      "mcp_server_id": "mcpServerId",
       "success_count": "successCount",
       "target_id": "targetId",
       "target_kind": "targetKind",

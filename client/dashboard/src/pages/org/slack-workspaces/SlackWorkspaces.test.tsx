@@ -25,6 +25,13 @@ const mocks = vi.hoisted(() => ({
   pending: false,
   error: null as Error | null,
   refetch: vi.fn(),
+  toolApprovals: false,
+  missingScopes: [] as string[],
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: () => ({
+    status: mocks.toolApprovals ? "enabled" : "disabled",
+  }),
 }));
 vi.mock("./SlackDirectory", () => ({
   SlackDirectory: () => <div>Directory table</div>,
@@ -87,6 +94,7 @@ vi.mock("@gram/client/react-query/slackDirectoryConnections.js", () => ({
                   status: "connected",
                   generation: mocks.generation,
                   grantedScopes: [],
+                  missingScopes: mocks.missingScopes,
                   updatedAt: "2026-01-01T00:00:00Z",
                   memberCount: 0,
                   directoryStatus: "never_synced",
@@ -99,6 +107,7 @@ vi.mock("@gram/client/react-query/slackDirectoryConnections.js", () => ({
                   status: "disconnected",
                   generation: "generation-retired",
                   grantedScopes: [],
+                  missingScopes: ["chat:write"],
                   updatedAt: "2026-01-01T00:00:00Z",
                   memberCount: 0,
                   directoryStatus: "stale",
@@ -167,6 +176,8 @@ beforeEach(() => {
   mocks.pending = false;
   mocks.error = null;
   mocks.generation = "generation-one";
+  mocks.toolApprovals = false;
+  mocks.missingScopes = [];
 });
 afterEach(() => {
   cleanup();
@@ -318,6 +329,39 @@ it.each([true, false])(
   },
 );
 
+it("asks to reinstall a workspace that cannot send approval messages", () => {
+  mocks.toolApprovals = true;
+  mocks.missingScopes = ["chat:write"];
+  show();
+  expect(screen.getByText(/Reinstall the Slack app so approvers/)).toBeTruthy();
+  // A disconnected workspace is not offered.
+  expect(
+    screen.queryByRole("button", { name: "Reinstall in Retired workspace" }),
+  ).toBeNull();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Reinstall in Example workspace" }),
+  );
+  expect(mocks.begin).toHaveBeenCalledWith(
+    expect.objectContaining({
+      request: {
+        beginSlackDirectoryConnectionRequestBody: {
+          connectionId: "connection-one",
+        },
+      },
+    }),
+    expect.anything(),
+  );
+});
+it("does not ask to reinstall without tool approvals or once granted", () => {
+  mocks.missingScopes = ["chat:write"];
+  const { unmount } = show();
+  expect(screen.queryByText(/Reinstall the Slack app so approvers/)).toBeNull();
+  unmount();
+  mocks.toolApprovals = true;
+  mocks.missingScopes = [];
+  show();
+  expect(screen.queryByText(/Reinstall the Slack app so approvers/)).toBeNull();
+});
 it("has no per-workspace Reconnect button", () => {
   show();
   expect(screen.getByText("Example workspace")).toBeTruthy();

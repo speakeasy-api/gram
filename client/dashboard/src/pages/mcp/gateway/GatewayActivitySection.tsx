@@ -14,6 +14,8 @@ import { Text } from "@/components/ui/Text";
 import { useLogsEnabledErrorCheck } from "@/hooks/useLogsEnabled";
 import { telemetryGetMetaMcpServerUsage } from "@gram/client/funcs/telemetryGetMetaMcpServerUsage";
 import { telemetryGetObservabilityOverview } from "@gram/client/funcs/telemetryGetObservabilityOverview";
+import { telemetryGetOrganizationGatewayOverview } from "@gram/client/funcs/telemetryGetOrganizationGatewayOverview";
+import { telemetryGetOrganizationGatewayUsage } from "@gram/client/funcs/telemetryGetOrganizationGatewayUsage";
 import type { GetMetaMcpServerUsageResult } from "@gram/client/models/components/getmetamcpserverusageresult.js";
 import type { GetObservabilityOverviewResult } from "@gram/client/models/components/getobservabilityoverviewresult.js";
 import type { ObservabilitySummary } from "@gram/client/models/components/observabilitysummary.js";
@@ -31,16 +33,18 @@ import {
 import type { MemberRow } from "./memberRows";
 import { MetaToolUsageChart } from "./MetaToolUsageChart";
 
+const noMembers: MemberRow[] = [];
+
 function errorRate(summary: ObservabilitySummary): number {
   return summary.totalToolCalls > 0
     ? (summary.failedToolCalls / summary.totalToolCalls) * 100
     : 0;
 }
 
-const memberColumns: Column<MemberUsageRow>[] = [
+const memberColumns = (header: string): Column<MemberUsageRow>[] => [
   {
     key: "label",
-    header: "Member",
+    header,
     width: "2fr",
     render: (row) => <Text className="truncate">{row.label}</Text>,
   },
@@ -102,19 +106,32 @@ function LoadError({ what }: { what: string }): JSX.Element {
   );
 }
 
+// A stored gateway, read in its project, or the caller's Organization
+// Gateway, read across every project in the organization.
+export type GatewayActivityScope =
+  | {
+      kind: "gateway";
+      metaMcpServerId: string;
+      memberRows: MemberRow[];
+      isLoadingMembers?: boolean;
+    }
+  | { kind: "organization"; organizationId: string };
+
 // Gateway-attributed usage for the selected range: the shared overview
 // metrics scoped to calls dispatched through this gateway, the discovery
 // funnel, and the per-member breakdown. The two queries fail independently so
 // one failing never hides what the other loaded.
 export function GatewayActivitySection({
-  metaMcpServerId,
-  memberRows,
-  isLoadingMembers = false,
+  scope,
 }: {
-  metaMcpServerId: string;
-  memberRows: MemberRow[];
-  isLoadingMembers?: boolean;
+  scope: GatewayActivityScope;
 }): JSX.Element {
+  const isOrganization = scope.kind === "organization";
+  const metaMcpServerId =
+    scope.kind === "gateway" ? scope.metaMcpServerId : undefined;
+  const memberRows = scope.kind === "gateway" ? scope.memberRows : noMembers;
+  const isLoadingMembers =
+    scope.kind === "gateway" && (scope.isLoadingMembers ?? false);
   const client = useGramContext();
   const routes = useRoutes();
   const [searchParams] = useSearchParams();
@@ -131,9 +148,15 @@ export function GatewayActivitySection({
     clearCustomRange,
   } = useDateRangeFilter();
   const timeRangeMs = useMemo(() => to.getTime() - from.getTime(), [from, to]);
-  const rangeKey = [metaMcpServerId, from.toISOString(), to.toISOString()];
-  // Logs and insights read the same range params, so links carry the range shown here.
+  const rangeKey = [
+    scope.kind === "gateway" ? scope.metaMcpServerId : scope.organizationId,
+    from.toISOString(),
+    to.toISOString(),
+  ];
+  // Logs and insights read the same range params, so links carry the range
+  // shown here. Both are project pages, so the Organization Gateway has none.
   const gatewayScopedSearch = useMemo(() => {
+    if (!metaMcpServerId) return undefined;
     const params = new URLSearchParams();
     params.set("server", encodeGatewayServerFilter(metaMcpServerId));
     for (const key of ["range", "from", "to", "label"]) {
@@ -143,10 +166,13 @@ export function GatewayActivitySection({
     return `?${params.toString()}`;
   }, [metaMcpServerId, searchParams]);
   const canViewToolLogs = useCanViewToolLogs();
-  const logsHref = canViewToolLogs
-    ? routes.logs.href() + gatewayScopedSearch
+  const logsHref =
+    canViewToolLogs && gatewayScopedSearch
+      ? routes.logs.href() + gatewayScopedSearch
+      : undefined;
+  const insightsHref = gatewayScopedSearch
+    ? routes.insights.href() + gatewayScopedSearch
     : undefined;
-  const insightsHref = routes.insights.href() + gatewayScopedSearch;
   const handleRangeSelect = useCallback(
     (rangeFrom: Date, rangeTo: Date) =>
       setCustomRangeParam(
@@ -162,14 +188,18 @@ export function GatewayActivitySection({
       queryKey: ["gateway-overview", ...rangeKey],
       queryFn: () =>
         unwrapAsync(
-          telemetryGetObservabilityOverview(client, {
-            getObservabilityOverviewPayload: {
-              from,
-              to,
-              metaMcpServerId,
-              includeTimeSeries: true,
-            },
-          }),
+          metaMcpServerId
+            ? telemetryGetObservabilityOverview(client, {
+                getObservabilityOverviewPayload: {
+                  from,
+                  to,
+                  metaMcpServerId,
+                  includeTimeSeries: true,
+                },
+              })
+            : telemetryGetOrganizationGatewayOverview(client, {
+                getOrganizationGatewayActivityPayload: { from, to },
+              }),
         ),
       placeholderData: keepPreviousData,
       throwOnError: false,
@@ -180,9 +210,13 @@ export function GatewayActivitySection({
       queryKey: ["gateway-usage", ...rangeKey],
       queryFn: () =>
         unwrapAsync(
-          telemetryGetMetaMcpServerUsage(client, {
-            getMetaMcpServerUsagePayload: { metaMcpServerId, from, to },
-          }),
+          metaMcpServerId
+            ? telemetryGetMetaMcpServerUsage(client, {
+                getMetaMcpServerUsagePayload: { metaMcpServerId, from, to },
+              })
+            : telemetryGetOrganizationGatewayUsage(client, {
+                getOrganizationGatewayActivityPayload: { from, to },
+              }),
         ),
       placeholderData: keepPreviousData,
       throwOnError: false,
@@ -223,7 +257,9 @@ export function GatewayActivitySection({
     : "No dispatched calls for the selected time range";
   const noMemberCallsMessage = stoppedAtDiscovery
     ? "No execute_tool calls were observed in the selected range; agents only used the discovery tools."
-    : "No member calls in the selected range.";
+    : isOrganization
+      ? "No server calls in the selected range."
+      : "No member calls in the selected range.";
 
   return (
     <Page.Section>
@@ -233,8 +269,9 @@ export function GatewayActivitySection({
         Activity
       </Page.Section.Title>
       <Page.Section.Description>
-        Calls dispatched to members through execute_tool, the discovery steps
-        agents took to reach them, and how the load spread across members.
+        {isOrganization
+          ? "Calls dispatched to MCP servers through execute_tool, the discovery steps agents took to reach them, and how the load spread across servers."
+          : "Calls dispatched to members through execute_tool, the discovery steps agents took to reach them, and how the load spread across members."}
       </Page.Section.Description>
       <Page.Section.CTA>
         <TimeRangePicker
@@ -345,12 +382,16 @@ export function GatewayActivitySection({
                   loading={usage.isLoading && !usage.data}
                 />
                 <div className="border p-5">
-                  <h3 className="text-eyebrow mb-3">Calls by member</h3>
+                  <h3 className="text-eyebrow mb-3">
+                    {isOrganization ? "Calls by server" : "Calls by member"}
+                  </h3>
                   {(usage.isLoading && !usage.data) || isLoadingMembers ? (
                     <SkeletonTable />
                   ) : (
                     <Table
-                      columns={memberColumns}
+                      columns={memberColumns(
+                        isOrganization ? "Server" : "Member",
+                      )}
                       data={members}
                       rowKey={(row) => row.mcpServerId}
                       noResultsMessage={

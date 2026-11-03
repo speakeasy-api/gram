@@ -8,6 +8,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { catalogPresetState } from "@/pages/security/server-guardrails/server-guardrail-policy";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { AddServerDialog, GuardrailOutcomeNotice } from "./AddServerDialog";
@@ -34,6 +35,7 @@ vi.mock("@/contexts/Auth", () => ({
 
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "default",
+  useSlugs: () => ({ orgSlug: "acme", projectSlug: "default" }),
   useSdkClient: () => ({
     mcpRegistries: { getServerDetails: mocks.getServerDetails },
   }),
@@ -49,12 +51,6 @@ vi.mock("@/hooks/useRBAC", () => ({
 vi.mock("react-router", async (importOriginal) => ({
   ...(await importOriginal<typeof import("react-router")>()),
   useNavigate: () => mocks.navigate,
-}));
-
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    policyCenter: { new: { href: () => "/p/risk-policies/new" } },
-  }),
 }));
 
 vi.mock("./useRemoteMcpInstallWorkflow", () => ({
@@ -76,6 +72,7 @@ const server = {
   toolCount: 0,
   isReadOnly: false,
   supportsDcr: true,
+  supportsCimd: false,
   remotes: [
     {
       url: "https://mcp.example.test/mcp",
@@ -91,17 +88,19 @@ function render(ui: React.ReactElement) {
   const invalidate = vi.spyOn(client, "invalidateQueries");
   return {
     ...testingRender(
-      <QueryClientProvider client={client}>{ui}</QueryClientProvider>,
+      <MemoryRouter>
+        <QueryClientProvider client={client}>{ui}</QueryClientProvider>
+      </MemoryRouter>,
     ),
     invalidate,
   };
 }
 
-function renderDialog(): void {
+function renderDialog(selectedServer = server): void {
   render(
     <TooltipProvider>
       <AddServerDialog
-        servers={[server]}
+        servers={[selectedServer]}
         open
         onOpenChange={(open) => {
           mocks.onOpenChange(open);
@@ -111,14 +110,13 @@ function renderDialog(): void {
   );
 }
 
-beforeEach(() => {
-  mocks.hasScope.mockReturnValue(false);
+function mockConfigureWorkflow(selectedServer = server): void {
   mocks.workflow.mockReturnValue({
     phase: "configure",
     projectSlug: "default",
     serverConfigs: [
       {
-        server,
+        server: selectedServer,
         name: "Test Server",
         remotes: server.remotes,
         identityMode: "user",
@@ -133,6 +131,11 @@ beforeEach(() => {
     startInstall: mocks.startInstall,
     updateServerConfig: mocks.updateServerConfig,
   });
+}
+
+beforeEach(() => {
+  mocks.hasScope.mockReturnValue(false);
+  mockConfigureWorkflow();
 });
 
 afterEach(() => {
@@ -141,6 +144,15 @@ afterEach(() => {
 });
 
 describe("AddServerDialog identity permissions", () => {
+  it("marks User Identity as Default for CIMD-only servers", async () => {
+    const cimdServer = { ...server, supportsDcr: false, supportsCimd: true };
+    mockConfigureWorkflow(cimdServer);
+    renderDialog(cimdServer);
+    expect(
+      await screen.findByRole("radio", { name: /User Identity Default/ }),
+    ).toBeDefined();
+  });
+
   it("disables User Identity and explains project:write", async () => {
     renderDialog();
 
@@ -298,7 +310,7 @@ describe("AddServerDialog guardrails", () => {
       mocks.navigate.mock.calls[0]![0] as string,
       "https://x",
     );
-    expect(url.pathname).toBe("/p/risk-policies/new");
+    expect(url.pathname).toBe("/acme/projects/default/risk-policies/new");
     expect(url.searchParams.get("kind")).toBe("standard");
     expect(url.searchParams.get("mcp_server_id")).toBe("srv-1");
     expect(url.searchParams.get("action")).toBe("flag");

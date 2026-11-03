@@ -128,9 +128,13 @@ func (s *Service) SetProductFeature(ctx context.Context, payload *gen.SetProduct
 
 	// Staff-managed entitlements (SSO, SCIM, ...) must not be self-granted by
 	// organization admins; org-settable operational toggles need org:admin only.
-	// Retired rollout flags cannot be changed, including by staff.
+	// Retired rollout flags and upstream auth enforcement, which has readiness
+	// checks of its own, cannot be changed here, including by staff.
 	if feature == Feature("automatic-role-distribution") {
 		return oops.E(oops.CodeInvalid, nil, "unknown product feature")
+	}
+	if feature == FeatureUpstreamAuthEnforced {
+		return oops.E(oops.CodeInvalid, nil, "upstream auth enforcement is changed through the admin enforcement endpoint")
 	}
 	if feature.RequiresPlatformAdmin() {
 		if _, _, err := auth.RequirePlatformAdmin(ctx, s.logger); err != nil {
@@ -233,6 +237,14 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 	}
 
 	snapshot := s.featureClient.Snapshot(ctx, orgID)
+	// Left absent when unreadable so a caller never presents an enforcing
+	// organization as unenforced.
+	var upstreamAuthEnforced *bool
+	if enforced, err := s.featureClient.IsFeatureEnabled(ctx, orgID, FeatureUpstreamAuthEnforced); err != nil {
+		s.logger.WarnContext(ctx, "failed to read upstream auth enforcement", attr.SlogError(err), attr.SlogOrganizationID(orgID))
+	} else {
+		upstreamAuthEnforced = &enforced
+	}
 	return &gen.ProductFeatures{
 		LogsEnabled:                             snapshot.LogsEnabled,
 		ToolIoLogsEnabled:                       snapshot.ToolIoLogsEnabled,
@@ -254,7 +266,9 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 		NetworkIngressEnabled:                   snapshot.NetworkIngressEnabled,
 		SignalsIntelligenceEnabled:              snapshot.SignalsIntelligenceEnabled,
 		OrganizationGatewayDisabled:             snapshot.OrganizationGatewayDisabled,
+		CodeModeEnabled:                         snapshot.CodeModeEnabled,
 		DeviceAgent:                             snapshot.DeviceAgent,
+		UpstreamAuthEnforced:                    upstreamAuthEnforced,
 	}, nil
 }
 

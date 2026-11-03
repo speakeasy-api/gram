@@ -12,6 +12,7 @@ import { unwrapAsync } from "@gram/client/types/fp";
 import { Column, Table } from "@/components/ui/Table";
 import { useQuery } from "@tanstack/react-query";
 import { useMemo } from "react";
+import type { HostedServerRef } from "./MCPOverviewTab";
 
 type UserRow = GetToolUsageUsersResult["users"][number] & {
   agent?: { id: string; name: string };
@@ -53,11 +54,11 @@ const columns: Column<UserRow>[] = [
 ];
 
 export function TopUsersTable({
-  toolsetSlug,
+  server,
   from,
   to,
 }: {
-  toolsetSlug: string;
+  server: HostedServerRef;
   from: Date;
   to: Date;
 }): React.JSX.Element {
@@ -67,7 +68,9 @@ export function TopUsersTable({
     useQuery({
       queryKey: [
         "mcp-detail-top-users",
-        toolsetSlug,
+        server.kind,
+        server.id,
+        server.slug,
         from.toISOString(),
         to.toISOString(),
       ],
@@ -77,7 +80,9 @@ export function TopUsersTable({
             getToolUsageSummaryPayload: {
               from,
               to,
-              hostedToolsetSlugs: [toolsetSlug],
+              ...(server.kind === "mcp-server"
+                ? { mcpServerIds: [server.id] }
+                : { hostedToolsetSlugs: [server.slug] }),
             },
           }),
         ),

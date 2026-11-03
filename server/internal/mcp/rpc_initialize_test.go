@@ -164,7 +164,7 @@ func TestHandleInitialize_WritesNegotiatedVersionBackIntoPayload(t *testing.T) {
 		Params:  rawParams,
 	}
 
-	body, err := handleInitialize(t.Context(), testenv.NewLogger(t), nil, req, payload, nil, metadata_repo.New(failingDBTX{}), store)
+	body, err := handleInitialize(t.Context(), testenv.NewLogger(t), nil, req, payload, nil, metadata_repo.New(failingDBTX{}), store, false)
 	require.NoError(t, err)
 
 	require.Equal(t, mcpversions.Version20251125, payload.protocolVersion.InEffect)

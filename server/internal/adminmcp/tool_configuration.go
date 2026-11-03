@@ -33,6 +33,7 @@ type OrganizationFeatures struct {
 	SessionPortabilityEnabled            bool   `json:"session_portability_enabled"`
 	NetworkIngressEnabled                bool   `json:"network_ingress_enabled"`
 	OrganizationGatewayDisabled          bool   `json:"organization_gateway_disabled"`
+	CodeModeEnabled                      bool   `json:"code_mode_enabled"`
 }
 
 type OrganizationChatAnalysisSettings struct {
@@ -73,7 +74,9 @@ func registerConfigurationTools(server *mcp.Server, organizations OrganizationRe
 			RemoteSessionAutoRefreshEnabled:      features.RemoteSessionAutoRefreshEnabled,
 			RemoteSessionAutoRefreshEnforced:     features.RemoteSessionAutoRefreshEnforcedEnabled,
 			SessionPortabilityEnabled:            features.SessionPortabilityEnabled,
-			NetworkIngressEnabled:                features.NetworkIngressEnabled, OrganizationGatewayDisabled: features.OrganizationGatewayDisabled,
+			NetworkIngressEnabled:                features.NetworkIngressEnabled,
+			OrganizationGatewayDisabled:          features.OrganizationGatewayDisabled,
+			CodeModeEnabled:                      features.CodeModeEnabled,
 		}, nil
 	})
 

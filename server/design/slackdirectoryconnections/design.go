@@ -15,6 +15,7 @@ var Connection = Type("SlackDirectoryConnection", func() {
 	Attribute("status", String, "Authorization status, independent of directory sync.", func() { Enum("connected", "disconnected", "reconnect_required") })
 	Attribute("generation", String, "Connection generation used to reject stale changes.", func() { Format(FormatUUID) })
 	Attribute("granted_scopes", ArrayOf(String), "Permissions granted by Slack.")
+	Attribute("missing_scopes", ArrayOf(String), "Permissions Speakeasy asks for that this install has not granted. Reinstalling the app grants them. Without chat:write, approval requests do not reach approvers in Slack.")
 	Attribute("last_error_code", String, "Bounded authorization failure code, when known.")
 	Attribute("disconnected_at", String, "When credentials were removed.", func() { Format(FormatDateTime) })
 	Attribute("member_count", Int64, "Members observed in the last complete snapshot, including guests and bots.")
@@ -27,7 +28,7 @@ var Connection = Type("SlackDirectoryConnection", func() {
 	Attribute("last_sync_failed_at", String, "Most recent failed attempt; may precede a successful sync.", func() { Format(FormatDateTime) })
 	Attribute("last_full_sync_succeeded_at", String, "Last complete directory publication, possibly from an earlier authorization.", func() { Format(FormatDateTime) })
 	Attribute("updated_at", String, "Last connection change timestamp.", func() { Format(FormatDateTime) })
-	Required("id", "workspace_id", "workspace_name", "status", "generation", "granted_scopes", "updated_at", "member_count", "directory_status", "sync_status")
+	Required("id", "workspace_id", "workspace_name", "status", "generation", "granted_scopes", "missing_scopes", "updated_at", "member_count", "directory_status", "sync_status")
 })
 
 var Mapping = Type("SlackIdentityMapping", func() {

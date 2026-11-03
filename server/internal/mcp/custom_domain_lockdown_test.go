@@ -17,7 +17,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 // TestServePublic_Lockdown_LegacyToolset_AllowlistBlocksPlatform is the
@@ -73,7 +72,6 @@ func TestServePublic_Lockdown_McpEndpoint_AllowlistBlocksPlatform(t *testing.T) 
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsetsrepo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -86,7 +84,7 @@ func TestServePublic_Lockdown_McpEndpoint_AllowlistBlocksPlatform(t *testing.T) 
 	})
 	require.NoError(t, err)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "lockdown-ep-ts-"+uuid.New().String()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "lockdown-ep-ts-"+uuid.New().String()[:8])
 	platformSlug := "platform-ep-" + uuid.NewString()
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, platformSlug, "public", uuid.NullUUID{}, uuid.Nil)
 

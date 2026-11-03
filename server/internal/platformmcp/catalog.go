@@ -5,6 +5,7 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"net/url"
 	"sort"
 	"strings"
@@ -41,8 +42,16 @@ type CatalogCandidate struct {
 	Name        string `json:"name"`
 	Description string `json:"description"`
 	Version     string `json:"version"`
-	ToolCount   int    `json:"tool_count"`
+	// ToolCount is left out when the catalogue does not know the tool count, so
+	// it never reads as a server with no tools.
+	ToolCount   int    `json:"tool_count,omitempty" jsonschema:"number of tools the server offers; absent when not known"`
 	SetupIntent string `json:"setup_intent"`
+	// SupportsDCR is advertised dynamic client registration support.
+	SupportsDCR bool `json:"supports_dcr"`
+	// SupportsCIMD is advertised compatible client metadata document support.
+	SupportsCIMD bool `json:"supports_cimd"`
+	// AuthSetup distinguishes unknown capability evidence from required manual setup.
+	AuthSetup string `json:"auth_setup" jsonschema:"how the server signs users in: none means no sign-in; dcr or cimd means OAuth whose client is set up automatically, so only the user signs in; manual means an administrator registers an OAuth client or adds a credential by hand; unknown means not yet determined, so check the setup guide with search_speakeasy_docs before saying how it signs in"`
 }
 
 type CatalogConfigurationField struct {
@@ -293,6 +302,7 @@ func projectCatalogDetails(descriptor CatalogDescriptor, catalogRef string, deta
 			Description: details.Description,
 			Version:     details.Version,
 			ToolCount:   len(toolNames),
+			SupportsDCR: details.SupportsDCR, SupportsCIMD: details.SupportsCIMD, AuthSetup: details.AuthSetup,
 			SetupIntent: descriptor.SetupIntent,
 		},
 		Transport:              string(details.TransportType),
@@ -422,6 +432,7 @@ func catalogCandidateFromEntry(descriptor CatalogDescriptor, entry *types.Extern
 		Description: entry.Description,
 		Version:     entry.Version,
 		ToolCount:   entry.ToolCount,
+		SupportsDCR: entry.SupportsDcr, SupportsCIMD: conv.PtrValOr(entry.SupportsCimd, false), AuthSetup: conv.PtrValOr(entry.AuthSetup, "unknown"),
 		SetupIntent: descriptor.SetupIntent,
 	}
 }

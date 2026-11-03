@@ -1,7 +1,11 @@
 // Package orghost resolves the base URL of the URLs Speakeasy renders for an
 // organization without an inbound request to follow: emails, Slack messages,
-// and background jobs. Request-driven URLs follow the request's platform
-// origin instead.
+// and background jobs. Request-driven browser redirects follow the request's
+// platform origin instead. MCP addresses given to members during platform
+// requests use a stored platform default host when there is one
+// (StoredPlatformBaseURLs), so they match the host the dashboard serves the
+// organization on; custom-domain and private-network requests keep the
+// configured URLs.
 //
 // An organization's organization_metadata.default_host names the platform host
 // those URLs use. NULL means the legacy host, which stays fixed when the
@@ -89,12 +93,23 @@ func (r *Resolver) ServerURL(defaultHost pgtype.Text) *url.URL {
 // move a browser to the organization's host use it so that they never act on
 // the legacy fallback.
 func (r *Resolver) StoredPlatformHost(defaultHost pgtype.Text) (serverURL, siteURL *url.URL, ok bool) {
+	serverURL, siteURL, ok = r.StoredPlatformBaseURLs(defaultHost)
+	if !ok || siteURL == nil {
+		return nil, nil, false
+	}
+	return serverURL, siteURL, true
+}
+
+// StoredPlatformBaseURLs is StoredPlatformHost without the dashboard URL
+// requirement: when the stored value names the server host and no dashboard
+// URL is configured, ok is true and siteURL is nil.
+func (r *Resolver) StoredPlatformBaseURLs(defaultHost pgtype.Text) (serverURL, siteURL *url.URL, ok bool) {
 	host, ok := storedHost(defaultHost)
 	if !ok {
 		return nil, nil, false
 	}
 	if host == r.serverHost {
-		if r.cfg.ServerURL == nil || r.cfg.SiteURL == nil {
+		if r.cfg.ServerURL == nil {
 			return nil, nil, false
 		}
 		return clone(r.cfg.ServerURL), clone(r.cfg.SiteURL), true
@@ -108,6 +123,19 @@ func (r *Resolver) StoredPlatformHost(defaultHost pgtype.Text) (serverURL, siteU
 		return nil, nil, false
 	}
 	return parsed, clone(parsed), true
+}
+
+// StoredPlatformBaseURLsOr returns the server and dashboard base URLs of links
+// given to an organization's members, such as MCP addresses: the platform host
+// stored as its default host, so links match the host the dashboard serves it
+// on, or serverURL and siteURL when r is nil or no platform host is stored.
+func (r *Resolver) StoredPlatformBaseURLsOr(defaultHost pgtype.Text, serverURL, siteURL *url.URL) (*url.URL, *url.URL) {
+	if r != nil {
+		if storedServerURL, storedSiteURL, ok := r.StoredPlatformBaseURLs(defaultHost); ok {
+			return storedServerURL, storedSiteURL
+		}
+	}
+	return serverURL, siteURL
 }
 
 func (r *Resolver) resolve(defaultHost pgtype.Text, configured *url.URL) *url.URL {

@@ -1,3 +1,4 @@
+import { calendarDateRangeValue } from "./filter-schema";
 import { useEffect, useId, useMemo, useState } from "react";
 import { TimeRangePicker } from "@/components/DashboardTimeRangePicker";
 import { Checkbox } from "@/components/ui/Checkbox";
@@ -109,6 +110,7 @@ export function FilterControl({
     case "text":
       return (
         <DebouncedTextInput
+          debounceMs={dim.debounceMs}
           value={value as string}
           onChange={(v) => onChange(v)}
           placeholder={dim.placeholder ?? `${dim.label} contains...`}
@@ -120,6 +122,7 @@ export function FilterControl({
     case "number":
       return (
         <DebouncedNumberInput
+          debounceMs={dim.debounceMs}
           value={value as number | null}
           onChange={(v) => onChange(v)}
           placeholder={dim.placeholder ?? `${dim.label}…`}
@@ -175,6 +178,9 @@ function DateRangeControl({
       onPresetChange={(preset) =>
         onChange({ preset, customRange: null, customLabel: null })
       }
+      onCalendarRangeChange={(from, to) =>
+        onChange(calendarDateRangeValue(from, to))
+      }
       onCustomRangeChange={(from, to, label) =>
         onChange({
           preset: null,
@@ -198,6 +204,7 @@ function DateRangeControl({
 // A debounced free-text input. Mirrors the previous inline RiskEvents filter so
 // keystrokes don't fire a request (or URL write) on every character.
 function DebouncedTextInput({
+  debounceMs = 350,
   value,
   onChange,
   placeholder,
@@ -205,6 +212,7 @@ function DebouncedTextInput({
   suggestions,
   className,
 }: {
+  debounceMs?: number;
   value: string;
   onChange: (next: string) => void;
   placeholder: string;
@@ -221,10 +229,10 @@ function DebouncedTextInput({
   }, [value]);
 
   useEffect(() => {
-    if (local === value) return;
-    const timer = setTimeout(() => onChange(local), 350);
+    if (local === value || debounceMs === 0) return;
+    const timer = setTimeout(() => onChange(local), debounceMs);
     return () => clearTimeout(timer);
-  }, [local, value, onChange]);
+  }, [local, value, onChange, debounceMs]);
 
   // Browser-native <datalist> does substring matching client-side using these
   // as candidates; dedup and drop empties.
@@ -240,7 +248,10 @@ function DebouncedTextInput({
         id={inputId}
         type="text"
         value={local}
-        onChange={(e) => setLocal(e.target.value)}
+        onChange={(e) => {
+          setLocal(e.target.value);
+          if (debounceMs === 0) onChange(e.target.value);
+        }}
         placeholder={placeholder}
         aria-label={ariaLabel}
         autoComplete="off"
@@ -280,6 +291,7 @@ function DebouncedTextInput({
 // (empty / non-numeric → null) so number dimensions never round-trip through a
 // string at the page layer.
 function DebouncedNumberInput({
+  debounceMs = 350,
   value,
   onChange,
   placeholder,
@@ -289,6 +301,7 @@ function DebouncedNumberInput({
   step,
   className,
 }: {
+  debounceMs?: number;
   value: number | null;
   onChange: (next: number | null) => void;
   placeholder: string;
@@ -308,10 +321,10 @@ function DebouncedNumberInput({
     const trimmed = local.trim();
     const parsed = trimmed === "" ? NaN : Number(trimmed);
     const next = Number.isFinite(parsed) ? parsed : null;
-    if (next === value) return;
-    const timer = setTimeout(() => onChange(next), 350);
+    if (next === value || debounceMs === 0) return;
+    const timer = setTimeout(() => onChange(next), debounceMs);
     return () => clearTimeout(timer);
-  }, [local, value, onChange]);
+  }, [local, value, onChange, debounceMs]);
 
   return (
     <div className="border-border focus-within:border-ring inline-flex h-9 items-center gap-2 border px-2">
@@ -322,7 +335,12 @@ function DebouncedNumberInput({
         min={min}
         max={max}
         step={step}
-        onChange={(e) => setLocal(e.target.value)}
+        onChange={(e) => {
+          if (e.currentTarget.validity.badInput) return;
+          setLocal(e.target.value);
+          if (debounceMs === 0)
+            onChange(e.target.value === "" ? null : e.target.valueAsNumber);
+        }}
         // Scrolling over a focused number input natively edits the value;
         // blur so page scrolls pass through (same guard as ui/input).
         onWheel={(e) => e.currentTarget.blur()}

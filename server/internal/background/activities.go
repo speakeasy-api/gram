@@ -72,11 +72,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	riskchrepo "github.com/speakeasy-api/gram/server/internal/risk/chrepo"
-	"github.com/speakeasy-api/gram/server/internal/risk/presetlib"
-	"github.com/speakeasy-api/gram/server/internal/scanners/customruleanalyzer"
 	"github.com/speakeasy-api/gram/server/internal/scanners/promptinjection"
-	ppopenrouter "github.com/speakeasy-api/gram/server/internal/scanners/promptpolicy/openrouter"
-	"github.com/speakeasy-api/gram/server/internal/shadowmcp"
 	"github.com/speakeasy-api/gram/server/internal/signins"
 	"github.com/speakeasy-api/gram/server/internal/skills/efficacy"
 	"github.com/speakeasy-api/gram/server/internal/skills/suggest"
@@ -236,10 +232,7 @@ func NewActivities(
 	cacheAdapter cache.Cache,
 	emailService *email.Service,
 	assistantsCore *assistants.ServiceCore,
-	piiScanner risk_analysis.PIIScanner,
 	piScanner *promptinjection.Scanner,
-	customRuleScanner *customruleanalyzer.Scanner,
-	shadowMCPClient *shadowmcp.Client,
 	auditLogger *audit.Logger,
 	workosClient activities.WorkOSClient,
 	productFeatures *productfeatures.Client,
@@ -248,7 +241,6 @@ func NewActivities(
 	publishers *Publishers,
 	celEng *celenv.Engine,
 	judgeRateLimiter *ratelimit.Limiter,
-	builtinPresets *presetlib.Library,
 	trialEmailsService *trialemails.Service,
 	trialFixtureHandler activities.TrialFixtureHandler,
 	githubEvidenceToken string,
@@ -273,11 +265,6 @@ func NewActivities(
 		meterProvider,
 		db,
 		assetStorage,
-		piiScanner,
-		piScanner,
-		shadowMCPClient,
-		telemetryRepo,
-		ppopenrouter.New(logger, tracerProvider, meterProvider, chatClient, judgeRateLimiter).Evaluate,
 		features,
 		publishers.PresidioAnalysis,
 		publishers.GitleaksAnalysis,
@@ -287,11 +274,7 @@ func NewActivities(
 		publishers.LLMAnalysis,
 		publishers.ToolCallAnalysis,
 		publishers.AccountIdentityAnalysis,
-		customRuleScanner,
 		celEng,
-		builtinPresets,
-		NewShadowMCPPolicyBypassChecker(logger, db),
-		riskRecorder,
 		llmAnalyzerEnabled,
 	)
 	if err != nil {

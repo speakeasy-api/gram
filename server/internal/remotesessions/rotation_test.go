@@ -280,6 +280,57 @@ func TestBuildAuthorizationUrl_RotatesExpiredSecretWithoutProbe(t *testing.T) {
 	require.Equal(t, "rotated-cid", loadClient(t, env).ClientID)
 }
 
+// A replacement is registered for the scope logins request: with no stored
+// scope, the issuer-level scope widened by the triggering login's request,
+// else the stored scope.
+func TestBuildAuthorizationUrl_RotationRegistersRequestedScope(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		slug        string
+		clientScope []string
+		login       string
+		registered  string
+	}{
+		"no stored scope": {slug: "rotate-scope-none", clientScope: nil, login: "files:read", registered: "channels:history files:read"},
+		"stored scope":    {slug: "rotate-scope-stored", clientScope: []string{"chat:write"}, login: "chat:write", registered: "chat:write"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			resource, _ := fakeResource(t, []string{"files:read", "files:write"})
+			upstream := &rotationUpstream{refreshStatus: http.StatusUnauthorized, refreshBody: invalidClientBody}
+			_, env := newSyntheticExpiryEnv(t, tc.slug, upstream.handler(),
+				withClientScope(tc.clientScope...),
+				withRemoteServer(resource.URL),
+				withProtectedResource(protectedResourceSeed{pin: []string{"files:read"}, fetchedAgo: 2 * time.Hour}),
+				withProber(),
+			)
+			expiredAt := time.Now().Add(-time.Minute)
+			stageRegistration(t, env, issuerTokenEndpoint(t, env)+"/register", nil, &expiredAt)
+
+			authURL, err := env.mgr.BuildAuthorizationUrl(t.Context(), remotesessions.ParentChallenge{
+				ID:                  uuid.NewString(),
+				ProjectID:           env.projectID,
+				OrganizationID:      env.organizationID,
+				UserSessionIssuerID: env.session.UserSessionIssuerID,
+				Subject:             &env.subject,
+				McpSlug:             tc.slug,
+				McpServerID:         env.mcpServerID,
+				FinalRedirectURI:    "",
+				Resource:            "",
+			}, listClient(t, env))
+			require.NoError(t, err)
+			parsed, err := url.Parse(authURL)
+			require.NoError(t, err)
+			require.Equal(t, "rotated-cid", parsed.Query().Get("client_id"))
+			require.Equal(t, tc.login, parsed.Query().Get("scope"))
+			require.EqualValues(t, 1, upstream.registrationAttempts.Load())
+			require.Equal(t, tc.registered, (*upstream.lastRegistration.Load())["scope"])
+		})
+	}
+}
+
 // An issuer that publishes no registration endpoint gives Speakeasy nowhere to
 // re-register: a rejected client under it goes to the authorize endpoint
 // unchanged, and the issuer is not contacted.

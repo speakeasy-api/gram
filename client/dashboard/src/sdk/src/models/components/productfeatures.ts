@@ -18,6 +18,10 @@ export type ProductFeatures = {
    */
   authzChallengeLoggingEnabled: boolean;
   /**
+   * Whether the organization has the staff-managed gateway Code Mode entitlement
+   */
+  codeModeEnabled: boolean;
+  /**
    * Whether the organization can supply its own model provider API keys (BYOK)
    */
   customModelKeysEnabled: boolean;
@@ -93,6 +97,10 @@ export type ProductFeatures = {
    * Whether tool I/O logging is enabled
    */
   toolIoLogsEnabled: boolean;
+  /**
+   * Whether upstream auth enforcement is on for the organization. Absent when the state could not be read. Staff change it through the admin enforcement endpoint.
+   */
+  upstreamAuthEnforced?: boolean | undefined;
 };
 
 /** @internal */
@@ -103,6 +111,7 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
   z.object({
     ai_platform_push_integrations_enabled: z.boolean(),
     authz_challenge_logging_enabled: z.boolean(),
+    code_mode_enabled: z.boolean(),
     custom_model_keys_enabled: z.boolean(),
     customer_managed_encryption_keys_enabled: z.boolean(),
     device_agent: z.boolean(),
@@ -122,12 +131,14 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
     skills_enabled: z.boolean(),
     sso_enabled: z.boolean(),
     tool_io_logs_enabled: z.boolean(),
+    upstream_auth_enforced: z.optional(z.boolean()),
   }),
   z.transform((v) => {
     return remap$(v, {
       "ai_platform_push_integrations_enabled":
         "aiPlatformPushIntegrationsEnabled",
       "authz_challenge_logging_enabled": "authzChallengeLoggingEnabled",
+      "code_mode_enabled": "codeModeEnabled",
       "custom_model_keys_enabled": "customModelKeysEnabled",
       "customer_managed_encryption_keys_enabled":
         "customerManagedEncryptionKeysEnabled",
@@ -149,6 +160,7 @@ export const ProductFeatures$inboundSchema: z.ZodMiniType<
       "skills_enabled": "skillsEnabled",
       "sso_enabled": "ssoEnabled",
       "tool_io_logs_enabled": "toolIoLogsEnabled",
+      "upstream_auth_enforced": "upstreamAuthEnforced",
     });
   }),
 );

@@ -1,4 +1,5 @@
 import { cleanup, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, expect, it, vi } from "vitest";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { parseFilters } from "@/pages/logs/log-filter-url";
@@ -20,18 +21,33 @@ vi.mock("@tanstack/react-query", async (original) => ({
     isSuccess: enabled !== false && logs.enabled,
   }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({ logs: { href: () => "/example/projects/test/logs" } }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "example", projectSlug: "test" }),
 }));
 vi.mock("@/pages/mcp/overview/PluginStatusBanner", () => ({
   PluginStatusBanner: () => <div>Marketplace</div>,
 }));
 // The real dashboard renders the marketplace banner unless told not to.
 vi.mock("@/pages/mcp/overview/MCPOverviewTab", () => ({
-  MCPOverviewTab: ({ showPluginBanner }: { showPluginBanner?: boolean }) => (
+  MCPOverviewTab: ({
+    showPluginBanner,
+    server,
+    pluginServer,
+  }: {
+    showPluginBanner?: boolean;
+    server: { kind: string; slug: string };
+    pluginServer?: { kind: string; id: string };
+  }) => (
     <div>
       {showPluginBanner !== false && <div>Marketplace</div>}
       <div>Shared usage dashboard</div>
+      <div
+        data-testid="scope"
+        data-scope={`${server.kind}:${server.slug}`}
+        data-plugin={
+          pluginServer ? `${pluginServer.kind}:${pluginServer.id}` : ""
+        }
+      />
     </div>
   ),
 }));
@@ -57,6 +73,7 @@ const server = {
 it("places the marketplace above tunnel status and keeps the usage dashboard below it", () => {
   const { container } = render(
     <OverviewTab mcpServer={server} agentSetupHref="/settings" />,
+    { wrapper: MemoryRouter },
   );
   expect(container.textContent).toBe(
     "MarketplaceTunnel statusShared usage dashboard",
@@ -77,7 +94,9 @@ it.each([
   ["the user cannot read logs", { canView: false, enabled: true }],
 ])("offers no Tool Logs link when %s", (_, state) => {
   Object.assign(logs, state);
-  render(<OverviewTab mcpServer={server} agentSetupHref="/settings" />);
+  render(<OverviewTab mcpServer={server} agentSetupHref="/settings" />, {
+    wrapper: MemoryRouter,
+  });
   expect(screen.getByText("Tunnel status")).toBeTruthy();
   expect(screen.queryByRole("link")).toBeNull();
 });
@@ -88,6 +107,7 @@ it("shows the tunnel status without a usage dashboard when the server has no slu
       mcpServer={{ ...server, slug: undefined }}
       agentSetupHref="/settings"
     />,
+    { wrapper: MemoryRouter },
   );
   expect(container.textContent).toBe("MarketplaceTunnel status");
 });
@@ -98,8 +118,48 @@ it("retains the shared overview for servers without tunnels", () => {
       mcpServer={{ ...server, tunneledMcpServerId: undefined }}
       agentSetupHref="/settings"
     />,
+    { wrapper: MemoryRouter },
   );
   expect(screen.getByText("Shared usage dashboard")).toBeTruthy();
   expect(screen.getAllByText("Marketplace")).toHaveLength(1);
   expect(screen.queryByText("Tunnel status")).toBeNull();
 });
+
+it.each([
+  ["its canonical wrapper", "toolset-1", "toolset:toolset-1"],
+  [
+    "a hosting server that is not the canonical wrapper",
+    "host-1",
+    "mcp-server:host-1",
+  ],
+])(
+  "scopes a hosted server's overview to its toolset when it is %s",
+  (_, id, plugin) => {
+    render(
+      <OverviewTab
+        mcpServer={
+          {
+            id,
+            slug: "server-slug",
+            name: "Server",
+            toolsetId: "toolset-1",
+            toolset: {
+              id: "toolset-1",
+              slug: "toolset-slug",
+              name: "Tools",
+              hostingMcpServerId: id,
+            },
+          } as McpServer
+        }
+        agentSetupHref="/settings"
+      />,
+      { wrapper: MemoryRouter },
+    );
+    expect(screen.getByTestId("scope").getAttribute("data-scope")).toBe(
+      "toolset:toolset-slug",
+    );
+    expect(screen.getByTestId("scope").getAttribute("data-plugin")).toBe(
+      plugin,
+    );
+  },
+);

@@ -177,6 +177,7 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 		// cascade. mcp_servers in turn pins its toolset with RESTRICT, so it
 		// must still go before the toolsets delete.
 		{"delete assistant mcp servers", func() error { return s.q.OrgDeleteAssistantMCPServers(ctx, org) }},
+		{"delete catalogue promotion candidates", func() error { return s.q.OrgDeleteRegistryPromotionCandidates(ctx, org) }},
 		// Toolsets are cleared across the organization, including other
 		// projects. Clear their plugin attachments across the same scope before
 		// deleting them.
@@ -242,10 +243,14 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 		{"delete policy bypass grants", func() error {
 			return s.q.OrgDeletePolicyBypassGrants(ctx, repo.OrgDeletePolicyBypassGrantsParams{OrgID: org, PolicyID: s.policySM().String()})
 		}},
-		{"delete github grants", func() error {
+		{"delete seeded direct user grants", func() error {
 			return s.q.OrgDeleteGrantsByID(ctx, repo.OrgDeleteGrantsByIDParams{
 				OrgID: org,
-				Ids:   []uuid.UUID{s.det("github-direct-grant"), s.det("github-wildcard-grant")},
+				Ids: []uuid.UUID{
+					s.det("github-direct-grant"), s.det("github-wildcard-grant"),
+					s.det("inference-owner-grant"),
+					s.det("auth-client-github-token-use"), s.det("auth-client-github-token-block"),
+				},
 			})
 		}},
 		// Workload trust is organization-scoped: an organization-tier issuer or
@@ -417,6 +422,7 @@ func (s *seeder) orgMemberships(ctx context.Context) error {
 	org := s.orgID()
 	if err := runOrgSteps([]orgStep{
 		{"delete agent grants", func() error { return s.q.OrgDeleteAgentGrants(ctx, org) }},
+		{"delete auth permission provisions", func() error { return s.q.OrgDeleteAuthPermissionProvisions(ctx, org) }},
 		{"delete agents", func() error { return s.q.OrgDeleteAgents(ctx, org) }},
 		{"delete slack identity mappings", func() error { return s.q.OrgDeleteSlackIdentityMappings(ctx, org) }},
 		{"delete memberships", func() error { return s.q.OrgDeleteMemberships(ctx, org) }},

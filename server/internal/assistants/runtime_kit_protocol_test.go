@@ -243,8 +243,6 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	connections := 0
 	controls := map[string]bool{}
 	prompts := 0
-	resident := false
-	var desiredSets []json.RawMessage
 	selectedModel := "speakeasy:gpt-5.4"
 	catalog := func() string {
 		return fmt.Sprintf(`{"configOptions":[{"configId":"model","type":"select","currentValue":%q,"options":[{"groupId":"speakeasy","name":"Speakeasy","options":[{"value":"speakeasy:openai/gpt-4.1-mini","name":"openai/gpt-4.1-mini"},{"value":"speakeasy:openai/gpt-4.1","name":"openai/gpt-4.1"}]}]}]}`, selectedModel)
@@ -310,13 +308,9 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 					ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"error\":{\"code\":-32000,\"message\":\"connection already controls session\"}}\n\n", msg.ID)
 					return
 				}
-				if desired, supplied := msg.Params["mcpServers"]; supplied {
-					if resident {
-						t.Error("must close resident before supplying a desired MCP set")
-					}
-					desiredSets = append(desiredSets, append(json.RawMessage(nil), desired...))
+				if _, supplied := msg.Params["mcpServers"]; supplied {
+					t.Error("filesystem-owned MCP must not replace the session overlay")
 				}
-				resident = true
 				assert.NotContains(t, msg.Params, "_meta", "chat identity belongs to the control plane")
 				if msg.Method == "session/new" {
 					result = strings.TrimSuffix(catalog(), "}") + `,"sessionId":"session-one"}`
@@ -393,8 +387,6 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 					ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"session-one","update":{"sessionUpdate":"agent_message_chunk","messageId":"reply","content":{"type":"text","text":"final"}}}}` + "\n\n"
 				}
 				result = `{"sessionId":"session-one","settled":true,"foregroundActive":false,"backgroundActive":false,"pendingBackgroundTerminals":false,"activeSubagents":0}`
-			case "session/close":
-				resident = false
 			case "session/cancel":
 				w.WriteHeader(202)
 				return
@@ -429,7 +421,7 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	require.NoError(t, err)
 	p, err := NewKitRuntimeProtocol(KitRuntimeProtocolConfig{Core: core, Endpoint: endpoint, Projector: projector, CWD: "/workspace", GatewayToken: "fixture-token", HTTPClient: kitProtocolTestHTTPClient(t)})
 	require.NoError(t, err)
-	ctx, cancel := context.WithTimeout(t.Context(), 90*time.Second)
+	ctx, cancel := context.WithTimeout(t.Context(), 30*time.Second)
 	defer cancel()
 	r := assistantRuntimeRecord{ID: key.RuntimeID, ProjectID: key.ProjectID, AssistantID: key.AssistantID, RuntimeVersion: 3}
 	interrupted, err := p.InterruptTurn(ctx, r, key.ThreadID)
@@ -438,15 +430,11 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	mu.Lock()
 	require.Zero(t, connections, "missing session must not dial")
 	mu.Unlock()
-	require.NoError(t, (&kitConfiguredRuntimeProtocol{p}).RunTurn(ctx, r, runTurnRequest{AuthToken: "first-token", MCPServers: []runtimeMCPServer{{ID: "platform", URL: "https://example.invalid/platform"}, {ID: "attached", URL: "https://example.invalid/mcp"}}, Model: "openai/gpt-4.1-mini", ThreadID: key.ThreadID, Prompt: "hello", EventID: eventID, CanonicalUserMessageID: currentID}))
+	require.NoError(t, p.RunTurn(ctx, r, runTurnRequest{Model: "openai/gpt-4.1-mini", ThreadID: key.ThreadID, Prompt: "hello", EventID: eventID, CanonicalUserMessageID: currentID}))
 	// A new adapter reconstructs the durable correlation before replay.
 	restarted, err := NewKitRuntimeProtocol(p.config)
 	require.NoError(t, err)
-	require.NoError(t, (&kitConfiguredRuntimeProtocol{restarted}).RunTurn(ctx, r, runTurnRequest{AuthToken: "rotated-token", MCPServers: []runtimeMCPServer{{ID: "platform", URL: "https://example.invalid/platform"}}, Model: "openai/gpt-4.1", ThreadID: key.ThreadID, Prompt: "hello", EventID: eventID, CanonicalUserMessageID: currentID}))
-	require.NoError(t, (&kitConfiguredRuntimeProtocol{restarted}).RunTurn(ctx, r, runTurnRequest{AuthToken: "third-token", MCPServers: []runtimeMCPServer{}, Model: "openai/gpt-4.1", ThreadID: key.ThreadID, Prompt: "hello", EventID: eventID, CanonicalUserMessageID: currentID}))
-	// Connection discovery can be unavailable while inference remains healthy.
-	// Preserve the resident set: no additional close or MCP replacement occurs.
-	require.NoError(t, (&kitConfiguredRuntimeProtocol{restarted}).RunTurn(ctx, r, runTurnRequest{MCPServers: nil, Model: "openai/gpt-4.1", ThreadID: key.ThreadID, Prompt: "hello", EventID: eventID, CanonicalUserMessageID: currentID}))
+	require.NoError(t, restarted.RunTurn(ctx, r, runTurnRequest{Model: "openai/gpt-4.1", ThreadID: key.ThreadID, Prompt: "hello", EventID: eventID, CanonicalUserMessageID: currentID}))
 	messages, err := chatrepo.New(db).ListLatestGenerationChatMessages(ctx, chatrepo.ListLatestGenerationChatMessagesParams{ProjectID: key.ProjectID, ChatID: chatID})
 	require.NoError(t, err)
 	users, finals := 0, 0
@@ -460,20 +448,18 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 	}
 	require.Equal(t, 2, users, "historical user plus canonical dashboard user; live echoes must not duplicate")
 	require.Equal(t, 1, finals)
+	// Desired-set removal cannot be expressed by an additive MCP upsert.
+	// Reject before opening another transport or submitting another prompt.
+	for _, desired := range [][]runtimeMCPServer{{}, {{ID: "client", URL: "https://mcp.example/mcp"}}} {
+		err := p.RunTurn(ctx, r, runTurnRequest{Model: "openai/gpt-4.1", ThreadID: key.ThreadID, Prompt: "must not send", MCPServers: desired})
+		require.ErrorIs(t, err, ErrKitMCPDesiredSetUnsupported)
+	}
 	interrupted, err = p.InterruptTurn(ctx, r, key.ThreadID)
 	require.NoError(t, err)
 	require.False(t, interrupted)
 	mu.Lock()
-	require.Equal(t, 4, prompts)
-	require.Empty(t, desiredSets, "native configuration must not receive per-turn bearer credentials")
-	closes := 0
-	for _, method := range methods {
-		if method == "session/close" {
-			closes++
-		}
-	}
-	require.Zero(t, closes)
-	require.Equal(t, 4, connections, "interrupt must not dial or replace projector control")
+	require.Equal(t, []string{"session/new", "session/set_config_option", "session/prompt", "kit/session/status", "session/resume", "session/set_config_option", "session/prompt", "kit/session/status"}, methods)
+	require.Equal(t, 2, connections, "interrupt must not dial or replace projector control")
 	mu.Unlock()
 }
 
@@ -525,4 +511,46 @@ func flushKitTestResponse(t *testing.T, w http.ResponseWriter) {
 		return
 	}
 	flusher.Flush()
+}
+
+func TestKitProtocolSourceContextIsPerTurn(t *testing.T) {
+	t.Parallel()
+	contexts := []string{}
+	for _, channel := range []string{"CHANNEL_ONE", "CHANNEL_TWO"} {
+		source, err := composeInstructions("", assistantThreadRecord{SourceKind: sourceKindSlack, SourceRefJSON: []byte(`{"channel_id":"` + channel + `","thread_id":"123.456"}`)}, nil, "")
+		require.NoError(t, err)
+		prompt, err := kitProtocolPrompt(runTurnRequest{SourceInstructions: source, Prompt: "Please reply"})
+		require.NoError(t, err)
+		require.Len(t, prompt, 2)
+		require.Equal(t, "Please reply", prompt[1]["text"])
+		instructions, ok := prompt[0]["text"].(string)
+		require.True(t, ok)
+		require.Contains(t, instructions, "Text responses are not delivered to the user")
+		require.Contains(t, instructions, "call a Slack post tool")
+		require.Contains(t, instructions, "Surface AuthURL to owner verbatim")
+		require.Contains(t, instructions, "Never expose AuthURL to non-owners")
+		require.Contains(t, instructions, "ChannelID: "+channel)
+		require.Contains(t, instructions, "ThreadID: 123.456")
+		contexts = append(contexts, instructions)
+	}
+	require.NotContains(t, contexts[0], "CHANNEL_TWO")
+	require.NotContains(t, contexts[1], "CHANNEL_ONE")
+	prompt, err := kitProtocolPrompt(runTurnRequest{Prompt: "No Slack context"})
+	require.NoError(t, err)
+	require.Len(t, prompt, 1)
+	require.Equal(t, "No Slack context", prompt[0]["text"])
+}
+
+func TestKitProtocolPreservesUpstreamSignInAction(t *testing.T) {
+	t.Parallel()
+	source, err := composeInstructions("", assistantThreadRecord{SourceKind: sourceKindSlack, SourceRefJSON: []byte(`{"channel_id":"CHANNEL","thread_id":"123.456"}`)}, nil, "")
+	require.NoError(t, err)
+	action := "<message-context>\nEventType: assistant_mcp_auth_required\nMCPSlug: tools\nAuthURL: https://auth.example/authorize?state=opaque-state&code_challenge=opaque-challenge\n</message-context>"
+	prompt, err := kitProtocolPrompt(runTurnRequest{SourceInstructions: source, Prompt: action})
+	require.NoError(t, err)
+	require.Equal(t, action, prompt[1]["text"], "an upstream sign-in action must reach the model verbatim")
+	require.Contains(t, prompt[0]["text"], "deliver it to the OWNER")
+	require.Contains(t, prompt[0]["text"], "single primary button")
+	require.Contains(t, prompt[0]["text"], "Never ask users to paste passwords or tokens")
+	require.Contains(t, prompt[0]["text"], "never disclose workload credentials")
 }

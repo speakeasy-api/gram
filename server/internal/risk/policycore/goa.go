@@ -28,6 +28,13 @@ func ToGoa(policy Policy) *types.RiskPolicy {
 		}
 	}
 
+	var approvalConfig *types.RiskPolicyApprovalConfig
+	if policy.ApprovalConfig != nil {
+		approvalConfig = &types.RiskPolicyApprovalConfig{
+			Approvers: policy.ApprovalConfig.Approvers,
+		}
+	}
+
 	var mcpScope *types.RiskMCPScope
 	if policy.MCPScope != nil {
 		servers := make([]*types.RiskMCPServerScope, 0, len(policy.MCPScope.Servers))
@@ -67,6 +74,8 @@ func ToGoa(policy Policy) *types.RiskPolicy {
 		UserMessage:            policy.UserMessage,
 		Prompt:                 policy.Prompt,
 		ModelConfig:            modelConfig,
+		ApprovalConfig:         approvalConfig,
+		ApprovalsServerSetup:   nil,
 		Score:                  policy.Score,
 		Version:                policy.Version,
 		CreatedAt:              policy.CreatedAt.Format(time.RFC3339),

@@ -301,9 +301,8 @@ func TestRemoteLogin_Unchanged_ClientScopeAlreadyCarryingStandardScopes(t *testi
 	require.Empty(t, widened, "nothing was appended, so nothing is logged as widened")
 }
 
-// access_denied on a valid state is refused as before. One change is pinned:
-// the denial now consumes the login state, so a later code on it cannot complete.
-func TestRemoteLoginCallback_Unchanged_AccessDeniedWithValidState(t *testing.T) {
+// Cancellation returns to consent and consumes the login state without exchanging a code.
+func TestRemoteLoginCallback_AccessDeniedReturnsToConsent(t *testing.T) {
 	t.Parallel()
 
 	spy := &exchangeSpy{}
@@ -315,12 +314,10 @@ func TestRemoteLoginCallback_Unchanged_AccessDeniedWithValidState(t *testing.T) 
 			q.Set("error_description", "The user declined")
 		}),
 	)
-	require.Error(t, err)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	require.Equal(t, "http://localhost/mcp/synthetic-mcp-unchanged-denied/connect?"+url.Values{"state": {env.parentID}}.Encode(), w.Header().Get("Location"))
 	var shareable *oops.ShareableError
-	require.ErrorAs(t, err, &shareable)
-	require.Equal(t, oops.CodeUnauthorized, shareable.Code)
-	require.Equal(t, "remote authn challenge denied: access_denied", shareable.Error())
-	require.Empty(t, w.Header().Get("Location"), "a denial never redirects")
 	require.Equal(t, 0, spy.count(), "a denial never exchanges a code")
 
 	_, err = env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
@@ -508,8 +505,8 @@ func TestRemoteLoginCallback_RetiredRouteBaseFailsClosed(t *testing.T) {
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 }
 
-// A provider denial on a retired-route state is still reported as a denial.
-func TestRemoteLoginCallback_RetiredRouteBaseDenialStillDenied(t *testing.T) {
+// A provider denial on a retired-route state reports an expired connection link.
+func TestRemoteLoginCallback_RetiredRouteBaseDenialReportsExpiredState(t *testing.T) {
 	t.Parallel()
 
 	const slug = "retired-route-denied"
@@ -521,7 +518,7 @@ func TestRemoteLoginCallback_RetiredRouteBaseDenialStillDenied(t *testing.T) {
 	require.Error(t, err)
 	var shareable *oops.ShareableError
 	require.ErrorAs(t, err, &shareable)
-	require.Equal(t, "remote authn challenge denied: access_denied", shareable.Error())
+	require.Equal(t, "remote login state not found or expired", shareable.Error())
 	require.Equal(t, 1, spy.count())
 }
 

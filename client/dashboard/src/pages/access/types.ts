@@ -25,6 +25,7 @@ export type ResourceType =
   | "mcp"
   | "environment"
   | "skill"
+  | "inference"
   | "assistant"
   | "risk_policy"
   | "chat"
@@ -66,8 +67,8 @@ export function isProjectSelectableResourceType(
  */
 export function isProjectFilteredResourceType(
   resourceType: ResourceType,
-): resourceType is "assistant" {
-  return resourceType === "assistant";
+): resourceType is "assistant" | "inference" {
+  return resourceType === "assistant" || resourceType === "inference";
 }
 
 /** Whether the role editor narrows this resource type by project. */
@@ -145,6 +146,7 @@ export function isKnownResourceType(value: string): value is ResourceType {
     "environment",
     "skill",
     "assistant",
+    "inference",
     "risk_policy",
     "chat",
     "agent",

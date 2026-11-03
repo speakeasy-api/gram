@@ -1,8 +1,10 @@
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { describe, expect, it } from "vitest";
+import { AUDIT_ACTIONS } from "./audit-actions";
 import {
   formatAuditActionLabel,
   formatSubjectLabel,
+  getActorLabel,
   renderVerb,
 } from "./audit-log-format";
 
@@ -81,6 +83,15 @@ describe("renderVerb", () => {
     expect(
       renderVerb(log({ action: "organization:product_feature_disabled" })),
     ).toBe("disabled a product feature for");
+
+    expect(
+      renderVerb(
+        log({
+          action: "auth-client:detach-mcp-server",
+          metadata: { mcp_server_id: "srv-1", mcp_server_name: "GitHub" },
+        }),
+      ),
+    ).toBe("removed MCP server GitHub from auth client");
   });
 
   // Every billing action is recorded against the same fixed subject display
@@ -119,6 +130,17 @@ describe("formatAuditActionLabel", () => {
     expect(
       formatAuditActionLabel("billing_metadata:create_stripe_portal"),
     ).toBe("Opened Stripe billing portal");
+    expect(formatAuditActionLabel("risk_policy:approval_approve")).toBe(
+      "Approved a held tool call",
+    );
+  });
+
+  it("never leaves a dangling preposition on a known action", () => {
+    for (const action of AUDIT_ACTIONS) {
+      expect(formatAuditActionLabel(action), action).not.toMatch(
+        /\s(about|at|by|for|from|in|into|of|on|onto|to|under|via|with|within)$/,
+      );
+    }
   });
 });
 
@@ -160,5 +182,37 @@ describe("past-tense fallback inflection", () => {
     expect(renderVerb(log({ action: "widget:retry" }))).toBe("retried widget");
     expect(renderVerb(log({ action: "widget:deny" }))).toBe("denied widget");
     expect(renderVerb(log({ action: "widget:relay" }))).toBe("relayed widget");
+  });
+});
+
+describe("getActorLabel", () => {
+  it("names a system actor instead of calling it Someone", () => {
+    expect(
+      getActorLabel(
+        log({ action: "x:y", actorType: "system", actorId: "kit-runtime" }),
+      ),
+    ).toBe("Speakeasy");
+    expect(
+      getActorLabel(
+        log({ action: "x:y", actorType: "user", actorId: "system" }),
+      ),
+    ).toBe("Speakeasy");
+  });
+
+  it("prefers a stored display name", () => {
+    expect(
+      getActorLabel(
+        log({
+          action: "x:y",
+          actorType: "system",
+          actorId: "internal-session-issuers",
+          actorDisplayName: "Session issuer rotation",
+        }),
+      ),
+    ).toBe("Session issuer rotation");
+  });
+
+  it("falls back to Someone for an unnamed person", () => {
+    expect(getActorLabel(log({ action: "x:y" }))).toBe("Someone");
   });
 });

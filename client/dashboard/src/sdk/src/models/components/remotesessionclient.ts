@@ -83,6 +83,10 @@ export type RemoteSessionClient = {
    */
   credentialOwner: CredentialOwner;
   /**
+   * Administrator-chosen name for the client. Null when unset, in which case the client is shown by its client_id.
+   */
+  displayName?: string | undefined;
+  /**
    * The redirect URI to register in the customer identity provider's app when this client is a user session issuer's trusted sign-in client. Present only on organization-owned clients outside any project and not managed by an identity provider connection, the only clients a user session issuer can trust.
    */
   federatedCallbackUrl?: string | undefined;
@@ -177,6 +181,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       z.transform(v => new Date(v)),
     ),
     credential_owner: CredentialOwner$inboundSchema,
+    display_name: z.optional(z.string()),
     federated_callback_url: z.optional(z.string()),
     grant_types: z.nullable(z.array(z.string())),
     id: z.string(),
@@ -210,6 +215,7 @@ export const RemoteSessionClient$inboundSchema: z.ZodMiniType<
       "client_secret_expires_at": "clientSecretExpiresAt",
       "created_at": "createdAt",
       "credential_owner": "credentialOwner",
+      "display_name": "displayName",
       "federated_callback_url": "federatedCallbackUrl",
       "grant_types": "grantTypes",
       "json_web_key_set_id": "jsonWebKeySetId",

@@ -3,7 +3,6 @@ package assistants
 import (
 	"context"
 	"net/url"
-	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -43,7 +42,7 @@ func TestPrincipalCredentialsUseActingUserOrWorkloadOwnerUpstreamSessions(t *tes
 	core := newProvisioningCore(t, db)
 	assistant, err := core.CreateAssistant(ctx, "org-test", project, "user-1", "Credentials", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil)
 	require.NoError(t, err)
-	_, err = toolsetsrepo.New(db).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{OrganizationID: "org-test", ProjectID: project, Name: "Business", Slug: "business", Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}, McpSlug: pgtype.Text{}, McpEnabled: true})
+	_, err = toolsetsrepo.New(db).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{OrganizationID: "org-test", ProjectID: project, Name: "Business", Slug: "business", Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{}})
 	require.NoError(t, err)
 	thread := seedThreadWithEvent(t, db, assistant.ID, "execution-credentials", "execution-credentials", eventStatusPending)
 	redisClient, err := assistantsInfra.NewRedisClient(t, 0)
@@ -52,8 +51,7 @@ func TestPrincipalCredentialsUseActingUserOrWorkloadOwnerUpstreamSessions(t *tes
 	manager := assistanttokens.New("test-secret", db, engine, newTestPrincipalCredentials(t, db), cache.NewRedisCacheAdapter(redisClient))
 	core.assistantTokens = manager
 	var dispatched atomic.Pointer[string]
-	var dispatchedServers atomic.Pointer[[]runtimeMCPServer]
-	core.runtime = testRuntimeBackend{backend: runtimeBackendGKE, runTurnToken: &dispatched, runTurnMCPServers: &dispatchedServers}
+	core.runtime = testRuntimeBackend{backend: runtimeBackendGKE, runTurnToken: &dispatched}
 
 	enc := testenv.NewEncryptionClient(t)
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
@@ -74,13 +72,6 @@ func TestPrincipalCredentialsUseActingUserOrWorkloadOwnerUpstreamSessions(t *tes
 		t.Helper()
 		_, err := core.processEventTurn(ctx, assistantThreadRecord{ID: thread, ProjectID: project, AssistantID: assistant.ID, SourceKind: source}, assistant, assistantRuntimeRecord{}, assistantThreadEventRecord{ID: uuid.New(), EventID: uuid.NewString(), NormalizedPayloadJSON: []byte(payload)})
 		require.NoError(t, err)
-		servers := *dispatchedServers.Load()
-		require.NotEmpty(t, servers)
-		platform := false
-		for _, server := range servers {
-			platform = platform || strings.Contains(server.URL, "/platform/mcp/")
-		}
-		require.True(t, platform)
 		authed, _, err := manager.AuthorizeRuntime(ctx, *dispatched.Load())
 		require.NoError(t, err)
 		return authed

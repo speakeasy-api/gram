@@ -33,15 +33,15 @@ type batchMessage struct {
 	PriorUserRequest       string
 	RecentUntrustedContent string
 	// UserID is the scanned chat's owner (empty for unattributed sessions),
-	// carried onto judge completions for scanning-volume attribution and into
-	// Shadow MCP bypass checks. GetMessageContentBatch must return the same
-	// WorkOS user-id space that authz.ResolveUserPrincipals expects.
+	// carried on every scan request for scanning-volume attribution and the
+	// handlers' Shadow MCP bypass checks. GetMessageContentBatch must return
+	// the same WorkOS user-id space that authz.ResolveUserPrincipals expects.
 	UserID string
-	// CreatedAt is when the message was recorded. The shadow-MCP scanner uses
-	// the batch's oldest value to bound its ClickHouse provenance lookup.
+	// CreatedAt is when the message was recorded, stamped on each tool call of
+	// a tool-call scan request.
 	CreatedAt time.Time
-	// Source is the agent that recorded the message (Codex, Cursor, ...). The
-	// shadow-MCP scanner attributes unresolved provenance to it.
+	// Source is the agent that recorded the message (Codex, Cursor, ...),
+	// carried on every scan request as the hook source.
 	Source string
 	// Truncated reports that bound cut content, arguments, raw tool-call JSON,
 	// a tool-call name or id, or the number of calls.
@@ -238,13 +238,6 @@ func newBatchMessage(ctx context.Context, logger *slog.Logger, id uuid.UUID, rol
 	}
 	msg.bound()
 	return msg, true
-}
-
-func batchJudgeTrajectory(msg batchMessage) judgemessage.Trajectory {
-	return judgemessage.Trajectory{
-		PriorUserRequest:       msg.PriorUserRequest,
-		RecentUntrustedContent: msg.RecentUntrustedContent,
-	}
 }
 
 func (m batchMessage) chatMessageID() uuid.NullUUID {

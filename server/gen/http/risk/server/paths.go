@@ -192,6 +192,21 @@ func RevokeRiskPolicyBypassRequestRiskPath() string {
 	return "/rpc/risk.revokePolicyBypassRequest"
 }
 
+// ListRiskPolicyApprovalsRiskPath returns the URL path to the risk service listRiskPolicyApprovals HTTP endpoint.
+func ListRiskPolicyApprovalsRiskPath() string {
+	return "/rpc/risk.listApprovals"
+}
+
+// GetRiskPolicyApprovalRiskPath returns the URL path to the risk service getRiskPolicyApproval HTTP endpoint.
+func GetRiskPolicyApprovalRiskPath() string {
+	return "/rpc/risk.getApproval"
+}
+
+// DecideRiskPolicyApprovalRiskPath returns the URL path to the risk service decideRiskPolicyApproval HTTP endpoint.
+func DecideRiskPolicyApprovalRiskPath() string {
+	return "/rpc/risk.decideApproval"
+}
+
 // TriggerRiskAnalysisRiskPath returns the URL path to the risk service triggerRiskAnalysis HTTP endpoint.
 func TriggerRiskAnalysisRiskPath() string {
 	return "/rpc/risk.triggerPolicy"

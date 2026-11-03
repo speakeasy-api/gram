@@ -7,6 +7,16 @@
 
 package client
 
+// BeginBindingRefreshRemoteSessionsPath returns the URL path to the remoteSessions service beginBindingRefresh HTTP endpoint.
+func BeginBindingRefreshRemoteSessionsPath() string {
+	return "/rpc/remoteSessions.beginBindingRefresh"
+}
+
+// CompleteBindingRefreshRemoteSessionsPath returns the URL path to the remoteSessions service completeBindingRefresh HTTP endpoint.
+func CompleteBindingRefreshRemoteSessionsPath() string {
+	return "/rpc/remoteSessions.completeBindingRefresh"
+}
+
 // ListBindingsRemoteSessionsPath returns the URL path to the remoteSessions service listBindings HTTP endpoint.
 func ListBindingsRemoteSessionsPath() string {
 	return "/rpc/remoteSessions.listBindings"

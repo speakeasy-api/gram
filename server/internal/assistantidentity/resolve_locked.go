@@ -12,13 +12,11 @@ import (
 
 // ResolveLocked resolves identity on the caller's transaction and keeps its
 // binding, issuer, admission and assignment stable until that transaction ends.
-// With a nil trigger, it resolves only the stable assistant agent under the
-// assistant lock, without locking a trigger or issuer or checking admission or assignment.
 // It follows the writer lock order: assistant, trigger, then workload issuer.
 // Call before taking any of those locks in another order. Unlike Resolve it
 // neither acquires another connection nor opens a separate read snapshot.
 func (s *Service) ResolveLocked(ctx context.Context, tx pgx.Tx, org string, project, assistant, trigger uuid.UUID) (Resolution, error) {
-	if org == "" || project == uuid.Nil || assistant == uuid.Nil {
+	if org == "" || project == uuid.Nil || assistant == uuid.Nil || trigger == uuid.Nil {
 		return Resolution{}, ErrInvalidIdentity
 	}
 	q := repo.New(tx)
@@ -28,9 +26,6 @@ func (s *Service) ResolveLocked(ctx context.Context, tx pgx.Tx, org string, proj
 	}
 	if a.OrganizationID != org {
 		return Resolution{}, ErrInvalidIdentity
-	}
-	if trigger == uuid.Nil {
-		return resolveStable(ctx, tx, org, project, assistant)
 	}
 	roots, err := q.LockTriggers(ctx, repo.LockTriggersParams{ProjectID: project, TriggerIds: []uuid.UUID{trigger}})
 	if err != nil {

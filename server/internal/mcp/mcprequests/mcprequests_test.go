@@ -41,6 +41,20 @@ func TestClampMethod_KnownMethodsPassThrough(t *testing.T) {
 	}
 }
 
+// TestClampMethod_ExtensionMethodsPassThrough pins that the census counts
+// demand for a recognized extension's methods by name, whether or not any
+// surface serves them.
+func TestClampMethod_ExtensionMethodsPassThrough(t *testing.T) {
+	t.Parallel()
+
+	for _, method := range mcpversions.ExtensionMethods() {
+		require.Equal(t, method, mcprequests.ClampMethod(method))
+	}
+	require.Equal(t, "skills/list", mcprequests.ClampMethod(mcpversions.MethodSkillsList))
+	require.Equal(t, "skills/get", mcprequests.ClampMethod(mcpversions.MethodSkillsGet))
+	require.Equal(t, "resources/directory/read", mcprequests.ClampMethod(mcpversions.MethodResourcesDirectoryRead))
+}
+
 // TestClampMethod_UnknownMethodsClampToOther pins that everything outside the
 // known list — unlisted extension methods, yet-unknown spec additions, and
 // hostile garbage — collapses into the single "other" bucket.
@@ -48,6 +62,7 @@ func TestClampMethod_UnknownMethodsClampToOther(t *testing.T) {
 	t.Parallel()
 
 	require.Equal(t, mcprequests.MethodOther, mcprequests.ClampMethod("tasks/create"))
+	require.Equal(t, mcprequests.MethodOther, mcprequests.ClampMethod("skills/update"))
 	require.Equal(t, mcprequests.MethodOther, mcprequests.ClampMethod("tools/brand-new"))
 	require.Equal(t, mcprequests.MethodOther, mcprequests.ClampMethod("rpc.discover"))
 	require.Equal(t, mcprequests.MethodOther, mcprequests.ClampMethod("evil/../../etc"))

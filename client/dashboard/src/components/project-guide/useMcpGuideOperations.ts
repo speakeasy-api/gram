@@ -26,7 +26,7 @@ import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import {
   extractAuthType,
   isPulseMcpServer,
-  requiresManualSetup,
+  supportsAutomaticOAuth,
 } from "@/pages/catalog/hooks/serverMetadata";
 import {
   filterToHttpRemotes,
@@ -99,7 +99,7 @@ function canConfigureWithoutUserCredentials(server: PulseMCPServer): boolean {
   const authType = extractAuthType(server);
   return (
     authType === "none" ||
-    (authType === "oauth" && !requiresManualSetup(server))
+    (authType === "oauth" && supportsAutomaticOAuth(server))
   );
 }
 
@@ -873,7 +873,7 @@ export function useMcpGuideOperations(): {
     connectionPrompts,
     toolLogsHref: canViewToolLogs ? routes.logs.href() : undefined,
     mcpServerHref: mcpServer
-      ? routes.mcp.x.overview.href(mcpServerRouteParam(mcpServer))
+      ? routes.mcp.details.overview.href(mcpServerRouteParam(mcpServer))
       : routes.home.href(),
   };
 }

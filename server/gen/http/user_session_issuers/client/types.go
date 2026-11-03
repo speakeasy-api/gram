@@ -16,6 +16,9 @@ import (
 // CreateUserSessionIssuerRequestBody is the type of the "userSessionIssuers"
 // service "createUserSessionIssuer" endpoint HTTP request body.
 type CreateUserSessionIssuerRequestBody struct {
+	// Authorization-server topology. Shared mode supports standalone workload
+	// token exchange without an MCP server.
+	AuthorizationServerMode string `form:"authorization_server_mode" json:"authorization_server_mode" xml:"authorization_server_mode"`
 	// Issuer slug. Unique for project-owned issuers; organization-owned issuer
 	// slugs may repeat.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
@@ -1507,9 +1510,16 @@ type UserSessionIssuerResponseBody struct {
 // "userSessionIssuers" service.
 func NewCreateUserSessionIssuerRequestBody(p *usersessionissuers.CreateUserSessionIssuerPayload) *CreateUserSessionIssuerRequestBody {
 	body := &CreateUserSessionIssuerRequestBody{
-		Slug:                 p.Slug,
-		AuthnChallengeMode:   p.AuthnChallengeMode,
-		SessionDurationHours: p.SessionDurationHours,
+		AuthorizationServerMode: p.AuthorizationServerMode,
+		Slug:                    p.Slug,
+		AuthnChallengeMode:      p.AuthnChallengeMode,
+		SessionDurationHours:    p.SessionDurationHours,
+	}
+	{
+		var zero string
+		if body.AuthorizationServerMode == zero {
+			body.AuthorizationServerMode = "endpoint"
+		}
 	}
 	return body
 }

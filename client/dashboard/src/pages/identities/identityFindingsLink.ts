@@ -12,6 +12,9 @@ export type FindingsFilter = { category?: string; ruleId?: string };
 export const RISK_UNAVAILABLE =
   "Risk and shadow MCP findings need the org:admin permission.";
 
+/** Where the Findings list sits on the Security section. */
+export const FINDINGS_ANCHOR = "findings";
+
 export const CATEGORY_PARAM = "category";
 export const RULE_PARAM = "rule";
 
@@ -36,7 +39,10 @@ export function withoutFindingsFilter(search: string): string {
   return query ? `?${query}` : "";
 }
 
-/** This identity's Findings page, narrowed to `filter`, keeping other params. */
+/**
+ * This identity's Findings list at the foot of Security, narrowed to `filter`,
+ * keeping other params.
+ */
 export function identityFindingsHref(
   routes: ReturnType<typeof useRoutes>,
   urn: string,
@@ -47,6 +53,6 @@ export function identityFindingsHref(
     new URLSearchParams(search),
     filter,
   ).toString();
-  const base = routes.identities.detail.findings.href(encodeIdentityUrn(urn));
-  return query ? `${base}?${query}` : base;
+  const base = routes.identities.detail.security.href(encodeIdentityUrn(urn));
+  return `${base}${query ? `?${query}` : ""}#${FINDINGS_ANCHOR}`;
 }

@@ -331,6 +331,9 @@ type UpdateMcpServerPayload struct {
 	// The ID of an existing project- or organization-owned user session issuer to
 	// attach. Omit to preserve the current issuer.
 	UserSessionIssuerID *string
+	// Detach the current user session issuer, so the server no longer requires
+	// user sessions. Must not be true when user_session_issuer_id is set.
+	ClearUserSessionIssuer *bool
 	// The visibility of the server
 	Visibility types.McpServerVisibility
 	// The allowed network surfaces. Omit to preserve the stored mode.

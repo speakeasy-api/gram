@@ -96,6 +96,7 @@ export default function IdentityCost(): JSX.Element {
   return (
     <IdentitySection
       title="Cost"
+      timeRange
       meta={sectionMeta([{ count: models.length, singular: "model" }])}
     >
       <div className="flex flex-col gap-6">

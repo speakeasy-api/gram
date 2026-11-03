@@ -1,7 +1,6 @@
 package assistants
 
 import (
-	"context"
 	"net/url"
 	"testing"
 
@@ -20,6 +19,7 @@ func TestKitLocalCompositionSelectsOnlyNewAssistants(t *testing.T) {
 	require.NoError(t, err)
 	project, existing, _, _ := insertAssistantFixture(t, db)
 	core := newProvisioningCore(t, db)
+	core.serverURL = &url.URL{Scheme: "https", Host: "api.example"}
 	core.guardianPolicy = guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
 	core.chatWriter = new(chat.ChatMessageWriter)
 	core.assistantTokens = assistanttokens.New("test", db, nil, nil, nil)
@@ -29,11 +29,10 @@ func TestKitLocalCompositionSelectsOnlyNewAssistants(t *testing.T) {
 	config := KitLocalCompositionConfig{
 		Environment: "local", Image: "example.invalid/kit:local", Network: "isolated-test", ExtraCACertFile: "/test/ca.pem", Origin: origin,
 		PersistedMCP: true, TurnStream: new(chat.TurnStream),
-		ProvisionMCP: func(context.Context, KitMCPProvisionRequest) (KitMCPProvisionResult, error) {
-			return KitMCPProvisionResult{}, nil
-		},
+		WorkloadJWKSURL: "https://external.example/jwks", WorkloadIssuerURL: "https://external.example", WorkloadIssuerBaseURL: "https://issuer.example", WorkloadSubject: "operator-subject", WorkloadAssertionFile: "/run/assertion",
 	}
 	require.NoError(t, core.InstallKitLocalRuntime(config))
+	require.NotEqual(t, origin.String(), core.runtime.ServerURL().String())
 	created, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Local Kit", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, false, nil)
 	require.NoError(t, err)
 	require.EqualValues(t, 3, created.RuntimeVersion)
@@ -49,7 +48,7 @@ func TestKitLocalCompositionSelectsOnlyNewAssistants(t *testing.T) {
 func TestKitLocalBootstrapRejectsUnknownEnvironment(t *testing.T) {
 	t.Parallel()
 	for _, environment := range []string{"", "staging-unknown"} {
-		_, _, err := PrepareKitStartupBootstrap(t.Context(), nil, KitStartupBootstrapInput{Environment: environment})
-		require.ErrorContains(t, err, "unsupported Kit startup environment")
+		err := validateKitLocalComposition(KitLocalCompositionConfig{Environment: environment})
+		require.ErrorContains(t, err, "requires the local environment")
 	}
 }

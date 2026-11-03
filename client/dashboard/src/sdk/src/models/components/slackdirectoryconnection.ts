@@ -99,6 +99,10 @@ export type SlackDirectoryConnection = {
    */
   memberCount: number;
   /**
+   * Permissions Speakeasy asks for that this install has not granted. Reinstalling the app grants them. Without chat:write, approval requests do not reach approvers in Slack.
+   */
+  missingScopes: Array<string>;
+  /**
    * Authorization status, independent of directory sync.
    */
   status: SlackDirectoryConnectionStatus;
@@ -172,6 +176,7 @@ export const SlackDirectoryConnection$inboundSchema: z.ZodMiniType<
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
     ),
     member_count: z.int(),
+    missing_scopes: z.array(z.string()),
     status: SlackDirectoryConnectionStatus$inboundSchema,
     sync_members: z.optional(z.int()),
     sync_pages: z.optional(z.int()),
@@ -194,6 +199,7 @@ export const SlackDirectoryConnection$inboundSchema: z.ZodMiniType<
       "last_sync_failed_at": "lastSyncFailedAt",
       "last_sync_started_at": "lastSyncStartedAt",
       "member_count": "memberCount",
+      "missing_scopes": "missingScopes",
       "sync_members": "syncMembers",
       "sync_pages": "syncPages",
       "sync_phase": "syncPhase",

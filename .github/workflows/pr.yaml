@@ -715,6 +715,124 @@ jobs:
           tags: ${{ steps.assistantMetaGcr.outputs.tags }}
           labels: ${{ steps.assistantMetaGcr.outputs.labels }}
 
+  code-runner-image:
+    name: code-runner-image
+    # The image is content-addressed by agents/code-runner (the Dockerfile pins
+    # Monty), so an unchanged runner is re-tagged rather than rebuilt. Every
+    # commit therefore gets a runner image under the same preview and sha tags
+    # as the server, which previews and releases resolve without a lookup.
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      id-token: write # Google Cloud workload identity federation
+    needs: [changes]
+    if: github.event_name != 'merge_group' && (github.event_name != 'pull_request' || (github.event.pull_request.user.login != 'dependabot[bot]' && !github.event.pull_request.head.repo.fork))
+    env:
+      IMAGE: gcr.io/linen-analyst-344721/${{ github.repository_owner }}/gram-code-runner
+    steps:
+      - name: Checkout
+        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
+        with:
+          persist-credentials: false
+
+      - name: Compute image tags
+        id: tags
+        shell: bash
+        env:
+          EVENT_NAME: ${{ github.event_name }}
+          PR_NUMBER: ${{ github.event.pull_request.number }}
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REF_NAME: ${{ github.ref_name }}
+        run: |
+          set -euo pipefail
+          # Same value as `mise run hash:code-runner-image`.
+          hash=$(git rev-parse HEAD:agents/code-runner | cut -c1-12)
+          tags=("sha-${GITHUB_SHA}" "sha-${GITHUB_SHA::7}")
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            tags+=("pr-${PR_NUMBER}" "pr-${PR_NUMBER}-${HEAD_SHA::8}")
+          elif [[ "$REF_NAME" == "main" ]]; then
+            tags+=("main")
+          fi
+          {
+            echo "hash=$hash"
+            echo "aliases=${tags[*]}"
+            echo "push<<EOF"
+            echo "${IMAGE}:${hash}"
+            for tag in "${tags[@]}"; do echo "${IMAGE}:${tag}"; done
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
+
+      - id: gcrAuth
+        name: "Authenticate to Google Cloud"
+        uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
+        with:
+          token_format: "access_token"
+          workload_identity_provider: "projects/409661704476/locations/global/workloadIdentityPools/ga-pool/providers/github-oidc-provider"
+          service_account: "speakeasy-registry-ga-ci@linen-analyst-344721.iam.gserviceaccount.com"
+
+      - name: Login to GCR
+        env:
+          GCR_TOKEN: ${{ steps.gcrAuth.outputs.access_token }}
+        run: |
+          max_attempts=3
+          for ((i=1; i<=max_attempts; i++)); do
+            echo "Docker login attempt $i/$max_attempts..."
+            if docker login -u oauth2accesstoken --password-stdin gcr.io/linen-analyst-344721 <<< "$GCR_TOKEN"; then
+              echo "Login successful"
+              exit 0
+            fi
+            if [ $i -lt $max_attempts ]; then
+              echo "Login failed, waiting 5s before retry..."
+              sleep 5
+            fi
+          done
+          echo "All login attempts failed"
+          exit 1
+
+      - name: Setup Docker builder
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Find an existing image
+        id: existing
+        env:
+          HASH: ${{ steps.tags.outputs.hash }}
+        run: |
+          if docker buildx imagetools inspect "${IMAGE}:${HASH}" >/dev/null 2>&1; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Tag the existing image
+        if: steps.existing.outputs.found == 'true'
+        env:
+          HASH: ${{ steps.tags.outputs.hash }}
+          ALIASES: ${{ steps.tags.outputs.aliases }}
+        run: |
+          set -euo pipefail
+          args=()
+          for tag in $ALIASES; do args+=(--tag "${IMAGE}:${tag}"); done
+          docker buildx imagetools create "${args[@]}" "${IMAGE}:${HASH}"
+
+      - name: Log in to Docker Hub
+        if: steps.existing.outputs.found != 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
+
+      - name: Build and push code runner image
+        if: steps.existing.outputs.found != 'true'
+        uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
+        with:
+          context: .
+          file: ./agents/code-runner/Dockerfile
+          platforms: linux/amd64
+          push: true
+          tags: ${{ steps.tags.outputs.push }}
+          cache-from: type=gha,scope=code-runner
+          cache-to: type=gha,mode=max,scope=code-runner
+
   otel-collector:
     name: otel-collector
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -1396,6 +1514,8 @@ jobs:
         run: mise run test:infra
 
       - name: Run code generators
+        env:
+          BUF_TOKEN: ${{ secrets.FORGEBOT_BUF_TOKEN }}
         run: mise run gen:infra
 
       - name: Check for dirty files
@@ -2565,6 +2685,7 @@ jobs:
       - functions-build-host
       - functions-image
       - assistant-runtime-image
+      - code-runner-image
       - otel-collector
       - ts-framework-test
       - impeccable
@@ -2629,6 +2750,7 @@ jobs:
         docker-build-client,
         docker-build-pystreams,
         assistant-runtime-image,
+        code-runner-image,
         preview-image-tags,
         upload-dashboard-assets,
       ]
@@ -2636,6 +2758,8 @@ jobs:
       pull-requests: write # adds the preview label
     # Only on PR creation, so a manually removed label stays removed. Waits
     # for every preview image tag, or the preview polls for missing images.
+    # The code runner image is tagged for every eligible PR commit, so it is
+    # never skipped here and must succeed.
     if: >-
       !cancelled() &&
       github.event_name == 'pull_request' &&
@@ -2652,6 +2776,7 @@ jobs:
        needs.docker-build-pystreams.result == 'success') &&
       (needs.changes.outputs.server != 'true' ||
        needs.assistant-runtime-image.result == 'success') &&
+      needs.code-runner-image.result == 'success' &&
       ((needs.changes.outputs.server != 'true' && needs.changes.outputs.client != 'true') ||
        needs.upload-dashboard-assets.result == 'success') &&
       contains(fromJSON('["success","skipped"]'), needs.preview-image-tags.result)
@@ -2671,6 +2796,7 @@ jobs:
         ci-gate,
         docker-build-server,
         assistant-runtime-image,
+        code-runner-image,
         svix-sync-webhooks,
       ]
     # ci-gate's transitive needs include path-filtered jobs, and a skipped job
@@ -2684,6 +2810,7 @@ jobs:
       needs.ci-gate.result == 'success' &&
       needs.docker-build-server.result == 'success' &&
       needs.assistant-runtime-image.result == 'success' &&
+      needs.code-runner-image.result == 'success' &&
       needs.svix-sync-webhooks.result == 'success' &&
       github.event_name == 'push' && github.ref == 'refs/heads/main'
     steps:

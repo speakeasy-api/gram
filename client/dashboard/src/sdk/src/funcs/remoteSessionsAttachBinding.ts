@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * attachBinding remoteSessions
  *
  * @remarks
- * Manage exact remote session attachments for an agent. Requires an ordinary human session, agent authorization authority and ownership of the upstream session. Never returns credentials.
+ * Manage exact remote session attachments for an agent. Reads require agent authorization or write permission. Changes require an ordinary human session and agent write permission. Attachment requires ownership of the upstream session; editors can remove any assignment. Never returns credentials.
  */
 export function remoteSessionsAttachBinding(
   client: GramCore,

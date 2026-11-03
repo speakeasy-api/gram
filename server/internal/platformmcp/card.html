@@ -1,0 +1,337 @@
+<!doctype html>
+<html lang="en">
+  <head>
+    <meta charset="utf-8" />
+    <meta name="viewport" content="width=device-width, initial-scale=1" />
+    <title>Speakeasy</title>
+    <style>
+      /* One shared shell: a dotted panel with the resource's tile, a coloured
+   eyebrow, a serif title, up to two lines, tags and one action, over a Speakeasy
+   footer. Square corners and hairline borders throughout. */
+      :root {
+        color-scheme: light dark;
+        --surface: light-dark(hsl(0 0% 100%), hsl(0 0% 9%));
+        --line: light-dark(hsl(0 0% 80%), hsl(0 0% 26%));
+        --hair: light-dark(hsl(0 0% 88%), hsl(0 0% 20%));
+        --dots: light-dark(hsl(0 0% 82%), hsl(0 0% 24%));
+        --fg: light-dark(hsl(0 0% 9%), hsl(0 0% 96%));
+        --muted: light-dark(hsl(0 0% 40%), hsl(0 0% 64%));
+        --tile: light-dark(hsl(0 0% 96%), hsl(0 0% 15%));
+        --tile-icon: light-dark(hsl(0 0% 27%), hsl(0 0% 75%));
+        --tag: light-dark(hsl(0 0% 95%), hsl(0 0% 16%));
+        --tag-fg: light-dark(hsl(0 0% 25%), hsl(0 0% 78%));
+        --solid: light-dark(hsl(0 0% 9%), hsl(0 0% 96%));
+        --solid-fg: light-dark(hsl(0 0% 100%), hsl(0 0% 7%));
+        --done: light-dark(hsl(142 70% 30%), hsl(142 60% 55%));
+        --action: light-dark(hsl(24 90% 40%), hsl(28 95% 60%));
+        --sans:
+          -apple-system, BlinkMacSystemFont, "SF Pro Text", Inter, "Segoe UI",
+          Roboto, Helvetica, Arial, sans-serif;
+        --serif:
+          "Tiempos Headline", "Iowan Old Style", Charter, "Source Serif Pro",
+          Georgia, ui-serif, serif;
+        --mono:
+          "IBM Plex Mono", ui-monospace, SFMono-Regular, "SF Mono", Menlo,
+          Consolas, monospace;
+      }
+      * {
+        box-sizing: border-box;
+      }
+      body {
+        margin: 0;
+        background: transparent;
+        color: var(--fg);
+        font: 14px/1.45 var(--sans);
+        -webkit-font-smoothing: antialiased;
+      }
+      p,
+      h1,
+      ul {
+        margin: 0;
+        padding: 0;
+      }
+      .card {
+        background: var(--surface);
+        border: 1px solid var(--line);
+      }
+      .body {
+        display: flex;
+      }
+      .panel {
+        flex: none;
+        width: 30%;
+        min-width: 112px;
+        max-width: 200px;
+        display: grid;
+        place-items: center;
+        padding: 20px 0;
+        border-right: 1px solid var(--hair);
+        background-image: radial-gradient(var(--dots) 1px, transparent 1.2px);
+        background-size: 8px 8px;
+        background-position: 4px 4px;
+      }
+      .tile {
+        width: 72px;
+        height: 72px;
+        display: grid;
+        place-items: center;
+        background: var(--surface);
+        border: 1px solid var(--line);
+        color: var(--tile-icon);
+        font: 500 22px/1 var(--mono);
+      }
+      .tile-logo {
+        background: var(--tile);
+        border-color: transparent;
+      }
+      .logo {
+        width: 100%;
+        height: 100%;
+        object-fit: contain;
+      }
+      .icon {
+        width: 28px;
+        height: 28px;
+        fill: none;
+        stroke: currentColor;
+        stroke-width: 1.75;
+      }
+      .text {
+        flex: 1;
+        min-width: 0;
+        padding: 22px 24px 20px;
+      }
+      .eyebrow {
+        font: 500 10.5px/1.4 var(--mono);
+        letter-spacing: 0.18em;
+        text-transform: uppercase;
+        color: var(--muted);
+      }
+      .eyebrow-done {
+        color: var(--done);
+      }
+      .eyebrow-action {
+        color: var(--action);
+      }
+      h1 {
+        margin-top: 6px;
+        font: 400 26px/1.15 var(--serif);
+        letter-spacing: -0.01em;
+        overflow-wrap: anywhere;
+      }
+      .line {
+        margin-top: 10px;
+        color: var(--muted);
+        font-size: 13px;
+        overflow-wrap: anywhere;
+      }
+      code {
+        margin-left: 4px;
+        color: var(--fg);
+        font: 13px/1.4 var(--mono);
+      }
+      .foot {
+        display: flex;
+        flex-wrap: wrap;
+        align-items: center;
+        justify-content: space-between;
+        gap: 12px;
+        margin-top: 22px;
+      }
+      .tags {
+        display: flex;
+        flex-wrap: wrap;
+        gap: 6px;
+        list-style: none;
+      }
+      .tags li {
+        padding: 1px 7px;
+        background: var(--tag);
+        border: 1px solid var(--hair);
+        color: var(--tag-fg);
+        font: 11px/1.5 var(--mono);
+        letter-spacing: 0.06em;
+        text-transform: uppercase;
+      }
+      .button {
+        margin-left: auto;
+        display: inline-flex;
+        align-items: center;
+        gap: 6px;
+        height: 34px;
+        padding: 0 14px;
+        background: var(--solid);
+        color: var(--solid-fg);
+        font-weight: 500;
+        text-decoration: none;
+        white-space: nowrap;
+      }
+      .button:focus-visible {
+        outline: 2px solid var(--fg);
+        outline-offset: 2px;
+      }
+      .brand {
+        display: flex;
+        align-items: center;
+        gap: 6px;
+        padding: 7px 14px;
+        border-top: 1px solid var(--hair);
+        font-weight: 500;
+        font-size: 13px;
+        letter-spacing: -0.03em;
+      }
+      .mark {
+        width: 14px;
+        height: 14px;
+        fill: currentColor;
+      }
+      /* A narrow card puts the panel above the text so the text keeps the
+   card's full width. */
+      @media (max-width: 480px) {
+        .body {
+          flex-direction: column;
+        }
+        .panel {
+          width: auto;
+          max-width: none;
+          padding: 16px 0;
+          border-right: 0;
+          border-bottom: 1px solid var(--hair);
+        }
+        .tile {
+          width: 56px;
+          height: 56px;
+        }
+        .text {
+          padding: 18px 18px 18px;
+        }
+        h1 {
+          font-size: 23px;
+        }
+      }
+    </style>
+  </head>
+  <body>
+    <div id="frame" hidden>
+      <main id="card"></main>
+    </div>
+    <script>
+      (function () {
+        "use strict";
+        // The card arrives already rendered and escaped by the server, in the tool
+        // result's _meta. This shell only places it, follows the host theme, and
+        // opens the card's one link through the host.
+        var CARD_KEY = "com.speakeasy/card";
+        var frame = document.getElementById("frame");
+        var root = document.getElementById("card");
+        var nextId = 1;
+        var initializeId = 0;
+
+        function post(message) {
+          message.jsonrpc = "2.0";
+          window.parent.postMessage(message, "*");
+        }
+        function request(method, params) {
+          var id = nextId++;
+          post({ id: id, method: method, params: params });
+          return id;
+        }
+        function notify(method, params) {
+          post({ method: method, params: params });
+        }
+        function setTheme(theme) {
+          if (theme === "light" || theme === "dark") {
+            document.documentElement.style.colorScheme = theme;
+          }
+        }
+        // MCP Apps hosts may send their own style variables; the card's neutrals
+        // read them, so it matches the host's surfaces.
+        function applyHostContext(context) {
+          if (!context) {
+            return;
+          }
+          setTheme(context.theme);
+          var variables = context.styles && context.styles.variables;
+          for (var name in variables || {}) {
+            if (
+              /^--[a-z0-9-]+$/.test(name) &&
+              typeof variables[name] === "string"
+            ) {
+              document.documentElement.style.setProperty(name, variables[name]);
+            }
+          }
+        }
+        // A result without a card, such as a refusal, clears any earlier card,
+        // hides the frame and reports zero height so the host can collapse it.
+        function render(meta) {
+          var card = meta && meta[CARD_KEY];
+          root.innerHTML = typeof card === "string" ? card : "";
+          frame.hidden = root.innerHTML === "";
+          notify("ui/notifications/size-changed", {
+            width: document.documentElement.scrollWidth,
+            height: frame.offsetHeight,
+          });
+        }
+
+        window.addEventListener("message", function (event) {
+          var message = event.data;
+          if (
+            event.source !== window.parent ||
+            !message ||
+            message.jsonrpc !== "2.0"
+          ) {
+            return;
+          }
+          if (message.id === initializeId && message.result) {
+            applyHostContext(message.result.hostContext);
+            notify("ui/notifications/initialized", {});
+          } else if (message.method === "ui/notifications/tool-result") {
+            render(message.params && message.params._meta);
+          } else if (
+            message.method === "ui/notifications/host-context-changed"
+          ) {
+            applyHostContext(message.params);
+          }
+        });
+
+        root.addEventListener("click", function (event) {
+          var link = event.target.closest && event.target.closest("a[href]");
+          if (!link) {
+            return;
+          }
+          var url = link.href;
+          if (!/^https?:\/\//i.test(url)) {
+            event.preventDefault();
+            return;
+          }
+          // A sandboxed view cannot open a window itself; the host opens the link.
+          event.preventDefault();
+          if (
+            window.openai &&
+            typeof window.openai.openExternal === "function"
+          ) {
+            window.openai.openExternal({ href: url });
+          } else {
+            request("ui/open-link", { url: url });
+          }
+        });
+
+        initializeId = request("ui/initialize", {
+          appInfo: { name: "speakeasy-platform-card", version: "1" },
+          appCapabilities: {},
+          protocolVersion: "2026-01-26",
+        });
+
+        // ChatGPT also exposes the result directly on window.openai.
+        function renderFromOpenAI() {
+          setTheme(window.openai.theme);
+          render(window.openai.toolResponseMetadata);
+        }
+        if (window.openai) {
+          renderFromOpenAI();
+          window.addEventListener("openai:set_globals", renderFromOpenAI);
+        }
+      })();
+    </script>
+  </body>
+</html>

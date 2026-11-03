@@ -274,6 +274,57 @@ func TestCreateOrganization_CreatesInWorkOSAndInGram(t *testing.T) {
 	require.Nil(t, list.Organizations[0].CreationSource)
 }
 
+func TestCreateOrganization_UsesExplicitNameAndSlug(t *testing.T) {
+	t.Parallel()
+
+	const workosOrgID = "org_01HZADMINCUSTOMIDENTITY"
+	fake := newFakeWorkOS(workosOrgID)
+	ctx, svc, _ := newTestAdminServiceWithWorkOS(t, fake)
+
+	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{
+		URL:                "https://www.example.com/about",
+		Name:               new("Customer Display Name"),
+		Slug:               new("customer-facing-slug"),
+		OwnershipConfirmed: true,
+		AdminSessionToken:  nil,
+	})
+	require.NoError(t, err)
+
+	require.Equal(t, "Customer Display Name", res.Name)
+	require.Equal(t, "customer-facing-slug", res.Slug)
+	require.Equal(t, []string{"www.example.com"}, fake.names(), "the exact hostname still controls the verified domain")
+	require.Equal(t, []string{"Customer Display Name"}, fake.createdDisplayNames)
+}
+
+func TestCreateOrganization_ExplicitSlugGetsSuffixWhenTaken(t *testing.T) {
+	t.Parallel()
+
+	firstFake := newFakeWorkOS("org_01HZCUSTOMSLUG1")
+	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, firstFake)
+
+	first, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{
+		URL:                "first.example.com",
+		Slug:               new("chosen-slug"),
+		OwnershipConfirmed: true,
+		AdminSessionToken:  nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "chosen-slug", first.Slug)
+
+	svc.workos = newFakeWorkOS("org_01HZCUSTOMSLUG2")
+	second, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{
+		URL:                "second.example.com",
+		Slug:               new("chosen-slug"),
+		OwnershipConfirmed: true,
+		AdminSessionToken:  nil,
+	})
+	require.NoError(t, err)
+	require.Regexp(t, `^chosen-slug-[a-f0-9]{4}$`, second.Slug)
+	require.NotEqual(t, first.Slug, second.Slug)
+	require.Equal(t, int64(1), countOrganizationsForWorkOSID(t, ctx, conn, "org_01HZCUSTOMSLUG1"))
+	require.Equal(t, int64(1), countOrganizationsForWorkOSID(t, ctx, conn, "org_01HZCUSTOMSLUG2"))
+}
+
 // TestCreateOrganization_WebhookAfterwardsDoesNotDuplicate is the ordering the
 // endpoint produces on every successful call: WorkOS fires organization.created
 // and the sync activity applies it against a row this endpoint already wrote.
@@ -359,6 +410,28 @@ func TestCreateOrganization_WebhookThatWonTheRaceIsUpdatedNotDuplicated(t *testi
 	// Nothing in this handler may roll it back.
 	cursor := readWorkOSLastEventID(t, ctx, conn, derivedID)
 	require.Equal(t, "event_01HZC", cursor, "a create must not clear the webhook cursor")
+}
+
+func TestCreateOrganization_ExplicitSlugOverridesWebhookSuggestion(t *testing.T) {
+	t.Parallel()
+
+	const workosOrgID = "org_01HZHOOKTHENCUSTOMSLUG"
+	fake := newFakeWorkOS(workosOrgID)
+	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
+
+	runOrganizationWebhook(t, ctx, conn, workosOrgID, organizationEvent("event_01HZCUSTOM", "organization.created", workosOrgID, "Webhook Suggested Name", ""))
+
+	res, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{
+		URL:                "custom.example.com",
+		Name:               new("Operator Chosen Name"),
+		Slug:               new("operator-chosen-slug"),
+		OwnershipConfirmed: true,
+		AdminSessionToken:  nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, "Operator Chosen Name", res.Name)
+	require.Equal(t, "operator-chosen-slug", res.Slug)
+	require.Equal(t, int64(1), countOrganizationsForWorkOSID(t, ctx, conn, workosOrgID))
 }
 
 // TestCreateOrganization_SyncCommittingUnderTheSlugLockKeepsItsSlug is the
@@ -645,6 +718,36 @@ func TestCreateOrganization_RejectsInvalidDerivedNameBeforeEffects(t *testing.T)
 		requireOopsCode(t, err, oops.CodeInvalid)
 		require.Empty(t, fake.names(), "invalid derived name must cause no remote creation")
 		require.Empty(t, fake.externalID(workosOrgID), "invalid derived name must cause no external ID write")
+	}
+	requireNoOrganizationRow(t, ctx, conn, workosOrgID)
+}
+
+func TestCreateOrganization_RejectsInvalidExplicitIdentityBeforeEffects(t *testing.T) {
+	t.Parallel()
+
+	const workosOrgID = "org_invalid_explicit_identity"
+	fake := newFakeWorkOS(workosOrgID)
+	ctx, svc, conn := newTestAdminServiceWithWorkOS(t, fake)
+	for _, tc := range []struct {
+		name *string
+		slug *string
+	}{
+		{name: new("x")},
+		{name: new(strings.Repeat("x", 101))},
+		{slug: new("x")},
+		{slug: new("Uppercase")},
+		{slug: new("two--hyphens")},
+		{slug: new(strings.Repeat("x", 101))},
+	} {
+		_, err := svc.CreateOrganization(ctx, &gen.CreateOrganizationPayload{
+			URL:                "example.com",
+			Name:               tc.name,
+			Slug:               tc.slug,
+			OwnershipConfirmed: true,
+			AdminSessionToken:  nil,
+		})
+		requireOopsCode(t, err, oops.CodeInvalid)
+		require.Empty(t, fake.names(), "invalid explicit identity must cause no remote creation")
 	}
 	requireNoOrganizationRow(t, ctx, conn, workosOrgID)
 }

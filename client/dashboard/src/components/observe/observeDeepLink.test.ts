@@ -20,6 +20,7 @@ const REQUIRED_SHARED_PARAMS = [
   "status",
   "account_type",
   "client",
+  "agent",
   "range",
   "from",
   "to",
@@ -167,6 +168,29 @@ describe("buildObserveHref", () => {
 
     expect(new URLSearchParams(href.split("?")[1]).get("client")).toBe(
       "claude code",
+    );
+  });
+
+  it("narrows skill loads to one channel through af", () => {
+    const href = buildObserveHref(LOGS, new URLSearchParams(), {
+      targetTypes: ["skill"],
+      toolName: "release-checklist",
+      loadedVia: "hook",
+    });
+    const params = new URLSearchParams(href.split("?")[1]);
+
+    expect(params.get("hookTypes")).toBe("skill");
+    expect(params.get("af")).toBe(
+      "gram.tool.name:eq:release-checklist,gram.event.source:eq:hook",
+    );
+  });
+
+  it("narrows to skills whenever a channel is picked", () => {
+    const current = new URLSearchParams({ hookTypes: "hosted_mcp_server" });
+    const href = buildObserveHref(LOGS, current, { loadedVia: "mcp" });
+
+    expect(new URLSearchParams(href.split("?")[1]).get("hookTypes")).toBe(
+      "skill",
     );
   });
 

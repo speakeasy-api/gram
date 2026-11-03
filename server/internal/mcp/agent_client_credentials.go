@@ -18,9 +18,6 @@ import (
 // Agent clients renew by proving possession again, never by retaining a refresh
 // token. Their identity and ceiling come only from authenticated registration.
 func (s *Service) handleAgentClientCredentialsGrant(ctx context.Context, w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, client *usersessions_repo.UserSessionClient, baseURL, method string, logger *slog.Logger) error {
-	if !client.SubjectUrn.Valid {
-		return s.handleAssistantClientCredentialsGrant(ctx, w, r, endpoint, client, baseURL, method, logger)
-	}
 	reject := func(code string) error {
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, code, "agent client authorization refused")
 	}
@@ -31,7 +28,7 @@ func (s *Service) handleAgentClientCredentialsGrant(ctx context.Context, w http.
 		logger.ErrorContext(ctx, "agent client admission unavailable", "error", err)
 		return writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "agent client authorization unavailable")
 	}
-	if method != "private_key_jwt" || client.TokenEndpointAuthMethod.String != "private_key_jwt" || client.UserSessionIssuerID != endpoint.UserSessionIssuerID {
+	if !client.SubjectUrn.Valid || method != "private_key_jwt" || client.TokenEndpointAuthMethod.String != "private_key_jwt" || client.UserSessionIssuerID != endpoint.UserSessionIssuerID {
 		return reject("unauthorized_client")
 	}
 	resource, err := endpoint.RootURL(baseURL)

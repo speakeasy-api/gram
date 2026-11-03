@@ -17,6 +17,7 @@ var AuditLogCreated = outbox.NewEventDef[AuditLogCreatedPayloadV1](
 )
 
 var (
+	CatalogPromotionV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.catalog_promotion_event_v1", "Emitted when staff curate catalogue promotion candidates or retry setup documentation")
 	AccessChallengeV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.access_challenge_event_v1", "Emitted when changes to access challenges are made")
 	AIIntegrationV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.ai_integration_event_v1", "Emitted when changes to AI integration configs are made")
 	AccessMemberV1                         = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.access_member_event_v1", "Emitted when changes to org members are made")
@@ -27,6 +28,7 @@ var (
 	AwsIamCredentialV1                     = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.aws_iam_credential_event_v1", "Emitted when changes to AWS IAM external credentials are made")
 	AwsKmsKeyV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.aws_kms_key_event_v1", "Emitted when changes to AWS KMS external keys are made")
 	AssistantIdentityV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_identity_event_v1", "Emitted when workload identity is configured for an assistant")
+	AssistantExecutionProfileV1            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_execution_profile_event_v1", "Emitted when the upstream credentials an assistant's turns use are changed")
 	AssistantToolCallV1                    = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_tool_call_event_v1", "Emitted when an assistant executes a tool call")
 	AssistantWakeV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.assistant_wake_event_v1", "Emitted when an assistant wake is scheduled or canceled")
 	BillingMetadataV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.billing_metadata_event_v1", "Emitted when changes to billing metadata are made")
@@ -83,6 +85,8 @@ var (
 	DashboardV1                            = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.dashboard_event_v1", "Emitted when changes to dashboards are made")
 	RemoteMcpServerV1                      = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_mcp_server_event_v1", "Emitted when changes to remote MCP servers are made")
 	RemoteMcpServerHeaderV1                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_mcp_server_header_event_v1", "Emitted when changes to remote MCP server headers are made")
+	AuthClientV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.auth_client_event_v1", "Emitted when changes to MCP auth clients or the servers offering them are made")
+	IssuanceSelectionProfileV1             = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.issuance_selection_profile_event_v1", "Emitted when the upstream credentials a headless caller's sessions use are configured")
 	RemoteSessionClientV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_session_client_event_v1", "Emitted when changes to remote session clients are made")
 	RemoteSessionV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_session_event_v1", "Emitted when changes to remote sessions are made")
 	RemoteSessionIssuerV1                  = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.remote_session_issuer_event_v1", "Emitted when changes to remote session issuers are made")
@@ -134,6 +138,14 @@ type AuditLogCreatedPayloadV1 struct {
 	// property breaks every one of them; optional keeps the addition additive
 	// while the value is in fact always sent.
 	ActingSurface string `json:"acting_surface,omitzero"`
+
+	// Category is what kind of event this is: "configuration" for a change to
+	// the platform's configuration, "security" for machine access and other
+	// security-relevant activity that is not a configuration decision.
+	// Subscribers filter on it to separate the two. Optional in the schema for
+	// the same reason as ActingSurface; every record Speakeasy writes carries
+	// one.
+	Category string `json:"category,omitzero"`
 
 	ProjectID          uuid.NullUUID   `json:"project_id,omitzero"`
 	ActorDisplayName   string          `json:"actor_display_name,omitzero"`

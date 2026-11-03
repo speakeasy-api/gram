@@ -13,6 +13,7 @@ func TestValidateAPIKeyPolicyGrant(t *testing.T) {
 	require.NoError(t, ValidateAPIKeyPolicyGrant(ScopeMCPConnect, projectConnectSelector("p")))
 	require.NoError(t, ValidateAPIKeyPolicyGrant(ScopeMCPAuth, client))
 	require.NoError(t, ValidateAPIKeyPolicyGrant(ScopeMCPBlockedAuth, client))
+	require.NoError(t, ValidateAPIKeyPolicyGrant(ScopeMCPAuth, Selector{SelectorKeyResourceKind: ResourceKindMCPAuthClient, SelectorKeyResourceID: WildcardResource}))
 
 	invalid := map[string]struct {
 		scope    Scope
@@ -20,7 +21,6 @@ func TestValidateAPIKeyPolicyGrant(t *testing.T) {
 	}{
 		"org admin":       {ScopeOrgAdmin, NewSelector(ScopeOrgAdmin, "org")},
 		"mcp write":       {ScopeMCPWrite, NewSelector(ScopeMCPWrite, "*")},
-		"any client":      {ScopeMCPAuth, Selector{SelectorKeyResourceKind: ResourceKindMCPAuthClient, SelectorKeyResourceID: WildcardResource}},
 		"personal owner":  {ScopeMCPAuth, Selector{SelectorKeyResourceKind: ResourceKindMCPAuthClient, SelectorKeyResourceID: "client_a", SelectorKeyClientType: AuthClientTypeRemoteSession, SelectorKeyConnectionOwner: SelectorValueRepresentedUser}},
 		"remote session":  {ScopeMCPAuth, Selector{SelectorKeyResourceKind: ResourceKindMCPAuthClient, SelectorKeyResourceID: "client_a", SelectorKeyClientType: AuthClientTypeRemoteSession}},
 		"invalid sel":     {ScopeMCPConnect, Selector{SelectorKeyResourceKind: ResourceKindMCPAuthClient, SelectorKeyResourceID: "*"}},

@@ -128,6 +128,59 @@ func TestRuntimeRejectsUnsupportedMethodWithoutCaching(t *testing.T) {
 	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
 }
 
+func TestRuntimeInitializeCapabilitiesDisableToolListChanges(t *testing.T) {
+	t.Parallel()
+
+	auth := &testAuthenticator{principal: staffPrincipal()}
+	request := httptest.NewRequest(http.MethodPost, Path, strings.NewReader(`{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1.0.0"}}}`))
+	request.Header.Set("Authorization", "Bearer test-token")
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json, text/event-stream")
+	response := httptest.NewRecorder()
+	NewRuntime(auth, "").Handler().ServeHTTP(response, request)
+
+	require.Equal(t, http.StatusOK, response.Code)
+	var message struct {
+		Result struct {
+			Capabilities struct {
+				Logging json.RawMessage `json:"logging"`
+				Tools   json.RawMessage `json:"tools"`
+			} `json:"capabilities"`
+		} `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(response.Body.Bytes(), &message))
+	require.JSONEq(t, `{}`, string(message.Result.Capabilities.Logging))
+	require.JSONEq(t, `{}`, string(message.Result.Capabilities.Tools))
+	require.NotContains(t, response.Body.String(), `"listChanged"`)
+}
+
+func TestRuntimeSubscriptionForToolListChangesTerminatesPromptly(t *testing.T) {
+	t.Parallel()
+
+	auth := &testAuthenticator{principal: staffPrincipal()}
+	request := httptest.NewRequest(http.MethodPost, Path, strings.NewReader(`{"jsonrpc":"2.0","id":2,"method":"subscriptions/listen","params":{"notifications":{"toolsListChanged":true}}}`))
+	request.Header.Set("Authorization", "Bearer test-token")
+	request.Header.Set("Content-Type", "application/json")
+	request.Header.Set("Accept", "application/json, text/event-stream")
+	response := httptest.NewRecorder()
+	done := make(chan struct{})
+	go func() {
+		NewRuntime(auth, "").Handler().ServeHTTP(response, request)
+		close(done)
+	}()
+
+	select {
+	case <-done:
+	case <-time.After(time.Second):
+		t.Fatal("subscriptions/listen did not terminate promptly")
+	}
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Contains(t, response.Body.String(), `"method":"notifications/subscriptions/acknowledged"`)
+	require.Contains(t, response.Body.String(), `"id":2`)
+	require.Contains(t, response.Body.String(), `"result"`)
+	require.NotContains(t, response.Body.String(), `"error"`)
+}
+
 func TestContextToolReturnsOnlyAuthenticatedContext(t *testing.T) {
 	t.Parallel()
 

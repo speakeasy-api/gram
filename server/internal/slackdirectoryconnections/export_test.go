@@ -11,3 +11,6 @@ func (s *DirectorySync) OccupySyncSlotsForTest() func() {
 		}
 	}
 }
+
+// SyncLockKeyForTest names the advisory lock a sync of connectionID holds.
+var SyncLockKeyForTest = syncLockKey

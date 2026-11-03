@@ -21,16 +21,22 @@ import (
 )
 
 // RegisterAgentOAuthClient is the authenticated registration mechanism shared
-// by the public resource registration endpoint and trusted runtime composition.
+// for ordinary agent keys at the public resource registration endpoint.
 // Callers must establish an agent actor and its immutable authorizer first.
-// No assistant, trigger, workload issuer, or runtime row is required.
+// Runtime credentials cannot create independent clients that outlive their binding.
 func RegisterAgentOAuthClient(ctx context.Context, db pgx.Tx, target AgentAuthorizationTarget, request usersessions.RegistrationRequest) (usersessions_repo.UserSessionClient, error) {
 	var zero usersessions_repo.UserSessionClient
 	actor, ok := contextvalues.AuthenticatedActor(ctx)
 	ac, hasAuth := contextvalues.GetAuthContext(ctx)
 	credential, hasCredential := contextvalues.PrincipalCredentialAuthorization(ctx)
-	if !ok || actor.Type != urn.PrincipalTypeAgent || !hasAuth || ac == nil || ac.ActiveOrganizationID != target.OrganizationID || !hasCredential {
+	if !ok || actor.Type != urn.PrincipalTypeAgent || !hasAuth || ac == nil || ac.ActiveOrganizationID != target.OrganizationID || (ac.ProjectID != nil && *ac.ProjectID != target.ProjectID) || !hasCredential {
 		return zero, oops.C(oops.CodeUnauthorized)
+	}
+	// Signed turn credentials derive policy live and carry runtime fences that
+	// an ordinary OAuth client cannot preserve. Never exchange them for an
+	// independently renewable credential, even through trusted composition.
+	if credential.DerivesPolicyAtAdmission {
+		return zero, oops.C(oops.CodeForbidden)
 	}
 	if len(request.RedirectURIs) != 0 || request.TokenEndpointAuthMethod != "private_key_jwt" || len(request.GrantTypes) != 1 || request.GrantTypes[0] != "client_credentials" {
 		return zero, oops.C(oops.CodeBadRequest)
@@ -46,7 +52,7 @@ func RegisterAgentOAuthClient(ctx context.Context, db pgx.Tx, target AgentAuthor
 	if err != nil {
 		return zero, fmt.Errorf("resolve agent OAuth issuer: %w", err)
 	}
-	if !issuer.OrganizationID.Valid || issuer.OrganizationID.String != target.OrganizationID || !issuer.ProjectID.Valid || issuer.ProjectID.UUID != target.ProjectID {
+	if !issuer.OrganizationID.Valid || issuer.OrganizationID.String != target.OrganizationID || (issuer.ProjectID.Valid && issuer.ProjectID.UUID != target.ProjectID) {
 		return zero, oops.C(oops.CodeForbidden)
 	}
 	admission, err := runtimepolicy.AdmitPrincipalCredentialWithDBTX(ctx, db)

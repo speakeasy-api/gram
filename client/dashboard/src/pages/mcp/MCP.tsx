@@ -22,8 +22,6 @@ import { useViewMode } from "@/components/ui/ViewToggle/use-view-mode";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { useProjectSlugForRequests } from "@/contexts/Sdk";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useRoutes } from "@/routes";
 import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useMcpEndpoints } from "@gram/client/react-query/mcpEndpoints.js";
@@ -100,11 +98,6 @@ function MCPOverview() {
   } = useMcpServers({ gramProject }, undefined, {
     throwOnError: false,
   });
-  // Gateways (meta MCP servers) are behind a rollout flag: opt-in, so an
-  // unresolved flag keeps them hidden. The flag gates discoverability only —
-  // the backend enforces mcp:read/mcp:write regardless.
-  const gatewayFlag = useFeatureFlag(FEATURE_FLAGS.gatewayEndpoints);
-  const gatewaysEnabled = gatewayFlag.status === "enabled";
   const {
     data: gatewaysResult,
     isLoading: isLoadingGateways,
@@ -113,7 +106,6 @@ function MCPOverview() {
     refetch: refetchGateways,
   } = useMetaMcpServers({ gramProject }, undefined, {
     throwOnError: false,
-    enabled: gatewaysEnabled,
   });
   const {
     data: endpointsResult,
@@ -123,7 +115,6 @@ function MCPOverview() {
     refetch: refetchEndpoints,
   } = useMcpEndpoints({ gramProject }, undefined, {
     throwOnError: false,
-    enabled: gatewaysEnabled,
   });
   // Plugin membership only drives the "Included in plugins" filter, so a failed
   // fetch degrades to an empty option list rather than breaking the listing.
@@ -140,10 +131,8 @@ function MCPOverview() {
     // invisible here until some other refetch happened to run.
     void refetchMembers();
     refetchReach();
-    if (gatewaysEnabled) {
-      void refetchGateways();
-      void refetchEndpoints();
-    }
+    void refetchGateways();
+    void refetchEndpoints();
   };
   const mcpServers = useMemo(
     () => listedMcpServers(mcpServersResult?.mcpServers ?? []),

@@ -12,23 +12,9 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const deployAttachUserSessionIssuer = `-- name: DeployAttachUserSessionIssuer :exec
-UPDATE toolsets SET user_session_issuer_id = $1::uuid WHERE id = $2
-`
-
-type DeployAttachUserSessionIssuerParams struct {
-	UserSessionIssuerID uuid.UUID
-	ToolsetID           uuid.UUID
-}
-
-func (q *Queries) DeployAttachUserSessionIssuer(ctx context.Context, arg DeployAttachUserSessionIssuerParams) error {
-	_, err := q.db.Exec(ctx, deployAttachUserSessionIssuer, arg.UserSessionIssuerID, arg.ToolsetID)
-	return err
-}
-
 const deployInsertAgent = `-- name: DeployInsertAgent :exec
 INSERT INTO agents (id, organization_id, project_id, owner_user_id, name)
-VALUES ($1, $2::text, $3::uuid, $4, 'Identity-bound assistant agent')
+VALUES ($1, $2::text, $3::uuid, $4, $5::text)
 `
 
 type DeployInsertAgentParams struct {
@@ -36,6 +22,7 @@ type DeployInsertAgentParams struct {
 	OrganizationID string
 	ProjectID      uuid.UUID
 	OwnerUserID    string
+	Name           string
 }
 
 func (q *Queries) DeployInsertAgent(ctx context.Context, arg DeployInsertAgentParams) error {
@@ -44,6 +31,7 @@ func (q *Queries) DeployInsertAgent(ctx context.Context, arg DeployInsertAgentPa
 		arg.OrganizationID,
 		arg.ProjectID,
 		arg.OwnerUserID,
+		arg.Name,
 	)
 	return err
 }
@@ -549,10 +537,10 @@ func (q *Queries) DeployInsertOpenAPIAsset(ctx context.Context, arg DeployInsert
 const deployInsertOrgWorkloadIssuer = `-- name: DeployInsertOrgWorkloadIssuer :exec
 INSERT INTO workload_issuers
   (id, organization_id, project_id, name, description, tags, issuer, jwks_uri,
-   allow_wildcard_admission)
+   allow_wildcard_admission, allow_assertion_reuse)
 VALUES
   ($1, $2::text, NULL, $3, $4::text, $5::text[], $6, $7,
-   $8)
+   $8, $9::boolean)
 `
 
 type DeployInsertOrgWorkloadIssuerParams struct {
@@ -564,6 +552,7 @@ type DeployInsertOrgWorkloadIssuerParams struct {
 	Issuer                 string
 	JwksUri                string
 	AllowWildcardAdmission bool
+	AllowAssertionReuse    bool
 }
 
 func (q *Queries) DeployInsertOrgWorkloadIssuer(ctx context.Context, arg DeployInsertOrgWorkloadIssuerParams) error {
@@ -576,6 +565,7 @@ func (q *Queries) DeployInsertOrgWorkloadIssuer(ctx context.Context, arg DeployI
 		arg.Issuer,
 		arg.JwksUri,
 		arg.AllowWildcardAdmission,
+		arg.AllowAssertionReuse,
 	)
 	return err
 }
@@ -645,50 +635,44 @@ func (q *Queries) DeployInsertToolsetVersions(ctx context.Context, arg DeployIns
 
 const deployInsertToolsets = `-- name: DeployInsertToolsets :exec
 INSERT INTO toolsets (id, organization_id, project_id, name, slug, description,
-                      mcp_slug, mcp_enabled, mcp_is_public, external_oauth_server_id)
+                      external_oauth_server_id)
 VALUES
   ($1, $2::text, $3::uuid, 'Acme Support Tools', 'acme-support-tools',
-   'Support workflows: logs, refunds, customer lookups.',
-   $4::text, TRUE, FALSE, NULL),
-  ($5, $2::text, $3::uuid, 'Acme Ops', 'acme-ops',
-   'Operational checks and deploy tooling.', NULL, TRUE, FALSE, NULL),
+   'Support workflows: logs, refunds, customer lookups.', NULL),
+  ($4, $2::text, $3::uuid, 'Acme Ops', 'acme-ops',
+   'Operational checks and deploy tooling.', NULL),
   -- The OAuth-protected server, kept separate from the two above: attaching
   -- a session issuer changes what a server's authentication tab and install
   -- instructions say, and the support server is the one a visitor meets
   -- first.
-  ($6, $2::text, $3::uuid, 'Acme Partner Gateway', 'acme-partner-gateway',
-   'Tools Acme exposes to partner agents, behind OAuth.',
-   $7::text, TRUE, FALSE, NULL),
-  ($8, $2::text, $3::uuid, 'Acme OAuth Discovery', 'acme-oauth-discovery',
+  ($5, $2::text, $3::uuid, 'Acme Partner Gateway', 'acme-partner-gateway',
+   'Tools Acme exposes to partner agents, behind OAuth.', NULL),
+  ($6, $2::text, $3::uuid, 'Acme OAuth Discovery', 'acme-oauth-discovery',
    'Demonstrates external OAuth metadata source choices.',
-   $9::text, TRUE, TRUE,
-   $10::uuid)
+   $7::uuid)
 `
 
 type DeployInsertToolsetsParams struct {
 	Toolset1              uuid.UUID
 	OrganizationID        string
 	ProjectID             uuid.UUID
-	SupportMcpSlug        string
 	Toolset2              uuid.UUID
 	Toolset3              uuid.UUID
-	PartnerMcpSlug        string
 	Toolset4              uuid.UUID
-	DiscoveryMcpSlug      string
 	ExternalOauthServerID uuid.UUID
 }
 
+// Hosting state (address, visibility, issuer) lives on each hosted
+// toolset's canonical MCP server, seeded in 04_servers.sql; the toolset
+// hosting columns stay unset as they do for every new toolset.
 func (q *Queries) DeployInsertToolsets(ctx context.Context, arg DeployInsertToolsetsParams) error {
 	_, err := q.db.Exec(ctx, deployInsertToolsets,
 		arg.Toolset1,
 		arg.OrganizationID,
 		arg.ProjectID,
-		arg.SupportMcpSlug,
 		arg.Toolset2,
 		arg.Toolset3,
-		arg.PartnerMcpSlug,
 		arg.Toolset4,
-		arg.DiscoveryMcpSlug,
 		arg.ExternalOauthServerID,
 	)
 	return err

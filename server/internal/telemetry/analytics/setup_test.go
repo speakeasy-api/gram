@@ -80,7 +80,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 
 	return ctx, &testInstance{
-		service:        NewService(logger, tracerProvider, conn, chConn, sessionManager, authzEngine),
+		service:        NewService(logger, tracerProvider, conn, chConn, sessionManager, authzEngine, nil),
 		ch:             chConn,
 		db:             conn,
 		organizationID: authCtx.ActiveOrganizationID,

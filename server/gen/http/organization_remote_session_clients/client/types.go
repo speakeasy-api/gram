@@ -90,6 +90,14 @@ type CreateCimdClientRequestBody struct {
 type UpdateClientRequestBody struct {
 	// The remote_session_client id.
 	ID string `form:"id" json:"id" xml:"id"`
+	// Correct the client_id registered with the issuer. Refused for Client ID
+	// Metadata Document (CIMD) clients and clients managed by an identity provider
+	// connection. A changed value revokes every remote session obtained through
+	// the client, so each user must reconnect. Omit to leave unchanged.
+	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Replace the client's display name. Pass an empty string to clear it so the
+	// client shows its client_id. Omit to leave unchanged.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// Rotate the client secret. Speakeasy re-encrypts before persisting.
 	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
 	// Change how the client authenticates at the issuer's token endpoint.
@@ -192,6 +200,9 @@ type GetClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// When set, the client is in Client ID Metadata Document (CIMD) mode:
 	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
 	// as the client_id. Null for non-CIMD clients.
@@ -304,6 +315,9 @@ type CreateClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// When set, the client is in Client ID Metadata Document (CIMD) mode:
 	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
 	// as the client_id. Null for non-CIMD clients.
@@ -376,6 +390,9 @@ type CreateCimdClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// When set, the client is in Client ID Metadata Document (CIMD) mode:
 	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
 	// as the client_id. Null for non-CIMD clients.
@@ -448,6 +465,9 @@ type UpdateClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// When set, the client is in Client ID Metadata Document (CIMD) mode:
 	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
 	// as the client_id. Null for non-CIMD clients.
@@ -520,6 +540,9 @@ type AttachClientKeySetResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// When set, the client is in Client ID Metadata Document (CIMD) mode:
 	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
 	// as the client_id. Null for non-CIMD clients.
@@ -592,6 +615,9 @@ type DetachClientKeySetResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// When set, the client is in Client ID Metadata Document (CIMD) mode:
 	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
 	// as the client_id. Null for non-CIMD clients.
@@ -664,6 +690,9 @@ type RotateClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// When set, the client is in Client ID Metadata Document (CIMD) mode:
 	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
 	// as the client_id. Null for non-CIMD clients.
@@ -736,6 +765,9 @@ type DuplicateClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// When set, the client is in Client ID Metadata Document (CIMD) mode:
 	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
 	// as the client_id. Null for non-CIMD clients.
@@ -3517,6 +3549,9 @@ type RemoteSessionClientResponseBody struct {
 	// The client_id used to identify this client at the issuer's token and
 	// authorization endpoints.
 	ClientID *string `form:"client_id,omitempty" json:"client_id,omitempty" xml:"client_id,omitempty"`
+	// Administrator-chosen name for the client. Null when unset, in which case the
+	// client is shown by its client_id.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
 	// When set, the client is in Client ID Metadata Document (CIMD) mode:
 	// Speakeasy hosts its OAuth client metadata document at this URL and uses it
 	// as the client_id. Null for non-CIMD clients.
@@ -3668,6 +3703,8 @@ func NewCreateCimdClientRequestBody(p *organizationremotesessionclients.CreateCi
 func NewUpdateClientRequestBody(p *organizationremotesessionclients.UpdateClientPayload) *UpdateClientRequestBody {
 	body := &UpdateClientRequestBody{
 		ID:                              p.ID,
+		ClientID:                        p.ClientID,
+		DisplayName:                     p.DisplayName,
 		ClientSecret:                    p.ClientSecret,
 		TokenEndpointAuthMethod:         p.TokenEndpointAuthMethod,
 		TokenEndpointAuthAudienceFormat: p.TokenEndpointAuthAudienceFormat,
@@ -3909,6 +3946,7 @@ func NewGetClientRemoteSessionClientOK(body *GetClientResponseBody) *types.Remot
 		OrganizationID:                  *body.OrganizationID,
 		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
 		ClientID:                        *body.ClientID,
+		DisplayName:                     body.DisplayName,
 		ClientIDMetadataURI:             body.ClientIDMetadataURI,
 		ClientIDIssuedAt:                body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
@@ -4640,6 +4678,7 @@ func NewCreateClientRemoteSessionClientOK(body *CreateClientResponseBody) *types
 		OrganizationID:                  *body.OrganizationID,
 		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
 		ClientID:                        *body.ClientID,
+		DisplayName:                     body.DisplayName,
 		ClientIDMetadataURI:             body.ClientIDMetadataURI,
 		ClientIDIssuedAt:                body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
@@ -4835,6 +4874,7 @@ func NewCreateCimdClientRemoteSessionClientOK(body *CreateCimdClientResponseBody
 		OrganizationID:                  *body.OrganizationID,
 		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
 		ClientID:                        *body.ClientID,
+		DisplayName:                     body.DisplayName,
 		ClientIDMetadataURI:             body.ClientIDMetadataURI,
 		ClientIDIssuedAt:                body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
@@ -5032,6 +5072,7 @@ func NewUpdateClientRemoteSessionClientOK(body *UpdateClientResponseBody) *types
 		OrganizationID:                  *body.OrganizationID,
 		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
 		ClientID:                        *body.ClientID,
+		DisplayName:                     body.DisplayName,
 		ClientIDMetadataURI:             body.ClientIDMetadataURI,
 		ClientIDIssuedAt:                body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
@@ -5227,6 +5268,7 @@ func NewAttachClientKeySetRemoteSessionClientOK(body *AttachClientKeySetResponse
 		OrganizationID:                  *body.OrganizationID,
 		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
 		ClientID:                        *body.ClientID,
+		DisplayName:                     body.DisplayName,
 		ClientIDMetadataURI:             body.ClientIDMetadataURI,
 		ClientIDIssuedAt:                body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
@@ -5440,6 +5482,7 @@ func NewDetachClientKeySetRemoteSessionClientOK(body *DetachClientKeySetResponse
 		OrganizationID:                  *body.OrganizationID,
 		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
 		ClientID:                        *body.ClientID,
+		DisplayName:                     body.DisplayName,
 		ClientIDMetadataURI:             body.ClientIDMetadataURI,
 		ClientIDIssuedAt:                body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
@@ -5653,6 +5696,7 @@ func NewRotateClientRemoteSessionClientOK(body *RotateClientResponseBody) *types
 		OrganizationID:                  *body.OrganizationID,
 		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
 		ClientID:                        *body.ClientID,
+		DisplayName:                     body.DisplayName,
 		ClientIDMetadataURI:             body.ClientIDMetadataURI,
 		ClientIDIssuedAt:                body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,
@@ -5848,6 +5892,7 @@ func NewDuplicateClientRemoteSessionClientOK(body *DuplicateClientResponseBody) 
 		OrganizationID:                  *body.OrganizationID,
 		RemoteSessionIssuerID:           *body.RemoteSessionIssuerID,
 		ClientID:                        *body.ClientID,
+		DisplayName:                     body.DisplayName,
 		ClientIDMetadataURI:             body.ClientIDMetadataURI,
 		ClientIDIssuedAt:                body.ClientIDIssuedAt,
 		ClientSecretExpiresAt:           body.ClientSecretExpiresAt,

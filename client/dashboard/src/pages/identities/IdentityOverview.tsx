@@ -244,7 +244,7 @@ export default function IdentityOverview(): JSX.Element {
   };
 
   return (
-    <IdentitySection>
+    <IdentitySection title="Overview" timeRange>
       <div className="flex flex-col gap-6">
         <IdentityPanel
           title="Needs attention"

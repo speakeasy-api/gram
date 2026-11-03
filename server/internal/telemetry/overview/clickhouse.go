@@ -72,7 +72,7 @@ func FetchClickHouse(
 			// Org-scope read: Speakeasy-hosted sources stay counted, matching the
 			// summaries fast path.
 			ExcludedHookSources: nil,
-			GramProjectID:       params.ProjectID,
+			GramProjectIDs:      []string{params.ProjectID},
 			TimeStart:           params.TimeStart,
 			TimeEnd:             params.TimeEnd,
 			User:                repo.UserIdentity{UserIDs: nil, Emails: nil},
@@ -101,7 +101,7 @@ func FetchClickHouse(
 			// Org-scope read: Speakeasy-hosted sources stay counted, matching the
 			// summaries fast path.
 			ExcludedHookSources: nil,
-			GramProjectID:       params.ProjectID,
+			GramProjectIDs:      []string{params.ProjectID},
 			TimeStart:           params.ComparisonStart,
 			TimeEnd:             params.ComparisonEnd,
 			User:                repo.UserIdentity{UserIDs: nil, Emails: nil},

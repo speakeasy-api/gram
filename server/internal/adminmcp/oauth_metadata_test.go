@@ -9,7 +9,9 @@ import (
 
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 
+	"github.com/speakeasy-api/gram/server/internal/consentpage"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -84,4 +86,23 @@ func TestStaffOAuthMetadataURLs(t *testing.T) {
 	var metadata map[string]any
 	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &metadata))
 	require.Equal(t, []any{ScopeRead, ScopeWrite}, metadata["scopes_supported"])
+}
+
+func TestStaffOAuthServesConsentFonts(t *testing.T) {
+	t.Parallel()
+	mux := goahttp.NewMuxer()
+	(&StaffOAuth{}).Attach(mux)
+	fonts, err := consentpage.FontNames()
+	require.NoError(t, err)
+	require.NotEmpty(t, fonts)
+
+	response := httptest.NewRecorder()
+	mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/mcp/consent-fonts/"+fonts[0], nil))
+	require.Equal(t, http.StatusOK, response.Code)
+	require.Equal(t, "font/woff2", response.Header().Get("Content-Type"))
+	require.NotEmpty(t, response.Body.Bytes())
+
+	response = httptest.NewRecorder()
+	mux.ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/mcp/consent-fonts/missing.woff2", nil))
+	require.Equal(t, http.StatusNotFound, response.Code)
 }

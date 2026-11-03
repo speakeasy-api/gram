@@ -30,12 +30,12 @@ func (s *Service) HandleRevoke(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 	mcpSlug := chi.URLParam(r, "mcpSlug")
 	if mcpSlug == "" {
-		return oops.E(oops.CodeBadRequest, nil, "an mcp slug must be provided").LogError(ctx, s.logger)
+		return oops.NewOAuthError(http.StatusBadRequest, oautherr.CodeInvalidRequest, "an mcp slug must be provided", nil)
 	}
 	logger := s.logger.With(attr.SlogToolsetMCPSlug(mcpSlug))
 	endpoint, err := s.LoadResolvedMcpEndpointBySlug(ctx, logger, mcpSlug, mcproute.MCP)
 	if err != nil {
-		return err
+		return tokenEndpointResolutionError(err)
 	}
 	return s.ServeRevoke(w, r, endpoint)
 }

@@ -15,7 +15,17 @@ export function getActorLabel(log: AuditLog): string {
       : log.actorId;
     return `Agent ${id.slice(0, 8)}`;
   }
-  return log.actorDisplayName || log.actorSlug || "Someone";
+  const stored = log.actorDisplayName || log.actorSlug;
+  if (stored) return stored;
+  // A system actor is a Speakeasy component working with no person behind
+  // it. It is never anonymous, so it must not read as "Someone".
+  if (
+    log.actorType === "system" ||
+    ["system", "user:system"].includes(log.actorId)
+  ) {
+    return "Speakeasy";
+  }
+  return "Someone";
 }
 
 export function formatAuditAction(action: string): string {
@@ -191,6 +201,13 @@ function describeInvitation(log: AuditLog): string | undefined {
   return undefined;
 }
 
+function describeAuthClientDetach(log: AuditLog): string | undefined {
+  const server =
+    recordString(log.metadata, "mcp_server_name") ??
+    recordString(log.metadata, "mcp_server_id");
+  return server ? `removed MCP server ${server} from auth client` : undefined;
+}
+
 function describeProductFeatureToggle(log: AuditLog): string | undefined {
   const feature = recordString(log.metadata, "feature_name");
   if (!feature) return undefined;
@@ -290,7 +307,7 @@ export function formatAuditActionLabel(action: string): string {
   const phrase = isAuditAction(action)
     ? staticActionPhrase(action)
     : describeUnknownAction(action);
-  const trimmed = phrase.replace(/\s+(for|to|from|on)$/, "");
+  const trimmed = phrase.replace(/\s+(for|to|from|on|under)$/, "");
   return trimmed.charAt(0).toUpperCase() + trimmed.slice(1);
 }
 
@@ -305,6 +322,8 @@ export function renderVerb(log: AuditLog): string {
     case "organization_invitation:create":
     case "organization_invitation:update_role":
       return describeInvitation(log) ?? staticActionPhrase(log.action);
+    case "auth-client:detach-mcp-server":
+      return describeAuthClientDetach(log) ?? staticActionPhrase(log.action);
     case "organization:product_feature_enabled":
     case "organization:product_feature_disabled":
       return (

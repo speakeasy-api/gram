@@ -17,14 +17,14 @@ Use product language in every distributed skill: **Speakeasy AI Control Plane**,
 
 ## Source and output map
 
-| Purpose                           | Path                                                                                     |
-| --------------------------------- | ---------------------------------------------------------------------------------------- |
-| Authoring source shipped to users | `server/internal/plugins/platform_mcp_skills/<skill-name>/SKILL.md`                      |
-| Generator and validation          | `server/internal/plugins/generate.go` (`loadPlatformMCPSkills`, `emitPlatformMCPSkills`) |
-| Package tests                     | `server/internal/plugins/generate_test.go`                                               |
-| Claude package output             | `speakeasy/skills/<skill-name>/SKILL.md`                                                 |
-| Portable Agent Plugin output      | `agent-plugins/speakeasy/skills/<skill-name>/SKILL.md`                                   |
-| Contributor guidance only         | `.agents/skills/authoring-platform-mcp-skills/SKILL.md` (this file)                      |
+| Purpose                           | Path                                                                                 |
+| --------------------------------- | ------------------------------------------------------------------------------------ |
+| Authoring source shipped to users | `server/internal/plugins/platform_mcp_skills/<skill-name>/SKILL.md`                  |
+| Generator and validation          | `server/internal/plugins/generate.go` (`PlatformMCPSkills`, `emitPlatformMCPSkills`) |
+| Package tests                     | `server/internal/plugins/generate_test.go`                                           |
+| Claude package output             | `speakeasy/skills/<skill-name>/SKILL.md`                                             |
+| Portable Agent Plugin output      | `agent-plugins/speakeasy/skills/<skill-name>/SKILL.md`                               |
+| Contributor guidance only         | `.agents/skills/authoring-platform-mcp-skills/SKILL.md` (this file)                  |
 
 Do not put a user-facing Platform workflow under `.agents/skills/`: that directory teaches contributors and coding agents how to work on this repository. It is not copied into the customer Platform Plugin.
 

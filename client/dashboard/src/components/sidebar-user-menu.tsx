@@ -37,7 +37,7 @@ import {
 import { useState, useSyncExternalStore } from "react";
 import { Link, useNavigate } from "react-router";
 import { useIdentityHrefBuilder } from "@/lib/useIdentityHref";
-import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
+import { IdentityAvatar } from "@/components/identity-avatar";
 import {
   isPylonChatOpen,
   subscribePylonChatOpen,
@@ -74,16 +74,6 @@ export function SidebarUserMenu(): JSX.Element {
     () => false,
   );
 
-  const userInitials =
-    user.displayName
-      ?.split(" ")
-      .map((n) => n[0])
-      .join("")
-      .toUpperCase()
-      .slice(0, 2) ||
-    user.email?.slice(0, 2).toUpperCase() ||
-    "?";
-
   // Only the first name in the compact footer preview so it never truncates.
   const firstName = user.displayName?.trim().split(/\s+/)[0] || "User";
   const accountDetails = (
@@ -109,15 +99,12 @@ export function SidebarUserMenu(): JSX.Element {
             aria-label="Account menu"
             className="hover:bg-accent flex min-w-0 flex-1 items-center gap-2 p-1 text-left group-data-[collapsible=icon]:mx-auto group-data-[collapsible=icon]:flex-none group-data-[collapsible=icon]:justify-center"
           >
-            <Avatar className="size-7 shrink-0">
-              <AvatarImage
-                src={user.photoUrl}
-                alt={user.displayName || user.email}
-              />
-              <AvatarFallback className="text-xs">
-                {userInitials}
-              </AvatarFallback>
-            </Avatar>
+            <IdentityAvatar
+              label={user.displayName || user.email}
+              src={user.photoUrl}
+              className="size-7"
+              textClassName="text-xs"
+            />
             <span className="truncate text-sm font-medium group-data-[collapsible=icon]:hidden">
               {firstName}
             </span>

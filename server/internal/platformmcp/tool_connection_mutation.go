@@ -33,12 +33,12 @@ func registerMCPConnectionMutationTools(reg *Registrar, service *MCPConnectionMu
 	meta := ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeExplicit}
 	addTool(reg, &mcp.Tool{
 		Name: setMCPAddressToolName, Title: "Set MCP Address",
-		Description: "Create or update the address for one exact MCP server or gateway in an explicit project. Supply the exact settings version from get_mcp_connection_settings, an idempotency key, and confirmed: true only after the user confirms the exact change. This commits the local desired address and requests publication; the response reports the publication request outcome, not that publication or downstream convergence has completed.",
+		Description: "Add an endpoint to, or change one existing endpoint of, one exact MCP server (hosted, remote, or tunneled) or gateway in an explicit project. Omit endpoint_id to add an endpoint; a target may have several. A custom domain must be the organization's own; a hosted server's must also be verified and active. Call first without confirmed: true: the same checks as a confirmed call run but nothing is written, and the confirmation_required refusal returns a preview of the current settings and the exact change; any other refusal means the change cannot be made as requested. Show it to the user, then call again with the same input, the exact settings version, the same idempotency key, and confirmed: true once they confirm. This commits the local desired address and requests publication; the response reports the publication request outcome, not that publication or downstream convergence has completed.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true), OpenWorldHint: new(false)},
 	}, meta, setAddress)
 	addTool(reg, &mcp.Tool{
 		Name: setMCPNetworkAccessToolName, Title: "Set MCP Network Access",
-		Description: "Change network access for one exact MCP server or gateway in an explicit project to public_only, dual, or private_only. Supply the exact settings version from get_mcp_connection_settings, an idempotency key, and confirmed: true only after the user confirms the exact change. This commits the local desired mode and requests publication; the response reports the publication request outcome, not that publication or downstream convergence has completed. Private access may be rejected when it is unavailable for the organization.",
+		Description: "Change network access for one exact MCP server (hosted, remote, or tunneled) or gateway in an explicit project to public_only, dual, or private_only. Call first without confirmed: true: the same checks as a confirmed call run but nothing is written, and the confirmation_required refusal returns a preview of the current settings and the exact change; any other refusal means the change cannot be made as requested. Show it to the user, then call again with the same input, the exact settings version, the same idempotency key, and confirmed: true once they confirm. This commits the local desired mode and requests publication; the response reports the publication request outcome, not that publication or downstream convergence has completed. Private access is refused unless the organization may use it and a live network ingress covers every endpoint.",
 		Annotations: &mcp.ToolAnnotations{IdempotentHint: true, DestructiveHint: new(true), OpenWorldHint: new(false)},
 	}, meta, setNetworkAccess)
 }
@@ -54,15 +54,33 @@ func unavailableMCPConnectionMutationTool[In, Out any]() mcp.ToolHandlerFor[In, 
 	}
 }
 
+type mcpConnectionMutationPreviewResult struct {
+	featureUnavailableResult
+	Preview MCPConnectionMutationPreview `json:"preview"`
+}
+
 func mcpConnectionMutationToolResult(err error) (*mcp.CallToolResult, bool) {
 	if refusal, ok := externalAuthorizationToolResult(err); ok {
 		return refusal, true
 	}
+	if preview, ok := errors.AsType[*connectionMutationPreviewError](err); ok {
+		payload, marshalErr := json.Marshal(mcpConnectionMutationPreviewResult{
+			featureUnavailableResult: featureUnavailableResult{Code: "confirmation_required", Feature: "mcp_connection_mutations", Message: preview.Error()},
+			Preview:                  preview.Preview,
+		})
+		if marshalErr != nil {
+			return nil, false
+		}
+		return &mcp.CallToolResult{Content: []mcp.Content{&mcp.TextContent{Text: string(payload)}}, IsError: true}, true
+	}
 	result := featureUnavailableResult{Feature: "mcp_connection_mutations"}
+	var mutation *RiskMutationError
 	switch {
+	case errors.As(err, &mutation):
+		result.Code, result.Message = mutation.Code, mutation.Message
 	case errors.Is(err, ErrMCPConnectionMutationInvalid):
 		result.Code = "invalid_request"
-		result.Message = "The connection change is invalid or was not explicitly confirmed. Read the latest settings and confirm the exact requested change."
+		result.Message = "The connection change is invalid. Read the latest settings and check the requested change."
 	case errors.Is(err, ErrMCPConnectionMutationConflict):
 		result.Code = "conflict"
 		result.Message = "The connection settings changed or the address is already in use. Read the latest settings before retrying."
@@ -73,11 +91,7 @@ func mcpConnectionMutationToolResult(err error) (*mcp.CallToolResult, bool) {
 		result.Code = unavailableCode
 		result.Message = "MCP connection mutations are temporarily unavailable."
 	default:
-		var mutation *RiskMutationError
-		if !errors.As(err, &mutation) {
-			return nil, false
-		}
-		result.Code, result.Message = mutation.Code, mutation.Message
+		return nil, false
 	}
 	payload, marshalErr := json.Marshal(result)
 	if marshalErr != nil {

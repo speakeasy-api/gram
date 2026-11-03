@@ -6,6 +6,7 @@ import {
   render,
   screen,
   waitFor,
+  within,
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { TooltipProvider } from "@/components/ui/Tooltip";
@@ -42,14 +43,12 @@ vi.mock("@/contexts/Auth", () => ({
     scimEnabled: mocks.scimEnabled,
   }),
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
-}));
 vi.mock("@gram/client/react-query/agents.js", () => ({
   queryKeyAgents: () => ["agents"],
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({ agents: { list: mocks.list } }),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@gram/client/react-query/members.js", () => ({
   useMembers: () => ({ data: { members: mocks.members } }),
@@ -79,6 +78,12 @@ vi.mock("@gram/client/react-query/listScopes.js", () => ({
           visibility: "user_visible",
           description: "Read projects",
           exclusionScope: "project:blocked_read",
+        },
+        {
+          slug: "inference:execute",
+          resourceType: "inference",
+          visibility: "user_visible",
+          description: "Run inference",
         },
         ...(["connect", "read", "write"] as const).map((action) => ({
           slug: `mcp:${action}`,
@@ -148,23 +153,28 @@ const role: Role = {
 };
 function renderEditor(editingRole?: Role, confirmAssignmentFor?: string) {
   const client = new QueryClient();
+  const tree = (role?: Role) => (
+    <MemoryRouter>
+      <QueryClientProvider client={client}>
+        <TooltipProvider>
+          <CreateRoleDialog
+            open
+            onOpenChange={vi.fn<(open: boolean) => void>()}
+            editingRole={role}
+            confirmAssignmentFor={confirmAssignmentFor}
+            presentation="page"
+          />
+        </TooltipProvider>
+      </QueryClientProvider>
+    </MemoryRouter>
+  );
+  const result = render(tree(editingRole));
   return {
     client,
-    ...render(
-      <MemoryRouter>
-        <QueryClientProvider client={client}>
-          <TooltipProvider>
-            <CreateRoleDialog
-              open
-              onOpenChange={vi.fn<(open: boolean) => void>()}
-              editingRole={editingRole}
-              confirmAssignmentFor={confirmAssignmentFor}
-              presentation="page"
-            />
-          </TooltipProvider>
-        </QueryClientProvider>
-      </MemoryRouter>,
-    ),
+    ...result,
+    /** The roles list refreshed: the same editor, handed the role as stored
+     *  now. */
+    reread: (next: Role) => result.rerender(tree(next)),
   };
 }
 // Radix tabs switch on mouse down, not click.
@@ -500,5 +510,202 @@ describe("the access grid", () => {
         .getByRole("button", { name: "View Default" })
         .getAttribute("aria-pressed"),
     ).toBe("true");
+  });
+});
+
+it("names the inference project selector for its permission, not View", () => {
+  renderEditor();
+  openPlatformTab();
+  fireEvent.click(screen.getByRole("button", { name: "Run inference" }));
+  expect(
+    screen.queryByRole("button", { name: "Change where View applies" }),
+  ).toBeNull();
+  fireEvent.click(
+    screen.getByRole("button", { name: "Change where Run inference applies" }),
+  );
+  expect(screen.getByRole("button", { name: "Select project A" })).toBeTruthy();
+});
+
+describe("a role read again while the editor is open", () => {
+  type Grant = Role["grants"][number];
+  const personalAuth: Grant = {
+    scope: "mcp:auth",
+    selectors: [
+      {
+        resourceKind: "mcp_auth_client",
+        resourceId: "*",
+        clientType: "remote_session",
+        connectionOwner: "$represented_user",
+      },
+    ],
+  };
+  const blockedAuth: Grant = {
+    scope: "mcp:blocked_auth",
+    selectors: [
+      {
+        resourceKind: "mcp_auth_client",
+        resourceId: "*",
+        clientType: "service_account",
+      },
+    ],
+  };
+  const linear: Grant["selectors"] = [
+    { resourceKind: "mcp", resourceId: "server-b" },
+  ];
+
+  /** One credential type's control, named by the credential it decides. */
+  function credential(label: string) {
+    return within(
+      screen.getByRole("group", { name: `${label} for this role` }),
+    );
+  }
+  function choose(label: string, option: string) {
+    fireEvent.click(credential(label).getByRole("button", { name: option }));
+  }
+  function chosen(label: string): string[] {
+    return credential(label)
+      .getAllByRole("button")
+      .filter((button) => button.getAttribute("aria-pressed") === "true")
+      .map((button) => button.textContent ?? "");
+  }
+  function rename() {
+    fireEvent.change(screen.getByDisplayValue("Test role"), {
+      target: { value: "Renamed role" },
+    });
+  }
+  function savedForm() {
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(mocks.update).toHaveBeenCalledOnce();
+    return mocks.update.mock.calls[0]![0].request.updateRoleForm;
+  }
+
+  it("does not revoke a credential rule the role gained while the editor was open", () => {
+    // The editor filled in from a read with no credential rules, and the role
+    // gained one before the person renamed it. A save works out what to take
+    // off the role from what the form holds, so renaming must not revoke a
+    // credential nobody here touched.
+    const { reread } = renderEditor(role);
+    reread({ ...role, grants: [personalAuth] });
+
+    rename();
+    const form = savedForm();
+    expect(form.name).toBe("Renamed role");
+    expect(form.removeGrants ?? []).toEqual([]);
+    expect(form.addGrants ?? []).toEqual([]);
+  });
+
+  it("shows a credential rule the role gained while the editor was open", () => {
+    const { reread } = renderEditor(role);
+    reread({ ...role, grants: [personalAuth] });
+
+    expect(chosen("Each person's own account")).toEqual(["Can use"]);
+  });
+
+  it("keeps a credential rule the editor started with", () => {
+    renderEditor({ ...role, grants: [personalAuth] });
+    rename();
+    const form = savedForm();
+    expect(form.removeGrants ?? []).toEqual([]);
+    expect(form.addGrants ?? []).toEqual([]);
+  });
+
+  it("does not undo a block the role gained while the editor was open", () => {
+    const { reread } = renderEditor({ ...role, grants: [personalAuth] });
+    reread({ ...role, grants: [personalAuth, blockedAuth] });
+
+    rename();
+    const form = savedForm();
+    expect(form.removeGrants ?? []).toEqual([]);
+    expect(form.addGrants ?? []).toEqual([]);
+  });
+
+  it("shows a block the role gained while the editor was open", () => {
+    const { reread } = renderEditor({ ...role, grants: [personalAuth] });
+    reread({ ...role, grants: [personalAuth, blockedAuth] });
+
+    expect(chosen("Service account")).toEqual(["Blocked"]);
+  });
+
+  it("does not revoke a permission the role gained while the editor was open", () => {
+    const { reread } = renderEditor(role);
+    reread({ ...role, grants: [{ scope: "mcp:connect", selectors: linear }] });
+
+    rename();
+    const form = savedForm();
+    expect(form.removeGrants ?? []).toEqual([]);
+    expect(form.addGrants ?? []).toEqual([]);
+  });
+
+  it("shows a permission the role gained while the editor was open", () => {
+    const { reread } = renderEditor(role);
+    reread({ ...role, grants: [{ scope: "mcp:connect", selectors: linear }] });
+
+    expect(
+      screen
+        .getByRole("button", { name: "Connect Linear" })
+        .getAttribute("aria-pressed"),
+    ).toBe("true");
+  });
+
+  it("keeps the credential the person chose and the rule the role gained", () => {
+    const { reread } = renderEditor(role);
+    choose("Each person's own account", "Can use");
+    reread({ ...role, grants: [blockedAuth] });
+
+    const form = savedForm();
+    expect(form.addGrants).toEqual([personalAuth]);
+    expect(form.removeGrants ?? []).toEqual([]);
+    expect(chosen("Each person's own account")).toEqual(["Can use"]);
+    expect(chosen("Service account")).toEqual(["Blocked"]);
+  });
+
+  it("takes away the stored rule the person switched off", () => {
+    // Turning a credential off is an explicit edit, and its removal has to
+    // name the selector the role stores so the server matches it.
+    renderEditor({ ...role, grants: [personalAuth] });
+    choose("Each person's own account", "Not set");
+    const form = savedForm();
+    expect(form.removeGrants).toEqual([personalAuth]);
+    expect(form.addGrants ?? []).toEqual([]);
+  });
+
+  it("takes away the permission the person switched off, not the one the role gained", () => {
+    const github: Grant["selectors"] = [
+      { resourceKind: "mcp", resourceId: "server-a" },
+    ];
+    const { reread } = renderEditor({
+      ...role,
+      grants: [{ scope: "mcp:connect", selectors: github }],
+    });
+    fireEvent.click(screen.getByRole("button", { name: "Connect GitHub" }));
+    reread({
+      ...role,
+      grants: [
+        { scope: "mcp:connect", selectors: github },
+        { scope: "mcp:read", selectors: linear },
+      ],
+    });
+
+    const form = savedForm();
+    expect(form.removeGrants).toEqual([
+      { scope: "mcp:connect", selectors: github },
+    ]);
+    expect(form.addGrants ?? []).toEqual([]);
+  });
+
+  it("leaves the name being typed alone and offers nothing to save for the read itself", () => {
+    const { reread } = renderEditor(role);
+    rename();
+    reread({ ...role, grants: [personalAuth] });
+
+    expect(screen.getByDisplayValue("Renamed role")).toBeTruthy();
+    fireEvent.change(screen.getByDisplayValue("Renamed role"), {
+      target: { value: "Test role" },
+    });
+    expect(
+      screen
+        .getByRole("button", { name: "Save Changes" })
+        .getAttribute("disabled"),
+    ).not.toBeNull();
   });
 });

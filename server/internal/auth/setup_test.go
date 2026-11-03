@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/growthsignals"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -59,6 +60,25 @@ type noopCancelScheduler struct{}
 
 func (noopCancelScheduler) ScheduleCancelAssistantsSubscription(ctx context.Context, subscriptionID string) error {
 	return nil
+}
+
+// recordingGrowthClient records the growth activities a service emits.
+type recordingGrowthClient struct {
+	mu     sync.Mutex
+	events []map[string]any
+}
+
+func (c *recordingGrowthClient) CaptureEvent(_ context.Context, _ string, _ string, properties map[string]any) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.events = append(c.events, properties)
+	return nil
+}
+
+func (c *recordingGrowthClient) captured() []map[string]any {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return append([]map[string]any(nil), c.events...)
 }
 
 type fakeTrialNotifier struct {
@@ -111,6 +131,7 @@ type testInstance struct {
 	authConfigs      auth.AuthConfigurations
 	nonceStore       cache.Cache
 	trialNotifier    *fakeTrialNotifier
+	growthEvents     *recordingGrowthClient
 }
 
 // MockUserInfo represents the user info used by the mock OIDC server
@@ -309,10 +330,13 @@ func newTestAuthServiceWithWorkOSClient(t *testing.T, userInfo *MockUserInfo, wo
 	for _, apply := range configure {
 		apply(&authConfigs)
 	}
-	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, nil, nonceStore, authzProvisioner, productfeatures.SeedOrganizationDefaultsTx, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), trialNotifier)
+	growthEvents := &recordingGrowthClient{}
+	growthEmitter := growthsignals.NewEmitter(logger, growthEvents, growthsignals.NewDatabaseEnricher(conn), nil)
+	svc := auth.NewService(logger, tracerProvider, conn, sessionManager, resolver, authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog, growthEmitter, nonceStore, authzProvisioner, productfeatures.SeedOrganizationDefaultsTx, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), trialNotifier)
 	result := newTestAuthServiceResult(t, svc, conn, sessionManager, resolver, mockServer, authConfigs, nonceStore)
 	result.authorizer = auth.New(logger, conn, sessionManager, authzEngine)
 	result.trialNotifier = trialNotifier
+	result.growthEvents = growthEvents
 
 	return ctx, result
 }
@@ -395,6 +419,7 @@ func newTestAuthServiceResult(_ *testing.T, svc *auth.Service, conn *pgxpool.Poo
 		authConfigs:      authConfigs,
 		nonceStore:       nonceStore,
 		trialNotifier:    nil,
+		growthEvents:     nil,
 	}
 }
 
@@ -452,7 +477,7 @@ func (ti *testInstance) callbackWithNonce(ctx context.Context, t *testing.T) (*g
 	t.Helper()
 	ctx, stateParam := ti.stateWithNonce(ctx, t, "")
 	res, err := ti.service.Callback(ctx, &gen.CallbackPayload{
-		Code:  "mock_code",
+		Code:  new("mock_code"),
 		State: &stateParam,
 	})
 	if err != nil {

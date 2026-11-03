@@ -2,6 +2,7 @@ package policycore
 
 import (
 	"encoding/json"
+	"fmt"
 	"slices"
 	"time"
 
@@ -117,6 +118,7 @@ type Policy struct {
 	UserMessage            *string
 	Prompt                 *string
 	ModelConfig            *ModelConfig
+	ApprovalConfig         *ApprovalConfig
 	Score                  float64
 	Version                int64
 	CreatedAt              time.Time
@@ -134,6 +136,18 @@ type DetectionScope struct {
 type ModelConfig struct {
 	Temperature *float64 `json:"temperature,omitempty"`
 	FailOpen    *bool    `json:"fail_open,omitempty"`
+}
+
+// ActionRequireApproval holds an MCP tool call until a listed approver
+// approves it.
+const ActionRequireApproval = "require_approval"
+
+// ApprovalConfig is the persisted approval configuration of a
+// require_approval policy.
+type ApprovalConfig struct {
+	// Approvers are the user and role principal URNs that may approve calls the
+	// policy holds.
+	Approvers []string `json:"approvers"`
 }
 
 // AuditSnapshot strips policy content that must not enter audit or outbox
@@ -174,6 +188,7 @@ func Project(row repo.RiskPolicy, audiencePrincipalURNs []string) Policy {
 		Prompt:                 conv.FromPGText[string](row.Prompt),
 		MCPScope:               unmarshalMCPScope(row.McpScope),
 		ModelConfig:            unmarshalModelConfig(row.ModelConfig),
+		ApprovalConfig:         unmarshalApprovalConfig(row.ApprovalConfig),
 		Score:                  row.Score,
 		Version:                row.Version,
 		CreatedAt:              row.CreatedAt.Time,
@@ -242,6 +257,30 @@ func unmarshalMCPScope(raw []byte) *MCPScope {
 
 func failClosedMCPScope() *MCPScope {
 	return &MCPScope{AllServers: false, ToolAnnotations: nil, Servers: []MCPServerScope{}}
+}
+
+func unmarshalApprovalConfig(raw []byte) *ApprovalConfig {
+	if len(raw) == 0 {
+		return nil
+	}
+	var config ApprovalConfig
+	if err := json.Unmarshal(raw, &config); err != nil {
+		return nil
+	}
+	return &config
+}
+
+// MarshalApprovalConfig encodes an approval configuration for storage. A nil
+// configuration stores NULL.
+func MarshalApprovalConfig(config *ApprovalConfig) ([]byte, error) {
+	if config == nil {
+		return nil, nil
+	}
+	raw, err := json.Marshal(config)
+	if err != nil {
+		return nil, fmt.Errorf("marshal approval config: %w", err)
+	}
+	return raw, nil
 }
 
 func unmarshalModelConfig(raw []byte) *ModelConfig {

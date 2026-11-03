@@ -5,7 +5,6 @@ package mcp
 
 import (
 	"context"
-	"fmt"
 
 	"github.com/google/uuid"
 )
@@ -16,12 +15,9 @@ import (
 // pick, and the credential's choice for it is left to a reconnection unless
 // the server has only one client. Interactive and chained cards are picked
 // alike, so this is the one place a person's choice is decided.
-func (s *Service) consentUpstreamClientPicks(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState) (map[uuid.UUID]uuid.UUID, error) {
-	cards, err := s.buildRemoteSessionCards(ctx, endpoint, challengeState, s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID))
-	if err != nil {
-		return nil, fmt.Errorf("build remote session cards: %w", err)
-	}
+func (s *Service) consentUpstreamClientPicks(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, cards []remoteSessionCard) (map[uuid.UUID]uuid.UUID, error) {
 	var members []metaMember
+	var err error
 	if endpoint.MetaMcpServerID.Valid {
 		members, err = s.consentSubjectMembers(ctx, endpoint, challengeState)
 		if err != nil {

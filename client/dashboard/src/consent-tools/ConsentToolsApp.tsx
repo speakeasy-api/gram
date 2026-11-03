@@ -514,14 +514,16 @@ export function ConsentToolsApp({
   ];
   const grouped = groupTools(tools, nav);
   const normalizedQuery = query.trim().toLowerCase();
-  const viewed =
-    normalizedQuery === ""
-      ? grouped
-      : grouped.filter(
-          (t) =>
-            t.name.toLowerCase().includes(normalizedQuery) ||
-            (t.source ?? "").toLowerCase().includes(normalizedQuery),
-        );
+  const searching = normalizedQuery !== "";
+  const viewed = searching
+    ? grouped.filter(
+        (t) =>
+          t.name.toLowerCase().includes(normalizedQuery) ||
+          (t.source ?? "").toLowerCase().includes(normalizedQuery),
+      )
+    : grouped;
+  // With a search, the header covers only the tools the search shows.
+  const bulk = searching ? viewed : grouped;
   const hasSources = tools.some((t) => t.source !== undefined);
   const labels = sourceLabels(tools);
 
@@ -536,9 +538,9 @@ export function ConsentToolsApp({
     return annGrants.has(id);
   };
   const navGranted =
-    groupGranted(nav) ||
-    (grouped.length > 0 && grouped.every((t) => scope.has(t.name)));
-  const navPartial = !navGranted && grouped.some((t) => scope.has(t.name));
+    (!searching && groupGranted(nav)) ||
+    (bulk.length > 0 && bulk.every((t) => scope.has(t.name)));
+  const navPartial = !navGranted && bulk.some((t) => scope.has(t.name));
 
   // Bulk-select tools by name: the "All tools" and unannotated groups, which
   // have no annotation grant to express them, and a gateway's source sections.
@@ -583,6 +585,12 @@ export function ConsentToolsApp({
   };
 
   const toggleGroupGrant = () => {
+    // An annotation grant would reach tools the search hides, so a filtered
+    // header picks or clears the matching tools by name instead.
+    if (searching) {
+      togglePicks(viewed);
+      return;
+    }
     if (nav !== "all" && nav !== "none" && annGrants.has(nav)) {
       const remaining = new Map(annGrants);
       remaining.delete(nav);
@@ -727,7 +735,7 @@ export function ConsentToolsApp({
                 className="flex cursor-pointer items-center gap-2 text-sm"
               >
                 <SelectionBox checked={navGranted} indeterminate={navPartial} />
-                Select all {grouped.length}
+                Select all {bulk.length}
                 {nav !== "all" && (
                   <span className="text-muted-foreground">
                     in {groupLabel(nav).toLowerCase()}

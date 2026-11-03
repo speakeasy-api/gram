@@ -26,6 +26,10 @@ type RegisterIssuerRequestBody struct {
 	// Where the issuer publishes the keys its assertions are signed with. Must be
 	// an https URL on a fully qualified domain name.
 	JwksURI *string `form:"jwks_uri,omitempty" json:"jwks_uri,omitempty" xml:"jwks_uri,omitempty"`
+	// Allow valid assertions with jti or uti identifiers to be exchanged
+	// repeatedly until expiry. Defaults to false. Tokens without replay
+	// identifiers retain existing exact-token compatibility.
+	AllowAssertionReuse *bool `form:"allow_assertion_reuse,omitempty" json:"allow_assertion_reuse,omitempty" xml:"allow_assertion_reuse,omitempty"`
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	// Defaults to true. Checked when a wildcard rule is admitted and again on
 	// every lookup, so clearing it makes wildcard rules already written inert
@@ -39,8 +43,9 @@ type RegisterIssuerRequestBody struct {
 	// tags of at most 64 characters each.
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// Register the issuer for the selected project alone rather than the whole
-	// organization. Requires a caller that names a project; a dashboard session
-	// does not. Defaults to false.
+	// organization. Requires an explicitly selected project via the Gram-Project
+	// header or a project-bound API key. Dashboard sessions require access to that
+	// project. Defaults to false.
 	ProjectScoped *bool `form:"project_scoped,omitempty" json:"project_scoped,omitempty" xml:"project_scoped,omitempty"`
 }
 
@@ -61,6 +66,11 @@ type UpdateIssuerRequestBody struct {
 	// de-duplicated on write, then limited to 40 tags of at most 64 characters
 	// each.
 	Tags []string `json:"tags,omitzero"`
+	// Allow valid assertions with jti or uti identifiers to be exchanged
+	// repeatedly until expiry. Omit to preserve the current setting; false
+	// disables this opt-in. Tokens without replay identifiers retain existing
+	// exact-token compatibility.
+	AllowAssertionReuse *bool `form:"allow_assertion_reuse,omitempty" json:"allow_assertion_reuse,omitempty" xml:"allow_assertion_reuse,omitempty"`
 }
 
 // AdmitSubjectRequestBody is the type of the "workloadIdentities" service
@@ -87,8 +97,9 @@ type AdmitSubjectRequestBody struct {
 	// The agent whose policy the admitted workload inherits.
 	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
 	// Admit the subject for the selected project alone rather than the whole
-	// organization. Requires a caller that names a project; a dashboard session
-	// does not. Defaults to false.
+	// organization. Requires an explicitly selected project via the Gram-Project
+	// header or a project-bound API key. Dashboard sessions require access to that
+	// project. Defaults to false.
 	ProjectScoped *bool `form:"project_scoped,omitempty" json:"project_scoped,omitempty" xml:"project_scoped,omitempty"`
 }
 
@@ -2517,6 +2528,10 @@ type WorkloadIssuerResponseBody struct {
 	// What the platform is and what runs on it. Empty rather than absent where
 	// none is set.
 	Description string `form:"description" json:"description" xml:"description"`
+	// Allow valid assertions with jti or uti identifiers to be exchanged
+	// repeatedly until expiry. Defaults to false. Tokens without replay
+	// identifiers retain existing exact-token compatibility.
+	AllowAssertionReuse bool `form:"allow_assertion_reuse" json:"allow_assertion_reuse" xml:"allow_assertion_reuse"`
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	AllowWildcardAdmission bool `form:"allow_wildcard_admission" json:"allow_wildcard_admission" xml:"allow_wildcard_admission"`
 	// Free-form labels for grouping and filtering trusted platforms. Empty rather
@@ -2617,6 +2632,25 @@ type WorkloadPlatformVariableResponseBody struct {
 // WorkloadPlatformSubjectResponseBody is used to define fields on response
 // body types.
 type WorkloadPlatformSubjectResponseBody struct {
+	// The subject with {key} placeholders for rule-tier variables; the stem, for a
+	// wildcard rule.
+	Template string `form:"template" json:"template" xml:"template"`
+	// Whether the rule is the filled template followed by *.
+	Wildcard bool `form:"wildcard" json:"wildcard" xml:"wildcard"`
+	// Names the default rule beside its alternatives. Empty where there are none.
+	Label string `form:"label" json:"label" xml:"label"`
+	// Other rules the operator may choose instead, in the order they are offered.
+	// Absent where there are none.
+	Alternatives []*WorkloadPlatformSubjectAlternativeResponseBody `form:"alternatives,omitempty" json:"alternatives,omitempty" xml:"alternatives,omitempty"`
+}
+
+// WorkloadPlatformSubjectAlternativeResponseBody is used to define fields on
+// response body types.
+type WorkloadPlatformSubjectAlternativeResponseBody struct {
+	// Identifies the choice within the platform.
+	Key string `form:"key" json:"key" xml:"key"`
+	// What the operator chooses it by.
+	Label string `form:"label" json:"label" xml:"label"`
 	// The subject with {key} placeholders for rule-tier variables; the stem, for a
 	// wildcard rule.
 	Template string `form:"template" json:"template" xml:"template"`
@@ -4804,6 +4838,7 @@ func NewRegisterIssuerPayload(body *RegisterIssuerRequestBody, sessionToken *str
 		Name:                   *body.Name,
 		Issuer:                 *body.Issuer,
 		JwksURI:                *body.JwksURI,
+		AllowAssertionReuse:    body.AllowAssertionReuse,
 		AllowWildcardAdmission: body.AllowWildcardAdmission,
 		Description:            body.Description,
 	}
@@ -4830,10 +4865,11 @@ func NewRegisterIssuerPayload(body *RegisterIssuerRequestBody, sessionToken *str
 // endpoint payload.
 func NewUpdateIssuerPayload(body *UpdateIssuerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *workloadidentities.UpdateIssuerPayload {
 	v := &workloadidentities.UpdateIssuerPayload{
-		ID:          *body.ID,
-		Name:        body.Name,
-		JwksURI:     body.JwksURI,
-		Description: body.Description,
+		ID:                  *body.ID,
+		Name:                body.Name,
+		JwksURI:             body.JwksURI,
+		Description:         body.Description,
+		AllowAssertionReuse: body.AllowAssertionReuse,
 	}
 	if body.Tags != nil {
 		v.Tags = make([]string, len(body.Tags))
