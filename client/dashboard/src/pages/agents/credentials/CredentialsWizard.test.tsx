@@ -2888,6 +2888,64 @@ describe("Editing an agent that already exists", () => {
       expect(mocks.admitSubject).toHaveBeenCalledOnce();
     });
   });
+  describe("its GitHub Actions rule", () => {
+    beforeEach(() => {
+      mocks.platforms.mockReturnValue([githubActions]);
+      mocks.workloadIssuers.mockReturnValue([
+        {
+          id: "issuer_github",
+          name: "GitHub Actions",
+          issuer: githubActions.issuer.value,
+          jwksUri: githubActions.jwksUri.value,
+          organizationId: "org_example",
+          projectId: "",
+        },
+      ]);
+      mocks.workloadAdmissions.mockReturnValue([
+        {
+          id: "admission_pull_requests",
+          agentId: "agent_one",
+          agentName: "Release Bot",
+          issuer: githubActions.issuer.value,
+          issuerName: "GitHub Actions",
+          matchKind: "exact",
+          name: "",
+          organizationId: "org_example",
+          projectId: "",
+          subject: "repo:acme/payments-api:pull_request",
+          tags: [],
+          wildcardActive: false,
+          workloadIssuerId: "issuer_github",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ]);
+    });
+
+    it("reads a saved pull request rule back as its choice", async () => {
+      editing();
+      fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Your repository" });
+
+      expect(
+        screen
+          .getByRole("radio", { name: "Pull requests" })
+          .getAttribute("aria-checked"),
+      ).toBe("true");
+      expect((screen.getByLabelText("Owner") as HTMLInputElement).value).toBe(
+        "acme",
+      );
+      expect(
+        (screen.getByLabelText("Repository") as HTMLInputElement).value,
+      ).toBe("payments-api");
+      expect(
+        screen.getByText("repo:acme/payments-api:pull_request"),
+      ).toBeTruthy();
+      // Read back as it was saved, so there is nothing to write.
+      expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+    });
+  });
   describe("its Claude Tag or custom issuer", () => {
     const base = {
       agentId: "agent_one",
@@ -3475,6 +3533,12 @@ const githubActions = {
         template: "repo:{owner}/{repo}:environment:{environment}",
         wildcard: false,
       },
+      {
+        key: "pull_request",
+        label: "Pull requests",
+        template: "repo:{owner}/{repo}:pull_request",
+        wildcard: false,
+      },
     ],
   },
 };
@@ -3751,6 +3815,41 @@ describe("Connecting a GitHub repository", () => {
       subject: "repo:acme/payments-api:ref:refs/heads/release/v2",
       matchKind: "exact",
     });
+  });
+
+  it("admits pull request jobs alone, and runs the workflow on them", async () => {
+    await reachRepositoryStep();
+    fireEvent.click(screen.getByRole("radio", { name: "Pull requests" }));
+    // Nothing more to name: the rule is the repository's pull requests.
+    expect(screen.queryByLabelText("Branch")).toBeNull();
+    expect(screen.queryByLabelText("Environment")).toBeNull();
+    expect(
+      screen.getByText("repo:acme/payments-api:pull_request"),
+    ).toBeTruthy();
+    expect(screen.getByText(/nobody reviews it first/)).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+
+    await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.admitSubject.mock.calls[0]?.[0]?.request?.admitWorkloadSubjectForm,
+    ).toMatchObject({
+      subject: "repo:acme/payments-api:pull_request",
+      matchKind: "exact",
+    });
+    await screen.findByRole("heading", { name: "What the job gets" });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const workflow = await screen.findByLabelText(
+      ".github/workflows/speakeasy.yml",
+    );
+    expect(workflow.textContent).toContain(
+      "types: [opened, synchronize, reopened, ready_for_review]",
+    );
+    expect(workflow.textContent).not.toContain("push:");
+    expect(workflow.textContent).toContain(
+      "github.event.pull_request.head.repo.fork == false",
+    );
   });
 
   it("registers its own issuer when only a project trusts GitHub, and says that project's servers read the project's", async () => {

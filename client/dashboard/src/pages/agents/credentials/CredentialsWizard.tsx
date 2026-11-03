@@ -87,6 +87,7 @@ import type { AgentPolicyGrantCheck } from "@gram/client/models/components/agent
 import { useAgentAdmissions } from "@/pages/agents/agentAdmissions";
 import {
   catalogEntryForIssuer,
+  SUBJECT_CHOICE,
   useCatalogEntries,
   valuesFromIssuer,
   valuesFromSubject,
@@ -204,6 +205,7 @@ const SUMMARY_ROW_FOR_FIELD = new Map<string, string>([
   ["org_id", "Anthropic organization"],
   ["owner", "Repository"],
   ["repo", "Repository"],
+  [SUBJECT_CHOICE, "Jobs"],
   ["branch", "Branch"],
   ["environment", "Environment"],
   ["project", "Cluster"],
@@ -216,19 +218,28 @@ const SUMMARY_ROW_FOR_FIELD = new Map<string, string>([
 ]);
 
 /**
- * The rail's row for the branch or environment a GitHub Actions rule is
- * narrowed to, once it is named. None for the whole repository.
+ * The rail's row for what a GitHub Actions rule narrows the repository to:
+ * its pull requests, or a branch or environment once it is named. None for
+ * the whole repository.
  */
 function githubActionsScopeRow(
   scope: JobScope,
 ): { label: string; value: ReactNode }[] {
-  if (scope.kind === "repository" || scope.name === "") return [];
-  return [
-    {
-      label: scope.kind === "branch" ? "Branch" : "Environment",
-      value: <code className="text-xs break-all">{scope.name}</code>,
-    },
-  ];
+  switch (scope.kind) {
+    case "repository":
+      return [];
+    case "pull_request":
+      return [{ label: "Jobs", value: "Pull requests" }];
+    case "branch":
+    case "environment":
+      if (scope.name === "") return [];
+      return [
+        {
+          label: scope.kind === "branch" ? "Branch" : "Environment",
+          value: <code className="text-xs break-all">{scope.name}</code>,
+        },
+      ];
+  }
 }
 
 /**
@@ -1754,7 +1765,7 @@ export function CredentialsWizard({
               },
             ]
           : []),
-        // The one branch or environment the rule narrows the repository to.
+        // What the rule narrows the repository to, if anything.
         ...(credential === "workload" && platformKey === GITHUB_ACTIONS_KEY
           ? githubActionsScopeRow(jobScope(workload.values))
           : []),
