@@ -177,6 +177,10 @@ func TestServePublic_MetaEndpoint_RefreshOutageIsRetryableThenRecovers(t *testin
 	require.NotContains(t, status.Text(), "To sign in, open")
 	require.Contains(t, status.Servers[0].Detail, "reconnect at")
 	require.EqualValues(t, 1, f.refreshes.Load(), "retries inside the cooldown never reach the provider")
+	require.NotNil(t, status.Servers[0].Outage)
+	require.Contains(t, status.Servers[0].Outage.Message, "provider isn't responding. Try again in about")
+	require.NotContains(t, status.Servers[0].Outage.Message, "http")
+	require.Contains(t, status.Servers[0].Outage.ReconnectURL, "/connect/first-party?server=member")
 
 	stored, err := remotesessions_repo.New(ti.conn).GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{
 		SubjectUrn:            f.subject,
@@ -222,6 +226,9 @@ func TestServePublic_MetaEndpoint_TunnelBoundOutageDoesNotOfferReconnect(t *test
 	status := f.connectionStatus(t, ctx)
 	require.Equal(t, metamcp.SignInUnavailable, status.Servers[0].Status)
 	require.NotContains(t, status.Servers[0].Detail, "reconnect")
+	require.NotNil(t, status.Servers[0].Outage)
+	require.Contains(t, status.Servers[0].Outage.Message, "can't be reached right now")
+	require.Empty(t, status.Servers[0].Outage.ReconnectURL, "a tunnel row offers no button")
 }
 
 // A grant from before resources were recorded still belongs to its member.

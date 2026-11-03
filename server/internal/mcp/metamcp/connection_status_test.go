@@ -72,6 +72,8 @@ func TestConnectionStatusText_UnavailableDoesNotAskForSignIn(t *testing.T) {
         needs++`, "an outage isn't counted as needing sign-in")
 	require.Contains(t, ConnectionStatusHTML, "Ask again shortly to refresh this list.")
 	require.Contains(t, ConnectionStatusHTML, `state.textContent = "Temporarily unavailable";`, "the row stays short; the full message wraps below it")
+	require.NotContains(t, ConnectionStatusHTML, "note.textContent = s.detail", "the message for the AI app isn't shown to the person")
+	require.Contains(t, ConnectionStatusHTML, `btn.textContent = "Reconnect";`)
 }
 
 func TestIsConnectionStatusResourceURI(t *testing.T) {
@@ -89,4 +91,16 @@ func TestIsConnectionStatusResourceURI(t *testing.T) {
 	} {
 		require.False(t, IsConnectionStatusResourceURI(uri), uri)
 	}
+}
+
+// The outage words are for the view, so the text for the AI app keeps Detail.
+func TestConnectionStatusText_OutageWordsStayOutOfTheAppMessage(t *testing.T) {
+	t.Parallel()
+
+	text := ConnectionStatusResult{Servers: []ConnectionStatusServer{{
+		Slug: "a", Status: SignInUnavailable, Detail: "retry shortly",
+		Outage: &ConnectionStatusOutage{Message: "A's provider isn't responding.", ReconnectURL: "https://example.test/connect"},
+	}}}.Text()
+	require.Contains(t, text, "temporarily unavailable (retry shortly)")
+	require.NotContains(t, text, "A's provider")
 }

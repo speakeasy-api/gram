@@ -10,7 +10,7 @@
   h1 { font-size: 14px; font-weight: 600; margin: 0 0 8px; }
   ul { list-style: none; margin: 0; padding: 0; }
   li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 0; border-top: 1px solid var(--line); }
-  .name { flex: 1; min-width: 0; }
+  .name { flex: 1 1 6rem; min-width: 0; overflow-wrap: anywhere; }
   .detail { color: var(--muted); font-size: 12px; }
   .ok { color: var(--ok); } .warn { color: var(--warn); }
   .note { flex-basis: 100%; min-width: 0; overflow-wrap: anywhere; }
@@ -86,12 +86,19 @@
         state.className = "warn";
         state.textContent = "Temporarily unavailable";
         li.append(state);
-        if (s.detail) {
-          const note = document.createElement("div");
-          note.className = "detail note";
-          note.textContent = s.detail;
-          li.append(note);
+        const outage = s.outage || {};
+        const note = document.createElement("div");
+        note.className = "detail note";
+        note.textContent = outage.message || "Try again shortly.";
+        if (outage.reconnectUrl) {
+          const btn = document.createElement("button");
+          btn.textContent = "Reconnect";
+          btn.onclick = () => request("ui/open-link", { url: outage.reconnectUrl }).catch(() => {
+            note.textContent = "Open " + outage.reconnectUrl + " in your browser";
+          });
+          li.append(btn);
         }
+        li.append(note);
       } else {
         needs++;
         state.className = "warn";

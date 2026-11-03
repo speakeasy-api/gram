@@ -5,6 +5,7 @@ import (
 	"errors"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -380,4 +381,23 @@ func TestMemberAuthFailure_SelfCredentialNamesAdministrator(t *testing.T) {
 
 	err = memberAuthFailure(member, memberDial{anonymous: false, clientCredential: false})
 	require.Contains(t, err.Error(), "reconnect it from this gateway's sign-in page")
+}
+
+func TestConnectionOutageMessage(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name string
+		kind remotesessions.RefreshOutageKind
+		wait time.Duration
+		want string
+	}{
+		{"Fake Docs", remotesessions.RefreshOutageProvider, 30 * time.Second, "Fake Docs' provider isn't responding. Try again in about 30 seconds."},
+		{"Linear", remotesessions.RefreshOutageProvider, 5 * time.Minute, "Linear's provider isn't responding. Try again in about 5 minutes."},
+		{"Linear", remotesessions.RefreshOutageProvider, 0, "Linear's provider isn't responding. Try again shortly."},
+		{"Linear", remotesessions.RefreshOutageTunnel, 30 * time.Second, "Linear can't be reached right now. Try again in about 30 seconds."},
+		{"Linear", remotesessions.RefreshOutageNone, 0, "Linear can't renew its sign-in right now. Try again shortly."},
+	} {
+		require.Equal(t, tc.want, connectionOutageMessage(tc.name, tc.kind, tc.wait))
+	}
 }

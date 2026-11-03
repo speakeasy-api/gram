@@ -3,11 +3,14 @@
 package mcp
 
 import (
+	"cmp"
 	"context"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
+	"time"
 
 	"github.com/google/uuid"
 
@@ -17,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
 // handleMetaConnectionStatusCall reports stored consent outcomes for cached
@@ -32,12 +36,13 @@ func (s *Service) handleMetaConnectionStatusCall(
 	servers := make([]metamcp.ConnectionStatusServer, 0, len(members)+len(gate.unapprovedMembers)+len(gate.hiddenMembers))
 	requiresAuth := s.memberAuthRequirements(gate.organizationID, members)
 	for _, member := range members {
-		status, detail := s.memberSignInStatus(ctx, logger, gate, member, requiresAuth)
+		status, detail, outage := s.memberSignInStatus(ctx, logger, gate, member, requiresAuth)
 		servers = append(servers, metamcp.ConnectionStatusServer{
 			Slug:   member.slug,
 			Name:   member.name,
 			Status: status,
 			Detail: detail,
+			Outage: outage,
 		})
 	}
 	// A cached connection reports members its consent did not approve,
@@ -50,6 +55,7 @@ func (s *Service) handleMetaConnectionStatusCall(
 				Name:   member.name,
 				Status: metamcp.SignInNeedsConsent,
 				Detail: catalogMemberNotApproved,
+				Outage: nil,
 			})
 		}
 	}
@@ -60,6 +66,7 @@ func (s *Service) handleMetaConnectionStatusCall(
 			Name:   member.name,
 			Status: metamcp.SignInHidden,
 			Detail: "",
+			Outage: nil,
 		})
 	}
 
@@ -100,50 +107,50 @@ func (s *Service) handleMetaConnectionStatusCall(
 // remote_session_issuer) needs no sign-in. A remote member can still receive
 // a grant routed by its upstream resource without a derived issuer, so
 // routing runs before that shortcut.
-func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, requiresAuth func(context.Context, metaMember) (bool, error)) (string, string) {
+func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, requiresAuth func(context.Context, metaMember) (bool, error)) (string, string, *metamcp.ConnectionStatusOutage) {
 	if gate.catalog != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached {
 		if err := s.validateCatalogMember(ctx, gate, member); err != nil {
-			return metamcp.SignInNeedsConsent, memberErrorMessage(err)
+			return metamcp.SignInNeedsConsent, memberErrorMessage(err), nil
 		}
 		for _, outcome := range gate.catalog.MemberOutcomes {
 			if outcome.Slug == member.slug {
-				return metamcp.SignInVerifiedAtConsent, outcome.Label + ". Tool calls check current authorization."
+				return metamcp.SignInVerifiedAtConsent, outcome.Label + ". Tool calls check current authorization.", nil
 			}
 		}
-		return metamcp.SignInNeedsConsent, "No recorded consent outcome."
+		return metamcp.SignInNeedsConsent, "No recorded consent outcome.", nil
 	}
 	if member.backend == metaMemberBackendHosted {
 		if !member.remoteSessionIssuerID.Valid {
-			return metamcp.SignInNotRequired, ""
+			return metamcp.SignInNotRequired, "", nil
 		}
 		gateTokens, err := s.resolveMemberTokens(ctx, gate, member)
 		if err != nil {
-			return memberFailureSignInStatus(err), memberErrorMessage(err)
+			return memberFailureSignIn(*gate, member, err)
 		}
 		tokens, err := hostedMemberTokens(gateTokens, member)
 		if err != nil {
-			return memberFailureSignInStatus(err), memberErrorMessage(withMemberConnectLink(err, member, gate.memberConnectURL(member)))
+			return memberFailureSignIn(*gate, member, withMemberConnectLink(err, member, gate.memberConnectURL(member)))
 		}
 		if len(tokens) == 0 {
-			return metamcp.SignInNotConnected, ""
+			return metamcp.SignInNotConnected, "", nil
 		}
-		return metamcp.SignInConnected, ""
+		return metamcp.SignInConnected, "", nil
 	}
 
 	probe := *gate
 	probe.chainUpstream = nil
 	dial, _, err := s.routeMetaMember(ctx, logger, probe, member, "")
 	if err != nil {
-		return memberFailureSignInStatus(err), memberErrorMessage(err)
+		return memberFailureSignIn(*gate, member, err)
 	}
 	if !dial.anonymous {
-		return metamcp.SignInConnected, ""
+		return metamcp.SignInConnected, "", nil
 	}
 	if member.remoteSessionIssuerID.Valid {
-		return metamcp.SignInNotConnected, ""
+		return metamcp.SignInNotConnected, "", nil
 	}
 	if member.upstreamNoAuth {
-		return metamcp.SignInNotRequired, ""
+		return metamcp.SignInNotRequired, "", nil
 	}
 	// A member with no derived provider can still require a credential
 	// through an enabled auth client, such as a static credential. A call
@@ -151,12 +158,12 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 	required, err := requiresAuth(ctx, member)
 	if err != nil {
 		logger.ErrorContext(ctx, "check member upstream authentication", attr.SlogError(err))
-		return metamcp.SignInError, "could not check this server"
+		return metamcp.SignInError, "could not check this server", nil
 	}
 	if required {
-		return metamcp.SignInNotConnected, ""
+		return metamcp.SignInNotConnected, "", nil
 	}
-	return metamcp.SignInNotRequired, ""
+	return metamcp.SignInNotRequired, "", nil
 }
 
 // memberAuthRequirements reports whether a proxied member offers an enabled
@@ -195,12 +202,46 @@ func (s *Service) memberAuthRequirements(organizationID string, members []metaMe
 	}
 }
 
-// memberFailureSignInStatus keeps an outage from reading as a broken sign-in.
-func memberFailureSignInStatus(err error) string {
-	if _, unavailable := errors.AsType[memberUnavailableError](err); unavailable {
-		return metamcp.SignInUnavailable
+// memberFailureSignIn keeps an outage from reading as a broken sign-in.
+func memberFailureSignIn(gate metaGateContext, member metaMember, err error) (string, string, *metamcp.ConnectionStatusOutage) {
+	unavailable, ok := errors.AsType[memberUnavailableError](err)
+	if !ok {
+		return metamcp.SignInError, memberErrorMessage(err), nil
 	}
-	return metamcp.SignInError
+	name := cmp.Or(member.name, member.slug)
+	if unavailable.session == nil {
+		return metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: name + " isn't available right now. Try again shortly.", ReconnectURL: ""}
+	}
+	kind := remotesessions.OutageKindOf(unavailable.session)
+	reconnectURL := ""
+	if kind != remotesessions.RefreshOutageTunnel {
+		reconnectURL = gate.memberConnectURL(member)
+	}
+	return metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: connectionOutageMessage(name, kind, remotesessions.RetryAfter(unavailable.session)), ReconnectURL: reconnectURL}
+}
+
+// connectionOutageMessage says what's down and when to retry, in words for a person.
+func connectionOutageMessage(name string, kind remotesessions.RefreshOutageKind, wait time.Duration) string {
+	retry := "Try again shortly."
+	switch {
+	case wait >= 90*time.Second:
+		retry = fmt.Sprintf("Try again in about %d minutes.", int(wait.Round(time.Minute).Minutes()))
+	case wait > 0:
+		retry = fmt.Sprintf("Try again in about %d seconds.", int(wait.Round(time.Second).Seconds()))
+	}
+	switch kind {
+	case remotesessions.RefreshOutageProvider:
+		possessive := name + "'s"
+		if strings.HasSuffix(strings.ToLower(name), "s") {
+			possessive = name + "'"
+		}
+		return possessive + " provider isn't responding. " + retry
+	case remotesessions.RefreshOutageTunnel:
+		return name + " can't be reached right now. " + retry
+	case remotesessions.RefreshOutageNone:
+		return name + " can't renew its sign-in right now. " + retry
+	}
+	return name + " isn't available right now. " + retry
 }
 
 func memberErrorMessage(err error) string {

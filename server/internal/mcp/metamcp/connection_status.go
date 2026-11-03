@@ -74,6 +74,17 @@ type ConnectionStatusServer struct {
 	Name   string `json:"name,omitempty"`
 	Status string `json:"status"`
 	Detail string `json:"detail,omitempty"`
+
+	// Outage is what the view shows for SignInUnavailable; Detail stays the message for the AI app.
+	Outage *ConnectionStatusOutage `json:"outage,omitempty"`
+}
+
+// ConnectionStatusOutage is an outage in words for the person reading the view.
+type ConnectionStatusOutage struct {
+	Message string `json:"message"`
+
+	// ReconnectURL is set when reconnecting could get past the outage.
+	ReconnectURL string `json:"reconnectUrl,omitempty"`
 }
 
 // ConnectionStatusResult is the structuredContent payload of a
