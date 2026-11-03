@@ -83,7 +83,8 @@ func FromRequest(r *http.Request) Option {
 		return Option{apply: nil}
 	}
 	family, version := classifyUserAgent(r.UserAgent())
+	ip := connectionIP(r)
 	return Option{apply: func(row *Row) {
-		row.ClientFamily, row.ClientVersion = family, version
+		row.ClientFamily, row.ClientVersion, row.clientIP = family, version, ip
 	}}
 }

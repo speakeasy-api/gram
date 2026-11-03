@@ -30,6 +30,9 @@ const (
 	// abandonedOneIn makes one attempt in this many stop with no final row.
 	abandonedOneIn = 10
 
+	// seededDevices is how many devices seeded attempts come from.
+	seededDevices = 6
+
 	// repeatedOneIn makes one failed attempt in this many stand for repeated failures.
 	repeatedOneIn = 4
 
@@ -137,6 +140,7 @@ func (s *seeder) connectionAttemptRows(attempt mcpconnectionattempts.Attempt, ke
 	first.TraceID = md5Hex(s.name(key + "-authorize"))
 	client := connectionClients[hash64(s.name(key), "client")%uint64(len(connectionClients))]
 	first.ClientFamily, first.ClientVersion = client.family, client.version
+	first.DeviceKey = md5Hex(s.name("connection-device-" + strconv.FormatUint(hash64(s.name(key), "device")%seededDevices, 10)))
 	if abandoned {
 		return []mcpconnectionattempts.Row{first}, nil
 	}
@@ -160,7 +164,7 @@ func (s *seeder) connectionAttemptRows(attempt mcpconnectionattempts.Attempt, ke
 		return nil, fmt.Errorf("build connection event: %w", err)
 	}
 	last.TraceID = md5Hex(s.name(key + "-ending"))
-	last.ClientFamily, last.ClientVersion = client.family, client.version
+	last.ClientFamily, last.ClientVersion, last.DeviceKey = client.family, client.version, first.DeviceKey
 	if ending.what != mcpconnectionattempts.ResultCodeIssued && hash64(s.name(key), "repeats")%repeatedOneIn == 0 {
 		last.Repeats = uint32(hash64(s.name(key), "repeat-count")%maxSeededRepeats) + 1
 	}

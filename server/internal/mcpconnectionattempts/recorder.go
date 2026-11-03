@@ -35,7 +35,7 @@ const (
 		sub_reason, who_fixes, grant_type, is_final, retries, auth_client_id,
 		remote_session_issuer_id, user_session_issuer_id, user_session_client_id,
 		remote_session_client_id, subject_urn, user_session_id, remote_session_id,
-		trace_id, provider_host, app_key, client_family, client_version, repeats)`
+		trace_id, provider_host, app_key, client_family, client_version, repeats, device_key)`
 
 	eventsTable = "mcp_connection_events"
 
@@ -203,6 +203,10 @@ type Row struct {
 	ClientFamily          string
 	ClientVersion         string
 	Repeats               uint32
+	DeviceKey             string
+
+	// clientIP waits here for the writer to hash it. It is never stored or logged.
+	clientIP string
 }
 
 var errInvalidEvent = errors.New("invalid connection event")
@@ -275,6 +279,8 @@ func RowAt(attempt Attempt, step Step, what Happened, final bool, at time.Time, 
 		ClientFamily:          "",
 		ClientVersion:         "",
 		Repeats:               0,
+		DeviceKey:             "",
+		clientIP:              "",
 	}
 	for _, opt := range opts {
 		if opt.apply != nil {
@@ -312,7 +318,7 @@ func appendRowsInto(ctx context.Context, conn driver.Conn, table string, rows []
 			row.SubReason, row.WhoFixes, row.GrantType, row.IsFinal, row.Retries, row.AuthClientID,
 			row.RemoteSessionIssuerID, row.UserSessionIssuerID, row.UserSessionClientID,
 			row.RemoteSessionClientID, row.SubjectURN, row.UserSessionID, row.RemoteSessionID,
-			row.TraceID, row.ProviderHost, row.AppKey, row.ClientFamily, row.ClientVersion, row.Repeats,
+			row.TraceID, row.ProviderHost, row.AppKey, row.ClientFamily, row.ClientVersion, row.Repeats, row.DeviceKey,
 		); err != nil {
 			return fmt.Errorf("append connection event: %w", err)
 		}
@@ -341,6 +347,7 @@ type Recorder struct {
 	conn        driver.Conn
 	limiter     *onceLimiter
 	logsEnabled func(context.Context, string) (bool, error)
+	deviceKey   []byte
 	capture     func(Row)
 	cfg         config
 	steps       metric.Int64Counter
@@ -382,8 +389,8 @@ func newDropCounters() map[dropReason]*atomic.Int64 {
 
 // NewRecorder starts a recorder. Stop it with Shutdown. Without logsEnabled
 // nothing is written.
-func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn driver.Conn, logsEnabled func(context.Context, string) (bool, error)) *Recorder {
-	return newRecorder(logger, meterProvider, conn, logsEnabled, config{
+func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn driver.Conn, logsEnabled func(context.Context, string) (bool, error), opts ...RecorderOption) *Recorder {
+	return newRecorder(logger, meterProvider, conn, logsEnabled, recorderDeviceKey(opts), config{
 		table:            eventsTable,
 		queueSize:        defaultQueueSize,
 		maxBatch:         defaultMaxBatch,
@@ -394,7 +401,7 @@ func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 	})
 }
 
-func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn driver.Conn, logsEnabled func(context.Context, string) (bool, error), cfg config) *Recorder {
+func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn driver.Conn, logsEnabled func(context.Context, string) (bool, error), deviceKey []byte, cfg config) *Recorder {
 	logger = logger.With(attr.SlogComponent("mcp_connection_attempts"))
 	meter := meterProvider.Meter(meterScope)
 
@@ -416,6 +423,7 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 		conn:        conn,
 		limiter:     newOnceLimiter(),
 		logsEnabled: logsEnabled,
+		deviceKey:   deviceKey,
 		capture:     nil,
 		cfg:         cfg,
 		steps:       steps,
@@ -442,6 +450,7 @@ func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (
 		conn:        nil,
 		limiter:     nil,
 		logsEnabled: logsEnabled,
+		deviceKey:   nil,
 		capture:     capture,
 		cfg:         config{table: "", queueSize: 0, maxBatch: 0, flushInterval: 0, insertTimeout: 0, logsCheckTimeout: time.Second, repeatsInterval: 0},
 		steps:       nil,
@@ -504,6 +513,7 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 	r.countStep(ctx, row)
 	if r.capture != nil {
 		if reason, _ := r.organizationAllowed(row.OrganizationID); reason == "" {
+			r.stampDevice(&row)
 			r.capture(row)
 		}
 		return
@@ -646,6 +656,7 @@ func (r *Recorder) run() {
 				r.drop(context.Background(), reason, 1, nil)
 				return
 			}
+			r.stampDevice(&row)
 			batch = append(batch, row)
 		})
 		if len(batch) == pending {
