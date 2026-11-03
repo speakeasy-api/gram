@@ -279,7 +279,7 @@ func brokenProjectRegistry(t *testing.T) *s.Registry {
 	access := string(GrantSurfaceAccess)
 	var decls []s.TypeDecl
 	for _, decl := range DefaultDeclarations() {
-		if decl.Name() == "organization" {
+		if decl.Name() != "project" {
 			decls = append(decls, decl)
 		}
 	}
