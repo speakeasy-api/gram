@@ -73,6 +73,7 @@ export type {
 } from "./model/serviceAccount";
 export { ServiceAccountPanel } from "./components/ServiceAccountPanel";
 export { useServiceAccountClientDraft } from "./drafts/useServiceAccountClientDraft";
+export type { ServiceAccountClientSpec } from "./drafts/useServiceAccountClientDraft";
 export { useCustomerManagedKeys } from "./queries/useCustomerManagedKeys";
 export { useOrganizationKeySets, useResolveKeySet } from "./queries/useKeySets";
 export { AvailabilityBadge } from "./components/AvailabilityBadge";

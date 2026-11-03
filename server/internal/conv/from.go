@@ -235,6 +235,27 @@ func PtrToPGInterval(d *time.Duration) pgtype.Interval {
 	return pgtype.Interval{Microseconds: d.Microseconds(), Days: 0, Months: 0, Valid: true}
 }
 
+// PGIntervalToDuration converts an interval, counting a day as 24 hours. It
+// reports false for NULL, a Months component (no fixed length), or overflow.
+func PGIntervalToDuration(iv pgtype.Interval) (time.Duration, bool) {
+	if !iv.Valid || iv.Months != 0 {
+		return 0, false
+	}
+	const dayNanos = int64(24 * time.Hour)
+	const microNanos = int64(time.Microsecond)
+	days, micros := int64(iv.Days), iv.Microseconds
+	if days > math.MaxInt64/dayNanos || days < math.MinInt64/dayNanos ||
+		micros > math.MaxInt64/microNanos || micros < math.MinInt64/microNanos {
+		return 0, false
+	}
+	dayPart, microPart := days*dayNanos, micros*microNanos
+	if (microPart > 0 && dayPart > math.MaxInt64-microPart) ||
+		(microPart < 0 && dayPart < math.MinInt64-microPart) {
+		return 0, false
+	}
+	return time.Duration(dayPart + microPart), true
+}
+
 // PtrToPGInt8 converts an int pointer to a pgtype.Int8. If the pointer is nil,
 // the result has Valid set to false.
 func PtrToPGInt8(v *int) pgtype.Int8 {

@@ -9,6 +9,8 @@ import { telemetryGetMcpNetworkTraffic } from "../funcs/telemetryGetMcpNetworkTr
 import { telemetryGetMcpServerActivity } from "../funcs/telemetryGetMcpServerActivity.js";
 import { telemetryGetMetaMcpServerUsage } from "../funcs/telemetryGetMetaMcpServerUsage.js";
 import { telemetryGetObservabilityOverview } from "../funcs/telemetryGetObservabilityOverview.js";
+import { telemetryGetOrganizationGatewayOverview } from "../funcs/telemetryGetOrganizationGatewayOverview.js";
+import { telemetryGetOrganizationGatewayUsage } from "../funcs/telemetryGetOrganizationGatewayUsage.js";
 import { telemetryGetProjectMetricsSummary } from "../funcs/telemetryGetProjectMetricsSummary.js";
 import { telemetryGetProjectOverview } from "../funcs/telemetryGetProjectOverview.js";
 import { telemetryGetToolUsageClients } from "../funcs/telemetryGetToolUsageClients.js";
@@ -103,6 +105,14 @@ import {
   GetObservabilityOverviewRequest,
   GetObservabilityOverviewSecurity,
 } from "../models/operations/getobservabilityoverview.js";
+import {
+  GetOrganizationGatewayOverviewRequest,
+  GetOrganizationGatewayOverviewSecurity,
+} from "../models/operations/getorganizationgatewayoverview.js";
+import {
+  GetOrganizationGatewayUsageRequest,
+  GetOrganizationGatewayUsageSecurity,
+} from "../models/operations/getorganizationgatewayusage.js";
 import {
   GetProjectMetricsSummaryRequest,
   GetProjectMetricsSummarySecurity,
@@ -345,6 +355,44 @@ export class Telemetry extends ClientSDK {
     options?: RequestOptions,
   ): Promise<GetObservabilityOverviewResult> {
     return unwrapAsync(telemetryGetObservabilityOverview(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getOrganizationGatewayOverview telemetry
+   *
+   * @remarks
+   * Observability overview metrics for calls dispatched through the caller's Organization Gateway, across every project in the organization.
+   */
+  async getOrganizationGatewayOverview(
+    request: GetOrganizationGatewayOverviewRequest,
+    security?: GetOrganizationGatewayOverviewSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetObservabilityOverviewResult> {
+    return unwrapAsync(telemetryGetOrganizationGatewayOverview(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getOrganizationGatewayUsage telemetry
+   *
+   * @remarks
+   * Discovery funnel and per-server execution breakdown for the caller's Organization Gateway, across every project in the organization.
+   */
+  async getOrganizationGatewayUsage(
+    request: GetOrganizationGatewayUsageRequest,
+    security?: GetOrganizationGatewayUsageSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<GetMetaMcpServerUsageResult> {
+    return unwrapAsync(telemetryGetOrganizationGatewayUsage(
       this,
       request,
       security,

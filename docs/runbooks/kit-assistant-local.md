@@ -63,8 +63,6 @@ files or command output.
    GRAM_ASSISTANT_KIT_MCP_RESOURCE = "https://<RESOURCE_HOST>/mcp/<SLUG>"
    GRAM_ASSISTANT_KIT_MCP_ISSUER = "https://<EXPECTED_OAUTH_ISSUER>"
    GRAM_ASSISTANT_KIT_MCP_ISSUER_ID = "<PERSISTED_ISSUER_UUID>"
-   # Set when multiple existing root triggers make automatic selection ambiguous:
-   # GRAM_ASSISTANT_KIT_ROOT_TRIGGER_ID = "<EXISTING_ROOT_TRIGGER_UUID>"
    ```
 
 2. Configure an isolated container network with a TLS relay whose network-local

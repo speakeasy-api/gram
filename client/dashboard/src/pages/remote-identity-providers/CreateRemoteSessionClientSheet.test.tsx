@@ -7,6 +7,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
@@ -49,11 +50,6 @@ vi.mock("@gram/client/react-query/listExternalKeys", () => ({
 vi.mock("@/pages/org/encryption-keys/jwks/CreateJsonWebKeySetSheet", () => ({
   CreateJsonWebKeySetSheet: () => null,
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    remoteIdentityProviders: { clientDetail: { goTo: vi.fn() } },
-  }),
-}));
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
 }));
@@ -62,6 +58,7 @@ vi.mock("@/contexts/Fetcher", () => ({
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
   useSdkClient: () => ({
     organizationRemoteSessionClients: {
       create: createClient,
@@ -70,9 +67,13 @@ vi.mock("@/contexts/Sdk", () => ({
   }),
 }));
 
-vi.mock("@/lib/proxyRegisterUpstreamClient", () => ({
-  proxyRegisterUpstreamClient: (...args: unknown[]) => proxyRegister(...args),
-}));
+vi.mock(
+  import("@/lib/proxyRegisterUpstreamClient"),
+  async (importOriginal) => ({
+    ...(await importOriginal()),
+    proxyRegisterUpstreamClient: (...args: unknown[]) => proxyRegister(...args),
+  }),
+);
 
 vi.mock("@gram/client/react-query/organizationRemoteSessionClients.js", () => ({
   invalidateAllOrganizationRemoteSessionClients: vi.fn(() => Promise.resolve()),
@@ -111,6 +112,10 @@ vi.mock("sonner", () => ({
   toast: { success: vi.fn(), warning: vi.fn() },
 }));
 
+import { toast } from "sonner";
+import { invalidateAllOrganizationRemoteSessionClients } from "@gram/client/react-query/organizationRemoteSessionClients.js";
+import { invalidateAllOrganizationRemoteSessionIssuers } from "@gram/client/react-query/organizationRemoteSessionIssuers.js";
+
 import { CreateRemoteSessionClientSheet } from "./CreateRemoteSessionClientSheet";
 
 beforeEach(() => {
@@ -145,6 +150,29 @@ describe("CreateRemoteSessionClientSheet", () => {
         }),
       );
     });
+    await waitFor(() =>
+      expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false),
+    );
+    expect(createClient).toHaveBeenCalledExactlyOnceWith({
+      createOrganizationRemoteSessionClientForm: expect.objectContaining({
+        remoteSessionIssuerId: "issuer-1",
+        clientId: "registered-client",
+        clientSecret: "registered-secret",
+        tokenEndpointAuthMethod: "client_secret_basic",
+      }),
+    });
+    expect(
+      invalidateAllOrganizationRemoteSessionClients,
+    ).toHaveBeenCalledExactlyOnceWith(expect.any(QueryClient), {
+      refetchType: "all",
+    });
+    expect(
+      invalidateAllOrganizationRemoteSessionIssuers,
+    ).toHaveBeenCalledExactlyOnceWith(expect.any(QueryClient), {
+      refetchType: "all",
+    });
+    expect(toast.success).toHaveBeenCalledExactlyOnceWith("Client created");
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("offers Manual or CIMD instead of tunneled DCR to non-platform admins", () => {
@@ -188,17 +216,34 @@ describe("CreateRemoteSessionClientSheet", () => {
         }),
       });
     });
+    await waitFor(() =>
+      expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false),
+    );
+    expect(toast.success).toHaveBeenCalledExactlyOnceWith("Client created");
+    await waitFor(() =>
+      expect(screen.getByTestId("location").textContent).toBe(
+        "/org/projects/project/remote-identity-providers/issuer-1/clients/client-1",
+      ),
+    );
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 });
+
+function LocationProbe() {
+  return <output data-testid="location">{useLocation().pathname}</output>;
+}
 
 function renderSheet(issuer: RemoteSessionIssuer): void {
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <CreateRemoteSessionClientSheet
-        open
-        onOpenChange={onOpenChange}
-        issuer={issuer}
-      />
+      <MemoryRouter>
+        <CreateRemoteSessionClientSheet
+          open
+          onOpenChange={onOpenChange}
+          issuer={issuer}
+        />
+        <LocationProbe />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }

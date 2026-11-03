@@ -146,7 +146,7 @@ func (s *Service) deliver(ctx context.Context, target repo.RegistryPromotionCand
 		return fmt.Errorf("claim documentation request: %w", err)
 	}
 	effectCtx, effectCancel := context.WithTimeout(ctx, s.effectTimeout)
-	var public PublicMetadata
+	var public publicSnapshot
 	var issueURL string
 	var effectErr error
 	if row.DocsFailures > maxDocsFailures {
@@ -156,7 +156,7 @@ func (s *Service) deliver(ctx context.Context, target repo.RegistryPromotionCand
 	} else if effectCtx.Err() != nil {
 		effectErr = effectCtx.Err()
 	} else {
-		issueURL, effectErr = s.delivery.EnsureGuide(effectCtx, delivery.Guide{Slug: public.DocsSlug, Name: public.Title, Description: public.Description, RemoteURL: public.URL, DocumentationURL: public.DocumentationURL, AuthMode: public.AuthMode})
+		issueURL, effectErr = s.delivery.EnsureGuide(effectCtx, delivery.Guide{Slug: public.DocsSlug, Name: public.Title, Description: public.Description, RemoteURL: public.URL, DocumentationURL: public.DocumentationURL, AuthMode: public.AuthMode, AuthDiscovery: public.AuthDiscovery})
 	}
 	effectCancel()
 	var result repo.FinishDocsParams

@@ -177,8 +177,6 @@ function CreateRemoteMcpForm() {
             selectedIssuer === PROJECT_SPECIFIC_ISSUER_VALUE
               ? undefined
               : selectedIssuer,
-          organizationOwnedUserSessionIssuer:
-            selectedIssuer !== PROJECT_SPECIFIC_ISSUER_VALUE,
           identityMode,
           agentAuthorization:
             identityMode === "agent"

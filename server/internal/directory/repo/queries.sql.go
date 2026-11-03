@@ -148,6 +148,35 @@ func (q *Queries) CountDirectoryUserGroupMembershipsByWorkOSIDs(ctx context.Cont
 	return count, err
 }
 
+const countIDJAGResolvableDirectoryUsers = `-- name: CountIDJAGResolvableDirectoryUsers :one
+SELECT count(DISTINCT du.id)
+FROM directory_users AS du
+JOIN users AS candidate
+  ON (du.user_id IS NOT NULL AND candidate.id = du.user_id)
+  OR (du.user_id IS NULL AND LOWER(candidate.email) = LOWER(du.email))
+JOIN organization_user_relationships AS membership
+  ON membership.user_id = candidate.id
+  AND membership.organization_id = du.organization_id
+  AND membership.deleted_at IS NULL
+WHERE du.organization_id = $1
+  AND du.email IS NOT NULL
+  AND du.deleted IS FALSE
+  AND du.workos_deleted IS FALSE
+  AND candidate.deleted_at IS NULL
+  AND candidate.workos_deleted_at IS NULL
+`
+
+// Directory users an ID-JAG can resolve to, under ResolveIDJAGUsersByEmail's
+// predicate: an active directory row linked, or matched by email, to an active
+// user with live membership in the same organization. Zero means every ID-JAG
+// exchange is refused.
+func (q *Queries) CountIDJAGResolvableDirectoryUsers(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, countIDJAGResolvableDirectoryUsers, organizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const deleteDirectoryGroupByWorkOSID = `-- name: DeleteDirectoryGroupByWorkOSID :execrows
 UPDATE directory_groups
 SET directory_id = COALESCE($1, directory_id),

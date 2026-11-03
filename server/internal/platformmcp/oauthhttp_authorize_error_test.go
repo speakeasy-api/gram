@@ -10,6 +10,7 @@ import (
 	"time"
 
 	"github.com/stretchr/testify/require"
+	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
@@ -120,4 +121,51 @@ func TestOAuthHTTPConnectPostDenialStillRedirectsRemoteCallback(t *testing.T) {
 	require.Equal(t, oautherr.CodeAccessDenied, callback.Query().Get(oauthwire.ParamError))
 	require.Equal(t, "user denied authorization", callback.Query().Get(oauthwire.ParamErrorDescription))
 	require.Equal(t, challenge.State, callback.Query().Get(oauthwire.ParamState))
+}
+
+func TestOAuthHTTPBrowserRoutesRejectMissingStateWithHTML(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		method, path string
+		status       int
+	}{
+		{http.MethodGet, "/platform-mcp/idp_callback", http.StatusBadRequest},
+		{http.MethodGet, "/platform-mcp/select-organization", http.StatusBadRequest},
+		{http.MethodPost, "/platform-mcp/select-organization", http.StatusBadRequest},
+		{http.MethodGet, "/platform-mcp/connect", http.StatusBadRequest},
+		{http.MethodPost, "/platform-mcp/connect", http.StatusBadRequest},
+		{http.MethodPost, "/platform-mcp/create-workspace", http.StatusUnauthorized},
+		{http.MethodPost, "/platform-mcp/join-workspace", http.StatusUnauthorized},
+	} {
+		t.Run(tc.method+tc.path, func(t *testing.T) {
+			t.Parallel()
+			service := newTestOAuthHTTP(t)
+			service.workspaces = &workspaceTestState{}
+			mux := goahttp.NewMuxer()
+			service.Attach(mux)
+			response := httptest.NewRecorder()
+			request := httptest.NewRequest(tc.method, tc.path, nil)
+			request.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			mux.ServeHTTP(response, request)
+			body := oauthtest.RequireAuthorizationErrorPage(t, response, tc.status)
+			require.Equal(t, oautherr.CodeInvalidRequest, body.Code)
+		})
+	}
+}
+
+func TestOAuthHTTPClientValidationExplainsClientFailure(t *testing.T) {
+	t.Parallel()
+	for _, code := range []string{oautherr.CodeInvalidClient, oautherr.CodeInvalidClientMetadata, oautherr.CodeInvalidRedirectURI} {
+		t.Run(code, func(t *testing.T) {
+			t.Parallel()
+			service := newTestOAuthHTTP(t)
+			response := httptest.NewRecorder()
+			service.writeClientResolutionError(response, t.Context(), "https://client.example/client.json", &oauthwire.Error{Code: code, Description: "client validation failed"})
+			body := oauthtest.RequireAuthorizationErrorPage(t, response, http.StatusBadRequest)
+			require.Equal(t, code, body.Code)
+			require.Equal(t, "client validation failed", body.Description)
+			require.Contains(t, response.Body.String(), "or its return address")
+			require.NotContains(t, response.Body.String(), "started sign-in in a way")
+		})
+	}
 }

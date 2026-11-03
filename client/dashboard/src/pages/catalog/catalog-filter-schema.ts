@@ -30,7 +30,8 @@ export const CATALOG_FILTERS = defineFilters([
     id: "setup",
     label: "Setup",
     kind: "multiselect",
-    description: "Whether clients register themselves or you add credentials.",
+    description:
+      "Whether setup is automatic, requires credentials, or is not yet confirmed.",
   },
   {
     id: "behavior",
@@ -52,8 +53,9 @@ export const CATALOG_FILTER_OPTIONS: OptionsById = {
     { value: "other", label: "Other" },
   ],
   setup: [
-    { value: "auto", label: "Automatic (DCR)" },
+    { value: "auto", label: "Automatic" },
     { value: "manual", label: "Manual setup" },
+    { value: "unknown", label: "Setup unknown" },
   ],
   behavior: [
     { value: "readonly", label: "Read-only only" },
@@ -84,7 +86,7 @@ const VALID_AUTH_TYPES: readonly AuthType[] = [
   "oauth",
   "other",
 ];
-const VALID_SETUP_TYPES: readonly SetupType[] = ["auto", "manual"];
+const VALID_SETUP_TYPES: readonly SetupType[] = ["auto", "manual", "unknown"];
 const VALID_BEHAVIORS: readonly ToolBehavior[] = ["readonly", "write"];
 const VALID_MIN_USERS: readonly PopularityThreshold[] = [100, 1000, 10000];
 const VALID_UPDATED: readonly UpdatedRange[] = ["week", "month", "year"];

@@ -111,6 +111,7 @@ vi.mock("@/contexts/Fetcher", () => ({
 
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({}),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
 vi.mock("@/contexts/Telemetry", () => ({
@@ -122,14 +123,6 @@ vi.mock("@/contexts/Telemetry", () => ({
 
 vi.mock("@/hooks/useProductTier", () => ({
   useProductTier: () => mocks.productTier,
-}));
-
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    environments: {
-      Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
-    },
-  }),
 }));
 
 vi.mock("@/components/FeatureRequestModal", () => ({
@@ -674,7 +667,7 @@ describe("OAuthWizard — happy proxy create", () => {
     expect(mocks.linkToolsetUserSessionIssuer).toHaveBeenCalledTimes(1);
     expect(mocks.linkToolsetUserSessionIssuer).toHaveBeenCalledWith(
       expect.anything(),
-      { id: "toolset-1", slug: "mytoolset" },
+      { id: "toolset-1" },
       "usi-1",
       expect.objectContaining({ fetchOptions: expect.anything() }),
     );

@@ -19,6 +19,7 @@ import (
 	packagesrepo "github.com/speakeasy-api/gram/server/internal/packages/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	ragrepo "github.com/speakeasy-api/gram/server/internal/rag/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	openrouterrepo "github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter/repo"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -54,27 +55,16 @@ func TestListToolsetsForIndexingRequiresResolvableToolsAndMissingEmbeddings(t *t
 	createHTTPToolDefinition(t, db, project.ID, deploymentID, validToolURN)
 
 	validToolset := createMCPToolset(t, db, organizationID, project.ID, "valid", []urn.Tool{validToolURN})
-	// A canonical wrapper that disagrees with its private toolset is denied when served, so it is not indexed.
-	driftedToolset := createMCPToolset(t, db, organizationID, project.ID, "drifted", []urn.Tool{validToolURN})
-	_, err = mcpserversrepo.New(db).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-		ID:                    driftedToolset.ID,
-		ProjectID:             project.ID,
-		Name:                  pgtype.Text{String: "drifted", Valid: true},
-		Slug:                  pgtype.Text{String: "drifted", Valid: true},
-		EnvironmentID:         uuid.NullUUID{},
-		UserSessionIssuerID:   uuid.NullUUID{},
-		RemoteMcpServerID:     uuid.NullUUID{},
-		TunneledMcpServerID:   uuid.NullUUID{},
-		ToolsetID:             uuid.NullUUID{UUID: driftedToolset.ID, Valid: true},
-		UnproxiedMcpServerID:  uuid.NullUUID{},
-		ToolVariationsGroupID: uuid.NullUUID{},
-		Visibility:            "public",
-		NetworkAccessMode:     pgtype.Text{},
+	hostedToolset := createMCPToolset(t, db, organizationID, project.ID, "hosted", []urn.Tool{validToolURN})
+	// A toolset without a canonical wrapper is not hosted, and neither is one whose wrapper is disabled.
+	createUnhostedToolset(t, db, organizationID, project.ID, "unwrapped", []urn.Tool{validToolURN})
+	disabledToolset := createMCPToolset(t, db, organizationID, project.ID, "disabled", []urn.Tool{validToolURN})
+	testenv.SetHostedMCP(t, ctx, db, project.ID, disabledToolset.ID, testenv.HostedMCP{
+		Visibility: "disabled", UserSessionIssuerID: nil, Slug: "", CustomDomainID: uuid.NullUUID{},
 	})
-	require.NoError(t, err)
 	// A server that kept a toolset's id after leaving it leaves the toolset unserved.
-	keptToolset := createMCPToolset(t, db, organizationID, project.ID, "kept", []urn.Tool{validToolURN})
-	keptTarget := createMCPToolset(t, db, organizationID, project.ID, "kept-target", []urn.Tool{})
+	keptToolset := createUnhostedToolset(t, db, organizationID, project.ID, "kept", []urn.Tool{validToolURN})
+	keptTarget := createUnhostedToolset(t, db, organizationID, project.ID, "kept-target", []urn.Tool{})
 	_, err = mcpserversrepo.New(db).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID:                    keptToolset.ID,
 		ProjectID:             project.ID,
@@ -192,6 +182,12 @@ func TestListToolsetsForIndexingRequiresResolvableToolsAndMissingEmbeddings(t *t
 		DeploymentID:   deploymentID,
 	}, {
 		ProjectID:      project.ID,
+		ToolsetID:      hostedToolset.ID,
+		ToolsetSlug:    "hosted",
+		ToolsetVersion: 1,
+		DeploymentID:   deploymentID,
+	}, {
+		ProjectID:      project.ID,
 		ToolsetID:      packageToolset.ID,
 		ToolsetSlug:    "package",
 		ToolsetVersion: 1,
@@ -216,6 +212,17 @@ func TestListToolsetsForIndexingRequiresResolvableToolsAndMissingEmbeddings(t *t
 	})
 	require.NoError(t, err)
 	require.True(t, indexed)
+	_, err = ragrepo.New(db).InsertToolsetEmbedding(ctx, ragrepo.InsertToolsetEmbeddingParams{
+		ProjectID:      project.ID,
+		ToolsetID:      hostedToolset.ID,
+		ToolsetVersion: 1,
+		EntryKey:       "tools:hosted",
+		EmbeddingModel: "test-model",
+		Embedding1536:  pgvector.NewVector(make([]float32, 1536)),
+		Payload:        []byte(fmt.Sprintf(`{"_gramIndexDeploymentId":%q}`, deploymentID)),
+		Tags:           []string{},
+	})
+	require.NoError(t, err)
 	_, err = ragrepo.New(db).InsertToolsetEmbedding(ctx, ragrepo.InsertToolsetEmbeddingParams{
 		ProjectID:      project.ID,
 		ToolsetID:      packageToolset.ID,
@@ -253,6 +260,12 @@ func TestListToolsetsForIndexingRequiresResolvableToolsAndMissingEmbeddings(t *t
 		ProjectID:      project.ID,
 		ToolsetID:      validToolset.ID,
 		ToolsetSlug:    "valid",
+		ToolsetVersion: 1,
+		DeploymentID:   newDeploymentID,
+	}, {
+		ProjectID:      project.ID,
+		ToolsetID:      hostedToolset.ID,
+		ToolsetSlug:    "hosted",
 		ToolsetVersion: 1,
 		DeploymentID:   newDeploymentID,
 	}, {
@@ -441,7 +454,23 @@ func createHTTPToolDefinition(
 	require.NoError(t, err)
 }
 
+// createMCPToolset creates a toolset hosted by a private canonical wrapper.
 func createMCPToolset(
+	t *testing.T,
+	db *pgxpool.Pool,
+	organizationID string,
+	projectID uuid.UUID,
+	slug string,
+	toolURNs []urn.Tool,
+) toolsetsrepo.Toolset {
+	t.Helper()
+
+	toolset := createUnhostedToolset(t, db, organizationID, projectID, slug, toolURNs)
+	createWrapper(t, db, projectID, toolset.ID, toolset.ID, "private")
+	return toolset
+}
+
+func createUnhostedToolset(
 	t *testing.T,
 	db *pgxpool.Pool,
 	organizationID string,
@@ -458,8 +487,6 @@ func createMCPToolset(
 		Slug:                   slug,
 		Description:            pgtype.Text{},
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                pgtype.Text{},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
 

@@ -6,17 +6,14 @@ import {
   TooltipTrigger,
 } from "@/components/ui/Tooltip";
 import type { PulseMCPServer } from "./hooks";
-import { requiresManualSetup } from "./hooks/serverMetadata";
+import { serverSetupType } from "./hooks/serverMetadata";
 
 const MANUAL_SETUP_TOOLTIP =
-  "This server doesn't support dynamic client registration (DCR). Connecting requires manual auth setup — static OAuth client credentials or API keys.";
+  "Connecting requires manual authentication setup. Follow this server's setup guide for the required credentials.";
+const UNKNOWN_SETUP_TOOLTIP =
+  "Automatic authentication setup has not been confirmed. Check the server's setup guide or discover its sign-in options during setup.";
 
-/**
- * Flags a catalog server that requires manual auth setup (no DCR support).
- * Renders nothing for automatic / DCR-capable servers, so callers can drop it
- * inline without a guard. Uses the Moonshine badge so it lines up with the
- * neighbouring catalog badges (tool count, Official/Latest).
- */
+/** Show setup requirements without treating missing discovery as a rejection. */
 export function ManualSetupBadge({
   server,
   className,
@@ -24,18 +21,20 @@ export function ManualSetupBadge({
   server: PulseMCPServer;
   className?: string;
 }): JSX.Element | null {
-  if (!requiresManualSetup(server)) return null;
+  const setup = serverSetupType(server);
+  if (setup === "auto") return null;
+  const isManual = setup === "manual";
 
   return (
     <Tooltip>
       <TooltipTrigger>
-        <Badge variant="warning" className={className}>
-          <Badge.Text>Manual Setup</Badge.Text>
+        <Badge variant={isManual ? "warning" : "neutral"} className={className}>
+          <Badge.Text>{isManual ? "Manual Setup" : "Setup unknown"}</Badge.Text>
         </Badge>
       </TooltipTrigger>
       <TooltipPortal>
         <TooltipContent className="max-w-sm">
-          {MANUAL_SETUP_TOOLTIP}
+          {isManual ? MANUAL_SETUP_TOOLTIP : UNKNOWN_SETUP_TOOLTIP}
         </TooltipContent>
       </TooltipPortal>
     </Tooltip>

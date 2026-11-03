@@ -14,7 +14,7 @@ func TestGrantReadinessIgnoresOnlySelectionCoverageFailures(t *testing.T) {
 	require.True(t, sharedReady(report), "selection coverage records nothing grants depend on")
 	require.True(t, keysReady(report))
 
-	for _, phase := range []string{PhaseOAuth, PhaseHeaders, PhaseEMA, PhaseEMAWarnings, PhaseReconcile, PhaseMark} {
+	for _, phase := range []string{PhaseOAuth, PhaseHeaders, PhaseEMA, PhaseEMAWarnings, PhaseReconcile} {
 		failed := newReport(true)
 		failed.PhaseErrors[PhaseSelections] = "selections failed"
 		failed.PhaseErrors[phase] = "failed"

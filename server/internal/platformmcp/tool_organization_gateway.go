@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -17,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // Administrator assignment review already has list_access_members,
@@ -91,6 +93,16 @@ func (s *OrganizationGatewayService) valid() bool {
 
 // Get returns the principal's organization gateway.
 func (s *OrganizationGatewayService) Get(ctx context.Context, principal Principal) (GetMyOrganizationGatewayOutput, error) {
+	return s.get(ctx, principal, orggateway.Availability)
+}
+
+// getForPlatformMCP is Get as Platform MCP's own use of the gateway sees it:
+// on unless an administrator turned it off explicitly.
+func (s *OrganizationGatewayService) getForPlatformMCP(ctx context.Context, principal Principal) (GetMyOrganizationGatewayOutput, error) {
+	return s.get(ctx, principal, orggateway.PlatformAvailability)
+}
+
+func (s *OrganizationGatewayService) get(ctx context.Context, principal Principal, availability func(context.Context, usersessionsrepo.DBTX, repo.OrganizationMetadatum) (uuid.UUID, orggateway.Unavailability, error)) (GetMyOrganizationGatewayOutput, error) {
 	organization, err := repo.New(s.db).GetOrganizationMetadata(ctx, principal.OrganizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -99,7 +111,7 @@ func (s *OrganizationGatewayService) Get(ctx context.Context, principal Principa
 		return GetMyOrganizationGatewayOutput{}, fmt.Errorf("load organization: %w", err)
 	}
 
-	_, unavailable, err := orggateway.Availability(ctx, s.db, organization)
+	_, unavailable, err := availability(ctx, s.db, organization)
 	if err != nil {
 		return GetMyOrganizationGatewayOutput{}, fmt.Errorf("resolve organization gateway: %w", err)
 	}
@@ -123,6 +135,36 @@ func (s *OrganizationGatewayService) Get(ctx context.Context, principal Principa
 	default:
 		return unavailableOrganizationGateway(unavailable, "This organization is disabled. Contact your organization administrator."), nil
 	}
+}
+
+// organizationGatewayIssuer is the issuer a served organization gateway signs
+// users in through, and its URL; both are empty when no gateway is served.
+type organizationGatewayIssuer struct {
+	// IssuerID is the gateway's user session issuer.
+	IssuerID string
+
+	// URL is the gateway's MCP URL.
+	URL string
+}
+
+// servingIssuer reads the organization gateway's issuer and URL.
+func (s *OrganizationGatewayService) servingIssuer(ctx context.Context, organizationID string) (organizationGatewayIssuer, error) {
+	organization, err := repo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return organizationGatewayIssuer{}, nil
+	case err != nil:
+		return organizationGatewayIssuer{}, fmt.Errorf("load organization: %w", err)
+	}
+	issuerID, unavailable, err := orggateway.Availability(ctx, s.db, organization)
+	if err != nil {
+		return organizationGatewayIssuer{}, fmt.Errorf("resolve organization gateway: %w", err)
+	}
+	if unavailable != orggateway.UnavailabilityNone {
+		return organizationGatewayIssuer{}, nil
+	}
+	baseURL, _ := organizationBaseURLs(ctx, s.orgHosts, organization.DefaultHost, s.serverURL, nil)
+	return organizationGatewayIssuer{IssuerID: issuerID.String(), URL: orggateway.URL(baseURL, organization.Slug)}, nil
 }
 
 func unavailableOrganizationGateway(reason orggateway.Unavailability, nextAction string) GetMyOrganizationGatewayOutput {

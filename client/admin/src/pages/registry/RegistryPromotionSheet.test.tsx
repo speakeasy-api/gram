@@ -1,4 +1,10 @@
-import { cleanup, fireEvent, screen, waitFor } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  screen,
+  waitFor,
+  within,
+} from "@testing-library/react";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { queryOptions, useMutation } from "@tanstack/react-query";
 import { renderWithApp } from "@/test/harness";
@@ -183,16 +189,6 @@ it("retains draft after a source conflict and requires fresh review", async () =
   ).toBe(true);
 });
 
-it("limits a public title to the server's 200-character maximum", async () => {
-  await renderWithApp(
-    <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
-  );
-  await screen.findByText("Ready for staff review");
-  expect(
-    (screen.getByRole("textbox", { name: "Public title" }) as HTMLInputElement)
-      .maxLength,
-  ).toBe(200);
-});
 it("confirms closing a review when only authentication was changed", async () => {
   const close = vi.fn<() => void>();
   await renderWithApp(
@@ -394,3 +390,204 @@ it("uses the server override capability for unfamiliar health reasons", async ()
     }),
   ).toBeTruthy();
 });
+
+it.each([
+  ["publicTitle", "Public title", true],
+  ["publicTitle", "Public title", false],
+  ["publicDescription", "Public description", true],
+  ["publicDescription", "Public description", false],
+] as const)(
+  "validates %s (%s, eligible=%s) without truncating suggestions",
+  async (field, label, eligible) => {
+    const value = "a".repeat(126);
+    api.candidate.mockResolvedValue({
+      ...candidate,
+      eligible,
+      reason: eligible ? "eligible" : "errors_observed",
+      canOverrideEligibility: !eligible,
+      suggestedMetadata: { ...metadata, authMode: "none", [field]: value },
+    });
+    await renderWithApp(
+      <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
+    );
+    if (!eligible) {
+      fireEvent.click(
+        await screen.findByRole("checkbox", { name: /Promote anyway/ }),
+      );
+    }
+    const input = (await screen.findByRole("textbox", {
+      name: label,
+    })) as HTMLInputElement;
+    expect(input.value).toBe(value);
+    const alert = screen.getByRole("alert");
+    const errorText = `${label} must be 100 characters or fewer.`;
+    expect(alert.textContent).toBe(errorText);
+    expect(
+      document
+        .getElementById(input.getAttribute("aria-describedby")!)
+        ?.contains(alert),
+    ).toBe(true);
+    fireEvent.click(screen.getByRole("checkbox", { name: /I verified/ }));
+    const publish = screen.getByRole("button", {
+      name: eligible ? "Publish catalog entry" : "Promote anyway",
+    }) as HTMLButtonElement;
+    expect(publish.disabled).toBe(true);
+    fireEvent.submit(input.closest("form")!);
+    expect(api.promote).not.toHaveBeenCalled();
+    for (const oversized of ["a".repeat(101), "🌍".repeat(101)]) {
+      fireEvent.change(input, { target: { value: oversized } });
+      expect(input.value).toBe(oversized);
+      expect(input.getAttribute("aria-invalid")).toBe("true");
+      expect(publish.disabled).toBe(true);
+      expect(screen.getByRole("alert")).toBe(alert);
+      expect(alert.textContent).toBe(errorText);
+      expect(screen.getByText("101 / 100 characters.")).toBeTruthy();
+      fireEvent.submit(input.closest("form")!);
+      expect(api.promote).not.toHaveBeenCalled();
+    }
+    for (const valid of ["a".repeat(100), "🌍".repeat(100)]) {
+      fireEvent.change(input, { target: { value: valid } });
+      expect(input.value).toBe(valid);
+      expect(input.getAttribute("aria-invalid")).toBe("false");
+      expect(screen.queryByRole("alert")).toBeNull();
+      expect(screen.getByText("100 / 100 characters.")).toBeTruthy();
+    }
+    expect(publish.disabled).toBe(true);
+    fireEvent.submit(input.closest("form")!);
+    expect(api.promote).not.toHaveBeenCalled();
+    fireEvent.click(screen.getByRole("checkbox", { name: /I verified/ }));
+    expect(publish.disabled).toBe(false);
+    fireEvent.click(publish);
+    await screen.findByText("Catalog entry published");
+    expect(api.promote.mock.calls[0]?.[0].request[field]).toBe(
+      "🌍".repeat(100),
+    );
+    expect(api.promote.mock.calls[0]?.[0].request.overrideEligibility).toBe(
+      !eligible,
+    );
+  },
+);
+
+it("retains reviewed fields and confirmation on an unknown validation failure without echoing its payload", async () => {
+  api.promote.mockRejectedValueOnce({
+    statusCode: 400,
+    message: "private backend detail",
+    body: { publicTitle: "untrusted response text" },
+  });
+  await renderWithApp(
+    <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
+  );
+  await fill();
+  fireEvent.click(screen.getByRole("checkbox"));
+  fireEvent.click(
+    screen.getByRole("button", { name: "Publish catalog entry" }),
+  );
+  await screen.findByRole("alert");
+  expect(
+    screen.queryByText(/private backend detail|untrusted response text/),
+  ).toBeNull();
+  expect(
+    (screen.getByRole("textbox", { name: "Public title" }) as HTMLInputElement)
+      .value,
+  ).toBe(metadata.publicTitle);
+  expect(
+    (
+      screen.getByRole("textbox", {
+        name: "Public description",
+      }) as HTMLTextAreaElement
+    ).value,
+  ).toBe(metadata.publicDescription);
+  expect(screen.getByRole("checkbox").getAttribute("aria-checked")).toBe(
+    "true",
+  );
+  const retry = screen.getByRole("button", {
+    name: "Publish catalog entry",
+  }) as HTMLButtonElement;
+  expect(retry.disabled).toBe(false);
+  fireEvent.click(retry);
+  await screen.findByText("Catalog entry published");
+  expect(api.promote.mock.calls[1]?.[0].request).toEqual(
+    api.promote.mock.calls[0]?.[0].request,
+  );
+});
+
+it("shows CIMD discovery and hides it when the reviewed endpoint changes", async () => {
+  api.candidate.mockResolvedValue({
+    ...candidate,
+    suggestedMetadata: { ...metadata, authMode: "oauth" },
+    authDiscovery: {
+      supportsDcr: false,
+      supportsCimd: true,
+      authSetup: "cimd",
+      status: "complete",
+    },
+  });
+  await renderWithApp(
+    <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
+  );
+  await screen.findByText(
+    "Automatic OAuth setup is available through client ID metadata.",
+  );
+  const section = screen.getByRole("region", { name: "Sign-in setup" });
+  expect(within(section).getByText("Available")).toBeTruthy();
+  expect(within(section).getByText("Not available")).toBeTruthy();
+  fireEvent.change(
+    screen.getByRole("textbox", { name: "Public MCP endpoint" }),
+    { target: { value: "https://different.example.com/mcp" } },
+  );
+  expect(
+    screen.queryByText(
+      "Automatic OAuth setup is available through client ID metadata.",
+    ),
+  ).toBeNull();
+  expect(
+    screen.getByText(
+      /Sign-in options will be checked for the reviewed endpoint/,
+    ),
+  ).toBeTruthy();
+});
+
+it.each([
+  {
+    label: "known auth mode",
+    authMode: "oauth" as const,
+    publicUrl: metadata.publicUrl,
+  },
+  {
+    label: "omitted auth mode",
+    authMode: undefined,
+    publicUrl: metadata.publicUrl,
+  },
+  {
+    label: "omitted endpoint and auth mode",
+    authMode: undefined,
+    publicUrl: undefined,
+  },
+])(
+  "lets staff retry inconclusive discovery without promotion: $label",
+  async ({ authMode, publicUrl }) => {
+    api.candidate.mockResolvedValue({
+      ...candidate,
+      suggestedMetadata: { ...metadata, authMode, publicUrl },
+      authDiscovery: {
+        supportsDcr: false,
+        supportsCimd: false,
+        authSetup: "unknown",
+        status: "unavailable",
+      },
+    });
+    await renderWithApp(
+      <RegistryPromotionSheet target={target} onClose={vi.fn<() => void>()} />,
+    );
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Recheck sign-in options" }),
+    );
+    await waitFor(() => expect(api.candidate).toHaveBeenCalledTimes(2));
+    expect(
+      await screen.findByText(
+        "Sign-in setup could not be confirmed. This does not mean automatic setup is unsupported.",
+      ),
+    ).toBeDefined();
+    expect(api.promote).not.toHaveBeenCalled();
+  },
+);

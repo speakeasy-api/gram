@@ -9,10 +9,8 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 func (f hostedAttachmentFixture) customDomain(t *testing.T, orgID, domain string, verified, activated bool) uuid.UUID {
@@ -31,19 +29,12 @@ func (f hostedAttachmentFixture) customDomain(t *testing.T, orgID, domain string
 	return created.ID
 }
 
-// moveHostedToDomain re-addresses the hosted toolset onto a custom domain, as a toolset save does.
+// moveHostedToDomain re-addresses the hosted toolset onto a custom domain.
 func (f hostedAttachmentFixture) moveHostedToDomain(t *testing.T, domainID uuid.UUID) {
 	t.Helper()
-	ts, err := toolsetsrepo.New(f.db).UpdateToolset(t.Context(), toolsetsrepo.UpdateToolsetParams{
-		Name: f.hosted.Name, DefaultEnvironmentSlug: f.hosted.DefaultEnvironmentSlug, McpSlug: f.hosted.McpSlug,
-		McpIsPublic: f.hosted.McpIsPublic, CustomDomainID: uuid.NullUUID{UUID: domainID, Valid: true}, McpEnabled: true,
-		ToolSelectionMode: f.hosted.ToolSelectionMode, Slug: f.hosted.Slug, ProjectID: f.projectID,
+	testenv.SetHostedMCP(t, t.Context(), f.db, f.projectID, f.hosted.ID, testenv.HostedMCP{
+		Slug: "org-test-billing-x1", CustomDomainID: uuid.NullUUID{UUID: domainID, Valid: true},
 	})
-	require.NoError(t, err)
-	tx := testenv.BeginTx(t, t.Context(), f.db)
-	_, err = hostedmcp.Sync(t.Context(), tx, newTestAuditLogger(), hostedmcp.SystemActor("test"), ts, nil)
-	require.NoError(t, err)
-	require.NoError(t, tx.Commit(t.Context()))
 }
 
 func (f hostedAttachmentFixture) retirePlatformEndpoints(t *testing.T) {
@@ -84,7 +75,9 @@ func TestAssistantHostedServerOnCustomDomainUsesEndpointURL(t *testing.T) {
 func TestAssistantHostedServerOnInactiveDomainKeepsLegacyAlias(t *testing.T) {
 	t.Parallel()
 	f := newHostedAttachmentFixture(t, "endpoint_addr_hosted_inactive")
-	f.moveHostedToDomain(t, f.customDomain(t, "org-test", "mcp.example.test", true, false))
+	domainID := f.customDomain(t, "org-test", "mcp.example.test", true, false)
+	f.moveHostedToDomain(t, domainID)
+	testenv.SetLegacyAlias(t, t.Context(), f.db, f.projectID, f.hosted.ID, "org-test-billing-x1", uuid.NullUUID{UUID: domainID, Valid: true})
 	f.addServerRow(t, f.hosted.ID, uuid.NullUUID{})
 
 	servers := f.runtime(t)

@@ -35,7 +35,7 @@ async fn main() -> Result<()> {
     let state = State::new(&args.monty_bin, token, args.capacity).await?;
     let listener = TcpListener::bind(args.listen).await?;
     eprintln!(
-        "gram-code-runner protocol 1 listening on {}",
+        "gram-code-runner protocol 2 listening on {}",
         listener.local_addr()?
     );
     let shutdown = CancellationToken::new();

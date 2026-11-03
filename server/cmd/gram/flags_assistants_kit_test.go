@@ -2,7 +2,6 @@ package gram
 
 import (
 	"flag"
-	"github.com/google/uuid"
 	"strconv"
 	"testing"
 
@@ -104,7 +103,7 @@ func TestKitCLIOptInAndProviderValidation(t *testing.T) {
 	require.ErrorContains(t, installKitLocalRuntimeFromCLI(c, nil, nil, nil, nil, nil), "local environment")
 	c = kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v1", "assistant-runtime-provider": "gke"})
 	require.ErrorContains(t, installKitLocalRuntimeFromCLI(c, nil, nil, nil, nil, nil), "ingress-cidr")
-	c = kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v1", "assistant-runtime-provider": "gke", "assistant-kit-root-trigger-id": uuid.NewString()})
+	c = kitCLIContext(t, map[string]string{"assistant-kit-image": "example.invalid/kit:v1", "assistant-runtime-provider": "gke", "assistant-kit-workload-subject": "local-subject"})
 	require.ErrorContains(t, installKitLocalRuntimeFromCLI(c, nil, nil, nil, nil, nil), "local-only")
 }
 

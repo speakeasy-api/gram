@@ -262,7 +262,7 @@ func TestMemberClientResultCaptureHonorsRejection(t *testing.T) {
 	defer cancel()
 	session, _, err := service.connectMetaMember(ctx, testenv.NewLogger(t), guardedBuild, time.Second)
 	require.NoError(t, err)
-	invocation := &metaCodeInvocation{dispatched: false, rejected: false, message: ""}
+	invocation := &metaCodeInvocation{dispatched: false, rejected: false, message: "", credential: false}
 	raw, err := callMemberTool(context.WithValue(ctx, metaCodeInvocationKey{}, invocation), session, &sdk.CallToolParams{Name: "ping"})
 	require.Error(t, err)
 	rpcErr, ok := errors.AsType[*jsonrpc.Error](err)
@@ -287,7 +287,7 @@ func TestMemberClientMarksMembersOwnRefusal(t *testing.T) {
 	defer cancel()
 	session, _, err := service.connectMetaMember(ctx, testenv.NewLogger(t), build, time.Second)
 	require.NoError(t, err)
-	invocation := &metaCodeInvocation{dispatched: false, rejected: false, message: ""}
+	invocation := &metaCodeInvocation{dispatched: false, rejected: false, message: "", credential: false}
 	_, err = callMemberTool(context.WithValue(ctx, metaCodeInvocationKey{}, invocation), session, &sdk.CallToolParams{Name: "missing"})
 	require.Error(t, err)
 	require.True(t, invocation.rejected)

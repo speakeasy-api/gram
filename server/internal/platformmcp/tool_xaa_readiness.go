@@ -9,7 +9,6 @@ import (
 	"log/slog"
 	"net/url"
 	"slices"
-	"strings"
 	"time"
 
 	"github.com/google/uuid"
@@ -540,9 +539,7 @@ func (i *postgresXAAIdentityInspector) Inspect(ctx context.Context, organization
 					return out, callback, fmt.Errorf("read XAA diagnostic candidates: %w", readErr)
 				}
 				for _, candidate := range candidates {
-					if identitychaining.MatchesDiagnosticOrigin(resource, candidate) && !slices.ContainsFunc(resources, func(existing string) bool {
-						return strings.TrimRight(existing, "/") == strings.TrimRight(candidate, "/")
-					}) {
+					if identitychaining.MatchesDiagnosticOrigin(resource, candidate) && !slices.Contains(resources, candidate) {
 						resources = append(resources, candidate)
 					}
 				}

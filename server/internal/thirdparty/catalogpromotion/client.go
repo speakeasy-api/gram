@@ -7,6 +7,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/catalogauth"
 	"io"
 	"net"
 	"net/http"
@@ -74,6 +75,8 @@ type Guide struct {
 	DocumentationURL string `json:"documentation_url"`
 	// AuthMode is the reviewed public authentication mode: none or OAuth discovery.
 	AuthMode string `json:"auth_mode"`
+	// AuthDiscovery is advertised public capability evidence, not a verified connection.
+	AuthDiscovery catalogauth.Discovery `json:"auth_discovery,omitzero"`
 }
 
 type client struct {

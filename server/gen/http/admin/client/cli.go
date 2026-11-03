@@ -895,10 +895,33 @@ func BuildCreateOrganizationPayload(adminCreateOrganizationBody string, adminCre
 	{
 		err = json.Unmarshal([]byte(adminCreateOrganizationBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"ownership_confirmed\": false,\n      \"url\": \"aa\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"name\": \"aa\",\n      \"ownership_confirmed\": false,\n      \"slug\": \"aaa\",\n      \"url\": \"aa\"\n   }'")
 		}
 		if utf8.RuneCountInString(body.URL) < 1 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.url", body.URL, utf8.RuneCountInString(body.URL), 1, true))
+		}
+		if body.Name != nil {
+			if utf8.RuneCountInString(*body.Name) < 1 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+			}
+		}
+		if body.Name != nil {
+			if utf8.RuneCountInString(*body.Name) > 100 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 100, false))
+			}
+		}
+		if body.Slug != nil {
+			err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9]+(?:-[a-z0-9]+)*$"))
+		}
+		if body.Slug != nil {
+			if utf8.RuneCountInString(*body.Slug) < 2 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 2, true))
+			}
+		}
+		if body.Slug != nil {
+			if utf8.RuneCountInString(*body.Slug) > 100 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 100, false))
+			}
 		}
 		if err != nil {
 			return nil, err
@@ -912,6 +935,8 @@ func BuildCreateOrganizationPayload(adminCreateOrganizationBody string, adminCre
 	}
 	v := &admin.CreateOrganizationPayload{
 		URL:                body.URL,
+		Name:               body.Name,
+		Slug:               body.Slug,
 		OwnershipConfirmed: body.OwnershipConfirmed,
 	}
 	v.AdminSessionToken = adminSessionToken
@@ -1193,6 +1218,40 @@ func BuildSetStripeCustomerPayload(adminSetStripeCustomerBody string, adminSetSt
 	v := &admin.SetStripeCustomerPayload{
 		OrganizationID:   body.OrganizationID,
 		StripeCustomerID: body.StripeCustomerID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildSetAdoptionDashboardURLPayload builds the payload for the admin
+// setAdoptionDashboardUrl endpoint from CLI flags.
+func BuildSetAdoptionDashboardURLPayload(adminSetAdoptionDashboardURLBody string, adminSetAdoptionDashboardURLAdminSessionToken string) (*admin.SetAdoptionDashboardURLPayload, error) {
+	var err error
+	var body SetAdoptionDashboardURLRequestBody
+	{
+		err = json.Unmarshal([]byte(adminSetAdoptionDashboardURLBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"adoption_dashboard_url\": \"aaa\",\n      \"organization_id\": \"abc123\"\n   }'")
+		}
+		if body.AdoptionDashboardURL != nil {
+			if utf8.RuneCountInString(*body.AdoptionDashboardURL) > 2048 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.adoption_dashboard_url", *body.AdoptionDashboardURL, utf8.RuneCountInString(*body.AdoptionDashboardURL), 2048, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var adminSessionToken *string
+	{
+		if adminSetAdoptionDashboardURLAdminSessionToken != "" {
+			adminSessionToken = &adminSetAdoptionDashboardURLAdminSessionToken
+		}
+	}
+	v := &admin.SetAdoptionDashboardURLPayload{
+		OrganizationID:       body.OrganizationID,
+		AdoptionDashboardURL: body.AdoptionDashboardURL,
 	}
 	v.AdminSessionToken = adminSessionToken
 
@@ -3516,6 +3575,21 @@ func BuildDisableUpstreamAuthEnforcementPayload(adminDisableUpstreamAuthEnforcem
 	v := &admin.DisableUpstreamAuthEnforcementPayload{
 		OrganizationID: body.OrganizationID,
 	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}
+
+// BuildBackfillMcpAuthGrantsPayload builds the payload for the admin
+// backfillMcpAuthGrants endpoint from CLI flags.
+func BuildBackfillMcpAuthGrantsPayload(adminBackfillMcpAuthGrantsAdminSessionToken string) (*admin.BackfillMcpAuthGrantsPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminBackfillMcpAuthGrantsAdminSessionToken != "" {
+			adminSessionToken = &adminBackfillMcpAuthGrantsAdminSessionToken
+		}
+	}
+	v := &admin.BackfillMcpAuthGrantsPayload{}
 	v.AdminSessionToken = adminSessionToken
 
 	return v, nil

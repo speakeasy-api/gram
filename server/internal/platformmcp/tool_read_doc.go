@@ -9,7 +9,7 @@ import (
 )
 
 type ReadGramDocToolInput struct {
-	URI string `json:"uri" jsonschema:"gram:// resource URI of a reviewed guide, exactly as returned by search_gram_docs, for example gram://platform-mcp/setup/github/provider_setup"`
+	URI string `json:"uri" jsonschema:"speakeasy:// resource URI of a reviewed guide, exactly as returned by search_speakeasy_docs, for example speakeasy://platform-mcp/setup/github/provider_setup"`
 }
 
 type ReadGramDocToolOutput struct {
@@ -28,7 +28,7 @@ type ReadGramDocToolOutput struct {
 //
 // An external MCP client reads a cited guide with resources/read. The assistant
 // speaks Go rather than MCP and its tool channel has no resource methods, so
-// without this the gram:// URIs in a search result would resolve on one surface
+// without this the speakeasy:// URIs in a search result would resolve on one surface
 // and dangle on the other — a citation that looks openable and is not. The tool
 // reads the same registered resources, through the same freshness rules, so
 // both surfaces answer identically.
@@ -36,7 +36,7 @@ func registerReadDocTool(reg *Registrar) {
 	addTool(reg, &mcp.Tool{
 		Name:        "read_gram_doc",
 		Title:       "Read a Setup Guide",
-		Description: "Read one reviewed Speakeasy setup guide in full, by the gram:// URI search_gram_docs returned. Constraints: returns guide_unavailable when no reviewed guide stands behind that URI — say so and hand the user the canonical links rather than inventing steps.",
+		Description: "Read one reviewed Speakeasy setup guide in full, by the speakeasy:// URI search_speakeasy_docs returned. Constraints: returns guide_unavailable when no reviewed guide stands behind that URI — say so and hand the user the canonical links rather than inventing steps.",
 		Annotations: readOnlyAnnotations(),
 	}, ToolMeta{
 		Authorization: ExternalAuthorizationOrgAdmin,

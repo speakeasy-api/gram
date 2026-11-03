@@ -23,7 +23,34 @@ func oauthRouteHandler(logger *slog.Logger, method, pattern string, handler func
 	if isOAuthTokenRoute(method, pattern) {
 		return oops.OAuthErrHandle(logger, handler)
 	}
+	if method == http.MethodPost && strings.HasSuffix(pattern, "/connect/remote-session") {
+		return consentActionRouteHandler(logger, handler)
+	}
+	if (method == http.MethodGet && (strings.HasSuffix(pattern, "/authorize") || strings.HasSuffix(pattern, "/connect/first-party"))) || ((method == http.MethodGet || method == http.MethodPost) && strings.HasSuffix(pattern, "/connect")) {
+		return oops.BrowserErrHandle(logger, handler)
+	}
 	return oops.ErrHandle(logger, handler)
+}
+
+// consentActionRouteHandler classifies the parsed action before endpoint or
+// state resolution can fail. PostForm.Get selects the first value, exactly as the
+// action handler does, including duplicate values. A partially parsed form can
+// still identify a fetch operation. Parse failures are deferred to the handler
+// so endpoint resolution retains its error precedence.
+func consentActionRouteHandler(logger *slog.Logger, handler func(http.ResponseWriter, *http.Request) error) http.Handler {
+	browser := oops.BrowserErrHandle(logger, handler)
+	machine := oops.ErrHandle(logger, handler)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		if err := parseConsentActionForm(w, r); err != nil {
+			r = r.WithContext(context.WithValue(r.Context(), consentActionFormErrorKey{}, err))
+		}
+		switch r.PostForm.Get("action") {
+		case "agent_connections", "agent_attach", "agent_detach", "identity_chaining_check":
+			machine.ServeHTTP(w, r)
+		default:
+			browser.ServeHTTP(w, r)
+		}
+	})
 }
 
 // tokenEndpointResolutionError preserves indistinguishable 404s for unknown,

@@ -152,6 +152,10 @@ type ProxyManager struct {
 	// protectedResources keeps each proxied server's protected resource row
 	// fresh; shared with the login path so one replica has one writer.
 	protectedResources *protectedresource.Prober
+
+	// drain is shared by every proxy this manager builds, so starting it
+	// reaches every stream relayed by this process.
+	drain *proxy.Drain
 }
 
 // NewProxyManager wires the MCP-aware proxy stack with its dependencies.
@@ -208,7 +212,17 @@ func NewProxyManager(
 		challengeScopes:                       newChallengeScopesState(),
 		afterChallengeScopes:                  nil,
 		protectedResources:                    protectedResources,
+		drain:                                 proxy.NewDrain(),
 	}
+}
+
+// StartDrain starts the shutdown drain for every stream this manager's
+// proxies relay: streams that only carry server-initiated messages end now so
+// clients reconnect to a replica that is still serving, and requests still
+// waiting on a remote MCP server after interruptAfter are answered with a
+// JSON-RPC error. Call it when the server starts shutting down.
+func (f *ProxyManager) StartDrain(interruptAfter time.Duration) {
+	f.drain.Start(interruptAfter)
 }
 
 // Build constructs a configured [*proxy.Proxy] for a single request against
@@ -430,6 +444,7 @@ func (f *ProxyManager) BuildTarget(
 		Logger:                      logger,
 		Tracer:                      f.tracer,
 		NonStreamingTimeout:         proxy.DefaultNonStreamingTimeout,
+		Drain:                       f.drain,
 		StreamingTimeout:            proxy.DefaultStreamingTimeout,
 		Metrics:                     f.proxyMetrics,
 		MaxBufferedBodyBytes:        proxy.DefaultMaxBufferedBodyBytes,

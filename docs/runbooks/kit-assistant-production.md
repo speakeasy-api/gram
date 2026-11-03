@@ -92,8 +92,6 @@ Configure the server and worker consistently:
 - `GRAM_ASSISTANT_KIT_MCP_RESOURCE=https://<RESOURCE_HOST>/mcp/<SLUG>`.
 - `GRAM_ASSISTANT_KIT_MCP_ISSUER=https://<EXPECTED_ISSUER>` and
   `GRAM_ASSISTANT_KIT_MCP_ISSUER_ID=<PERSISTED_ISSUER_UUID>`.
-- Optional `GRAM_ASSISTANT_KIT_ROOT_TRIGGER_ID=<ROOT_TRIGGER_UUID>` when the
-  assistant has more than one root.
 - `GRAM_ASSISTANT_KIT_WORKLOAD_ISSUER=<CLUSTER_OIDC_ISSUER_URL>` and
   `GRAM_ASSISTANT_KIT_WORKLOAD_JWKS_URL=<DISCOVERED_JWKS_URL>`. Use the
   cluster discovery document's actual `jwks_uri`, not an assumed URL suffix.

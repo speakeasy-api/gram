@@ -48,6 +48,26 @@ interface SubjectTemplate {
   wildcard: boolean;
 }
 
+/** An access rule an entry offers in place of its default. */
+interface SubjectAlternative extends SubjectTemplate {
+  /** Identifies the choice; the values name it under SUBJECT_CHOICE. */
+  key: string;
+  label: string;
+}
+
+/** The rule an entry produces by default, and the others it offers. */
+interface CatalogSubject extends SubjectTemplate {
+  /** Names the default beside its alternatives. */
+  label?: string;
+  alternatives: SubjectAlternative[];
+}
+
+/**
+ * The values key naming the subject alternative chosen, absent for the
+ * default. Variable keys are snake_case, so a hyphenated one is never one.
+ */
+export const SUBJECT_CHOICE = "subject-choice";
+
 export interface CatalogEntry {
   /** Permanent: written onto the rows this entry creates. */
   key: string;
@@ -58,7 +78,7 @@ export interface CatalogEntry {
   issuer: CatalogConstant;
   jwksUri: CatalogConstant;
   variables: CatalogVariable[];
-  subject: SubjectTemplate;
+  subject: CatalogSubject;
   /** A disabled entry stays listed so operators can see it is known. */
   enabled: boolean;
 }
@@ -87,6 +107,9 @@ export function isSupportedCatalogEntry(entry: CatalogEntry): boolean {
  */
 export type ComputedValueKey = "token_endpoint" | "issuer_url" | "mcp_host";
 
+/** How long a fetched catalog is reused before it is read again. */
+const CATALOG_STALE_TIME_MS = 10 * 60_000;
+
 /**
  * The catalog the server ships. The server validates it; this reshapes.
  *
@@ -103,6 +126,9 @@ export function useCatalogEntries(enabled = true): {
   const query = useWorkloadPlatforms({}, undefined, {
     enabled,
     throwOnError: false,
+    // Embedded in the server binary, so it changes only with a deploy:
+    // reopening Command K or the wizard should not fetch it again.
+    staleTime: CATALOG_STALE_TIME_MS,
   });
   // Disabled means the caller may not read the catalog, so nothing cached from
   // before, entries or an error, is reported. A disabled query also stays
@@ -137,7 +163,12 @@ function toCatalogEntry(platform: WorkloadPlatform): CatalogEntry {
       pattern: optional(variable.pattern),
       patternMessage: optional(variable.patternMessage),
     })),
-    subject: platform.subject,
+    // A server that predates alternatives does not send them.
+    subject: {
+      ...platform.subject,
+      label: optional(platform.subject.label),
+      alternatives: platform.subject.alternatives ?? [],
+    },
   };
 }
 
@@ -207,16 +238,37 @@ export interface SubjectRule {
   matchKind: "exact" | "wildcard";
 }
 
-/** The access rule an entry's subject template produces for these values. */
+/**
+ * The subject alternative these values choose, or the entry's default when
+ * they choose none. Null for one the entry does not offer: falling back to
+ * the default would quietly widen the rule.
+ */
+function chosenSubject(
+  entry: CatalogEntry,
+  values: VariableValues,
+): SubjectTemplate | null {
+  const key = values[SUBJECT_CHOICE];
+  if (!key) return entry.subject;
+  return (
+    entry.subject.alternatives.find((choice) => choice.key === key) ?? null
+  );
+}
+
+/**
+ * The access rule an entry's chosen subject template produces for these
+ * values. Only the chosen template's variables need values.
+ */
 export function subjectRule(
   entry: CatalogEntry,
   values: VariableValues,
 ): SubjectRule | null {
-  const filled = fillTemplate(entry, entry.subject.template, values);
+  const subject = chosenSubject(entry, values);
+  if (subject === null) return null;
+  const filled = fillTemplate(entry, subject.template, values);
   if (filled === null) {
     return null;
   }
-  if (entry.subject.wildcard) {
+  if (subject.wildcard) {
     return { subject: `${filled}*`, matchKind: "wildcard" };
   }
   return { subject: filled, matchKind: "exact" };
@@ -272,31 +324,112 @@ export function connectedIssuer(
 }
 
 /**
- * The variable values a subject was built from, read back out of it.
+ * The values a filled template was made from, read back out of it, or null
+ * when it was not made from this template. A placeholder reads up to the next
+ * "/", or to the end when it ends the template, so a last segment such as a
+ * branch may hold one. Each value it reads must then pass its variable's own
+ * pattern, so text of the right shape but with values the catalog would
+ * refuse, or split at the wrong delimiter, is not read as this entry's.
+ */
+function readTemplate(
+  entry: CatalogEntry,
+  template: string,
+  filled: string,
+): VariableValues | null {
+  const keys: string[] = [];
+  let source = "";
+  let last = 0;
+  for (const match of template.matchAll(PLACEHOLDER)) {
+    const end = match.index + match[0].length;
+    source +=
+      escapeRegExp(template.slice(last, match.index)) +
+      (end === template.length ? "(.+)" : "([^/]+)");
+    keys.push(match[1] ?? "");
+    last = end;
+  }
+  source += escapeRegExp(template.slice(last));
+  const match = new RegExp(`^${source}$`).exec(filled);
+  if (match === null) return null;
+  const values = Object.fromEntries(
+    keys.map((key, index) => [key, match[index + 1] ?? ""]),
+  );
+  const valid = keys.every((key) => {
+    const variable = entry.variables.find((v) => v.key === key);
+    return (
+      variable !== undefined &&
+      variableProblem(variable, values[key] ?? "") === null
+    );
+  });
+  return valid ? values : null;
+}
+
+function escapeRegExp(text: string): string {
+  return text.replace(/[.*+?^${}()|[\]\\]/g, "\\$&");
+}
+
+/**
+ * The variable values a rule was built from, read back out of it, with the
+ * alternative it was made from under SUBJECT_CHOICE. Only choices of the
+ * rule's own match kind are tried.
  *
  * Editing shows what the rule says, and the rule is all there is: the values
  * someone typed to make it are not stored anywhere else.
  */
 export function valuesFromSubject(
   entry: CatalogEntry,
-  subject: string,
+  rule: { subject: string; matchKind: string },
 ): VariableValues {
-  const keys: string[] = [];
-  const pattern = entry.subject.template.replace(
-    PLACEHOLDER,
-    (_, key: string) => {
-      keys.push(key);
-      return "([^/]+)";
-    },
+  const { template, wildcard, alternatives } = entry.subject;
+  const choices = [{ key: undefined, template, wildcard }, ...alternatives];
+  const wildcardRule = rule.matchKind === "wildcard";
+  const stem = wildcardRule ? rule.subject.replace(/\*$/, "") : rule.subject;
+  for (const choice of choices) {
+    if (choice.wildcard !== wildcardRule) continue;
+    const values = readTemplate(entry, choice.template, stem);
+    if (values === null) continue;
+    return choice.key === undefined
+      ? values
+      : { ...values, [SUBJECT_CHOICE]: choice.key };
+  }
+  return {};
+}
+
+/**
+ * The platform-tier values an issuer was built from, such as a cluster's
+ * project, location and name. Empty for an entry whose issuer is a constant.
+ */
+export function valuesFromIssuer(
+  entry: CatalogEntry,
+  issuer: string,
+): VariableValues {
+  return readTemplate(entry, entry.issuer.value, issuer) ?? {};
+}
+
+/**
+ * The catalog entry a trusted issuer came from. An entry whose issuer varies
+ * per platform, such as one per cluster, produces many issuers, so the match
+ * is on the template rather than on its text.
+ */
+export function catalogEntryForIssuer(
+  entries: CatalogEntry[],
+  issuer: string,
+): CatalogEntry | undefined {
+  return entries.find(
+    (entry) => readTemplate(entry, entry.issuer.value, issuer) !== null,
   );
-  const escaped = pattern
-    .split("([^/]+)")
-    .map((part) => part.replace(/[.*+?^${}()|[\]\\]/g, "\\$&"))
-    .join("([^/]+)");
-  const stem = entry.subject.wildcard ? subject.replace(/\*$/, "") : subject;
-  const match = new RegExp(`^${escaped}$`).exec(stem);
-  if (match === null) return {};
-  return Object.fromEntries(
-    keys.map((key, index) => [key, match[index + 1] ?? ""]),
-  );
+}
+
+/**
+ * The issuer and key URL these values make, or null while any platform-tier
+ * value they need is missing or invalid. Identical to the entry's own for an
+ * entry whose issuer is a constant.
+ */
+export function platformEndpoints(
+  entry: CatalogEntry,
+  values: VariableValues,
+): { issuer: string; jwksUri: string } | null {
+  const issuer = fillTemplate(entry, entry.issuer.value, values);
+  const jwksUri = fillTemplate(entry, entry.jwksUri.value, values);
+  if (issuer === null || jwksUri === null) return null;
+  return { issuer, jwksUri };
 }

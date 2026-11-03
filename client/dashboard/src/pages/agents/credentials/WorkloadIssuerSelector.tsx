@@ -44,6 +44,7 @@ export function WorkloadIssuerSelector({
       setValues((current) => ({ ...current, [key]: value })),
     agentName: "",
     computed: {},
+    servers: [],
     issuerPicker: null,
     ruleConflict: null,
   };

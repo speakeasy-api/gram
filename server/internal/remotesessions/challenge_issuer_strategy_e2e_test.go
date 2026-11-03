@@ -499,12 +499,12 @@ func TestRemoteLoginCallback_DeniedEchoesOnlyRegisteredErrorCodes(t *testing.T) 
 	_, _, w, err := driveSyntheticLogin(t, "denied-registered", scopelessToken,
 		withCallbackQuery(func(q url.Values) {
 			q.Del("code")
-			q.Set("error", "access_denied")
+			q.Set("error", "server_error")
 		}),
 	)
 	require.Error(t, err)
 	require.NotEqual(t, http.StatusSeeOther, w.Code)
-	require.Contains(t, err.Error(), "remote authn challenge denied: access_denied")
+	require.Contains(t, err.Error(), "remote authn challenge denied: server_error")
 
 	_, _, w, err = driveSyntheticLogin(t, "denied-unregistered", scopelessToken,
 		withCallbackQuery(func(q url.Values) {
@@ -547,4 +547,20 @@ func TestRemoteLoginCallback_BareStateDoesNotConsumeLogin(t *testing.T) {
 	})
 	require.NoError(t, err)
 	require.NotEqual(t, uuid.Nil, session.ID)
+}
+
+func TestRemoteLoginCallback_CancellationRejectsWrongIssuer(t *testing.T) {
+	t.Parallel()
+	spy := &exchangeSpy{}
+	_, _, response, err := driveSyntheticLogin(t, "cancel-wrong-issuer", spy.handler(),
+		withIssParameterSupported(true),
+		withCallbackQuery(func(q url.Values) {
+			q.Del("code")
+			q.Set("error", "access_denied")
+			q.Set("iss", "https://untrusted.example")
+		}),
+	)
+	require.ErrorContains(t, err, "expected issuer")
+	require.Empty(t, response.Header().Get("Location"))
+	require.Zero(t, spy.count())
 }

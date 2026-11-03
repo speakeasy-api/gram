@@ -33,11 +33,10 @@ func TestKitInferenceLiveAdmissionAndCaptureOwnership(t *testing.T) {
 	core := newProvisioningCore(t, db)
 	assistant, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Inference", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil)
 	require.NoError(t, err)
-	trigger, err := core.resolveDashboardTriggerInstance(t.Context(), "org-test", project, assistant.ID, assistant.Name)
+	_, err = core.resolveDashboardTriggerInstance(t.Context(), "org-test", project, assistant.ID, assistant.Name)
 	require.NoError(t, err)
-	resolution, err := core.identities.Resolve(t.Context(), db, "org-test", project, assistant.ID, trigger)
+	resolution, err := core.identities.ResolveRuntime(t.Context(), db, "org-test", project, assistant.ID)
 	require.NoError(t, err)
-	require.NotNil(t, resolution.Identity)
 	thread := seedThreadWithEvent(t, db, assistant.ID, "inference", "inference", eventStatusPending)
 	queries := assistantrepo.New(db)
 	require.NoError(t, queries.SetAssistantDesiredRuntimeVersionForTest(t.Context(), assistantrepo.SetAssistantDesiredRuntimeVersionForTestParams{ProjectID: project, AssistantID: assistant.ID, RuntimeVersion: 3}))
@@ -54,7 +53,7 @@ func TestKitInferenceLiveAdmissionAndCaptureOwnership(t *testing.T) {
 	subject := "runtime-generation-one"
 	persist := func(subject string) {
 		t.Helper()
-		metadata, err := json.Marshal(map[string]any{"workload": map[string]any{"issuer_id": issuerID, "subject": subject, "identity": resolution.Identity}})
+		metadata, err := json.Marshal(map[string]any{"workload": map[string]any{"issuer_id": issuerID, "subject": subject, "identity": resolution}})
 		require.NoError(t, err)
 		require.NoError(t, queries.UpdateAssistantRuntimeMetadata(t.Context(), assistantrepo.UpdateAssistantRuntimeMetadataParams{ProjectID: project, RuntimeID: runtime, BackendMetadataJson: metadata}))
 	}
@@ -64,7 +63,7 @@ func TestKitInferenceLiveAdmissionAndCaptureOwnership(t *testing.T) {
 	authorize := func(subject string) (context.Context, error) {
 		ac := &contextvalues.AuthContext{ActiveOrganizationID: "org-test", ProjectID: &project}
 		ctx := contextvalues.WithAuthenticatedActor(t.Context(), ac, urn.NewWorkloadPrincipal(issuerID, subject))
-		ctx = contextvalues.WithWorkloadAgent(ctx, urn.NewPrincipal(urn.PrincipalTypeAgent, resolution.Identity.AgentID.String()))
+		ctx = contextvalues.WithWorkloadAgent(ctx, urn.NewPrincipal(urn.PrincipalTypeAgent, resolution.AgentID.String()))
 		return manager.AuthorizeKitWorkload(ctx)
 	}
 	ctx, err := authorize(subject)
@@ -119,7 +118,7 @@ func TestKitInferenceLiveAdmissionAndCaptureOwnership(t *testing.T) {
 	ctx, err = authorize(subject)
 	require.NoError(t, err)
 	require.True(t, assistanttokens.InferenceTranscriptOwned(ctx))
-	_, err = agentrepo.New(db).SuspendAgent(t.Context(), agentrepo.SuspendAgentParams{OrganizationID: "org-test", ID: resolution.Identity.AgentID})
+	_, err = agentrepo.New(db).SuspendAgent(t.Context(), agentrepo.SuspendAgentParams{OrganizationID: "org-test", ID: resolution.AgentID})
 	require.NoError(t, err)
 	_, err = authorize(subject)
 	require.Error(t, err, "current identity eligibility is checked on every request")

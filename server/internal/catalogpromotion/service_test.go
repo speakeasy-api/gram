@@ -16,6 +16,7 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
+	"github.com/speakeasy-api/gram/server/internal/catalogauth"
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion/repo"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/dns"
@@ -625,4 +626,96 @@ func TestPromotionUnusedHealthOverrideAudit(t *testing.T) {
 	require.NoError(t, json.Unmarshal(event.Metadata, &metadata))
 	require.False(t, metadata.EligibilityOverridden)
 	require.Equal(t, "eligible", metadata.EligibilityReason)
+}
+
+func TestPromotionPublicTextMatchesCatalogueSchema(t *testing.T) {
+	t.Parallel()
+	for _, field := range []string{"title", "description"} {
+		for _, tc := range []struct {
+			name, value string
+			valid       bool
+		}{
+			{name: "short", value: "Public example service", valid: true},
+			{name: "100 ASCII", value: strings.Repeat("a", 100), valid: true},
+			{name: "101 ASCII", value: strings.Repeat("a", 101)},
+			{name: "126 ASCII", value: strings.Repeat("a", 126)},
+			{name: "100 Unicode", value: strings.Repeat("界", 100), valid: true},
+			{name: "100 supplementary", value: strings.Repeat("🌍", 100), valid: true},
+			{name: "101 supplementary", value: strings.Repeat("🌍", 101)},
+		} {
+			t.Run(field+"/"+tc.name, func(t *testing.T) {
+				t.Parallel()
+				f := newPromotionFixture(t)
+				f.health.failures = 1
+				candidate, err := f.service.GetCandidate(t.Context(), f.target)
+				require.NoError(t, err)
+				require.True(t, candidate.CanOverrideEligibility())
+				f.request.OverrideEligibility = true
+				expected := ErrPublicDescriptionTooLong
+				if field == "title" {
+					f.request.Public.Title = tc.value
+					expected = ErrPublicTitleTooLong
+				} else {
+					f.request.Public.Description = tc.value
+				}
+				record, err := buildRecord(f.request.Public, "streamable-http")
+				require.NoError(t, err)
+				require.Equal(t, tc.valid, len(f.service.registry.Validate(record)) == 0, "promotion validation must match the pinned catalogue schema")
+				_, err = f.promote(t)
+				if tc.valid {
+					require.NoError(t, err)
+				} else {
+					require.ErrorIs(t, err, expected)
+					require.ErrorIs(t, err, ErrInvalid)
+					require.NotContains(t, err.Error(), tc.value)
+				}
+			})
+		}
+	}
+}
+
+func TestPromotionPersistsAuthEvidenceAndReplaysWithoutRediscovery(t *testing.T) {
+	t.Parallel()
+	f := newPromotionFixture(t)
+	evidence := catalogauth.Discovery{SupportsCIMD: true, AuthSetup: "cimd", Status: "complete"}
+	f.request.Public.AuthMode = "oauth"
+	f.request.AuthDiscovery = evidence
+	delivered := &recordingDelivery{}
+	f.service.delivery = delivered
+	result, err := f.promote(t)
+	require.NoError(t, err)
+	require.Equal(t, &evidence, result.AuthDiscovery)
+	entry, err := f.service.registry.GetByName(t.Context(), f.request.Public.Name)
+	require.NoError(t, err)
+	require.Empty(t, f.service.registry.Validate(entry.Data))
+	var record struct {
+		Meta map[string]struct {
+			SupportsDCR  bool   `json:"supportsDcr"`
+			SupportsCIMD bool   `json:"supportsCimd"`
+			AuthSetup    string `json:"authSetup"`
+		} `json:"_meta"`
+	}
+	require.NoError(t, json.Unmarshal(entry.Data, &record))
+	require.True(t, record.Meta["com.speakeasy.ai/catalog"].SupportsCIMD)
+	require.Equal(t, "cimd", record.Meta["com.speakeasy.ai/catalog"].AuthSetup)
+	require.NotContains(t, string(entry.Data), f.target.OrganizationID)
+	f.request.AuthDiscovery = catalogauth.Unknown()
+	// An unavailable discovery policy cannot erase or delay a completed receipt's evidence.
+	f.service.policy = nil
+	prepared, err := f.service.PreparePublication(t.Context(), f.request)
+	require.NoError(t, err)
+	require.Equal(t, evidence, prepared.AuthDiscovery)
+	f.request = prepared
+	replay, err := f.promote(t)
+	require.NoError(t, err)
+	require.Equal(t, result.RegistryEntryID, replay.RegistryEntryID)
+	require.Equal(t, &evidence, replay.AuthDiscovery)
+	require.NoError(t, f.service.Dispatch(t.Context()))
+	require.Len(t, delivered.guides, 1)
+	require.Equal(t, evidence, delivered.guides[0].AuthDiscovery)
+	f.request.Public.Description = "Different reviewed metadata"
+	f.request, err = f.service.PreparePublication(t.Context(), f.request)
+	require.NoError(t, err)
+	_, err = f.promote(t)
+	require.ErrorIs(t, err, ErrConflict)
 }

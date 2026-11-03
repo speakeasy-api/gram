@@ -77,7 +77,7 @@ func kitGKEBackendFixture(t *testing.T) (*KitGKERuntimeBackend, *dynamicfake.Fak
 			labels[gkeClaimUIDLabel] = string(obj.GetUID())
 			pod.SetLabels(labels)
 			pod.SetAnnotations(obj.GetAnnotations())
-			template, err := client.Tracker().Get(kitTemplateGVR, k.config.GKE.Namespace, kitGKEName(r))
+			template, err := client.Tracker().Get(kitTemplateGVR, k.config.GKE.Namespace, kitGKETemplateName(kitGKEName(r)))
 			require.NoError(t, err)
 			templateObject, ok := template.(*unstructured.Unstructured)
 			require.True(t, ok)
@@ -242,11 +242,18 @@ func TestKitGKEBackendCheckpointRestorePersistsAuthority(t *testing.T) {
 	require.True(t, apierrors.IsNotFound(err))
 	_, err = kitGKETLSConfig(state.Metadata.TLSCertificate, kitGKEName(r)+".kit.internal")
 	require.NoError(t, err)
-	template, err := client.Resource(kitTemplateGVR).Namespace(k.config.GKE.Namespace).Get(t.Context(), kitGKEName(r), metav1.GetOptions{})
+	template, err := client.Resource(kitTemplateGVR).Namespace(k.config.GKE.Namespace).Get(t.Context(), kitGKETemplateName(kitGKEName(r)), metav1.GetOptions{})
 	require.NoError(t, err)
 	selected, _, err := unstructured.NestedString(template.Object, "spec", "podTemplate", "metadata", "annotations", "podsnapshot.gke.io/ps-name")
 	require.NoError(t, err)
 	require.Equal(t, "verified-snapshot", selected)
+	require.Equal(t, template.GetName(), state.Metadata.TemplateName)
+	claim, err := client.Resource(gkeSandboxClaimGVR).Namespace(k.config.GKE.Namespace).Get(t.Context(), kitGKEName(r), metav1.GetOptions{})
+	require.NoError(t, err)
+	ref, found, err := unstructured.NestedString(claim.Object, "spec", "sandboxTemplateRef", "name")
+	require.NoError(t, err)
+	require.True(t, found)
+	require.Equal(t, template.GetName(), ref)
 }
 func TestKitGKEBackendCheckpointRejectsColdFallback(t *testing.T) {
 	t.Parallel()
@@ -636,4 +643,39 @@ func TestKitGKECallerGenerationIsScopedAndStable(t *testing.T) {
 	repeated, err := NewKitGKERuntimeBackend(defaults.config)
 	require.NoError(t, err)
 	require.Equal(t, defaults.fingerprint, repeated.fingerprint)
+}
+
+func TestKitGKERejectsLeftoverLegacyTemplate(t *testing.T) {
+	t.Parallel()
+	k, client, r, _ := kitGKEBackendFixture(t)
+	template := kitObject("SandboxTemplate", "extensions.agents.x-k8s.io/v1alpha1", kitGKEName(r), k.identity(r))
+	require.NoError(t, client.Tracker().Create(kitTemplateGVR, template, k.config.GKE.Namespace))
+	_, err := k.Ensure(t.Context(), r)
+	require.ErrorContains(t, err, "unrecorded")
+}
+
+func TestKitGKEReapOriginalTemplateName(t *testing.T) {
+	t.Parallel()
+	k, client, r, _ := kitGKEBackendFixture(t)
+	result, err := k.Ensure(t.Context(), r)
+	require.NoError(t, err)
+	r.BackendMetadataJSON = result.BackendMetadataJSON
+	state, obj, err := k.loadAuthority(t.Context(), r)
+	require.NoError(t, err)
+	template, err := client.Tracker().Get(kitTemplateGVR, k.config.GKE.Namespace, state.Metadata.TemplateName)
+	require.NoError(t, err)
+	require.NoError(t, client.Tracker().Delete(kitTemplateGVR, k.config.GKE.Namespace, state.Metadata.TemplateName))
+	legacyTemplate, ok := template.(*unstructured.Unstructured)
+	require.True(t, ok)
+	legacyTemplate.SetName(kitGKEName(r))
+	require.NoError(t, client.Tracker().Create(kitTemplateGVR, template, k.config.GKE.Namespace))
+	state.Metadata.TemplateName = ""
+	_, err = k.saveAuthority(t.Context(), obj, state)
+	require.NoError(t, err)
+	r.BackendMetadataJSON, err = json.Marshal(state.Metadata)
+	require.NoError(t, err)
+	r.Retired = true
+	require.NoError(t, k.Reap(t.Context(), r))
+	_, err = client.Tracker().Get(kitTemplateGVR, k.config.GKE.Namespace, kitGKEName(r))
+	require.True(t, apierrors.IsNotFound(err))
 }

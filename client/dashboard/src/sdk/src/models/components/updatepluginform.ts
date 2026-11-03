@@ -3,8 +3,13 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 
 export type UpdatePluginForm = {
+  /**
+   * Whether changes to this plugin publish to the marketplace automatically. Omit to keep the current setting. Turning it off is refused while the plugin has changes that haven't been synced, and the slug can't change while it is off.
+   */
+  autoSyncEnabled?: boolean | undefined;
   /**
    * Updated description.
    */
@@ -22,6 +27,7 @@ export type UpdatePluginForm = {
 
 /** @internal */
 export type UpdatePluginForm$Outbound = {
+  auto_sync_enabled?: boolean | undefined;
   description?: string | undefined;
   id: string;
   name: string;
@@ -32,12 +38,20 @@ export type UpdatePluginForm$Outbound = {
 export const UpdatePluginForm$outboundSchema: z.ZodMiniType<
   UpdatePluginForm$Outbound,
   UpdatePluginForm
-> = z.object({
-  description: z.optional(z.string()),
-  id: z.string(),
-  name: z.string(),
-  slug: z.string(),
-});
+> = z.pipe(
+  z.object({
+    autoSyncEnabled: z.optional(z.boolean()),
+    description: z.optional(z.string()),
+    id: z.string(),
+    name: z.string(),
+    slug: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      autoSyncEnabled: "auto_sync_enabled",
+    });
+  }),
+);
 
 export function updatePluginFormToJSON(
   updatePluginForm: UpdatePluginForm,

@@ -4,7 +4,7 @@ import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { GramError } from "@gram/client/models/errors/gramerror.js";
 import { mcpServerUpdateForm } from "@/lib/mcpServerUpdateForm";
 
-type SdkClient = Pick<Gram, "mcpServers" | "toolsets">;
+type SdkClient = Pick<Gram, "mcpServers">;
 
 const UNSUPPORTED_VISIBILITY =
   "This server's visibility is not supported by this version of Speakeasy. Refresh the page before editing.";
@@ -38,13 +38,13 @@ export async function linkMcpServerUserSessionIssuer(
   return await updateServerIssuer(client, latest, userSessionIssuerId, options);
 }
 
-// Falls back to the toolset call only while the toolset has no canonical MCP server.
+// A toolset's session issuer lives on its canonical MCP server, which shares the toolset's id.
 export async function linkToolsetUserSessionIssuer(
   client: SdkClient,
-  toolset: { id: string; slug: string },
+  toolset: { id: string },
   userSessionIssuerId: string,
   options?: RequestOptions,
-): Promise<McpServer | undefined> {
+): Promise<McpServer> {
   let canonical: McpServer | undefined;
   try {
     const server = await client.mcpServers.get(
@@ -60,23 +60,15 @@ export async function linkToolsetUserSessionIssuer(
       throw error;
     }
   }
-
-  if (canonical) {
-    return await updateServerIssuer(
-      client,
-      canonical,
-      userSessionIssuerId,
-      options,
+  if (!canonical) {
+    throw new Error(
+      "This toolset has no hosted MCP server, so a sign-in provider cannot be linked to it.",
     );
   }
-
-  await client.toolsets.setUserSessionIssuer(
-    {
-      slug: toolset.slug,
-      setUserSessionIssuerRequestBody: { userSessionIssuerId },
-    },
-    undefined,
+  return await updateServerIssuer(
+    client,
+    canonical,
+    userSessionIssuerId,
     options,
   );
-  return undefined;
 }

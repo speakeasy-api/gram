@@ -43,7 +43,7 @@ func TestClient_ClientSecretBasic_EncodesCredentialsAndOmitsAssertion(t *testing
 	}
 	for _, form := range tc.stub.recordedTokenForms() {
 		require.Equal(t, oauthwire.GrantTypeClientCredentials, form.Get("grant_type"))
-		require.Equal(t, "okta.apps.read okta.users.read okta.groups.read", form.Get("scope"))
+		require.Equal(t, "okta.apps.read", form.Get("scope"))
 		for _, param := range []string{oauthwire.ParamClientID, oauthwire.ParamClientSecret, oauthwire.ParamClientAssertion, oauthwire.ParamClientAssertionType} {
 			require.False(t, form.Has(param), param)
 		}
@@ -263,7 +263,7 @@ func TestClientFactory_RebuildsOnConfigChange(t *testing.T) {
 func TestFake_RequireClientSecret(t *testing.T) {
 	t.Parallel()
 	const orgURL = "https://a.okta.com"
-	factory := NewFakeFactory(map[string]Fixtures{orgURL: {Users: nil, Apps: nil, AppUsers: nil, AppGroups: nil, Groups: nil, GrantedScopes: []string{"okta.apps.read"}}})
+	factory := NewFakeFactory(map[string]Fixtures{orgURL: {Apps: nil, AppUsers: nil, AppGroups: nil, GrantedScopes: []string{"okta.apps.read"}}})
 	fake := factory.Fake(orgURL)
 	fake.RequireClientSecret("stub-secret", &stubDecrypter{mu: sync.Mutex{}, err: nil, calls: 0})
 
@@ -296,7 +296,7 @@ func TestFake_RequireClientSecret(t *testing.T) {
 func TestFakeFactory_ClientsKeepTheirOwnConfig(t *testing.T) {
 	t.Parallel()
 	const orgURL = "https://a.okta.com"
-	factory := NewFakeFactory(map[string]Fixtures{orgURL: {Users: nil, Apps: nil, AppUsers: nil, AppGroups: nil, Groups: nil, GrantedScopes: []string{"okta.apps.read"}}})
+	factory := NewFakeFactory(map[string]Fixtures{orgURL: {Apps: nil, AppUsers: nil, AppGroups: nil, GrantedScopes: []string{"okta.apps.read"}}})
 	factory.Fake(orgURL).RequireClientSecret("stub-secret", &stubDecrypter{mu: sync.Mutex{}, err: nil, calls: 0})
 
 	good := basicTestConfig("stub-secret")
@@ -316,7 +316,7 @@ func TestFakeFactory_ClientsKeepTheirOwnConfig(t *testing.T) {
 
 func TestFake_SetBearerOnly(t *testing.T) {
 	t.Parallel()
-	fake := NewFake(Fixtures{Users: nil, Apps: nil, AppUsers: nil, AppGroups: nil, Groups: nil, GrantedScopes: []string{"okta.apps.read"}})
+	fake := NewFake(Fixtures{Apps: nil, AppUsers: nil, AppGroups: nil, GrantedScopes: []string{"okta.apps.read"}})
 	fake.SetBearerOnly(true)
 
 	v, err := fake.VerifyScopes(t.Context(), []string{"okta.apps.read"})

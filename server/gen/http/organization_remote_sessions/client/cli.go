@@ -10,6 +10,7 @@ package client
 import (
 	"fmt"
 	"strconv"
+	"unicode/utf8"
 
 	organizationremotesessions "github.com/speakeasy-api/gram/server/gen/organization_remote_sessions"
 	goa "goa.design/goa/v3/pkg"
@@ -17,7 +18,7 @@ import (
 
 // BuildListClientSessionsPayload builds the payload for the
 // organizationRemoteSessions listClientSessions endpoint from CLI flags.
-func BuildListClientSessionsPayload(organizationRemoteSessionsListClientSessionsClientID string, organizationRemoteSessionsListClientSessionsCursor string, organizationRemoteSessionsListClientSessionsLimit string, organizationRemoteSessionsListClientSessionsSessionToken string, organizationRemoteSessionsListClientSessionsApikeyToken string) (*organizationremotesessions.ListClientSessionsPayload, error) {
+func BuildListClientSessionsPayload(organizationRemoteSessionsListClientSessionsClientID string, organizationRemoteSessionsListClientSessionsSearch string, organizationRemoteSessionsListClientSessionsStatus string, organizationRemoteSessionsListClientSessionsCreatedAfter string, organizationRemoteSessionsListClientSessionsCreatedBefore string, organizationRemoteSessionsListClientSessionsSort string, organizationRemoteSessionsListClientSessionsCursor string, organizationRemoteSessionsListClientSessionsLimit string, organizationRemoteSessionsListClientSessionsSessionToken string, organizationRemoteSessionsListClientSessionsApikeyToken string) (*organizationremotesessions.ListClientSessionsPayload, error) {
 	var err error
 	var clientID string
 	{
@@ -25,6 +26,62 @@ func BuildListClientSessionsPayload(organizationRemoteSessionsListClientSessions
 		err = goa.MergeErrors(err, goa.ValidateFormat("client_id", clientID, goa.FormatUUID))
 		if err != nil {
 			return nil, err
+		}
+	}
+	var search *string
+	{
+		if organizationRemoteSessionsListClientSessionsSearch != "" {
+			search = &organizationRemoteSessionsListClientSessionsSearch
+			if utf8.RuneCountInString(*search) > 200 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("search", *search, utf8.RuneCountInString(*search), 200, false))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var status *string
+	{
+		if organizationRemoteSessionsListClientSessionsStatus != "" {
+			status = &organizationRemoteSessionsListClientSessionsStatus
+			if !(*status == "active" || *status == "expired" || *status == "all") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("status", *status, []any{"active", "expired", "all"}))
+			}
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var createdAfter *string
+	{
+		if organizationRemoteSessionsListClientSessionsCreatedAfter != "" {
+			createdAfter = &organizationRemoteSessionsListClientSessionsCreatedAfter
+			err = goa.MergeErrors(err, goa.ValidateFormat("created_after", *createdAfter, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var createdBefore *string
+	{
+		if organizationRemoteSessionsListClientSessionsCreatedBefore != "" {
+			createdBefore = &organizationRemoteSessionsListClientSessionsCreatedBefore
+			err = goa.MergeErrors(err, goa.ValidateFormat("created_before", *createdBefore, goa.FormatDateTime))
+			if err != nil {
+				return nil, err
+			}
+		}
+	}
+	var sort *string
+	{
+		if organizationRemoteSessionsListClientSessionsSort != "" {
+			sort = &organizationRemoteSessionsListClientSessionsSort
+			if !(*sort == "newest" || *sort == "oldest" || *sort == "last_used" || *sort == "expiry") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("sort", *sort, []any{"newest", "oldest", "last_used", "expiry"}))
+			}
+			if err != nil {
+				return nil, err
+			}
 		}
 	}
 	var cursor *string
@@ -59,6 +116,11 @@ func BuildListClientSessionsPayload(organizationRemoteSessionsListClientSessions
 	}
 	v := &organizationremotesessions.ListClientSessionsPayload{}
 	v.ClientID = clientID
+	v.Search = search
+	v.Status = status
+	v.CreatedAfter = createdAfter
+	v.CreatedBefore = createdBefore
+	v.Sort = sort
 	v.Cursor = cursor
 	v.Limit = limit
 	v.SessionToken = sessionToken

@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // Where a shadowed mandatory check ran.
@@ -187,23 +186,21 @@ func isAccessDenial(err error) bool {
 // shadowAuthClientUse records the check for using a resolved client. A
 // personal client a non-user session uses has no connection owner to check
 // yet, so it is recorded as skipped rather than as an invalid check.
-func (s *Service) shadowAuthClientUse(ctx context.Context, organizationID string, legacyAllowed bool, projectID, clientID uuid.UUID, registrationID uuid.NullUUID, clientType string, subject urn.SessionSubject) {
-	if clientType == authClientTypeRemoteSession && subject.Kind != urn.SessionSubjectKindUser {
+func (s *Service) shadowAuthClientUse(ctx context.Context, organizationID string, legacyAllowed bool, projectID, clientID uuid.UUID, registrationID uuid.NullUUID, clientType string, owner string) {
+	if clientType == authClientTypeRemoteSession && owner == "" {
 		s.newMandatoryShadow(ctx, organizationID).recordSkipped(ctx, mandatorySurfaceAuthClient, legacyAllowed, mandatoryReasonNoConnectionOwner, clientID.String(), projectID.String())
 		return
 	}
-	s.shadowMandatory(ctx, mandatorySurfaceAuthClient, organizationID, legacyAllowed, mandatoryAuthClientCheck(projectID, clientID, registrationID, clientType, subject))
+	s.shadowMandatory(ctx, mandatorySurfaceAuthClient, organizationID, legacyAllowed, mandatoryAuthClientCheck(projectID, clientID, registrationID, clientType, owner))
 }
 
 // mandatoryAuthClientCheck is the check for using a resolved client. A
 // personal client is checked against the connection's stored owner and the
 // upstream OAuth client the connection uses.
-func mandatoryAuthClientCheck(projectID, clientID uuid.UUID, registrationID uuid.NullUUID, clientType string, subject urn.SessionSubject) authz.Check {
+func mandatoryAuthClientCheck(projectID, clientID uuid.UUID, registrationID uuid.NullUUID, clientType string, connectionOwner string) authz.Check {
 	owner, upstream := "", ""
 	if clientType == authClientTypeRemoteSession {
-		if subject.Kind == urn.SessionSubjectKindUser {
-			owner = subject.ID
-		}
+		owner = connectionOwner
 		if registrationID.Valid {
 			upstream = registrationID.UUID.String()
 		}
@@ -227,6 +224,41 @@ func (m *mandatoryShadow) callerClass() string {
 // record evaluates check and records whether it agrees with legacyAllowed,
 // today's decision. It never changes the request.
 func (m *mandatoryShadow) record(ctx context.Context, surface string, legacyAllowed bool, check authz.Check) {
+	m.recordDecision(ctx, surface, legacyAllowed, check, func() (authz.MandatoryDecision, error) {
+		return m.authorization.Decide(m.organizationID, check)
+	})
+}
+
+// recordServer records a request that reached server admission: connect is
+// decided under the server's visibility, so
+// a public server's anonymous caller is admitted without a policy. A request
+// denied before admission, such as by a failed identity check, is recorded
+// with record instead.
+func (m *mandatoryShadow) recordServer(ctx context.Context, surface string, legacyAllowed bool, visibility authz.MandatoryServerVisibility, connect authz.Check) {
+	m.recordDecision(ctx, surface, legacyAllowed, connect, func() (authz.MandatoryDecision, error) {
+		return m.authorization.DecideServerAdmission(m.organizationID, visibility, connect)
+	})
+}
+
+// shadowRequireServer is recordServer against today's Require result. Only
+// access denials count as a deny.
+func (m *mandatoryShadow) shadowRequireServer(ctx context.Context, surface string, requireErr error, visibility authz.MandatoryServerVisibility, connect authz.Check) {
+	if requireErr != nil && !isAccessDenial(requireErr) {
+		return
+	}
+	m.recordServer(ctx, surface, requireErr == nil, visibility, connect)
+}
+
+// mandatoryVisibility maps a server's stored visibility to the visibility
+// admission decides under. Anything but public fails closed as private.
+func mandatoryVisibility(public bool) authz.MandatoryServerVisibility {
+	if public {
+		return authz.MandatoryServerPublic
+	}
+	return authz.MandatoryServerPrivate
+}
+
+func (m *mandatoryShadow) recordDecision(ctx context.Context, surface string, legacyAllowed bool, check authz.Check, decide func() (authz.MandatoryDecision, error)) {
 	if m == nil {
 		return
 	}
@@ -237,7 +269,7 @@ func (m *mandatoryShadow) record(ctx context.Context, surface string, legacyAllo
 	var decision authz.MandatoryDecision
 	err := m.err
 	if err == nil {
-		decision, err = m.authorization.Decide(m.organizationID, check)
+		decision, err = decide()
 	}
 	m.emit(ctx, surface, legacyAllowed, check.ResourceID, check.Dimensions[authz.SelectorKeyProjectID], decision, err, "")
 }

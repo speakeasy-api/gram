@@ -164,6 +164,7 @@ type kitGKEBackendMetadata struct {
 	Namespace         string              `json:"namespace"`
 	Fingerprint       string              `json:"compatibility"`
 	ClaimUID          types.UID           `json:"claim_uid"`
+	TemplateName      string              `json:"template_name,omitempty"`
 	TemplateUID       types.UID           `json:"template_uid"`
 	SecretUID         types.UID           `json:"secret_uid"`
 	SecretName        string              `json:"secret_name"`
@@ -278,7 +279,7 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 	for _, step := range []struct {
 		gvr  schema.GroupVersionResource
 		name string
-	}{{gkeSandboxClaimGVR, name}, {kitTemplateGVR, name}} {
+	}{{gkeSandboxClaimGVR, name}, {kitTemplateGVR, kitGKETemplateName(name)}, {kitTemplateGVR, name}} {
 		_, err := k.config.GKE.Dynamic.Resource(step.gvr).Namespace(k.config.GKE.Namespace).Get(ctx, step.name, metav1.GetOptions{})
 		if err == nil {
 			return RuntimeBackendEnsureResult{}, fmt.Errorf("unrecorded Kit GKE resources require fenced operator reconciliation")
@@ -354,7 +355,7 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 	}
 	maps.Copy(podAnnotations, annotations)
 	_ = unstructured.SetNestedStringMap(objects.Template.Object, podAnnotations, "spec", "podTemplate", "metadata", "annotations")
-	m := kitGKEBackendMetadata{ServiceAccountUID: "", Checkpoint: nil, TLSCertificate: in.TLSCertificate, Provisioning: false, CheckpointMarker: string(in.CheckpointMarker), ImageDigest: "", ProxyImageDigest: "", ContainerID: "", AuthorityUID: "", ClaimUID: "", TemplateUID: "", SecretUID: "", PodName: "", PodUID: "", Workload: b.Workload, SecretName: objects.Secret.GetName(), RuntimeID: r.ID, AssistantID: r.AssistantID, ProjectID: r.ProjectID, Version: 3, Namespace: in.Identity.Namespace, Fingerprint: k.fingerprint}
+	m := kitGKEBackendMetadata{TemplateName: objects.Template.GetName(), ServiceAccountUID: "", Checkpoint: nil, TLSCertificate: in.TLSCertificate, Provisioning: false, CheckpointMarker: string(in.CheckpointMarker), ImageDigest: "", ProxyImageDigest: "", ContainerID: "", AuthorityUID: "", ClaimUID: "", TemplateUID: "", SecretUID: "", PodName: "", PodUID: "", Workload: b.Workload, SecretName: objects.Secret.GetName(), RuntimeID: r.ID, AssistantID: r.AssistantID, ProjectID: r.ProjectID, Version: 3, Namespace: in.Identity.Namespace, Fingerprint: k.fingerprint}
 	for _, step := range []struct {
 		gvr schema.GroupVersionResource
 		obj *unstructured.Unstructured
@@ -408,7 +409,7 @@ func (k *KitGKERuntimeBackend) finishColdProvision(ctx context.Context, r assist
 		gvr  schema.GroupVersionResource
 		name string
 		uid  types.UID
-	}{{gkeSandboxClaimGVR, kitGKEName(r), m.ClaimUID}, {kitTemplateGVR, kitGKEName(r), m.TemplateUID}, {kitSecretGVR, m.SecretName, m.SecretUID}, {kitServiceAccountGVR, m.Workload.ServiceAccount, m.ServiceAccountUID}} {
+	}{{gkeSandboxClaimGVR, kitGKEName(r), m.ClaimUID}, {kitTemplateGVR, m.templateName(r), m.TemplateUID}, {kitSecretGVR, m.SecretName, m.SecretUID}, {kitServiceAccountGVR, m.Workload.ServiceAccount, m.ServiceAccountUID}} {
 		if _, err := k.get(ctx, r, step.gvr, step.name, step.uid); err != nil {
 			return RuntimeBackendEnsureResult{}, err
 		}
@@ -565,7 +566,7 @@ func (k *KitGKERuntimeBackend) protocolForLifecycle(ctx context.Context, r assis
 		gvr  schema.GroupVersionResource
 		name string
 		uid  types.UID
-	}{{gkeSandboxClaimGVR, kitGKEName(r), m.ClaimUID}, {kitTemplateGVR, kitGKEName(r), m.TemplateUID}, {kitSecretGVR, m.SecretName, m.SecretUID}, {kitServiceAccountGVR, m.Workload.ServiceAccount, m.ServiceAccountUID}} {
+	}{{gkeSandboxClaimGVR, kitGKEName(r), m.ClaimUID}, {kitTemplateGVR, m.templateName(r), m.TemplateUID}, {kitSecretGVR, m.SecretName, m.SecretUID}, {kitServiceAccountGVR, m.Workload.ServiceAccount, m.ServiceAccountUID}} {
 		if _, err = k.get(ctx, r, s.gvr, s.name, s.uid); err != nil {
 			return nil, err
 		}
@@ -787,7 +788,7 @@ func (k *KitGKERuntimeBackend) invalidateLegacy(ctx context.Context, r assistant
 		uid  types.UID
 	}{
 		{gkeSandboxClaimGVR, kitGKEName(r), m.ClaimUID}, {gkePodGVR, m.PodName, m.PodUID},
-		{kitTemplateGVR, kitGKEName(r), m.TemplateUID}, {kitSecretGVR, m.SecretName, m.SecretUID},
+		{kitTemplateGVR, m.templateName(r), m.TemplateUID}, {kitSecretGVR, m.SecretName, m.SecretUID},
 	}
 	for _, step := range steps {
 		if step.uid == "" {
@@ -853,4 +854,12 @@ func kitGKETLSRenewalDue(certPEM []byte, serverName string, now time.Time) (bool
 		return false, fmt.Errorf("parse Kit TLS renewal certificate: %w", err)
 	}
 	return !now.Add(24 * time.Hour).Before(cert.NotAfter), nil
+}
+
+// Old authorities retain the exact original name for UID-fenced cleanup.
+func (m kitGKEBackendMetadata) templateName(r assistantRuntimeRecord) string {
+	if m.TemplateName != "" {
+		return m.TemplateName
+	}
+	return kitGKEName(r)
 }

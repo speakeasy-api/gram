@@ -42,20 +42,19 @@ func TestWorkloadInference_ManagedCompletion(t *testing.T) {
 	project := f.fx.target.ProjectID
 	a, err := q.CreateAssistant(ctx, assistantrepo.CreateAssistantParams{ProjectID: project, OrganizationID: f.fx.orgID, CreatedByUserID: conv.ToPGText(f.fx.userID), Name: "Managed completion", Model: "test/model", WarmTtlSeconds: 300, MaxConcurrency: 1, Status: "active"})
 	require.NoError(t, err)
-	trigger, err := triggerrepo.New(f.ti.conn).CreateTriggerInstance(ctx, triggerrepo.CreateTriggerInstanceParams{OrganizationID: f.fx.orgID, ProjectID: project, DefinitionSlug: "manual", Name: "Managed root", TargetKind: "assistant", TargetRef: a.ID.String(), TargetDisplay: a.Name, ConfigJson: []byte(`{}`), Status: "active"})
+	_, err = triggerrepo.New(f.ti.conn).CreateTriggerInstance(ctx, triggerrepo.CreateTriggerInstanceParams{OrganizationID: f.fx.orgID, ProjectID: project, DefinitionSlug: "manual", Name: "Managed root", TargetKind: "assistant", TargetRef: a.ID.String(), TargetDisplay: a.Name, ConfigJson: []byte(`{}`), Status: "active"})
 	require.NoError(t, err)
 	identities := assistantidentity.New(f.ti.serverURL.String(), f.ti.audit)
 	tx := testenv.BeginTx(t, ctx, f.ti.conn)
 	require.NoError(t, identities.Provision(ctx, tx, assistantidentity.ProvisionParams{OrganizationID: f.fx.orgID, ProjectID: project, AssistantID: a.ID, ActorUserID: f.fx.userID}))
 	require.NoError(t, tx.Commit(ctx))
-	identity, err := identities.Resolve(ctx, f.ti.conn, f.fx.orgID, project, a.ID, trigger.ID)
+	identity, err := identities.ResolveRuntime(ctx, f.ti.conn, f.fx.orgID, project, a.ID)
 	require.NoError(t, err)
-	require.NotNil(t, identity.Identity)
 	// The generic workload fixture starts with an organization-wide agent.
 	// Provision a dedicated assistant agent through the real identity service,
 	// then assign the projected workload to that exact project/owner identity.
 	unassignWorkloadAgent(t, ctx, f.ti, f.assignmentID)
-	f.agentID = identity.Identity.AgentID
+	f.agentID = identity.AgentID
 	f.assignmentID = assignAgentToWorkload(t, ctx, f.ti, f.fx.orgID, f.issuerID, f.subject, f.agentID)
 	agentGrant, ownerGrant := enableWorkloadInference(t, f)
 
@@ -69,7 +68,7 @@ func TestWorkloadInference_ManagedCompletion(t *testing.T) {
 	require.NoError(t, err)
 	persist := func(subject string) {
 		t.Helper()
-		metadata, err := json.Marshal(map[string]any{"workload": map[string]any{"issuer_id": f.issuerID, "subject": subject, "identity": identity.Identity}})
+		metadata, err := json.Marshal(map[string]any{"workload": map[string]any{"issuer_id": f.issuerID, "subject": subject, "identity": identity}})
 		require.NoError(t, err)
 		require.NoError(t, q.UpdateAssistantRuntimeMetadata(ctx, assistantrepo.UpdateAssistantRuntimeMetadataParams{ProjectID: project, RuntimeID: runtime.ID, BackendMetadataJson: metadata}))
 	}

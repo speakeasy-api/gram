@@ -1,6 +1,7 @@
 import type { ReactNode } from "react";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { IdentityChainingSection } from "./IdentityChainingSection";
 
@@ -53,27 +54,11 @@ vi.mock("@/lib/remote-identity", () => ({
     refetch: state.clientsRefetch,
   }),
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
-  useRoutes: () => ({
-    remoteIdentityProviders: {
-      clientDetail: {
-        overview: {
-          href: (issuerId: string, clientId: string) =>
-            `/rip/${issuerId}/clients/${clientId}/overview`,
-        },
-      },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@/pages/org/identity-provider/tabs", () => ({
   identityProvidersHref: () => "?tab=identity-providers",
-}));
-vi.mock("react-router", () => ({
-  Link: ({ children, to }: { children: ReactNode; to: string }) => (
-    <a href={to}>{children}</a>
-  ),
-  useLocation: () => ({ hash: state.hash }),
 }));
 vi.mock("@/hooks/useFeatureFlag", () => ({
   useFeatureFlag: (flag: string) => ({
@@ -151,6 +136,13 @@ beforeEach(() => {
   state.orgAdmin = true;
 });
 
+// The page URL carries the deep-link hash the section scrolls to.
+function Router({ children }: { children: ReactNode }) {
+  return (
+    <MemoryRouter initialEntries={[`/${state.hash}`]}>{children}</MemoryRouter>
+  );
+}
+
 afterEach(() => {
   cleanup();
   vi.restoreAllMocks();
@@ -158,7 +150,7 @@ afterEach(() => {
 
 describe("IdentityChainingSection", () => {
   it("is its own section on an organization issuer Speakeasy can vouch for", () => {
-    render(<IdentityChainingSection mcpServer={server} />);
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
     expect(
       screen.getByRole("heading", { name: "Enterprise Managed Authorization" }),
     ).toBeTruthy();
@@ -174,7 +166,7 @@ describe("IdentityChainingSection", () => {
 
   it("says a project sign-in can't chain, and where to change it", () => {
     state.issuer = { id: "issuer", projectId: "project", slug: "team-only" };
-    render(<IdentityChainingSection mcpServer={server} />);
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
     expect(screen.queryByTestId("identity-chaining")).toBeNull();
     expect(
       screen.getByText(/needs an organization-level sign-in/).textContent,
@@ -184,12 +176,12 @@ describe("IdentityChainingSection", () => {
       screen
         .getByRole("link", { name: "Change in Sessions" })
         .getAttribute("href"),
-    ).toBe("#sessions");
+    ).toBe("/#sessions");
   });
 
   it("points at setting Speakeasy up when nothing can vouch yet", () => {
     state.speakeasy = { state: "setup_required" };
-    render(<IdentityChainingSection mcpServer={server} />);
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
     expect(
       screen.getByRole("heading", { name: "Enterprise Managed Authorization" }),
     ).toBeTruthy();
@@ -203,7 +195,7 @@ describe("IdentityChainingSection", () => {
 
   it("sends a verified-domain gap to the Single sign-on tab", () => {
     state.speakeasy = { state: "verified_domain_required" };
-    render(<IdentityChainingSection mcpServer={server} />);
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
     expect(
       screen
         .getByRole("link", {
@@ -221,7 +213,7 @@ describe("IdentityChainingSection", () => {
   it("asks someone who isn't an org admin to have Speakeasy set up", () => {
     state.orgAdmin = false;
     state.speakeasy = { state: "setup_required" };
-    render(<IdentityChainingSection mcpServer={server} />);
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
     expect(
       screen.queryByRole("link", {
         name: "Set up Speakeasy as an identity provider",
@@ -236,7 +228,7 @@ describe("IdentityChainingSection", () => {
 
   it("holds its place while Speakeasy's issuer loads", () => {
     state.speakeasyStatus = "loading";
-    render(<IdentityChainingSection mcpServer={server} />);
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
     expect(screen.getByRole("status").textContent).toBe(
       "Loading Enterprise Managed Authorization…",
     );
@@ -244,7 +236,7 @@ describe("IdentityChainingSection", () => {
 
   it("says when Speakeasy's issuer couldn't load, with a retry", () => {
     state.speakeasyStatus = "error";
-    render(<IdentityChainingSection mcpServer={server} />);
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
     expect(
       screen.getByText(
         "Couldn’t load Enterprise Managed Authorization for this server.",
@@ -257,7 +249,7 @@ describe("IdentityChainingSection", () => {
   it("keeps an on binding manageable for someone who can't read Speakeasy's issuer", () => {
     state.speakeasyStatus = "disabled";
     state.orgAdmin = false;
-    render(<IdentityChainingSection mcpServer={server} />);
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
     expect(
       screen.getByRole("heading", { name: "Enterprise Managed Authorization" }),
     ).toBeTruthy();
@@ -318,7 +310,7 @@ describe("IdentityChainingSection", () => {
     ],
   ])("is hidden when %s", (_name, arrange) => {
     arrange();
-    render(<IdentityChainingSection mcpServer={server} />);
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
     expect(
       screen.queryByRole("heading", {
         name: "Enterprise Managed Authorization",
@@ -329,7 +321,7 @@ describe("IdentityChainingSection", () => {
   it("stays hidden when Speakeasy's issuer is unavailable even with ema-providers on", () => {
     state.flags = { oktaConnections: false, emaProviders: true };
     state.speakeasy = { state: "unavailable" };
-    render(<IdentityChainingSection mcpServer={server} />);
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
     expect(
       screen.queryByRole("heading", {
         name: "Enterprise Managed Authorization",
@@ -339,7 +331,7 @@ describe("IdentityChainingSection", () => {
 
   it("shows when Speakeasy's issuer is offered while ema-providers is off", () => {
     state.flags = { oktaConnections: false, emaProviders: false };
-    render(<IdentityChainingSection mcpServer={server} />);
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
     expect(
       screen.getByRole("heading", {
         name: "Enterprise Managed Authorization",
@@ -365,7 +357,7 @@ describe("IdentityChainingSection", () => {
     state.flags = { oktaConnections: false, emaProviders: false };
     state.speakeasy = { state: "unavailable" };
     arrange();
-    render(<IdentityChainingSection mcpServer={server} />);
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
     expect(
       screen.queryByRole("heading", {
         name: "Enterprise Managed Authorization",
@@ -389,7 +381,7 @@ describe("IdentityChainingSection", () => {
     ],
   ])("holds its place while %s", (_name, arrange) => {
     arrange();
-    render(<IdentityChainingSection mcpServer={server} />);
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
     expect(
       screen.getByRole("heading", { name: "Enterprise Managed Authorization" }),
     ).toBeTruthy();
@@ -402,7 +394,7 @@ describe("IdentityChainingSection", () => {
   it("says when it couldn't load, with a retry", () => {
     state.url = undefined;
     state.sourceError = true;
-    render(<IdentityChainingSection mcpServer={server} />);
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
     expect(
       screen.getByText(
         "Couldn’t load Enterprise Managed Authorization for this server.",
@@ -414,7 +406,7 @@ describe("IdentityChainingSection", () => {
 
   it("says when the clients couldn't load, instead of asking for a client", () => {
     state.clientsError = true;
-    render(<IdentityChainingSection mcpServer={server} />);
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
     expect(
       screen.getByText(
         "Couldn’t load Enterprise Managed Authorization for this server.",
@@ -438,7 +430,10 @@ describe("IdentityChainingSection", () => {
       cb(0);
       return 1;
     });
-    const { rerender } = render(<IdentityChainingSection mcpServer={server} />);
+    const { rerender } = render(
+      <IdentityChainingSection mcpServer={server} />,
+      { wrapper: Router },
+    );
     expect(scroll).not.toHaveBeenCalled();
     state.clientsLoading = false;
     rerender(<IdentityChainingSection mcpServer={server} />);

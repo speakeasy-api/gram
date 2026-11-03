@@ -16,33 +16,25 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-// SetHostedNetworkAccessInTransaction changes only the canonical hosted policy
+// SetHostedNetworkAccessInTransaction changes only the network mode of a toolset's canonical wrapper
 // within a caller-owned transaction. The caller must authorize the target and
-// hold the organization's ingress and project admission locks first.
-func SetHostedNetworkAccessInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor *contextvalues.AuthContext, toolsetID uuid.UUID, mode networkaccess.Mode) error {
+// hold the organization's ingress and project admission locks first, and reconcile
+// the returned custom domains, whose root was cleared, after commit.
+func SetHostedNetworkAccessInTransaction(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor *contextvalues.AuthContext, toolsetID uuid.UUID, mode networkaccess.Mode) ([]uuid.UUID, error) {
 	if actor == nil || actor.ProjectID == nil || auditLogger == nil {
-		return oops.E(oops.CodeUnauthorized, nil, "missing hosted MCP actor")
+		return nil, oops.E(oops.CodeUnauthorized, nil, "missing hosted MCP actor")
 	}
-	toolsets := repo.New(tx)
-	candidate, err := toolsets.GetToolsetByIDAndProject(ctx, repo.GetToolsetByIDAndProjectParams{ID: toolsetID, ProjectID: *actor.ProjectID})
+	locked, err := lockHostedToolset(ctx, tx, actor, toolsetID)
 	if err != nil {
-		return oops.E(oops.CodeNotFound, err, "hosted toolset not found")
+		return nil, err
 	}
-	if candidate.OrganizationID != actor.ActiveOrganizationID {
-		return oops.E(oops.CodeNotFound, nil, "hosted toolset not found")
+	written, err := applyHostedServerChange(ctx, tx, auditLogger, hostedActor(actor), locked, hostedServerChange{
+		Name: nil, Visibility: nil, UserSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ClearUserSessionIssuer: false, ToolVariationsGroupID: nil, NetworkAccessMode: &mode,
+	})
+	if err != nil {
+		return nil, err
 	}
-	locked, err := toolsets.GetToolsetForUpdate(ctx, repo.GetToolsetForUpdateParams{Slug: candidate.Slug, ProjectID: *actor.ProjectID})
-	if err != nil || locked.ID != toolsetID || locked.OrganizationID != actor.ActiveOrganizationID {
-		return oops.E(oops.CodeConflict, err, "hosted toolset changed concurrently")
-	}
-	// A mode change leaves visibility and address alone, so no root is cleared.
-	_, err = hostedmcp.Sync(ctx, tx, auditLogger, hostedActor(actor), locked, &mode)
-	return err //nolint:wrapcheck // hostedmcp returns oops errors whose codes reach the caller.
-}
-
-// syncHostedServer must run under the toolset row lock.
-func (s *Service) syncHostedServer(ctx context.Context, tx pgx.Tx, actor *contextvalues.AuthContext, toolset repo.Toolset, requested *networkaccess.Mode) ([]uuid.UUID, error) {
-	return hostedmcp.Sync(ctx, tx, s.audit, hostedActor(actor), toolset, requested) //nolint:wrapcheck // oops errors pass through.
+	return written.ClearedRootDomainIDs, nil
 }
 
 func (s *Service) deleteHostedServer(ctx context.Context, tx pgx.Tx, actor *contextvalues.AuthContext, toolset repo.Toolset) (hostedmcp.DeleteResult, error) {

@@ -9,7 +9,7 @@ import (
 )
 
 func kitTestWorkloadBootstrap() KitLocalBootstrap {
-	return KitLocalBootstrap{Model: "openai/gpt-4.1-mini", AgentsMD: []byte("caller instructions"), GatewayToken: []byte("private-test-token"), MCPJSON: []byte(`{"mcpServers":{}}`), AssertionFile: KitWorkloadAssertionPath, InferenceEndpoint: "https://ai.speakeasy.com/chat/completions", Workload: &KitWorkloadBinding{IssuerID: uuid.New(), Subject: "system:serviceaccount:test:kit-generation", Audience: "https://issuer.example/oauth/usi/test", Identity: assistantidentity.Identity{ProjectID: uuid.New()}}}
+	return KitLocalBootstrap{Model: "openai/gpt-4.1-mini", AgentsMD: []byte("caller instructions"), GatewayToken: []byte("private-test-token"), MCPJSON: []byte(`{"mcpServers":{}}`), AssertionFile: KitWorkloadAssertionPath, InferenceEndpoint: "https://ai.speakeasy.com/chat/completions", Workload: &KitWorkloadBinding{IssuerID: uuid.New(), Subject: "system:serviceaccount:test:kit-generation", Audience: "https://issuer.example/oauth/usi/test", Identity: assistantidentity.RuntimeIdentity{ProjectID: uuid.New()}}}
 }
 
 func TestKitLocalBootstrapContractValidation(t *testing.T) {

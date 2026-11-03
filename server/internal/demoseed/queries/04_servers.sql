@@ -20,7 +20,7 @@ INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url)
 -- (mcp_servers_issuer_required_check); the gateway gets its own so clients
 -- authenticate to it rather than to a member.
 -- session_duration must be a Microseconds-only interval: the user-session
--- mint rejects Months/Days components (see usersessions/minthandler.go).
+-- mint rejects Months components (see conv.PGIntervalToDuration).
 -- The workforce issuer serves one shared authorization server for its MCP
 -- servers at /oauth/usi/{id}. It is left unpinned: this seed runs against
 -- every deployment, and an unpinned issuer URL follows the deployment's own
@@ -64,30 +64,30 @@ INSERT INTO registry_promotion_candidates (id, organization_id, project_id, mcp_
 VALUES (@id::uuid, @org_id::text, @project_id::uuid, @mcp_server_id::uuid, @remote_mcp_server_id::uuid, 'unobserved', false, 'insufficient_evidence', @curation_status::text, clock_timestamp() - make_interval(days => @age_days::integer))
 ON CONFLICT (project_id,mcp_server_id) DO NOTHING;
 
--- Every toolset with an MCP slug owns a canonical hosted wrapper (id = the
--- toolset id) and one endpoint at its address, mirroring its hosting
--- columns. The fresh-id servers above stay separate servers over the same
--- toolsets.
+-- Each hosted toolset owns a canonical wrapper (id = the toolset id) that
+-- holds its hosting state, and one platform endpoint at the wrapper's slug.
+-- The fresh-id servers above stay separate servers over the same toolsets.
 -- name: ServersInsertHostedToolsetMCPServers :exec
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
-                         user_session_issuer_id, tool_variations_group_id,
-                         visibility)
-SELECT t.id, t.project_id, t.name, t.mcp_slug, t.id, t.user_session_issuer_id,
-       t.tool_variations_group_id,
-       CASE WHEN NOT t.mcp_enabled THEN 'disabled'
-            WHEN t.mcp_is_public THEN 'public'
-            ELSE 'private' END
-FROM toolsets t
-WHERE t.project_id = @project_id::uuid AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL;
+                         user_session_issuer_id, visibility)
+SELECT t.id, t.project_id, t.name, v.slug, t.id, v.user_session_issuer_id, v.visibility
+FROM (VALUES
+  (@toolset_1::uuid, @support_mcp_slug::text, NULL::uuid, 'private'),
+  (@toolset_2::uuid, @ops_mcp_slug::text, NULL::uuid, 'private'),
+  (@toolset_3::uuid, @partner_mcp_slug::text, @partner_issuer_id::uuid, 'private'),
+  (@toolset_4::uuid, @discovery_mcp_slug::text, NULL::uuid, 'public')
+) AS v(toolset_id, slug, user_session_issuer_id, visibility)
+JOIN toolsets t ON t.id = v.toolset_id AND t.project_id = @project_id::uuid AND t.deleted IS FALSE;
 
 -- The endpoint id is det_uuid(<name seed> || 'endpoint-hosted-' || slug),
 -- computed in SQL with the same md5 formula as detUUID in names.go.
 -- name: ServersInsertHostedToolsetEndpoints :exec
 INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, custom_domain_id, slug)
 SELECT overlay(overlay(md5(@endpoint_name_prefix::text || t.slug) placing '5' from 13) placing '8' from 17)::uuid,
-       t.project_id, t.id, t.custom_domain_id, t.mcp_slug
-FROM toolsets t
-WHERE t.project_id = @project_id::uuid AND t.deleted IS FALSE AND t.mcp_slug IS NOT NULL;
+       s.project_id, s.id, NULL, s.slug
+FROM mcp_servers s
+JOIN toolsets t ON t.id = s.id AND t.project_id = s.project_id AND t.deleted IS FALSE
+WHERE s.project_id = @project_id::uuid AND s.toolset_id = s.id AND s.deleted IS FALSE;
 
 -- Check Access scenarios on GitHub. Contractors blocks connecting, which
 -- wins over every other role's grant: Mateo (a contractor through the
@@ -160,8 +160,8 @@ WHERE p.organization_id = @org_id::text AND p.project_id = @project_id::uuid
 -- Engineer reaches GitHub through both its role plugin and this one. Other
 -- servers/roles keep their single-match and no-match examples.
 -- name: ServersInsertEngineeringEssentialsPlugin :one
-INSERT INTO plugins (organization_id, project_id, name, slug)
-VALUES (@org_id::text, @project_id::uuid, 'Engineering Essentials', 'engineering-essentials')
+INSERT INTO plugins (organization_id, project_id, name, slug, auto_sync_enabled)
+VALUES (@org_id::text, @project_id::uuid, 'Engineering Essentials', 'engineering-essentials', false)
 RETURNING id;
 
 -- name: ServersInsertEngineeringEssentialsAssignment :exec
@@ -397,9 +397,9 @@ VALUES
    ARRAY['code'], ARRAY['client_secret_basic'], ARRAY['S256'], TRUE,
    'Acme Identity');
 
--- The workforce sign-in is left as it is: pointing it at this fictional
--- provider would send interactive sign-in for every server on it to a
--- provider that doesn't exist. The Services pages still show these vendors.
+-- The workforce sign-in client is left unset: pointing interactive sign-in at
+-- this fictional provider would send every server on it to a provider that
+-- doesn't exist. The Services pages still show these vendors.
 -- name: ServersInsertEMAIdentityProviderClient :exec
 INSERT INTO remote_session_clients
   (id, project_id, organization_id, remote_session_issuer_id, client_id,
@@ -409,6 +409,17 @@ VALUES
    'demo-acme-identity-sign-in', 'DEMO-NOT-VALID-CIPHERTEXT',
    'client_secret_basic', ARRAY['authorization_code', 'refresh_token'],
    ARRAY['openid', 'profile', 'email']);
+
+-- Inbound EMA: the workforce issuer accepts ID-JAGs from Acme Identity. Only
+-- the issuer is linked, never the sign-in client, so interactive sign-in stays
+-- on the organization's own login.
+-- name: ServersTrustEMAIdentityProviderForInboundEMA :execrows
+UPDATE user_session_issuers
+SET trusted_remote_session_issuer_id = @ema_provider::uuid
+WHERE id = @workforce_issuer::uuid
+  AND organization_id = @org_id::text
+  AND project_id IS NULL
+  AND deleted IS FALSE;
 
 -- name: ServersInsertEMARemoteMCPServers :exec
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
@@ -569,7 +580,7 @@ INSERT INTO remote_sessions
 VALUES (@id::uuid,
         'user:' || @user_id::text, @user_session_issuer_id::uuid,
         @remote_session_client_id::uuid,
-        'DEMO-NOT-VALID-CIPHERTEXT', now() + interval '7 days', false,
+        'DEMO-NOT-VALID-CIPHERTEXT', now() + @expires_in::interval, false,
         ARRAY['releases:read'], 'Fictional release account',
         now() - interval '3 days', now() - interval '40 minutes');
 
@@ -737,15 +748,14 @@ VALUES
 -- Typed auth clients, as the upstream OAuth migration records them: Linear's
 -- personal client over its OAuth registration, and one static credential
 -- shared by GitHub and Linear, so the server settings show a shared client
--- and a server offering two. Slack is left undecided about upstream
--- authentication.
+-- and a server offering two. Slack offers none.
 -- The projects delete cascades the clients, their headers and associations.
 -- name: ServersInsertAuthClient :exec
 INSERT INTO mcp_auth_clients
   (id, organization_id, project_id, client_type, source, name,
    remote_session_client_id, client_attachment_scope)
 SELECT @id::uuid, @org_id::text, @project_id::uuid, @client_type::text,
-       'backfill', @name::text, c.id, c.attachment_scope
+       @source::text, @name::text, c.id, c.attachment_scope
 FROM (SELECT 1) AS one
 LEFT JOIN remote_session_clients AS c
   ON c.id = sqlc.narg(remote_session_client_id)::uuid;
@@ -758,20 +768,21 @@ VALUES
   (@id::uuid, @auth_client_id::uuid, @org_id::text, @name::text, TRUE,
    @value::text);
 
+-- name: ServersInsertAuthClientForwardedHeader :exec
+INSERT INTO mcp_auth_client_headers
+  (id, auth_client_id, organization_id, name, is_required, value_from_request_header)
+VALUES
+  (@id::uuid, @auth_client_id::uuid, @org_id::text, @name::text, TRUE,
+   @value_from_request_header::text);
+
 -- name: ServersInsertServerAuthClient :exec
 INSERT INTO mcp_server_auth_clients
   (id, project_id, organization_id, mcp_server_id, auth_client_id,
    client_attachment_scope, source)
 SELECT @id::uuid, @project_id::uuid, @org_id::text, @mcp_server_id::uuid,
-       ac.id, ac.attachment_scope, 'backfill'
+       ac.id, ac.attachment_scope, ac.source
 FROM mcp_auth_clients AS ac
 WHERE ac.id = @auth_client_id::uuid;
-
--- name: ServersMarkRequiresUpstreamAuth :exec
-UPDATE mcp_servers
-SET requires_upstream_auth = TRUE
-WHERE project_id = @project_id::uuid
-  AND id = ANY(@ids::uuid[]);
 
 -- Engineers may use the shared GitHub token; Contractors are blocked from
 -- it on every server that offers it. Cleared by id at the top of the seed.
@@ -786,3 +797,100 @@ FROM (VALUES
 ) AS v(id, slug, scope)
 JOIN organization_roles r
   ON r.organization_id = @org_id::text AND r.workos_slug = v.slug;
+
+-- An app that signs in to Linear without a browser, so it cannot pick a
+-- credential on the consent screen.
+-- name: ServersInsertHeadlessClient :exec
+INSERT INTO user_session_clients
+  (id, project_id, organization_id, user_session_issuer_id, client_id,
+   client_secret_hash, client_name, redirect_uris, client_id_issued_at,
+   token_endpoint_auth_method)
+VALUES
+  (@id::uuid, @project_id::uuid, @org_id::text, @issuer_id::uuid,
+   'gram_demo_client_nightly_report', NULL, 'Nightly report job',
+   ARRAY[]::text[], now() - interval '6 days', 'none');
+
+-- The credential the headless app's sessions use on one server.
+-- name: ServersInsertIssuanceProfile :exec
+INSERT INTO issuance_selection_profiles
+  (id, organization_id, project_id, user_session_issuer_id,
+   user_session_client_id, name)
+VALUES
+  (@id::uuid, @org_id::text, @project_id::uuid, @issuer_id::uuid,
+   @client_id::uuid, @name::text);
+
+-- name: ServersInsertIssuanceProfileChoice :exec
+INSERT INTO upstream_client_selections
+  (id, project_id, organization_id, credential_kind, credential_id,
+   mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth,
+   auth_client_id, auth_client_attachment_scope, source)
+SELECT @id::uuid, @project_id::uuid, @org_id::text, 'issuance_profile',
+       @profile_id::uuid, @mcp_server_id::uuid, ac.remote_session_client_id,
+       NULL, FALSE, ac.id, ac.attachment_scope, 'issuance'
+FROM mcp_auth_clients AS ac
+WHERE ac.id = @auth_client_id::uuid AND ac.organization_id = @org_id::text;
+
+-- Sets the organization gateway's seeded GitHub choices to the caller's own
+-- GitHub token. The server offers two credentials, so a choice that names
+-- neither resolves to no credential under enforcement.
+-- name: ServersPickGatewayGitHubCredential :execrows
+UPDATE upstream_client_selections AS sel
+SET auth_client_id = ac.id,
+    auth_client_attachment_scope = ac.attachment_scope,
+    no_auth = FALSE
+FROM mcp_auth_clients AS ac
+WHERE ac.id = @auth_client_id::uuid
+  AND ac.organization_id = @org_id::text
+  AND sel.project_id = @project_id::uuid
+  AND sel.organization_id = @org_id::text
+  AND sel.credential_kind = 'user_session'
+  AND sel.credential_id = ANY(@credential_ids::uuid[])
+  AND sel.mcp_server_id = @mcp_server_id::uuid
+  AND sel.deleted IS FALSE;
+
+-- name: ServersAttachAssistantServer :exec
+INSERT INTO assistant_mcp_servers (id, assistant_id, mcp_server_id, project_id)
+VALUES (@id::uuid, @assistant_id::uuid, @mcp_server_id::uuid, @project_id::uuid);
+
+-- The upstream credential an administrator chose for an assistant's turns
+-- under one root trigger and execution context, as version 1 of its profile.
+-- name: ServersInsertExecutionProfile :exec
+INSERT INTO execution_selection_profiles
+  (id, organization_id, project_id, assistant_id, trigger_instance_id, execution_context)
+VALUES
+  (@id::uuid, @org_id::text, @project_id::uuid, @assistant_id::uuid,
+   @trigger_instance_id::uuid, @execution_context::text);
+
+-- name: ServersInsertExecutionProfileVersion :exec
+INSERT INTO execution_selection_profile_versions
+  (id, profile_id, organization_id, project_id, version, source)
+VALUES (@id::uuid, @profile_id::uuid, @org_id::text, @project_id::uuid, 1, 'admin');
+
+-- name: ServersInsertExecutionProfileChoice :exec
+INSERT INTO upstream_client_selections
+  (id, project_id, organization_id, credential_kind, credential_id,
+   mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth,
+   auth_client_id, auth_client_attachment_scope, source)
+SELECT @id::uuid, @project_id::uuid, @org_id::text, 'execution_profile_version',
+       @version_id::uuid, @mcp_server_id::uuid, ac.remote_session_client_id,
+       NULL, FALSE, ac.id, ac.attachment_scope, 'admin'
+FROM mcp_auth_clients AS ac
+WHERE ac.id = @auth_client_id::uuid AND ac.organization_id = @org_id::text;
+
+-- name: ServersInsertOrganizationGatewayClient :exec
+INSERT INTO user_session_clients
+ (id, project_id, organization_id, user_session_issuer_id, client_id, client_name,
+ redirect_uris, client_id_issued_at, token_endpoint_auth_method)
+VALUES (@id::uuid, NULL, @org_id::text, @issuer_id::uuid,
+ (@id::uuid)::text, 'Example desktop client', ARRAY['http://127.0.0.1:41296/callback'], now(), 'none');
+
+-- name: ServersInsertOrganizationGatewaySession :exec
+-- Inert authorizations remain visible while the gateway is disabled.
+-- Access tokens expired one hour ago; refresh authorization has its own deadline.
+INSERT INTO user_sessions
+ (id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn,
+ jti, refresh_token_hash, refresh_expires_at, expires_at, last_used_at, created_at)
+VALUES (@id::uuid, @org_id::text, @issuer_id::uuid, @client_id::uuid, 'user:' || @user_id::text,
+ @jti::text, @refresh_token_hash::text,
+ now() + (@refresh_expires_in::text)::interval,
+ now() - interval '1 hour', now() - (@last_used_ago::text)::interval, now() - (@created_ago::text)::interval);

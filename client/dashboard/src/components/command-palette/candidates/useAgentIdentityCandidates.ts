@@ -1,15 +1,11 @@
-import {
-  useIsPlatformAdmin,
-  useOrganization,
-  useSession,
-} from "@/contexts/Auth";
-import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
+import { useOrganization, useSession } from "@/contexts/Auth";
 import {
   useProjectSlugForRequests,
   useSdkClient,
   useSlugs,
 } from "@/contexts/Sdk";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
+import { useRBACScopeOverride } from "@/hooks/useRBACScopeOverride";
 import { encodeIdentityUrn, withIdentityWindow } from "@/lib/identity-urn";
 import { fetchRegisteredAgents } from "@/pages/identities/identityRoster";
 import { useRoutes } from "@/routes";
@@ -30,7 +26,7 @@ export function useAgentIdentityCandidates({
 }): LauncherCandidate[] {
   const organization = useOrganization();
   const session = useSession();
-  const isPlatformAdmin = useIsPlatformAdmin();
+  const scopeOverride = useRBACScopeOverride();
   const sdk = useSdkClient();
   const projectSlug = useProjectSlugForRequests();
   const { projectSlug: routeProjectSlug } = useSlugs();
@@ -40,13 +36,12 @@ export function useAgentIdentityCandidates({
 
   // Keep this aligned with the registered-agent query on the identities index
   // and the agent-management page. Those APIs deliberately reject support,
-  // impersonated, demo, and RBAC-override sessions.
+  // impersonated, and demo sessions.
   const queryEnabled =
     enabled &&
     organization.slug !== DEMO_ORG_SLUG &&
     !session.organizationOverride &&
-    !session.impersonatorEmail &&
-    getRBACScopeOverrideHeader(import.meta.env.DEV || isPlatformAdmin) === null;
+    !session.impersonatorEmail;
 
   const {
     data,
@@ -67,6 +62,7 @@ export function useAgentIdentityCandidates({
       "[]",
       "[]",
       "",
+      scopeOverride,
     ],
     queryFn: ({ pageParam, signal }) =>
       fetchRegisteredAgents(

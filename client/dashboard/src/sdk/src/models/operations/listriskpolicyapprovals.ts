@@ -24,7 +24,7 @@ export type ListRiskPolicyApprovalsSecurity = {
 /**
  * Optional status filter. An open request past its window counts as expired.
  */
-export const Status = {
+export const ListRiskPolicyApprovalsQueryParamStatus = {
   Blocked: "blocked",
   Pending: "pending",
   Approved: "approved",
@@ -35,13 +35,15 @@ export const Status = {
 /**
  * Optional status filter. An open request past its window counts as expired.
  */
-export type Status = ClosedEnum<typeof Status>;
+export type ListRiskPolicyApprovalsQueryParamStatus = ClosedEnum<
+  typeof ListRiskPolicyApprovalsQueryParamStatus
+>;
 
 export type ListRiskPolicyApprovalsRequest = {
   /**
    * Optional status filter. An open request past its window counts as expired.
    */
-  status?: Status | undefined;
+  status?: ListRiskPolicyApprovalsQueryParamStatus | undefined;
   /**
    * Continue after this approval request ID.
    */
@@ -172,9 +174,10 @@ export function listRiskPolicyApprovalsSecurityToJSON(
 }
 
 /** @internal */
-export const Status$outboundSchema: z.ZodMiniEnum<typeof Status> = z.enum(
-  Status,
-);
+export const ListRiskPolicyApprovalsQueryParamStatus$outboundSchema:
+  z.ZodMiniEnum<typeof ListRiskPolicyApprovalsQueryParamStatus> = z.enum(
+    ListRiskPolicyApprovalsQueryParamStatus,
+  );
 
 /** @internal */
 export type ListRiskPolicyApprovalsRequest$Outbound = {
@@ -192,7 +195,7 @@ export const ListRiskPolicyApprovalsRequest$outboundSchema: z.ZodMiniType<
   ListRiskPolicyApprovalsRequest
 > = z.pipe(
   z.object({
-    status: z.optional(Status$outboundSchema),
+    status: z.optional(ListRiskPolicyApprovalsQueryParamStatus$outboundSchema),
     cursor: z.optional(z.string()),
     limit: z._default(z.int(), 50),
     gramKey: z.optional(z.string()),

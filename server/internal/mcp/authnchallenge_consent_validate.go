@@ -305,9 +305,12 @@ func (s *Service) metaValidationTarget(
 		connectRoot:         "",
 		chainUpstream:       nil,
 		catalog:             nil,
+		consentDiagnostics:  nil,
+		catalogRecoveryOnly: false,
 		catalogRef:          nil,
 		authentication:      nil,
 		unapprovedMembers:   nil,
+		hiddenMembers:       nil,
 		execute:             false,
 		authenticated:       subject.Kind != urn.SessionSubjectKindAnonymous,
 		sessionID:           sessionID,
@@ -317,7 +320,9 @@ func (s *Service) metaValidationTarget(
 		apiKeyID:            "",
 		protocolVersion:     mcpversions.Resolution{Declared: "", InEffect: mcpversions.DefaultInEffect},
 		// Consent probes never call connection_status.
-		connectURL: "",
+		connectURL:        "",
+		skillsOverMCP:     nil,
+		servedCredentials: nil,
 	}
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:

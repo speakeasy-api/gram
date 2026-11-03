@@ -13,6 +13,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/stretchr/testify/require"
 	"golang.org/x/crypto/bcrypt"
 
@@ -692,7 +693,8 @@ func TestOAuthHTTPAuthorizeClientLookupErrors(t *testing.T) {
 			response := httptest.NewRecorder()
 			service.AuthorizeHandler().ServeHTTP(response, request)
 			require.Equal(t, tc.status, response.Code, response.Body.String())
-			require.Contains(t, response.Body.String(), `"error":"`+tc.code+`"`)
+			body := oauthtest.RequireAuthorizationErrorPage(t, response, tc.status)
+			require.Equal(t, tc.code, body.Code)
 			require.Empty(t, response.Header().Get("WWW-Authenticate"))
 			require.Empty(t, response.Header().Get("Location"))
 			require.NotContains(t, response.Body.String(), "database unavailable")

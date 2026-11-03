@@ -7,7 +7,14 @@ import {
   ServerUrlSection,
 } from "./sections/ServerUrlSection";
 
+import { SettingsSection } from "@/components/detail/settings-section";
 import { RequireScope } from "@/components/require-scope";
+import { FieldError } from "@/components/ui/Field";
+import { Text } from "@/components/ui/Text";
+import {
+  type UpstreamAuthEnforcementStatus,
+  useUpstreamAuthEnforcement,
+} from "@/hooks/useUpstreamAuthEnforcement";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
 import type { Toolset } from "@/lib/toolTypes";
 import {
@@ -17,7 +24,6 @@ import {
 import { MCPPerformanceTab } from "@/pages/mcp/MCPPerformanceTab";
 import { PageSection } from "@/pages/mcp/PageSection";
 import { ExportJsonSection } from "@/pages/mcp/x/hosted/ExportJsonSection";
-import { HostedAddressSections } from "@/pages/mcp/x/hosted/HostedAddressSections";
 import { ServerInstructionsSection } from "@/pages/mcp/x/hosted/ServerInstructionsSection";
 import { isCanonicalHostedWrapper } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { getTunneledMcpServerArgs } from "@/lib/sources";
@@ -125,6 +131,9 @@ export function SettingsTab({
     !!mcpServer.remoteMcpServerId || !!mcpServer.tunneledMcpServerId;
   const remoteMcpServerId = mcpServer.remoteMcpServerId;
   const { mcpUrl } = useResolvedMcpServerUrl(endpoints, isLoadingEndpoints);
+  // Enforcing organizations configure upstream identity through credentials;
+  // the others keep the legacy Identity panel. Only one renders.
+  const upstreamAuth = useUpstreamAuthEnforcement();
 
   // The source rows behind this server. Each section edits the source
   // directly, so they are fetched once here rather than per section.
@@ -155,7 +164,7 @@ export function SettingsTab({
     !!remoteMcpServer ||
     !!tunneledMcpServer;
 
-  useScrollToSettingsHash(sourceSettled);
+  useScrollToSettingsHash(sourceSettled && upstreamAuth !== "loading");
 
   // Speakeasy manages a built-in server, such as the approvals server, so it
   // has no settings to edit.
@@ -188,13 +197,15 @@ export function SettingsTab({
             resourceId={hostedToolset.id}
             level="section"
           >
-            <HostedAddressSections
-              toolset={hostedToolset}
+            <ServerUrlSection
+              backend={{ mcpServerId: mcpServer.id }}
               endpoints={endpoints}
               isLoadingEndpoints={isLoadingEndpoints}
+              mcpServer={mcpServer}
             />
             <NetworkAccessSection
               mcpServer={mcpServer}
+              endpoints={endpoints}
               toolset={hostedToolset}
             />
             <div id={MCP_AUTHENTICATION_SECTION_ID}>
@@ -263,8 +274,19 @@ export function SettingsTab({
             remote server needs. Upstream headers live inside its Custom
             Headers disclosure; they are governed by the identity choice, not
             a peer of it. */}
-        <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
-        <UpstreamCredentialsSection mcpServer={mcpServer} />
+        {upstreamAuth === "legacy" ? (
+          <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
+        ) : upstreamAuth === "enforced" ? (
+          // Links to the legacy Identity anchor land on its replacement.
+          <div id={MCP_AUTHENTICATION_SECTION_ID}>
+            <UpstreamCredentialsSection mcpServer={mcpServer} />
+          </div>
+        ) : (
+          <UpstreamIdentityPendingSection
+            id={MCP_AUTHENTICATION_SECTION_ID}
+            status={upstreamAuth}
+          />
+        )}
         <IdentityChainingSection mcpServer={mcpServer} />
         <ServerUrlSection
           backend={{ mcpServerId: mcpServer.id }}
@@ -306,8 +328,15 @@ export function SettingsTab({
       <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
       {/* Hosted toolsets keep their own authentication, and unproxied
           servers reach the upstream without Speakeasy in between. */}
-      {isUnproxied || mcpServer.toolsetId ? null : (
+      {isUnproxied ||
+      mcpServer.toolsetId ||
+      upstreamAuth === "legacy" ? null : upstreamAuth === "enforced" ? (
         <UpstreamCredentialsSection mcpServer={mcpServer} />
+      ) : (
+        <UpstreamIdentityPendingSection
+          id={UPSTREAM_CREDENTIALS_SECTION_ID}
+          status={upstreamAuth}
+        />
       )}
       {tunneledMcpServer ? (
         <Fragment key={tunneledMcpServer.id}>
@@ -330,5 +359,40 @@ export function SettingsTab({
         sourceUnavailable={sourceUnavailable}
       />
     </div>
+  );
+}
+
+/**
+ * Placeholder for the Identity section while the enforcement state that picks
+ * its contents is loading or unavailable. It renders no controls, so no write
+ * surface appears for the wrong mode.
+ */
+function UpstreamIdentityPendingSection({
+  id,
+  status,
+}: {
+  id: string;
+  status: Extract<UpstreamAuthEnforcementStatus, "loading" | "error">;
+}): JSX.Element {
+  return (
+    <SettingsSection id={id}>
+      <SettingsSection.Header>
+        <SettingsSection.Title>Identity</SettingsSection.Title>
+      </SettingsSection.Header>
+      <SettingsSection.Panel>
+        <SettingsSection.Body>
+          {status === "loading" ? (
+            <Text muted small>
+              Loading…
+            </Text>
+          ) : (
+            <FieldError>
+              The identity settings could not be loaded. Refresh the page to try
+              again.
+            </FieldError>
+          )}
+        </SettingsSection.Body>
+      </SettingsSection.Panel>
+    </SettingsSection>
   );
 }

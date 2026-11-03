@@ -698,40 +698,41 @@ function ToolGroupHeader({
         !isFirstGroup && "border-neutral-softest border-t",
       )}
     >
-      <button
-        onClick={onToggle}
-        aria-expanded={isExpanded}
-        aria-label={`${isExpanded ? "Collapse" : "Expand"} ${group.title} group`}
-        className="flex items-center gap-4 transition-opacity hover:opacity-70"
-      >
-        <div className="relative size-4 shrink-0">
-          <Icon
-            className={cn(
-              "absolute inset-0 size-4 transition-opacity",
-              !readOnly && "group-hover/header:opacity-0",
-            )}
-            strokeWidth={1.5}
-          />
-          {!readOnly && (
-            <SimpleTooltip
-              tooltip={`${allSelected ? "Deselect" : "Select"} ${group.tools.length} tools`}
-            >
-              <Checkbox
-                checked={allSelected}
-                onCheckedChange={onSelectAll}
-                onClick={(e) => {
-                  e.stopPropagation();
-                }}
-                className={cn(
-                  "absolute inset-0 opacity-0 transition-opacity",
-                  "group-hover/header:opacity-100",
-                )}
-              />
-            </SimpleTooltip>
-          )}
-        </div>
-        <p className="text-foreground text-sm leading-6">{group.title}</p>
-      </button>
+      <div className="relative flex items-center transition-opacity hover:opacity-70">
+        <button
+          type="button"
+          onClick={onToggle}
+          aria-expanded={isExpanded}
+          aria-label={`${isExpanded ? "Collapse" : "Expand"} ${group.title} group`}
+          className="flex items-center gap-4"
+        >
+          <div className="relative size-4 shrink-0">
+            <Icon
+              className={cn(
+                "absolute inset-0 size-4 transition-opacity",
+                !readOnly && "group-hover/header:opacity-0",
+              )}
+              strokeWidth={1.5}
+            />
+          </div>
+          <p className="text-foreground text-sm leading-6">{group.title}</p>
+        </button>
+        {!readOnly && (
+          <SimpleTooltip
+            tooltip={`${allSelected ? "Deselect" : "Select"} ${group.tools.length} tools`}
+          >
+            <Checkbox
+              checked={allSelected}
+              onCheckedChange={onSelectAll}
+              aria-label={`${allSelected ? "Deselect" : "Select"} ${group.title} tools`}
+              className={cn(
+                "absolute top-1/2 left-0 -translate-y-1/2 opacity-0 transition-opacity",
+                "group-hover/header:opacity-100 focus-visible:opacity-100",
+              )}
+            />
+          </SimpleTooltip>
+        )}
+      </div>
       <button
         onClick={onToggle}
         aria-expanded={isExpanded}

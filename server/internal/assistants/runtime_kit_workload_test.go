@@ -15,8 +15,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/agents"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -67,7 +70,7 @@ func TestKitWorkloadInferenceRequiresBothPolicies(t *testing.T) {
 func TestKitWorkloadRejectsForeignIdentityBeforeDatabase(t *testing.T) {
 	t.Parallel()
 	r := assistantRuntimeRecord{ID: uuid.New(), ProjectID: uuid.New(), AssistantID: uuid.New(), RuntimeVersion: 3}
-	identity := assistantidentity.Identity{OrganizationID: "test-org", ProjectID: r.ProjectID, AssistantID: r.AssistantID, AgentID: uuid.New(), TriggerID: uuid.New(), IssuerID: uuid.New(), Subject: "root"}
+	identity := assistantidentity.RuntimeIdentity{OrganizationID: "test-org", ProjectID: r.ProjectID, AssistantID: r.AssistantID, AgentID: uuid.New(), BindingID: uuid.New(), BindingGeneration: 1}
 	require.True(t, kitWorkloadIdentityMatches(r, identity))
 	identity.ProjectID = uuid.New()
 	core := new(ServiceCore)
@@ -103,7 +106,7 @@ func TestKitWorkloadIssuerRequiresRuntimeOwnership(t *testing.T) {
 
 // Grant the owner authority before creation, so normal provisioning grants the
 // agent its own inference policy rather than bypassing either live policy.
-func kitWorkloadDBFixture(t *testing.T) (*ServiceCore, *pgxpool.Pool, assistantRuntimeRecord, assistantidentity.Identity, KitLocalCompositionConfig, uuid.UUID) {
+func kitWorkloadDBFixture(t *testing.T) (*ServiceCore, *pgxpool.Pool, assistantRuntimeRecord, assistantidentity.RuntimeIdentity, KitLocalCompositionConfig, uuid.UUID) {
 	t.Helper()
 	db, err := assistantsInfra.CloneTestDatabase(t, "kit_workload_trust")
 	require.NoError(t, err)
@@ -121,12 +124,10 @@ func kitWorkloadDBFixture(t *testing.T) (*ServiceCore, *pgxpool.Pool, assistantR
 	require.NoError(t, err)
 	assistant, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Workload trust", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil)
 	require.NoError(t, err)
-	trigger, err := core.resolveDashboardTriggerInstance(t.Context(), "org-test", project, assistant.ID, assistant.Name)
+	_, err = core.resolveDashboardTriggerInstance(t.Context(), "org-test", project, assistant.ID, assistant.Name)
 	require.NoError(t, err)
-	resolved, err := core.identities.Resolve(t.Context(), db, "org-test", project, assistant.ID, trigger)
+	resolved, err := core.identities.ResolveRuntime(t.Context(), db, "org-test", project, assistant.ID)
 	require.NoError(t, err)
-	require.Equal(t, assistantidentity.Active, resolved.State)
-	require.NotNil(t, resolved.Identity)
 	fixtures := testrepo.New(db)
 	issuer, err := fixtures.InsertOrganizationTierUserSessionIssuerFixture(t.Context(), testrepo.InsertOrganizationTierUserSessionIssuerFixtureParams{OrganizationID: pgtype.Text{String: "org-test", Valid: true}, Slug: "kit-shared", AuthnChallengeMode: "none", SessionDuration: pgtype.Interval{Microseconds: 3600000000, Valid: true}})
 	require.NoError(t, err)
@@ -134,7 +135,7 @@ func kitWorkloadDBFixture(t *testing.T) (*ServiceCore, *pgxpool.Pool, assistantR
 	require.NoError(t, err)
 	r := assistantRuntimeRecord{ID: uuid.New(), ProjectID: project, AssistantID: assistant.ID, RuntimeVersion: 3}
 	c := KitLocalCompositionConfig{Environment: "production", WorkloadNamespace: "assistants", WorkloadIssuerURL: "https://cluster.example", WorkloadJWKSURL: "https://cluster.example/openid/v1/jwks", MCPUserSessionIssuerID: issuer}
-	return core, db, r, *resolved.Identity, c, grant.ID
+	return core, db, r, resolved, c, grant.ID
 }
 
 func kitWorkloadMetadata(t *testing.T, r assistantRuntimeRecord, binding *KitWorkloadBinding) assistantRuntimeRecord {
@@ -176,6 +177,74 @@ func TestKitWorkloadDBSharedIssuerAndExactRevoke(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, assignments, 1)
 	require.Equal(t, identity.AgentID, assignments[0].AgentID)
+}
+
+// A runtime admitting and withdrawing its own workload on every start and
+// teardown is machine access, so those entries go to the security log.
+// Registering the cluster issuer happens once per project and is a
+// configuration change. Both are attributed to the assistant's agent rather
+// than to an anonymous system component.
+func TestKitWorkloadDBAuditLogAndAttribution(t *testing.T) {
+	t.Parallel()
+	core, db, r, identity, c, _ := kitWorkloadDBFixture(t)
+	configurationAdmits, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionAdmit)
+	require.NoError(t, err)
+	configurationWithdrawals, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+
+	binding, err := core.provisionKitWorkload(t.Context(), r, c, identity, "generation-one")
+	require.NoError(t, err)
+
+	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, identity.AgentID.String())
+	agent, err := agents.ResolvePrincipal(t.Context(), db, identity.OrganizationID, agentPrincipal)
+	require.NoError(t, err)
+
+	// The project's shared issuer belongs to the runtime, not to whichever
+	// agent's start created it; that agent is kept as provenance.
+	issuerCreate, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionWorkloadIssuerCreate)
+	require.NoError(t, err)
+	require.Equal(t, string(urn.PrincipalTypeSystem), issuerCreate.ActorType)
+	require.Equal(t, "kit-runtime", issuerCreate.ActorID)
+	require.JSONEq(t, `{"triggered_by":"`+agentPrincipal.String()+`"}`, string(issuerCreate.Metadata))
+
+	admit, err := audittest.LatestSecurityAuditLogByAction(t.Context(), db, audit.ActionWorkloadAdmissionAdmit)
+	require.NoError(t, err)
+	require.Equal(t, binding.Subject, admit.SubjectDisplay)
+	require.Equal(t, string(urn.PrincipalTypeAgent), admit.ActorType)
+	require.Equal(t, identity.AgentID.String(), admit.ActorID)
+	require.Equal(t, agent.Name, admit.ActorDisplay, "the entry names the agent, so it stays readable after the agent is gone")
+
+	require.NoError(t, core.revokeKitWorkload(t.Context(), db, kitWorkloadMetadata(t, r, binding)))
+	withdraw, err := audittest.LatestSecurityAuditLogByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+	require.Equal(t, binding.Subject, withdraw.SubjectDisplay)
+	require.Equal(t, string(urn.PrincipalTypeAgent), withdraw.ActorType)
+	require.Equal(t, identity.AgentID.String(), withdraw.ActorID)
+	require.Equal(t, agent.Name, withdraw.ActorDisplay)
+
+	admits, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionAdmit)
+	require.NoError(t, err)
+	require.Equal(t, configurationAdmits, admits, "the runtime's admit stays out of the configuration log")
+	withdrawals, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+	require.Equal(t, configurationWithdrawals, withdrawals, "the runtime's withdrawal stays out of the configuration log")
+}
+
+// A runtime is withdrawn after its agent is deleted too, and the entry still
+// names the agent.
+func TestKitWorkloadDBWithdrawalNamesADeletedAgent(t *testing.T) {
+	t.Parallel()
+	core, db, r, identity, c, _ := kitWorkloadDBFixture(t)
+
+	binding, err := core.provisionKitWorkload(t.Context(), r, c, identity, "generation-one")
+	require.NoError(t, err)
+	agent, err := agentrepo.New(db).DeleteAgent(t.Context(), agentrepo.DeleteAgentParams{OrganizationID: identity.OrganizationID, ID: identity.AgentID})
+	require.NoError(t, err)
+
+	require.NoError(t, core.revokeKitWorkload(t.Context(), db, kitWorkloadMetadata(t, r, binding)))
+	withdraw, err := audittest.LatestSecurityAuditLogByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+	require.Equal(t, agent.Name, withdraw.ActorDisplay)
 }
 
 func TestKitWorkloadDBLocalSubjectCannotBeReused(t *testing.T) {
@@ -306,13 +375,11 @@ func TestKitWorkloadDBDifferentAssistantsShareIssuerNotSubjects(t *testing.T) {
 	core, db, firstRuntime, firstIdentity, config, _ := kitWorkloadDBFixture(t)
 	assistant, err := core.CreateAssistant(t.Context(), firstIdentity.OrganizationID, firstRuntime.ProjectID, "user-1", "Second workload assistant", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil)
 	require.NoError(t, err)
-	trigger, err := core.resolveDashboardTriggerInstance(t.Context(), firstIdentity.OrganizationID, firstRuntime.ProjectID, assistant.ID, assistant.Name)
+	_, err = core.resolveDashboardTriggerInstance(t.Context(), firstIdentity.OrganizationID, firstRuntime.ProjectID, assistant.ID, assistant.Name)
 	require.NoError(t, err)
-	resolved, err := core.identities.Resolve(t.Context(), db, firstIdentity.OrganizationID, firstRuntime.ProjectID, assistant.ID, trigger)
+	resolved, err := core.identities.ResolveRuntime(t.Context(), db, firstIdentity.OrganizationID, firstRuntime.ProjectID, assistant.ID)
 	require.NoError(t, err)
-	require.Equal(t, assistantidentity.Active, resolved.State)
-	require.NotNil(t, resolved.Identity)
-	secondIdentity := *resolved.Identity
+	secondIdentity := resolved
 	require.NotEqual(t, firstIdentity.AgentID, secondIdentity.AgentID)
 	secondRuntime := assistantRuntimeRecord{ID: uuid.New(), ProjectID: firstRuntime.ProjectID, AssistantID: assistant.ID, RuntimeVersion: 3}
 
@@ -372,13 +439,11 @@ func TestKitWorkloadDBConcurrentCrossProjectLocalSubject(t *testing.T) {
 	require.NoError(t, err)
 	assistant, err := core.CreateAssistant(t.Context(), firstIdentity.OrganizationID, project, "user-1", "Cross-project workload assistant", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, true, nil)
 	require.NoError(t, err)
-	trigger, err := core.resolveDashboardTriggerInstance(t.Context(), firstIdentity.OrganizationID, project, assistant.ID, assistant.Name)
+	_, err = core.resolveDashboardTriggerInstance(t.Context(), firstIdentity.OrganizationID, project, assistant.ID, assistant.Name)
 	require.NoError(t, err)
-	resolved, err := core.identities.Resolve(t.Context(), db, firstIdentity.OrganizationID, project, assistant.ID, trigger)
+	resolved, err := core.identities.ResolveRuntime(t.Context(), db, firstIdentity.OrganizationID, project, assistant.ID)
 	require.NoError(t, err)
-	require.Equal(t, assistantidentity.Active, resolved.State)
-	require.NotNil(t, resolved.Identity)
-	secondIdentity := *resolved.Identity
+	secondIdentity := resolved
 	require.NotEqual(t, firstIdentity.AgentID, secondIdentity.AgentID)
 	secondRuntime := assistantRuntimeRecord{ID: uuid.New(), ProjectID: project, AssistantID: assistant.ID, RuntimeVersion: 3}
 	config.Environment, config.WorkloadSubject = "local", "cross-project-shared-subject"
@@ -392,9 +457,9 @@ func TestKitWorkloadDBConcurrentCrossProjectLocalSubject(t *testing.T) {
 	ctx := t.Context()
 	for _, candidate := range []struct {
 		runtime  assistantRuntimeRecord
-		identity assistantidentity.Identity
+		identity assistantidentity.RuntimeIdentity
 	}{{firstRuntime, firstIdentity}, {secondRuntime, secondIdentity}} {
-		go func(r assistantRuntimeRecord, identity assistantidentity.Identity) {
+		go func(r assistantRuntimeRecord, identity assistantidentity.RuntimeIdentity) {
 			ready <- struct{}{}
 			<-start
 			binding, err := core.provisionKitWorkload(ctx, r, config, identity, "concurrent-generation")
@@ -472,4 +537,16 @@ func TestKitWorkloadDBRetiredFenceAfterIdentityTombstone(t *testing.T) {
 			require.False(t, assigned)
 		})
 	}
+}
+
+func TestKitRuntimeIdentityRejectsOwnerReassignmentLatch(t *testing.T) {
+	t.Parallel()
+	core, db, r, identity, config, _ := kitWorkloadDBFixture(t)
+	require.NoError(t, core.identities.ValidateRuntime(t.Context(), db, identity))
+	rows, err := agentrepo.New(db).LatchAgentsForOwnerLossByMembership(t.Context(), agentrepo.LatchAgentsForOwnerLossByMembershipParams{OrganizationID: identity.OrganizationID, OwnerUserID: "user-1", OwnerReassignmentReason: pgtype.Text{String: "membership_removed", Valid: true}})
+	require.NoError(t, err)
+	require.NotEmpty(t, rows)
+	require.ErrorIs(t, core.identities.ValidateRuntime(t.Context(), db, identity), assistantidentity.ErrInvalidIdentity)
+	_, err = core.provisionKitWorkload(t.Context(), r, config, identity, "owner-latched")
+	require.ErrorIs(t, err, assistantidentity.ErrInvalidIdentity)
 }

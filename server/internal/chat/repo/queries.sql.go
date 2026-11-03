@@ -124,20 +124,26 @@ WITH candidate_chats AS (
   WHERE c.project_id = $3
     AND c.deleted IS FALSE
     AND ($4 = '' OR c.external_user_id = $4)
-    AND ($5 = '' OR c.user_id = $5)
+    -- @owned_agent_ids widens a @user_id scope to the sessions of agents that
+    -- user owns: agent-actor capture leaves user_id NULL, so an agent's
+    -- sessions would otherwise belong to nobody. A row that
+    -- also carries a human identity (user_id or external_user_id) is that
+    -- human's, whatever agent_id says.
+    AND ($5 = '' OR c.user_id = $5 OR (c.user_id IS NULL AND COALESCE(c.external_user_id, '') = '' AND c.agent_id = ANY($6::uuid[])))
+    AND ($7::uuid IS NULL OR c.agent_id = $7::uuid)
     AND (
-      $6::text = ''
-      OR ($6::text = 'true' AND c.pinned_at IS NOT NULL)
-      OR ($6::text = 'false' AND c.pinned_at IS NULL)
+      $8::text = ''
+      OR ($8::text = 'true' AND c.pinned_at IS NOT NULL)
+      OR ($8::text = 'false' AND c.pinned_at IS NULL)
     )
     AND (
-      $7 = ''
-      OR c.id::text ILIKE '%' || $7 || '%'
-      OR c.external_user_id ILIKE '%' || $7 || '%'
-      OR c.title ILIKE '%' || $7 || '%'
-      OR u.display_name ILIKE '%' || $7 || '%'
-      OR u.email ILIKE '%' || $7 || '%'
-      OR ua.email ILIKE '%' || $7 || '%'
+      $9 = ''
+      OR c.id::text ILIKE '%' || $9 || '%'
+      OR c.external_user_id ILIKE '%' || $9 || '%'
+      OR c.title ILIKE '%' || $9 || '%'
+      OR u.display_name ILIKE '%' || $9 || '%'
+      OR u.email ILIKE '%' || $9 || '%'
+      OR ua.email ILIKE '%' || $9 || '%'
     )
     -- Eager runtime warmup persists a blank chat, not a user session.
     -- Apply this outside the optional assistant filter for ordinary lists too.
@@ -149,53 +155,53 @@ WITH candidate_chats AS (
         AND warmup.source_kind = 'warmup'
     )
     AND (
-      $8 = ''
+      $10 = ''
       OR EXISTS (
         SELECT 1 FROM assistant_threads at
         WHERE at.chat_id = c.id
           AND at.project_id = $3
-          AND at.assistant_id = $8::uuid
+          AND at.assistant_id = $10::uuid
           AND at.deleted IS FALSE
           -- Optional source-kind dimension so setup/onboarding and runtime
           -- threads for the same assistant don't pollute each other's listing.
           -- @source_kind keeps only threads of that kind (onboarding passes
           -- 'setup'); @exclude_source_kind drops threads of that kind (runtime
           -- views pass 'setup'). Empty string on either disables that side.
-          AND ($9::text = '' OR at.source_kind = $9::text)
-          AND ($10::text = '' OR at.source_kind <> $10::text)
-      )
-    )
-    AND (
-      $11::text = ''
-      OR (
-        $11::text = 'true'
-        AND c.id = ANY($12::uuid[])
-      )
-      OR (
-        $11::text = 'false'
-        AND NOT COALESCE(c.id = ANY($12::uuid[]), FALSE)
+          AND ($11::text = '' OR at.source_kind = $11::text)
+          AND ($12::text = '' OR at.source_kind <> $12::text)
       )
     )
     AND (
       $13::text = ''
-      OR ua.account_type = $13::text
+      OR (
+        $13::text = 'true'
+        AND c.id = ANY($14::uuid[])
+      )
+      OR (
+        $13::text = 'false'
+        AND NOT COALESCE(c.id = ANY($14::uuid[]), FALSE)
+      )
+    )
+    AND (
+      $15::text = ''
+      OR ua.account_type = $15::text
       -- Rows without a classified account type are treated as 'team' so the
       -- team filter stays backwards-compatible with pre-classification chats.
       OR (
-        $13::text = 'team'
+        $15::text = 'team'
         AND (ua.account_type IS NULL OR ua.account_type = '')
       )
     )
     AND (
-      $14::int < 0
-      OR c.id = ANY($12::uuid[])
+      $16::int < 0
+      OR c.id = ANY($14::uuid[])
     )
     AND (
-      coalesce(cardinality($15::text[]), 0) = 0
+      coalesce(cardinality($17::text[]), 0) = 0
       -- Proxied sessions match the LiteLLM filter even when a native hook
       -- stream owns every transcript row (proxied rows are suppressed as
       -- duplicates, so the message-source probe alone would miss them).
-      OR ('litellm' = ANY ($15::text[]) AND c.litellm_proxied)
+      OR ('litellm' = ANY ($17::text[]) AND c.litellm_proxied)
       OR coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = $3::uuid AND tag_link.child_chat_id = c.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag') THEN 'claude-tag' END, (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
@@ -205,7 +211,7 @@ WITH candidate_chats AS (
           AND cmsrc.source <> ''
         ORDER BY cmsrc.created_at DESC
         LIMIT 1
-      )) = ANY ($15::text[])
+      )) = ANY ($17::text[])
     )
 ),
 chat_activity AS (
@@ -237,6 +243,8 @@ type CountChatsParams struct {
 	ProjectID         uuid.UUID
 	ExternalUserID    interface{}
 	UserID            interface{}
+	OwnedAgentIds     []uuid.UUID
+	AgentID           uuid.NullUUID
 	Pinned            string
 	Search            interface{}
 	AssistantID       interface{}
@@ -267,6 +275,8 @@ func (q *Queries) CountChats(ctx context.Context, arg CountChatsParams) (int64, 
 		arg.ProjectID,
 		arg.ExternalUserID,
 		arg.UserID,
+		arg.OwnedAgentIds,
+		arg.AgentID,
 		arg.Pinned,
 		arg.Search,
 		arg.AssistantID,
@@ -1820,6 +1830,31 @@ func (q *Queries) InsertUserFeedback(ctx context.Context, arg InsertUserFeedback
 	return id, err
 }
 
+const isAgentOwner = `-- name: IsAgentOwner :one
+SELECT EXISTS (
+  SELECT 1
+  FROM agents a
+  WHERE a.id = $1
+    AND a.organization_id = $2
+    AND a.owner_user_id = $3
+    AND a.owner_reassignment_required_at IS NULL
+    AND a.deleted IS FALSE
+)
+`
+
+type IsAgentOwnerParams struct {
+	AgentID        uuid.UUID
+	OrganizationID string
+	OwnerUserID    string
+}
+
+func (q *Queries) IsAgentOwner(ctx context.Context, arg IsAgentOwnerParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isAgentOwner, arg.AgentID, arg.OrganizationID, arg.OwnerUserID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const linkAIIntegrationConfigChat = `-- name: LinkAIIntegrationConfigChat :one
 INSERT INTO ai_integration_config_chats (
     ai_integration_config_id
@@ -2616,12 +2651,12 @@ SELECT
 FROM chat_session_links l
 LEFT JOIN chats pc ON pc.id = l.parent_chat_id AND pc.project_id = l.project_id AND pc.deleted IS FALSE
   AND ($1::text = '' OR pc.external_user_id = $1::text)
-  AND ($2::text = '' OR pc.user_id = $2::text)
+  AND ($2::text = '' OR pc.user_id = $2::text OR (pc.user_id IS NULL AND COALESCE(pc.external_user_id, '') = '' AND pc.agent_id = ANY($3::uuid[])))
 LEFT JOIN chats cc ON l.child_chat_id IS NOT NULL AND cc.id = l.child_chat_id AND cc.project_id = l.project_id AND cc.deleted IS FALSE
   AND ($1::text = '' OR cc.external_user_id = $1::text)
-  AND ($2::text = '' OR cc.user_id = $2::text)
-WHERE l.project_id = $3
-  AND (l.parent_chat_id = ANY ($4::uuid[]) OR l.child_chat_id = ANY ($4::uuid[]))
+  AND ($2::text = '' OR cc.user_id = $2::text OR (cc.user_id IS NULL AND COALESCE(cc.external_user_id, '') = '' AND cc.agent_id = ANY($3::uuid[])))
+WHERE l.project_id = $4
+  AND (l.parent_chat_id = ANY ($5::uuid[]) OR l.child_chat_id = ANY ($5::uuid[]))
   AND (
     ($1::text = '' AND $2::text = '')
     OR pc.id IS NOT NULL
@@ -2633,6 +2668,7 @@ ORDER BY l.created_at DESC
 type ListChatSessionLinksParams struct {
 	ExternalUserID string
 	UserID         string
+	OwnedAgentIds  []uuid.UUID
 	ProjectID      uuid.UUID
 	ChatIds        []uuid.UUID
 }
@@ -2669,6 +2705,7 @@ func (q *Queries) ListChatSessionLinks(ctx context.Context, arg ListChatSessionL
 	rows, err := q.db.Query(ctx, listChatSessionLinks,
 		arg.ExternalUserID,
 		arg.UserID,
+		arg.OwnedAgentIds,
 		arg.ProjectID,
 		arg.ChatIds,
 	)
@@ -2717,7 +2754,7 @@ WITH RECURSIVE ancestry AS (
  JOIN chats parent ON parent.id = l.parent_chat_id AND parent.project_id = $1 AND parent.deleted IS FALSE
  WHERE a.slack_channel_id IS NULL AND NOT parent.id = ANY(a.visited)
   AND ($3::text = '' OR parent.external_user_id = $3::text)
-  AND ($4::text = '' OR parent.user_id = $4::text)
+  AND ($4::text = '' OR parent.user_id = $4::text OR (parent.user_id IS NULL AND COALESCE(parent.external_user_id, '') = '' AND parent.agent_id = ANY($5::uuid[])))
 )
 SELECT DISTINCT ON (root_id) root_id AS id,
  coalesce(slack_team_id, '')::text AS slack_team_id,
@@ -2731,6 +2768,7 @@ type ListChatSlackChannelsParams struct {
 	ChatIds        []uuid.UUID
 	ExternalUserID string
 	UserID         string
+	OwnedAgentIds  []uuid.UUID
 }
 
 type ListChatSlackChannelsRow struct {
@@ -2748,6 +2786,7 @@ func (q *Queries) ListChatSlackChannels(ctx context.Context, arg ListChatSlackCh
 		arg.ChatIds,
 		arg.ExternalUserID,
 		arg.UserID,
+		arg.OwnedAgentIds,
 	)
 	if err != nil {
 		return nil, err
@@ -2789,7 +2828,7 @@ WHERE c.project_id = $1
   AND (latest.source IS NOT NULL OR c.session_surface IS NOT NULL OR EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = $1::uuid AND tag_link.child_chat_id = c.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag'))
   AND c.deleted IS FALSE
   AND ($2::text = '' OR c.external_user_id = $2::text)
-  AND ($3::text = '' OR c.user_id = $3::text)
+  AND ($3::text = '' OR c.user_id = $3::text OR (c.user_id IS NULL AND COALESCE(c.external_user_id, '') = '' AND c.agent_id = ANY($4::uuid[])))
 UNION
 SELECT 'litellm'
 WHERE EXISTS (
@@ -2799,7 +2838,7 @@ WHERE EXISTS (
     AND pc.deleted IS FALSE
     AND pc.litellm_proxied
     AND ($2::text = '' OR pc.external_user_id = $2::text)
-    AND ($3::text = '' OR pc.user_id = $3::text)
+    AND ($3::text = '' OR pc.user_id = $3::text OR (pc.user_id IS NULL AND COALESCE(pc.external_user_id, '') = '' AND pc.agent_id = ANY($4::uuid[])))
 )
 ORDER BY source
 `
@@ -2808,6 +2847,7 @@ type ListChatSourcesParams struct {
 	ProjectID      uuid.UUID
 	ExternalUserID string
 	UserID         string
+	OwnedAgentIds  []uuid.UUID
 }
 
 // Distinct inferred source (the latest non-null message source) across the
@@ -2823,7 +2863,12 @@ type ListChatSourcesParams struct {
 // suppressed as duplicates), so the LiteLLM filter option must also be offered
 // when any visible chat carries the chat-level proxied marker.
 func (q *Queries) ListChatSources(ctx context.Context, arg ListChatSourcesParams) ([]pgtype.Text, error) {
-	rows, err := q.db.Query(ctx, listChatSources, arg.ProjectID, arg.ExternalUserID, arg.UserID)
+	rows, err := q.db.Query(ctx, listChatSources,
+		arg.ProjectID,
+		arg.ExternalUserID,
+		arg.UserID,
+		arg.OwnedAgentIds,
+	)
 	if err != nil {
 		return nil, err
 	}
@@ -2969,20 +3014,24 @@ WITH candidate_chats AS (
     AND ($2::uuid IS NULL OR c.id = $2::uuid)
     AND c.deleted IS FALSE
     AND ($3 = '' OR c.external_user_id = $3)
-    AND ($4 = '' OR c.user_id = $4)
+    -- @owned_agent_ids widens a @user_id scope to the sessions of agents that
+    -- user owns: agent-actor capture leaves user_id NULL, so an agent's
+    -- sessions would otherwise belong to nobody.
+    AND ($4 = '' OR c.user_id = $4 OR (c.user_id IS NULL AND COALESCE(c.external_user_id, '') = '' AND c.agent_id = ANY($5::uuid[])))
+    AND ($6::uuid IS NULL OR c.agent_id = $6::uuid)
     AND (
-      $5::text = ''
-      OR ($5::text = 'true' AND c.pinned_at IS NOT NULL)
-      OR ($5::text = 'false' AND c.pinned_at IS NULL)
+      $7::text = ''
+      OR ($7::text = 'true' AND c.pinned_at IS NOT NULL)
+      OR ($7::text = 'false' AND c.pinned_at IS NULL)
     )
     AND (
-      $6 = ''
-      OR c.id::text ILIKE '%' || $6 || '%'
-      OR c.external_user_id ILIKE '%' || $6 || '%'
-      OR c.title ILIKE '%' || $6 || '%'
-      OR u.display_name ILIKE '%' || $6 || '%'
-      OR u.email ILIKE '%' || $6 || '%'
-      OR ua.email ILIKE '%' || $6 || '%'
+      $8 = ''
+      OR c.id::text ILIKE '%' || $8 || '%'
+      OR c.external_user_id ILIKE '%' || $8 || '%'
+      OR c.title ILIKE '%' || $8 || '%'
+      OR u.display_name ILIKE '%' || $8 || '%'
+      OR u.email ILIKE '%' || $8 || '%'
+      OR ua.email ILIKE '%' || $8 || '%'
     )
     -- Eager runtime warmup persists a blank chat, not a user session.
     -- Apply this outside the optional assistant filter for ordinary lists too.
@@ -2994,53 +3043,53 @@ WITH candidate_chats AS (
         AND warmup.source_kind = 'warmup'
     )
     AND (
-      $7 = ''
+      $9 = ''
       OR EXISTS (
         SELECT 1 FROM assistant_threads at
         WHERE at.chat_id = c.id
           AND at.project_id = $1
-          AND at.assistant_id = $7::uuid
+          AND at.assistant_id = $9::uuid
           AND at.deleted IS FALSE
           -- Optional source-kind dimension so setup/onboarding and runtime
           -- threads for the same assistant don't pollute each other's listing.
           -- @source_kind keeps only threads of that kind (onboarding passes
           -- 'setup'); @exclude_source_kind drops threads of that kind (runtime
           -- views pass 'setup'). Empty string on either disables that side.
-          AND ($8::text = '' OR at.source_kind = $8::text)
-          AND ($9::text = '' OR at.source_kind <> $9::text)
-      )
-    )
-    AND (
-      $10::text = ''
-      OR (
-        $10::text = 'true'
-        AND c.id = ANY($11::uuid[])
-      )
-      OR (
-        $10::text = 'false'
-        AND NOT COALESCE(c.id = ANY($11::uuid[]), FALSE)
+          AND ($10::text = '' OR at.source_kind = $10::text)
+          AND ($11::text = '' OR at.source_kind <> $11::text)
       )
     )
     AND (
       $12::text = ''
-      OR ua.account_type = $12::text
+      OR (
+        $12::text = 'true'
+        AND c.id = ANY($13::uuid[])
+      )
+      OR (
+        $12::text = 'false'
+        AND NOT COALESCE(c.id = ANY($13::uuid[]), FALSE)
+      )
+    )
+    AND (
+      $14::text = ''
+      OR ua.account_type = $14::text
       -- Rows without a classified account type are treated as 'team' so the
       -- team filter stays backwards-compatible with pre-classification chats.
       OR (
-        $12::text = 'team'
+        $14::text = 'team'
         AND (ua.account_type IS NULL OR ua.account_type = '')
       )
     )
     AND (
-      $13::int < 0
-      OR c.id = ANY($11::uuid[])
+      $15::int < 0
+      OR c.id = ANY($13::uuid[])
     )
     AND (
-      coalesce(cardinality($14::text[]), 0) = 0
+      coalesce(cardinality($16::text[]), 0) = 0
       -- Proxied sessions match the LiteLLM filter even when a native hook
       -- stream owns every transcript row (proxied rows are suppressed as
       -- duplicates, so the message-source probe alone would miss them).
-      OR ('litellm' = ANY ($14::text[]) AND c.litellm_proxied)
+      OR ('litellm' = ANY ($16::text[]) AND c.litellm_proxied)
       OR coalesce(c.session_surface, CASE WHEN EXISTS (SELECT 1 FROM chat_session_links tag_link WHERE tag_link.project_id = $1::uuid AND tag_link.child_chat_id = c.id AND tag_link.kind = 'subagent' AND tag_link.source_surface = 'claude-tag') THEN 'claude-tag' END, (
         SELECT cmsrc.source
         FROM chat_messages cmsrc
@@ -3050,7 +3099,7 @@ WITH candidate_chats AS (
           AND cmsrc.source <> ''
         ORDER BY cmsrc.created_at DESC
         LIMIT 1
-      )) = ANY ($14::text[])
+      )) = ANY ($16::text[])
     )
 ),
 chat_stats AS (
@@ -3062,7 +3111,7 @@ chat_stats AS (
   -- inflating either value.
   SELECT
     cc.id,
-    CASE WHEN $15 = 'num_messages' THEN (
+    CASE WHEN $17 = 'num_messages' THEN (
       -- COUNT(*) rather than COUNT(cm.id) so the probe stays index-only.
       SELECT COUNT(*)::integer
       FROM chat_messages cm
@@ -3103,8 +3152,8 @@ filtered_chats AS (
   -- would evict an actively-writing chat the moment a new message lands past
   -- the caller's @to — the dashboard freezes @to when a range is picked, so
   -- running sessions would flicker out of the list until the next reload.
-  WHERE ($16::timestamptz IS NULL OR cs.last_message_timestamp >= $16)
-    AND ($17::timestamptz IS NULL OR cc.created_at <= $17)
+  WHERE ($18::timestamptz IS NULL OR cs.last_message_timestamp >= $18)
+    AND ($19::timestamptz IS NULL OR cc.created_at <= $19)
 ),
 limited_chats AS (
   -- Only ordering, paging and the total run over every filtered chat; the
@@ -3136,17 +3185,17 @@ limited_chats AS (
         -- deliberate: listings are a timeline of when conversations happened,
         -- and folding in updated_at would let title renames and pin toggles
         -- reorder recency.
-        CASE WHEN $15 = 'last_message_timestamp' AND $18 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
-        CASE WHEN $15 = 'last_message_timestamp' AND $18 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
-        CASE WHEN $15 = 'num_messages' AND $18 = 'desc' THEN fc.sort_num_messages END DESC NULLS LAST,
-        CASE WHEN $15 = 'num_messages' AND $18 = 'asc' THEN fc.sort_num_messages END ASC NULLS LAST,
+        CASE WHEN $17 = 'last_message_timestamp' AND $20 = 'desc' THEN fc.last_message_timestamp END DESC NULLS LAST,
+        CASE WHEN $17 = 'last_message_timestamp' AND $20 = 'asc' THEN fc.last_message_timestamp END ASC NULLS LAST,
+        CASE WHEN $17 = 'num_messages' AND $20 = 'desc' THEN fc.sort_num_messages END DESC NULLS LAST,
+        CASE WHEN $17 = 'num_messages' AND $20 = 'asc' THEN fc.sort_num_messages END ASC NULLS LAST,
         fc.last_message_timestamp DESC,
         fc.id DESC
     ) AS page_position
   FROM filtered_chats fc
   ORDER BY page_position
-  LIMIT $20
-  OFFSET $19
+  LIMIT $22
+  OFFSET $21
 ),
 page_chats AS (
   SELECT
@@ -3199,7 +3248,7 @@ page_chats AS (
     SELECT at.id AS thread_id
     FROM assistant_threads at
     WHERE at.chat_id = lc.id AND at.project_id = $1 AND at.deleted IS FALSE
-    ORDER BY ($7 <> '' AND at.assistant_id::text = $7) DESC, at.last_event_at DESC, at.id DESC
+    ORDER BY ($9 <> '' AND at.assistant_id::text = $9) DESC, at.last_event_at DESC, at.id DESC
     LIMIT 1
   ) picked ON TRUE
   LEFT JOIN assistant_threads thread ON thread.id = picked.thread_id AND thread.project_id = $1
@@ -3260,6 +3309,8 @@ type ListChatsParams struct {
 	ChatID            uuid.NullUUID
 	ExternalUserID    interface{}
 	UserID            interface{}
+	OwnedAgentIds     []uuid.UUID
+	AgentID           uuid.NullUUID
 	Pinned            string
 	Search            interface{}
 	AssistantID       interface{}
@@ -3314,6 +3365,8 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 		arg.ChatID,
 		arg.ExternalUserID,
 		arg.UserID,
+		arg.OwnedAgentIds,
+		arg.AgentID,
 		arg.Pinned,
 		arg.Search,
 		arg.AssistantID,
@@ -3568,6 +3621,43 @@ func (q *Queries) ListLatestGenerationChatMessages(ctx context.Context, arg List
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOwnedAgentIDs = `-- name: ListOwnedAgentIDs :many
+SELECT a.id
+FROM agents a
+WHERE a.organization_id = $1
+  AND a.owner_user_id = $2
+  AND a.owner_reassignment_required_at IS NULL
+  AND a.deleted IS FALSE
+`
+
+type ListOwnedAgentIDsParams struct {
+	OrganizationID string
+	OwnerUserID    string
+}
+
+// The agents whose sessions count as the user's own. Ownership follows the
+// agent-management rule: an owner whose agent is latched for reassignment no
+// longer answers for it, so its sessions stop being theirs.
+func (q *Queries) ListOwnedAgentIDs(ctx context.Context, arg ListOwnedAgentIDsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOwnedAgentIDs, arg.OrganizationID, arg.OwnerUserID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

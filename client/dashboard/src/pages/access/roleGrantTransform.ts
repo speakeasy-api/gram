@@ -10,6 +10,7 @@ import {
   type Selector,
 } from "@gram/client/models/components/selector.js";
 
+import { grantSummaryKey } from "./roleDialogState";
 import type {
   AnnotationHint,
   PolicyEffect,
@@ -84,10 +85,17 @@ export function grantsFromRole(
   role: Role,
   scopes: ScopeDefinition[],
 ): Record<string, RoleGrant> {
+  return formGrantsFromSdk(role.grants, scopes);
+}
+
+function formGrantsFromSdk(
+  grants: SdkRoleGrant[],
+  scopes: ScopeDefinition[],
+): Record<string, RoleGrant> {
   const result: Record<string, RoleGrant> = Object.create(null);
   const baseScopeByBlocklist = baseScopeByBlocklistScope(scopes);
 
-  for (const g of role.grants) {
+  for (const g of grants) {
     const scope = g.scope as Scope;
     // Auth client permissions are provisioned and not edited here; leaving
     // them out of the form means a save never touches them.
@@ -296,6 +304,83 @@ export function roleHoldsGrants(
   const saved = sdkGrantsFromForm(grantsFromRole(role, scopes), scopes);
   const { addGrants, removeGrants } = diffGrants(saved, wanted);
   return addGrants.length === 0 && removeGrants.length === 0;
+}
+
+/**
+ * The form's permissions after the role was read again. A permission the
+ * person changed keeps their edit; every other one follows the role as stored.
+ *
+ * The editor fills its form in from one read of the role and a save works out
+ * its removals from that form, so a later read is not a cosmetic refresh: a
+ * permission the role gained since the form was filled in would otherwise sit
+ * in the form as switched off, and the next save would take it away. Within a
+ * permission the person edited, only the servers, tools and groups they added
+ * or removed keep their edit; the rest follow the role as stored.
+ */
+export function rebaseFormGrants(args: {
+  current: Record<string, RoleGrant>;
+  baseline: Record<string, RoleGrant>;
+  stored: Record<string, RoleGrant>;
+  scopes: ScopeDefinition[];
+}): Record<string, RoleGrant> {
+  const { current, baseline, stored, scopes: definitions } = args;
+  const next: Record<string, RoleGrant> = Object.create(null);
+  const scopes = new Set([
+    ...Object.keys(current),
+    ...Object.keys(baseline),
+    ...Object.keys(stored),
+  ]);
+  for (const scope of scopes) {
+    const edited =
+      grantSummaryKey(current[scope]) !== grantSummaryKey(baseline[scope]);
+    const keep = edited
+      ? rebaseScopeEdit(
+          current[scope],
+          baseline[scope],
+          stored[scope],
+          definitions,
+        )
+      : stored[scope];
+    if (keep) next[scope] = keep;
+  }
+  return next;
+}
+
+/**
+ * Applies the selectors the person added to and removed from one permission
+ * onto that permission as stored. The form's own grant is returned when the
+ * stored side brings nothing new, so the rules being edited keep their ids.
+ */
+function rebaseScopeEdit(
+  current: RoleGrant | undefined,
+  baseline: RoleGrant | undefined,
+  stored: RoleGrant | undefined,
+  scopes: ScopeDefinition[],
+): RoleGrant | undefined {
+  const identities = (grant: RoleGrant | undefined) =>
+    new Map(
+      grantIdentities(
+        grant ? sdkGrantsFromForm({ [grant.scope]: grant }, scopes) : [],
+      ).map((identity) => [grantIdentityKey(identity), identity]),
+    );
+  const before = identities(baseline);
+  const after = identities(current);
+  const merged = identities(stored);
+  for (const key of before.keys()) {
+    if (!after.has(key)) merged.delete(key);
+  }
+  for (const [key, identity] of after) {
+    if (!before.has(key)) merged.set(key, identity);
+  }
+  if (
+    merged.size === after.size &&
+    [...merged.keys()].every((key) => after.has(key))
+  ) {
+    return current;
+  }
+  return Object.values(
+    formGrantsFromSdk(grantsFromIdentities([...merged.values()]), scopes),
+  )[0];
 }
 
 /**

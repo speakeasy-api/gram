@@ -84,7 +84,7 @@ type NetworkAccessProps =
   | {
       mcpServer: McpServer;
       metaMcpServer?: never;
-      endpoints?: never;
+      endpoints: McpEndpoint[];
       toolset: Toolset & {
         networkAccessMode?: McpServerNetworkAccessMode;
       };
@@ -117,7 +117,7 @@ export function NetworkAccessSection({
       mcpServer={mcpServer}
       metaMcpServer={metaMcpServer}
       toolset={toolset}
-      endpoints={endpoints ?? hostedToolsetEndpoint(toolset)}
+      endpoints={endpoints}
       canReadIngress={canManageIngress}
     />
   );
@@ -131,24 +131,6 @@ export function NetworkAccessSection({
   }
 
   return section;
-}
-
-function hostedToolsetEndpoint(
-  toolset: (Toolset & { customDomainId?: string }) | undefined,
-): McpEndpoint[] {
-  if (!toolset?.mcpSlug) return [];
-  return [
-    {
-      id: toolset.id,
-      projectId: toolset.projectId,
-      slug: toolset.mcpSlug,
-      customDomainId: toolset.customDomainId,
-      mcpServerId: toolset.id,
-      isDomainRoot: false,
-      createdAt: new Date(0),
-      updatedAt: new Date(0),
-    },
-  ];
 }
 
 function NetworkAccessSectionContent({

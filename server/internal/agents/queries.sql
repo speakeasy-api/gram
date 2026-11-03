@@ -39,6 +39,15 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 LIMIT 1;
 
+-- name: GetAgentNameIncludingDeleted :one
+-- Reads an agent's name even after it is deleted, for records written about
+-- it afterwards, such as its runtime's withdrawal in the audit log.
+SELECT name
+FROM agents
+WHERE organization_id = @organization_id
+  AND id = @id
+LIMIT 1;
+
 -- name: LockAgentIncludingDeleted :one
 -- Locks an agent whatever its lifecycle, for cleanup that must still run
 -- after the agent is deleted.
@@ -284,21 +293,81 @@ JOIN organization_user_relationships AS membership
 WHERE u.id = ANY(@owner_user_ids::text[]) AND u.deleted_at IS NULL;
 
 -- name: ListManagedAgentSessions :many
+-- Sessions signed in as the agent, and sessions of workloads that sign in as
+-- it through federation. A workload session's subject is the workload, not the
+-- agent, so it is linked through workload_agent_assignments and resolved the
+-- way ResolveWorkloadAgentAssignment resolves it: exact before wildcard, the
+-- longer stem first. A workload pinned to another agent is not listed here,
+-- even when one of this agent's wildcards also covers it.
 -- All known tenancy sources must agree before legacy fallback.
+WITH assigned AS (
+  SELECT a.workload_issuer_id, a.match_kind, a.subject
+  FROM workload_agent_assignments AS a
+  JOIN workload_issuers AS i ON i.organization_id = a.organization_id AND i.id = a.workload_issuer_id
+  WHERE a.organization_id = @organization_id::text
+    AND a.agent_id = @agent_id::uuid
+    AND a.deleted IS FALSE
+    AND i.deleted IS FALSE
+),
+candidates AS (
+  SELECT agent_session.id FROM user_sessions AS agent_session WHERE agent_session.subject_urn = @agent_subject::text
+  UNION
+  SELECT exact_session.id
+  FROM assigned AS a
+  JOIN user_sessions AS exact_session
+    ON a.match_kind = 'exact'
+   AND exact_session.subject_urn = 'workload:' || a.workload_issuer_id::text || ':' || a.subject
+  UNION
+  -- Wildcard stems cannot use the subject index, so the scan stays inside
+  -- the organization's own sessions.
+  SELECT wildcard_session.id
+  FROM assigned AS a
+  JOIN user_sessions AS wildcard_session
+    ON a.match_kind = 'wildcard'
+   AND a.subject LIKE '%*'
+   AND length(a.subject) > 1
+   AND wildcard_session.organization_id = @organization_id::text
+   AND starts_with(wildcard_session.subject_urn, 'workload:' || a.workload_issuer_id::text || ':' || left(a.subject, length(a.subject) - 1))
+)
 SELECT s.id, s.project_id, s.user_session_issuer_id, iss.slug AS issuer_slug,
        c.client_name, s.authorizer_user_id, s.created_at, s.expires_at,
-       s.refresh_expires_at, s.last_used_at
-FROM user_sessions AS s
+       s.refresh_expires_at, s.last_used_at, s.subject_urn
+FROM candidates
+JOIN user_sessions AS s ON s.id = candidates.id
 JOIN user_session_issuers AS iss ON iss.id = s.user_session_issuer_id
 LEFT JOIN projects AS p ON p.id = iss.project_id
 LEFT JOIN projects AS session_project ON session_project.id = s.project_id
 LEFT JOIN user_session_clients AS c ON c.id = s.user_session_client_id AND c.user_session_issuer_id = iss.id
+LEFT JOIN LATERAL (
+  -- `workload:` is 9 characters and the issuer id a 36-character UUID, so the
+  -- issuer id starts at 10 and the external subject at 47.
+  SELECT wa.agent_id
+  FROM workload_agent_assignments AS wa
+  JOIN workload_issuers AS wi ON wi.organization_id = wa.organization_id AND wi.id = wa.workload_issuer_id
+  WHERE starts_with(s.subject_urn, 'workload:')
+    AND wa.organization_id = @organization_id::text
+    AND wa.workload_issuer_id::text = substring(s.subject_urn FROM 10 FOR 36)
+    AND wa.deleted IS FALSE
+    AND wi.deleted IS FALSE
+    AND (
+      (wa.match_kind = 'exact' AND wa.subject = substring(s.subject_urn FROM 47))
+      OR (
+        wa.match_kind = 'wildcard'
+        AND wi.allow_wildcard_admission
+        AND wa.subject LIKE '%*'
+        AND length(wa.subject) > 1
+        AND starts_with(substring(s.subject_urn FROM 47), left(wa.subject, length(wa.subject) - 1))
+      )
+    )
+  ORDER BY (wa.match_kind = 'exact') DESC, length(wa.subject) DESC
+  LIMIT 1
+) AS workload_agent ON TRUE
 WHERE COALESCE(s.organization_id, iss.organization_id, p.organization_id, session_project.organization_id) = @organization_id::text
   AND (s.organization_id IS NULL OR s.organization_id = @organization_id::text)
   AND (iss.organization_id IS NULL OR iss.organization_id = @organization_id::text)
   AND (p.organization_id IS NULL OR p.organization_id = @organization_id::text)
   AND (session_project.organization_id IS NULL OR session_project.organization_id = @organization_id::text)
-  AND s.subject_urn = @agent_subject::text
+  AND (s.subject_urn = @agent_subject::text OR workload_agent.agent_id = @agent_id::uuid)
   AND s.deleted IS FALSE
   AND (sqlc.narg('cursor')::uuid IS NULL OR s.id < sqlc.narg('cursor')::uuid)
 ORDER BY s.id DESC
@@ -447,3 +516,35 @@ SELECT EXISTS (
       'connection_owner', r.owner_user_id
     )
 );
+
+-- name: ListAgentsNeedingConnectionRefresh :many
+-- One tenant-scoped read for the visible page, without exposing source credentials.
+SELECT DISTINCT a.id
+FROM agents a
+JOIN principal_remote_session_bindings b ON b.principal_id = a.id AND b.organization_id = a.organization_id AND b.revoked_at IS NULL
+JOIN projects p ON p.id = b.project_id AND p.organization_id = a.organization_id AND NOT p.deleted
+LEFT JOIN remote_sessions s ON s.id = b.remote_session_id
+WHERE a.organization_id = @organization_id
+  AND a.id = ANY(@agent_ids::uuid[])
+  AND NOT a.deleted
+  AND (
+    s.id IS NULL OR s.deleted
+    OR NOT EXISTS (SELECT 1 FROM users lender JOIN organization_user_relationships lm ON lm.user_id = lender.id AND lm.organization_id = a.organization_id AND lm.deleted_at IS NULL WHERE 'user:' || lender.id = s.subject_urn AND lender.deleted_at IS NULL)
+    OR b.attached_by_subject_id <> s.subject_urn
+    OR NOT EXISTS (
+      SELECT 1
+      FROM remote_session_clients c
+      JOIN remote_session_issuers issuer ON issuer.id = c.remote_session_issuer_id AND NOT issuer.deleted
+      JOIN user_session_issuers usi ON usi.id = b.user_session_issuer_id AND NOT usi.deleted
+      JOIN user_session_issuers provenance ON provenance.id = s.user_session_issuer_id AND NOT provenance.deleted
+      JOIN remote_session_client_user_session_issuers link ON link.remote_session_client_id = c.id AND link.user_session_issuer_id = usi.id
+      WHERE c.id = b.remote_session_client_id AND c.id = s.remote_session_client_id AND NOT c.deleted
+        AND (c.project_id = p.id OR (c.project_id IS NULL AND (c.organization_id IS NULL OR c.organization_id = p.organization_id)))
+        AND (issuer.project_id = p.id OR (issuer.project_id IS NULL AND (issuer.organization_id IS NULL OR issuer.organization_id = p.organization_id)))
+        AND (usi.project_id = p.id OR (usi.project_id IS NULL AND usi.organization_id = p.organization_id))
+        AND (provenance.project_id = p.id OR (provenance.project_id IS NULL AND provenance.organization_id = p.organization_id))
+    )
+    OR (s.authorization_expires_at IS NOT NULL AND s.authorization_expires_at <= now())
+    OR (s.access_expires_at IS NOT NULL AND s.access_expires_at <= now()
+      AND (s.refresh_token_encrypted IS NULL OR s.refresh_expires_at <= now()))
+  );

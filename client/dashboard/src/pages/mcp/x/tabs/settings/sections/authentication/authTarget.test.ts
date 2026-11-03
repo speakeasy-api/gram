@@ -9,16 +9,14 @@ vi.mock("@/pages/mcp/x/useFollowRenamedServer", () => ({
   useFollowRenamedServer: () => followRenamedServer,
 }));
 
-const { get, update, setUserSessionIssuer } = vi.hoisted(() => ({
+const { get, update } = vi.hoisted(() => ({
   get: vi.fn(),
   update: vi.fn(),
-  setUserSessionIssuer: vi.fn(),
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     mcpServers: { get, update },
-    toolsets: { setUserSessionIssuer },
   }),
 }));
 
@@ -111,7 +109,6 @@ describe("useToolsetAuthTarget", () => {
     };
     get.mockResolvedValue(canonical);
     update.mockResolvedValue(undefined);
-    setUserSessionIssuer.mockReset();
     const toolset = {
       id: "toolset-id",
       slug: "hosted",
@@ -141,6 +138,5 @@ describe("useToolsetAuthTarget", () => {
       undefined,
       undefined,
     );
-    expect(setUserSessionIssuer).not.toHaveBeenCalled();
   });
 });

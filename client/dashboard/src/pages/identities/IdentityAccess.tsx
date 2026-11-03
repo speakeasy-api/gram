@@ -168,6 +168,7 @@ export default function IdentityAccess(): JSX.Element {
   return (
     <IdentitySection
       title="Access"
+      timeRange
       meta={sectionMeta([
         { count: roles.length, singular: "role" },
         { count: scopeCount, singular: "permission" },

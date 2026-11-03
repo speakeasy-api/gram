@@ -87,8 +87,15 @@ type ExtendTrialRequestBody struct {
 // "createOrganization" endpoint HTTP request body.
 type CreateOrganizationRequestBody struct {
 	// Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes
-	// the name and verified email domain.
+	// the verified email domain.
 	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
+	// Organization display name. When omitted, a name is derived from the
+	// registrable company domain.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// Preferred organization URL slug. When omitted, a unique slug is derived from
+	// the organization name. Explicit slugs use lowercase letters, numbers, and
+	// hyphens.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
 	// The operator confirms that domain ownership was established outside this
 	// form.
 	OwnershipConfirmed *bool `form:"ownership_confirmed,omitempty" json:"ownership_confirmed,omitempty" xml:"ownership_confirmed,omitempty"`
@@ -129,6 +136,14 @@ type SetInferenceKeyMonthlyLimitRequestBody struct {
 type SetStripeCustomerRequestBody struct {
 	OrganizationID   *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
 	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
+}
+
+// SetAdoptionDashboardURLRequestBody is the type of the "admin" service
+// "setAdoptionDashboardUrl" endpoint HTTP request body.
+type SetAdoptionDashboardURLRequestBody struct {
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	// An https URL, or empty to clear the link.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 }
 
 // CancelStripeSubscriptionRequestBody is the type of the "admin" service
@@ -424,13 +439,15 @@ type GetRegistryPromotionCandidateRequestBody struct {
 // PromoteRegistryCandidateRequestBody is the type of the "admin" service
 // "promoteRegistryCandidate" endpoint HTTP request body.
 type PromoteRegistryCandidateRequestBody struct {
-	OrganizationID          *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
-	ProjectID               *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
-	McpServerID             *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
-	SourceRevision          *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
-	CurationRevision        *string `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
-	PublicName              *string `form:"public_name,omitempty" json:"public_name,omitempty" xml:"public_name,omitempty"`
-	PublicTitle             *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	OrganizationID   *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	ProjectID        *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	McpServerID      *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	SourceRevision   *string `form:"source_revision,omitempty" json:"source_revision,omitempty" xml:"source_revision,omitempty"`
+	CurationRevision *string `form:"curation_revision,omitempty" json:"curation_revision,omitempty" xml:"curation_revision,omitempty"`
+	PublicName       *string `form:"public_name,omitempty" json:"public_name,omitempty" xml:"public_name,omitempty"`
+	// Public title, at most 100 Unicode code points.
+	PublicTitle *string `form:"public_title,omitempty" json:"public_title,omitempty" xml:"public_title,omitempty"`
+	// Public description, at most 100 Unicode code points.
 	PublicDescription       *string `form:"public_description,omitempty" json:"public_description,omitempty" xml:"public_description,omitempty"`
 	PublicURL               *string `form:"public_url,omitempty" json:"public_url,omitempty" xml:"public_url,omitempty"`
 	DocumentationURL        *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
@@ -690,6 +707,10 @@ type GetOrganizationFeaturesResponseBody struct {
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent bool `form:"device_agent" json:"device_agent" xml:"device_agent"`
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool `form:"upstream_auth_enforced,omitempty" json:"upstream_auth_enforced,omitempty" xml:"upstream_auth_enforced,omitempty"`
 }
 
 // SetOrganizationFeatureResponseBody is the type of the "admin" service
@@ -752,6 +773,10 @@ type SetOrganizationFeatureResponseBody struct {
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent bool `form:"device_agent" json:"device_agent" xml:"device_agent"`
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool `form:"upstream_auth_enforced,omitempty" json:"upstream_auth_enforced,omitempty" xml:"upstream_auth_enforced,omitempty"`
 }
 
 // GetOrganizationChatAnalysisSettingsResponseBody is the type of the "admin"
@@ -857,6 +882,9 @@ type UpdateOrganizationResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -923,6 +951,9 @@ type DisableOrganizationResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -978,6 +1009,9 @@ type EnableOrganizationResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1033,6 +1067,9 @@ type GetOrganizationResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1147,6 +1184,9 @@ type ExtendTrialResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1202,6 +1242,9 @@ type CreateOrganizationResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1257,6 +1300,9 @@ type RearmTrialResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1377,6 +1423,67 @@ type SetStripeCustomerResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
+	// Number of active members in the organization.
+	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
+	// The flow that created the organization (e.g. signup, assistants,
+	// platform_admin). Absent when nothing recorded one. Informational only.
+	CreationSource *string `form:"creation_source,omitempty" json:"creation_source,omitempty" xml:"creation_source,omitempty"`
+	// The creation date of the organization.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// The last update date of the organization.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+}
+
+// SetAdoptionDashboardURLResponseBody is the type of the "admin" service
+// "setAdoptionDashboardUrl" endpoint HTTP response body.
+type SetAdoptionDashboardURLResponseBody struct {
+	// The ID of the organization
+	ID string `form:"id" json:"id" xml:"id"`
+	// The name of the organization
+	Name string `form:"name" json:"name" xml:"name"`
+	// The slug of the organization
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// Speakeasy account type (e.g. free, pro, payg, enterprise).
+	AccountType string `form:"account_type" json:"account_type" xml:"account_type"`
+	// WorkOS organization ID, if linked.
+	WorkosID *string `form:"workos_id,omitempty" json:"workos_id,omitempty" xml:"workos_id,omitempty"`
+	// Link to the organization in the WorkOS dashboard. Absent when the
+	// organization is not linked to WorkOS or the deployment has no WorkOS
+	// environment configured.
+	WorkosDashboardURL *string `form:"workos_dashboard_url,omitempty" json:"workos_dashboard_url,omitempty" xml:"workos_dashboard_url,omitempty"`
+	// Stripe customer ID, if billing metadata has a customer.
+	StripeCustomerID *string `form:"stripe_customer_id,omitempty" json:"stripe_customer_id,omitempty" xml:"stripe_customer_id,omitempty"`
+	// Current Stripe subscription ID, if subscribed.
+	StripeSubscriptionID *string `form:"stripe_subscription_id,omitempty" json:"stripe_subscription_id,omitempty" xml:"stripe_subscription_id,omitempty"`
+	// Link to the Stripe customer in the Stripe dashboard. Absent when the
+	// organization has no Stripe customer or the deployment has no Stripe API key
+	// configured.
+	StripeCustomerDashboardURL *string `form:"stripe_customer_dashboard_url,omitempty" json:"stripe_customer_dashboard_url,omitempty" xml:"stripe_customer_dashboard_url,omitempty"`
+	// Link to the Stripe subscription in the Stripe dashboard. Absent when the
+	// organization has no Stripe subscription or the deployment has no Stripe API
+	// key configured.
+	StripeSubscriptionDashboardURL *string `form:"stripe_subscription_dashboard_url,omitempty" json:"stripe_subscription_dashboard_url,omitempty" xml:"stripe_subscription_dashboard_url,omitempty"`
+	// Whether the organization is whitelisted for full access.
+	Whitelisted bool `form:"whitelisted" json:"whitelisted" xml:"whitelisted"`
+	// The time at which the organization was disabled, if any.
+	DisabledAt *string `form:"disabled_at,omitempty" json:"disabled_at,omitempty" xml:"disabled_at,omitempty"`
+	// Lifecycle state of the organization's enterprise trial.
+	TrialState *string `form:"trial_state,omitempty" json:"trial_state,omitempty" xml:"trial_state,omitempty"`
+	// The trial tier. Absent when the organization never trialled.
+	TrialTier *string `form:"trial_tier,omitempty" json:"trial_tier,omitempty" xml:"trial_tier,omitempty"`
+	// The time at which the enterprise trial ends. Absent when the organization
+	// never trialled.
+	TrialEndsAt *string `form:"trial_ends_at,omitempty" json:"trial_ends_at,omitempty" xml:"trial_ends_at,omitempty"`
+	// The time at which the trial converted to a paid plan, if any.
+	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
+	// The time at which the organization was demoted after its trial, if any.
+	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1841,8 +1948,10 @@ type MigrateToGlobalIssuerResponseBody struct {
 // UploadPlatformImageResponseBody is the type of the "admin" service
 // "uploadPlatformImage" endpoint HTTP response body.
 type UploadPlatformImageResponseBody struct {
-	// The asset entry that was created in Speakeasy
+	// The uploaded platform image asset
 	Asset *AssetResponseBody `form:"asset" json:"asset" xml:"asset"`
+	// Canonical public URL for the uploaded image
+	URL string `form:"url" json:"url" xml:"url"`
 }
 
 // StartTrialResponseBody is the type of the "admin" service "startTrial"
@@ -1889,6 +1998,9 @@ type StartTrialResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -1944,6 +2056,9 @@ type ChangeTrialEndDateResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -2104,17 +2219,18 @@ type ListRegistryPromotionCandidatesResponseBody struct {
 // GetRegistryPromotionCandidateResponseBody is the type of the "admin" service
 // "getRegistryPromotionCandidate" endpoint HTTP response body.
 type GetRegistryPromotionCandidateResponseBody struct {
-	ID                string                                         `form:"id" json:"id" xml:"id"`
-	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
-	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
-	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
-	SourceRevision    string                                         `form:"source_revision" json:"source_revision" xml:"source_revision"`
-	Eligible          bool                                           `form:"eligible" json:"eligible" xml:"eligible"`
+	ID                string                                           `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                           `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                           `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                           `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                           `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                           `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                           `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
+	SourceRevision    string                                           `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible          bool                                             `form:"eligible" json:"eligible" xml:"eligible"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility bool    `form:"can_override_eligibility" json:"can_override_eligibility" xml:"can_override_eligibility"`
 	Reason                 string  `form:"reason" json:"reason" xml:"reason"`
@@ -2140,17 +2256,18 @@ type GetRegistryPromotionCandidateResponseBody struct {
 // PromoteRegistryCandidateResponseBody is the type of the "admin" service
 // "promoteRegistryCandidate" endpoint HTTP response body.
 type PromoteRegistryCandidateResponseBody struct {
-	ID                string                                         `form:"id" json:"id" xml:"id"`
-	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
-	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
-	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
-	SourceRevision    string                                         `form:"source_revision" json:"source_revision" xml:"source_revision"`
-	Eligible          bool                                           `form:"eligible" json:"eligible" xml:"eligible"`
+	ID                string                                           `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                           `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                           `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                           `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                           `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                           `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                           `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
+	SourceRevision    string                                           `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible          bool                                             `form:"eligible" json:"eligible" xml:"eligible"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility bool    `form:"can_override_eligibility" json:"can_override_eligibility" xml:"can_override_eligibility"`
 	Reason                 string  `form:"reason" json:"reason" xml:"reason"`
@@ -2176,17 +2293,18 @@ type PromoteRegistryCandidateResponseBody struct {
 // CurateRegistryPromotionCandidateResponseBody is the type of the "admin"
 // service "curateRegistryPromotionCandidate" endpoint HTTP response body.
 type CurateRegistryPromotionCandidateResponseBody struct {
-	ID                string                                         `form:"id" json:"id" xml:"id"`
-	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
-	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
-	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
-	SourceRevision    string                                         `form:"source_revision" json:"source_revision" xml:"source_revision"`
-	Eligible          bool                                           `form:"eligible" json:"eligible" xml:"eligible"`
+	ID                string                                           `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                           `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                           `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                           `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                           `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                           `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                           `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
+	SourceRevision    string                                           `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible          bool                                             `form:"eligible" json:"eligible" xml:"eligible"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility bool    `form:"can_override_eligibility" json:"can_override_eligibility" xml:"can_override_eligibility"`
 	Reason                 string  `form:"reason" json:"reason" xml:"reason"`
@@ -2212,17 +2330,18 @@ type CurateRegistryPromotionCandidateResponseBody struct {
 // RetryRegistryPromotionDocsResponseBody is the type of the "admin" service
 // "retryRegistryPromotionDocs" endpoint HTTP response body.
 type RetryRegistryPromotionDocsResponseBody struct {
-	ID                string                                         `form:"id" json:"id" xml:"id"`
-	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
-	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
-	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
-	SourceRevision    string                                         `form:"source_revision" json:"source_revision" xml:"source_revision"`
-	Eligible          bool                                           `form:"eligible" json:"eligible" xml:"eligible"`
+	ID                string                                           `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                           `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                           `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                           `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                           `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                           `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                           `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
+	SourceRevision    string                                           `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible          bool                                             `form:"eligible" json:"eligible" xml:"eligible"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility bool    `form:"can_override_eligibility" json:"can_override_eligibility" xml:"can_override_eligibility"`
 	Reason                 string  `form:"reason" json:"reason" xml:"reason"`
@@ -2574,6 +2693,9 @@ type SetStripeSubscriptionResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -2653,8 +2775,8 @@ type RunUpstreamOAuthMigrationResponseBody struct {
 	AuthClientsWritten *int64 `form:"auth_clients_written,omitempty" json:"auth_clients_written,omitempty" xml:"auth_clients_written,omitempty"`
 	// Server to auth client links recorded.
 	AuthClientLinksWritten *int64 `form:"auth_client_links_written,omitempty" json:"auth_client_links_written,omitempty" xml:"auth_client_links_written,omitempty"`
-	// Servers marked as needing upstream authentication because they offer a
-	// backfilled auth client.
+	// Deprecated: always omitted. Whether a server needs upstream authentication
+	// follows from the auth clients it offers, so no server is marked.
 	ServersMarkedRequiringUpstreamAuth *int64 `form:"servers_marked_requiring_upstream_auth,omitempty" json:"servers_marked_requiring_upstream_auth,omitempty" xml:"servers_marked_requiring_upstream_auth,omitempty"`
 	// Credential choices this run named a typed auth client on.
 	SelectionsMapped *int64 `form:"selections_mapped,omitempty" json:"selections_mapped,omitempty" xml:"selections_mapped,omitempty"`
@@ -2738,6 +2860,13 @@ type DisableUpstreamAuthEnforcementResponseBody struct {
 	// Whether upstream auth enforcement is on for the organization, and whether it
 	// can be turned on.
 	Enforcement *AdminUpstreamAuthEnforcementResponseBody `form:"enforcement,omitempty" json:"enforcement,omitempty" xml:"enforcement,omitempty"`
+}
+
+// BackfillMcpAuthGrantsResponseBody is the type of the "admin" service
+// "backfillMcpAuthGrants" endpoint HTTP response body.
+type BackfillMcpAuthGrantsResponseBody struct {
+	// How many principals gained the mcp:auth grant.
+	Granted int64 `form:"granted" json:"granted" xml:"granted"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -9082,6 +9211,196 @@ type SetStripeCustomerUnexpectedResponseBody struct {
 // "setStripeCustomer" endpoint HTTP response body for the "gateway_error"
 // error.
 type SetStripeCustomerGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAdoptionDashboardURLUnauthorizedResponseBody is the type of the "admin"
+// service "setAdoptionDashboardUrl" endpoint HTTP response body for the
+// "unauthorized" error.
+type SetAdoptionDashboardURLUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAdoptionDashboardURLForbiddenResponseBody is the type of the "admin"
+// service "setAdoptionDashboardUrl" endpoint HTTP response body for the
+// "forbidden" error.
+type SetAdoptionDashboardURLForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAdoptionDashboardURLBadRequestResponseBody is the type of the "admin"
+// service "setAdoptionDashboardUrl" endpoint HTTP response body for the
+// "bad_request" error.
+type SetAdoptionDashboardURLBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAdoptionDashboardURLNotFoundResponseBody is the type of the "admin"
+// service "setAdoptionDashboardUrl" endpoint HTTP response body for the
+// "not_found" error.
+type SetAdoptionDashboardURLNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAdoptionDashboardURLConflictResponseBody is the type of the "admin"
+// service "setAdoptionDashboardUrl" endpoint HTTP response body for the
+// "conflict" error.
+type SetAdoptionDashboardURLConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAdoptionDashboardURLUnsupportedMediaResponseBody is the type of the
+// "admin" service "setAdoptionDashboardUrl" endpoint HTTP response body for
+// the "unsupported_media" error.
+type SetAdoptionDashboardURLUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAdoptionDashboardURLInvalidResponseBody is the type of the "admin"
+// service "setAdoptionDashboardUrl" endpoint HTTP response body for the
+// "invalid" error.
+type SetAdoptionDashboardURLInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAdoptionDashboardURLInvariantViolationResponseBody is the type of the
+// "admin" service "setAdoptionDashboardUrl" endpoint HTTP response body for
+// the "invariant_violation" error.
+type SetAdoptionDashboardURLInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAdoptionDashboardURLUnexpectedResponseBody is the type of the "admin"
+// service "setAdoptionDashboardUrl" endpoint HTTP response body for the
+// "unexpected" error.
+type SetAdoptionDashboardURLUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetAdoptionDashboardURLGatewayErrorResponseBody is the type of the "admin"
+// service "setAdoptionDashboardUrl" endpoint HTTP response body for the
+// "gateway_error" error.
+type SetAdoptionDashboardURLGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -22290,6 +22609,194 @@ type DisableUpstreamAuthEnforcementGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// BackfillMcpAuthGrantsUnauthorizedResponseBody is the type of the "admin"
+// service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "unauthorized" error.
+type BackfillMcpAuthGrantsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsForbiddenResponseBody is the type of the "admin"
+// service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "forbidden" error.
+type BackfillMcpAuthGrantsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsBadRequestResponseBody is the type of the "admin"
+// service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "bad_request" error.
+type BackfillMcpAuthGrantsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsNotFoundResponseBody is the type of the "admin" service
+// "backfillMcpAuthGrants" endpoint HTTP response body for the "not_found"
+// error.
+type BackfillMcpAuthGrantsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsConflictResponseBody is the type of the "admin" service
+// "backfillMcpAuthGrants" endpoint HTTP response body for the "conflict" error.
+type BackfillMcpAuthGrantsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsUnsupportedMediaResponseBody is the type of the "admin"
+// service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "unsupported_media" error.
+type BackfillMcpAuthGrantsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsInvalidResponseBody is the type of the "admin" service
+// "backfillMcpAuthGrants" endpoint HTTP response body for the "invalid" error.
+type BackfillMcpAuthGrantsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsInvariantViolationResponseBody is the type of the
+// "admin" service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "invariant_violation" error.
+type BackfillMcpAuthGrantsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsUnexpectedResponseBody is the type of the "admin"
+// service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "unexpected" error.
+type BackfillMcpAuthGrantsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsGatewayErrorResponseBody is the type of the "admin"
+// service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "gateway_error" error.
+type BackfillMcpAuthGrantsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -22353,7 +22860,13 @@ type AuditLogResponseBody struct {
 	ActingSurface string `form:"acting_surface" json:"acting_surface" xml:"acting_surface"`
 	// The registered OAuth client the call authenticated as, when it had one.
 	// Absent for calls that carried no OAuth client.
-	ActingClientID     *string         `form:"acting_client_id,omitempty" json:"acting_client_id,omitempty" xml:"acting_client_id,omitempty"`
+	ActingClientID *string `form:"acting_client_id,omitempty" json:"acting_client_id,omitempty" xml:"acting_client_id,omitempty"`
+	// What kind of event the entry records: 'configuration' for a change to the
+	// platform's configuration, 'security' for machine access and other
+	// security-relevant activity that is not a configuration decision. Always
+	// present in responses; optional in the schema so clients built against it
+	// still read responses from servers that predate it.
+	Category           *string         `form:"category,omitempty" json:"category,omitempty" xml:"category,omitempty"`
 	SubjectID          string          `form:"subject_id" json:"subject_id" xml:"subject_id"`
 	SubjectType        string          `form:"subject_type" json:"subject_type" xml:"subject_type"`
 	SubjectDisplayName *string         `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
@@ -22428,6 +22941,9 @@ type AdminOrganizationResponseBody struct {
 	TrialConvertedAt *string `form:"trial_converted_at,omitempty" json:"trial_converted_at,omitempty" xml:"trial_converted_at,omitempty"`
 	// The time at which the organization was demoted after its trial, if any.
 	TrialDemotedAt *string `form:"trial_demoted_at,omitempty" json:"trial_demoted_at,omitempty" xml:"trial_demoted_at,omitempty"`
+	// Staff-entered link to the organization's adoption dashboard. Absent when
+	// none has been set.
+	AdoptionDashboardURL *string `form:"adoption_dashboard_url,omitempty" json:"adoption_dashboard_url,omitempty" xml:"adoption_dashboard_url,omitempty"`
 	// Number of active members in the organization.
 	MemberCount int `form:"member_count" json:"member_count" xml:"member_count"`
 	// The flow that created the organization (e.g. signup, assistants,
@@ -23045,11 +23561,13 @@ type AdminMcpServerHealthRemoteSessionsResponseBody struct {
 // AdminMcpServerHealthUpstreamAuthResponseBody is used to define fields on
 // response body types.
 type AdminMcpServerHealthUpstreamAuthResponseBody struct {
-	// configured, setup_incomplete (required with no enabled client),
-	// no_auth_required or undecided.
+	// configured (at least one enabled auth client), setup_incomplete (no auth
+	// client was ever linked to it, live or detached, but it has upstream
+	// credentials that no auth client records yet) or no_auth_required.
 	Status string `form:"status" json:"status" xml:"status"`
-	// Whether the upstream needs authentication. Omitted while undecided.
-	RequiresUpstreamAuth *bool                                         `form:"requires_upstream_auth,omitempty" json:"requires_upstream_auth,omitempty" xml:"requires_upstream_auth,omitempty"`
+	// Whether the upstream needs authentication: true when the server offers at
+	// least one enabled auth client.
+	RequiresUpstreamAuth bool                                          `form:"requires_upstream_auth" json:"requires_upstream_auth" xml:"requires_upstream_auth"`
 	AuthClients          []*AdminMcpServerHealthAuthClientResponseBody `form:"auth_clients" json:"auth_clients" xml:"auth_clients"`
 }
 
@@ -23240,17 +23758,18 @@ type AdminExternalMcpMigrationOutcomeResponseBody struct {
 // AdminRegistryPromotionCandidateResponseBody is used to define fields on
 // response body types.
 type AdminRegistryPromotionCandidateResponseBody struct {
-	ID                string                                         `form:"id" json:"id" xml:"id"`
-	OrganizationID    string                                         `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	ProjectID         string                                         `form:"project_id" json:"project_id" xml:"project_id"`
-	McpServerID       string                                         `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
-	RemoteMcpServerID string                                         `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
-	SourceName        *string                                        `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
-	CreatedAt         string                                         `form:"created_at" json:"created_at" xml:"created_at"`
-	CurationRevision  string                                         `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
-	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
-	SourceRevision    string                                         `form:"source_revision" json:"source_revision" xml:"source_revision"`
-	Eligible          bool                                           `form:"eligible" json:"eligible" xml:"eligible"`
+	ID                string                                           `form:"id" json:"id" xml:"id"`
+	OrganizationID    string                                           `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	ProjectID         string                                           `form:"project_id" json:"project_id" xml:"project_id"`
+	McpServerID       string                                           `form:"mcp_server_id" json:"mcp_server_id" xml:"mcp_server_id"`
+	RemoteMcpServerID string                                           `form:"remote_mcp_server_id" json:"remote_mcp_server_id" xml:"remote_mcp_server_id"`
+	SourceName        *string                                          `form:"source_name,omitempty" json:"source_name,omitempty" xml:"source_name,omitempty"`
+	CreatedAt         string                                           `form:"created_at" json:"created_at" xml:"created_at"`
+	CurationRevision  string                                           `form:"curation_revision" json:"curation_revision" xml:"curation_revision"`
+	SuggestedMetadata *AdminRegistryPromotionSuggestionsResponseBody   `form:"suggested_metadata,omitempty" json:"suggested_metadata,omitempty" xml:"suggested_metadata,omitempty"`
+	AuthDiscovery     *AdminRegistryPromotionAuthDiscoveryResponseBody `form:"auth_discovery,omitempty" json:"auth_discovery,omitempty" xml:"auth_discovery,omitempty"`
+	SourceRevision    string                                           `form:"source_revision" json:"source_revision" xml:"source_revision"`
+	Eligible          bool                                             `form:"eligible" json:"eligible" xml:"eligible"`
 	// Whether staff may explicitly accept this candidate's health evidence.
 	CanOverrideEligibility bool    `form:"can_override_eligibility" json:"can_override_eligibility" xml:"can_override_eligibility"`
 	Reason                 string  `form:"reason" json:"reason" xml:"reason"`
@@ -23283,6 +23802,15 @@ type AdminRegistryPromotionSuggestionsResponseBody struct {
 	DocumentationURL  *string `form:"documentation_url,omitempty" json:"documentation_url,omitempty" xml:"documentation_url,omitempty"`
 	DocsSlug          *string `form:"docs_slug,omitempty" json:"docs_slug,omitempty" xml:"docs_slug,omitempty"`
 	AuthMode          *string `form:"auth_mode,omitempty" json:"auth_mode,omitempty" xml:"auth_mode,omitempty"`
+}
+
+// AdminRegistryPromotionAuthDiscoveryResponseBody is used to define fields on
+// response body types.
+type AdminRegistryPromotionAuthDiscoveryResponseBody struct {
+	SupportsDcr  bool   `form:"supports_dcr" json:"supports_dcr" xml:"supports_dcr"`
+	SupportsCimd bool   `form:"supports_cimd" json:"supports_cimd" xml:"supports_cimd"`
+	AuthSetup    string `form:"auth_setup" json:"auth_setup" xml:"auth_setup"`
+	Status       string `form:"status" json:"status" xml:"status"`
 }
 
 // AdminRegistryOktaCandidateResponseBody is used to define fields on response
@@ -23522,14 +24050,14 @@ type AdminUpstreamOAuthMigrationServerResponseBody struct {
 // on response body types.
 type AdminUpstreamOAuthMigrationAuthClientsResponseBody struct {
 	// Whether every configured identity has its auth client, server links and
-	// header copies recorded, no backfilled record is left to retire, no server
-	// offering one is left undecided, and no phase failed.
+	// header copies recorded, no backfilled record is left to retire, and no phase
+	// failed.
 	Complete bool `form:"complete" json:"complete" xml:"complete"`
 	// Whether a run is recording typed auth clients for the organization right
 	// now. The other counts are then empty; check again when it finishes.
 	InProgress bool `form:"in_progress" json:"in_progress" xml:"in_progress"`
-	// Servers offering a backfilled auth client whose need for upstream
-	// authentication is still undecided, not yet marked as needing it.
+	// Deprecated: always 0. Whether a server needs upstream authentication follows
+	// from the auth clients it offers, so no server is marked.
 	PendingMarkedServers int64 `form:"pending_marked_servers" json:"pending_marked_servers" xml:"pending_marked_servers"`
 	// Configured identities and server links decided.
 	Associations int64 `form:"associations" json:"associations" xml:"associations"`
@@ -23565,6 +24093,9 @@ type AdminUpstreamOAuthMigrationAuthClientsResponseBody struct {
 	// agents and API keys are missing, which a run adds. Enforcement needs them,
 	// so existing callers keep their access.
 	PendingGrants *int64 `form:"pending_grants,omitempty" json:"pending_grants,omitempty" xml:"pending_grants,omitempty"`
+	// Agent attachments whose grants a run does not write while the organization's
+	// upstream selector writes are not allowed. While any wait, complete is false.
+	AttachmentsWaiting *int64 `form:"attachments_waiting,omitempty" json:"attachments_waiting,omitempty" xml:"attachments_waiting,omitempty"`
 	// Credential choice coverage for each credential class.
 	SelectionClasses []*AdminUpstreamOAuthMigrationSelectionClassResponseBody `form:"selection_classes,omitempty" json:"selection_classes,omitempty" xml:"selection_classes,omitempty"`
 	// The first live credential choices left without a usable auth client.
@@ -23695,9 +24226,8 @@ type AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody struct {
 	// Why there is no choice: selection_required (several clients could serve it),
 	// personal_requires_user (only a personal client serves it, and the turn has
 	// no user), no_client (no live, enabled auth client carries its upstream OAuth
-	// client), setup_incomplete (it needs upstream authentication and offers no
-	// auth client) or upstream_auth_undecided (it offers no auth client and an
-	// administrator has not decided whether it needs upstream authentication).
+	// client) or setup_incomplete (no auth client was ever linked to it, live or
+	// detached, but it has upstream credentials that no auth client records yet).
 	Reason string `form:"reason" json:"reason" xml:"reason"`
 	// Profile and server pairs with no choice for this reason.
 	Servers int64 `form:"servers" json:"servers" xml:"servers"`
@@ -23820,6 +24350,7 @@ func NewGetOrganizationFeaturesResponseBody(res *adminviews.ProductFeaturesView)
 		OrganizationGatewayDisabled:             *res.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         *res.CodeModeEnabled,
 		DeviceAgent:                             *res.DeviceAgent,
+		UpstreamAuthEnforced:                    res.UpstreamAuthEnforced,
 	}
 	return body
 }
@@ -23850,6 +24381,7 @@ func NewSetOrganizationFeatureResponseBody(res *adminviews.ProductFeaturesView) 
 		OrganizationGatewayDisabled:             *res.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         *res.CodeModeEnabled,
 		DeviceAgent:                             *res.DeviceAgent,
+		UpstreamAuthEnforced:                    res.UpstreamAuthEnforced,
 	}
 	return body
 }
@@ -23937,6 +24469,7 @@ func NewUpdateOrganizationResponseBody(res *admin.AdminOrganization) *UpdateOrga
 		TrialEndsAt:                    res.TrialEndsAt,
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
+		AdoptionDashboardURL:           res.AdoptionDashboardURL,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
@@ -23989,6 +24522,7 @@ func NewDisableOrganizationResponseBody(res *admin.AdminOrganization) *DisableOr
 		TrialEndsAt:                    res.TrialEndsAt,
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
+		AdoptionDashboardURL:           res.AdoptionDashboardURL,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
@@ -24018,6 +24552,7 @@ func NewEnableOrganizationResponseBody(res *admin.AdminOrganization) *EnableOrga
 		TrialEndsAt:                    res.TrialEndsAt,
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
+		AdoptionDashboardURL:           res.AdoptionDashboardURL,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
@@ -24047,6 +24582,7 @@ func NewGetOrganizationResponseBody(res *admin.AdminOrganization) *GetOrganizati
 		TrialEndsAt:                    res.TrialEndsAt,
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
+		AdoptionDashboardURL:           res.AdoptionDashboardURL,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
@@ -24222,6 +24758,7 @@ func NewExtendTrialResponseBody(res *admin.AdminOrganization) *ExtendTrialRespon
 		TrialEndsAt:                    res.TrialEndsAt,
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
+		AdoptionDashboardURL:           res.AdoptionDashboardURL,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
@@ -24251,6 +24788,7 @@ func NewCreateOrganizationResponseBody(res *admin.AdminOrganization) *CreateOrga
 		TrialEndsAt:                    res.TrialEndsAt,
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
+		AdoptionDashboardURL:           res.AdoptionDashboardURL,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
@@ -24280,6 +24818,7 @@ func NewRearmTrialResponseBody(res *admin.AdminOrganization) *RearmTrialResponse
 		TrialEndsAt:                    res.TrialEndsAt,
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
+		AdoptionDashboardURL:           res.AdoptionDashboardURL,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
@@ -24404,6 +24943,37 @@ func NewSetStripeCustomerResponseBody(res *admin.AdminOrganization) *SetStripeCu
 		TrialEndsAt:                    res.TrialEndsAt,
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
+		AdoptionDashboardURL:           res.AdoptionDashboardURL,
+		MemberCount:                    res.MemberCount,
+		CreationSource:                 res.CreationSource,
+		CreatedAt:                      res.CreatedAt,
+		UpdatedAt:                      res.UpdatedAt,
+	}
+	return body
+}
+
+// NewSetAdoptionDashboardURLResponseBody builds the HTTP response body from
+// the result of the "setAdoptionDashboardUrl" endpoint of the "admin" service.
+func NewSetAdoptionDashboardURLResponseBody(res *admin.AdminOrganization) *SetAdoptionDashboardURLResponseBody {
+	body := &SetAdoptionDashboardURLResponseBody{
+		ID:                             res.ID,
+		Name:                           res.Name,
+		Slug:                           res.Slug,
+		AccountType:                    res.AccountType,
+		WorkosID:                       res.WorkosID,
+		WorkosDashboardURL:             res.WorkosDashboardURL,
+		StripeCustomerID:               res.StripeCustomerID,
+		StripeSubscriptionID:           res.StripeSubscriptionID,
+		StripeCustomerDashboardURL:     res.StripeCustomerDashboardURL,
+		StripeSubscriptionDashboardURL: res.StripeSubscriptionDashboardURL,
+		Whitelisted:                    res.Whitelisted,
+		DisabledAt:                     res.DisabledAt,
+		TrialState:                     res.TrialState,
+		TrialTier:                      res.TrialTier,
+		TrialEndsAt:                    res.TrialEndsAt,
+		TrialConvertedAt:               res.TrialConvertedAt,
+		TrialDemotedAt:                 res.TrialDemotedAt,
+		AdoptionDashboardURL:           res.AdoptionDashboardURL,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
@@ -24936,8 +25506,10 @@ func NewMigrateToGlobalIssuerResponseBody(res *admin.MigrateRemoteSessionIssuerR
 
 // NewUploadPlatformImageResponseBody builds the HTTP response body from the
 // result of the "uploadPlatformImage" endpoint of the "admin" service.
-func NewUploadPlatformImageResponseBody(res *admin.UploadImageResult) *UploadPlatformImageResponseBody {
-	body := &UploadPlatformImageResponseBody{}
+func NewUploadPlatformImageResponseBody(res *admin.AdminUploadImageResult) *UploadPlatformImageResponseBody {
+	body := &UploadPlatformImageResponseBody{
+		URL: res.URL,
+	}
 	if res.Asset != nil {
 		body.Asset = marshalAdminAssetToAssetResponseBody(res.Asset)
 	}
@@ -24965,6 +25537,7 @@ func NewStartTrialResponseBody(res *admin.AdminOrganization) *StartTrialResponse
 		TrialEndsAt:                    res.TrialEndsAt,
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
+		AdoptionDashboardURL:           res.AdoptionDashboardURL,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
@@ -24994,6 +25567,7 @@ func NewChangeTrialEndDateResponseBody(res *admin.AdminOrganization) *ChangeTria
 		TrialEndsAt:                    res.TrialEndsAt,
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
+		AdoptionDashboardURL:           res.AdoptionDashboardURL,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
@@ -25439,6 +26013,9 @@ func NewGetRegistryPromotionCandidateResponseBody(res *admin.AdminRegistryPromot
 	if res.SuggestedMetadata != nil {
 		body.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(res.SuggestedMetadata)
 	}
+	if res.AuthDiscovery != nil {
+		body.AuthDiscovery = marshalAdminAdminRegistryPromotionAuthDiscoveryToAdminRegistryPromotionAuthDiscoveryResponseBody(res.AuthDiscovery)
+	}
 	return body
 }
 
@@ -25478,6 +26055,9 @@ func NewPromoteRegistryCandidateResponseBody(res *admin.AdminRegistryPromotionCa
 	}
 	if res.SuggestedMetadata != nil {
 		body.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(res.SuggestedMetadata)
+	}
+	if res.AuthDiscovery != nil {
+		body.AuthDiscovery = marshalAdminAdminRegistryPromotionAuthDiscoveryToAdminRegistryPromotionAuthDiscoveryResponseBody(res.AuthDiscovery)
 	}
 	return body
 }
@@ -25520,6 +26100,9 @@ func NewCurateRegistryPromotionCandidateResponseBody(res *admin.AdminRegistryPro
 	if res.SuggestedMetadata != nil {
 		body.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(res.SuggestedMetadata)
 	}
+	if res.AuthDiscovery != nil {
+		body.AuthDiscovery = marshalAdminAdminRegistryPromotionAuthDiscoveryToAdminRegistryPromotionAuthDiscoveryResponseBody(res.AuthDiscovery)
+	}
 	return body
 }
 
@@ -25560,6 +26143,9 @@ func NewRetryRegistryPromotionDocsResponseBody(res *admin.AdminRegistryPromotion
 	}
 	if res.SuggestedMetadata != nil {
 		body.SuggestedMetadata = marshalAdminAdminRegistryPromotionSuggestionsToAdminRegistryPromotionSuggestionsResponseBody(res.SuggestedMetadata)
+	}
+	if res.AuthDiscovery != nil {
+		body.AuthDiscovery = marshalAdminAdminRegistryPromotionAuthDiscoveryToAdminRegistryPromotionAuthDiscoveryResponseBody(res.AuthDiscovery)
 	}
 	return body
 }
@@ -26145,6 +26731,7 @@ func NewSetStripeSubscriptionResponseBody(res *admin.AdminOrganization) *SetStri
 		TrialEndsAt:                    res.TrialEndsAt,
 		TrialConvertedAt:               res.TrialConvertedAt,
 		TrialDemotedAt:                 res.TrialDemotedAt,
+		AdoptionDashboardURL:           res.AdoptionDashboardURL,
 		MemberCount:                    res.MemberCount,
 		CreationSource:                 res.CreationSource,
 		CreatedAt:                      res.CreatedAt,
@@ -26326,6 +26913,15 @@ func NewDisableUpstreamAuthEnforcementResponseBody(res *admin.AdminUpstreamOAuth
 	}
 	if res.Enforcement != nil {
 		body.Enforcement = marshalAdminAdminUpstreamAuthEnforcementToAdminUpstreamAuthEnforcementResponseBody(res.Enforcement)
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsResponseBody builds the HTTP response body from the
+// result of the "backfillMcpAuthGrants" endpoint of the "admin" service.
+func NewBackfillMcpAuthGrantsResponseBody(res *admin.AdminBackfillMCPAuthGrantsResult) *BackfillMcpAuthGrantsResponseBody {
+	body := &BackfillMcpAuthGrantsResponseBody{
+		Granted: res.Granted,
 	}
 	return body
 }
@@ -31302,6 +31898,156 @@ func NewSetStripeCustomerUnexpectedResponseBody(res *goa.ServiceError) *SetStrip
 // from the result of the "setStripeCustomer" endpoint of the "admin" service.
 func NewSetStripeCustomerGatewayErrorResponseBody(res *goa.ServiceError) *SetStripeCustomerGatewayErrorResponseBody {
 	body := &SetStripeCustomerGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAdoptionDashboardURLUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "setAdoptionDashboardUrl" endpoint of the
+// "admin" service.
+func NewSetAdoptionDashboardURLUnauthorizedResponseBody(res *goa.ServiceError) *SetAdoptionDashboardURLUnauthorizedResponseBody {
+	body := &SetAdoptionDashboardURLUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAdoptionDashboardURLForbiddenResponseBody builds the HTTP response
+// body from the result of the "setAdoptionDashboardUrl" endpoint of the
+// "admin" service.
+func NewSetAdoptionDashboardURLForbiddenResponseBody(res *goa.ServiceError) *SetAdoptionDashboardURLForbiddenResponseBody {
+	body := &SetAdoptionDashboardURLForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAdoptionDashboardURLBadRequestResponseBody builds the HTTP response
+// body from the result of the "setAdoptionDashboardUrl" endpoint of the
+// "admin" service.
+func NewSetAdoptionDashboardURLBadRequestResponseBody(res *goa.ServiceError) *SetAdoptionDashboardURLBadRequestResponseBody {
+	body := &SetAdoptionDashboardURLBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAdoptionDashboardURLNotFoundResponseBody builds the HTTP response body
+// from the result of the "setAdoptionDashboardUrl" endpoint of the "admin"
+// service.
+func NewSetAdoptionDashboardURLNotFoundResponseBody(res *goa.ServiceError) *SetAdoptionDashboardURLNotFoundResponseBody {
+	body := &SetAdoptionDashboardURLNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAdoptionDashboardURLConflictResponseBody builds the HTTP response body
+// from the result of the "setAdoptionDashboardUrl" endpoint of the "admin"
+// service.
+func NewSetAdoptionDashboardURLConflictResponseBody(res *goa.ServiceError) *SetAdoptionDashboardURLConflictResponseBody {
+	body := &SetAdoptionDashboardURLConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAdoptionDashboardURLUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "setAdoptionDashboardUrl" endpoint of
+// the "admin" service.
+func NewSetAdoptionDashboardURLUnsupportedMediaResponseBody(res *goa.ServiceError) *SetAdoptionDashboardURLUnsupportedMediaResponseBody {
+	body := &SetAdoptionDashboardURLUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAdoptionDashboardURLInvalidResponseBody builds the HTTP response body
+// from the result of the "setAdoptionDashboardUrl" endpoint of the "admin"
+// service.
+func NewSetAdoptionDashboardURLInvalidResponseBody(res *goa.ServiceError) *SetAdoptionDashboardURLInvalidResponseBody {
+	body := &SetAdoptionDashboardURLInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAdoptionDashboardURLInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "setAdoptionDashboardUrl" endpoint of
+// the "admin" service.
+func NewSetAdoptionDashboardURLInvariantViolationResponseBody(res *goa.ServiceError) *SetAdoptionDashboardURLInvariantViolationResponseBody {
+	body := &SetAdoptionDashboardURLInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAdoptionDashboardURLUnexpectedResponseBody builds the HTTP response
+// body from the result of the "setAdoptionDashboardUrl" endpoint of the
+// "admin" service.
+func NewSetAdoptionDashboardURLUnexpectedResponseBody(res *goa.ServiceError) *SetAdoptionDashboardURLUnexpectedResponseBody {
+	body := &SetAdoptionDashboardURLUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetAdoptionDashboardURLGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "setAdoptionDashboardUrl" endpoint of the
+// "admin" service.
+func NewSetAdoptionDashboardURLGatewayErrorResponseBody(res *goa.ServiceError) *SetAdoptionDashboardURLGatewayErrorResponseBody {
+	body := &SetAdoptionDashboardURLGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -41661,6 +42407,156 @@ func NewDisableUpstreamAuthEnforcementGatewayErrorResponseBody(res *goa.ServiceE
 	return body
 }
 
+// NewBackfillMcpAuthGrantsUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "backfillMcpAuthGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpAuthGrantsUnauthorizedResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsUnauthorizedResponseBody {
+	body := &BackfillMcpAuthGrantsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsForbiddenResponseBody builds the HTTP response body
+// from the result of the "backfillMcpAuthGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpAuthGrantsForbiddenResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsForbiddenResponseBody {
+	body := &BackfillMcpAuthGrantsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsBadRequestResponseBody builds the HTTP response body
+// from the result of the "backfillMcpAuthGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpAuthGrantsBadRequestResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsBadRequestResponseBody {
+	body := &BackfillMcpAuthGrantsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsNotFoundResponseBody builds the HTTP response body
+// from the result of the "backfillMcpAuthGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpAuthGrantsNotFoundResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsNotFoundResponseBody {
+	body := &BackfillMcpAuthGrantsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsConflictResponseBody builds the HTTP response body
+// from the result of the "backfillMcpAuthGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpAuthGrantsConflictResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsConflictResponseBody {
+	body := &BackfillMcpAuthGrantsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "backfillMcpAuthGrants" endpoint of the
+// "admin" service.
+func NewBackfillMcpAuthGrantsUnsupportedMediaResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsUnsupportedMediaResponseBody {
+	body := &BackfillMcpAuthGrantsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsInvalidResponseBody builds the HTTP response body
+// from the result of the "backfillMcpAuthGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpAuthGrantsInvalidResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsInvalidResponseBody {
+	body := &BackfillMcpAuthGrantsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "backfillMcpAuthGrants" endpoint of the
+// "admin" service.
+func NewBackfillMcpAuthGrantsInvariantViolationResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsInvariantViolationResponseBody {
+	body := &BackfillMcpAuthGrantsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "backfillMcpAuthGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpAuthGrantsUnexpectedResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsUnexpectedResponseBody {
+	body := &BackfillMcpAuthGrantsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "backfillMcpAuthGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpAuthGrantsGatewayErrorResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsGatewayErrorResponseBody {
+	body := &BackfillMcpAuthGrantsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLoginPayload builds a admin service login endpoint payload.
 func NewLoginPayload(returnTo *string, prompt *string) *admin.LoginPayload {
 	v := &admin.LoginPayload{}
@@ -41940,6 +42836,8 @@ func NewExtendTrialPayload(body *ExtendTrialRequestBody, adminSessionToken *stri
 func NewCreateOrganizationPayload(body *CreateOrganizationRequestBody, adminSessionToken *string) *admin.CreateOrganizationPayload {
 	v := &admin.CreateOrganizationPayload{
 		URL:                *body.URL,
+		Name:               body.Name,
+		Slug:               body.Slug,
 		OwnershipConfirmed: *body.OwnershipConfirmed,
 	}
 	v.AdminSessionToken = adminSessionToken
@@ -42045,6 +42943,18 @@ func NewSetStripeCustomerPayload(body *SetStripeCustomerRequestBody, adminSessio
 	v := &admin.SetStripeCustomerPayload{
 		OrganizationID:   *body.OrganizationID,
 		StripeCustomerID: *body.StripeCustomerID,
+	}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewSetAdoptionDashboardURLPayload builds a admin service
+// setAdoptionDashboardUrl endpoint payload.
+func NewSetAdoptionDashboardURLPayload(body *SetAdoptionDashboardURLRequestBody, adminSessionToken *string) *admin.SetAdoptionDashboardURLPayload {
+	v := &admin.SetAdoptionDashboardURLPayload{
+		OrganizationID:       *body.OrganizationID,
+		AdoptionDashboardURL: body.AdoptionDashboardURL,
 	}
 	v.AdminSessionToken = adminSessionToken
 
@@ -43032,6 +43942,15 @@ func NewDisableUpstreamAuthEnforcementPayload(body *DisableUpstreamAuthEnforceme
 	return v
 }
 
+// NewBackfillMcpAuthGrantsPayload builds a admin service backfillMcpAuthGrants
+// endpoint payload.
+func NewBackfillMcpAuthGrantsPayload(adminSessionToken *string) *admin.BackfillMcpAuthGrantsPayload {
+	v := &admin.BackfillMcpAuthGrantsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
 // ValidateSetOrganizationFeatureRequestBody runs the validations defined on
 // SetOrganizationFeatureRequestBody
 func ValidateSetOrganizationFeatureRequestBody(body *SetOrganizationFeatureRequestBody) (err error) {
@@ -43210,6 +44129,29 @@ func ValidateCreateOrganizationRequestBody(body *CreateOrganizationRequestBody) 
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.url", *body.URL, utf8.RuneCountInString(*body.URL), 1, true))
 		}
 	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) < 1 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 1, true))
+		}
+	}
+	if body.Name != nil {
+		if utf8.RuneCountInString(*body.Name) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.name", *body.Name, utf8.RuneCountInString(*body.Name), 100, false))
+		}
+	}
+	if body.Slug != nil {
+		err = goa.MergeErrors(err, goa.ValidatePattern("body.slug", *body.Slug, "^[a-z0-9]+(?:-[a-z0-9]+)*$"))
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) < 2 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 2, true))
+		}
+	}
+	if body.Slug != nil {
+		if utf8.RuneCountInString(*body.Slug) > 100 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.slug", *body.Slug, utf8.RuneCountInString(*body.Slug), 100, false))
+		}
+	}
 	return
 }
 
@@ -43332,6 +44274,20 @@ func ValidateSetStripeCustomerRequestBody(body *SetStripeCustomerRequestBody) (e
 	if body.StripeCustomerID != nil {
 		if utf8.RuneCountInString(*body.StripeCustomerID) > 255 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.stripe_customer_id", *body.StripeCustomerID, utf8.RuneCountInString(*body.StripeCustomerID), 255, false))
+		}
+	}
+	return
+}
+
+// ValidateSetAdoptionDashboardURLRequestBody runs the validations defined on
+// SetAdoptionDashboardUrlRequestBody
+func ValidateSetAdoptionDashboardURLRequestBody(body *SetAdoptionDashboardURLRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.AdoptionDashboardURL != nil {
+		if utf8.RuneCountInString(*body.AdoptionDashboardURL) > 2048 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.adoption_dashboard_url", *body.AdoptionDashboardURL, utf8.RuneCountInString(*body.AdoptionDashboardURL), 2048, false))
 		}
 	}
 	return

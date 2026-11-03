@@ -24,6 +24,7 @@ import (
 	endpointrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	serverrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/oauth/wellknown"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/remotemcptest"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -234,10 +235,21 @@ func TestCodeBridgeObservesEndpointAndGrantRevocation(t *testing.T) {
 				_, err = accessrepo.New(ti.conn).DeletePrincipalGrantsByPrincipal(ctx, accessrepo.DeletePrincipalGrantsByPrincipalParams{OrganizationID: auth.ActiveOrganizationID, PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, auth.UserID)})
 			}
 			require.NoError(t, err)
-			before := upstream.requestCount()
+			// Only the detached protected-resource metadata probe can race this
+			// snapshot. Count all other traffic, including initialize/tools/list.
+			requests := func() []recordedRequest {
+				var requests []recordedRequest
+				for _, request := range upstream.journal() {
+					if request.httpMethod != http.MethodGet || request.path != wellknown.OAuthProtectedResourcePath {
+						requests = append(requests, request)
+					}
+				}
+				return requests
+			}
+			before := requests()
 			_, err = host.Call(ctx, "remote--ping", json.RawMessage(`{}`))
 			require.Error(t, err)
-			require.Equal(t, before, upstream.requestCount())
+			require.Equal(t, before, requests())
 		})
 	}
 }

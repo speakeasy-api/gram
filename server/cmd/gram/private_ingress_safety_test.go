@@ -60,22 +60,22 @@ func TestPrivateIngressAllowsLocalTemporalWithoutMTLS(t *testing.T) {
 
 func TestParseSiteURL(t *testing.T) {
 	t.Parallel()
-	for _, raw := range []string{"", "/dashboard", "//example.com", "ftp://example.com", "https:///dashboard", "https://:443", ":invalid"} {
+	for _, raw := range []string{"", "/dashboard", "//example.com", "ftp://example.com", "https:///dashboard", "https://:443", ":invalid", "http://public.example", "https://user@example.com", "https://example.com?query", "https://example.com#fragment", "https://example.com?", "https://example.com#"} {
 		parsed, err := parseSiteURL(raw)
 		require.Error(t, err, raw)
 		require.Nil(t, parsed, raw)
 	}
-	for _, raw := range []string{"https://example.com", "http://localhost:3000", "https://example.com/dashboard"} {
+	for _, raw := range []string{"https://example.com", "http://localhost:3000", "http://127.0.0.1:3000", "http://[::1]:3000", "https://example.com/dashboard"} {
 		parsed, err := parseSiteURL(raw)
 		require.NoError(t, err, raw)
 		require.Equal(t, raw, parsed.String())
 	}
 }
 
-func TestPrivateIngressShutdownCancelsRequestsAndClosesConnections(t *testing.T) {
+func TestDrainHTTPServerCancelsRequestsAndClosesConnections(t *testing.T) {
 	t.Parallel()
-	ctx, cancelRequests := context.WithCancel(t.Context())
-	defer cancelRequests()
+	ctx, cancelRequests := context.WithCancelCause(t.Context())
+	defer cancelRequests(nil)
 	started, finished := make(chan struct{}), make(chan struct{})
 	server := httptest.NewUnstartedServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		close(started)
@@ -98,8 +98,9 @@ func TestPrivateIngressShutdownCancelsRequestsAndClosesConnections(t *testing.T)
 	case <-time.After(5 * time.Second):
 		t.Fatal("handler did not start")
 	}
-	shutdownPrivateIngress(t.Context(), testenv.NewLogger(t), server.Config, cancelRequests, 0)
+	drainHTTPServer(t.Context(), testenv.NewLogger(t), server.Config, cancelRequests, 0, "failed to shutdown test server")
 	require.ErrorIs(t, ctx.Err(), context.Canceled)
+	require.ErrorIs(t, context.Cause(ctx), errShutdownDeadline)
 	select {
 	case <-finished:
 	case <-time.After(5 * time.Second):
@@ -210,4 +211,11 @@ func TestPrivateIngressReadinessRejectsMissingTokenAndLeavesLivenessAlone(t *tes
 	handler.ServeHTTP(response, httptest.NewRequestWithContext(t.Context(), http.MethodGet, "/livez", nil))
 	require.Equal(t, http.StatusOK, response.Code)
 	reviewer.AssertNotCalled(t, "Create", mock.Anything, mock.Anything, mock.Anything)
+}
+
+func TestParseSiteURLNormalizesHost(t *testing.T) {
+	t.Parallel()
+	parsed, err := parseSiteURL("https://PUBLIC.Example:443/prefix")
+	require.NoError(t, err)
+	require.Equal(t, "https://public.example:443/prefix", parsed.String())
 }

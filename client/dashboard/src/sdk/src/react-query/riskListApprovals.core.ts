@@ -13,9 +13,9 @@ import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { ListRiskPolicyApprovalsResult } from "../models/components/listriskpolicyapprovalsresult.js";
 import {
+  ListRiskPolicyApprovalsQueryParamStatus,
   ListRiskPolicyApprovalsRequest,
   ListRiskPolicyApprovalsSecurity,
-  Status,
 } from "../models/operations/listriskpolicyapprovals.js";
 import { unwrapAsync } from "../types/fp.js";
 export type RiskListApprovalsQueryData = ListRiskPolicyApprovalsResult;
@@ -83,7 +83,7 @@ export function buildRiskListApprovalsQuery(
 
 export function queryKeyRiskListApprovals(
   parameters: {
-    status?: Status | undefined;
+    status?: ListRiskPolicyApprovalsQueryParamStatus | undefined;
     cursor?: string | undefined;
     limit?: number | undefined;
     gramKey?: string | undefined;

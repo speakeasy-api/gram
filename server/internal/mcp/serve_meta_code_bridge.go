@@ -9,6 +9,7 @@ import (
 	"fmt"
 	"log/slog"
 	"slices"
+	"sync"
 	"sync/atomic"
 	"time"
 
@@ -35,17 +36,18 @@ import (
 // metaCodeBackend retains admission identity; the runner cannot choose routing
 // or credentials. Current membership and authorization are loaded per operation.
 type metaCodeBackend struct {
-	service  *Service
-	gate     metaGateContext
-	admitted map[string]string
-	meta     *mcprequests.WireMeta
-	boundary authz.AdmissionBoundary
-	refresh  metaCodeGateRefresher
-	endpoint endpointrepo.McpEndpoint
-	issuer   uuid.NullUUID
-	surface  networkaccess.Surface
-	revoked  atomic.Bool
-	sessions *codeSessionScope
+	service     *Service
+	gate        metaGateContext
+	admitted    map[string]string
+	meta        *mcprequests.WireMeta
+	boundary    authz.AdmissionBoundary
+	refresh     metaCodeGateRefresher
+	endpoint    endpointrepo.McpEndpoint
+	issuer      uuid.NullUUID
+	surface     networkaccess.Surface
+	revoked     atomic.Bool
+	sessions    *codeSessionScope
+	connections codeConnections
 }
 
 // metaCodeGateRefresher must re-run endpoint binding and issuer admission using
@@ -57,7 +59,7 @@ var _ codemode.Backend = (*metaCodeBackend)(nil)
 
 func newMetaCodeBackend(ctx context.Context, service *Service, gate *metaGateContext, members []metaMember, endpoint endpointrepo.McpEndpoint, issuer uuid.NullUUID, meta *mcprequests.WireMeta, refresh metaCodeGateRefresher) (*metaCodeBackend, error) {
 	admitted := make(map[string]string, len(members))
-	for _, member := range members {
+	for _, member := range append(slices.Clone(members), gate.unapprovedMembers...) {
 		admitted[member.slug] = codeMemberDestination(member)
 	}
 	var boundary authz.AdmissionBoundary
@@ -74,7 +76,9 @@ func newMetaCodeBackend(ctx context.Context, service *Service, gate *metaGateCon
 	if origin, ok := requestorigin.FromContext(ctx); ok && origin.Surface == requestorigin.SurfacePrivateNetwork {
 		surface = networkaccess.SurfacePrivate
 	}
-	backend := &metaCodeBackend{service: service, gate: *gate, admitted: admitted, meta: meta, boundary: boundary, refresh: refresh, endpoint: endpoint, issuer: issuer, surface: surface, revoked: atomic.Bool{}, sessions: nil}
+	backend := &metaCodeBackend{service: service, gate: *gate, admitted: admitted, meta: meta, boundary: boundary, refresh: refresh, endpoint: endpoint, issuer: issuer, surface: surface, revoked: atomic.Bool{}, sessions: nil, connections: codeConnections{mu: sync.Mutex{}, actions: nil}}
+	backend.gate.consentDiagnostics = &consentDiagnostics{seen: sync.Map{}}
+
 	recheck := func(ctx context.Context, slug string) (context.Context, *metaGateContext, metaMember, error) {
 		ctx, gate, members, err := backend.current(ctx, true)
 		if err != nil {
@@ -114,6 +118,10 @@ func newMetaCodeBackend(ctx context.Context, service *Service, gate *metaGateCon
 }
 
 func (b *metaCodeBackend) current(ctx context.Context, execute bool) (context.Context, *metaGateContext, []metaMember, error) {
+	return b.currentState(ctx, execute, false)
+}
+
+func (b *metaCodeBackend) currentState(ctx context.Context, execute, recovery bool) (context.Context, *metaGateContext, []metaMember, error) {
 	if err := ctx.Err(); err != nil {
 		return ctx, nil, nil, fmt.Errorf("callback cancelled: %w", err)
 	}
@@ -172,10 +180,16 @@ func (b *metaCodeBackend) current(ctx context.Context, execute bool) (context.Co
 	}
 	// The authenticated reference is unchanged, so reuse this execution's
 	// immutable consent record without another Redis read or upstream discovery.
-	if b.gate.catalog != nil && !time.Now().Before(b.gate.catalog.ExpiresAt) {
-		return ctx, nil, nil, b.revoke()
+	expired := b.gate.catalogRecoveryOnly || (b.gate.catalog != nil && !time.Now().Before(b.gate.catalog.ExpiresAt))
+	if expired && !recovery {
+		return ctx, nil, nil, codemode.ErrConsentRequired
 	}
+	gate.catalogRecoveryOnly = expired
 	gate.catalog = b.gate.catalog
+	gate.consentDiagnostics = b.gate.consentDiagnostics
+	if expired {
+		gate.catalog = nil
+	}
 	gate.execute = execute
 	ctx = b.boundary.Apply(ctx)
 	freshCtx, err = b.service.authz.RefreshContext(ctx)
@@ -188,6 +202,9 @@ func (b *metaCodeBackend) current(ctx context.Context, execute bool) (context.Co
 		return ctx, nil, nil, b.refreshFailure(ctx, err)
 	}
 	ctx = freshCtx
+	if recovery {
+		members = append(members, gate.unapprovedMembers...)
+	}
 	permitted := make([]metaMember, 0, len(members))
 	for _, member := range members {
 		// Calls no longer re-read a member's catalog, so a member that now
@@ -197,7 +214,9 @@ func (b *metaCodeBackend) current(ctx context.Context, execute bool) (context.Co
 		}
 		permitted = append(permitted, member)
 	}
-	permitted = b.service.codeCallableMembers(ctx, gate, permitted, true)
+	if !recovery {
+		permitted = b.service.codeCallableMembers(ctx, gate, permitted, true)
+	}
 	return ctx, gate, permitted, nil
 }
 
@@ -233,7 +252,7 @@ func (b *metaCodeBackend) Members(ctx context.Context) ([]codemode.Server, codem
 	}
 	servers := make([]codemode.Server, 0, len(members))
 	for _, member := range members {
-		servers = append(servers, codemode.Server{Slug: member.slug, Name: member.name})
+		servers = append(servers, codemode.Server{Slug: member.slug, Name: member.name, Connection: nil})
 	}
 	list := func(callCtx context.Context, slug string) (*codemode.Catalog, error) {
 		bound, cancel := boundToCallback(ctx, callCtx)
@@ -351,7 +370,7 @@ func (b *metaCodeBackend) call(ctx context.Context, path string, arguments json.
 		}
 	}
 	req := &rawRequest{JSONRPC: "2.0", ID: mcpjsonrpc.StringID(uuid.NewString()), Method: "tools/call", Params: nil}
-	invocation := &metaCodeInvocation{dispatched: false, rejected: false, message: ""}
+	invocation := &metaCodeInvocation{dispatched: false, rejected: false, message: "", credential: false}
 	ctx = context.WithValue(ctx, metaCodeInvocationKey{}, invocation)
 	ctx = context.WithValue(ctx, codeMemberSessionsKey{}, b.sessions)
 	raw, err := b.service.executeMetaMemberTool(ctx, b.service.logger, &callGate, members, req, path, arguments, b.meta)
@@ -359,6 +378,15 @@ func (b *metaCodeBackend) call(ctx context.Context, path string, arguments json.
 		failure := invocation.failure()
 		if refusal, ok := errors.AsType[*codemode.DispatchError](err); ok {
 			failure = refusal
+		}
+		// The member's own remedy names a connect page the program cannot
+		// open; point it at tools.connect, which binds the link to this user.
+		if invocation.credential {
+			if slug, _, splitErr := metamcp.SplitQualifiedName(path); splitErr == nil {
+				if member, ok := findMetaMember(members, slug); ok && codeConnectAvailable(&callGate) && callGate.memberConnectURL(member) != "" {
+					failure = &codemode.ConnectionRequiredError{Server: member.slug}
+				}
+			}
 		}
 		if invocation.message != "" {
 			level := slog.LevelInfo
@@ -393,6 +421,8 @@ type metaCodeInvocation struct {
 	rejected bool
 	// message is the member-scoped failure the program would otherwise lose.
 	message string
+	// credential marks a member failure the user fixes by connecting it.
+	credential bool
 }
 
 func (i *metaCodeInvocation) failure() error {

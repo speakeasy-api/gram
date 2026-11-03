@@ -85,6 +85,23 @@ func (q *Queries) AddMCPServerToolMetadata(ctx context.Context, arg AddMCPServer
 	return items, nil
 }
 
+const countEMAClientHeadersFixture = `-- name: CountEMAClientHeadersFixture :one
+SELECT count(*) FROM mcp_auth_client_headers
+WHERE auth_client_id = $1 AND organization_id = $2 AND NOT deleted
+`
+
+type CountEMAClientHeadersFixtureParams struct {
+	AuthClientID   uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) CountEMAClientHeadersFixture(ctx context.Context, arg CountEMAClientHeadersFixtureParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countEMAClientHeadersFixture, arg.AuthClientID, arg.OrganizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createMCPServer = `-- name: CreateMCPServer :one
 INSERT INTO mcp_servers (
     id,
@@ -1322,6 +1339,49 @@ func (q *Queries) ListMCPServersForTelemetryByProjectID(ctx context.Context, pro
 	return items, nil
 }
 
+const listProjectsSharingOrganizationUserSessionIssuers = `-- name: ListProjectsSharingOrganizationUserSessionIssuers :many
+SELECT DISTINCT s.project_id
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id
+JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
+WHERE s.user_session_issuer_id = ANY($1::uuid[])
+  AND usi.project_id IS NULL
+  AND usi.organization_id = $2::text
+  AND usi.deleted IS FALSE
+  AND p.organization_id = $2::text
+  AND p.deleted IS FALSE
+  AND s.deleted IS FALSE
+ORDER BY s.project_id
+`
+
+type ListProjectsSharingOrganizationUserSessionIssuersParams struct {
+	UserSessionIssuerIds []uuid.UUID
+	OrganizationID       string
+}
+
+// Projects of the organization with a live MCP server on one of the named
+// organization-level user session issuers. Their servers share the issuer's
+// client bindings, so a binding change on it is resynced in each of them.
+func (q *Queries) ListProjectsSharingOrganizationUserSessionIssuers(ctx context.Context, arg ListProjectsSharingOrganizationUserSessionIssuersParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listProjectsSharingOrganizationUserSessionIssuers, arg.UserSessionIssuerIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var project_id uuid.UUID
+		if err := rows.Scan(&project_id); err != nil {
+			return nil, err
+		}
+		items = append(items, project_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listServableMCPServersByOrganizationID = `-- name: ListServableMCPServersByOrganizationID :many
 SELECT
     s.id AS mcp_server_id,
@@ -1894,6 +1954,22 @@ func (q *Queries) ResyncMCPServerRemoteSessionIssuers(ctx context.Context, arg R
 	return result.RowsAffected(), nil
 }
 
+const setEMABindingGatewayIssuerFixture = `-- name: SetEMABindingGatewayIssuerFixture :exec
+UPDATE remote_session_ema_bindings SET user_session_issuer_id = $1
+WHERE remote_session_client_id = $2 AND project_id = $3
+`
+
+type SetEMABindingGatewayIssuerFixtureParams struct {
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.NullUUID
+	ProjectID             uuid.UUID
+}
+
+func (q *Queries) SetEMABindingGatewayIssuerFixture(ctx context.Context, arg SetEMABindingGatewayIssuerFixtureParams) error {
+	_, err := q.db.Exec(ctx, setEMABindingGatewayIssuerFixture, arg.UserSessionIssuerID, arg.RemoteSessionClientID, arg.ProjectID)
+	return err
+}
+
 const setMCPServerToolMetadata = `-- name: SetMCPServerToolMetadata :many
 WITH input AS (
     SELECT
@@ -2117,37 +2193,46 @@ SET
     name = $1,
     slug = $2,
     environment_id = $3,
-    user_session_issuer_id = COALESCE($4, user_session_issuer_id),
-    remote_mcp_server_id = $5,
-    tunneled_mcp_server_id = $6,
-    toolset_id = $7,
-    unproxied_mcp_server_id = $8,
-    tool_variations_group_id = $9,
-    visibility = $10,
+    user_session_issuer_id = CASE
+        WHEN $4::boolean THEN NULL
+        ELSE COALESCE($5, user_session_issuer_id)
+    END,
+    -- Detaching the issuer clears the derived remote issuer, which no resync can reach.
+    remote_session_issuer_id = CASE
+        WHEN $4::boolean THEN NULL
+        ELSE remote_session_issuer_id
+    END,
+    remote_mcp_server_id = $6,
+    tunneled_mcp_server_id = $7,
+    toolset_id = $8,
+    unproxied_mcp_server_id = $9,
+    tool_variations_group_id = $10,
+    visibility = $11,
     network_access_mode = CASE
-        WHEN $11::boolean THEN $12
+        WHEN $12::boolean THEN $13
         ELSE network_access_mode
     END,
     updated_at = clock_timestamp()
-WHERE id = $13 AND project_id = $14 AND deleted IS FALSE
+WHERE id = $14 AND project_id = $15 AND deleted IS FALSE
 RETURNING id, project_id, name, slug, environment_id, user_session_issuer_id, remote_session_issuer_id, remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, unproxied_mcp_server_id, builtin_backend, tool_variations_group_id, visibility, network_access_mode, requires_upstream_auth, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateMCPServerParams struct {
-	Name                  pgtype.Text
-	Slug                  pgtype.Text
-	EnvironmentID         uuid.NullUUID
-	UserSessionIssuerID   uuid.NullUUID
-	RemoteMcpServerID     uuid.NullUUID
-	TunneledMcpServerID   uuid.NullUUID
-	ToolsetID             uuid.NullUUID
-	UnproxiedMcpServerID  uuid.NullUUID
-	ToolVariationsGroupID uuid.NullUUID
-	Visibility            string
-	NetworkAccessModeSet  bool
-	NetworkAccessMode     pgtype.Text
-	ID                    uuid.UUID
-	ProjectID             uuid.UUID
+	Name                   pgtype.Text
+	Slug                   pgtype.Text
+	EnvironmentID          uuid.NullUUID
+	ClearUserSessionIssuer bool
+	UserSessionIssuerID    uuid.NullUUID
+	RemoteMcpServerID      uuid.NullUUID
+	TunneledMcpServerID    uuid.NullUUID
+	ToolsetID              uuid.NullUUID
+	UnproxiedMcpServerID   uuid.NullUUID
+	ToolVariationsGroupID  uuid.NullUUID
+	Visibility             string
+	NetworkAccessModeSet   bool
+	NetworkAccessMode      pgtype.Text
+	ID                     uuid.UUID
+	ProjectID              uuid.UUID
 }
 
 func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams) (McpServer, error) {
@@ -2155,6 +2240,7 @@ func (q *Queries) UpdateMCPServer(ctx context.Context, arg UpdateMCPServerParams
 		arg.Name,
 		arg.Slug,
 		arg.EnvironmentID,
+		arg.ClearUserSessionIssuer,
 		arg.UserSessionIssuerID,
 		arg.RemoteMcpServerID,
 		arg.TunneledMcpServerID,

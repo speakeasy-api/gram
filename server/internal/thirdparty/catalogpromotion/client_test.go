@@ -9,6 +9,7 @@ import (
 	"sync/atomic"
 	"testing"
 
+	"github.com/speakeasy-api/gram/server/internal/catalogauth"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/require"
@@ -79,7 +80,7 @@ func TestEnsureGuideRecoversAfterAmbiguousCreate(t *testing.T) {
 			w.WriteHeader(http.StatusNotFound)
 		}
 	})
-	guide := Guide{Slug: "example", Name: "Example", Description: "Public service", RemoteURL: "https://mcp.example.com/mcp", DocumentationURL: "https://docs.example.com/mcp", AuthMode: "none"}
+	guide := Guide{Slug: "example", Name: "Example", Description: "Public service", RemoteURL: "https://mcp.example.com/mcp", DocumentationURL: "https://docs.example.com/mcp", AuthMode: "none", AuthDiscovery: catalogauth.Discovery{AuthSetup: "none", Status: "not_required"}}
 	_, err := c.EnsureGuide(t.Context(), guide)
 	require.ErrorContains(t, err, "HTTP 502")
 	issueURL, err := c.EnsureGuide(t.Context(), guide)
@@ -94,6 +95,8 @@ func TestEnsureGuideRecoversAfterAmbiguousCreate(t *testing.T) {
 	require.Equal(t, 1, labels)
 	require.Equal(t, []string{"guide:draft"}, requestedLabels)
 	require.Contains(t, created.Body, `"auth_mode": "none"`)
+	require.Contains(t, created.Body, `"auth_discovery": {`)
+	require.Contains(t, created.Body, `"status": "not_required"`)
 	require.Contains(t, created.Body, "<!-- speakeasy-catalog-guide:example -->")
 	for _, authorization := range authorizations {
 		require.Equal(t, "Bearer test-token", authorization)

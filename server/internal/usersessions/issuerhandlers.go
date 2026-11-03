@@ -174,17 +174,6 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 		return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
 	}
 
-	// Compare under the issuer row lock, which also serializes binding
-	// preparation. Slug-only and no-op patches do not reconfigure bindings.
-	bindingSensitive := (payload.AuthnChallengeMode != nil && *payload.AuthnChallengeMode != existing.AuthnChallengeMode) ||
-		(durPtr != nil && conv.PtrToPGInterval(durPtr) != existing.SessionDuration) ||
-		(payload.ClientIDMetadataAdmissionMode != nil && *payload.ClientIDMetadataAdmissionMode != existing.ClientIDMetadataAdmissionMode.String)
-	if bindingSensitive {
-		if err := guardScopedUserIssuerEMABindings(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, id); err != nil {
-			return nil, err
-		}
-	}
-
 	beforeView := UserSessionIssuerView(existing)
 
 	updated, err := txRepo.UpdateUserSessionIssuer(ctx, repo.UpdateUserSessionIssuerParams{
@@ -486,7 +475,7 @@ func (s *Service) DeleteUserSessionIssuer(ctx context.Context, payload *gen.Dele
 // served depends on the deployment's hosts too, so issuerView adds it to
 // responses and audit snapshots leave it out.
 func UserSessionIssuerView(row repo.UserSessionIssuer) *types.UserSessionIssuer {
-	dur := time.Duration(row.SessionDuration.Microseconds) * time.Microsecond
+	dur, _ := conv.PGIntervalToDuration(row.SessionDuration)
 	// The EFFECTIVE mode, never the raw column: an issuer that has never had
 	// one set stores NULL and reports the resolved default. Clients of this
 	// API — including the audit snapshots built from this view — should never

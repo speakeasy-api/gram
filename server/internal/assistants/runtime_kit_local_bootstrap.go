@@ -57,9 +57,10 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 	}
 	for _, raw := range mcp.Servers {
 		var server struct {
-			Type string `json:"type"`
-			URL  string `json:"url"`
-			Auth struct {
+			Type    string            `json:"type"`
+			URL     string            `json:"url"`
+			Headers map[string]string `json:"headers,omitempty"`
+			Auth    struct {
 				Type          string `json:"type"`
 				TokenFile     string `json:"tokenFile"`
 				TokenEndpoint string `json:"tokenEndpoint"`

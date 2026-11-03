@@ -108,6 +108,7 @@ async function $do(
 
   const query = encodeFormQuery({
     "account_type": payload?.account_type,
+    "agent_id": payload?.agent_id,
     "assistant_id": payload?.assistant_id,
     "exclude_source_kind": payload?.exclude_source_kind,
     "external_user_id": payload?.external_user_id,

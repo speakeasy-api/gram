@@ -252,7 +252,8 @@ func newRoleDeliveryFixture(t *testing.T) (context.Context, *roleDeliveryFixture
 	toolsetID := uuid.New()
 	_, err := testrepo.New(ti.conn).CreateToolsetFixture(ctx, testrepo.CreateToolsetFixtureParams{ID: toolsetID, OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, Name: "Delivery server", Slug: "delivery-server"})
 	require.NoError(t, err)
-	require.NoError(t, testrepo.New(ti.conn).SetToolsetMCPEnabledByID(ctx, testrepo.SetToolsetMCPEnabledByIDParams{ID: toolsetID, ProjectID: *ac.ProjectID, McpEnabled: true}))
+	_, err = testrepo.New(ti.conn).CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{ID: toolsetID, ProjectID: *ac.ProjectID, ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, Visibility: "private"})
+	require.NoError(t, err)
 	serverID, err := testrepo.New(ti.conn).CreateRemoteMCPServerFixture(ctx, testrepo.CreateRemoteMCPServerFixtureParams{ID: uuid.New(), ProjectID: *ac.ProjectID, ToolsetID: uuid.NullUUID{UUID: toolsetID, Valid: true}, Visibility: "private"})
 	require.NoError(t, err)
 	_, err = endpointrepo.New(ti.conn).CreateMCPEndpoint(ctx, endpointrepo.CreateMCPEndpointParams{ProjectID: *ac.ProjectID, McpServerID: uuid.NullUUID{UUID: serverID, Valid: true}, Slug: "delivery-endpoint"})
@@ -315,10 +316,20 @@ func (g *roleDeliveryGitHub) HasDirectCollaborator(ctx context.Context, installa
 	args := g.Called(ctx, installationID, owner, repo)
 	return args.Bool(0), args.Error(1)
 }
-func (g *roleDeliveryGitHub) GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string) (map[string][]byte, error) {
+func (g *roleDeliveryGitHub) GetRepoFiles(ctx context.Context, installationID int64, owner, repo, branch string, include func(path string) bool) (map[string][]byte, error) {
 	args := g.Called(ctx, installationID, owner, repo, branch)
 	getFiles, _ := args.Get(0).(func() map[string][]byte)
-	return getFiles(), args.Error(1)
+	all := getFiles()
+	if all == nil {
+		return nil, args.Error(1)
+	}
+	files := make(map[string][]byte, len(all))
+	for path, content := range all {
+		if include == nil || include(path) {
+			files[path] = content
+		}
+	}
+	return files, args.Error(1)
 }
 func (g *roleDeliveryGitHub) GetFileContent(ctx context.Context, installationID int64, owner, repo, branch, path string) ([]byte, error) {
 	args := g.Called(ctx, installationID, owner, repo, branch, path)

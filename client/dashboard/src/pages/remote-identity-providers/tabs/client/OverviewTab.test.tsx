@@ -17,6 +17,7 @@ import { OverviewTab } from "./OverviewTab";
 
 const mutation = vi.hoisted(() => ({
   mutate: vi.fn(),
+  mutateAsync: vi.fn(),
   onSuccess: undefined as ((saved: unknown) => Promise<void>) | undefined,
 }));
 const auth = vi.hoisted(() => ({ isPlatformAdmin: false, isOrgAdmin: true }));
@@ -26,6 +27,9 @@ vi.mock("@/lib/remote-identity/queries/useCustomerManagedKeys", () => ({
 }));
 vi.mock("@/components/ui/Icon", () => ({
   Icon: ({ name }: { name: string }) => <span>{name}</span>,
+}));
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useIsPlatformAdmin: () => auth.isPlatformAdmin,
@@ -37,17 +41,6 @@ vi.mock("@/hooks/useRBAC", () => ({
     hasScope: () => auth.isOrgAdmin,
     hasAllScopes: () => auth.isOrgAdmin,
     isLoading: false,
-  }),
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    remoteIdentityProviders: {
-      issuerDetail: {
-        goTo: vi.fn(),
-        overview: { href: (id: string) => `/rip/${id}/overview` },
-        settings: { href: (id: string) => `/rip/${id}/settings` },
-      },
-    },
   }),
 }));
 vi.mock("@/components/require-scope", () => ({
@@ -76,8 +69,14 @@ vi.mock(
     useUpdateOrganizationRemoteSessionClientMutation: (options: {
       onSuccess: (saved: unknown) => Promise<void>;
     }) => {
-      mutation.onSuccess = options.onSuccess;
-      return { mutate: mutation.mutate, isPending: false };
+      // The card also holds a rename mutation whose onSuccess ignores the
+      // saved client; keep the form's handler, which reads it.
+      if (options.onSuccess.length > 0) mutation.onSuccess = options.onSuccess;
+      return {
+        mutate: mutation.mutate,
+        mutateAsync: mutation.mutateAsync,
+        isPending: false,
+      };
     },
   }),
 );
@@ -90,10 +89,39 @@ vi.mock(
     invalidateAllOrganizationRemoteSessionClient: vi.fn(),
   }),
 );
+vi.mock(
+  "@gram/client/react-query/organizationRemoteSessionClients.js",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@gram/client/react-query/organizationRemoteSessionClients.js")
+    >()),
+    invalidateAllOrganizationRemoteSessionClients: vi.fn(),
+  }),
+);
+vi.mock(
+  "@gram/client/react-query/organizationRemoteSessionClientSessions.js",
+  async (importOriginal) => ({
+    ...(await importOriginal<
+      typeof import("@gram/client/react-query/organizationRemoteSessionClientSessions.js")
+    >()),
+    invalidateAllOrganizationRemoteSessionClientSessions: vi.fn(),
+  }),
+);
 vi.mock("./KeySetField", () => ({ KeySetField: () => <div>key set</div> }));
 vi.mock("../../clientDialogs", () => ({
   DeleteClientDialog: () => <div>delete dialog</div>,
   RotateClientDialog: () => <div>rotate dialog</div>,
+  ChangeClientIdDialog: ({
+    newClientId,
+    onConfirm,
+  }: {
+    newClientId: string;
+    onConfirm: () => void;
+  }) => (
+    <button type="button" onClick={onConfirm}>
+      Confirm change to {newClientId}
+    </button>
+  ),
 }));
 vi.mock(
   "../../../mcp/x/tabs/settings/sections/authentication/IssuerFormFields",
@@ -250,7 +278,9 @@ describe("client overview authorization server card", () => {
     const link = screen.getByRole("link", {
       name: "View authorization server",
     });
-    expect(link.getAttribute("href")).toBe("/rip/issuer-1/overview");
+    expect(link.getAttribute("href")).toBe(
+      "/org/projects/project/remote-identity-providers/issuer-1/overview",
+    );
     expect(screen.getByText("Example IdP")).toBeTruthy();
     expect(
       screen.getAllByText("https://idp.example.com").length,
@@ -296,7 +326,7 @@ describe("client overview authorization server card", () => {
 
     expect(screen.queryByText("View authorization server")).toBeNull();
     expect(container.querySelector(".skeleton")).toBeNull();
-    expect(screen.getByText("Client")).toBeTruthy();
+    expect(screen.getByTitle("Rename client")).toBeTruthy();
   });
 
   it("keeps the card while the issuer loads", () => {
@@ -308,7 +338,7 @@ describe("client overview authorization server card", () => {
     // The card holds its place with a skeleton until the issuer arrives.
     expect(screen.queryByText("View authorization server")).toBeNull();
     expect(container.querySelector(".skeleton")).not.toBeNull();
-    expect(screen.getByText("Client")).toBeTruthy();
+    expect(screen.getByTitle("Rename client")).toBeTruthy();
   });
 });
 
@@ -452,10 +482,106 @@ describe("client overview read-only access", () => {
 });
 
 describe("client overview settings", () => {
-  it("shows the client ID read-only at the top of the card", () => {
+  it("shows a CIMD client's generated client ID read-only", () => {
+    renderTab({
+      client: client(undefined, {
+        clientId: "https://app.example.com/cimd/client-1",
+        clientIdMetadataUri: "https://app.example.com/cimd/client-1",
+      }),
+    });
+
+    expect(field("Client ID").textContent).toContain(
+      "https://app.example.com/cimd/client-1",
+    );
+    expect(screen.queryByRole("textbox", { name: "Client ID" })).toBeNull();
+  });
+
+  it("omits an unchanged client ID without asking to confirm", () => {
     renderTab();
 
-    expect(field("Client ID").textContent).toContain("upstream-client");
+    expect(
+      (screen.getByRole("textbox", { name: "Client ID" }) as HTMLInputElement)
+        .value,
+    ).toBe("upstream-client");
+    save();
+
+    expect(screen.queryByText(/Confirm change/)).toBeNull();
+    expect(lastSaved().clientId).toBeUndefined();
+  });
+
+  it("confirms before saving a corrected client ID", () => {
+    renderTab();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Client ID" }), {
+      target: { value: "  corrected-client  " },
+    });
+    save();
+
+    expect(mutation.mutate).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("button", {
+        name: "Confirm change to corrected-client",
+      }),
+    );
+    expect(lastSaved().clientId).toBe("corrected-client");
+  });
+
+  it("blocks saving an empty client ID", () => {
+    renderTab();
+
+    fireEvent.change(screen.getByRole("textbox", { name: "Client ID" }), {
+      target: { value: "  " },
+    });
+
+    expect(
+      (
+        screen.getByRole("button", {
+          name: "Save changes",
+        }) as HTMLButtonElement
+      ).disabled,
+    ).toBe(true);
+  });
+
+  it("renames from the header, trimmed, on its own request", async () => {
+    mutation.mutateAsync.mockResolvedValue({});
+    renderTab();
+
+    fireEvent.click(screen.getByTitle("Rename client"));
+    const input = screen.getByLabelText("Name");
+    expect((input as HTMLInputElement).value).toBe("");
+    fireEvent.change(input, { target: { value: "  Production login  " } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await vi.waitFor(() =>
+      expect(mutation.mutateAsync).toHaveBeenLastCalledWith({
+        request: {
+          updateRemoteSessionClientForm: {
+            id: "client-1",
+            displayName: "Production login",
+          },
+        },
+      }),
+    );
+    save();
+    expect(lastSaved().displayName).toBeUndefined();
+  });
+
+  it("clears a name with an empty string", async () => {
+    mutation.mutateAsync.mockResolvedValue({});
+    renderTab({ client: client(undefined, { displayName: "Old name" }) });
+
+    expect(screen.getByText("Old name")).toBeTruthy();
+    fireEvent.click(screen.getByTitle("Rename client"));
+    const input = screen.getByLabelText("Name");
+    fireEvent.change(input, { target: { value: "" } });
+    fireEvent.keyDown(input, { key: "Enter" });
+
+    await vi.waitFor(() =>
+      expect(
+        mutation.mutateAsync.mock.lastCall![0].request
+          .updateRemoteSessionClientForm.displayName,
+      ).toBe(""),
+    );
   });
 
   it("saves a trimmed audience", () => {
@@ -480,7 +606,10 @@ describe("client overview settings", () => {
     expect(lastSaved().audience).toBeUndefined();
 
     await act(async () => {
-      await mutation.onSuccess?.({ audience: "old-aud" });
+      await mutation.onSuccess?.({
+        audience: "old-aud",
+        clientId: "upstream-client",
+      });
     });
     expect((screen.getByLabelText("Audience") as HTMLInputElement).value).toBe(
       "old-aud",

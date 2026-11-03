@@ -1108,3 +1108,34 @@ it("shares candidate query cache for implicit and explicit active status", () =>
     boundary.registryPromotionCandidatesQuery({ limit: 25 }).queryKey,
   );
 });
+
+it.each(["{}", "not JSON"])(
+  "clears a cached registry crumb for an unnamed response %s",
+  async (dataJson) => {
+    const { registryEntryNameKey } = await import("@/lib/registryEntryName");
+    const id = "00000000-0000-4000-8000-000000000001";
+    const cache = new QueryClient();
+    cache.setQueryData(registryEntryNameKey(id), { name: "old name" });
+    vi.stubGlobal(
+      "fetch",
+      vi.fn().mockResolvedValue(
+        new Response(
+          JSON.stringify({
+            id,
+            data_json: dataJson,
+            updated_at: "opaque",
+            created_at: "opaque",
+            published: false,
+            issues: [],
+          }),
+          { headers: { "Content-Type": "application/json" } },
+        ),
+      ),
+    );
+    await cache.fetchQuery(boundary.registryEntryQuery(id));
+    expect(cache.getQueryData(registryEntryNameKey(id))).toEqual({
+      name: undefined,
+    });
+    cache.clear();
+  },
+);

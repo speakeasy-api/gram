@@ -20,6 +20,10 @@ func (a schemeAuthorizer) Authorize(_ context.Context, _ string, schema *securit
 	return a[schema.Name], nil
 }
 
+func (a schemeAuthorizer) AuthorizeWithHandlerProjectAccess(_ context.Context, _ string, schema *security.APIKeyScheme) (context.Context, error) {
+	return a[schema.Name], nil
+}
+
 // unboundAgentKey returns an admitted agent credential as the key scheme
 // leaves it for a key bound to no project, and as the project scheme leaves
 // it once Gram-Project resolves.

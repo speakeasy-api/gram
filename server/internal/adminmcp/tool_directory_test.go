@@ -24,7 +24,7 @@ import (
 
 func TestToolDirectoryMatchesRegisteredToolsAcrossPages(t *testing.T) {
 	t.Parallel()
-	operations := map[WriteOperation]bool{}
+	operations := make(map[WriteOperation]bool)
 	for _, op := range AllWriteOperations {
 		if op.implemented() {
 			operations[op] = true
@@ -68,7 +68,12 @@ func TestToolDirectoryMatchesRegisteredToolsAcrossPages(t *testing.T) {
 	require.Equal(t, directoryApproval, byName["prepare_registry_promotion_curation"].Access)
 	require.Equal(t, directoryApproval, byName["execute_admin_proposal"].Access)
 	require.Equal(t, directoryRead, byName["get_admin_proposal_status"].Access)
+	require.Equal(t, directoryRead, byName["list_audit_log_entries"].Access)
+	require.Contains(t, byName["list_audit_log_entries"].Description, "confidential")
 	require.Equal(t, directoryWrite, byName["create_image_upload_url"].Access)
+	require.Contains(t, byName["create_image_upload_url"].Description, "direct write without browser approval")
+	require.Contains(t, byName["create_image_upload_url"].Description, "publicly served immediately and stays stored")
+	require.Contains(t, byName["create_image_upload_url"].Description, "local clip paths")
 }
 
 func TestToolDirectoryReflectsDisabledWritesAndRegistryChanges(t *testing.T) {
@@ -135,7 +140,7 @@ func TestToolDirectoryListsOnlyEnabledWriteOperations(t *testing.T) {
 	t.Parallel()
 	runtime := NewRuntime(nil, "https://admin.example.test/admin-mcp")
 	deps := WriteDependencies{Features: &productfeatures.Client{}, Registry: mcpregistry.New(nil, nil)}
-	writes := WriteConfig{Enabled: true, Operations: map[WriteOperation]bool{}}
+	writes := WriteConfig{Enabled: true, Operations: make(map[WriteOperation]bool)}
 	writes.Operations[OperationSetOrganizationFeature] = true
 	require.NoError(t, AttachWrites(runtime, &StaffOAuth{Approval: &StaffProposalApproval{}}, deps, writes))
 	directory, err := runtime.toolDirectory(t.Context())

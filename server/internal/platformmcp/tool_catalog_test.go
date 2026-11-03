@@ -3,6 +3,7 @@ package platformmcp
 import (
 	"encoding/json"
 	"errors"
+	"reflect"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -15,9 +16,10 @@ func TestCandidateInspectionIncludesCatalogSetupIntent(t *testing.T) {
 	registrar := newRegistrar(server)
 	catalog := testCatalog{details: CatalogDetails{
 		CatalogCandidate: CatalogCandidate{
-			ProviderKey: "provider",
-			CatalogRef:  "reviewed/mcp",
-			SetupIntent: "dashboard_source_settings",
+			ProviderKey:  "provider",
+			CatalogRef:   "reviewed/mcp",
+			SetupIntent:  "dashboard_source_settings",
+			SupportsCIMD: true, AuthSetup: "cimd",
 		},
 		Transport: "streamable-http",
 	}}
@@ -32,6 +34,9 @@ func TestCandidateInspectionIncludesCatalogSetupIntent(t *testing.T) {
 	inspection, ok := result.(CandidateInspection)
 	require.True(t, ok)
 	require.Equal(t, "dashboard_source_settings", inspection.SetupIntent)
+	require.Equal(t, new(false), inspection.SupportsDCR)
+	require.Equal(t, new(true), inspection.SupportsCIMD)
+	require.Equal(t, "cimd", inspection.AuthSetup)
 }
 
 func TestCandidateInspectionReturnsSafeDirectRemoteErrors(t *testing.T) {
@@ -126,6 +131,9 @@ func TestCandidateInspectionReportsAutomaticClientRegistrationPath(t *testing.T)
 			encoded, err := json.Marshal(inspection)
 			require.NoError(t, err)
 			require.Contains(t, string(encoded), `"automatic_client_registration":"`+test.registration+`"`)
+			require.NotContains(t, string(encoded), `"supports_dcr"`)
+			require.NotContains(t, string(encoded), `"supports_cimd"`)
+			require.NotContains(t, string(encoded), `"auth_setup"`)
 		})
 	}
 }
@@ -233,4 +241,23 @@ func TestCandidateInspectionDirectRemoteProtocols(t *testing.T) {
 			}
 		})
 	}
+}
+
+// A catalogue entry whose tool count is unknown must not read as a server with
+// no tools, and the sign-in classification carries its meaning to the agent.
+func TestCatalogCandidateOmitsUnknownToolCountAndExplainsSignIn(t *testing.T) {
+	t.Parallel()
+
+	raw, err := json.Marshal(CatalogCandidate{ProviderKey: "provider", CatalogRef: "app.example/mcp", Name: "Example", AuthSetup: "manual"})
+	require.NoError(t, err)
+	require.NotContains(t, string(raw), "tool_count")
+	require.Contains(t, string(raw), `"auth_setup":"manual"`)
+
+	raw, err = json.Marshal(CatalogCandidate{ToolCount: 3})
+	require.NoError(t, err)
+	require.Contains(t, string(raw), `"tool_count":3`)
+
+	field, ok := reflect.TypeFor[CatalogCandidate]().FieldByName("AuthSetup")
+	require.True(t, ok)
+	require.Contains(t, field.Tag.Get("jsonschema"), "search_speakeasy_docs")
 }

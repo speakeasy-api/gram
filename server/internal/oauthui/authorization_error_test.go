@@ -1,6 +1,7 @@
 package oauthui_test
 
 import (
+	"context"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -11,6 +12,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 	"golang.org/x/net/html"
 
+	"github.com/speakeasy-api/gram/server/internal/consentpage"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oauthtest"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
@@ -55,10 +57,43 @@ func TestAuthorizationErrorPageRejectsUnsafeSchemes(t *testing.T) {
 			response := httptest.NewRecorder()
 			err := oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{CallbackURL: strings.ToUpper(scheme) + ":payload", Code: oautherr.CodeInvalidRequest, Description: "invalid request", ClientName: "", ClientID: "", ClientIDOrigin: "", ServerName: ""})
 			require.Error(t, err)
-			require.Empty(t, response.Body.String())
+			require.Contains(t, response.Body.String(), "Request could not be completed")
+			require.NotContains(t, response.Body.String(), "href=")
 			require.Empty(t, response.Header().Get("Location"))
 		})
 	}
+}
+
+func TestAuthorizationErrorPageFallbackSurvivesCanceledContext(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	response := httptest.NewRecorder()
+	err := oauthui.WriteAuthorizationError(ctx, response, oauthui.AuthorizationError{
+		Status:      http.StatusForbidden,
+		Code:        `<script>alert("code")</script>`,
+		Description: `<img src=x onerror="alert('description')">`,
+		CallbackURL: "https://client.example/callback",
+	})
+	require.ErrorIs(t, err, context.Canceled)
+	require.Equal(t, http.StatusForbidden, response.Code)
+	require.Equal(t, "text/html; charset=utf-8", response.Header().Get("Content-Type"))
+	require.Equal(t, "no-store", response.Header().Get("Cache-Control"))
+	require.Equal(t, "no-referrer", response.Header().Get("Referrer-Policy"))
+	require.Equal(t, "nosniff", response.Header().Get("X-Content-Type-Options"))
+	require.Equal(t, "default-src 'none'; style-src 'unsafe-inline'; font-src 'self'; base-uri 'none'; frame-ancestors 'none'; form-action 'none'", response.Header().Get("Content-Security-Policy"))
+	require.Empty(t, response.Header().Get("Location"))
+	body := response.Body.String()
+	require.Contains(t, body, string(consentpage.Styles))
+	require.Contains(t, body, "<svg")
+	require.Contains(t, body, "Secured by Speakeasy.")
+	require.Contains(t, body, "Request could not be completed")
+	require.Contains(t, body, "&lt;script&gt;")
+	require.Contains(t, body, "&lt;img")
+	require.NotContains(t, body, "<script")
+	require.NotContains(t, body, "<img")
+	require.NotContains(t, body, "href=")
+	require.NotContains(t, body, "https://client.example/callback")
 }
 
 func TestAuthorizationErrorPageExplainsErrorForEndUsers(t *testing.T) {
@@ -135,4 +170,98 @@ func TestAuthorizationErrorPageCopiesTechnicalDetailsAsPlainText(t *testing.T) {
 		"Returns to: client.example",
 	}, "\n"), copied)
 	require.NotContains(t, copied, "secret-state")
+}
+
+func TestAuthorizationErrorPageWithoutCallback(t *testing.T) {
+	t.Parallel()
+	for _, status := range []int{http.StatusBadRequest, http.StatusUnauthorized, http.StatusForbidden, http.StatusNotFound, http.StatusConflict, http.StatusServiceUnavailable} {
+		t.Run(http.StatusText(status), func(t *testing.T) {
+			t.Parallel()
+			response := httptest.NewRecorder()
+			require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Status: status, Code: oautherr.CodeInvalidRequest, Description: "public detail"}))
+			body := oauthtest.RequireAuthorizationErrorPage(t, response, status)
+			require.Equal(t, oautherr.CodeInvalidRequest, body.Code)
+			require.Equal(t, "public detail", body.Description)
+			require.NotContains(t, response.Body.String(), "Returns to")
+			require.NotContains(t, response.Body.String(), "Return to")
+			require.Contains(t, response.Body.String(), "close this tab and start again")
+			require.Contains(t, response.Body.String(), "data-copy-details")
+		})
+	}
+}
+
+func TestAuthorizationErrorPageReasonOverridesCode(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		reason   oauthui.Reason
+		approval bool
+		want     string
+	}{
+		{"blocked", oauthui.ReasonOrganizationBlocked, false, "Your organization doesn't allow"},
+		{"expired", oauthui.ReasonExpired, false, "link expired or was already used"},
+		{"unavailable", oauthui.ReasonUnavailable, false, "This is a problem on our side"},
+		{"session", oauthui.ReasonSessionChanged, false, "current browser or sign-in session"},
+		{"approval-expired", oauthui.ReasonExpired, true, "This approval link expired"},
+		{"approval-session", oauthui.ReasonSessionChanged, true, "Your staff sign-in session changed"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			response := httptest.NewRecorder()
+			require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{Code: oautherr.CodeInvalidClient, Reason: tc.reason, Approval: tc.approval, ClientName: "Example Client", ServerName: "example-server"}))
+			body := oauthtest.RequireAuthorizationErrorPage(t, response, http.StatusBadRequest)
+			require.Equal(t, oautherr.CodeInvalidClient, body.Code)
+			require.Contains(t, response.Body.String(), tc.want)
+			require.NotContains(t, response.Body.String(), "before you signed in")
+		})
+	}
+}
+
+func TestAuthorizationErrorRecoveryLink(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name   string
+		setup  bool
+		reason oauthui.Reason
+	}{
+		{name: "setup", setup: true},
+		{name: "canceled", reason: oauthui.ReasonCanceled},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			const destination = "https://app.example.test/@self/setup"
+			response := httptest.NewRecorder()
+			require.NoError(t, oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{
+				Setup: tc.setup, Reason: tc.reason, Status: http.StatusForbidden,
+				Code: oautherr.CodeAccessDenied, Description: "forbidden",
+				Recovery: &oauthui.RecoveryLink{URL: destination, Label: "Open <organization> setup"},
+			}))
+			body := oauthtest.RequireAuthorizationErrorRecovery(t, response, http.StatusForbidden, destination)
+			require.Equal(t, oautherr.CodeAccessDenied, body.Code)
+			require.Equal(t, "forbidden", body.Description)
+			require.Contains(t, response.Body.String(), "Open &lt;organization&gt; setup")
+			require.NotContains(t, response.Body.String(), "Return to app.example.test", "recovery must not use OAuth callback wording")
+		})
+	}
+}
+
+func TestAuthorizationErrorRejectsUnsafeRecoveryLink(t *testing.T) {
+	t.Parallel()
+	for _, target := range []string{
+		"javascript:alert(1)", "data:text/html,example", "//untrusted.example/setup",
+		"/@self/setup", "https://", "https://user:password@app.example.test/setup", "com.example.app:callback",
+	} {
+		t.Run(target, func(t *testing.T) {
+			t.Parallel()
+			response := httptest.NewRecorder()
+			err := oauthui.WriteAuthorizationError(t.Context(), response, oauthui.AuthorizationError{
+				Status: http.StatusForbidden, Code: oautherr.CodeAccessDenied,
+				Recovery: &oauthui.RecoveryLink{URL: target, Label: "Open organization setup"},
+			})
+			require.Error(t, err)
+			require.Equal(t, http.StatusForbidden, response.Code)
+			require.NotContains(t, response.Body.String(), "href=")
+			require.Empty(t, response.Header().Get("Location"))
+		})
+	}
 }

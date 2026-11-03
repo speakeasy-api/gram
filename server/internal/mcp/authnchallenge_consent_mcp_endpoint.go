@@ -345,14 +345,14 @@ func (s *Service) authorizedToolsetConsentInventory(ctx context.Context, endpoin
 	connectResourceID := endpoint.connectResourceID()
 	connect := authz.MCPCheck(authz.ScopeMCPConnect, connectResourceID.String(), endpoint.ProjectID.String())
 	if s.authz != nil && !private {
-		s.shadowMandatory(authzCtx, mandatorySurfaceConsent, endpoint.OrganizationID, true, connect)
+		s.newMandatoryShadow(authzCtx, endpoint.OrganizationID).recordServer(authzCtx, mandatorySurfaceConsent, true, authz.MandatoryServerPublic, connect)
 	}
 	if s.authz != nil && private {
 		if authzCtx, cerr = s.authz.PrepareContext(authzCtx); cerr != nil {
 			return nil, nil, oops.E(oops.CodeUnexpected, cerr, "load access grants for consent inventory").LogError(ctx, logger)
 		}
 		cerr = s.authz.Require(authzCtx, connect)
-		s.newMandatoryShadow(authzCtx, endpoint.OrganizationID).shadowRequire(authzCtx, mandatorySurfaceConsent, cerr, connect)
+		s.newMandatoryShadow(authzCtx, endpoint.OrganizationID).shadowRequireServer(authzCtx, mandatorySurfaceConsent, cerr, authz.MandatoryServerPrivate, connect)
 		if cerr != nil {
 			return nil, nil, fmt.Errorf("authorize consent inventory access: %w", mcpaccess.ServerPermissionDenied(cerr, s.requestAccessURL(authzCtx, connectResourceID.String(), toolset.Name)))
 		}

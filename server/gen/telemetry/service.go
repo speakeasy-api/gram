@@ -42,6 +42,12 @@ type Service interface {
 	// Discovery funnel and per-member execution breakdown for one gateway (meta
 	// MCP server), from gateway-attributed telemetry.
 	GetMetaMcpServerUsage(context.Context, *GetMetaMcpServerUsagePayload) (res *GetMetaMcpServerUsageResult, err error)
+	// Observability overview metrics for calls dispatched through the caller's
+	// Organization Gateway, across every project in the organization.
+	GetOrganizationGatewayOverview(context.Context, *GetOrganizationGatewayOverviewPayload) (res *GetObservabilityOverviewResult, err error)
+	// Discovery funnel and per-server execution breakdown for the caller's
+	// Organization Gateway, across every project in the organization.
+	GetOrganizationGatewayUsage(context.Context, *GetOrganizationGatewayUsagePayload) (res *GetMetaMcpServerUsageResult, err error)
 	// Get project-level overview including total chats, tool calls, active
 	// servers/users, and top lists
 	GetProjectOverview(context.Context, *GetProjectOverviewPayload) (res *GetProjectOverviewResult, err error)
@@ -140,7 +146,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [36]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getMcpNetworkTraffic", "getMetaMcpServerUsage", "getProjectOverview", "getUnproxiedMcpServerUsage", "getUnproxiedMcpServerToolUsage", "getUnproxiedMcpServerUserUsage", "getUnproxiedMcpServerClientUsage", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageClients", "getToolUsageClientToolBreakdown", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "listHooksTraces"}
+var MethodNames = [38]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getMcpNetworkTraffic", "getMetaMcpServerUsage", "getOrganizationGatewayOverview", "getOrganizationGatewayUsage", "getProjectOverview", "getUnproxiedMcpServerUsage", "getUnproxiedMcpServerToolUsage", "getUnproxiedMcpServerUserUsage", "getUnproxiedMcpServerClientUsage", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageClients", "getToolUsageClientToolBreakdown", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -443,6 +449,26 @@ type GetObservabilityOverviewResult struct {
 	IntervalSeconds int64
 }
 
+// GetOrganizationGatewayOverviewPayload is the payload type of the telemetry
+// service getOrganizationGatewayOverview method.
+type GetOrganizationGatewayOverviewPayload struct {
+	SessionToken *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+}
+
+// GetOrganizationGatewayUsagePayload is the payload type of the telemetry
+// service getOrganizationGatewayUsage method.
+type GetOrganizationGatewayUsagePayload struct {
+	SessionToken *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+}
+
 // GetProjectMetricsSummaryPayload is the payload type of the telemetry service
 // getProjectMetricsSummary method.
 type GetProjectMetricsSummaryPayload struct {
@@ -596,6 +622,34 @@ type GetToolUsageFilterOptionsPayload struct {
 	To string
 	// Filter option types to include. Empty means all option types.
 	OptionTypes []ToolUsageFilterOptionType
+	// Target types to include. Empty means all target types.
+	TargetTypes []ToolUsageTargetType
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to narrow by. Not
+	// applied to the server options.
+	HostedToolsetSlugs []string
+	// MCP server ids to narrow by. Not applied to the server options.
+	McpServerIds []string
+	// Shadow MCP server names to narrow by. Not applied to the server options.
+	ShadowServerNames []string
+	// Gateway (meta MCP server) ids to narrow by. Not applied to the server
+	// options.
+	MetaMcpServerIds []string
+	// Typed user identities to narrow by. Not applied to the email user options.
+	UserFilters []*ToolUsageUserFilter
+	// Agent identities to narrow by. Not applied to the agent user options.
+	AgentIds []string
+	// Hook plugin sources to narrow by.
+	HookSources []string
+	// MCP client keys to narrow by. Not applied to the client options.
+	ClientKeys []string
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string
+	// Trace outcomes to narrow by. Empty means all.
+	Statuses []ToolUsageStatus
+	// Free-text attribute search string from the q URL param.
+	Query *string
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilter
 }
 
 // GetToolUsageFilterOptionsResult is the result type of the telemetry service
@@ -1523,6 +1577,9 @@ type MetaMcpMemberUsage struct {
 	ErrorCount int64
 	// ISO 8601 timestamp of the most recent call
 	LastCalledAt *string
+	// Display name of the server. Set for Organization Gateway usage, whose
+	// servers span projects the caller may not have loaded.
+	McpServerName *string
 }
 
 // Model usage statistics
@@ -2426,6 +2483,19 @@ type ToolUsageTraceSummary struct {
 	AuthorizerUserID *string
 	// Email of the authorizer when they resolve to a known user
 	AuthorizerLabel *string
+	// Type of the auth client that signed an agent's gateway call in to its
+	// upstream server, such as remote_session for a person's connection or
+	// service_account for a shared credential; absent for calls recorded before it
+	// was tracked
+	AuthClientType *string
+	// Auth client that signed an agent's gateway call in to its upstream server
+	AuthClientID *string
+	// Person whose own connection signed an agent's gateway call in; absent for a
+	// shared credential
+	ConnectionOwnerUserID *string
+	// Display name, or email, of the connection owner when they resolve to a known
+	// user
+	ConnectionOwnerLabel *string
 	// Hook plugin source when the row came from hook telemetry
 	HookSource *string
 	// Telemetry event source

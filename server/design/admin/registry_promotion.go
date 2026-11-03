@@ -16,6 +16,15 @@ var AdminRegistryPromotionSuggestions = Type("AdminRegistryPromotionSuggestions"
 	Attribute("auth_mode", String, func() { Enum("none", "oauth") })
 })
 
+var AdminRegistryPromotionAuthDiscovery = Type("AdminRegistryPromotionAuthDiscovery", func() {
+	Description("Publicly advertised authentication capabilities, not a verified OAuth connection.")
+	Attribute("supports_dcr", Boolean)
+	Attribute("supports_cimd", Boolean)
+	Attribute("auth_setup", String, func() { Enum("none", "dcr", "cimd", "manual", "unknown") })
+	Attribute("status", String, func() { Enum("complete", "partial", "unavailable", "not_required") })
+	Required("supports_dcr", "supports_cimd", "auth_setup", "status")
+})
+
 var AdminRegistryPromotionCandidate = Type("AdminRegistryPromotionCandidate", func() {
 	Attribute("id", String)
 	Attribute("organization_id", String)
@@ -26,6 +35,7 @@ var AdminRegistryPromotionCandidate = Type("AdminRegistryPromotionCandidate", fu
 	Attribute("created_at", String, func() { Format(FormatDateTime) })
 	Attribute("curation_revision", String, func() { Format(FormatUUID) })
 	Attribute("suggested_metadata", AdminRegistryPromotionSuggestions)
+	Attribute("auth_discovery", AdminRegistryPromotionAuthDiscovery)
 	Attribute("source_revision", String)
 	Attribute("eligible", Boolean)
 	Attribute("can_override_eligibility", Boolean, "Whether staff may explicitly accept this candidate's health evidence.")
@@ -102,8 +112,8 @@ func registryPromotionDesign() {
 			Attribute("source_revision", String)
 			Attribute("curation_revision", String, func() { Format(FormatUUID) })
 			Attribute("public_name", String)
-			Attribute("public_title", String)
-			Attribute("public_description", String)
+			Attribute("public_title", String, "Public title, at most 100 Unicode code points.")
+			Attribute("public_description", String, "Public description, at most 100 Unicode code points.")
 			Attribute("public_url", String)
 			Attribute("documentation_url", String)
 			Attribute("docs_slug", String)

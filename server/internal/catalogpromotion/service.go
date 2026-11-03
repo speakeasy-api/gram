@@ -22,6 +22,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/catalogauth"
 	"github.com/speakeasy-api/gram/server/internal/catalogpromotion/repo"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -45,7 +46,9 @@ const (
 	recentActivityWindow = 48 * time.Hour
 	// evidenceLifetime keeps staff approval tied to a recently refreshed health check.
 	evidenceLifetime = 15 * time.Minute
-	// maxPublicText bounds staff-submitted descriptions sent to public systems.
+	// maxPublicDisplayCharacters matches the pinned catalogue title and description schema, in Unicode code points.
+	maxPublicDisplayCharacters = 100
+	// maxPublicText bounds metadata bytes before catalogue schema validation.
 	maxPublicText = 2000
 	// maxPublicURL bounds both reviewed public endpoint and documentation URLs.
 	maxPublicURL = 2048
@@ -401,12 +404,36 @@ func (s *Service) ValidateTx(ctx context.Context, tx pgx.Tx, target Target, revi
 
 // RequestDigest binds a retry key to the exact canonical target and reviewed input.
 func RequestDigest(request Request) (string, error) {
+	// Live capability evidence is not caller input; publication retries retain the original receipt.
+	request.AuthDiscovery = catalogauth.Discovery{SupportsDCR: false, SupportsCIMD: false, AuthSetup: "", Status: ""}
 	encoded, err := json.Marshal(request)
 	if err != nil {
 		return "", fmt.Errorf("encode promotion request: %w", err)
 	}
 	sum := sha256.Sum256(encoded)
 	return hex.EncodeToString(sum[:]), nil
+}
+
+// PreparePublication captures public discovery before opening a publication transaction.
+// Completed receipts reuse their evidence; PromoteTx still checks exact replay identity.
+func (s *Service) PreparePublication(ctx context.Context, request Request) (Request, error) {
+	prior, err := repo.New(s.db).GetCandidate(ctx, repo.GetCandidateParams{OrganizationID: request.Target.OrganizationID, ProjectID: uuid.NullUUID{UUID: request.Target.ProjectID, Valid: true}, McpServerID: uuid.NullUUID{UUID: request.Target.MCPServerID, Valid: true}})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return request, ErrNotFound
+	}
+	if err != nil {
+		return request, fmt.Errorf("read publication receipt: %w", err)
+	}
+	if prior.PromotedAt.Valid {
+		var snapshot publicSnapshot
+		if err := json.Unmarshal(prior.PublicMetadata, &snapshot); err != nil {
+			return request, fmt.Errorf("decode publication receipt: %w", err)
+		}
+		request.AuthDiscovery = snapshot.AuthDiscovery
+		return request, nil
+	}
+	request.AuthDiscovery = s.DiscoverAuth(ctx, request.Public.URL, request.Public.AuthMode)
+	return request, nil
 }
 
 // PromoteTx commits publication, receipt, delivery intent, and audit in one transaction.
@@ -466,6 +493,9 @@ func (s *Service) PromoteTx(ctx context.Context, tx pgx.Tx, request Request, act
 		return Candidate{}, fmt.Errorf("read promotion target: %w", err)
 	}
 	record, err := buildRecord(request.Public, source.TransportType)
+	if err == nil {
+		record, err = withAuthDiscovery(record, request.AuthDiscovery)
+	}
 	if err != nil {
 		return Candidate{}, err
 	}
@@ -476,7 +506,7 @@ func (s *Service) PromoteTx(ctx context.Context, tx pgx.Tx, request Request, act
 	if err != nil {
 		return Candidate{}, fmt.Errorf("publish reviewed catalogue entry: %w", err)
 	}
-	publicJSON, err := json.Marshal(request.Public)
+	publicJSON, err := json.Marshal(publicSnapshot{PublicMetadata: request.Public, AuthDiscovery: request.AuthDiscovery})
 	if err != nil {
 		return Candidate{}, fmt.Errorf("encode public promotion metadata: %w", err)
 	}
@@ -501,7 +531,13 @@ func (s *Service) PromoteTx(ctx context.Context, tx pgx.Tx, request Request, act
 }
 
 func validatePublic(public PublicMetadata) error {
-	if len(public.Title) > 200 || strings.ContainsAny(public.Title, "\r\n") {
+	if utf8.RuneCountInString(public.Title) > maxPublicDisplayCharacters {
+		return errors.Join(ErrInvalid, ErrPublicTitleTooLong)
+	}
+	if utf8.RuneCountInString(public.Description) > maxPublicDisplayCharacters {
+		return errors.Join(ErrInvalid, ErrPublicDescriptionTooLong)
+	}
+	if strings.ContainsAny(public.Title, "\r\n") {
 		return ErrInvalid
 	}
 	if public.Name != strings.TrimSpace(public.Name) || public.Title != strings.TrimSpace(public.Title) || public.Description != strings.TrimSpace(public.Description) {
@@ -618,9 +654,12 @@ func (s *Service) candidate(row repo.RegistryPromotionCandidate) Candidate {
 		if row.RegistryEntryID.Valid {
 			out.RegistryEntryID = row.RegistryEntryID.UUID.String()
 		}
-		var public PublicMetadata
+		var public publicSnapshot
 		if json.Unmarshal(row.PublicMetadata, &public) == nil {
 			out.PublicTitle = public.Title
+			if public.AuthDiscovery.Status != "" {
+				out.AuthDiscovery = &public.AuthDiscovery
+			}
 		}
 		out.DocsStatus = "pending"
 		if row.DocsAttempts > 0 {
@@ -643,4 +682,52 @@ func (s *Service) candidate(row repo.RegistryPromotionCandidate) Candidate {
 		}
 	}
 	return out
+}
+
+// DiscoverAuth resolves capabilities only from a validated public endpoint, outside publication transactions.
+func (s *Service) DiscoverAuth(ctx context.Context, endpoint, authMode string) catalogauth.Discovery {
+	if _, err := publicURL(endpoint); err != nil {
+		return catalogauth.Unknown()
+	}
+	return catalogauth.Discover(ctx, s.policy, endpoint, authMode)
+}
+
+// InspectCandidate adds public OAuth evidence only for interactive staff review, never background sweeps.
+func (s *Service) InspectCandidate(ctx context.Context, target Target) (Candidate, error) {
+	candidate, err := s.GetCandidate(ctx, target)
+	if err == nil && candidate.SuggestedMetadata != nil {
+		public := candidate.SuggestedMetadata
+		evidence := s.DiscoverAuth(ctx, public.URL, public.AuthMode)
+		candidate.AuthDiscovery = &evidence
+	}
+	return candidate, err
+}
+
+func withAuthDiscovery(record json.RawMessage, discovery catalogauth.Discovery) (json.RawMessage, error) {
+	if discovery.Status == "" {
+		return record, nil
+	}
+	if !discovery.Valid() {
+		return nil, ErrInvalid
+	}
+	var root map[string]json.RawMessage
+	if err := json.Unmarshal(record, &root); err != nil {
+		return nil, fmt.Errorf("decode public catalogue record: %w", err)
+	}
+	catalog := struct {
+		SupportsDCR         bool   `json:"supportsDcr"`
+		SupportsCIMD        bool   `json:"supportsCimd"`
+		AuthSetup           string `json:"authSetup"`
+		AuthDiscoveryStatus string `json:"authDiscoveryStatus"`
+	}{SupportsDCR: discovery.SupportsDCR, SupportsCIMD: discovery.SupportsCIMD, AuthSetup: discovery.AuthSetup, AuthDiscoveryStatus: discovery.Status}
+	meta, err := json.Marshal(map[string]any{"com.speakeasy.ai/catalog": catalog})
+	if err != nil {
+		return nil, fmt.Errorf("encode public auth capabilities: %w", err)
+	}
+	root["_meta"] = meta
+	encoded, err := json.Marshal(root)
+	if err != nil {
+		return nil, fmt.Errorf("encode discovered catalogue record: %w", err)
+	}
+	return encoded, nil
 }
