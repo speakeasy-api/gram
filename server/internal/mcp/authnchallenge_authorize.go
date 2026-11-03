@@ -285,6 +285,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 		mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID),
 		mcpconnectionattempts.UserSessionClient(client.ID),
 		mcpconnectionattempts.Subject(subject),
+		mcpconnectionattempts.FromRequest(r),
 	)
 
 	if forceIDP {

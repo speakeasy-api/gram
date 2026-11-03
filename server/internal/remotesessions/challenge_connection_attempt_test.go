@@ -62,6 +62,7 @@ func complete(t *testing.T, ctx context.Context, fx resourceDanceFixture, query 
 	t.Helper()
 
 	req := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?"+query, nil)
+	req.Header.Set("User-Agent", "Mozilla/5.0 (Macintosh) Chrome/141.0.0.0 Safari/537.36")
 	result, err := fx.mgr.CompleteRemoteLogin(req.WithContext(ctx))
 	require.NoError(t, err)
 	return result
@@ -165,6 +166,7 @@ func TestCompleteRemoteLogin_RecordsTheGatewayMember(t *testing.T) {
 
 	row := rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.ResultSignedIn)
 	require.Equal(t, member.UUID.String(), row.MemberID)
+	require.Equal(t, mcpconnectionattempts.FamilyBrowser, row.ClientFamily, "the callback says which client the person used")
 }
 
 // The login state holds the attempt, so the invalid_target retry leg keeps it.
