@@ -51,7 +51,10 @@ var CustomDomain = Type("CustomDomain", func() {
 	Attribute("dns_routing_method", String, "How the latest health check observed this domain's DNS routing traffic to Speakeasy. One of: per_domain_cname, shared_cname, a_record (also covers flattened CNAME, ALIAS and ANAME records, which resolve to addresses), unknown. Absent until the first health check.")
 
 	Attribute("dns_configuration_status", String, "Advisory public DNS configuration: matched, wrong_target, unconfirmed, not_found, check_failed, or not_configured. Does not establish ownership or public availability.")
-	Attribute("dns_checked_at", String, "When DNS configuration was observed. Infrastructure health belongs to the same observation only when this matches health_checked_at.")
+	Attribute("dns_checked_at", String, func() {
+		Description("When DNS configuration was observed. Infrastructure health belongs to the same observation only when this matches health_checked_at.")
+		Format(FormatDateTime)
+	})
 
 	Required("id", "organization_id", "domain", "verified", "activated", "created_at", "updated_at", "is_updating", "ip_allowlist", "suggested_record_type")
 })

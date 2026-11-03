@@ -93744,6 +93744,7 @@ components:
         dns_checked_at:
           type: string
           description: When DNS configuration was observed. Infrastructure health belongs to the same observation only when this matches health_checked_at.
+          format: date-time
         dns_configuration_status:
           type: string
           description: 'Advisory public DNS configuration: matched, wrong_target, unconfirmed, not_found, check_failed, or not_configured. Does not establish ownership or public availability.'

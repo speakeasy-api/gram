@@ -42,9 +42,8 @@ func customDomainFlags() []cli.Flag {
 	}
 }
 
-// customDomainTargetSuffixFlag is shared by the server and worker commands,
-// which serve and check per-domain targets, and the admin command, which
-// shows them to staff.
+// customDomainTargetSuffixFlag configures the parent DNS name used for
+// per-domain CNAME targets.
 func customDomainTargetSuffixFlag() cli.Flag {
 	return &cli.StringFlag{
 		Name:    "custom-domain-target-suffix",

@@ -201,11 +201,11 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 	}
 
 	// Pending rows created before token support need a target before setup can finish.
-	token, err := customdomains.EnsureDNSTargetToken(ctx, d.db, domain.OrganizationID, domain.ID, customdomains.NewDNSTargetToken)
-	if err != nil {
-		return noResult, fmt.Errorf("ensure custom domain DNS target: %w", err)
+	if !domain.DnsTargetToken.Valid {
+		if _, err := customdomains.EnsureDNSTargetToken(ctx, d.db, domain.OrganizationID, domain.ID, customdomains.NewDNSTargetToken); err != nil {
+			return noResult, fmt.Errorf("ensure custom domain DNS target: %w", err)
+		}
 	}
-	domain.DnsTargetToken = conv.ToPGTextEmpty(token)
 
 	routingIssue, err := checkCustomDomainRouting(ctx, d.resolver, domain.Domain, d.expectedTargetCNAME, d.expectedARecords)
 	if err != nil {
