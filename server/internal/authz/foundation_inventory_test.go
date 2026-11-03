@@ -191,6 +191,8 @@ var consumerEntryPoints = map[string]consumerCategory{
 	// not inventoried.
 	"Organization": "",
 	"Project":      "",
+	"Assistant":    "",
+	"MCPServer":    "",
 }
 
 // engineEntryPoints are Engine methods whose names are distinctive enough to

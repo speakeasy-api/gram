@@ -163,6 +163,77 @@ func (p ProjectRef) PublishPlugin() Operation {
 	)
 }
 
+// ReadSkills asks to read the project's skills. Skill grants are stored
+// against the project ID, so the operation targets the project rather than
+// one skill.
+func (p ProjectRef) ReadSkills() Operation {
+	return newOperation("skill", "read", p.id, nil)
+}
+
+// Assistants names the project's assistant collection, for operations that
+// act on the project rather than on one assistant, such as creating one.
+func (p ProjectRef) Assistants() AssistantRef {
+	return Assistant(p.organizationID, p.id, p.id)
+}
+
+// AssistantRef names one assistant in its project for typed operations.
+type AssistantRef struct {
+	projectID string
+	id        string
+}
+
+// Assistant names an assistant. The caller must have verified that the
+// assistant belongs to the project and the project to the organization.
+func Assistant(organizationID, projectID, assistantID string) AssistantRef {
+	_ = organizationID
+	return AssistantRef{projectID: projectID, id: assistantID}
+}
+
+// Read asks to read the assistant.
+func (a AssistantRef) Read() Operation {
+	return newOperation("assistant", "read", a.id, map[string]string{SelectorKeyProjectID: a.projectID})
+}
+
+// Write asks to change the assistant.
+func (a AssistantRef) Write() Operation {
+	return newOperation("assistant", "write", a.id, map[string]string{SelectorKeyProjectID: a.projectID})
+}
+
+// MCPServerRef names one MCP server in its project for typed operations.
+type MCPServerRef struct {
+	projectID string
+	id        string
+}
+
+// MCPServer names an MCP server. The caller must have verified that the
+// server belongs to the project and the project to the organization.
+func MCPServer(organizationID, projectID, serverID string) MCPServerRef {
+	_ = organizationID
+	return MCPServerRef{projectID: projectID, id: serverID}
+}
+
+func (m MCPServerRef) dimensions() map[string]string {
+	if m.projectID == "" {
+		return nil
+	}
+	return map[string]string{SelectorKeyProjectID: m.projectID}
+}
+
+// Read asks to inspect the server's configuration.
+func (m MCPServerRef) Read() Operation {
+	return newOperation("mcp_server", "read", m.id, m.dimensions())
+}
+
+// Edit asks to change the server's configuration.
+func (m MCPServerRef) Edit() Operation {
+	return newOperation("mcp_server", "edit", m.id, m.dimensions())
+}
+
+// Connect asks to connect to the server and invoke its permitted tools.
+func (m MCPServerRef) Connect() Operation {
+	return newOperation("mcp_server", "connect", m.id, m.dimensions())
+}
+
 // typedOperations lists one instance of every operation the typed
 // constructors build. NewClient rejects a registry that does not declare
 // each of them, so a constructor can never name a missing permission at
@@ -173,5 +244,11 @@ func typedOperations() []Operation {
 	return []Operation{
 		org.Read(), org.Administer(),
 		project.Read(), project.Write(), project.PublishPlugin(),
+		project.ReadSkills(),
+		Assistant("organization", "project", "assistant").Read(),
+		Assistant("organization", "project", "assistant").Write(),
+		MCPServer("organization", "project", "server").Read(),
+		MCPServer("organization", "project", "server").Edit(),
+		MCPServer("organization", "project", "server").Connect(),
 	}
 }
