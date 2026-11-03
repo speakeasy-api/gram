@@ -11,18 +11,18 @@ import { filterToHttpRemotes } from "@/pages/catalog/remotes";
 import { AddServerDialog } from "@/pages/catalog/AddServerDialog";
 import {
   PulseMCPServer,
-  useIsCatalogServerInstalled,
+  useCatalogInstallations,
   useListMCPCatalog,
 } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
-import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
+import { invalidateAllListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useMcpRegistriesGetServerDetails } from "@gram/client/react-query/mcpRegistriesGetServerDetails.js";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Stack } from "@/components/ui/Stack";
-import { useMutation } from "@tanstack/react-query";
+import { useMutation, useQueryClient } from "@tanstack/react-query";
 import {
   ChevronDown,
   ChevronUp,
@@ -75,11 +75,12 @@ export default function CatalogDetail(): JSX.Element {
   const { data, isLoading } = useListMCPCatalog();
   const [showAddDialog, setShowAddDialog] = useState(false);
 
+  const queryClient = useQueryClient();
   const { data: deploymentResult, refetch: refetchDeployment } =
     useLatestDeployment();
   const deployment = deploymentResult?.deployment;
-
-  const { data: toolsetsResult } = useListToolsets();
+  const { isInstalled: catalogServerIsInstalled, liveExternalMcp } =
+    useCatalogInstallations();
 
   const server = useMemo(() => {
     if (!data?.servers || !decodedSpecifier) return null;
@@ -137,7 +138,10 @@ export default function CatalogDetail(): JSX.Element {
       });
     },
     onSuccess: async () => {
-      await refetchDeployment();
+      await Promise.all([
+        refetchDeployment(),
+        invalidateAllListToolsets(queryClient),
+      ]);
     },
   });
 
@@ -151,32 +155,10 @@ export default function CatalogDetail(): JSX.Element {
     server?.registrySpecifier?.split("/").pop() ??
     decodedSpecifier.split("/").pop();
 
-  // Check if this server is already added to the project
-  const existingExternalMcp = useMemo(() => {
-    if (!deployment?.externalMcps || !server) return null;
-    return deployment.externalMcps.find(
-      (mcp) => mcp.registryServerSpecifier === server.registrySpecifier,
-    );
-  }, [deployment?.externalMcps, server]);
-
-  // Also consider origin-backed toolsets as installed — legacy installs
-  // created toolsets stamped with the catalog origin.
-  const hasOriginMatch = useMemo(() => {
-    if (!server) return false;
-    return (toolsetsResult?.toolsets ?? []).some(
-      (toolset) =>
-        toolset.origin?.registrySpecifier === server.registrySpecifier,
-    );
-  }, [toolsetsResult?.toolsets, server]);
-
-  // New installs are remote MCP servers, matched back to the catalog entry by
-  // endpoint URL.
-  const isInstalledByUrl = useIsCatalogServerInstalled();
-
-  const isInstalled =
-    !!existingExternalMcp ||
-    hasOriginMatch ||
-    (!!server && isInstalledByUrl(server));
+  // A deployment attachment only counts when a toolset still selects it.
+  // Deleting the MCP server leaves the attachment behind otherwise.
+  const existingExternalMcp = server ? liveExternalMcp(server) : undefined;
+  const isInstalled = !!server && catalogServerIsInstalled(server);
 
   if (isLoading) {
     return (

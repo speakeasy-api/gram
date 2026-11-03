@@ -1,12 +1,20 @@
 import { useCallback, useMemo } from "react";
 import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
 
+import type { DeploymentExternalMCP } from "@gram/client/models/components/deploymentexternalmcp.js";
 import { ExternalMCPServerEntry } from "@gram/client/models/components/externalmcpserverentry.js";
 import { ExternalMCPTool } from "@gram/client/models/components/externalmcptool.js";
-import { normalizeRemoteUrl } from "@/pages/catalog/remotes";
+import {
+  catalogServerIsInstalled,
+  collectCatalogInstallEvidence,
+  liveCatalogExternalMcp,
+} from "@/pages/catalog/catalogInstall";
 import { queryKeyListMCPCatalog } from "@gram/client/react-query/listMCPCatalog.js";
+import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
+import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { useQuery } from "@tanstack/react-query";
 import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
+import { useUnproxiedMcpServers } from "@gram/client/react-query/unproxiedMcpServers.js";
 
 interface ServerMeta {
   "com.pulsemcp/server"?: {
@@ -97,30 +105,71 @@ export function useListMCPCatalog(
 }
 
 /**
- * Informational "already installed" check for catalog entries: true when a
- * remote MCP server with one of the entry's endpoint URLs already exists in
- * the project. Installing again is always allowed and just creates another
- * server, so this only drives indicators, never blocking.
+ * Informational "already installed" check for catalog entries. Installing
+ * again is always allowed and just creates another server, so this only
+ * drives indicators, never blocking.
+ *
+ * Current installs are remote (or, for a few entries, unproxied) MCP servers
+ * matched by endpoint URL. Older installs are toolsets stamped with the
+ * catalog specifier, or a deployment attachment a toolset still selects.
+ * An attachment left behind after that toolset is deleted does not count.
  */
-export function useIsCatalogServerInstalled(): (
-  server: PulseMCPServer,
-) => boolean {
+export function useCatalogInstallations(): {
+  isInstalled: (server: PulseMCPServer) => boolean;
+  liveExternalMcp: (
+    server: PulseMCPServer,
+  ) => DeploymentExternalMCP | undefined;
+} {
+  const gramProject = useProjectSlugForRequests();
   const { data: remoteServersData } = useRemoteMcpServers();
-  const installedUrls = useMemo(
+  // A failed lookup must not take down the catalog; the badge just stays off.
+  // Key toolsets the same way as useToolsets so a project switch cannot reuse
+  // another project's list.
+  const { data: unproxiedServersData } = useUnproxiedMcpServers(
+    gramProject ? { gramProject } : undefined,
+    undefined,
+    { throwOnError: false },
+  );
+  const { data: deploymentResult } = useLatestDeployment();
+  const { data: toolsetsResult } = useListToolsets({ gramProject }, undefined, {
+    throwOnError: false,
+  });
+
+  const externalMcps = deploymentResult?.deployment?.externalMcps;
+  const evidence = useMemo(
     () =>
-      new Set(
-        (remoteServersData?.remoteMcpServers ?? []).map((server) =>
-          normalizeRemoteUrl(server.url),
-        ),
-      ),
-    [remoteServersData?.remoteMcpServers],
+      collectCatalogInstallEvidence({
+        urls: [
+          ...(remoteServersData?.remoteMcpServers ?? []).map(
+            (server) => server.url,
+          ),
+          ...(unproxiedServersData?.unproxiedMcpServers ?? []).map(
+            (server) => server.url,
+          ),
+        ],
+        toolsets: toolsetsResult?.toolsets ?? [],
+      }),
+    [
+      remoteServersData?.remoteMcpServers,
+      unproxiedServersData?.unproxiedMcpServers,
+      toolsetsResult?.toolsets,
+    ],
   );
 
-  return useCallback(
+  const isInstalled = useCallback(
     (server: PulseMCPServer) =>
-      (server.remotes ?? []).some((remote) =>
-        installedUrls.has(normalizeRemoteUrl(remote.url)),
-      ),
-    [installedUrls],
+      catalogServerIsInstalled(server, evidence, externalMcps ?? []),
+    [evidence, externalMcps],
   );
+  const liveExternalMcp = useCallback(
+    (server: PulseMCPServer) =>
+      liveCatalogExternalMcp(
+        server,
+        externalMcps ?? [],
+        evidence.referencedExternalMcpSlugs,
+      ),
+    [evidence.referencedExternalMcpSlugs, externalMcps],
+  );
+
+  return { isInstalled, liveExternalMcp };
 }
