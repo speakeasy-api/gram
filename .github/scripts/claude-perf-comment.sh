@@ -5,7 +5,8 @@
 #   REPORT=<json> MARKER=<html comment> HEAD_SHA=<sha> RUN_URL=<url> claude-perf-comment.sh
 #
 # REPORT is Claude's structured output, so it is untrusted, and the comment is
-# public. The script fails closed, printing nothing: when REPORT is not a
+# public. Its text renders as plain text on one line: no Markdown, HTML, links
+# or @mentions. The script fails closed, printing nothing: when REPORT is not a
 # complete review, and when the report or the rendered comment contains
 # anything shaped like a credential, an email address or a UUID.
 set -euo pipefail
@@ -22,21 +23,29 @@ if ! jq -e '
 fi
 
 body=$(jq -r --arg marker "$MARKER" --arg head "$HEAD_SHA" --arg run "$RUN_URL" '
-  def cell: tostring | gsub("[|]"; "\\|");
-  "\($marker)\n### Performance review: `\(.verdict)`\n\n\(.summary)\n"
+  def line: tostring | gsub("[[:space:][:cntrl:]]+"; " ");
+  # Every ASCII punctuation character is backslash-escaped, so no Markdown,
+  # HTML, entity or autolink survives, and a zero-width space after @ and #
+  # stops mentions and cross-references.
+  def text: line | gsub("(?<c>[!-/:-@\\[-`{-~])"; "\\\(.c)") | gsub("(?<c>[@#])"; "\(.c)\u200b");
+  # A backtick would end the code span.
+  def code: "`" + (line | gsub("`"; "\u0027")) + "`";
+  def cell: code | gsub("[|]"; "\\|");
+  def num: if type == "number" then tostring else "?" end;
+  "\($marker)\n### Performance review: \(.verdict | code)\n\n\(.summary | text)\n"
   + (if .findings != [] then
       "\n#### Findings\n" + ([.findings[] |
-        "- **\(.severity)** `\(.file)\(if .line then ":\(.line)" else "" end)`: \(.title). \(.detail)"
-        + (if .evidence then " _Evidence:_ \(.evidence)" else "" end)
+        "- **\(.severity | text)** \("\(.file)\(if (.line | type) == "number" then ":\(.line)" else "" end)" | code): \(.title | text). \(.detail | text)"
+        + (if .evidence then " _Evidence:_ \(.evidence | text)" else "" end)
       ] | join("\n"))
     else "" end)
   + (if .baselines != [] then
       "\n\n#### Production baselines (7 days)\n| Resource | Req/day | p50 ms | p95 ms | Query |\n|---|---|---|---|---|\n"
       + ([.baselines[] |
-        "| `\(.resource | cell)` | \(.requests_per_day // "?") | \(.p50_ms // "?") | \(.p95_ms // "?") | `\(.query | cell)` |"
+        "| \(.resource | cell) | \(.requests_per_day | num) | \(.p50_ms | num) | \(.p95_ms | num) | \(.query | cell) |"
       ] | join("\n"))
     else "" end)
-  + (if .mcp_status then "\n\n_MCP: \(.mcp_status)_" else "" end)
+  + (if .mcp_status then "\n\n_MCP: \(.mcp_status | text)_" else "" end)
   + "\n\n<sub>Commit \($head[0:7]) · [run](\($run)) · Claude Code with Speakeasy MCP</sub>"
 ' <<<"$REPORT")
 
@@ -56,7 +65,7 @@ patterns=(
   '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' # UUIDs
 )
 redact=$(IFS='|' && echo "${patterns[*]}")
-# The report's values as well as the comment, which may change them.
+# The report's values as well as the comment: escaping splits an email address.
 values=$(jq -r '.. | scalars' <<<"$REPORT")
 if grep -Eiq -e "$redact" <<<"$values"$'\n'"$body"; then
   echo "::error::The perf review matched the redaction check, so nothing was posted." >&2
