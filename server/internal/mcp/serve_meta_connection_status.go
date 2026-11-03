@@ -226,7 +226,7 @@ func connectionOutageMessage(name string, kind remotesessions.RefreshOutageKind,
 	switch {
 	case wait >= 90*time.Second:
 		retry = fmt.Sprintf("Try again in about %d minutes.", int(wait.Round(time.Minute).Minutes()))
-	case wait > 0:
+	case wait.Round(time.Second) >= 2*time.Second:
 		retry = fmt.Sprintf("Try again in about %d seconds.", int(wait.Round(time.Second).Seconds()))
 	}
 	switch kind {

@@ -395,6 +395,9 @@ func TestConnectionOutageMessage(t *testing.T) {
 		{"Fake Docs", remotesessions.RefreshOutageProvider, 30 * time.Second, "Fake Docs' provider isn't responding. Try again in about 30 seconds."},
 		{"Linear", remotesessions.RefreshOutageProvider, 5 * time.Minute, "Linear's provider isn't responding. Try again in about 5 minutes."},
 		{"Linear", remotesessions.RefreshOutageProvider, 0, "Linear's provider isn't responding. Try again shortly."},
+		{"Linear", remotesessions.RefreshOutageProvider, 400 * time.Millisecond, "Linear's provider isn't responding. Try again shortly."},
+		{"Linear", remotesessions.RefreshOutageProvider, time.Second, "Linear's provider isn't responding. Try again shortly."},
+		{"Linear", remotesessions.RefreshOutageProvider, 2 * time.Second, "Linear's provider isn't responding. Try again in about 2 seconds."},
 		{"Linear", remotesessions.RefreshOutageTunnel, 30 * time.Second, "Linear can't be reached right now. Try again in about 30 seconds."},
 		{"Linear", remotesessions.RefreshOutageNone, 0, "Linear can't renew its sign-in right now. Try again shortly."},
 	} {

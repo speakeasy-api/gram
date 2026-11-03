@@ -160,7 +160,7 @@ func metaMemberClientCredentialError(member metaMember, err error) error {
 // linkedMemberOutage offers reconnecting as a fallback: a provider can answer 5xx for one bad token.
 func linkedMemberOutage(member metaMember, err error, connectURL string) error {
 	retry := "Retry shortly."
-	if wait := remotesessions.RetryAfter(err); wait > 0 {
+	if wait := remotesessions.RetryAfter(err); wait.Round(time.Second) >= 2*time.Second {
 		retry = fmt.Sprintf("Retry in about %d seconds.", int(wait.Round(time.Second).Seconds()))
 	}
 	// A tunnel-bound provider's connect page has no Reconnect: it would take the same path.
