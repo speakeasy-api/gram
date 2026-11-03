@@ -10,6 +10,7 @@ import {
   CreditCardIcon,
   ExternalLinkIcon,
   FolderIcon,
+  GlobeIcon,
   HistoryIcon,
   SearchIcon,
   ServerIcon,
@@ -36,6 +37,7 @@ import {
 } from "@/components/ui/dialog";
 import { useOnUnmount } from "@/hooks/useOnUnmount";
 import { organizationQuery, organizationsListQuery } from "@/lib/adminQueries";
+import { adminListCustomDomainsQuery } from "@/lib/gramAdminClient";
 import { ADMIN_NAV } from "@/lib/adminNav";
 import {
   openOrganizationDashboard,
@@ -237,6 +239,19 @@ export function CommandPalette(): JSX.Element {
           ? "empty"
           : "results";
 
+  // This endpoint returns the complete custom-domain inventory.
+  // Reuse the fleet page cache; never fetch while the palette is closed.
+  const domainsQuery = useQuery({
+    ...adminListCustomDomainsQuery(),
+    enabled: open && searching,
+    retry: false,
+  });
+  const domainResults = searching
+    ? (domainsQuery.data?.customDomains
+        .filter((domain) => matches(trimmed, domain.domain))
+        .slice(0, RESULT_LIMIT) ?? [])
+    : [];
+
   const lowered = trimmed.toLowerCase();
   const navItems = ADMIN_NAV.filter((item) =>
     matches(lowered, `${item.label} ${item.keywords}`),
@@ -384,6 +399,48 @@ export function CommandPalette(): JSX.Element {
                           ? "No organizations match."
                           : "Searching..."}
                     </div>
+                  )}
+                </CommandGroup>
+              )}
+
+              {searching && (
+                <CommandGroup heading="Custom domains">
+                  {domainResults.map((domain) => (
+                    <CommandItem
+                      key={domain.id}
+                      value={`domain:${domain.id}`}
+                      onSelect={() => {
+                        changeOpen(false);
+                        void navigate({
+                          to: "/organizations/$idOrSlug/custom-domain",
+                          params: {
+                            idOrSlug:
+                              domain.organizationSlug || domain.organizationId,
+                          },
+                        });
+                      }}
+                    >
+                      <GlobeIcon />
+                      <span className="truncate">{domain.domain}</span>
+                      <span className="text-muted-foreground ml-auto truncate pl-2 text-xs">
+                        {domain.organizationName}
+                      </span>
+                    </CommandItem>
+                  ))}
+                  {domainsQuery.isError && (
+                    <p className="text-muted-foreground px-2 py-3 text-sm">
+                      Could not search custom domains.
+                    </p>
+                  )}
+                  {domainsQuery.isPending && (
+                    <p className="text-muted-foreground px-2 py-3 text-sm">
+                      Searching custom domains...
+                    </p>
+                  )}
+                  {domainsQuery.isSuccess && domainResults.length === 0 && (
+                    <p className="text-muted-foreground px-2 py-3 text-sm">
+                      No custom domains match.
+                    </p>
                   )}
                 </CommandGroup>
               )}

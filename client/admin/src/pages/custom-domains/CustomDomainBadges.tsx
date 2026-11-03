@@ -17,6 +17,7 @@ import {
   dnsConfigurationLabel,
   fmtDateTimeUtc,
   healthLabel,
+  healthIssueLabel,
   routingMethodLabel,
   type Label,
 } from "./customDomainModel";
@@ -56,7 +57,7 @@ export function HealthCell({
       <ToneBadge {...healthLabel(domain.healthStatus)} />
       {domain.healthIssue && (
         <p className="text-muted-foreground text-xs whitespace-normal">
-          {domain.healthIssue}
+          {healthIssueLabel(domain.healthIssue)}
         </p>
       )}
     </div>

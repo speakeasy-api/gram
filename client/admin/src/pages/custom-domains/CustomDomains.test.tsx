@@ -153,6 +153,14 @@ describe("CustomDomains", () => {
     expect(screen.getAllByText("Not checked")).toHaveLength(3);
   });
 
+  it("explains a configured token without a target suffix", async () => {
+    mocks.listCustomDomains.mockResolvedValue({
+      customDomains: [aDomain({ dnsTarget: undefined })],
+    });
+    await renderRouteTree(routeTree, { initialPath: "/custom-domains" });
+    await screen.findByText("No target suffix configured on this admin server");
+  });
+
   it("says when no domain uses the chosen routing method", async () => {
     mocks.listCustomDomains.mockResolvedValue({ customDomains: [] });
 

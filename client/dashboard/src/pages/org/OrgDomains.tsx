@@ -116,7 +116,7 @@ const dnsConfigurationMessages: Record<string, string> = {
   not_found:
     "The domain name was not found in DNS. Check its records with your DNS provider.",
   check_failed: "The DNS check could not complete. Try checking again.",
-  not_configured: "DNS target checks are not configured for this deployment.",
+  not_configured: "DNS configuration has not been checked yet.",
 };
 
 const healthIssueMessages: Record<string, string> = {
@@ -694,8 +694,7 @@ function OrgDomainsInner() {
 
   const hasInfrastructureObservation =
     Boolean(domain?.dnsCheckedAt) &&
-    new Date(domain?.dnsCheckedAt ?? "").getTime() ===
-      domain?.healthCheckedAt?.getTime() &&
+    domain?.dnsCheckedAt?.getTime() === domain?.healthCheckedAt?.getTime() &&
     domain?.healthIssue !== "dns_not_found" &&
     domain?.healthIssue !== "dns_target_mismatch";
 
@@ -1084,7 +1083,9 @@ function OrgDomainsInner() {
                 </div>
               </Alert>
             )}
-            {domain.verified && (
+            {(domain.dnsTarget ||
+              (domain.dnsConfigurationStatus &&
+                domain.dnsConfigurationStatus !== "not_configured")) && (
               <div className="border-border mt-4 space-y-2 border-t pt-4">
                 <Text variant="body" className="font-medium">
                   DNS configuration
@@ -1114,29 +1115,29 @@ function OrgDomainsInner() {
                     variant="body"
                     className="text-muted-foreground text-sm"
                   >
-                    DNS checked{" "}
-                    <HumanizeDateTime date={new Date(domain.dnsCheckedAt)} />
+                    DNS checked <HumanizeDateTime date={domain.dnsCheckedAt} />
                   </Text>
                 )}
-                {domain.activated && (
-                  <RequireScope scope="org:admin" level="component">
-                    <Button
-                      variant="secondary"
-                      size="sm"
-                      disabled={checkDomainHealthMutation.isPending}
-                      onClick={() =>
-                        checkDomainHealthMutation.mutate({
-                          security: { sessionHeaderGramSession: "" },
-                        })
-                      }
-                    >
-                      {checkDomainHealthMutation.isPending
-                        ? "Checking..."
-                        : "Check again"}
-                    </Button>
-                  </RequireScope>
-                )}
               </div>
+            )}
+            {domain.verified && domain.activated && (
+              <RequireScope scope="org:admin" level="component">
+                <Button
+                  variant="secondary"
+                  size="sm"
+                  className="mt-3"
+                  disabled={checkDomainHealthMutation.isPending}
+                  onClick={() =>
+                    checkDomainHealthMutation.mutate({
+                      security: { sessionHeaderGramSession: "" },
+                    })
+                  }
+                >
+                  {checkDomainHealthMutation.isPending
+                    ? "Checking..."
+                    : "Check again"}
+                </Button>
+              </RequireScope>
             )}
             {!showCustomDomainUnhealthy(domain) &&
               showRecommendedDnsUpdate(domain) && (

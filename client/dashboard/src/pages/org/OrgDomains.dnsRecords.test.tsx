@@ -287,7 +287,7 @@ it("shows one recheck action and separates fresh DNS from infrastructure", () =>
     isUpdating: false,
     dnsRoutingMethod: "shared_cname",
     dnsConfigurationStatus: "matched",
-    dnsCheckedAt: "2026-11-01T00:00:00Z",
+    dnsCheckedAt: new Date("2026-11-01T00:00:00Z"),
     healthCheckedAt: new Date("2026-11-01T00:00:00Z"),
     healthStatus: "healthy",
   });
@@ -305,7 +305,7 @@ it("does not treat an older worker's later health write as fresh infrastructure"
     isUpdating: false,
     dnsConfigurationStatus: "matched",
     dnsRoutingMethod: "per_domain_cname",
-    dnsCheckedAt: "2026-11-01T00:00:00Z",
+    dnsCheckedAt: new Date("2026-11-01T00:00:00Z"),
     healthCheckedAt: new Date("2026-11-01T01:00:00Z"),
     healthStatus: "unhealthy",
     healthIssue: "check_failed",
@@ -332,4 +332,50 @@ it("shows the designated target when DNS points at another domain's token", () =
   renderPage();
   expect(screen.getByText(/point to another domain/)).toBeTruthy();
   expect(screen.getByText(`Designated target: ${target}`)).toBeTruthy();
+});
+
+it("shows saved DNS guidance before ownership is verified", () => {
+  state.domain = customDomain({
+    verified: false,
+    dnsConfigurationStatus: "not_found",
+  });
+  renderPage();
+  expect(screen.getByText("DNS configuration")).toBeTruthy();
+  expect(screen.getByText(/The domain name was not found in DNS/)).toBeTruthy();
+});
+
+it("keeps shared-target DNS observations visible without a designated target", () => {
+  state.domain = customDomain({
+    verified: true,
+    dnsTarget: undefined,
+    dnsConfigurationStatus: "unconfirmed",
+  });
+  renderPage();
+  expect(
+    screen.getByText(/The routing target could not be confirmed/),
+  ).toBeTruthy();
+});
+
+it.each([undefined, "not_configured"])(
+  "hides unavailable DNS diagnostics (%s) without a designated target",
+  (dnsConfigurationStatus) => {
+    state.domain = customDomain({
+      verified: true,
+      dnsTarget: undefined,
+      dnsConfigurationStatus,
+    });
+    renderPage();
+    expect(screen.queryByText("DNS configuration")).toBeNull();
+  },
+);
+
+it("keeps the infrastructure recheck available without DNS target configuration", () => {
+  state.domain = customDomain({
+    verified: true,
+    activated: true,
+    dnsTarget: undefined,
+    dnsConfigurationStatus: "not_configured",
+  });
+  renderPage();
+  expect(screen.getByRole("button", { name: "Check again" })).toBeTruthy();
 });

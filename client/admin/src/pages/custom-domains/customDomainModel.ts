@@ -129,3 +129,19 @@ export function dnsConfigurationLabel(status: string | undefined): Label {
       return { label: "Not checked", tone: "neutral" };
   }
 }
+
+// Older workers may leave DNS findings in this field too.
+const HEALTH_ISSUE_LABELS: Record<string, string> = {
+  dns_not_found: "DNS name not found",
+  dns_target_mismatch: "DNS target does not match",
+  resource_missing: "Routing configuration missing",
+  certificate_missing: "TLS certificate missing",
+  certificate_not_ready: "TLS certificate not ready",
+  certificate_expired: "TLS certificate expired",
+  certificate_invalid: "TLS certificate invalid",
+  check_failed: "Health check incomplete",
+};
+
+export function healthIssueLabel(issue: string): string {
+  return HEALTH_ISSUE_LABELS[issue] ?? "Unrecognized health issue";
+}

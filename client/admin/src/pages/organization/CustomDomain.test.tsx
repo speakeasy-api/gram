@@ -5,7 +5,9 @@ import type { AdminListCustomDomainsRequest } from "@gram/admin-client/models/op
 
 import { routeTree } from "@/routeTree.gen";
 import { anOrganization } from "@/test/fixtures";
-import { renderRouteTree } from "@/test/harness";
+import { renderRouteTree, renderWithApp } from "@/test/harness";
+import { CustomDomain } from "./CustomDomain";
+import { TooltipProvider } from "@/components/ui/tooltip";
 
 const mocks = vi.hoisted(() => ({
   getSession: vi.fn(),
@@ -86,7 +88,7 @@ describe("CustomDomain", () => {
           dnsTargetToken: "abc123",
           dnsRoutingMethod: "per_domain_cname",
           healthStatus: "unhealthy",
-          healthIssue: "CNAME points somewhere else",
+          healthIssue: "certificate_expired",
           healthCheckedAt: new Date("2026-03-02T10:15:00Z"),
           createdAt: new Date("2026-01-15T00:00:00Z"),
         },
@@ -101,10 +103,40 @@ describe("CustomDomain", () => {
     expect(screen.getByText("Per-domain CNAME")).toBeTruthy();
     expect(screen.getByText("Verified, not activated")).toBeTruthy();
     expect(screen.getByText("Unhealthy")).toBeTruthy();
-    expect(screen.getByText("CNAME points somewhere else")).toBeTruthy();
+    expect(screen.getByText("TLS certificate expired")).toBeTruthy();
     // A token with no target means the admin server has no suffix configured.
     expect(
       screen.getByText("No target suffix configured on this admin server"),
     ).toBeTruthy();
   });
+});
+
+it("shows the designated CNAME and saved DNS diagnostic", async () => {
+  mocks.listCustomDomains.mockResolvedValue({
+    customDomains: [
+      {
+        id: "domain_1",
+        organizationId: ORG.id,
+        organizationName: ORG.name,
+        organizationSlug: ORG.slug,
+        domain: "mcp.example.test",
+        verified: true,
+        activated: true,
+        dnsTargetToken: "abcdefgh23",
+        dnsTarget: "abcdefgh23.domains.example.test",
+        dnsConfigurationStatus: "wrong_target",
+        createdAt: new Date("2026-01-15T00:00:00Z"),
+      },
+    ],
+  });
+  await renderWithApp(
+    <TooltipProvider>
+      <CustomDomain org={ORG} />
+    </TooltipProvider>,
+  );
+  await screen.findByText("abcdefgh23.domains.example.test");
+  expect(
+    screen.getByRole("button", { name: "Copy Designated target" }),
+  ).toBeTruthy();
+  expect(screen.getByText("Different target")).toBeTruthy();
 });
