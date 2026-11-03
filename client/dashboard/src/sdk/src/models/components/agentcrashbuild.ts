@@ -3,6 +3,7 @@
  */
 
 import * as z from "zod/v4-mini";
+import { remap as remap$ } from "../../lib/primitives.js";
 
 export type AgentCrashBuild = {
   arch?: string | undefined;
@@ -15,6 +16,10 @@ export type AgentCrashBuild = {
    */
   channel?: string | undefined;
   os?: string | undefined;
+  /**
+   * OS release, e.g. 15.4 on macOS or the kernel release on Linux.
+   */
+  osVersion?: string | undefined;
   version: string;
 };
 
@@ -24,6 +29,7 @@ export type AgentCrashBuild$Outbound = {
   binary: string;
   channel?: string | undefined;
   os?: string | undefined;
+  os_version?: string | undefined;
   version: string;
 };
 
@@ -31,13 +37,21 @@ export type AgentCrashBuild$Outbound = {
 export const AgentCrashBuild$outboundSchema: z.ZodMiniType<
   AgentCrashBuild$Outbound,
   AgentCrashBuild
-> = z.object({
-  arch: z.optional(z.string()),
-  binary: z.string(),
-  channel: z.optional(z.string()),
-  os: z.optional(z.string()),
-  version: z.string(),
-});
+> = z.pipe(
+  z.object({
+    arch: z.optional(z.string()),
+    binary: z.string(),
+    channel: z.optional(z.string()),
+    os: z.optional(z.string()),
+    osVersion: z.optional(z.string()),
+    version: z.string(),
+  }),
+  z.transform((v) => {
+    return remap$(v, {
+      osVersion: "os_version",
+    });
+  }),
+);
 
 export function agentCrashBuildToJSON(
   agentCrashBuild: AgentCrashBuild,

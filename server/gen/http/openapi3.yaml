@@ -98320,6 +98320,10 @@ components:
                 os:
                     type: string
                     maxLength: 16
+                os_version:
+                    type: string
+                    description: OS release, e.g. 15.4 on macOS or the kernel release on Linux.
+                    maxLength: 64
                 version:
                     type: string
                     maxLength: 64

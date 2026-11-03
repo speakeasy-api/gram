@@ -83,11 +83,12 @@ func TestRecordCrash_LogsScrubbedReportAndCountsClosedTags(t *testing.T) {
 		OccurredAt:    "2026-10-27T12:00:00Z",
 		Count:         3,
 		Build: &gen.AgentCrashBuild{
-			Binary:  "speakeasyd",
-			Version: "0.42.0",
-			Channel: new("stable"),
-			Os:      new("darwin"),
-			Arch:    new("arm64"),
+			Binary:    "speakeasyd",
+			Version:   "0.42.0",
+			Channel:   new("stable"),
+			Os:        new("darwin"),
+			Arch:      new("arm64"),
+			OsVersion: new("15.4"),
 		},
 		Message:         &message,
 		PanicType:       nil,
@@ -104,6 +105,7 @@ func TestRecordCrash_LogsScrubbedReportAndCountsClosedTags(t *testing.T) {
 	require.Contains(t, entry["error.stack"], "core/policy.(*Scheduler).tick()\n\tgithub.com/speakeasy-api/device-agent/core/policy/scheduler.go:204")
 	require.Equal(t, "unknown", entry["gram.agent.crash.component"])
 	require.Equal(t, "c02abc", entry["gram.agent.device.serial"])
+	require.Equal(t, "15.4", entry["gram.agent.build.os_version"])
 	require.NotContains(t, logs.String(), "jane")
 
 	var rm metricdata.ResourceMetrics
@@ -164,7 +166,7 @@ func validReport() *gen.AgentCrashReport {
 		Component:     "policy_scheduler",
 		OccurredAt:    "2026-10-27T12:00:00Z",
 		Count:         1,
-		Build:         &gen.AgentCrashBuild{Binary: "speakeasyd", Version: "0.42.0", Channel: nil, Os: nil, Arch: nil},
+		Build:         &gen.AgentCrashBuild{Binary: "speakeasyd", Version: "0.42.0", Channel: nil, Os: nil, Arch: nil, OsVersion: nil},
 		Message:       new("runtime error: index out of range [5] with length 3"),
 		PanicType:     nil,
 		Stack: []*gen.AgentCrashFrame{

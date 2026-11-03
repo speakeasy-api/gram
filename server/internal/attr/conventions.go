@@ -976,6 +976,7 @@ const (
 	AgentBuildChannelKey         = attribute.Key("gram.agent.build.channel")
 	AgentBuildOSKey              = attribute.Key("gram.agent.build.os")
 	AgentBuildArchKey            = attribute.Key("gram.agent.build.arch")
+	AgentBuildOSVersionKey       = attribute.Key("gram.agent.build.os_version")
 	// HookBlockReasonKey is set on hook telemetry entries when the Speakeasy hook
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
@@ -1706,6 +1707,10 @@ func SlogAgentBuildOS(v string) slog.Attr {
 
 func SlogAgentBuildArch(v string) slog.Attr {
 	return slog.String(string(AgentBuildArchKey), v)
+}
+
+func SlogAgentBuildOSVersion(v string) slog.Attr {
+	return slog.String(string(AgentBuildOSVersionKey), v)
 }
 
 func HookReplayed(v bool) attribute.KeyValue { return HookReplayedKey.Bool(v) }

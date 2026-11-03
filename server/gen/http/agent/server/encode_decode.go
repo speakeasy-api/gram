@@ -3915,11 +3915,12 @@ func unmarshalAgentCrashReportRequestBodyToAgentAgentCrashReport(v *AgentCrashRe
 // type *agent.AgentCrashBuild from a value of type *AgentCrashBuildRequestBody.
 func unmarshalAgentCrashBuildRequestBodyToAgentAgentCrashBuild(v *AgentCrashBuildRequestBody) *agent.AgentCrashBuild {
 	res := &agent.AgentCrashBuild{
-		Binary:  *v.Binary,
-		Version: *v.Version,
-		Channel: v.Channel,
-		Os:      v.Os,
-		Arch:    v.Arch,
+		Binary:    *v.Binary,
+		Version:   *v.Version,
+		Channel:   v.Channel,
+		Os:        v.Os,
+		Arch:      v.Arch,
+		OsVersion: v.OsVersion,
 	}
 
 	return res

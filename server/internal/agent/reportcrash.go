@@ -357,6 +357,9 @@ func (s *Service) recordCrash(ctx context.Context, organizationID, serial, envir
 	if serial != "" {
 		attrs = append(attrs, attr.SlogAgentDeviceSerial(serial))
 	}
+	if osVersion := scrubCrashText(conv.PtrValOr(build.OsVersion, "")); osVersion != "" {
+		attrs = append(attrs, attr.SlogAgentBuildOSVersion(osVersion))
+	}
 	if report.OtherGoroutines != nil {
 		attrs = append(attrs, attr.SlogAgentCrashOtherGoroutines(*report.OtherGoroutines))
 	}

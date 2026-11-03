@@ -823,6 +823,9 @@ var AgentCrashBuildModel = Type("AgentCrashBuild", func() {
 	Attribute("arch", String, func() {
 		MaxLength(16)
 	})
+	Attribute("os_version", String, "OS release, e.g. 15.4 on macOS or the kernel release on Linux.", func() {
+		MaxLength(64)
+	})
 })
 
 var AgentCrashFrameModel = Type("AgentCrashFrame", func() {

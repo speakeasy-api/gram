@@ -190,6 +190,8 @@ type AgentCrashBuild struct {
 	Channel *string
 	Os      *string
 	Arch    *string
+	// OS release, e.g. 15.4 on macOS or the kernel release on Linux.
+	OsVersion *string
 }
 
 type AgentCrashFrame struct {
