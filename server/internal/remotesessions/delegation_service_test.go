@@ -88,9 +88,10 @@ func newDelegationUnitFixture(t *testing.T) (*delegationAdapterFixture, *delegat
 	require.NoError(t, fixtures.SeedDelegationLoaderClientFixture(ctx, testrepo.SeedDelegationLoaderClientFixtureParams{
 		ID: b.ClientID, OrganizationID: b.OrganizationID, RemoteSessionIssuerID: b.IssuerID, ClientID: "test-client", Scope: nil,
 	}))
-	//nolint:glint // notestingrawsql: tenant fixtures for the delegation adapter across owner domains; the fixtures need caller-chosen ids
-	_, err = db.Exec(ctx, `INSERT INTO user_session_issuers (organization_id,slug,authn_challenge_mode,session_duration,trusted_remote_session_issuer_id,trusted_remote_session_client_id) VALUES ($1,'delegation-adapter','interactive',interval '1 hour',$2,$3)`, b.OrganizationID, b.IssuerID, b.ClientID)
-	require.NoError(t, err)
+	require.NoError(t, fixtures.SeedDelegationUserSessionIssuerFixture(ctx, testrepo.SeedDelegationUserSessionIssuerFixtureParams{
+		OrganizationID: pgtype.Text{String: b.OrganizationID, Valid: true}, Slug: "delegation-adapter",
+		TrustedRemoteSessionIssuerID: uuid.NullUUID{UUID: b.IssuerID, Valid: true}, TrustedRemoteSessionClientID: uuid.NullUUID{UUID: b.ClientID, Valid: true},
+	}))
 	enc, err := encryption.NewWithBytes(bytes.Repeat([]byte{0x42}, 32))
 	require.NoError(t, err)
 	now := time.Now().UTC().Truncate(time.Microsecond)

@@ -128,6 +128,34 @@ describe("DeviceAgentConfigurationTab", () => {
     expect(config).not.toHaveProperty("blocked_versions");
   });
 
+  it("stores the crash report switch only when it is off", () => {
+    mocks.isPlatformAdmin = false;
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <DeviceAgentConfigurationTab />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("switch", { name: "Crash reports" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save configuration" }));
+    expect(sentConfig().disable_crash_reports).toBe(true);
+  });
+
+  it("drops the crash report switch when it is turned back on", () => {
+    mocks.isPlatformAdmin = false;
+    mocks.configuration = {
+      ...storedConfiguration,
+      config: { ...storedConfiguration.config, disable_crash_reports: true },
+    };
+    render(
+      <QueryClientProvider client={new QueryClient()}>
+        <DeviceAgentConfigurationTab />
+      </QueryClientProvider>,
+    );
+    fireEvent.click(screen.getByRole("switch", { name: "Crash reports" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save configuration" }));
+    expect(sentConfig()).not.toHaveProperty("disable_crash_reports");
+  });
+
   it("sends platform-admin-only keys when a platform admin saves", () => {
     mocks.isPlatformAdmin = true;
     renderAndSave();
