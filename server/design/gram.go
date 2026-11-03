@@ -58,6 +58,7 @@ import (
 	_ "github.com/speakeasy-api/gram/server/design/oktaresourceconnections"
 	_ "github.com/speakeasy-api/gram/server/design/oktaserversuggestions"
 	_ "github.com/speakeasy-api/gram/server/design/organizations"
+	_ "github.com/speakeasy-api/gram/server/design/orgmemory"
 	_ "github.com/speakeasy-api/gram/server/design/otel"
 	_ "github.com/speakeasy-api/gram/server/design/packages"
 	_ "github.com/speakeasy-api/gram/server/design/platformadmin/assets"

@@ -48965,6 +48965,424 @@ paths:
             x-speakeasy-name-override: restore
             x-speakeasy-react-hook:
                 name: RestoreOktaServerSuggestion
+    /rpc/orgMemory.getDigest:
+        get:
+            description: 'Load one digest with what it cites: child digests for a week or month, sessions and memos for a day. Sources that left memory since the digest was written are omitted.'
+            operationId: getOrgMemoryDigest
+            parameters:
+                - allowEmptyValue: true
+                  description: Digest ID.
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: Digest ID.
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetOrgMemoryDigestResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getOrgMemoryDigest orgMemory
+            tags:
+                - orgMemory
+            x-speakeasy-name-override: getDigest
+            x-speakeasy-react-hook:
+                name: OrgMemoryDigest
+    /rpc/orgMemory.listDigests:
+        get:
+            description: List the project's digests at one level, newest period first.
+            operationId: listOrgMemoryDigests
+            parameters:
+                - allowEmptyValue: true
+                  description: Digest level to list.
+                  in: query
+                  name: level
+                  schema:
+                    default: week
+                    description: Digest level to list.
+                    enum:
+                        - day
+                        - week
+                        - month
+                    type: string
+                - allowEmptyValue: true
+                  description: Only digests whose period starts before this UTC day.
+                  in: query
+                  name: before
+                  schema:
+                    description: Only digests whose period starts before this UTC day.
+                    format: date
+                    type: string
+                - allowEmptyValue: true
+                  description: Number of digests to return.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 12
+                    description: Number of digests to return.
+                    format: int64
+                    maximum: 62
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOrgMemoryDigestsResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listOrgMemoryDigests orgMemory
+            tags:
+                - orgMemory
+            x-speakeasy-name-override: listDigests
+            x-speakeasy-react-hook:
+                name: OrgMemoryDigests
+    /rpc/orgMemory.overview:
+        get:
+            description: Summarize the project's Organizational Memory over a recent window.
+            operationId: getOrgMemoryOverview
+            parameters:
+                - allowEmptyValue: true
+                  description: Window size in days.
+                  in: query
+                  name: days
+                  schema:
+                    default: 30
+                    description: Window size in days.
+                    format: int64
+                    maximum: 90
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/GetOrgMemoryOverviewResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getOrgMemoryOverview orgMemory
+            tags:
+                - orgMemory
+            x-speakeasy-name-override: overview
+            x-speakeasy-react-hook:
+                name: OrgMemoryOverview
+    /rpc/orgMemory.recent:
+        get:
+            description: List sessions and memos from the last week that no day digest has folded yet, newest first.
+            operationId: listOrgMemoryRecent
+            parameters:
+                - allowEmptyValue: true
+                  description: Maximum sessions and maximum memos to return.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 20
+                    description: Maximum sessions and maximum memos to return.
+                    format: int64
+                    maximum: 100
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListOrgMemoryRecentResponseBody'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: listOrgMemoryRecent orgMemory
+            tags:
+                - orgMemory
+            x-speakeasy-name-override: recent
+            x-speakeasy-react-hook:
+                name: OrgMemoryRecent
     /rpc/organizationAssets.uploadImage:
         post:
             description: Upload an organization-tier image (e.g. a remote identity provider logo). Requires org:admin.
@@ -109019,6 +109437,60 @@ components:
                 - top_tools_by_count
                 - top_tools_by_failure_rate
                 - interval_seconds
+        GetOrgMemoryDigestResponseBody:
+            type: object
+            properties:
+                children:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OrgMemoryDigest'
+                    description: Digests one level down, oldest first.
+                digest:
+                    $ref: '#/components/schemas/OrgMemoryDigest'
+                memos:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OrgMemoryMemo'
+                    description: Memos a day digest folded, oldest first.
+                sessions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OrgMemorySession'
+                    description: Sessions a day digest folded, oldest first.
+            required:
+                - digest
+                - children
+                - sessions
+                - memos
+        GetOrgMemoryOverviewResponseBody:
+            type: object
+            properties:
+                days:
+                    type: integer
+                    description: Window size in days.
+                    format: int64
+                memos_saved:
+                    type: integer
+                    description: Memos saved to memory.
+                    format: int64
+                recalls:
+                    type: integer
+                    description: Times agents read memory through the Platform MCP.
+                    format: int64
+                sessions_left_out:
+                    type: integer
+                    description: 'Summarized sessions kept out of memory: excluded or from a personal account.'
+                    format: int64
+                sessions_remembered:
+                    type: integer
+                    description: Sessions with a masked summary in memory.
+                    format: int64
+            required:
+                - days
+                - sessions_remembered
+                - sessions_left_out
+                - memos_saved
+                - recalls
         GetOrganizationGatewayActivityPayload:
             type: object
             properties:
@@ -113407,6 +113879,33 @@ components:
                 - suggestions
                 - open_count
                 - total_count
+        ListOrgMemoryDigestsResponseBody:
+            type: object
+            properties:
+                digests:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OrgMemoryDigest'
+                next_before:
+                    type: string
+                    description: Pass as before to load older digests.
+                    format: date
+            required:
+                - digests
+        ListOrgMemoryRecentResponseBody:
+            type: object
+            properties:
+                memos:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OrgMemoryMemo'
+                sessions:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/OrgMemorySession'
+            required:
+                - sessions
+                - memos
         ListOrganizationMcpServersResult:
             type: object
             properties:
@@ -117326,6 +117825,115 @@ components:
                 - type
                 - summary
                 - env_variables
+        OrgMemoryDigest:
+            type: object
+            properties:
+                child_count:
+                    type: integer
+                    description: Digests one level down that a week or month digest folded.
+                    format: int64
+                content:
+                    type: string
+                    description: Digest text, written only from masked summaries, memos and child digests.
+                generated_at:
+                    type: string
+                    description: When the digest was written.
+                    format: date-time
+                id:
+                    type: string
+                    description: Digest ID.
+                    format: uuid
+                level:
+                    type: string
+                    description: Period the digest covers.
+                    enum:
+                        - day
+                        - week
+                        - month
+                memo_count:
+                    type: integer
+                    description: Memos a day digest folded. Zero for weeks and months.
+                    format: int64
+                period_end:
+                    type: string
+                    description: First UTC day after the period.
+                    format: date
+                period_start:
+                    type: string
+                    description: First UTC day of the period.
+                    format: date
+                session_count:
+                    type: integer
+                    description: Sessions a day digest folded. Zero for weeks and months.
+                    format: int64
+            description: A day, week or month digest of a project's Organizational Memory.
+            required:
+                - id
+                - level
+                - period_start
+                - period_end
+                - content
+                - session_count
+                - memo_count
+                - child_count
+                - generated_at
+        OrgMemoryMemo:
+            type: object
+            properties:
+                author_kind:
+                    type: string
+                    description: Who saved the memo.
+                    enum:
+                        - user
+                        - agent
+                        - system
+                author_name:
+                    type: string
+                    description: Display name of the person or agent that saved the memo, when known.
+                chat_id:
+                    type: string
+                    description: Session the memo was saved from, when it names one.
+                    format: uuid
+                content:
+                    type: string
+                    description: Masked memo text.
+                created_at:
+                    type: string
+                    description: When the memo was saved.
+                    format: date-time
+                id:
+                    type: string
+                    description: Memo ID.
+                    format: uuid
+            description: A fact an agent saved to Organizational Memory with remember.
+            required:
+                - id
+                - content
+                - author_kind
+                - created_at
+        OrgMemorySession:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: Chat ID.
+                    format: uuid
+                summarized_at:
+                    type: string
+                    description: When the summary was written.
+                    format: date-time
+                summary:
+                    type: string
+                    description: Masked session summary.
+                title:
+                    type: string
+                    description: Session title.
+            description: 'A session as Organizational Memory sees it: its masked summary, never the transcript.'
+            required:
+                - id
+                - title
+                - summary
+                - summarized_at
         Organization:
             type: object
             properties:
@@ -136064,6 +136672,8 @@ tags:
       description: 'MCP servers suggested from the organization''s Okta applications: catalog entries whose staff-curated Okta mapping matches a synced, assigned application. Administrators accept by creating the server through the usual remote MCP flow, or dismiss; dismissals are remembered per organization and audited.'
     - name: organizations
       description: Organization membership, invitations, and directory.
+    - name: orgMemory
+      description: 'Browse a project''s Organizational Memory: digests, the sessions and memos they fold, and recent activity. Requires an unrestricted chat:read grant on the project and the org-memory rollout.'
     - name: otel
       description: Receives OpenTelemetry signals from LLM providers and harnesses.
     - name: packages

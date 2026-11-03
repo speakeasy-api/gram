@@ -126,6 +126,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/openrouterkeys"
 	"github.com/speakeasy-api/gram/server/internal/organizations"
+	"github.com/speakeasy-api/gram/server/internal/orgmemory"
 	otelsvc "github.com/speakeasy-api/gram/server/internal/otel"
 	otelchrepo "github.com/speakeasy-api/gram/server/internal/otel/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/packages"
@@ -1537,6 +1538,15 @@ func newStartCommand() *cli.Command {
 				sessionManager,
 				authzEngine,
 				completionsClient,
+			))
+			orgmemory.Attach(mux, orgmemory.NewService(
+				logger,
+				tracerProvider,
+				db,
+				sessionManager,
+				authzEngine,
+				auditLogger,
+				featureFlags,
 			))
 			// identityMapRefreshSignaler.Shutdown is NOT registered as a
 			// shutdownFunc, for the same reason riskSignaler's is not: it is

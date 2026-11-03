@@ -70,6 +70,7 @@ import (
 	networkingressc "github.com/speakeasy-api/gram/server/gen/http/network_ingress/client"
 	oktaresourceconnectionsc "github.com/speakeasy-api/gram/server/gen/http/okta_resource_connections/client"
 	oktaserversuggestionsc "github.com/speakeasy-api/gram/server/gen/http/okta_server_suggestions/client"
+	orgmemoryc "github.com/speakeasy-api/gram/server/gen/http/org_memory/client"
 	organizationassetsc "github.com/speakeasy-api/gram/server/gen/http/organization_assets/client"
 	organizationremotesessionclientsc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_clients/client"
 	organizationremotesessionissuersc "github.com/speakeasy-api/gram/server/gen/http/organization_remote_session_issuers/client"
@@ -172,6 +173,7 @@ func UsageCommands() []string {
 		"okta-resource-connections (list|confirm|reset)",
 		"okta-server-suggestions (list|dismiss|restore)",
 		"organizations (get|get-gateway|send-invite|revoke-invite|update-invite-role|list-invites|list-users|remove-user|revoke-member-sign-ins|enable-webhooks|disable-webhooks|create-portal-session|get-onboarding-status|verify-onboarding-hooks-setup|send-enterprise-admin-onboarding-email|generate-work-os-admin-portal-link|list-setup-tasks|update-setup-task|submit-onboarding-survey)",
+		"org-memory (get-org-memory-overview|list-org-memory-digests|get-org-memory-digest|list-org-memory-recent)",
 		"otel (logs|metrics|traces|list-event-log|get-event-volume|get-event-facets)",
 		"packages (create-package|update-package|list-packages|list-versions|publish)",
 		"admin-assets upload-platform-image",
@@ -2395,6 +2397,30 @@ func ParseEndpoint(
 		organizationsSubmitOnboardingSurveyFlags            = flag.NewFlagSet("submit-onboarding-survey", flag.ExitOnError)
 		organizationsSubmitOnboardingSurveyBodyFlag         = organizationsSubmitOnboardingSurveyFlags.String("body", "REQUIRED", "")
 		organizationsSubmitOnboardingSurveySessionTokenFlag = organizationsSubmitOnboardingSurveyFlags.String("session-token", "", "")
+
+		orgMemoryFlags = flag.NewFlagSet("org-memory", flag.ContinueOnError)
+
+		orgMemoryGetOrgMemoryOverviewFlags                = flag.NewFlagSet("get-org-memory-overview", flag.ExitOnError)
+		orgMemoryGetOrgMemoryOverviewDaysFlag             = orgMemoryGetOrgMemoryOverviewFlags.String("days", "30", "")
+		orgMemoryGetOrgMemoryOverviewSessionTokenFlag     = orgMemoryGetOrgMemoryOverviewFlags.String("session-token", "", "")
+		orgMemoryGetOrgMemoryOverviewProjectSlugInputFlag = orgMemoryGetOrgMemoryOverviewFlags.String("project-slug-input", "", "")
+
+		orgMemoryListOrgMemoryDigestsFlags                = flag.NewFlagSet("list-org-memory-digests", flag.ExitOnError)
+		orgMemoryListOrgMemoryDigestsLevelFlag            = orgMemoryListOrgMemoryDigestsFlags.String("level", "week", "")
+		orgMemoryListOrgMemoryDigestsBeforeFlag           = orgMemoryListOrgMemoryDigestsFlags.String("before", "", "")
+		orgMemoryListOrgMemoryDigestsLimitFlag            = orgMemoryListOrgMemoryDigestsFlags.String("limit", "12", "")
+		orgMemoryListOrgMemoryDigestsSessionTokenFlag     = orgMemoryListOrgMemoryDigestsFlags.String("session-token", "", "")
+		orgMemoryListOrgMemoryDigestsProjectSlugInputFlag = orgMemoryListOrgMemoryDigestsFlags.String("project-slug-input", "", "")
+
+		orgMemoryGetOrgMemoryDigestFlags                = flag.NewFlagSet("get-org-memory-digest", flag.ExitOnError)
+		orgMemoryGetOrgMemoryDigestIDFlag               = orgMemoryGetOrgMemoryDigestFlags.String("id", "REQUIRED", "")
+		orgMemoryGetOrgMemoryDigestSessionTokenFlag     = orgMemoryGetOrgMemoryDigestFlags.String("session-token", "", "")
+		orgMemoryGetOrgMemoryDigestProjectSlugInputFlag = orgMemoryGetOrgMemoryDigestFlags.String("project-slug-input", "", "")
+
+		orgMemoryListOrgMemoryRecentFlags                = flag.NewFlagSet("list-org-memory-recent", flag.ExitOnError)
+		orgMemoryListOrgMemoryRecentLimitFlag            = orgMemoryListOrgMemoryRecentFlags.String("limit", "20", "")
+		orgMemoryListOrgMemoryRecentSessionTokenFlag     = orgMemoryListOrgMemoryRecentFlags.String("session-token", "", "")
+		orgMemoryListOrgMemoryRecentProjectSlugInputFlag = orgMemoryListOrgMemoryRecentFlags.String("project-slug-input", "", "")
 
 		otelFlags = flag.NewFlagSet("otel", flag.ContinueOnError)
 
@@ -5971,6 +5997,12 @@ func ParseEndpoint(
 	organizationsUpdateSetupTaskFlags.Usage = organizationsUpdateSetupTaskUsage
 	organizationsSubmitOnboardingSurveyFlags.Usage = organizationsSubmitOnboardingSurveyUsage
 
+	orgMemoryFlags.Usage = orgMemoryUsage
+	orgMemoryGetOrgMemoryOverviewFlags.Usage = orgMemoryGetOrgMemoryOverviewUsage
+	orgMemoryListOrgMemoryDigestsFlags.Usage = orgMemoryListOrgMemoryDigestsUsage
+	orgMemoryGetOrgMemoryDigestFlags.Usage = orgMemoryGetOrgMemoryDigestUsage
+	orgMemoryListOrgMemoryRecentFlags.Usage = orgMemoryListOrgMemoryRecentUsage
+
 	otelFlags.Usage = otelUsage
 	otelLogsFlags.Usage = otelLogsUsage
 	otelMetricsFlags.Usage = otelMetricsUsage
@@ -6738,6 +6770,8 @@ func ParseEndpoint(
 			svcf = oktaServerSuggestionsFlags
 		case "organizations":
 			svcf = organizationsFlags
+		case "org-memory":
+			svcf = orgMemoryFlags
 		case "otel":
 			svcf = otelFlags
 		case "packages":
@@ -8259,6 +8293,22 @@ func ParseEndpoint(
 
 			case "submit-onboarding-survey":
 				epf = organizationsSubmitOnboardingSurveyFlags
+
+			}
+
+		case "org-memory":
+			switch epn {
+			case "get-org-memory-overview":
+				epf = orgMemoryGetOrgMemoryOverviewFlags
+
+			case "list-org-memory-digests":
+				epf = orgMemoryListOrgMemoryDigestsFlags
+
+			case "get-org-memory-digest":
+				epf = orgMemoryGetOrgMemoryDigestFlags
+
+			case "list-org-memory-recent":
+				epf = orgMemoryListOrgMemoryRecentFlags
 
 			}
 
@@ -11567,6 +11617,22 @@ func ParseEndpoint(
 			case "submit-onboarding-survey":
 				endpoint = c.SubmitOnboardingSurvey()
 				data, err = organizationsc.BuildSubmitOnboardingSurveyPayload(*organizationsSubmitOnboardingSurveyBodyFlag, *organizationsSubmitOnboardingSurveySessionTokenFlag)
+			}
+		case "org-memory":
+			c := orgmemoryc.NewClient(scheme, host, doer, enc, dec, restore)
+			switch epn {
+			case "get-org-memory-overview":
+				endpoint = c.GetOrgMemoryOverview()
+				data, err = orgmemoryc.BuildGetOrgMemoryOverviewPayload(*orgMemoryGetOrgMemoryOverviewDaysFlag, *orgMemoryGetOrgMemoryOverviewSessionTokenFlag, *orgMemoryGetOrgMemoryOverviewProjectSlugInputFlag)
+			case "list-org-memory-digests":
+				endpoint = c.ListOrgMemoryDigests()
+				data, err = orgmemoryc.BuildListOrgMemoryDigestsPayload(*orgMemoryListOrgMemoryDigestsLevelFlag, *orgMemoryListOrgMemoryDigestsBeforeFlag, *orgMemoryListOrgMemoryDigestsLimitFlag, *orgMemoryListOrgMemoryDigestsSessionTokenFlag, *orgMemoryListOrgMemoryDigestsProjectSlugInputFlag)
+			case "get-org-memory-digest":
+				endpoint = c.GetOrgMemoryDigest()
+				data, err = orgmemoryc.BuildGetOrgMemoryDigestPayload(*orgMemoryGetOrgMemoryDigestIDFlag, *orgMemoryGetOrgMemoryDigestSessionTokenFlag, *orgMemoryGetOrgMemoryDigestProjectSlugInputFlag)
+			case "list-org-memory-recent":
+				endpoint = c.ListOrgMemoryRecent()
+				data, err = orgmemoryc.BuildListOrgMemoryRecentPayload(*orgMemoryListOrgMemoryRecentLimitFlag, *orgMemoryListOrgMemoryRecentSessionTokenFlag, *orgMemoryListOrgMemoryRecentProjectSlugInputFlag)
 			}
 		case "otel":
 			c := otelc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -23290,6 +23356,112 @@ func organizationsSubmitOnboardingSurveyUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "organizations submit-onboarding-survey --body '{\n      \"use_case\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+// orgMemoryUsage displays the usage of the org-memory command and its
+// subcommands.
+func orgMemoryUsage() {
+	fmt.Fprintln(os.Stderr, `Browse a project's Organizational Memory: digests, the sessions and memos they fold, and recent activity. Requires an unrestricted chat:read grant on the project and the org-memory rollout.`)
+	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] org-memory COMMAND [flags]\n\n", os.Args[0])
+	fmt.Fprintln(os.Stderr, "COMMAND:")
+	fmt.Fprintln(os.Stderr, `    get-org-memory-overview: Summarize the project's Organizational Memory over a recent window.`)
+	fmt.Fprintln(os.Stderr, `    list-org-memory-digests: List the project's digests at one level, newest period first.`)
+	fmt.Fprintln(os.Stderr, `    get-org-memory-digest: Load one digest with what it cites: child digests for a week or month, sessions and memos for a day. Sources that left memory since the digest was written are omitted.`)
+	fmt.Fprintln(os.Stderr, `    list-org-memory-recent: List sessions and memos from the last week that no day digest has folded yet, newest first.`)
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Additional help:")
+	fmt.Fprintf(os.Stderr, "    %s org-memory COMMAND --help\n", os.Args[0])
+}
+func orgMemoryGetOrgMemoryOverviewUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] org-memory get-org-memory-overview", os.Args[0])
+	fmt.Fprint(os.Stderr, " -days INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Summarize the project's Organizational Memory over a recent window.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -days INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "org-memory get-org-memory-overview --days 2 --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func orgMemoryListOrgMemoryDigestsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] org-memory list-org-memory-digests", os.Args[0])
+	fmt.Fprint(os.Stderr, " -level STRING")
+	fmt.Fprint(os.Stderr, " -before STRING")
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List the project's digests at one level, newest period first.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -level STRING: `)
+	fmt.Fprintln(os.Stderr, `    -before STRING: `)
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "org-memory list-org-memory-digests --level \"week\" --before \"1970-01-01\" --limit 2 --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func orgMemoryGetOrgMemoryDigestUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] org-memory get-org-memory-digest", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Load one digest with what it cites: child digests for a week or month, sessions and memos for a day. Sources that left memory since the digest was written are omitted.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "org-memory get-org-memory-digest --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func orgMemoryListOrgMemoryRecentUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] org-memory list-org-memory-recent", os.Args[0])
+	fmt.Fprint(os.Stderr, " -limit INT")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List sessions and memos from the last week that no day digest has folded yet, newest first.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -limit INT: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "org-memory list-org-memory-recent --limit 2 --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // otelUsage displays the usage of the otel command and its subcommands.
