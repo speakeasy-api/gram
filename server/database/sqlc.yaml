@@ -543,7 +543,12 @@ sql:
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
-  - schema: [schema.sql, sqlc_retired_columns.sql]
+  - schema:
+      [
+        schema.sql,
+        sqlc_retired_columns.sql,
+        sqlc_deferred_custom_domain_columns.sql,
+      ]
     queries: ../internal/customdomains/queries.sql
     engine: postgresql
     gen:
