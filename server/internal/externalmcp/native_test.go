@@ -197,7 +197,7 @@ func TestNativeListPrunesToolsPreservingMetadata(t *testing.T) {
 	result, err := NewNativeRegistryReader(source).ListServers(t.Context(), Registry{ID: uuid.New()}, ListServersParams{})
 	require.NoError(t, err)
 	require.Len(t, result.Servers, 1)
-	require.JSONEq(t, original, string(source.pages[0].Records[0]), "listing must not modify the stored record")
+	require.JSONEq(t, original, string(raw), "listing must not modify the stored record")
 	row := result.Servers[0]
 	require.Nil(t, row.ToolCount)
 	require.Nil(t, row.IsReadOnly)
