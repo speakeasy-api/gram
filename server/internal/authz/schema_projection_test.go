@@ -16,12 +16,12 @@ import (
 
 // TestSchemaProjectionsMatchFrozenTables declares the organization, project,
 // MCP server and MCP auth client scopes with the schema DSL and compares the
-// compiled projections with the frozen F1 baselines: scope_tables.golden and
-// the runtime policy's runtime_scopes.golden. The declarations exist only in
-// this test. They show that the DSL can reproduce today's tables for a slice
-// and that compiled scope names line up with the authz.Scope constants; the
-// production tables stay authoritative until the projection cutover tickets
-// replace them.
+// compiled projections with the frozen baselines: scope_tables.golden and the
+// runtime policy's runtime_scopes.golden. The declarations exist only in this
+// test. They show that the DSL can reproduce today's tables for a slice and
+// that compiled scope names line up with the authz.Scope constants; the
+// production tables stay authoritative until compiled projections replace
+// them.
 func TestSchemaProjectionsMatchFrozenTables(t *testing.T) {
 	t.Parallel()
 
