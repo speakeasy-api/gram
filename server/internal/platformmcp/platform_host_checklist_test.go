@@ -55,9 +55,9 @@ type checklistHost struct {
 // client's point of view, once per platform host, through the real host
 // classification middleware: discovery metadata and the WWW-Authenticate
 // challenge name the requested host, and a full registration, authorization,
-// organization selection, consent, and token flow issues tokens for that host
-// that the runtime accepts there and refuses on the other host, before and
-// after refresh.
+// consent for the user's only organization, and token flow issues tokens for
+// that host that the runtime accepts there and refuses on the other host,
+// before and after refresh.
 func TestPlatformHostVerificationChecklistPlatformMCP(t *testing.T) {
 	t.Parallel()
 
