@@ -369,6 +369,10 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 			}
 		}()
 		result, err := s.refreshNow(ctx, sess, callerResource, trigger)
+		if err != nil && ctx.Err() != nil {
+			// The caller that would have logged this has gone.
+			s.logger.WarnContext(ctx, "remote session refresh failed after its caller stopped waiting", refreshFailureAttrs(sess, err)...)
+		}
 		done <- refreshed{result: result, err: err}
 	})
 
