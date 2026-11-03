@@ -7747,7 +7747,10 @@ CREATE TABLE IF NOT EXISTS slack_directory_connections (
 
   CONSTRAINT slack_directory_connections_pkey PRIMARY KEY (id),
   CONSTRAINT slack_directory_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
-  CONSTRAINT slack_directory_connections_default_project_id_fkey FOREIGN KEY (default_project_id) REFERENCES projects (id) ON DELETE SET NULL
+  -- Composite so the routed project is pinned to the connection's
+  -- organization. Only the project column is nulled on delete because
+  -- organization_id is NOT NULL.
+  CONSTRAINT slack_directory_connections_default_project_id_fkey FOREIGN KEY (organization_id, default_project_id) REFERENCES projects (organization_id, id) ON DELETE SET NULL (default_project_id)
 );
 
 COMMENT ON COLUMN slack_directory_connections.id IS '@access: confidential';

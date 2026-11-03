@@ -11,14 +11,14 @@ Test Slack → tunnel → server → linked sender → project assistant → Sla
 
 ## Quick reference
 
-| Purpose | Setting |
-| --- | --- |
-| OAuth client | `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET` |
-| Request verification | `SLACK_SIGNING_SECRET` |
-| OAuth callback | `<GRAM_SERVER_URL>/rpc/slackDirectoryConnections.callback` |
-| Incoming messages | `https://<tunnel-host>/slack/events` |
-| Approval button clicks | `https://<tunnel-host>/slack/interactions` |
-| Local-only credentials | Ignored `mise.local.toml` |
+| Purpose                | Setting                                                    |
+| ---------------------- | ---------------------------------------------------------- |
+| OAuth client           | `SLACK_CLIENT_ID`, `SLACK_CLIENT_SECRET`                   |
+| Request verification   | `SLACK_SIGNING_SECRET`                                     |
+| OAuth callback         | `<GRAM_SERVER_URL>/rpc/slackDirectoryConnections.callback` |
+| Incoming messages      | `https://<tunnel-host>/slack/events`                       |
+| Approval button clicks | `https://<tunnel-host>/slack/interactions`                 |
+| Local-only credentials | Ignored `mise.local.toml`                                  |
 
 ## 1. Local services and credentials
 
@@ -28,10 +28,10 @@ In the app's **Basic Information → App Credentials**, obtain the client ID, cl
 
 Alternatively, use authorized Google Secret Manager access. Ask a maintainer to confirm the development GCP project and secret names:
 
-| Secret | mise key |
-| --- | --- |
-| `<DEV_SLACK_CLIENT_ID_SECRET>` | `SLACK_CLIENT_ID` |
-| `<DEV_SLACK_CLIENT_SECRET_SECRET>` | `SLACK_CLIENT_SECRET` |
+| Secret                              | mise key               |
+| ----------------------------------- | ---------------------- |
+| `<DEV_SLACK_CLIENT_ID_SECRET>`      | `SLACK_CLIENT_ID`      |
+| `<DEV_SLACK_CLIENT_SECRET_SECRET>`  | `SLACK_CLIENT_SECRET`  |
 | `<DEV_SLACK_SIGNING_SECRET_SECRET>` | `SLACK_SIGNING_SECRET` |
 
 Capture `gcloud secrets versions access latest --project <DEV_PROJECT> --secret <SECRET>` into a variable, pass it directly to `mise set`, then discard it. If authentication expired, ask the user to run `gcloud auth login`. Do not pick unrelated registry/bot tokens. The stored signing secret was stale during testing: check the app’s current value if signatures fail. Updating shared secrets requires explicit approval.
@@ -92,15 +92,15 @@ mise exec -- pitchfork logs server worker -n 200 --no-pager --raw
 
 **Logs may contain sensitive data.** Filter before returning output; never dump raw requests, tokens, message contents, or customer identifiers.
 
-| Observation | Next check |
-| --- | --- |
-| No events | Saved subscriptions, Socket Mode, current tunnel, correct app |
+| Observation                                                         | Next check                                                                                                                                                |
+| ------------------------------------------------------------------- | --------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| No events                                                           | Saved subscriptions, Socket Mode, current tunnel, correct app                                                                                             |
 | “Your URL didn’t respond with the value of the challenge parameter” | Inspect delivery/status. For 401 `invalid signature`, check current signing secret and restart; otherwise check tunnel/target. Never disable verification |
-| Event 200 but no reply | Sender mapping, default project, active managed assistant, then worker/runtime logs |
-| Stuck “routing” | Find the turn error; new messages are better probes than an old status |
-| `trigger workload identity is UNAVAILABLE` | Slack trigger identity binding; fix provisioning, not authorization bypasses |
-| `slack HTTP client not configured` | Reply-tool startup wiring must supply a Guardian HTTP client |
-| `issuer name is taken by another registration` | Seed placeholder issuer may collide with runtime provisioning; investigate exact target before repairing |
-| Directory permission denied | Live invoking-user, assistant-agent, and owner ceilings; never grant broad access just to clear an error |
+| Event 200 but no reply                                              | Sender mapping, default project, active managed assistant, then worker/runtime logs                                                                       |
+| Stuck “routing”                                                     | Find the turn error; new messages are better probes than an old status                                                                                    |
+| `trigger workload identity is UNAVAILABLE`                          | Slack trigger identity binding; fix provisioning, not authorization bypasses                                                                              |
+| `slack HTTP client not configured`                                  | Reply-tool startup wiring must supply a Guardian HTTP client                                                                                              |
+| `issuer name is taken by another registration`                      | Seed placeholder issuer may collide with runtime provisioning; investigate exact target before repairing                                                  |
+| Directory permission denied                                         | Live invoking-user, assistant-agent, and owner ceilings; never grant broad access just to clear an error                                                  |
 
 An unsigned POST returning 401 proves reachability only. Success means a real signed message produces an assistant turn and a visible Slack reply. Restore shared URLs and stop only your tunnel process afterwards.
