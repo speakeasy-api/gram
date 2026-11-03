@@ -1862,8 +1862,10 @@ FOR SHARE OF r, a;
 
 -- name: GetKitRuntimeSessionBinding :one
 -- Existence only: never load any previous transcript contents into the guest.
+-- Pending user input is the current turn; only a non-user message shows the
+-- assistant took part in earlier turns.
 SELECT r.id AS runtime_id, t.id AS thread_id, t.chat_id, s.acp_session_id,
-  EXISTS(SELECT 1 FROM chat_messages m WHERE m.chat_id = t.chat_id) AS has_prior_transcript
+  EXISTS(SELECT 1 FROM chat_messages m WHERE m.chat_id = t.chat_id AND m.role <> 'user') AS has_prior_transcript
 FROM assistant_runtimes r
 JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
 JOIN assistant_threads t ON t.assistant_id = a.id AND t.project_id = a.project_id
@@ -1921,11 +1923,6 @@ LEFT JOIN assistant_threads t ON t.id = s.assistant_thread_id
 LEFT JOIN chats c ON c.id = t.chat_id AND c.project_id = s.project_id AND c.deleted IS FALSE
 WHERE s.project_id = @project_id AND s.assistant_id = @assistant_id AND s.runtime_id = @runtime_id
 ORDER BY s.acp_session_id;
-
--- name: KitProtocolHasPriorMessages :one
-SELECT EXISTS(SELECT 1 FROM chat_messages
-WHERE project_id= @project_id AND chat_id= @chat_id
-AND id <> ALL(@current_message_ids::uuid[])) AS has_prior;
 
 -- name: ResolveKitCurrentUserMessage :many
 -- Dashboard idempotency_key is the caller's message ID, not an event UUID or text match.

@@ -379,6 +379,8 @@ SELECT count(*) FROM (
   SELECT 1 FROM session_quarantines WHERE organization_id = @org_id::text AND project_id <> @project_id::uuid
   UNION ALL
   SELECT 1 FROM audit_logs WHERE organization_id = @org_id::text AND project_id <> @project_id::uuid
+  UNION ALL
+  SELECT 1 FROM security_audit_logs WHERE organization_id = @org_id::text AND project_id <> @project_id::uuid
 ) x;
 
 -- The gateway is only a gateway if its members survived the reseed, and an
@@ -515,8 +517,20 @@ SELECT count(*) FROM (
 -- name: PostflightCountMDMDevices :one
 SELECT count(*) FROM mdm_devices WHERE organization_id = @org_id::text;
 
--- State reports: one attested machine and one enforcing an older policy.
--- Without them every active device reads unreported.
+-- Machines only their agents list: serials no MDM device holds.
+-- name: PostflightCountAgentOnlyDeviceSyncs :one
+SELECT count(*)
+FROM device_agent_device_syncs d
+WHERE d.organization_id = @org_id::text
+  AND NOT EXISTS (
+    SELECT 1 FROM mdm_devices m
+    WHERE m.organization_id = d.organization_id
+      AND LOWER(m.serial_number) = LOWER(d.serial_number)
+  );
+
+-- State reports: two attested machines (one only its agent lists) and one
+-- enforcing an older policy. Without them every active device reads
+-- unreported.
 
 -- name: PostflightCountDeviceAgentStateReports :one
 SELECT count(*) FROM device_agent_state_reports WHERE organization_id = @org_id::text;
@@ -567,3 +581,7 @@ WHERE organization_id = @org_id::text AND deleted IS FALSE;
 -- used, denied and expired.
 SELECT count(*) FROM risk_policy_approvals
 WHERE organization_id = @org_id::text AND deleted IS FALSE;
+
+-- name: PostflightCountSecurityAuditLogs :one
+SELECT count(*) FROM security_audit_logs
+WHERE organization_id = @org_id::text;

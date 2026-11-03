@@ -120,6 +120,9 @@ func TestOAuthHTTPAuthorizationOnExtraPlatformHost(t *testing.T) {
 	t.Parallel()
 
 	service := newTestOAuthHTTP(t)
+	// Two organizations keep the picker in the flow, so every browser leg
+	// is checked for returning to the extra host.
+	service.organizations = testOrganizationSelector{organizations: []OrganizationOption{{ID: "org-1", Name: "Organization one"}, {ID: "org-2", Name: "Organization two"}}}
 	store := testStore(t, service)
 	require.NoError(t, store.RegisterClient(t.Context(), platformoauth.Client{ID: "client-1", Name: "test", RedirectURIs: []string{"http://127.0.0.1:3000/callback"}}))
 	onExtra := func(r *http.Request) *http.Request {
@@ -163,7 +166,7 @@ func TestOAuthHTTPAuthorizationOnExtraPlatformHost(t *testing.T) {
 	require.Equal(t, testExtraHostBaseURL+"/platform-mcp/connect", connectURL.Scheme+"://"+connectURL.Host+connectURL.Path)
 
 	approve := httptest.NewRecorder()
-	approveRequest := httptest.NewRequest(http.MethodPost, "/platform-mcp/connect", strings.NewReader(url.Values{"state": {state}, "csrf_token": {csrf}, "action": {"approve"}}.Encode()))
+	approveRequest := httptest.NewRequest(http.MethodPost, "/platform-mcp/connect", strings.NewReader(url.Values{"state": {connectURL.Query().Get("state")}, "csrf_token": {csrf}, "organization_id": {"org-1"}, "action": {"approve"}}.Encode()))
 	approveRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	service.ConnectHandler().ServeHTTP(approve, onExtra(approveRequest))
 	require.Equal(t, http.StatusSeeOther, approve.Code)

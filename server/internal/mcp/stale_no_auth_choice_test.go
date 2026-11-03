@@ -489,8 +489,15 @@ func TestStaleNoAuthCodeModeReachesTheProgram(t *testing.T) {
 					require.NoError(t, serversErr)
 					require.Len(t, page.Items, 1)
 					connection := page.Items[0].Connection
-					require.Contains(t, connection.Instructions, map[bool]string{true: "reconnect this gateway", false: staleAdminCopy}[tc.fixable])
+					require.Contains(t, connection.Instructions, map[bool]string{true: "tools.connect", false: staleAdminCopy}[tc.fixable])
 					require.Equal(t, map[bool]string{true: "reauth_required", false: "unknown"}[tc.fixable], connection.Authentication)
+					if tc.fixable {
+						action, connectErr := host.Connect(runCtx, "source")
+						require.NoError(t, connectErr)
+						// A cached catalog binds to in-browser review; a live one needs a client reconnect.
+						require.Equal(t, mode == toolfilter.CatalogModeLive, action.ClientReconnectRequired)
+						require.Contains(t, action.Instructions, map[bool]string{true: "reconnect this gateway in your MCP client", false: "review and approve the refreshed gateway tools"}[mode == toolfilter.CatalogModeLive])
+					}
 					return &codemode.ExecutionResult{}, nil
 				}})
 				w := g.post(t, connection.token, "execute", map[string]any{"code": "call"})

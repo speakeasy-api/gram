@@ -451,12 +451,7 @@ func TestConnectionCatalogCachedDiscoveryNeverContactsUpstream(t *testing.T) {
 						require.Len(t, listed.Result.Tools, 1)
 						require.Empty(t, listed.Result.NextCursor)
 					} else {
-						require.Len(t, listed.Result.Tools, 100)
-						page, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{"cursor": listed.Result.NextCursor}), connection.token, nil)
-						require.NoError(t, err)
-						listed.Result.NextCursor = ""
-						require.NoError(t, json.Unmarshal(page.Body.Bytes(), &listed))
-						require.Len(t, listed.Result.Tools, 50)
+						require.Len(t, listed.Result.Tools, 150)
 						require.Empty(t, listed.Result.NextCursor)
 					}
 				}
@@ -1155,4 +1150,31 @@ func TestGatewayConsentPreselectsProgressiveWhenSavedCodeModeUnavailable(t *test
 	require.Contains(t, page, `<option value="progressive" selected>Progressive</option>`)
 	require.NotContains(t, page, `<option value="code_mode"`)
 	require.Contains(t, page, "The code runtime is unavailable. Progressive discovery is available for this connection.")
+}
+
+// Initial issuance must not create choices for a second gateway merely because
+// both gateways use the same inbound issuer.
+func TestConnectionCatalogChoicesStayWithinApprovedGateway(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	slug := "catalog-scope-" + uuid.NewString()
+	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer.ID)
+	other := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "other-"+uuid.NewString(), issuer.ID)
+	upstream := newCatalogUpstream(t, 1)
+	approvedID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "Approved", "approved", 1, upstream.url)
+	unrelatedID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, other.ID, "Unrelated", "unrelated", 1, upstream.url)
+	connection := approveGatewayCatalog(t, ctx, ti, issuer.ID, client, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeDirect, nil)
+	claims, err := usersessions.NewSigner("test-jwt-secret").Validate(connection.token, urn.NewUserSessionIssuer(issuer.ID).String())
+	require.NoError(t, err)
+	session, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuer.ID, Jti: claims.ID})
+	require.NoError(t, err)
+	choices, err := upstreamclientsrepo.New(ti.conn).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{
+		OrganizationID: auth.ActiveOrganizationID, CredentialKind: upstreamclients.CredentialKindUserSession,
+		CredentialID: session.CredentialID, McpServerIds: []uuid.UUID{approvedID, unrelatedID},
+	})
+	require.NoError(t, err)
+	require.Len(t, choices, 1)
+	require.Equal(t, approvedID, choices[0].McpServerID)
 }

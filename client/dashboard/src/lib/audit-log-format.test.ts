@@ -4,6 +4,7 @@ import { AUDIT_ACTIONS } from "./audit-actions";
 import {
   formatAuditActionLabel,
   formatSubjectLabel,
+  getActorLabel,
   renderVerb,
 } from "./audit-log-format";
 
@@ -181,5 +182,37 @@ describe("past-tense fallback inflection", () => {
     expect(renderVerb(log({ action: "widget:retry" }))).toBe("retried widget");
     expect(renderVerb(log({ action: "widget:deny" }))).toBe("denied widget");
     expect(renderVerb(log({ action: "widget:relay" }))).toBe("relayed widget");
+  });
+});
+
+describe("getActorLabel", () => {
+  it("names a system actor instead of calling it Someone", () => {
+    expect(
+      getActorLabel(
+        log({ action: "x:y", actorType: "system", actorId: "kit-runtime" }),
+      ),
+    ).toBe("Speakeasy");
+    expect(
+      getActorLabel(
+        log({ action: "x:y", actorType: "user", actorId: "system" }),
+      ),
+    ).toBe("Speakeasy");
+  });
+
+  it("prefers a stored display name", () => {
+    expect(
+      getActorLabel(
+        log({
+          action: "x:y",
+          actorType: "system",
+          actorId: "internal-session-issuers",
+          actorDisplayName: "Session issuer rotation",
+        }),
+      ),
+    ).toBe("Session issuer rotation");
+  });
+
+  it("falls back to Someone for an unnamed person", () => {
+    expect(getActorLabel(log({ action: "x:y" }))).toBe("Someone");
   });
 });

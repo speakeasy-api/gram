@@ -8,11 +8,8 @@ const state = vi.hoisted(() => ({
   issuerDashboard: "enabled",
 }));
 
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    domains: { href: () => "/acme/domains" },
-    userSessionIssuers: { href: () => "/acme/user-session-issuers" },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "acme", projectSlug: "project" }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-1", slug: "acme" }),

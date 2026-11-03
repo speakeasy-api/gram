@@ -169,7 +169,7 @@ func TestCodeModeStaleChoiceKeepsConsentInstruction(t *testing.T) {
 		consent string
 		text    string
 	}{
-		"consent can fix it": {bound: true, consent: "required", text: "reconnect this gateway"},
+		"consent can fix it": {bound: true, consent: "required", text: "tools.connect"},
 		"consent cannot":     {bound: false, consent: "unknown", text: "needs your administrator"},
 	} {
 		t.Run(name, func(t *testing.T) {

@@ -1,4 +1,5 @@
 ---
+name: pull-request
 description: Create a Pull Request for the current changes and/or branch
 ---
 

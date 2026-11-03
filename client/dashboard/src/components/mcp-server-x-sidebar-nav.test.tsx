@@ -8,6 +8,7 @@ import {
   McpServerCardStatus,
   RemoteIdentitySummary,
   SidebarUrlRow,
+  UpstreamCredentialsIdentitySummary,
 } from "./mcp-server-x-sidebar-nav";
 
 vi.mock("@/pages/mcp/x/MCPServerDetails", () => ({
@@ -162,4 +163,71 @@ describe("SidebarUrlRow", () => {
       expect(container.contains(full)).toBe(false);
     });
   });
+});
+
+describe("UpstreamCredentialsIdentitySummary", () => {
+  function renderSummary(
+    props: Partial<
+      React.ComponentProps<typeof UpstreamCredentialsIdentitySummary>
+    > = {},
+  ) {
+    return render(
+      <MemoryRouter>
+        <UpstreamCredentialsIdentitySummary
+          status={"status" in props ? props.status : "configured"}
+          authenticationRequired={props.authenticationRequired ?? false}
+          unavailable={props.unavailable ?? false}
+          loading={props.loading ?? false}
+          settingsHref="/mcp/example/settings#authentication"
+        />
+      </MemoryRouter>,
+    );
+  }
+
+  it.each([
+    ["configured", false, "Credentials set up"],
+    ["setup_incomplete", false, "Authentication setup incomplete"],
+    ["no_auth_required", false, "No authentication required"],
+    ["no_auth_required", true, "Authentication setup incomplete"],
+    ["unexpected", false, "Status unavailable"],
+  ] as const)(
+    "labels %s (sign-in detected: %s) from the credentials status",
+    (status, authenticationRequired, label) => {
+      renderSummary({ status, authenticationRequired });
+      const pill = screen.getByRole("link", { name: new RegExp(label) });
+      expect(pill.getAttribute("href")).toBe(
+        "/mcp/example/settings#authentication",
+      );
+      expect(screen.getByText("Identity")).toBeDefined();
+    },
+  );
+
+  it("shows no legacy identity mode or its explainer", () => {
+    renderSummary();
+    for (const legacy of ["User", "Shared credential", "Manual"]) {
+      expect(
+        screen.queryByRole("link", { name: new RegExp(legacy) }),
+      ).toBeNull();
+    }
+    expect(
+      screen.queryByRole("button", {
+        name: "What do these identity modes mean?",
+      }),
+    ).toBeNull();
+  });
+
+  it("links nothing while loading", () => {
+    renderSummary({ status: undefined, loading: true });
+    expect(screen.getByText("Loading…")).toBeDefined();
+    expect(screen.queryByRole("link")).toBeNull();
+  });
+
+  it.each([[{ unavailable: true }], [{ status: undefined, loading: false }]])(
+    "reports the identity unavailable without a link (%o)",
+    (props) => {
+      renderSummary(props);
+      expect(screen.getByText("Identity unavailable")).toBeDefined();
+      expect(screen.queryByRole("link")).toBeNull();
+    },
+  );
 });

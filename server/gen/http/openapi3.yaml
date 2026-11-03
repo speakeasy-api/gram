@@ -3768,7 +3768,7 @@ paths:
             tags:
                 - admin
             summary: setStripeSubscription admin
-            description: Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.
+            description: Links an eligible existing Stripe subscription and atomically activates PAYG for free organizations or unconverted enterprise trials. Existing PAYG organizations retain their access policy. Verifies customer ownership, preserves existing subscription links and redeemed partner anchors, and accepts same-subscription retries.
             operationId: adminSetStripeSubscription
             requestBody:
                 required: true
@@ -4126,7 +4126,7 @@ paths:
             tags:
                 - admin
             summary: getStripeSubscriptionCandidate admin
-            description: Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.
+            description: Returns eligible live Stripe subscription details before linking it to a free, PAYG, or unconverted enterprise trial organization with a matching Stripe customer.
             operationId: adminGetStripeSubscriptionCandidate
             parameters:
                 - name: organization_id
@@ -16624,6 +16624,115 @@ paths:
             x-speakeasy-name-override: reportAIScan
             x-speakeasy-react-hook:
                 name: ReportAgentAIScan
+    /rpc/agent.reportCrash:
+        post:
+            description: 'Report device agent crashes: fatal crashes, recovered panics and self-rollbacks (device-agent ADR-0030). Forwarded to Speakeasy''s monitoring and not stored. Accepts the credentials getPlugins accepts: the per-user key, the org install key (with a vouched email), and, with the device-sync grant, agent keys and device-agent tokens. The agent scrubs every report before sending it; the server accepts only reports shaped like a Go crash and scrubs them again.'
+            operationId: reportAgentCrash
+            parameters:
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Email of the enrolled user, sent in the Gram-User-Email header. Authoritative when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.
+                  in: header
+                  name: Gram-User-Email
+                  schema:
+                    description: Email of the enrolled user, sent in the Gram-User-Email header. Authoritative when authenticating with an org-scoped agent install key; ignored for a per-user key, whose owner is the enrolled user.
+                    type: string
+                - allowEmptyValue: true
+                  description: Hardware serial number of the machine that crashed, when the agent can read it.
+                  in: header
+                  name: Gram-Device-Serial
+                  schema:
+                    description: Hardware serial number of the machine that crashed, when the agent can read it.
+                    type: string
+                - allowEmptyValue: true
+                  description: Kind of machine the agent runs on (endpoint, server or ephemeral), sent in the Gram-Device-Environment header.
+                  in: header
+                  name: Gram-Device-Environment
+                  schema:
+                    description: Kind of machine the agent runs on (endpoint, server or ephemeral), sent in the Gram-Device-Environment header.
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ReportCrashRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ReportCrashResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - device_agent_token_header_Authorization: []
+                - apikey_header_Gram-Key: []
+            summary: reportCrash agent
+            tags:
+                - agent
+            x-speakeasy-name-override: reportCrash
+            x-speakeasy-react-hook:
+                name: ReportAgentCrash
     /rpc/agent.reportSessionMoved:
         post:
             description: 'Record that a captured agent session was moved to another harness on a device (session portability). Carries no session content — only the session identity, the target harness, and device attribution — and lands as a chat_session:move audit event so organizations retain governance visibility over local-first moves. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report moves. Fire-and-forget from the agent''s perspective: the daemon must never fail a move because this call failed.'
@@ -23318,6 +23427,17 @@ paths:
                     format: date-time
                     type: string
                 - allowEmptyValue: true
+                  description: 'Category of entries to list: ''configuration'' (the default) for changes to the platform''s configuration, or ''security'' for machine access and other security-relevant activity such as workloads admitting themselves.'
+                  in: query
+                  name: category
+                  schema:
+                    default: configuration
+                    description: 'Category of entries to list: ''configuration'' (the default) for changes to the platform''s configuration, or ''security'' for machine access and other security-relevant activity such as workloads admitting themselves.'
+                    enum:
+                        - configuration
+                        - security
+                    type: string
+                - allowEmptyValue: true
                   description: API Key header
                   in: header
                   name: Gram-Key
@@ -23420,6 +23540,17 @@ paths:
                   name: project_slug
                   schema:
                     description: Project slug to filter facet values to a specific project.
+                    type: string
+                - allowEmptyValue: true
+                  description: Category of entries to compute facet values from, matching the list being filtered. Defaults to 'configuration'.
+                  in: query
+                  name: category
+                  schema:
+                    default: configuration
+                    description: Category of entries to compute facet values from, matching the list being filtered. Defaults to 'configuration'.
+                    enum:
+                        - configuration
+                        - security
                     type: string
                 - allowEmptyValue: true
                   description: API Key header
@@ -31567,6 +31698,276 @@ paths:
             x-speakeasy-name-override: getCoverage
             x-speakeasy-react-hook:
                 name: DeviceIntegrationCoverage
+    /rpc/deviceIntegrations.getFleetCoverage:
+        get:
+            description: Summarize agent coverage and policy enforcement across every device the org can see, with or without a connected MDM, optionally scoped to one provider's inventory.
+            operationId: getFleetCoverage
+            parameters:
+                - allowEmptyValue: true
+                  description: Optionally scope coverage to one provider's inventory (e.g. jamf), which excludes agent-only machines.
+                  in: query
+                  name: provider
+                  schema:
+                    description: Optionally scope coverage to one provider's inventory (e.g. jamf), which excludes agent-only machines.
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/FleetCoverage'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: getFleetCoverage deviceIntegrations
+            tags:
+                - deviceIntegrations
+            x-speakeasy-name-override: getFleetCoverage
+            x-speakeasy-react-hook:
+                name: FleetCoverage
+    /rpc/deviceIntegrations.listFleetDevices:
+        get:
+            description: 'Page through every device the org can see, newest first: its connected MDM inventories plus the machines running the agent that no inventory holds, each with its coverage bucket and policy state.'
+            operationId: listFleetDevices
+            parameters:
+                - allowEmptyValue: true
+                  description: Only devices synced from this provider. Excludes agent-only machines.
+                  in: query
+                  name: provider
+                  schema:
+                    description: Only devices synced from this provider. Excludes agent-only machines.
+                    type: string
+                - allowEmptyValue: true
+                  description: true for devices a connected MDM holds, false for agent-only machines.
+                  in: query
+                  name: in_inventory
+                  schema:
+                    description: true for devices a connected MDM holds, false for agent-only machines.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Only devices in this coverage bucket.
+                  in: query
+                  name: coverage_bucket
+                  schema:
+                    description: Only devices in this coverage bucket.
+                    enum:
+                        - agent_active
+                        - agent_stale
+                        - agent_other_device
+                        - no_agent
+                        - no_email
+                        - unresolved_email
+                        - missing
+                    type: string
+                - allowEmptyValue: true
+                  description: Only agent_active devices in this policy state.
+                  in: query
+                  name: policy_state
+                  schema:
+                    description: Only agent_active devices in this policy state.
+                    enum:
+                        - attested
+                        - outdated
+                        - unreported
+                        - halted
+                    type: string
+                - allowEmptyValue: true
+                  description: Only devices of these Speakeasy users. Combined with user_emails as an OR.
+                  in: query
+                  name: user_ids
+                  schema:
+                    description: Only devices of these Speakeasy users. Combined with user_emails as an OR.
+                    items:
+                        type: string
+                    type: array
+                - allowEmptyValue: true
+                  description: Only devices whose user_email is one of these, matched case-insensitively.
+                  in: query
+                  name: user_emails
+                  schema:
+                    description: Only devices whose user_email is one of these, matched case-insensitively.
+                    items:
+                        type: string
+                    type: array
+                - allowEmptyValue: true
+                  description: Pagination cursor from a previous page.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Pagination cursor from a previous page.
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size. Defaults to 50, maximum 200.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: Page size. Defaults to 50, maximum 200.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListFleetDevicesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: listFleetDevices deviceIntegrations
+            tags:
+                - deviceIntegrations
+            x-speakeasy-name-override: listFleetDevices
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: FleetDevices
     /rpc/deviceIntegrations.listManagedDevices:
         get:
             description: Page through the org's synced MDM device inventory, newest first, with each device's coverage bucket.
@@ -95299,7 +95700,7 @@ components:
                     description: The device agent version grid. Empty for days before versions were recorded.
                 from_cache:
                     type: boolean
-                    description: True when the grids came from the cache rather than a fresh ClickHouse read. Cached grids last 24 hours and refresh in the background once an hour old.
+                    description: True when the grids came from the cache rather than a fresh ClickHouse read. Cached grids last 48 hours and refresh in the background once an hour old. The default window is also refreshed nightly.
                 inference:
                     type: array
                     items:
@@ -97902,6 +98303,122 @@ components:
                     format: uuid
             required:
                 - block_id
+        AgentCrashBuild:
+            type: object
+            properties:
+                arch:
+                    type: string
+                    maxLength: 16
+                binary:
+                    type: string
+                    description: speakeasyd or speakeasy-ui.
+                    maxLength: 32
+                channel:
+                    type: string
+                    description: Release channel.
+                    maxLength: 32
+                os:
+                    type: string
+                    maxLength: 16
+                version:
+                    type: string
+                    maxLength: 64
+            required:
+                - binary
+                - version
+        AgentCrashFrame:
+            type: object
+            properties:
+                file:
+                    type: string
+                    description: Module-relative source file.
+                    maxLength: 512
+                function:
+                    type: string
+                    description: Fully qualified function name.
+                    maxLength: 512
+                line:
+                    type: integer
+                    format: int64
+                    minimum: 0
+                    maximum: 1e+07
+            required:
+                - function
+        AgentCrashReport:
+            type: object
+            properties:
+                build:
+                    $ref: '#/components/schemas/AgentCrashBuild'
+                component:
+                    type: string
+                    description: 'Where it happened: ipc, policy_scheduler, update_scheduler, aiscan, sessions, ui or runtime.'
+                    maxLength: 32
+                count:
+                    type: integer
+                    description: Times this crash recurred in one process before it was reported.
+                    format: int64
+                    minimum: 1
+                    maximum: 1e+06
+                id:
+                    type: string
+                    description: Random report id; repeats of the same id are one report.
+                    minLength: 1
+                    maxLength: 64
+                kind:
+                    type: string
+                    description: fatal, recovered or rollback.
+                    maxLength: 32
+                message:
+                    type: string
+                    description: Go runtime error text, when the panic was one. Other panics send panic_type instead.
+                    maxLength: 512
+                occurred_at:
+                    type: string
+                    description: When it happened, by the device clock.
+                    format: date-time
+                other_goroutines:
+                    type: integer
+                    description: Goroutines in a fatal dump besides the crashing one. Their stacks are not sent.
+                    format: int64
+                    minimum: 0
+                    maximum: 1e+06
+                panic_type:
+                    type: string
+                    description: Go type of a non-runtime panic value.
+                    maxLength: 256
+                rollback:
+                    $ref: '#/components/schemas/AgentCrashRollback'
+                schema_version:
+                    type: integer
+                    description: Report schema version.
+                    format: int64
+                    minimum: 1
+                stack:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentCrashFrame'
+                    description: Frames of the crashing goroutine, innermost first.
+                    maxItems: 50
+            description: 'One device agent crash: a fatal crash, a recovered panic, or a self-rollback.'
+            required:
+                - schema_version
+                - id
+                - kind
+                - component
+                - occurred_at
+                - count
+                - build
+        AgentCrashRollback:
+            type: object
+            properties:
+                from:
+                    type: string
+                    description: Version that failed to stabilize.
+                    maxLength: 64
+                to:
+                    type: string
+                    description: Version restored.
+                    maxLength: 64
         AgentDelegatedGrant:
             type: object
             properties:
@@ -100018,6 +100535,12 @@ components:
                     type: string
                 after_snapshot: {}
                 before_snapshot: {}
+                category:
+                    type: string
+                    description: 'What kind of event the entry records: ''configuration'' for a change to the platform''s configuration, ''security'' for machine access and other security-relevant activity that is not a configuration decision. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.'
+                    enum:
+                        - configuration
+                        - security
                 created_at:
                     type: string
                     description: The creation date of the audit log.
@@ -107922,6 +108445,182 @@ components:
                 - id
                 - label
                 - count
+        FleetCoverage:
+            type: object
+            properties:
+                active_window_minutes:
+                    type: integer
+                    description: 'Freshness window: an agent counts as active when its heartbeat or state report is within this many minutes.'
+                    format: int64
+                agent_active:
+                    type: integer
+                    description: Devices with an agent heartbeat or state report within the window, agent-only machines included.
+                    format: int64
+                agent_active_device_attested:
+                    type: integer
+                    description: How many of agent_active are backed by that machine's own heartbeat or state report.
+                    format: int64
+                agent_only_devices:
+                    type: integer
+                    description: Machines running the agent that no connected MDM inventory holds. Always 0 when provider is set.
+                    format: int64
+                agent_other_device:
+                    type: integer
+                    description: MDM devices whose assigned user runs the agent, but not on this machine. Device-level matching only.
+                    format: int64
+                agent_stale:
+                    type: integer
+                    description: Devices with a known agent that went quiet.
+                    format: int64
+                attestation:
+                    type: string
+                    description: 'The strongest claim that holds for EVERY active device in this response — not merely the org''s matching mode. "device": every active device was matched on its own hardware serial, so each one ran the agent. "user": at least one active device was matched only on its assigned-user email, so the set as a whole supports only the weaker claim that assigned users ran the agent somewhere.'
+                    enum:
+                        - device
+                        - user
+                enforcement_halted:
+                    type: integer
+                    description: agent_active devices whose latest state report says the kill switch halted enforcement.
+                    format: int64
+                mdm_connected:
+                    type: boolean
+                    description: True when the organization has a connected MDM integration (the one named by provider, when set). Without one, the gap buckets are always 0 because nothing lists the devices that lack the agent.
+                missing:
+                    type: integer
+                    description: MDM devices absent from the latest completed inventory snapshot.
+                    format: int64
+                no_agent:
+                    type: integer
+                    description: MDM devices whose assigned email resolves to an org member with no agent at all.
+                    format: int64
+                no_email:
+                    type: integer
+                    description: MDM devices with no assigned-user email.
+                    format: int64
+                organization_id:
+                    type: string
+                    description: Organization the coverage describes.
+                policy_attested:
+                    type: integer
+                    description: agent_active devices whose latest report applies the policy last served to the reporting user.
+                    format: int64
+                policy_outdated:
+                    type: integer
+                    description: agent_active devices that report a different policy, or none.
+                    format: int64
+                policy_unreported:
+                    type: integer
+                    description: agent_active devices with no state report within the window.
+                    format: int64
+                total_devices:
+                    type: integer
+                    description: Every device counted here, missing and agent-only ones included.
+                    format: int64
+                unresolved_email:
+                    type: integer
+                    description: MDM devices whose assigned email matches neither an agent user nor an org member.
+                    format: int64
+            description: 'Agent coverage and policy enforcement across every device the organization can see: its MDM inventories plus the agent machines no inventory holds. Works with no MDM connected, when every device is an agent-only machine.'
+            required:
+                - organization_id
+                - active_window_minutes
+                - mdm_connected
+                - attestation
+                - agent_active
+                - agent_active_device_attested
+                - agent_stale
+                - agent_other_device
+                - no_agent
+                - no_email
+                - unresolved_email
+                - missing
+                - agent_only_devices
+                - total_devices
+                - policy_attested
+                - policy_outdated
+                - policy_unreported
+                - enforcement_halted
+        FleetDevice:
+            type: object
+            properties:
+                agent_last_seen_at:
+                    type: string
+                    description: The latest sign of life that classified this device, a policy poll or a state report. Omitted when no agent has ever synced.
+                    format: date-time
+                agent_state:
+                    $ref: '#/components/schemas/ManagedDeviceAgentState'
+                coverage_bucket:
+                    type: string
+                    description: Coverage classification for the device. What agent_active attests depends on the org's matching mode and on whether this device matched by serial or by assigned-user email.
+                    enum:
+                        - agent_active
+                        - agent_stale
+                        - agent_other_device
+                        - no_agent
+                        - no_email
+                        - unresolved_email
+                        - missing
+                external_id:
+                    type: string
+                    description: The MDM's identifier for the device. Omitted for an agent-only machine.
+                first_seen_at:
+                    type: string
+                    description: When the MDM or the agent first reported this device.
+                    format: date-time
+                hostname:
+                    type: string
+                    description: Device hostname, from the MDM or the agent.
+                id:
+                    type: string
+                    description: 'Stable device ID: mdm:<uuid> for an MDM device, agent:<uuid> for an agent-only machine.'
+                in_inventory:
+                    type: boolean
+                    description: True when a connected MDM's inventory holds this device. False for a machine only its agent reports.
+                last_seen_at:
+                    type: string
+                    description: When the MDM or the agent last reported this device.
+                    format: date-time
+                mdm_last_check_in_at:
+                    type: string
+                    description: Last device check-in as reported by the MDM.
+                    format: date-time
+                missing_since:
+                    type: string
+                    description: When the device went absent from the MDM inventory. Omitted while present, and for an agent-only machine.
+                    format: date-time
+                os_name:
+                    type: string
+                    description: Operating system name as the MDM reports it. Omitted for an agent-only machine; agent_state.os carries the agent's.
+                os_version:
+                    type: string
+                    description: Operating system version as the MDM reports it. Omitted for an agent-only machine.
+                policy_state:
+                    type: string
+                    description: 'Whether the agent that answers for an agent_active device verifiably applies its policy; agent_state.attestation says whether that agent runs on this machine. attested: its latest report applies the policy last served to the reporting user. outdated: it reports a different policy, or none. unreported: no report within the window, from an agent that predates reporting or has stopped sending. halted: the reporting agent''s kill switch stopped enforcement on a blocked build. Omitted for every other bucket.'
+                    enum:
+                        - attested
+                        - outdated
+                        - unreported
+                        - halted
+                provider:
+                    type: string
+                    description: Provider the device was synced from. Omitted for an agent-only machine.
+                serial_number:
+                    type: string
+                    description: Hardware serial number, from the MDM or the agent. Omitted when neither reported one.
+                user_email:
+                    type: string
+                    description: The MDM's assigned user, or for an agent-only machine the user its agent runs as.
+                user_id:
+                    type: string
+                    description: Resolved Speakeasy user for user_email. Omitted when it does not resolve to an org member.
+            description: 'One device the organization can see: a device from a connected MDM''s inventory, or a machine running the Speakeasy device agent that no connected inventory holds. MDM devices carry the same coverage bucket as listManagedDevices; agent-only devices are only ever agent_active or agent_stale, classified by their own heartbeat and state reports.'
+            required:
+                - id
+                - in_inventory
+                - coverage_bucket
+                - first_seen_at
+                - last_seen_at
         FunctionEnvironmentVariable:
             type: object
             properties:
@@ -112438,6 +113137,13 @@ components:
         ListAuditLogFacetsForm:
             type: object
             properties:
+                category:
+                    type: string
+                    description: Category of entries to compute facet values from, matching the list being filtered. Defaults to 'configuration'.
+                    default: configuration
+                    enum:
+                        - configuration
+                        - security
                 project_slug:
                     type: string
                     description: Project slug to filter facet values to a specific project.
@@ -112475,6 +113181,13 @@ components:
                 actor_id:
                     type: string
                     description: Actor ID to filter audit logs to a specific actor.
+                category:
+                    type: string
+                    description: 'Category of entries to list: ''configuration'' (the default) for changes to the platform''s configuration, or ''security'' for machine access and other security-relevant activity such as workloads admitting themselves.'
+                    default: configuration
+                    enum:
+                        - configuration
+                        - security
                 cursor:
                     type: string
                     description: The cursor for paginating through audit logs.
@@ -113003,6 +113716,19 @@ components:
             description: Result of listing filter options
             required:
                 - options
+        ListFleetDevicesResult:
+            type: object
+            properties:
+                devices:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/FleetDevice'
+                    description: Devices, newest first.
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page. Omitted on the last page.
+            required:
+                - devices
         ListGlobalRemoteSessionIssuersResult:
             type: object
             properties:
@@ -118968,6 +119694,9 @@ components:
                 tool_io_logs_enabled:
                     type: boolean
                     description: Whether tool I/O logging is enabled
+                upstream_auth_enforced:
+                    type: boolean
+                    description: Whether upstream auth enforcement is on for the organization. Absent when the state could not be read. Staff change it through the admin enforcement endpoint.
             required:
                 - logs_enabled
                 - tool_io_logs_enabled
@@ -121085,6 +121814,27 @@ components:
                 - scan_completed_at
                 - target_list_version
                 - matches
+        ReportCrashRequestBody:
+            type: object
+            properties:
+                reports:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentCrashReport'
+                    description: Queued crash reports, oldest first.
+                    minItems: 1
+                    maxItems: 10
+            required:
+                - reports
+        ReportCrashResult:
+            type: object
+            properties:
+                accepted:
+                    type: integer
+                    description: Reports accepted. A report not shaped like a device agent crash is dropped and not counted. The agent removes every report in the batch on success.
+                    format: int64
+            required:
+                - accepted
         ReportSessionMovedRequestBody:
             type: object
             properties:
@@ -132091,7 +132841,7 @@ components:
             properties:
                 config:
                     type: object
-                    description: Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, sync_interval_seconds, ai_scan_interval_seconds, and disable_ai_scan. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden, as is ai_scan, which Speakeasy injects from the organization's scan target list when serving agents.
+                    description: Shareable device-agent settings. Supported keys include platforms, update_channel, auto_update, pinned_target, blocked_versions, sync_interval_seconds, ai_scan_interval_seconds, disable_ai_scan, and disable_crash_reports. update_channel and blocked_versions can only be set by Speakeasy platform administrators; per-device identity and secret keys are forbidden, as is ai_scan, which Speakeasy injects from the organization's scan target list when serving agents.
                     additionalProperties: true
             required:
                 - config
@@ -135825,14 +136575,44 @@ components:
         WorkloadPlatformSubject:
             type: object
             properties:
+                alternatives:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkloadPlatformSubjectAlternative'
+                    description: Other rules the operator may choose instead, in the order they are offered. Absent where there are none.
+                label:
+                    type: string
+                    description: Names the default rule beside its alternatives. Empty where there are none.
+                    default: ""
                 template:
                     type: string
                     description: The subject with {key} placeholders for rule-tier variables; the stem, for a wildcard rule.
                 wildcard:
                     type: boolean
                     description: Whether the rule is the filled template followed by *.
-            description: The access rule a catalog platform produces.
+            description: The access rule a catalog platform produces by default, and the others the operator may choose instead.
             required:
+                - template
+                - wildcard
+        WorkloadPlatformSubjectAlternative:
+            type: object
+            properties:
+                key:
+                    type: string
+                    description: Identifies the choice within the platform.
+                label:
+                    type: string
+                    description: What the operator chooses it by.
+                template:
+                    type: string
+                    description: The subject with {key} placeholders for rule-tier variables; the stem, for a wildcard rule.
+                wildcard:
+                    type: boolean
+                    description: Whether the rule is the filled template followed by *.
+            description: An access rule a catalog platform offers in place of its default.
+            required:
+                - key
+                - label
                 - template
                 - wildcard
         WorkloadPlatformVariable:
