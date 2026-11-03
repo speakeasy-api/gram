@@ -132,7 +132,7 @@ func networkIngressProviderFlags() []cli.Flag {
 			EnvVars: []string{"GRAM_NETWORK_INGRESS_KUBERNETES_API_PORT"}, Action: validateNetworkIngressPort,
 		},
 		&cli.BoolFlag{
-			Name: "network-ingress-gateway-enabled", Usage: "Host new private ingresses on the tsnet tailnet gateway instead of the Tailscale operator",
+			Name: "network-ingress-gateway-enabled", Usage: "Make the tsnet tailnet gateway available: new private ingresses start on it, existing ones stay on the Tailscale operator until staff move them; set on the API server and the reconciler",
 			EnvVars: []string{"GRAM_NETWORK_INGRESS_GATEWAY_ENABLED"}, Value: false,
 		},
 		&cli.StringFlag{

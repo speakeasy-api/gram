@@ -3,7 +3,6 @@ package tailnetgateway_test
 import (
 	"context"
 	"encoding/json"
-	"errors"
 	"testing"
 	"time"
 
@@ -50,10 +49,19 @@ func newProvisionerFixture(t *testing.T, name string) *provisionerFixture {
 		Tag: tailnetgateway.DefaultTag, Slots: 3, AuthKeyTTL: 24 * time.Hour, StaleAfter: 2 * time.Minute, Now: time.Now,
 	})
 	require.NoError(t, err)
-	// seedIngress marks the runtime for the state store tests; start unmarked so Apply is exercised.
-	_, err = repo.New(db).MarkNetworkIngressRuntime(t.Context(), repo.MarkNetworkIngressRuntimeParams{Runtime: pgtype.Text{String: "", Valid: false}, ID: ingressID, OrganizationID: orgID})
-	require.NoError(t, err)
+	// seedIngress leaves the ingress on the gateway; tests of the operator
+	// path move it back with setRuntime.
 	return &provisionerFixture{db: db, enc: enc, api: api, provisioner: provisioner, now: now, ingressID: ingressID, orgID: orgID, resources: resources}
+}
+
+// setRuntime records which runtime hosts the fixture's ingress; empty means
+// the operator.
+func (f *provisionerFixture) setRuntime(t *testing.T, runtime string) {
+	t.Helper()
+	_, err := repo.New(f.db).MarkNetworkIngressRuntime(t.Context(), repo.MarkNetworkIngressRuntimeParams{
+		Runtime: pgtype.Text{String: runtime, Valid: runtime != ""}, ID: f.ingressID, OrganizationID: f.orgID,
+	})
+	require.NoError(t, err)
 }
 
 func credentialsJSON(t *testing.T, id, secret string) []byte {
@@ -107,10 +115,6 @@ func TestProvisionerApplyDefinesServiceAndMintsKeysPerSlot(t *testing.T) {
 		require.Equal(t, f.api.Keys()[i].Key, plain)
 		require.False(t, node.RetiredAt.Valid)
 	}
-	runtime, err := repo.New(f.db).GetNetworkIngressRuntime(ctx, repo.GetNetworkIngressRuntimeParams{ID: f.ingressID, OrganizationID: f.orgID})
-	require.NoError(t, err)
-	require.Equal(t, "gateway", runtime.String)
-
 	// A second apply keeps the unexpired keys and re-upserts the service.
 	_, err = f.provisioner.Apply(ctx, f.desired(t))
 	require.NoError(t, err)
@@ -293,6 +297,7 @@ func TestProvisionerDeleteWaitsForHostsThenRemovesDevices(t *testing.T) {
 func TestProvisionerDeleteWithoutCredentialsIsNoOpBeforeApply(t *testing.T) {
 	t.Parallel()
 	f := newProvisionerFixture(t, "tailnetprovuntouched")
+	f.setRuntime(t, "")
 	require.NoError(t, f.provisioner.Delete(t.Context(), f.resources), "nothing was created on the tailnet yet")
 }
 
@@ -315,10 +320,12 @@ type fakeOperator struct {
 	deleteCalls int
 	observe     k8s.NetworkIngressObservation
 	observed    int
+	applied     int
 }
 
 func (f *fakeOperator) Apply(context.Context, k8s.NetworkIngressDesired) (k8s.NetworkIngressObservation, error) {
-	return k8s.NetworkIngressObservation{Status: "", DNSName: "", ErrorCode: "", ConnectedAt: nil}, errors.New("operator apply must not run during cutover")
+	f.applied++
+	return f.observe, nil
 }
 
 func (f *fakeOperator) Observe(context.Context, k8s.NetworkIngressResourceNames) (k8s.NetworkIngressObservation, error) {
@@ -347,15 +354,27 @@ func TestCompositeMovesOperatorIngressToGatewayAfterTeardown(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	f := newProvisionerFixture(t, "tailnetcomposite")
-	operator := &fakeOperator{present: true, deleteErr: k8s.ErrNetworkIngressDeletionPending, deleteCalls: 0, observe: k8s.NetworkIngressObservation{Status: k8s.NetworkIngressStatusOnline, DNSName: "old.example.ts.net", ErrorCode: "", ConnectedAt: nil}, observed: 0}
+	operator := &fakeOperator{present: true, deleteErr: k8s.ErrNetworkIngressDeletionPending, deleteCalls: 0, observe: k8s.NetworkIngressObservation{Status: k8s.NetworkIngressStatusOnline, DNSName: "old.example.ts.net", ErrorCode: "", ConnectedAt: nil}, observed: 0, applied: 0}
 	composite, err := tailnetgateway.NewCompositeProvisioner(operator, f.provisioner)
 	require.NoError(t, err)
+	f.setRuntime(t, "")
 
-	// Before the runtime is marked, observation still comes from the operator.
-	observation, err := composite.Observe(ctx, f.resources)
+	// An ingress that has not been moved stays entirely on the operator,
+	// however often it is reconciled.
+	observation, err := composite.Apply(ctx, f.desired(t))
 	require.NoError(t, err)
 	require.Equal(t, "old.example.ts.net", observation.DNSName)
+	observation, err = composite.Observe(ctx, f.resources)
+	require.NoError(t, err)
+	require.Equal(t, "old.example.ts.net", observation.DNSName)
+	require.Equal(t, 1, operator.applied)
 	require.Equal(t, 1, operator.observed)
+	require.Zero(t, operator.deleteCalls, "enabling the gateway never tears down an unmoved ingress")
+	require.Empty(t, f.api.Keys())
+	require.Empty(t, f.api.Services())
+
+	// Moving the organization is what hands the ingress to the gateway.
+	f.setRuntime(t, "gateway")
 
 	// Invalid desired state never dismantles the operator backend.
 	invalid := f.desired(t)
@@ -377,10 +396,11 @@ func TestCompositeMovesOperatorIngressToGatewayAfterTeardown(t *testing.T) {
 	require.Len(t, f.api.Keys(), 3)
 	require.Equal(t, 2, operator.deleteCalls)
 
-	// Once marked, the operator is no longer consulted.
+	// Once moved, the operator is no longer consulted.
 	_, err = composite.Observe(ctx, f.resources)
 	require.NoError(t, err)
 	require.Equal(t, 1, operator.observed)
+	require.Equal(t, 1, operator.applied)
 
 	f.heartbeat(t, 0, tailnetgateway.NodeStatusStopped, "nONE")
 	require.NoError(t, composite.DeleteWithCredentials(ctx, f.resources, credentialsJSON(t, "cid", "csecret")))
@@ -401,4 +421,9 @@ func TestCompositeWithoutOperatorIsPlainGateway(t *testing.T) {
 	require.Empty(t, orphans)
 	_, err = tailnetgateway.NewCompositeProvisioner(nil, nil)
 	require.Error(t, err)
+
+	// Without the operator, an ingress that was never moved has no provider.
+	f.setRuntime(t, "")
+	_, err = composite.Apply(ctx, f.desired(t))
+	require.ErrorIs(t, err, k8s.ErrNetworkIngressUnsupportedProvider)
 }

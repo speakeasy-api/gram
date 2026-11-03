@@ -5,7 +5,10 @@ import (
 	"errors"
 	"fmt"
 
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 )
 
 // OperatorProvisioner is the Tailscale Kubernetes operator provider as seen
@@ -17,10 +20,12 @@ type OperatorProvisioner interface {
 	FindOrphans(context.Context, []k8s.NetworkIngressResourceNames) ([]k8s.NetworkIngressOrphan, error)
 }
 
-// CompositeProvisioner routes each ingress to the gateway while the operator
-// provider, when present, tears down resources it still owns. New ingresses
-// go straight to the gateway; an operator-managed ingress is moved once its
-// Kubernetes resources are gone.
+// CompositeProvisioner routes each ingress by its runtime column. An ingress
+// whose runtime is "gateway" is hosted by the tailnet gateway, and any
+// Kubernetes resources the operator still owns for it are torn down first.
+// Every other ingress stays on the operator: moving one is an explicit,
+// per-organization decision recorded in the runtime column, never a side
+// effect of enabling the gateway.
 type CompositeProvisioner struct {
 	operator OperatorProvisioner
 	gateway  *Provisioner
@@ -42,6 +47,21 @@ func NewCompositeProvisioner(operator OperatorProvisioner, gateway *Provisioner)
 
 //nolint:exhaustruct // observations populate only the state they know.
 func (c *CompositeProvisioner) Apply(ctx context.Context, desired k8s.NetworkIngressDesired) (k8s.NetworkIngressObservation, error) {
+	onGateway, err := c.onGateway(ctx, desired.ID)
+	if err != nil {
+		return errorObservation(k8s.NetworkIngressErrorInvalidDesiredState), err
+	}
+	if !onGateway {
+		if c.operator == nil {
+			return errorObservation(k8s.NetworkIngressErrorUnsupportedProvider), fmt.Errorf("%w: the operator provider is disabled and this ingress has not been moved to the tailnet gateway", k8s.ErrNetworkIngressUnsupportedProvider)
+		}
+		observation, err := c.operator.Apply(ctx, desired)
+		if err != nil {
+			return observation, fmt.Errorf("apply operator resources: %w", err)
+		}
+		return observation, nil
+	}
+
 	// Never dismantle the operator backend for a desired state the gateway
 	// would reject anyway.
 	if _, observation, err := c.gateway.ValidateDesired(desired); err != nil {
@@ -62,20 +82,27 @@ func (c *CompositeProvisioner) Apply(ctx context.Context, desired k8s.NetworkIng
 }
 
 func (c *CompositeProvisioner) Observe(ctx context.Context, resources k8s.NetworkIngressResourceNames) (k8s.NetworkIngressObservation, error) {
-	if c.operator != nil {
-		own, err := c.gateway.owner(ctx, resources.OwnerID)
-		if err != nil {
-			return errorObservation(k8s.NetworkIngressErrorInvalidDesiredState), err
-		}
-		if own.runtime != RuntimeGateway {
-			observation, err := c.operator.Observe(ctx, resources)
-			if err != nil {
-				return observation, fmt.Errorf("observe operator resources: %w", err)
-			}
-			return observation, nil
-		}
+	onGateway, err := c.onGateway(ctx, resources.OwnerID)
+	if err != nil {
+		return errorObservation(k8s.NetworkIngressErrorInvalidDesiredState), err
 	}
-	return c.gateway.Observe(ctx, resources)
+	if onGateway || c.operator == nil {
+		return c.gateway.Observe(ctx, resources)
+	}
+	observation, err := c.operator.Observe(ctx, resources)
+	if err != nil {
+		return observation, fmt.Errorf("observe operator resources: %w", err)
+	}
+	return observation, nil
+}
+
+// onGateway reports whether the ingress has been moved to the tailnet gateway.
+func (c *CompositeProvisioner) onGateway(ctx context.Context, id uuid.UUID) (bool, error) {
+	own, err := c.gateway.owner(ctx, id)
+	if err != nil {
+		return false, err
+	}
+	return own.runtime == networkingress.RuntimeGateway, nil
 }
 
 func (c *CompositeProvisioner) Delete(ctx context.Context, resources k8s.NetworkIngressResourceNames) error {

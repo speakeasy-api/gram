@@ -118,7 +118,8 @@ INSERT INTO network_ingresses (
     credentials_encrypted,
     attestor_namespace,
     attestor_service_account,
-    provider_resources
+    provider_resources,
+    runtime
 ) VALUES (
     $1,
     $2,
@@ -131,7 +132,8 @@ INSERT INTO network_ingresses (
     $9,
     $10,
     $11,
-    $12
+    $12,
+    $13
 )
 RETURNING id, organization_id, provider, hostname, endpoint_namespace_kind, custom_domain_id, enabled, identity_required, credentials_encrypted, attestor_namespace, attestor_service_account, provider_resources, status, dns_name, last_error, health_checked_at, connected_since, runtime, gateway_shard, created_at, updated_at, deleted_at, deleted
 `
@@ -149,6 +151,7 @@ type CreateNetworkIngressParams struct {
 	AttestorNamespace      string
 	AttestorServiceAccount string
 	ProviderResources      []byte
+	Runtime                pgtype.Text
 }
 
 func (q *Queries) CreateNetworkIngress(ctx context.Context, arg CreateNetworkIngressParams) (NetworkIngress, error) {
@@ -165,6 +168,7 @@ func (q *Queries) CreateNetworkIngress(ctx context.Context, arg CreateNetworkIng
 		arg.AttestorNamespace,
 		arg.AttestorServiceAccount,
 		arg.ProviderResources,
+		arg.Runtime,
 	)
 	var i NetworkIngress
 	err := row.Scan(

@@ -27,6 +27,19 @@ per-ingress attestor pods.
 - Each pod heartbeats its slot rows; the reconciler reports the ingress online
   when any slot has a fresh `online` heartbeat.
 
+## Which ingresses use it
+
+The `network_ingresses.runtime` column decides, per organization:
+
+- `gateway`: hosted by this gateway. Any Kubernetes resources the operator
+  still owns for the ingress are torn down by the reconciler first.
+- `NULL` (or anything else): hosted by the Tailscale Kubernetes operator, as
+  before. Enabling the gateway never moves these.
+
+With `GRAM_NETWORK_INGRESS_GATEWAY_ENABLED` set, the API server records
+`gateway` on every ingress it creates. Existing operator ingresses move only
+when staff move that organization.
+
 ## Running locally
 
 The daemon needs a real tailnet, so it is opt-in. Provision an ingress through
