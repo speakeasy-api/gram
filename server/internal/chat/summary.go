@@ -18,8 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chatredact"
-	"github.com/speakeasy-api/gram/server/internal/feature"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/memorygate"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -231,32 +230,18 @@ func newestMessageAt(messages []repo.ChatMessage) pgtype.Timestamptz {
 	return newest
 }
 
-// OrgMemoryEnabled reports whether the org-memory rollout flag is on for an
-// organization. Lookup failures read as disabled so a PostHog outage never
-// switches an organization onto the new summary path.
-func OrgMemoryEnabled(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, flags feature.Provider, organizationID string) bool {
-	on, err := OrgMemoryFlag(ctx, db, flags, organizationID)
+// OrgMemoryEnabled reports whether Organizational Memory is turned on for an
+// organization in the staff admin dashboard. Lookup failures read as
+// disabled so a database hiccup never switches an organization onto the new
+// summary path.
+func OrgMemoryEnabled(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, organizationID string) bool {
+	if db == nil {
+		return false
+	}
+	on, err := memorygate.Enabled(ctx, db, organizationID)
 	if err != nil {
-		logger.WarnContext(ctx, "org memory flag check failed; treating as disabled", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
+		logger.WarnContext(ctx, "organizational memory setting check failed; treating as disabled", attr.SlogError(err), attr.SlogOrganizationID(organizationID))
 		return false
 	}
 	return on
-}
-
-// OrgMemoryFlag is OrgMemoryEnabled for callers that must tell a disabled
-// flag from a failed lookup, such as background work that retries instead of
-// recording the organization as opted out.
-func OrgMemoryFlag(ctx context.Context, db *pgxpool.Pool, flags feature.Provider, organizationID string) (bool, error) {
-	if flags == nil || db == nil {
-		return false, nil
-	}
-	org, err := orgrepo.New(db).GetOrganizationMetadata(ctx, organizationID)
-	if err != nil {
-		return false, fmt.Errorf("resolve organization slug for org memory flag: %w", err)
-	}
-	on, err := flags.IsFlagEnabled(ctx, feature.FlagOrgMemory, organizationID, feature.OrgProjectGroups(org.Slug, ""))
-	if err != nil {
-		return false, fmt.Errorf("check org memory flag: %w", err)
-	}
-	return on, nil
 }
