@@ -764,10 +764,10 @@ func TestOrgAdmin_ManagesTenantClientOnPlatformIssuer(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 }
 
-// TestDeleteClient_RetiresTypedClientsOfItsServers proves the two models move
+// TestDeleteClient_StopsItsServersOfferingIt proves the two models move
 // together: removing the registration a server reached also stops the server
-// offering the typed client derived from it.
-func TestDeleteClient_RetiresTypedClientsOfItsServers(t *testing.T) {
+// offering the client derived from it.
+func TestDeleteClient_StopsItsServersOfferingIt(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -786,8 +786,8 @@ func TestDeleteClient_RetiresTypedClientsOfItsServers(t *testing.T) {
 	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "admin-typed-server")
 	associate(t, ctx, ti.conn, orgID, projectID, serverID, parsedClientID)
 	recordTypedClients(t, ctx, ti.conn, orgID, serverID)
-	require.NotEmpty(t, typedClients(t, ctx, ti.conn, serverID),
-		"the association must have a typed client to retire")
+	require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, serverID),
+		"the association must be offered through a link to retire")
 
 	require.NoError(t, ti.service.DeleteClient(ctx, &orgclientsgen.DeleteClientPayload{
 		ID:           clientID,
@@ -795,13 +795,13 @@ func TestDeleteClient_RetiresTypedClientsOfItsServers(t *testing.T) {
 		ApikeyToken:  nil,
 	}))
 
-	require.Empty(t, typedClients(t, ctx, ti.conn, serverID),
-		"deleting the registration retires what the server offered through it")
+	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, serverID),
+		"deleting the registration stops the server offering it")
 }
 
-// TestRemoveClientFromMcpServer_RetiresTypedClient proves the same for the
+// TestRemoveClientFromMcpServer_StopsServerOfferingIt proves the same for the
 // per-server removal on the organization's provider page.
-func TestRemoveClientFromMcpServer_RetiresTypedClient(t *testing.T) {
+func TestRemoveClientFromMcpServer_StopsServerOfferingIt(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestService(t)
@@ -820,7 +820,7 @@ func TestRemoveClientFromMcpServer_RetiresTypedClient(t *testing.T) {
 	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "admin-remove-server")
 	associate(t, ctx, ti.conn, orgID, projectID, serverID, parsedClientID)
 	recordTypedClients(t, ctx, ti.conn, orgID, serverID)
-	require.NotEmpty(t, typedClients(t, ctx, ti.conn, serverID))
+	require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, serverID))
 
 	require.NoError(t, ti.service.RemoveClientFromMcpServer(ctx, &orgclientsgen.RemoveClientFromMcpServerPayload{
 		ClientID:     clientID,
@@ -829,6 +829,6 @@ func TestRemoveClientFromMcpServer_RetiresTypedClient(t *testing.T) {
 		ApikeyToken:  nil,
 	}))
 
-	require.Empty(t, typedClients(t, ctx, ti.conn, serverID),
+	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, serverID),
 		"removing the client from the server retires the link derived from it")
 }

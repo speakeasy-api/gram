@@ -677,10 +677,10 @@ func TestDeleteGlobalIssuer_BlockedByGlobalClientOnly(t *testing.T) {
 	require.NotContains(t, err.Error(), "tenant-owned")
 }
 
-// TestDeleteGlobalClient_RetiresTypedClientsPerOrganization proves the staff
-// deletion carries through to the typed records of every organization that
+// TestDeleteGlobalClient_StopsServersOfferingItPerOrganization proves the staff
+// deletion stops every consuming organization's servers offering it that
 // reached the client, not only the one the request runs in.
-func TestDeleteGlobalClient_RetiresTypedClientsPerOrganization(t *testing.T) {
+func TestDeleteGlobalClient_StopsServersOfferingItPerOrganization(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -709,8 +709,8 @@ func TestDeleteGlobalClient_RetiresTypedClientsPerOrganization(t *testing.T) {
 	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "global-typed-server")
 	associate(t, ctx, ti.conn, orgID, projectID, serverID, clientID)
 	recordTypedClients(t, ctx, ti.conn, orgID, serverID)
-	require.NotEmpty(t, typedClients(t, ctx, ti.conn, serverID),
-		"the association must have a typed client to retire")
+	require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, serverID),
+		"the association must be offered through a link to retire")
 
 	require.NoError(t, ti.service.DeleteGlobalClient(adminCtx, &adminrsgen.DeleteGlobalClientPayload{
 		ID:           client.ID,
@@ -718,6 +718,6 @@ func TestDeleteGlobalClient_RetiresTypedClientsPerOrganization(t *testing.T) {
 	}))
 
 	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, serverID))
-	require.Empty(t, typedClients(t, ctx, ti.conn, serverID),
-		"the consuming organization's typed records go with the global client")
+	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, serverID),
+		"the consuming organization's link goes with the global client")
 }

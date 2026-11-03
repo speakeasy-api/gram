@@ -1317,7 +1317,7 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 
 	// A platform-global client is reachable from several organizations, so the
 	// servers losing it are collected per organization before the removal and
-	// their typed clients and links are decided again for each.
+	// each organization's links are decided again on its own.
 	affected, err := serversLosingGlobalClient(ctx, dbtx, deleted.ID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list servers losing the global client").LogError(ctx, logger)

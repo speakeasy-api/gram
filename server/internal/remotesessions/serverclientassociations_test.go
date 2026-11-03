@@ -51,8 +51,9 @@ func associate(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizati
 	return n
 }
 
-// typedClients is the live typed auth clients one MCP server offers.
-func typedClients(t *testing.T, ctx context.Context, conn *pgxpool.Pool, serverID uuid.UUID) []uuid.UUID {
+// offeredAuthClients is the live links through which one MCP server offers
+// typed auth clients. A retired link stops the offer; the client row survives.
+func offeredAuthClients(t *testing.T, ctx context.Context, conn *pgxpool.Pool, serverID uuid.UUID) []uuid.UUID {
 	t.Helper()
 	ids, err := authclientbackfill.New(conn).ListServerAuthClientsFixture(ctx, serverID)
 	require.NoError(t, err)
@@ -101,6 +102,16 @@ func seedAdministratorAuthClient(t *testing.T, ctx context.Context, conn *pgxpoo
 	})
 	require.NoError(t, err)
 	return client.ID
+}
+
+// authClientLive reports whether the typed auth client row itself is still
+// live. Retiring a link never deletes the client: only the offline backfill
+// retires one no server reaches.
+func authClientLive(t *testing.T, ctx context.Context, conn *pgxpool.Pool, authClientID uuid.UUID) bool {
+	t.Helper()
+	row, err := authclientbackfill.New(conn).GetAuthClientFixture(ctx, authClientID)
+	require.NoError(t, err)
+	return !row.Deleted
 }
 
 func TestMCPServerUpstreamClientAssociations(t *testing.T) {
@@ -197,7 +208,7 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 		require.Equal(t, oops.CodeNotFound, shareable.Code, "a second detach finds nothing to remove")
 	})
 
-	t.Run("detaching a server retires the typed client it offered", func(t *testing.T) {
+	t.Run("detaching a server stops it offering that client", func(t *testing.T) {
 		t.Parallel()
 
 		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-assoc-typed")
@@ -208,9 +219,9 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 		associate(t, ctx, ti.conn, orgID, projectID, second, clientID)
 		recordTypedClients(t, ctx, ti.conn, orgID, first, second)
 
-		offered := typedClients(t, ctx, ti.conn, first)
-		require.NotEmpty(t, offered, "the association must have a typed client to retire")
-		require.NotEmpty(t, typedClients(t, ctx, ti.conn, second))
+		offered := offeredAuthClients(t, ctx, ti.conn, first)
+		require.NotEmpty(t, offered, "the association must be offered through a link to retire")
+		require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, second))
 
 		require.NoError(t, ti.service.DetachServerClientAssociation(ctx, &gen.DetachServerClientAssociationPayload{
 			McpServerID:           first.String(),
@@ -218,9 +229,11 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 		}))
 
 		require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, first))
-		require.Empty(t, typedClients(t, ctx, ti.conn, first),
-			"the typed client goes with the association it was derived from")
-		require.Equal(t, offered, typedClients(t, ctx, ti.conn, second),
+		require.Empty(t, offeredAuthClients(t, ctx, ti.conn, first),
+			"the link goes with the association it was derived from")
+		require.True(t, authClientLive(t, ctx, ti.conn, offered[0]),
+			"the client row survives the retired link")
+		require.Equal(t, offered, offeredAuthClients(t, ctx, ti.conn, second),
 			"the other server on the same client keeps what it offers")
 	})
 
@@ -342,7 +355,7 @@ func TestCommitServerIdentityConfigurationAssociatesOnlyTheTargetServer(t *testi
 
 // TestDetachServerClientAssociation_EnforcedOrganization proves the older path
 // still works for an organization served by typed auth clients, and that both
-// models move: the write is not refused, and the typed client goes with it.
+// models move: the write is not refused, and its link goes with it.
 func TestDetachServerClientAssociation_EnforcedOrganization(t *testing.T) {
 	t.Parallel()
 
@@ -361,7 +374,7 @@ func TestDetachServerClientAssociation_EnforcedOrganization(t *testing.T) {
 	associate(t, ctx, ti.conn, orgID, projectID, first, clientID)
 	associate(t, ctx, ti.conn, orgID, projectID, second, clientID)
 	recordTypedClients(t, ctx, ti.conn, orgID, first, second)
-	require.NotEmpty(t, typedClients(t, ctx, ti.conn, first))
+	require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, first))
 
 	require.NoError(t, ti.service.DetachServerClientAssociation(ctx, &gen.DetachServerClientAssociationPayload{
 		McpServerID:           first.String(),
@@ -369,9 +382,9 @@ func TestDetachServerClientAssociation_EnforcedOrganization(t *testing.T) {
 	}), "an enforced organization is not refused the older path")
 
 	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, first))
-	require.Empty(t, typedClients(t, ctx, ti.conn, first),
+	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, first),
 		"both models move together while enforced")
-	require.NotEmpty(t, typedClients(t, ctx, ti.conn, second))
+	require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, second))
 }
 
 // TestDetachServerClientAssociation_KeepsAdministratorClients proves the sync
@@ -396,13 +409,61 @@ func TestDetachServerClientAssociation_KeepsAdministratorClients(t *testing.T) {
 	recordTypedClients(t, ctx, ti.conn, orgID, first, second)
 
 	adminClientID := seedAdministratorAuthClient(t, ctx, ti.conn, orgID, projectID, first)
-	require.Contains(t, typedClients(t, ctx, ti.conn, first), adminClientID)
+	require.Contains(t, offeredAuthClients(t, ctx, ti.conn, first), adminClientID)
 
 	require.NoError(t, ti.service.DetachServerClientAssociation(ctx, &gen.DetachServerClientAssociationPayload{
 		McpServerID:           first.String(),
 		RemoteSessionClientID: clientID.String(),
 	}))
 
-	require.Equal(t, []uuid.UUID{adminClientID}, typedClients(t, ctx, ti.conn, first),
-		"only the record derived from the association is retired")
+	require.Equal(t, []uuid.UUID{adminClientID}, offeredAuthClients(t, ctx, ti.conn, first),
+		"only the link derived from the association is retired")
+}
+
+// TestLegacyRemovalAndTypedSyncRollBackTogether proves the two writes are
+// mutually revertible: the legacy association removal and the typed link
+// retirement share one transaction, so a failure after either leaves both
+// models as they were. It drives the pair directly and abandons the
+// transaction, which is what any error between them does to the handler that
+// owns it.
+func TestLegacyRemovalAndTypedSyncRollBackTogether(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-atomic")
+	first := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "atomic-a")
+	second := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "atomic-b")
+	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-atomic")
+	associate(t, ctx, ti.conn, orgID, projectID, first, clientID)
+	associate(t, ctx, ti.conn, orgID, projectID, second, clientID)
+	recordTypedClients(t, ctx, ti.conn, orgID, first, second)
+
+	associatedBefore := associatedClients(t, ctx, ti.conn, projectID, first)
+	offeredBefore := offeredAuthClients(t, ctx, ti.conn, first)
+	require.NotEmpty(t, associatedBefore)
+	require.NotEmpty(t, offeredBefore)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	removed, err := upstreamclientsrepo.New(tx).DetachMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.DetachMCPServerRemoteSessionClientParams{
+		McpServerID:           first,
+		RemoteSessionClientID: clientID,
+		ProjectID:             projectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), removed)
+	require.NoError(t, authclientbackfill.SyncServerAssociations(ctx, tx, orgID, first))
+	// Whatever fails after this point — the audit write, the commit — takes
+	// both writes with it.
+	require.NoError(t, tx.Rollback(ctx))
+
+	require.Equal(t, associatedBefore, associatedClients(t, ctx, ti.conn, projectID, first),
+		"the legacy association is restored by the rollback")
+	require.Equal(t, offeredBefore, offeredAuthClients(t, ctx, ti.conn, first),
+		"the typed link is restored by the same rollback")
 }

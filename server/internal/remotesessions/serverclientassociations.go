@@ -167,11 +167,13 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 		return oops.E(oops.CodeUnexpected, err, "detach MCP server client association").LogError(ctx, logger)
 	}
 
-	// The association is what the server's typed auth client and link were
-	// derived from, so retiring it here keeps the two models in step: the link
-	// goes with it, and the credential headers the client copied from the
-	// source this server sat on are no longer its to send. Deciding again from
-	// the same evidence is how a repeated detach stays a no-op.
+	// The association is what the server's link to its typed auth client was
+	// derived from, so deciding again here keeps the two models in step: the
+	// link goes with the association, and the credential headers the client
+	// copied from the source this server sat on are no longer its to send.
+	// The client row itself is left alone — only the offline backfill retires
+	// one no server reaches. Deciding from the same evidence is how a repeated
+	// detach stays a no-op.
 	if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, serverID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "sync mcp server auth clients").LogError(ctx, logger)
 	}

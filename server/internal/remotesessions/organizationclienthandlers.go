@@ -973,8 +973,8 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "remove deleted client's mcp server associations").LogError(ctx, logger)
 	}
-	// Those servers no longer reach this registration, so the typed clients
-	// and links derived from it stop being offered in the same transaction.
+	// Those servers no longer reach this registration, so the links through
+	// which they offered its typed client are retired in the same transaction.
 	if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, affectedServers...); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "sync auth clients of the deleted client's servers").LogError(ctx, logger)
 	}
