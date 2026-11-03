@@ -35,9 +35,11 @@ func Read(meta any) Provenance {
 	if json.Unmarshal(encoded, &doc) != nil {
 		return zero
 	}
-	published := parseTime(doc.Version.PublishedAt)
+	// The native registry owns its publication time; publishers can write the
+	// official namespace, so it only fills in when the registry records none.
+	published := parseTime(doc.Publication.PublishedAt)
 	if published.IsZero() {
-		published = parseTime(doc.Publication.PublishedAt)
+		published = parseTime(doc.Version.PublishedAt)
 	}
 	return Provenance{
 		Status:      doc.Version.Status,
