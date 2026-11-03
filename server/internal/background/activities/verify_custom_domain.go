@@ -6,7 +6,6 @@ import (
 	"fmt"
 	"log/slog"
 	"net"
-	"net/netip"
 	"slices"
 
 	"github.com/google/uuid"
@@ -61,22 +60,18 @@ type VerifyCustomDomainResult struct {
 }
 
 type VerifyCustomDomain struct {
-	db                  *pgxpool.Pool
-	logger              *slog.Logger
-	expectedTargetCNAME string
-	expectedARecords    []netip.Addr
-	audit               *audit.Logger
-	resolver            dns.Resolver
+	db       *pgxpool.Pool
+	logger   *slog.Logger
+	audit    *audit.Logger
+	resolver dns.Resolver
 }
 
-func NewVerifyCustomDomain(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, expectedTargetCNAME string, expectedARecords []netip.Addr) *VerifyCustomDomain {
+func NewVerifyCustomDomain(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger) *VerifyCustomDomain {
 	return &VerifyCustomDomain{
-		db:                  db,
-		logger:              logger,
-		expectedTargetCNAME: expectedTargetCNAME,
-		expectedARecords:    expectedARecords,
-		audit:               auditLogger,
-		resolver:            dns.NewNetResolver(),
+		db:       db,
+		logger:   logger,
+		audit:    auditLogger,
+		resolver: dns.NewNetResolver(),
 	}
 }
 
@@ -130,11 +125,6 @@ func (d *VerifyCustomDomain) createLegacyDomainRow(ctx context.Context, args Ver
 	if err != nil {
 		return noRow, fmt.Errorf("create legacy custom domain: %w", err)
 	}
-	token, err := customdomains.EnsureDNSTargetToken(ctx, dbtx, domain.OrganizationID, domain.ID, customdomains.NewDNSTargetToken)
-	if err != nil {
-		return noRow, fmt.Errorf("assign legacy custom domain dns target token: %w", err)
-	}
-	domain.DnsTargetToken = conv.ToPGTextEmpty(token)
 	if err := d.audit.LogCustomDomainCreate(ctx, dbtx, audit.LogCustomDomainCreateEvent{
 		OrganizationID:   args.OrgID,
 		Actor:            args.CreatedBy,
@@ -204,25 +194,6 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 	if !domain.DnsTargetToken.Valid {
 		if _, err := customdomains.EnsureDNSTargetToken(ctx, d.db, domain.OrganizationID, domain.ID, customdomains.NewDNSTargetToken); err != nil {
 			return noResult, fmt.Errorf("ensure custom domain DNS target: %w", err)
-		}
-	}
-
-	routingIssue, err := checkCustomDomainRouting(ctx, d.resolver, domain.Domain, d.expectedTargetCNAME, d.expectedARecords)
-	if err != nil {
-		return noResult, oops.E(oops.CodeUnexpected, err, "failed to find custom domain mapping for %s", domain.Domain).LogError(ctx, d.logger)
-	}
-	switch routingIssue {
-	case customdomains.HealthIssueDNSNotFound:
-		// Indistinguishable from in-flight propagation, which can take hours
-		// with some providers.
-		return VerifyCustomDomainResult{Status: VerifyStatusDNSPending, Reason: "domain DNS records not found"}, nil
-	default:
-		// Routing shape is advisory at registration time: proxied/CDN domains
-		// and forwarding setups legitimately resolve elsewhere. Ownership is
-		// proven by the TXT record below.
-		if routingIssue != "" {
-			d.logger.InfoContext(ctx, "custom domain not resolving to expected target, continuing to ownership check",
-				attr.SlogURLDomain(domain.Domain), attr.SlogReason(string(routingIssue)))
 		}
 	}
 
