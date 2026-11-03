@@ -22,6 +22,10 @@ const state = vi.hoisted(() => ({
   speakeasyStatus: "success" as "success" | "loading" | "error" | "disabled",
   speakeasyRefetch: vi.fn(),
   orgAdmin: true,
+  upstreamAuth: "legacy" as "loading" | "enforced" | "legacy" | "error",
+  registrations: [{ id: "client" }] as { id: string }[],
+  clientFilters: [] as unknown[],
+  credentials: [] as { remoteSessionClientId?: string }[],
 }));
 
 vi.mock("./authTarget", () => ({
@@ -46,13 +50,27 @@ vi.mock("@gram/client/react-query/getRemoteMcpServer.js", () => ({
     refetch: state.refetch,
   }),
 }));
-vi.mock("@/lib/remote-identity", () => ({
-  useAllRemoteSessionClients: () => ({
-    items: [{ id: "client" }],
-    isLoading: state.clientsLoading,
-    isError: state.clientsError,
-    refetch: state.clientsRefetch,
+vi.mock("@/hooks/useUpstreamAuthEnforcement", () => ({
+  useUpstreamAuthEnforcement: () => state.upstreamAuth,
+}));
+vi.mock("@gram/client/react-query/mcpServerAuthentication.js", () => ({
+  useMcpServerAuthentication: () => ({
+    data: { clients: state.credentials },
+    isLoading: false,
+    isError: false,
+    refetch: state.refetch,
   }),
+}));
+vi.mock("@/lib/remote-identity", () => ({
+  useAllRemoteSessionClients: (filters: unknown) => (
+    state.clientFilters.push(filters),
+    {
+      items: state.registrations,
+      isLoading: state.clientsLoading,
+      isError: state.clientsError,
+      refetch: state.clientsRefetch,
+    }
+  ),
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
@@ -92,13 +110,19 @@ vi.mock("@/hooks/useRBAC", () => ({
 vi.mock("./IdentityChainingField", () => ({
   IdentityChainingField: (props: {
     providers: { external: boolean };
+    linkedClients: { id: string }[];
     speakeasyIssuerUrl?: string;
     resource: string;
     onlyWhenOn?: boolean;
     frame?: (content: ReactNode) => ReactNode;
   }) => {
     const content = (
-      <div data-testid="identity-chaining">
+      <div
+        data-testid="identity-chaining"
+        data-linked-clients={props.linkedClients
+          .map((client) => client.id)
+          .join(",")}
+      >
         {JSON.stringify({
           providers: props.providers,
           speakeasyIssuerUrl: props.speakeasyIssuerUrl,
@@ -134,6 +158,10 @@ beforeEach(() => {
   state.speakeasyStatus = "success";
   state.speakeasyRefetch.mockReset();
   state.orgAdmin = true;
+  state.upstreamAuth = "legacy";
+  state.registrations = [{ id: "client" }];
+  state.clientFilters = [];
+  state.credentials = [];
 });
 
 // The page URL carries the deep-link hash the section scrolls to.
@@ -161,6 +189,39 @@ describe("IdentityChainingSection", () => {
       providers: { external: false },
       speakeasyIssuerUrl: "https://speakeasy.example.com/idp",
       resource: "https://mcp.vendor.example.com/mcp",
+    });
+  });
+
+  it("offers the registrations behind the server's credentials when upstream auth is enforced", () => {
+    state.upstreamAuth = "enforced";
+    state.registrations = [
+      { id: "attached" },
+      { id: "linked-to-sign-in-only" },
+      { id: "ema-registration" },
+    ];
+    state.credentials = [
+      { remoteSessionClientId: "attached" },
+      { remoteSessionClientId: "ema-registration" },
+      {},
+    ];
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen
+        .getByTestId("identity-chaining")
+        .getAttribute("data-linked-clients"),
+    ).toBe("attached,ema-registration");
+    expect(state.clientFilters).toContainEqual({});
+  });
+
+  it("offers clients linked to the sign-in when upstream auth isn't enforced", () => {
+    render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
+    expect(
+      screen
+        .getByTestId("identity-chaining")
+        .getAttribute("data-linked-clients"),
+    ).toBe("client");
+    expect(state.clientFilters).toContainEqual({
+      userSessionIssuerId: "issuer",
     });
   });
 

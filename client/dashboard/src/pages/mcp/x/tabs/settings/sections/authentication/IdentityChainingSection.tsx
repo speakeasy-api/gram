@@ -9,12 +9,14 @@ import { Text } from "@/components/ui/Text";
 import { useOrganization } from "@/contexts/Auth";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useUpstreamAuthEnforcement } from "@/hooks/useUpstreamAuthEnforcement";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useAllRemoteSessionClients } from "@/lib/remote-identity";
 import { identityProvidersHref } from "@/pages/org/identity-provider/tabs";
 import { useOrgRoutes } from "@/routes";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useGetRemoteMcpServer } from "@gram/client/react-query/getRemoteMcpServer.js";
+import { useMcpServerAuthentication } from "@gram/client/react-query/mcpServerAuthentication.js";
 import { useUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer.js";
 
 import { MCP_SESSIONS_SECTION_ID } from "../RemoteMcpSessionsSection";
@@ -106,11 +108,34 @@ export function IdentityChainingSection({
     { enabled: !!userSessionIssuerId, throwOnError: false },
   );
   const userSessionIssuer = issuerQuery.data;
-  const clientsQuery = useAllRemoteSessionClients(
-    { userSessionIssuerId },
-    { enabled: !!userSessionIssuerId },
+  // Enforcing organizations attach registrations to the server as
+  // credentials; elsewhere they are linked to the server's sign-in.
+  const upstreamAuth = useUpstreamAuthEnforcement();
+  const enforced = upstreamAuth === "enforced";
+  const credentialsQuery = useMcpServerAuthentication(
+    { mcpServerId: mcpServer.id },
+    undefined,
+    { enabled: enforced, throwOnError: false },
   );
-  const clients = clientsQuery.items;
+  const credentialRegistrationIds = new Set(
+    (credentialsQuery.data?.clients ?? []).flatMap((client) =>
+      client.remoteSessionClientId ? [client.remoteSessionClientId] : [],
+    ),
+  );
+  const clientsQuery = useAllRemoteSessionClients(
+    enforced ? {} : { userSessionIssuerId },
+    {
+      enabled:
+        !!userSessionIssuerId &&
+        (upstreamAuth === "legacy" ||
+          (enforced && credentialRegistrationIds.size > 0)),
+    },
+  );
+  const clients = enforced
+    ? clientsQuery.items.filter((client) =>
+        credentialRegistrationIds.has(client.id),
+      )
+    : clientsQuery.items;
   const sourceQuery = useGetRemoteMcpServer(
     { id: remoteMcpServerId },
     undefined,
@@ -176,6 +201,8 @@ export function IdentityChainingSection({
     issuerQuery.isError ||
     sourceQuery.isError ||
     clientsQuery.isError ||
+    upstreamAuth === "error" ||
+    (enforced && credentialsQuery.isError) ||
     // Only when Speakeasy's issuer decides whether anyone can vouch.
     (speakeasyRollout && speakeasyIssuer.isError && !known);
   const loading =
@@ -183,6 +210,8 @@ export function IdentityChainingSection({
     (issuerQuery.isLoading ||
       sourceQuery.isLoading ||
       clientsQuery.isLoading ||
+      upstreamAuth === "loading" ||
+      (enforced && credentialsQuery.isLoading) ||
       externalFlag.status === "loading" ||
       emaProvidersFlag.status === "loading" ||
       speakeasyIssuer.isLoading);
@@ -231,6 +260,7 @@ export function IdentityChainingSection({
                 void issuerQuery.refetch();
                 void sourceQuery.refetch();
                 clientsQuery.refetch();
+                if (credentialsQuery.isError) void credentialsQuery.refetch();
                 if (speakeasyIssuer.isError) void speakeasyIssuer.refetch();
               }}
             >
