@@ -68,17 +68,11 @@ func (a *autoVerifications) shutdown(ctx context.Context) error {
 // before the database and cache close: the probes detach from their requests
 // and still write verdicts and close upstream sessions.
 func (s *Service) Shutdown(ctx context.Context) error {
+	// Covers a provider POST's 10s timeout and storing its result.
+	const upstreamRefreshDrainBudget = 15 * time.Second
+
 	// Stop automatic verification admission before releasing runtimes.
 	s.autoVerifications.closeAdmission()
-	// Concurrent with the drains below so their time does not spend this one's budget.
-	refreshesDrained := make(chan error, 1)
-	go func() {
-		if s.remoteChallengeMgr == nil {
-			refreshesDrained <- nil
-			return
-		}
-		refreshesDrained <- s.remoteChallengeMgr.DrainRefreshes(ctx)
-	}()
 	var errs []error
 	if runtime, ok := s.codeExecutor.(interface{ Shutdown(context.Context) error }); ok {
 		if err := runtime.Shutdown(ctx); err != nil {
@@ -94,8 +88,14 @@ func (s *Service) Shutdown(ctx context.Context) error {
 	if err := s.autoVerifications.shutdown(ctx); err != nil {
 		errs = append(errs, fmt.Errorf("drain automatic verifications: %w", err))
 	}
-	if err := <-refreshesDrained; err != nil {
-		errs = append(errs, fmt.Errorf("drain upstream token refreshes: %w", err))
+	// Last, since the drains above can start refreshes, and on its own budget,
+	// since they may have spent ctx.
+	if s.remoteChallengeMgr != nil {
+		refreshCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), upstreamRefreshDrainBudget)
+		defer cancel()
+		if err := s.remoteChallengeMgr.DrainRefreshes(refreshCtx); err != nil {
+			errs = append(errs, fmt.Errorf("drain upstream token refreshes: %w", err))
+		}
 	}
 	s.toolCallLogger.Close()
 	return errors.Join(errs...)
