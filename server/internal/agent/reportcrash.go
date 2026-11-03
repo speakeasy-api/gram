@@ -395,26 +395,29 @@ func scrubCrashText(s string) string {
 }
 
 // crashSignature identifies a crash across releases and devices: a hash of the
-// innermost agent function names, without lines, which move between builds.
+// innermost agent frames' functions and files, without lines, which move
+// between builds. The file keeps apart both binaries' package main functions.
 // A stack with no agent frames (a runtime-only fatal) hashes what it has.
 func crashSignature(stack []*gen.AgentCrashFrame) string {
-	var names []string
+	var keys, all []string
 	for _, frame := range stack {
-		if frame != nil && strings.HasPrefix(frame.Function, agentModulePrefix) {
-			names = append(names, frame.Function)
+		if frame == nil {
+			continue
+		}
+		file := conv.PtrValOr(frame.File, "")
+		key := frame.Function + " " + file
+		all = append(all, key)
+		if strings.HasPrefix(frame.Function, agentModulePrefix) || strings.HasPrefix(file, agentModulePrefix) {
+			keys = append(keys, key)
 		}
 	}
-	if len(names) == 0 {
-		for _, frame := range stack {
-			if frame != nil {
-				names = append(names, frame.Function)
-			}
-		}
+	if len(keys) == 0 {
+		keys = all
 	}
-	if len(names) == 0 {
+	if len(keys) == 0 {
 		return crashUnknown
 	}
-	sum := sha256.Sum256([]byte(strings.Join(names[:min(len(names), signatureFrames)], "\n")))
+	sum := sha256.Sum256([]byte(strings.Join(keys[:min(len(keys), signatureFrames)], "\n")))
 	return hex.EncodeToString(sum[:8])
 }
 

@@ -47,6 +47,15 @@ func TestCrashSignature(t *testing.T) {
 	require.Equal(t, base, crashSignature([]*gen.AgentCrashFrame{frame(tick, 204), frame(run, 90)}))
 	require.NotEqual(t, base, crashSignature([]*gen.AgentCrashFrame{frame(run, 90), frame(tick, 204)}))
 
+	// Both binaries are package main; their files keep their crashes apart,
+	// and a main frame still outranks the runtime's.
+	mainFrame := func(file string) *gen.AgentCrashFrame {
+		return &gen.AgentCrashFrame{Function: "main.run", File: new(agentModulePrefix + file), Line: new(10)}
+	}
+	daemon := crashSignature([]*gen.AgentCrashFrame{frame("runtime.gopanic", 1), mainFrame("cmd/speakeasyd/main.go")})
+	require.NotEqual(t, daemon, crashSignature([]*gen.AgentCrashFrame{mainFrame("cmd/speakeasy-ui/main.go")}))
+	require.Equal(t, daemon, crashSignature([]*gen.AgentCrashFrame{mainFrame("cmd/speakeasyd/main.go")}))
+
 	runtimeOnly := crashSignature([]*gen.AgentCrashFrame{frame("runtime.throw", 1)})
 	require.NotEqual(t, crashUnknown, runtimeOnly)
 	require.Equal(t, crashUnknown, crashSignature(nil))
