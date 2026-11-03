@@ -5,6 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
@@ -12,23 +14,48 @@ import {
   AuthClientChoice$inboundSchema,
 } from "./authclientchoice.js";
 
+/**
+ * configured when the server offers at least one enabled auth client; setup_incomplete when no auth client was ever linked to it, live or detached, but it has a live upstream OAuth client or a credential header on its source that no auth client records yet; no_auth_required otherwise.
+ */
+export const ListMcpServerAuthClientChoicesResponseBodyStatus = {
+  Configured: "configured",
+  SetupIncomplete: "setup_incomplete",
+  NoAuthRequired: "no_auth_required",
+} as const;
+/**
+ * configured when the server offers at least one enabled auth client; setup_incomplete when no auth client was ever linked to it, live or detached, but it has a live upstream OAuth client or a credential header on its source that no auth client records yet; no_auth_required otherwise.
+ */
+export type ListMcpServerAuthClientChoicesResponseBodyStatus = OpenEnum<
+  typeof ListMcpServerAuthClientChoicesResponseBodyStatus
+>;
+
 export type ListMcpServerAuthClientChoicesResponseBody = {
   /**
    * The enabled shared credentials the server offers.
    */
   choices: Array<AuthClientChoice>;
   /**
-   * Whether the upstream needs authentication. Omitted while undecided.
+   * Whether the upstream needs authentication: true when the server offers at least one enabled auth client.
    */
-  requiresUpstreamAuth?: boolean | undefined;
+  requiresUpstreamAuth: boolean;
+  /**
+   * configured when the server offers at least one enabled auth client; setup_incomplete when no auth client was ever linked to it, live or detached, but it has a live upstream OAuth client or a credential header on its source that no auth client records yet; no_auth_required otherwise.
+   */
+  status: ListMcpServerAuthClientChoicesResponseBodyStatus;
 };
+
+/** @internal */
+export const ListMcpServerAuthClientChoicesResponseBodyStatus$inboundSchema:
+  z.ZodMiniType<ListMcpServerAuthClientChoicesResponseBodyStatus, unknown> =
+    openEnums.inboundSchema(ListMcpServerAuthClientChoicesResponseBodyStatus);
 
 /** @internal */
 export const ListMcpServerAuthClientChoicesResponseBody$inboundSchema:
   z.ZodMiniType<ListMcpServerAuthClientChoicesResponseBody, unknown> = z.pipe(
     z.object({
       choices: z.array(AuthClientChoice$inboundSchema),
-      requires_upstream_auth: z.optional(z.boolean()),
+      requires_upstream_auth: z.boolean(),
+      status: ListMcpServerAuthClientChoicesResponseBodyStatus$inboundSchema,
     }),
     z.transform((v) => {
       return remap$(v, {

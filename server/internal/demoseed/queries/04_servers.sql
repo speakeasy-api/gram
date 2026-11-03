@@ -160,8 +160,8 @@ WHERE p.organization_id = @org_id::text AND p.project_id = @project_id::uuid
 -- Engineer reaches GitHub through both its role plugin and this one. Other
 -- servers/roles keep their single-match and no-match examples.
 -- name: ServersInsertEngineeringEssentialsPlugin :one
-INSERT INTO plugins (organization_id, project_id, name, slug)
-VALUES (@org_id::text, @project_id::uuid, 'Engineering Essentials', 'engineering-essentials')
+INSERT INTO plugins (organization_id, project_id, name, slug, auto_sync_enabled)
+VALUES (@org_id::text, @project_id::uuid, 'Engineering Essentials', 'engineering-essentials', false)
 RETURNING id;
 
 -- name: ServersInsertEngineeringEssentialsAssignment :exec
@@ -397,9 +397,9 @@ VALUES
    ARRAY['code'], ARRAY['client_secret_basic'], ARRAY['S256'], TRUE,
    'Acme Identity');
 
--- The workforce sign-in is left as it is: pointing it at this fictional
--- provider would send interactive sign-in for every server on it to a
--- provider that doesn't exist. The Services pages still show these vendors.
+-- The workforce sign-in client is left unset: pointing interactive sign-in at
+-- this fictional provider would send every server on it to a provider that
+-- doesn't exist. The Services pages still show these vendors.
 -- name: ServersInsertEMAIdentityProviderClient :exec
 INSERT INTO remote_session_clients
   (id, project_id, organization_id, remote_session_issuer_id, client_id,
@@ -409,6 +409,17 @@ VALUES
    'demo-acme-identity-sign-in', 'DEMO-NOT-VALID-CIPHERTEXT',
    'client_secret_basic', ARRAY['authorization_code', 'refresh_token'],
    ARRAY['openid', 'profile', 'email']);
+
+-- Inbound EMA: the workforce issuer accepts ID-JAGs from Acme Identity. Only
+-- the issuer is linked, never the sign-in client, so interactive sign-in stays
+-- on the organization's own login.
+-- name: ServersTrustEMAIdentityProviderForInboundEMA :execrows
+UPDATE user_session_issuers
+SET trusted_remote_session_issuer_id = @ema_provider::uuid
+WHERE id = @workforce_issuer::uuid
+  AND organization_id = @org_id::text
+  AND project_id IS NULL
+  AND deleted IS FALSE;
 
 -- name: ServersInsertEMARemoteMCPServers :exec
 INSERT INTO remote_mcp_servers (id, project_id, name, slug, transport_type, url) VALUES
@@ -737,8 +748,7 @@ VALUES
 -- Typed auth clients, as the upstream OAuth migration records them: Linear's
 -- personal client over its OAuth registration, and one static credential
 -- shared by GitHub and Linear, so the server settings show a shared client
--- and a server offering two. Slack is left undecided about upstream
--- authentication.
+-- and a server offering two. Slack offers none.
 -- The projects delete cascades the clients, their headers and associations.
 -- name: ServersInsertAuthClient :exec
 INSERT INTO mcp_auth_clients
@@ -773,12 +783,6 @@ SELECT @id::uuid, @project_id::uuid, @org_id::text, @mcp_server_id::uuid,
        ac.id, ac.attachment_scope, ac.source
 FROM mcp_auth_clients AS ac
 WHERE ac.id = @auth_client_id::uuid;
-
--- name: ServersMarkRequiresUpstreamAuth :exec
-UPDATE mcp_servers
-SET requires_upstream_auth = TRUE
-WHERE project_id = @project_id::uuid
-  AND id = ANY(@ids::uuid[]);
 
 -- Engineers may use the shared GitHub token; Contractors are blocked from
 -- it on every server that offers it. Cleared by id at the top of the seed.
@@ -825,6 +829,24 @@ SELECT @id::uuid, @project_id::uuid, @org_id::text, 'issuance_profile',
        NULL, FALSE, ac.id, ac.attachment_scope, 'issuance'
 FROM mcp_auth_clients AS ac
 WHERE ac.id = @auth_client_id::uuid AND ac.organization_id = @org_id::text;
+
+-- Sets the organization gateway's seeded GitHub choices to the caller's own
+-- GitHub token. The server offers two credentials, so a choice that names
+-- neither resolves to no credential under enforcement.
+-- name: ServersPickGatewayGitHubCredential :execrows
+UPDATE upstream_client_selections AS sel
+SET auth_client_id = ac.id,
+    auth_client_attachment_scope = ac.attachment_scope,
+    no_auth = FALSE
+FROM mcp_auth_clients AS ac
+WHERE ac.id = @auth_client_id::uuid
+  AND ac.organization_id = @org_id::text
+  AND sel.project_id = @project_id::uuid
+  AND sel.organization_id = @org_id::text
+  AND sel.credential_kind = 'user_session'
+  AND sel.credential_id = ANY(@credential_ids::uuid[])
+  AND sel.mcp_server_id = @mcp_server_id::uuid
+  AND sel.deleted IS FALSE;
 
 -- name: ServersAttachAssistantServer :exec
 INSERT INTO assistant_mcp_servers (id, assistant_id, mcp_server_id, project_id)

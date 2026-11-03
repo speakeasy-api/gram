@@ -369,6 +369,7 @@ type PostgresReader struct {
 	chatMetadata              *ChatMetadataService
 	chatSearch                *ChatSearchService
 	organizationGateway       *OrganizationGatewayService
+	inboundEMATrust           *InboundEMATrustService
 	gatewayProxy              *GatewayProxyService
 	gatewaySessions           GatewaySessionManagement
 	dataExports               *DataExportReadService
@@ -414,6 +415,7 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		chatMetadata:              nil,
 		chatSearch:                nil,
 		organizationGateway:       nil,
+		inboundEMATrust:           nil,
 		gatewayProxy:              nil,
 		gatewaySessions:           nil,
 		dataExports:               nil,

@@ -35,6 +35,9 @@ paths:
                             schema:
                                 format: int64
                                 type: integer
+                        Content-Security-Policy:
+                            schema:
+                                type: string
                         Content-Type:
                             schema:
                                 type: string
@@ -42,6 +45,9 @@ paths:
                             schema:
                                 type: string
                         Last-Modified:
+                            schema:
+                                type: string
+                        X-Content-Type-Options:
                             schema:
                                 type: string
                 "400":
@@ -110,7 +116,7 @@ paths:
             x-speakeasy-name-override: serveImage
     /admin/assets.uploadImage:
         post:
-            description: Upload a global issuer logo, limited to 4 MiB and PNG, JPEG, GIF or WebP.
+            description: 'Upload a platform logo, limited to 4 MiB and PNG, JPEG, GIF, WebP or static SVG with local clip paths. This is a direct upload, not a staged proposal: successful uploads are publicly served immediately and remain stored.'
             operationId: adminUploadPlatformImage
             parameters:
                 - allowEmptyValue: true
@@ -124,7 +130,7 @@ paths:
                     content:
                         application/json:
                             schema:
-                                $ref: '#/components/schemas/UploadImageResult'
+                                $ref: '#/components/schemas/AdminUploadImageResult'
                     description: OK response.
                 "400":
                     content:
@@ -17958,7 +17964,7 @@ paths:
                 name: AgentConnectionBlocks
     /rpc/agents.listDelegableGrants:
         get:
-            description: List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted. Issuance revalidates every grant.
+            description: List safe allow-only credential grant candidates shared by the live agent, owner, and current authorizer. Candidates with unrepresentable exclusions are conservatively omitted unless carry_exclusions is set. Issuance revalidates every grant.
             operationId: listAgentDelegableGrants
             parameters:
                 - allowEmptyValue: true
@@ -17989,6 +17995,14 @@ paths:
                         type: string
                     maxItems: 100
                     type: array
+                - allowEmptyValue: true
+                  description: Keep a wildcard candidate that a narrower exclusion overlaps, and return that exclusion beside it as a blocklist-scope grant, instead of omitting the candidate. Requesting both on a key needs delegated grants version 4 or later.
+                  in: query
+                  name: carry_exclusions
+                  schema:
+                    default: false
+                    description: Keep a wildcard candidate that a narrower exclusion overlaps, and return that exclusion beside it as a blocklist-scope grant, instead of omitting the candidate. Requesting both on a key needs delegated grants version 4 or later.
+                    type: boolean
                 - allowEmptyValue: true
                   description: Session header
                   in: header
@@ -21132,6 +21146,9 @@ paths:
                             schema:
                                 format: int64
                                 type: integer
+                        Content-Security-Policy:
+                            schema:
+                                type: string
                         Content-Type:
                             schema:
                                 type: string
@@ -21139,6 +21156,9 @@ paths:
                             schema:
                                 type: string
                         Last-Modified:
+                            schema:
+                                type: string
+                        X-Content-Type-Options:
                             schema:
                                 type: string
                 "400":
@@ -23298,6 +23318,17 @@ paths:
                     format: date-time
                     type: string
                 - allowEmptyValue: true
+                  description: 'Category of entries to list: ''configuration'' (the default) for changes to the platform''s configuration, or ''security'' for machine access and other security-relevant activity such as workloads admitting themselves.'
+                  in: query
+                  name: category
+                  schema:
+                    default: configuration
+                    description: 'Category of entries to list: ''configuration'' (the default) for changes to the platform''s configuration, or ''security'' for machine access and other security-relevant activity such as workloads admitting themselves.'
+                    enum:
+                        - configuration
+                        - security
+                    type: string
+                - allowEmptyValue: true
                   description: API Key header
                   in: header
                   name: Gram-Key
@@ -23400,6 +23431,17 @@ paths:
                   name: project_slug
                   schema:
                     description: Project slug to filter facet values to a specific project.
+                    type: string
+                - allowEmptyValue: true
+                  description: Category of entries to compute facet values from, matching the list being filtered. Defaults to 'configuration'.
+                  in: query
+                  name: category
+                  schema:
+                    default: configuration
+                    description: Category of entries to compute facet values from, matching the list being filtered. Defaults to 'configuration'.
+                    enum:
+                        - configuration
+                        - security
                     type: string
                 - allowEmptyValue: true
                   description: API Key header
@@ -25738,7 +25780,11 @@ paths:
                 name: SetIssuanceProfile
     /rpc/authClients.setMcpServerUpstreamAuthRequirement:
         post:
-            description: Declare whether an MCP server's upstream needs authentication. Where typed auth client resolution is enforced, a server that needs none is served without upstream credentials and a server that needs it and offers no enabled client is unavailable until setup is complete; elsewhere, including in shadow mode, the server's existing upstream configuration keeps serving. Not available for hosted toolsets. Requires org:admin.
+            deprecated: true
+            description: |-
+                Return how an MCP server authenticates to its upstream. The requested requirement is ignored: whether the upstream needs authentication follows from the enabled auth clients the server offers. Not available for hosted toolsets. Requires org:admin.
+
+                Deprecated: read getMcpServerAuthentication, and attach, detach, enable or disable auth clients instead.
             operationId: setMcpServerUpstreamAuthRequirement
             parameters:
                 - allowEmptyValue: true
@@ -31543,6 +31589,276 @@ paths:
             x-speakeasy-name-override: getCoverage
             x-speakeasy-react-hook:
                 name: DeviceIntegrationCoverage
+    /rpc/deviceIntegrations.getFleetCoverage:
+        get:
+            description: Summarize agent coverage and policy enforcement across every device the org can see, with or without a connected MDM, optionally scoped to one provider's inventory.
+            operationId: getFleetCoverage
+            parameters:
+                - allowEmptyValue: true
+                  description: Optionally scope coverage to one provider's inventory (e.g. jamf), which excludes agent-only machines.
+                  in: query
+                  name: provider
+                  schema:
+                    description: Optionally scope coverage to one provider's inventory (e.g. jamf), which excludes agent-only machines.
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/FleetCoverage'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: getFleetCoverage deviceIntegrations
+            tags:
+                - deviceIntegrations
+            x-speakeasy-name-override: getFleetCoverage
+            x-speakeasy-react-hook:
+                name: FleetCoverage
+    /rpc/deviceIntegrations.listFleetDevices:
+        get:
+            description: 'Page through every device the org can see, newest first: its connected MDM inventories plus the machines running the agent that no inventory holds, each with its coverage bucket and policy state.'
+            operationId: listFleetDevices
+            parameters:
+                - allowEmptyValue: true
+                  description: Only devices synced from this provider. Excludes agent-only machines.
+                  in: query
+                  name: provider
+                  schema:
+                    description: Only devices synced from this provider. Excludes agent-only machines.
+                    type: string
+                - allowEmptyValue: true
+                  description: true for devices a connected MDM holds, false for agent-only machines.
+                  in: query
+                  name: in_inventory
+                  schema:
+                    description: true for devices a connected MDM holds, false for agent-only machines.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Only devices in this coverage bucket.
+                  in: query
+                  name: coverage_bucket
+                  schema:
+                    description: Only devices in this coverage bucket.
+                    enum:
+                        - agent_active
+                        - agent_stale
+                        - agent_other_device
+                        - no_agent
+                        - no_email
+                        - unresolved_email
+                        - missing
+                    type: string
+                - allowEmptyValue: true
+                  description: Only agent_active devices in this policy state.
+                  in: query
+                  name: policy_state
+                  schema:
+                    description: Only agent_active devices in this policy state.
+                    enum:
+                        - attested
+                        - outdated
+                        - unreported
+                        - halted
+                    type: string
+                - allowEmptyValue: true
+                  description: Only devices of these Speakeasy users. Combined with user_emails as an OR.
+                  in: query
+                  name: user_ids
+                  schema:
+                    description: Only devices of these Speakeasy users. Combined with user_emails as an OR.
+                    items:
+                        type: string
+                    type: array
+                - allowEmptyValue: true
+                  description: Only devices whose user_email is one of these, matched case-insensitively.
+                  in: query
+                  name: user_emails
+                  schema:
+                    description: Only devices whose user_email is one of these, matched case-insensitively.
+                    items:
+                        type: string
+                    type: array
+                - allowEmptyValue: true
+                  description: Pagination cursor from a previous page.
+                  in: query
+                  name: cursor
+                  schema:
+                    description: Pagination cursor from a previous page.
+                    type: string
+                - allowEmptyValue: true
+                  description: Page size. Defaults to 50, maximum 200.
+                  in: query
+                  name: limit
+                  schema:
+                    default: 50
+                    description: Page size. Defaults to 50, maximum 200.
+                    format: int64
+                    maximum: 200
+                    minimum: 1
+                    type: integer
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListFleetDevicesResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - apikey_header_Gram-Key: []
+                - session_header_Gram-Session: []
+            summary: listFleetDevices deviceIntegrations
+            tags:
+                - deviceIntegrations
+            x-speakeasy-name-override: listFleetDevices
+            x-speakeasy-pagination:
+                inputs:
+                    - in: parameters
+                      name: cursor
+                      type: cursor
+                outputs:
+                    nextCursor: $.next_cursor
+                type: cursor
+            x-speakeasy-react-hook:
+                name: FleetDevices
     /rpc/deviceIntegrations.listManagedDevices:
         get:
             description: Page through the org's synced MDM device inventory, newest first, with each device's coverage bucket.
@@ -40781,6 +41097,93 @@ paths:
             x-speakeasy-name-override: create
             x-speakeasy-react-hook:
                 name: CreateAPIKey
+    /rpc/keys.extendAgentKeys:
+        post:
+            description: 'Add mcp:connect grants to every live key the caller issued for an agent, so servers the agent is given reach the keys it already runs with. Each key''s new policy is checked like issuance: the agent, its owner and the caller must all allow it. Keys issued by someone else are left as they are. The result lists only the keys this call changed: keys that already held the grants, expired keys and other people''s keys are not in it.'
+            operationId: extendAgentAPIKeys
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/ExtendAgentKeysForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListKeysResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: extendAgentKeys keys
+            tags:
+                - keys
+            x-speakeasy-name-override: extendAgentKeys
+            x-speakeasy-react-hook:
+                name: ExtendAgentAPIKeys
     /rpc/keys.list:
         get:
             description: List all api keys for an organization
@@ -59475,6 +59878,12 @@ paths:
                             schema:
                                 $ref: '#/components/schemas/Error'
                     description: 'conflict: resource already exists'
+                "412":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'failed_precondition: resource is not in a valid state for this operation'
                 "415":
                     content:
                         application/json:
@@ -95828,18 +96237,18 @@ components:
                         $ref: '#/components/schemas/AdminMcpServerHealthAuthClient'
                 requires_upstream_auth:
                     type: boolean
-                    description: Whether the upstream needs authentication. Omitted while undecided.
+                    description: 'Whether the upstream needs authentication: true when the server offers at least one enabled auth client.'
                 status:
                     type: string
-                    description: configured, setup_incomplete (required with no enabled client), no_auth_required or undecided.
+                    description: configured (at least one enabled auth client), setup_incomplete (no auth client was ever linked to it, live or detached, but it has upstream credentials that no auth client records yet) or no_auth_required.
                     enum:
                         - configured
                         - setup_incomplete
                         - no_auth_required
-                        - undecided
             description: Whether the server's upstream needs authentication and the auth clients it offers.
             required:
                 - status
+                - requires_upstream_auth
                 - auth_clients
         AdminMcpServerHealthUserSessionIssuer:
             type: object
@@ -97168,6 +97577,17 @@ components:
                 - id
                 - customer_id
                 - status
+        AdminUploadImageResult:
+            type: object
+            properties:
+                asset:
+                    $ref: '#/components/schemas/Asset'
+                url:
+                    type: string
+                    description: Canonical public URL for the uploaded image
+            required:
+                - asset
+                - url
         AdminUpstreamAuthEnforcement:
             type: object
             properties:
@@ -97239,7 +97659,7 @@ components:
                     format: int64
                 complete:
                     type: boolean
-                    description: Whether every configured identity has its auth client, server links and header copies recorded, no backfilled record is left to retire, no server offering one is left undecided, and no phase failed.
+                    description: Whether every configured identity has its auth client, server links and header copies recorded, no backfilled record is left to retire, and no phase failed.
                 failed_phases:
                     type: array
                     items:
@@ -97271,7 +97691,7 @@ components:
                     format: int64
                 pending_marked_servers:
                     type: integer
-                    description: Servers offering a backfilled auth client whose need for upstream authentication is still undecided, not yet marked as needing it.
+                    description: 'Deprecated: always 0. Whether a server needs upstream authentication follows from the auth clients it offers, so no server is marked.'
                     format: int64
                 pending_retirements:
                     type: integer
@@ -97335,7 +97755,7 @@ components:
                     description: user_backed for turns run for a user the event identified, userless for turns run as the trigger's workload.
                 reason:
                     type: string
-                    description: 'Why there is no choice: selection_required (several clients could serve it), personal_requires_user (only a personal client serves it, and the turn has no user), no_client (no live, enabled auth client carries its upstream OAuth client), setup_incomplete (it needs upstream authentication and offers no auth client) or upstream_auth_undecided (it offers no auth client and an administrator has not decided whether it needs upstream authentication).'
+                    description: 'Why there is no choice: selection_required (several clients could serve it), personal_requires_user (only a personal client serves it, and the turn has no user), no_client (no live, enabled auth client carries its upstream OAuth client) or setup_incomplete (no auth client was ever linked to it, live or detached, but it has upstream credentials that no auth client records yet).'
                 servers:
                     type: integer
                     description: Profile and server pairs with no choice for this reason.
@@ -97442,7 +97862,7 @@ components:
                     format: int64
                 servers_marked_requiring_upstream_auth:
                     type: integer
-                    description: Servers marked as needing upstream authentication because they offer a backfilled auth client.
+                    description: 'Deprecated: always omitted. Whether a server needs upstream authentication follows from the auth clients it offers, so no server is marked.'
                     format: int64
                 status:
                     $ref: '#/components/schemas/AdminUpstreamOAuthMigrationStatus'
@@ -99890,6 +100310,12 @@ components:
                     type: string
                 after_snapshot: {}
                 before_snapshot: {}
+                category:
+                    type: string
+                    description: 'What kind of event the entry records: ''configuration'' for a change to the platform''s configuration, ''security'' for machine access and other security-relevant activity that is not a configuration decision. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.'
+                    enum:
+                        - configuration
+                        - security
                 created_at:
                     type: string
                     description: The creation date of the audit log.
@@ -103340,6 +103766,9 @@ components:
         CreatePluginForm:
             type: object
             properties:
+                auto_sync_enabled:
+                    type: boolean
+                    description: Whether changes to this plugin publish to the marketplace automatically. Defaults to true. When false, the plugin stays out of the marketplace until someone syncs it by hand.
                 description:
                     type: string
                     description: Optional description.
@@ -106898,14 +107327,13 @@ components:
                         - personal_requires_user
                         - no_client
                         - setup_incomplete
-                        - upstream_auth_undecided
                 mcp_server_id:
                     type: string
                     description: The MCP server.
                     format: uuid
                 no_auth_allowed:
                     type: boolean
-                    description: Whether the server was decided to need no upstream authentication, so no-auth can be chosen.
+                    description: Whether the server offers no enabled auth client and has no upstream credentials left to record as one, so no-auth can be chosen.
                 options:
                     type: array
                     items:
@@ -107100,6 +107528,49 @@ components:
             required:
                 - ok
                 - error
+        ExtendAgentKeyGrantForm:
+            type: object
+            properties:
+                effect:
+                    type: string
+                    description: Grant effect
+                    enum:
+                        - allow
+                scope:
+                    type: string
+                    description: The grant's scope
+                    enum:
+                        - mcp:connect
+                selector:
+                    $ref: '#/components/schemas/AgentPolicySelector'
+            description: A server grant an agent key gains. Anything broader is a new delegation, made by issuing a key.
+            required:
+                - scope
+                - effect
+                - selector
+        ExtendAgentKeysForm:
+            type: object
+            properties:
+                agent_id:
+                    type: string
+                    description: The agent whose keys gain the grants
+                    format: uuid
+                auth_client_choices:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/AgentKeyAuthClientChoice'
+                    description: The upstream credential each key uses on the servers it gains, checked as at issuance. Recorded only on keys that gain that server.
+                    maxItems: 100
+                requested_grants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ExtendAgentKeyGrantForm'
+                    description: Server grants to add to each key
+                    minItems: 1
+                    maxItems: 100
+            required:
+                - agent_id
+                - requested_grants
         ExtendTrialRequestBody:
             type: object
             properties:
@@ -107749,6 +108220,182 @@ components:
                 - id
                 - label
                 - count
+        FleetCoverage:
+            type: object
+            properties:
+                active_window_minutes:
+                    type: integer
+                    description: 'Freshness window: an agent counts as active when its heartbeat or state report is within this many minutes.'
+                    format: int64
+                agent_active:
+                    type: integer
+                    description: Devices with an agent heartbeat or state report within the window, agent-only machines included.
+                    format: int64
+                agent_active_device_attested:
+                    type: integer
+                    description: How many of agent_active are backed by that machine's own heartbeat or state report.
+                    format: int64
+                agent_only_devices:
+                    type: integer
+                    description: Machines running the agent that no connected MDM inventory holds. Always 0 when provider is set.
+                    format: int64
+                agent_other_device:
+                    type: integer
+                    description: MDM devices whose assigned user runs the agent, but not on this machine. Device-level matching only.
+                    format: int64
+                agent_stale:
+                    type: integer
+                    description: Devices with a known agent that went quiet.
+                    format: int64
+                attestation:
+                    type: string
+                    description: 'The strongest claim that holds for EVERY active device in this response — not merely the org''s matching mode. "device": every active device was matched on its own hardware serial, so each one ran the agent. "user": at least one active device was matched only on its assigned-user email, so the set as a whole supports only the weaker claim that assigned users ran the agent somewhere.'
+                    enum:
+                        - device
+                        - user
+                enforcement_halted:
+                    type: integer
+                    description: agent_active devices whose latest state report says the kill switch halted enforcement.
+                    format: int64
+                mdm_connected:
+                    type: boolean
+                    description: True when the organization has a connected MDM integration (the one named by provider, when set). Without one, the gap buckets are always 0 because nothing lists the devices that lack the agent.
+                missing:
+                    type: integer
+                    description: MDM devices absent from the latest completed inventory snapshot.
+                    format: int64
+                no_agent:
+                    type: integer
+                    description: MDM devices whose assigned email resolves to an org member with no agent at all.
+                    format: int64
+                no_email:
+                    type: integer
+                    description: MDM devices with no assigned-user email.
+                    format: int64
+                organization_id:
+                    type: string
+                    description: Organization the coverage describes.
+                policy_attested:
+                    type: integer
+                    description: agent_active devices whose latest report applies the policy last served to the reporting user.
+                    format: int64
+                policy_outdated:
+                    type: integer
+                    description: agent_active devices that report a different policy, or none.
+                    format: int64
+                policy_unreported:
+                    type: integer
+                    description: agent_active devices with no state report within the window.
+                    format: int64
+                total_devices:
+                    type: integer
+                    description: Every device counted here, missing and agent-only ones included.
+                    format: int64
+                unresolved_email:
+                    type: integer
+                    description: MDM devices whose assigned email matches neither an agent user nor an org member.
+                    format: int64
+            description: 'Agent coverage and policy enforcement across every device the organization can see: its MDM inventories plus the agent machines no inventory holds. Works with no MDM connected, when every device is an agent-only machine.'
+            required:
+                - organization_id
+                - active_window_minutes
+                - mdm_connected
+                - attestation
+                - agent_active
+                - agent_active_device_attested
+                - agent_stale
+                - agent_other_device
+                - no_agent
+                - no_email
+                - unresolved_email
+                - missing
+                - agent_only_devices
+                - total_devices
+                - policy_attested
+                - policy_outdated
+                - policy_unreported
+                - enforcement_halted
+        FleetDevice:
+            type: object
+            properties:
+                agent_last_seen_at:
+                    type: string
+                    description: The latest sign of life that classified this device, a policy poll or a state report. Omitted when no agent has ever synced.
+                    format: date-time
+                agent_state:
+                    $ref: '#/components/schemas/ManagedDeviceAgentState'
+                coverage_bucket:
+                    type: string
+                    description: Coverage classification for the device. What agent_active attests depends on the org's matching mode and on whether this device matched by serial or by assigned-user email.
+                    enum:
+                        - agent_active
+                        - agent_stale
+                        - agent_other_device
+                        - no_agent
+                        - no_email
+                        - unresolved_email
+                        - missing
+                external_id:
+                    type: string
+                    description: The MDM's identifier for the device. Omitted for an agent-only machine.
+                first_seen_at:
+                    type: string
+                    description: When the MDM or the agent first reported this device.
+                    format: date-time
+                hostname:
+                    type: string
+                    description: Device hostname, from the MDM or the agent.
+                id:
+                    type: string
+                    description: 'Stable device ID: mdm:<uuid> for an MDM device, agent:<uuid> for an agent-only machine.'
+                in_inventory:
+                    type: boolean
+                    description: True when a connected MDM's inventory holds this device. False for a machine only its agent reports.
+                last_seen_at:
+                    type: string
+                    description: When the MDM or the agent last reported this device.
+                    format: date-time
+                mdm_last_check_in_at:
+                    type: string
+                    description: Last device check-in as reported by the MDM.
+                    format: date-time
+                missing_since:
+                    type: string
+                    description: When the device went absent from the MDM inventory. Omitted while present, and for an agent-only machine.
+                    format: date-time
+                os_name:
+                    type: string
+                    description: Operating system name as the MDM reports it. Omitted for an agent-only machine; agent_state.os carries the agent's.
+                os_version:
+                    type: string
+                    description: Operating system version as the MDM reports it. Omitted for an agent-only machine.
+                policy_state:
+                    type: string
+                    description: 'Whether the agent that answers for an agent_active device verifiably applies its policy; agent_state.attestation says whether that agent runs on this machine. attested: its latest report applies the policy last served to the reporting user. outdated: it reports a different policy, or none. unreported: no report within the window, from an agent that predates reporting or has stopped sending. halted: the reporting agent''s kill switch stopped enforcement on a blocked build. Omitted for every other bucket.'
+                    enum:
+                        - attested
+                        - outdated
+                        - unreported
+                        - halted
+                provider:
+                    type: string
+                    description: Provider the device was synced from. Omitted for an agent-only machine.
+                serial_number:
+                    type: string
+                    description: Hardware serial number, from the MDM or the agent. Omitted when neither reported one.
+                user_email:
+                    type: string
+                    description: The MDM's assigned user, or for an agent-only machine the user its agent runs as.
+                user_id:
+                    type: string
+                    description: Resolved Speakeasy user for user_email. Omitted when it does not resolve to an org member.
+            description: 'One device the organization can see: a device from a connected MDM''s inventory, or a machine running the Speakeasy device agent that no connected inventory holds. MDM devices carry the same coverage bucket as listManagedDevices; agent-only devices are only ever agent_active or agent_stale, classified by their own heartbeat and state reports.'
+            required:
+                - id
+                - in_inventory
+                - coverage_bucket
+                - first_seen_at
+                - last_seen_at
         FunctionEnvironmentVariable:
             type: object
             properties:
@@ -112265,6 +112912,13 @@ components:
         ListAuditLogFacetsForm:
             type: object
             properties:
+                category:
+                    type: string
+                    description: Category of entries to compute facet values from, matching the list being filtered. Defaults to 'configuration'.
+                    default: configuration
+                    enum:
+                        - configuration
+                        - security
                 project_slug:
                     type: string
                     description: Project slug to filter facet values to a specific project.
@@ -112302,6 +112956,13 @@ components:
                 actor_id:
                     type: string
                     description: Actor ID to filter audit logs to a specific actor.
+                category:
+                    type: string
+                    description: 'Category of entries to list: ''configuration'' (the default) for changes to the platform''s configuration, or ''security'' for machine access and other security-relevant activity such as workloads admitting themselves.'
+                    default: configuration
+                    enum:
+                        - configuration
+                        - security
                 cursor:
                     type: string
                     description: The cursor for paginating through audit logs.
@@ -112830,6 +113491,19 @@ components:
             description: Result of listing filter options
             required:
                 - options
+        ListFleetDevicesResult:
+            type: object
+            properties:
+                devices:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/FleetDevice'
+                    description: Devices, newest first.
+                next_cursor:
+                    type: string
+                    description: Cursor for the next page. Omitted on the last page.
+            required:
+                - devices
         ListGlobalRemoteSessionIssuersResult:
             type: object
             properties:
@@ -113099,8 +113773,17 @@ components:
                     description: The enabled shared credentials the server offers.
                 requires_upstream_auth:
                     type: boolean
-                    description: Whether the upstream needs authentication. Omitted while undecided.
+                    description: 'Whether the upstream needs authentication: true when the server offers at least one enabled auth client.'
+                status:
+                    type: string
+                    description: configured when the server offers at least one enabled auth client; setup_incomplete when no auth client was ever linked to it, live or detached, but it has a live upstream OAuth client or a credential header on its source that no auth client records yet; no_auth_required otherwise.
+                    enum:
+                        - configured
+                        - setup_incomplete
+                        - no_auth_required
             required:
+                - requires_upstream_auth
+                - status
                 - choices
         ListMcpServersResult:
             type: object
@@ -115478,20 +116161,20 @@ components:
                     description: Whether the MCP server is public.
                 requires_upstream_auth:
                     type: boolean
-                    description: Whether the upstream needs authentication. Omitted while undecided.
+                    description: 'Whether the upstream needs authentication: true when the server offers at least one enabled auth client.'
                 status:
                     type: string
-                    description: configured when authentication is required and at least one enabled client is offered; setup_incomplete when it is required and none is; no_auth_required when the upstream explicitly needs none; undecided when nobody has said.
+                    description: configured when the server offers at least one enabled auth client; setup_incomplete when no auth client was ever linked to it, live or detached, but it has a live upstream OAuth client or a credential header on its source that no auth client records yet; no_auth_required otherwise.
                     enum:
                         - configured
                         - setup_incomplete
                         - no_auth_required
-                        - undecided
             description: How an MCP server authenticates to its upstream.
             required:
                 - mcp_server_id
                 - project_id
                 - public
+                - requires_upstream_auth
                 - status
                 - clients
         McpServerToolsetSummary:
@@ -118280,6 +118963,9 @@ components:
                 auto_created:
                     type: boolean
                     description: Whether automatic role distribution created this plugin. Read-only; preserved after edits and reuse.
+                auto_sync_enabled:
+                    type: boolean
+                    description: Whether changes to this plugin publish to the marketplace automatically. When false, they wait until someone syncs the marketplace by hand.
                 created_at:
                     type: string
                     format: date-time
@@ -118320,6 +119006,7 @@ components:
                 - name
                 - slug
                 - auto_created
+                - auto_sync_enabled
                 - agent_plugins_v1_compatible
                 - created_at
                 - updated_at
@@ -118373,6 +119060,22 @@ components:
                 - kind
                 - display_name
                 - principal_urn
+        PluginPublishStatus:
+            type: object
+            properties:
+                awaiting_manual_sync:
+                    type: boolean
+                    description: Whether the plugin's auto sync is off and it has changes, or has never been published, so only a manual sync publishes it.
+                slug:
+                    type: string
+                    description: The plugin's slug.
+                up_to_date:
+                    type: boolean
+                    description: 'Whether the plugin''s published package is current. With auto sync on: an automatic publish would push nothing new for it, its package and the marketplace manifests alike. With auto sync off: its package matches what it was last published with.'
+            required:
+                - slug
+                - up_to_date
+                - awaiting_manual_sync
         PluginServer:
             type: object
             properties:
@@ -118766,6 +119469,9 @@ components:
                 tool_io_logs_enabled:
                     type: boolean
                     description: Whether tool I/O logging is enabled
+                upstream_auth_enforced:
+                    type: boolean
+                    description: Whether upstream auth enforcement is on for the organization. Absent when the state could not be read. Staff change it through the admin enforcement endpoint.
             required:
                 - logs_enabled
                 - tool_io_logs_enabled
@@ -119443,6 +120149,9 @@ components:
         PublishStatusResult:
             type: object
             properties:
+                automatic_sync_pending:
+                    type: boolean
+                    description: Whether an automatic publish would change the published marketplace. False while the only pending changes belong to plugins whose auto sync is off, which publish only on a manual sync. Absent when up_to_date is absent.
                 claude_observability_plugin:
                     type: string
                     description: Slug of the generated Claude Code observability plugin in the published marketplace — install as `<slug>@<marketplace name>`. Present when connected.
@@ -119471,6 +120180,11 @@ components:
                 marketplace_url:
                     type: string
                     description: Git-based Claude Code marketplace URL — the value to pass to `/plugin marketplace add` or set as the source URL in `extraKnownMarketplaces`. Present once a marketplace token has been minted, which happens automatically on the first publish.
+                plugins:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/PluginPublishStatus'
+                    description: Each live plugin's own freshness. Absent when up_to_date is absent.
                 repo_name:
                     type: string
                     description: GitHub repo name, if connected.
@@ -119482,7 +120196,7 @@ components:
                     description: Full GitHub repository URL, if connected.
                 up_to_date:
                     type: boolean
-                    description: Whether the project's current plugin state matches what was last published to GitHub. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).
+                    description: Whether the project's current plugin state matches what was last published to GitHub, including changes of plugins whose auto sync is off that wait for a manual sync. Absent when the project is not connected, or when the connection predates content fingerprinting (freshness can't be determined).
             required:
                 - configured
                 - connected
@@ -124452,11 +125166,15 @@ components:
                 content_length:
                     type: integer
                     format: int64
+                content_security_policy:
+                    type: string
                 content_type:
                     type: string
                 cross_origin_resource_policy:
                     type: string
                 last_modified:
+                    type: string
+                x_content_type_options:
                     type: string
             required:
                 - content_type
@@ -125245,7 +125963,7 @@ components:
                     format: uuid
                 requires_upstream_auth:
                     type: boolean
-                    description: Whether the upstream needs authentication.
+                    description: Ignored.
             required:
                 - mcp_server_id
                 - requires_upstream_auth
@@ -129894,6 +130612,12 @@ components:
                 account_type:
                     type: string
                     description: AI account classification ('team' or 'personal'); empty/absent when unclassified
+                auth_client_id:
+                    type: string
+                    description: Auth client that signed an agent's gateway call in to its upstream server
+                auth_client_type:
+                    type: string
+                    description: Type of the auth client that signed an agent's gateway call in to its upstream server, such as remote_session for a person's connection or service_account for a shared credential; absent for calls recorded before it was tracked
                 authorizer_label:
                     type: string
                     description: Email of the authorizer when they resolve to a known user
@@ -129912,6 +130636,12 @@ components:
                 client_version:
                     type: string
                     description: MCP client version when the client reported one alongside its name
+                connection_owner_label:
+                    type: string
+                    description: Display name, or email, of the connection owner when they resolve to a known user
+                connection_owner_user_id:
+                    type: string
+                    description: Person whose own connection signed an agent's gateway call in; absent for a shared credential
                 event_source:
                     type: string
                     description: Telemetry event source
@@ -132613,6 +133343,9 @@ components:
         UpdatePluginForm:
             type: object
             properties:
+                auto_sync_enabled:
+                    type: boolean
+                    description: Whether changes to this plugin publish to the marketplace automatically. Omit to keep the current setting. Turning it off is refused while the plugin has changes that haven't been synced, and the slug can't change while it is off.
                 description:
                     type: string
                     description: Updated description.
@@ -135596,14 +136329,44 @@ components:
         WorkloadPlatformSubject:
             type: object
             properties:
+                alternatives:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/WorkloadPlatformSubjectAlternative'
+                    description: Other rules the operator may choose instead, in the order they are offered. Absent where there are none.
+                label:
+                    type: string
+                    description: Names the default rule beside its alternatives. Empty where there are none.
+                    default: ""
                 template:
                     type: string
                     description: The subject with {key} placeholders for rule-tier variables; the stem, for a wildcard rule.
                 wildcard:
                     type: boolean
                     description: Whether the rule is the filled template followed by *.
-            description: The access rule a catalog platform produces.
+            description: The access rule a catalog platform produces by default, and the others the operator may choose instead.
             required:
+                - template
+                - wildcard
+        WorkloadPlatformSubjectAlternative:
+            type: object
+            properties:
+                key:
+                    type: string
+                    description: Identifies the choice within the platform.
+                label:
+                    type: string
+                    description: What the operator chooses it by.
+                template:
+                    type: string
+                    description: The subject with {key} placeholders for rule-tier variables; the stem, for a wildcard rule.
+                wildcard:
+                    type: boolean
+                    description: Whether the rule is the filled template followed by *.
+            description: An access rule a catalog platform offers in place of its default.
+            required:
+                - key
+                - label
                 - template
                 - wildcard
         WorkloadPlatformVariable:

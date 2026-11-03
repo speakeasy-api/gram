@@ -11,10 +11,16 @@ import { recommended } from "@/elements/plugins";
 import { InsightsConfig, InsightsProvider } from "@/components/insights-dock";
 import { INSIGHTS_SUGGESTIONS } from "@/lib/insights-suggestions";
 import { ResourceListPage } from "@/components/page-templates";
-import { Button } from "@/components/ui/Button";
+import { Page } from "@/components/page-layout";
+import {
+  defineFilters,
+  useFilterState,
+  type FilterValue,
+} from "@/components/filters";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
 import { Text } from "@/components/ui/Text";
 import { Switch } from "@/components/ui/Switch";
+import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useOrganization, useSession } from "@/contexts/Auth";
 import { useSlugs } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -31,7 +37,6 @@ import { useAuditLogFacets } from "@gram/client/react-query/auditLogFacets.js";
 import { useAuditLogsInfinite } from "@gram/client/react-query/auditLogs.js";
 import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
 import { Icon } from "@/components/ui/Icon";
-import { Input } from "@/components/ui/Input";
 import React, {
   useCallback,
   useDeferredValue,
@@ -55,13 +60,13 @@ import {
   ActionIconTile,
   AuditFeedFooter,
   DateGroupHeader,
-  FacetSelect,
 } from "@/components/auditlogs/feed";
 import {
   formatDateHeader,
   formatTimeOnly,
+  groupConsecutiveByActor,
   groupLogsByDate,
-  type FacetOption,
+  type ActorRun,
 } from "@/lib/audit-log-feed";
 import { cn, getServerURL } from "@/lib/utils";
 
@@ -90,6 +95,18 @@ function truncateMiddle(value: string, start = 18, end = 16) {
 const SUBJECT_MONO_CLASS = "font-mono text-xs text-muted-foreground";
 // Same mono treatment minus the colour, so the design-system link palette wins.
 const SUBJECT_LINK_CLASS = "font-mono text-xs";
+
+const AUDIT_LOG_FILTERS = defineFilters([
+  { id: "project", label: "Project", kind: "select" },
+  { id: "action", label: "Action", kind: "select" },
+  { id: "actor", label: "Actor", kind: "select" },
+  { id: "surface", label: "Surface", kind: "select" },
+]);
+
+function auditLogCountDescription(count?: number) {
+  if (count == null) return undefined;
+  return `${count.toLocaleString()} audit log${count === 1 ? "" : "s"}`;
+}
 
 // A subject rendered as a link to its detail page. Centralizes the mono styling
 // and hover affordance so every linked subject looks identical.
@@ -314,6 +331,88 @@ function AuditLogRow({
   );
 }
 
+type AuditCategory = "configuration" | "security";
+
+const CATEGORY_OPTIONS: {
+  value: AuditCategory;
+  label: string;
+  tooltip: string;
+}[] = [
+  {
+    value: "configuration",
+    label: "Configuration",
+    tooltip: "Changes people and the Speakeasy team made to settings",
+  },
+  {
+    value: "security",
+    label: "Security activity",
+    tooltip:
+      "Machine access, such as an agent's runtime admitting its workload identity",
+  },
+];
+
+/**
+ * A collapsed run of consecutive security entries by one actor, typically an
+ * agent's runtime admitting and withdrawing its workload identity on every
+ * start and teardown. Expanding it shows each entry.
+ */
+function ActorRunRow({
+  run,
+  expanded,
+  onToggle,
+  identities,
+  projectSlug,
+  timestampMode,
+  highlightMatch,
+  children,
+}: {
+  run: ActorRun;
+  expanded: boolean;
+  onToggle: () => void;
+  identities: ReturnType<typeof useAuditPrincipals>;
+  projectSlug?: string;
+  timestampMode: "utc" | "local";
+  highlightMatch?: (text: string) => React.ReactNode;
+  children: ReactNode;
+}) {
+  const latest = run.logs[0]!;
+  const earliest = run.logs[run.logs.length - 1]!;
+  return (
+    <div>
+      <div className="border-border bg-card group flex items-center gap-3 border-b px-4 py-2.5">
+        <ActionIconTile action={latest.action} />
+        <div className="min-w-0 flex-1 text-sm leading-5">
+          <StrongName>
+            <AuditPrincipalLink
+              projectSlug={projectSlug}
+              principal={auditActorPrincipal(latest)}
+              identities={identities}
+              fallback={getActorLabel(latest)}
+              renderLabel={highlightMatch}
+            />
+          </StrongName>{" "}
+          <span className="text-muted-foreground">
+            {run.logs.length} security events
+          </span>
+          <button
+            type="button"
+            aria-expanded={expanded}
+            onClick={onToggle}
+            className="text-link-primary ml-2 text-xs hover:underline"
+          >
+            {expanded ? "Hide ▴" : "Show ▾"}
+          </button>
+        </div>
+        <span className="text-muted-foreground shrink-0 text-right font-mono text-xs whitespace-nowrap tabular-nums">
+          {formatTimeOnly(earliest.createdAt, timestampMode)}–
+          {formatTimeOnly(latest.createdAt, timestampMode)}
+        </span>
+      </div>
+      {expanded && <div className="bg-card pl-8">{children}</div>}
+    </div>
+  );
+}
+
 /**
  * Wraps the audit logs page in an InsightsProvider so the AI Insights
  * trigger appears in the breadcrumb bar. Uses the org's first project
@@ -433,22 +532,40 @@ export default function OrgAuditLogs(): React.JSX.Element {
 function OrgAuditLogsInner() {
   const organization = useOrganization();
   const { orgSlug } = useSlugs();
-  const [selectedProjectSlug, setSelectedProjectSlug] = useQueryState(
-    "project",
-    { defaultValue: "all" },
+  const {
+    values: rawFilterValues,
+    setValue: setFilterValue,
+    clearValue: clearFilterValue,
+    clearAll: clearAllFilters,
+  } = useFilterState(AUDIT_LOG_FILTERS);
+  const filterValues = useMemo(
+    () => ({
+      project:
+        rawFilterValues.project === "all" ? null : rawFilterValues.project,
+      action: rawFilterValues.action === "all" ? null : rawFilterValues.action,
+      actor: rawFilterValues.actor === "all" ? null : rawFilterValues.actor,
+      surface:
+        rawFilterValues.surface === "all" ? null : rawFilterValues.surface,
+    }),
+    [rawFilterValues],
   );
-  const [selectedAction, setSelectedAction] = useQueryState("action", {
-    defaultValue: "all",
-  });
-  const [selectedActor, setSelectedActor] = useQueryState("actor", {
-    defaultValue: "all",
-  });
-  const [selectedSurface, setSelectedSurface] = useQueryState("surface", {
-    defaultValue: "all",
-  });
+  const selectedProjectSlug = filterValues.project ?? "all";
+  const selectedAction = filterValues.action ?? "all";
+  const selectedActor = filterValues.actor ?? "all";
+  const selectedSurface = filterValues.surface ?? "all";
+  const hasActiveFilters =
+    selectedProjectSlug !== "all" ||
+    selectedAction !== "all" ||
+    selectedActor !== "all" ||
+    selectedSurface !== "all";
   const [timestampMode, setTimestampMode] = useQueryState("time", {
     defaultValue: "utc",
   });
+  const [selectedCategory, setSelectedCategory] = useQueryState("category", {
+    defaultValue: "configuration",
+  });
+  const category: AuditCategory =
+    selectedCategory === "security" ? "security" : "configuration";
 
   const tsMode = (timestampMode === "local" ? "local" : "utc") as
     | "utc"
@@ -463,9 +580,10 @@ function OrgAuditLogsInner() {
   const { data: facetsData } = useAuditLogFacets!({
     projectSlug:
       selectedProjectSlug === "all" ? undefined : selectedProjectSlug,
+    category,
   });
 
-  const actionOptions: Array<FacetOption> = useMemo(
+  const actionOptions = useMemo(
     () =>
       (facetsData?.actions ?? []).map((option) => ({
         ...option,
@@ -473,8 +591,8 @@ function OrgAuditLogsInner() {
       })),
     [facetsData?.actions],
   );
-  const actorOptions: Array<FacetOption> = facetsData?.actors ?? [];
-  const surfaceOptions: Array<FacetOption> = useMemo(
+  const actorOptions = facetsData?.actors ?? [];
+  const surfaceOptions = useMemo(
     () =>
       (facetsData?.surfaces ?? []).map((option) => ({
         ...option,
@@ -497,6 +615,7 @@ function OrgAuditLogsInner() {
     action: selectedAction === "all" ? undefined : selectedAction,
     actorId: selectedActor === "all" ? undefined : selectedActor,
     actingSurface: selectedSurface === "all" ? undefined : selectedSurface,
+    category,
   });
 
   const logs = useMemo(
@@ -509,6 +628,37 @@ function OrgAuditLogsInner() {
     () => groupLogsByDate(logs, tsMode),
     [logs, tsMode],
   );
+
+  // Security entries from one actor arrive in bursts (a runtime writes one on
+  // every start and teardown), so each day groups consecutive entries by actor.
+  // Configuration changes stay one row each.
+  const dateRuns = useMemo(
+    () =>
+      dateGroups.map((group) => ({
+        ...group,
+        runs:
+          category === "security"
+            ? groupConsecutiveByActor(group.logs)
+            : group.logs.map((log) => ({
+                key: log.id,
+                actorId: log.actorId,
+                actorType: log.actorType,
+                logs: [log],
+              })),
+      })),
+    [dateGroups, category],
+  );
+  const [expandedRuns, setExpandedRuns] = useState<ReadonlySet<string>>(
+    () => new Set(),
+  );
+  const toggleRun = useCallback((key: string) => {
+    setExpandedRuns((prev) => {
+      const next = new Set(prev);
+      if (next.has(key)) next.delete(key);
+      else next.add(key);
+      return next;
+    });
+  }, []);
 
   // Feed current page state to the AI Insights sidebar as context.
   const insightsContext = useMemo(() => {
@@ -530,6 +680,11 @@ function OrgAuditLogsInner() {
         `Filtered to acting surface: ${formatActingSurfaceLabel(selectedSurface)}`,
       );
     }
+    parts.push(
+      category === "security"
+        ? "Showing security activity: machine access such as agents' runtimes admitting their workload identity."
+        : "Showing configuration changes.",
+    );
     parts.push(`Currently showing ${logs.length} audit log entries.`);
     if (dateGroups.length > 0) {
       const firstDate = dateGroups[0]!.date!;
@@ -546,6 +701,7 @@ function OrgAuditLogsInner() {
     selectedAction,
     selectedActor,
     selectedSurface,
+    category,
     logs.length,
     dateGroups,
     tsMode,
@@ -562,17 +718,10 @@ function OrgAuditLogsInner() {
     return map;
   }, [dateGroups]);
 
-  const hasActiveFilters =
-    selectedProjectSlug !== "all" ||
-    selectedAction !== "all" ||
-    selectedActor !== "all" ||
-    selectedSurface !== "all";
-
   // --- Search & keyboard navigation state ---
   const [searchQuery, setSearchQuery] = useState("");
   const [currentLogIndex, setCurrentLogIndex] = useState<number | null>(null);
   const [currentSearchIndex, setCurrentSearchIndex] = useState(0);
-  const [searchInputFocused, setSearchInputFocused] = useState(false);
 
   const logsContainerRef = useRef<HTMLDivElement>(null);
   const logRefs = useRef<Map<number, HTMLDivElement>>(new Map());
@@ -618,6 +767,33 @@ function OrgAuditLogsInner() {
     searchMatchIndices.length > 0
       ? Math.min(currentSearchIndex, searchMatchIndices.length - 1)
       : 0;
+
+  // Keyboard navigation and search move through every entry, including ones
+  // inside a collapsed run, so landing on one opens its run and scrolls to it.
+  const collapsibleRunByIndex = useMemo(() => {
+    const map = new Map<number, string>();
+    for (const group of dateRuns) {
+      for (const run of group.runs) {
+        if (run.logs.length < 2) continue;
+        for (const log of run.logs) {
+          const idx = logFlatIndices.get(log.id);
+          if (idx !== undefined) map.set(idx, run.key);
+        }
+      }
+    }
+    return map;
+  }, [dateRuns, logFlatIndices]);
+  useEffect(() => {
+    if (currentLogIndex === null) return;
+    const key = collapsibleRunByIndex.get(currentLogIndex);
+    if (!key || expandedRuns.has(key)) return;
+    setExpandedRuns((prev) => new Set(prev).add(key));
+    requestAnimationFrame(() => {
+      logRefs.current
+        .get(currentLogIndex)
+        ?.scrollIntoView({ behavior: "smooth", block: "center" });
+    });
+  }, [currentLogIndex, collapsibleRunByIndex, expandedRuns]);
 
   const scrollToLog = useCallback((index: number) => {
     const element = logRefs.current.get(index);
@@ -713,12 +889,9 @@ function OrgAuditLogsInner() {
       const isWithinLogsSection = logsContainer?.contains(
         activeElement as Node,
       );
-      const isSearchInputFocusedNow = activeElement?.hasAttribute(
-        "data-audit-search-input",
-      );
 
       if (e.key === "Escape") {
-        if (isWithinLogsSection || isSearchInputFocusedNow) {
+        if (isWithinLogsSection) {
           e.preventDefault();
           setSearchQuery("");
           setCurrentLogIndex(null);
@@ -731,17 +904,6 @@ function OrgAuditLogsInner() {
         return;
       }
 
-      if ((e.metaKey || e.ctrlKey) && e.key === "f") {
-        if (isWithinLogsSection || isSearchInputFocusedNow) {
-          e.preventDefault();
-          const searchInput = document.querySelector<HTMLInputElement>(
-            "[data-audit-search-input]",
-          );
-          searchInput?.focus();
-        }
-        return;
-      }
-
       const isInInput =
         activeElement?.tagName === "INPUT" ||
         activeElement?.tagName === "TEXTAREA" ||
@@ -749,14 +911,6 @@ function OrgAuditLogsInner() {
         activeElement?.closest("[contenteditable]") !== null;
       if (!isInInput) {
         switch (e.key) {
-          case "/": {
-            e.preventDefault();
-            const searchInput = document.querySelector<HTMLInputElement>(
-              "[data-audit-search-input]",
-            );
-            searchInput?.focus();
-            break;
-          }
           case "n":
             if (searchMatchIndices.length > 0) {
               e.preventDefault();
@@ -813,222 +967,139 @@ function OrgAuditLogsInner() {
     <ResourceListPage
       scope="org:read"
       title="Audit Logs"
-      description="Review organization-wide and project-level actions in chronological order. Search by project, actions, or actor."
+      description="Review changes to your organization's configuration, and security activity such as agents' runtimes admitting their workload identity. Filter by project, action, or actor."
     >
       <div className="flex w-full flex-col gap-4">
         <InsightsConfig contextInfo={insightsContext} />
 
-        <div className="flex flex-wrap items-end gap-3">
-          <FacetSelect
-            label="Project"
-            value={selectedProjectSlug}
-            onValueChange={(value) => {
-              void setSelectedProjectSlug(value);
-            }}
-            placeholder="All projects"
-            allLabel="All projects"
-            options={projects.map((project) => ({
-              value: project.slug,
-              displayName: project.slug,
-            }))}
-          />
-          <FacetSelect
-            label="Action"
-            value={selectedAction}
-            onValueChange={(value) => {
-              void setSelectedAction(value);
-            }}
-            placeholder="All actions"
-            allLabel="All actions"
-            options={actionOptions}
-          />
-          <FacetSelect
-            label="Actor"
-            value={selectedActor}
-            onValueChange={(value) => {
-              void setSelectedActor(value);
-            }}
-            placeholder="All actors"
-            allLabel="All actors"
-            options={actorOptions}
-          />
-          <FacetSelect
-            label="Surface"
-            value={selectedSurface}
-            onValueChange={(value) => {
-              void setSelectedSurface(value);
-            }}
-            placeholder="All surfaces"
-            allLabel="All surfaces"
-            options={surfaceOptions}
-          />
-          <div className="flex flex-col gap-1.5">
-            <Text small muted>
-              Filters
-            </Text>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={!hasActiveFilters}
-              onClick={() => {
-                void Promise.allSettled([
-                  setSelectedProjectSlug("all"),
-                  setSelectedAction("all"),
-                  setSelectedActor("all"),
-                  setSelectedSurface("all"),
-                ]);
-              }}
-            >
-              Clear filters
-            </Button>
-          </div>
-          <div className="flex flex-col gap-1.5">
-            <Text small muted>
-              Timestamp
-            </Text>
-            <div className="bg-background flex h-8 items-center gap-2 border px-3">
-              <Text
-                small
-                className={
-                  tsMode === "utc" ? "text-foreground" : "text-muted-foreground"
-                }
-              >
-                UTC
-              </Text>
-              <Switch
-                checked={tsMode === "local"}
-                onCheckedChange={(checked) => {
-                  void setTimestampMode(checked ? "local" : "utc");
+        <div
+          onKeyUp={(event) => {
+            if (
+              event.key === "Escape" &&
+              event.target instanceof HTMLInputElement
+            ) {
+              event.target.blur();
+            }
+          }}
+        >
+          <Page.Toolbar>
+            <Page.Toolbar.Leading>
+              <SegmentedControl
+                ariaLabel="Audit log category"
+                value={category}
+                onChange={(value) => {
+                  // Actions, actors and surfaces differ between categories, so
+                  // a filter chosen in one would leave the other empty.
+                  void setSelectedCategory(value);
+                  clearFilterValue("action");
+                  clearFilterValue("actor");
+                  clearFilterValue("surface");
                 }}
-                aria-label="Toggle timestamp timezone"
+                options={CATEGORY_OPTIONS}
               />
-              <Text
-                small
-                className={
-                  tsMode === "local"
-                    ? "text-foreground"
-                    : "text-muted-foreground"
-                }
-              >
-                Local
-              </Text>
-            </div>
-          </div>
+            </Page.Toolbar.Leading>
+            <Page.Toolbar.Search
+              value={searchQuery}
+              onChange={handleSearchChange}
+              placeholder="Search audit logs"
+            />
+            <Page.Toolbar.Filters
+              schema={AUDIT_LOG_FILTERS}
+              values={filterValues}
+              optionsById={{
+                project: projects.map((project) => ({
+                  value: project.slug,
+                  label: project.slug,
+                })),
+                action: actionOptions.map((option) => ({
+                  value: option.value,
+                  label: option.displayName,
+                  description: auditLogCountDescription(option.count),
+                })),
+                actor: actorOptions.map((option) => ({
+                  value: option.value,
+                  label: option.displayName,
+                  description: auditLogCountDescription(option.count),
+                })),
+                surface: surfaceOptions.map((option) => ({
+                  value: option.value,
+                  label: option.displayName,
+                  description: auditLogCountDescription(option.count),
+                })),
+              }}
+              onChange={
+                setFilterValue as (id: string, value: FilterValue) => void
+              }
+              onClear={clearFilterValue as (id: string) => void}
+              onClearAll={clearAllFilters}
+            />
+            <Page.Toolbar.Actions>
+              <div className="flex items-center gap-3">
+                {searchQuery ? (
+                  <div className="text-muted-foreground flex items-center gap-1 text-[11px]">
+                    <span aria-live="polite" className="min-w-8 text-center">
+                      {searchMatchIndices.length > 0
+                        ? `${effectiveSearchIndex + 1}/${searchMatchIndices.length}`
+                        : "0/0"}
+                    </span>
+                    <button
+                      onClick={() => navigateToResult("prev")}
+                      disabled={searchMatchIndices.length === 0}
+                      className="hover:bg-muted p-1 opacity-60 transition-opacity hover:opacity-100 disabled:pointer-events-none disabled:opacity-30"
+                      title="Previous (Shift+N)"
+                      aria-label="Previous search result"
+                    >
+                      <Icon name="chevron-up" className="size-3" />
+                    </button>
+                    <button
+                      onClick={() => navigateToResult("next")}
+                      disabled={searchMatchIndices.length === 0}
+                      className="hover:bg-muted p-1 opacity-60 transition-opacity hover:opacity-100 disabled:pointer-events-none disabled:opacity-30"
+                      title="Next (N)"
+                      aria-label="Next search result"
+                    >
+                      <Icon name="chevron-down" className="size-3" />
+                    </button>
+                  </div>
+                ) : null}
+                <Text small muted>
+                  Timestamp
+                </Text>
+                <div className="bg-background flex h-8 items-center gap-2 border px-3">
+                  <Text
+                    small
+                    className={
+                      tsMode === "utc"
+                        ? "text-foreground"
+                        : "text-muted-foreground"
+                    }
+                  >
+                    UTC
+                  </Text>
+                  <Switch
+                    checked={tsMode === "local"}
+                    onCheckedChange={(checked) => {
+                      void setTimestampMode(checked ? "local" : "utc");
+                    }}
+                    aria-label="Toggle timestamp timezone"
+                  />
+                  <Text
+                    small
+                    className={
+                      tsMode === "local"
+                        ? "text-foreground"
+                        : "text-muted-foreground"
+                    }
+                  >
+                    Local
+                  </Text>
+                </div>
+              </div>
+            </Page.Toolbar.Actions>
+          </Page.Toolbar>
         </div>
 
         <div className="bg-card overflow-hidden border">
-          {/* Search toolbar */}
-          {!isLoading && !error && logs.length > 0 && (
-            <div className="bg-card flex items-center gap-2 border-b p-2">
-              <div className="text-muted-foreground flex items-center gap-3 text-[11px]">
-                {searchQuery ? (
-                  <>
-                    <span className="flex items-center gap-1">
-                      <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
-                        N
-                      </kbd>
-                      <span>/</span>
-                      <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
-                        ⇧N
-                      </kbd>
-                      <span className="ml-0.5">results</span>
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
-                        ESC
-                      </kbd>
-                      <span>clear</span>
-                    </span>
-                  </>
-                ) : (
-                  <>
-                    <span className="flex items-center gap-1">
-                      <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
-                        J
-                      </kbd>
-                      <span>/</span>
-                      <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
-                        K
-                      </kbd>
-                      <span className="ml-0.5">navigate</span>
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
-                        G
-                      </kbd>
-                      <span>first</span>
-                    </span>
-                    <span className="flex items-center gap-1">
-                      <kbd className="bg-muted px-1 py-0.5 font-mono text-[10px]">
-                        ⇧G
-                      </kbd>
-                      <span>last</span>
-                    </span>
-                  </>
-                )}
-              </div>
-              <div className="relative ml-auto">
-                <Icon
-                  name="search"
-                  className="text-muted-foreground pointer-events-none absolute top-1/2 left-2 size-3 -translate-y-1/2"
-                />
-                <Input
-                  data-audit-search-input
-                  type="text"
-                  placeholder="Search audit logs"
-                  value={searchQuery}
-                  onChange={handleSearchChange}
-                  onFocus={() => setSearchInputFocused(true)}
-                  onBlur={() => setSearchInputFocused(false)}
-                  className="w-56 py-1 pr-16 pl-7 text-xs"
-                />
-                {searchQuery || searchInputFocused ? (
-                  searchMatchIndices.length > 0 ? (
-                    <div className="absolute top-1/2 right-1 flex -translate-y-1/2 items-center gap-0.5">
-                      <span className="text-muted-foreground bg-muted px-1 py-0.5 text-[10px]">
-                        ESC
-                      </span>
-                      <span className="text-muted-foreground mx-0.5 text-[10px]">
-                        {effectiveSearchIndex + 1}/{searchMatchIndices.length}
-                      </span>
-                      <div className="flex items-center">
-                        <button
-                          onClick={() => navigateToResult("prev")}
-                          className="hover:bg-muted p-0.5 opacity-60 transition-opacity hover:opacity-100"
-                          title="Previous (Shift+N)"
-                        >
-                          <Icon name="chevron-up" className="size-2.5" />
-                        </button>
-                        <button
-                          onClick={() => navigateToResult("next")}
-                          className="hover:bg-muted p-0.5 opacity-60 transition-opacity hover:opacity-100"
-                          title="Next (N)"
-                        >
-                          <Icon name="chevron-down" className="size-2.5" />
-                        </button>
-                      </div>
-                    </div>
-                  ) : (
-                    <div className="absolute top-1/2 right-1.5 flex -translate-y-1/2 items-center gap-0.5">
-                      <span className="text-muted-foreground bg-muted px-1 py-0.5 text-[10px]">
-                        ESC
-                      </span>
-                      <span className="text-muted-foreground ml-0.5 text-[10px]">
-                        0/0
-                      </span>
-                    </div>
-                  )
-                ) : (
-                  <div className="absolute top-1/2 right-2 flex -translate-y-1/2 items-center">
-                    <span className="text-muted-foreground bg-muted px-1 py-0.5 font-mono text-[10px]">
-                      /
-                    </span>
-                  </div>
-                )}
-              </div>
-            </div>
-          )}
-
           <div
             ref={logsContainerRef}
             tabIndex={0}
@@ -1048,44 +1119,87 @@ function OrgAuditLogsInner() {
               </div>
             ) : logs.length === 0 ? (
               <div className="flex flex-col items-center gap-2 py-12 text-center">
-                <Text className="font-medium">No audit logs found</Text>
+                <Text className="font-medium">
+                  {category === "security"
+                    ? "No security activity found"
+                    : "No audit logs found"}
+                </Text>
                 <Text muted small>
-                  {selectedProjectSlug === "all" &&
-                  selectedAction === "all" &&
-                  selectedActor === "all"
-                    ? "Activity will appear here as changes are made across your organization."
-                    : "No audit logs match the selected filters."}
+                  {hasActiveFilters
+                    ? "No audit logs match the selected filters."
+                    : category === "security"
+                      ? "Machine access appears here, such as an agent's runtime admitting its workload identity."
+                      : "Activity will appear here as changes are made across your organization."}
                 </Text>
               </div>
             ) : (
               <div>
-                {dateGroups.map((group) => (
+                {dateRuns.map((group) => (
                   <React.Fragment key={group.key}>
                     <DateGroupHeader date={group.date} mode={tsMode} />
-                    {group.logs.map((log) => {
-                      const idx = logFlatIndices.get(log.id) ?? 0;
+                    {group.runs.map((run) => {
+                      const rows = run.logs.map((log) => {
+                        const idx = logFlatIndices.get(log.id) ?? 0;
+                        return (
+                          <AuditLogRow
+                            key={log.id}
+                            log={log}
+                            identities={identities}
+                            projectSlug={
+                              log.projectSlug ||
+                              (selectedProjectSlug === "all"
+                                ? undefined
+                                : selectedProjectSlug)
+                            }
+                            orgSlug={orgSlug ?? ""}
+                            timestampMode={tsMode}
+                            isHighlighted={idx === currentLogIndex}
+                            rowRef={(el) => {
+                              if (el) logRefs.current.set(idx, el);
+                              else logRefs.current.delete(idx);
+                            }}
+                            highlightMatch={
+                              searchQuery ? highlightMatch : undefined
+                            }
+                          />
+                        );
+                      });
+                      // A lone entry is returned as its own keyed row, not an
+                      // array, so a new entry at the top doesn't remount it.
+                      if (run.logs.length < 2) return rows[0];
                       return (
-                        <AuditLogRow
-                          key={log.id}
-                          log={log}
+                        <ActorRunRow
+                          key={run.key}
+                          run={run}
+                          expanded={expandedRuns.has(run.key)}
+                          onToggle={() => {
+                            // Collapsing the run that holds the selected entry
+                            // clears the selection; otherwise the selection
+                            // would open the run again straight away.
+                            if (
+                              expandedRuns.has(run.key) &&
+                              currentLogIndex !== null &&
+                              collapsibleRunByIndex.get(currentLogIndex) ===
+                                run.key
+                            ) {
+                              setCurrentLogIndex(null);
+                            }
+                            toggleRun(run.key);
+                          }}
                           identities={identities}
                           projectSlug={
-                            log.projectSlug ||
+                            run.logs[0]!.projectSlug ||
                             (selectedProjectSlug === "all"
                               ? undefined
                               : selectedProjectSlug)
                           }
-                          orgSlug={orgSlug ?? ""}
                           timestampMode={tsMode}
-                          isHighlighted={idx === currentLogIndex}
-                          rowRef={(el) => {
-                            if (el) logRefs.current.set(idx, el);
-                            else logRefs.current.delete(idx);
-                          }}
                           highlightMatch={
                             searchQuery ? highlightMatch : undefined
                           }
-                        />
+                        >
+                          {rows}
+                        </ActorRunRow>
                       );
                     })}
                   </React.Fragment>

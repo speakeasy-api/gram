@@ -14,11 +14,14 @@ import (
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/agents"
+	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/securityevent"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -191,7 +194,10 @@ func (s *ServiceCore) provisionKitWorkload(ctx context.Context, r assistantRunti
 		if err != nil {
 			return nil, fmt.Errorf("provision kit workload: %w", err)
 		}
-		if err := s.audit.LogWorkloadIssuerCreate(ctx, db, audit.LogWorkloadIssuerCreateEvent{ActorDisplayName: nil, ActorSlug: nil, OrganizationID: identity.OrganizationID, ProjectID: project, Actor: urn.NewSystemPrincipal("kit-runtime"), IssuerURN: urn.NewWorkloadIssuer(issuer.ID), IssuerName: issuer.Name, IssuerSnapshotAfter: kitWorkloadIssuerSnapshot(issuer)}); err != nil {
+		// Every assistant in the project shares this issuer, so its creation is
+		// the runtime's, not the agent whose start happened to trigger it. That
+		// agent is kept as provenance without implying it owns the issuer.
+		if err := s.audit.LogWorkloadIssuerCreate(ctx, db, audit.LogWorkloadIssuerCreateEvent{ActorDisplayName: nil, ActorSlug: nil, OrganizationID: identity.OrganizationID, ProjectID: project, Actor: urn.NewSystemPrincipal("kit-runtime"), IssuerURN: urn.NewWorkloadIssuer(issuer.ID), IssuerName: issuer.Name, IssuerSnapshotAfter: kitWorkloadIssuerSnapshot(issuer), Metadata: map[string]any{"triggered_by": agentPrincipal.String()}}); err != nil {
 			return nil, fmt.Errorf("provision kit workload: %w", err)
 		}
 	}
@@ -239,7 +245,7 @@ func (s *ServiceCore) provisionKitWorkload(ctx context.Context, r assistantRunti
 		if err != nil {
 			return nil, fmt.Errorf("provision kit workload: %w", err)
 		}
-		if err := s.audit.LogWorkloadAdmissionAdmit(ctx, db, audit.LogWorkloadAdmissionAdmitEvent{ActorDisplayName: nil, ActorSlug: nil, OrganizationID: identity.OrganizationID, ProjectID: project, Actor: urn.NewSystemPrincipal("kit-runtime"), AdmissionURN: urn.NewWorkloadAdmission(admission.ID), AdmissionDisplayName: subject, AdmissionSnapshotAfter: kitWorkloadAdmissionSnapshot(admission, issuer, identity.AgentID.String())}); err != nil {
+		if err := securityevent.LogWorkloadAdmissionAdmit(ctx, db, audit.LogWorkloadAdmissionAdmitEvent{ActorDisplayName: conv.PtrEmpty(agent.Name), ActorSlug: nil, OrganizationID: identity.OrganizationID, ProjectID: project, Actor: urn.NewPrincipal(urn.PrincipalTypeAgent, identity.AgentID.String()), AdmissionURN: urn.NewWorkloadAdmission(admission.ID), AdmissionDisplayName: subject, AdmissionSnapshotAfter: kitWorkloadAdmissionSnapshot(admission, issuer, identity.AgentID.String())}); err != nil {
 			return nil, fmt.Errorf("provision kit workload: %w", err)
 		}
 	}
@@ -331,14 +337,15 @@ func (s *ServiceCore) revokeKitWorkload(ctx context.Context, db assistantrepo.DB
 			return ErrKitRuntimeBinding
 		}
 		owned = true
-		if s.audit == nil {
-			return errors.New("kit workload withdrawal requires audit logging")
-		}
 		admission, err := q.GetWorkloadAdmission(ctx, workloadrepo.GetWorkloadAdmissionParams{OrganizationID: b.Identity.OrganizationID, ProjectID: project, ID: a.ID})
 		if err != nil {
 			return fmt.Errorf("revoke kit workload: %w", err)
 		}
-		if err := s.audit.LogWorkloadAdmissionWithdraw(ctx, db, audit.LogWorkloadAdmissionWithdrawEvent{ActorDisplayName: nil, ActorSlug: nil, OrganizationID: b.Identity.OrganizationID, ProjectID: project, Actor: urn.NewSystemPrincipal("kit-runtime"), AdmissionURN: urn.NewWorkloadAdmission(a.ID), AdmissionDisplayName: a.Subject, AdmissionSnapshotBefore: kitWorkloadAdmissionSnapshot(admission, issuer, b.Identity.AgentID.String())}); err != nil {
+		agentName, err := kitAgentDisplayName(ctx, db, b.Identity.OrganizationID, b.Identity.AgentID)
+		if err != nil {
+			return fmt.Errorf("revoke kit workload: %w", err)
+		}
+		if err := securityevent.LogWorkloadAdmissionWithdraw(ctx, db, audit.LogWorkloadAdmissionWithdrawEvent{ActorDisplayName: agentName, ActorSlug: nil, OrganizationID: b.Identity.OrganizationID, ProjectID: project, Actor: urn.NewPrincipal(urn.PrincipalTypeAgent, b.Identity.AgentID.String()), AdmissionURN: urn.NewWorkloadAdmission(a.ID), AdmissionDisplayName: a.Subject, AdmissionSnapshotBefore: kitWorkloadAdmissionSnapshot(admission, issuer, b.Identity.AgentID.String())}); err != nil {
 			return fmt.Errorf("revoke kit workload: %w", err)
 		}
 		if _, err := q.SoftDeleteWorkloadAdmission(ctx, workloadrepo.SoftDeleteWorkloadAdmissionParams{OrganizationID: b.Identity.OrganizationID, ProjectID: project, ID: a.ID}); err != nil {
@@ -360,6 +367,21 @@ func (s *ServiceCore) revokeKitWorkload(ctx context.Context, db assistantrepo.DB
 		return fmt.Errorf("withdraw kit workload assignment: %w", err)
 	}
 	return nil
+}
+
+// kitAgentDisplayName names the agent on its audit entries, so the entry stays
+// readable after the agent is deleted. A runtime is withdrawn after its agent
+// is deleted too, so deleted agents are read. Nil only when there is no such
+// agent, which leaves the entry naming it by id.
+func kitAgentDisplayName(ctx context.Context, db assistantrepo.DBTX, organizationID string, agentID uuid.UUID) (*string, error) {
+	name, err := agentrepo.New(db).GetAgentNameIncludingDeleted(ctx, agentrepo.GetAgentNameIncludingDeletedParams{OrganizationID: organizationID, ID: agentID})
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, nil
+	case err != nil:
+		return nil, fmt.Errorf("read agent name: %w", err)
+	}
+	return conv.PtrEmpty(name), nil
 }
 
 func kitWorkloadInferenceAllowed(project uuid.UUID, policies ...[]authz.Grant) error {

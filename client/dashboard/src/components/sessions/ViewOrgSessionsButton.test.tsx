@@ -1,4 +1,5 @@
 import { cleanup, render, screen } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import { ViewOrgSessionsButton } from "./ViewOrgSessionsButton";
@@ -17,16 +18,8 @@ vi.mock("@/hooks/useRBAC", () => ({
   }),
 }));
 
-// The route helper resolves :orgSlug from the URL and renders a react-router
-// Link; stubbing it keeps this test off the router.
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    mcpSessions: {
-      Link: ({ children }: { children: React.ReactNode }) => (
-        <a href="/org-slug/projects/project-slug/mcp-sessions">{children}</a>
-      ),
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org-slug", projectSlug: "project-slug" }),
 }));
 
 function link() {
@@ -46,7 +39,7 @@ describe("ViewOrgSessionsButton", () => {
   });
 
   it("links to the project MCP Sessions page with read access", () => {
-    render(<ViewOrgSessionsButton />);
+    render(<ViewOrgSessionsButton />, { wrapper: MemoryRouter });
 
     expect(link()?.getAttribute("href")).toBe(
       "/org-slug/projects/project-slug/mcp-sessions",
@@ -57,7 +50,7 @@ describe("ViewOrgSessionsButton", () => {
   it("renders nothing without read access to the active project", () => {
     hasScope.mockReturnValue(false);
 
-    render(<ViewOrgSessionsButton />);
+    render(<ViewOrgSessionsButton />, { wrapper: MemoryRouter });
 
     expect(link()).toBeNull();
   });

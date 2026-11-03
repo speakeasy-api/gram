@@ -50,16 +50,37 @@ export type RegistryJsonEditorProps = {
 // Keep the existing 8 MiB contract without running Monaco/AST work over huge
 // documents. This is a presentation fallback, not a smaller input limit.
 const RICH_EDITOR_LIMIT = 1024 * 1024;
+// The editor grows with its content so the page, not the editor, scrolls. This
+// keeps an empty or short record from collapsing to a sliver.
+const MIN_EDITOR_HEIGHT = 128;
 
 export default class RegistryJsonEditor extends Component<RegistryJsonEditorProps> {
   // Admin CSS follows the system preference; it has no theme override.
   private readonly colorScheme = window.matchMedia(
     "(prefers-color-scheme: dark)",
   );
-  state = { mounted: false, dark: this.colorScheme.matches };
+  state = {
+    mounted: false,
+    dark: this.colorScheme.matches,
+    height: MIN_EDITOR_HEIGHT,
+  };
 
   componentDidMount(): void {
     this.colorScheme.addEventListener("change", this.updateTheme);
+    this.fitTextarea();
+    // Wrapping depends on width. Refit only when the width changes, since a
+    // refit changes the height and would otherwise notify again.
+    if (this.textarea && typeof ResizeObserver !== "undefined") {
+      let width: number | undefined;
+      this.resizeObserver = new ResizeObserver(([entry]) => {
+        const next = entry?.contentRect.width;
+        if (next === undefined || next === width) return;
+        const first = width === undefined;
+        width = next;
+        if (!first) this.fitTextarea();
+      });
+      this.resizeObserver.observe(this.textarea);
+    }
   }
 
   private updateTheme = (): void => {
@@ -70,10 +91,13 @@ export default class RegistryJsonEditor extends Component<RegistryJsonEditorProp
   private readonly large = this.props.value.length > RICH_EDITOR_LIMIT;
   private readonly modelPath = `gram-registry://draft/${crypto.randomUUID()}.json`;
   private editor: monaco.editor.IStandaloneCodeEditor | null = null;
+  private textarea: HTMLTextAreaElement | null = null;
+  private resizeObserver: ResizeObserver | null = null;
   private subscriptions: monaco.IDisposable[] = [];
 
   componentWillUnmount(): void {
     this.colorScheme.removeEventListener("change", this.updateTheme);
+    this.resizeObserver?.disconnect();
     this.disposeSubscriptions();
   }
 
@@ -102,16 +126,41 @@ export default class RegistryJsonEditor extends Component<RegistryJsonEditorProp
     current.pushUndoStop();
   };
 
+  private fitEditor = (): void => {
+    const height = Math.max(
+      MIN_EDITOR_HEIGHT,
+      this.editor?.getContentHeight() ?? 0,
+    );
+    if (height !== this.state.height) this.setState({ height });
+  };
+
+  // Measure from `auto` so the box can shrink as well as grow; the border is
+  // added back because scrollHeight leaves it out. The holder keeps its height
+  // while measuring so the page does not collapse and lose its scroll position.
+  private fitTextarea = (): void => {
+    const textarea = this.textarea;
+    if (!textarea) return;
+    const holder = textarea.parentElement;
+    if (holder) holder.style.minHeight = `${holder.offsetHeight}px`;
+    textarea.style.height = "auto";
+    const border = textarea.offsetHeight - textarea.clientHeight;
+    textarea.style.height = `${Math.max(MIN_EDITOR_HEIGHT, textarea.scrollHeight + border)}px`;
+    if (holder) holder.style.minHeight = "";
+  };
+
   private onMount: OnMount = (current) => {
     this.editor = current;
     this.subscriptions = [
       current.onDidPaste(this.formatDocument),
+      current.onDidContentSizeChange(this.fitEditor),
       current.onDidDispose(this.disposeSubscriptions),
     ];
     this.setState({ mounted: true });
+    this.fitEditor();
   };
 
-  componentDidUpdate(): void {
+  componentDidUpdate(previous: RegistryJsonEditorProps): void {
+    if (previous.value !== this.props.value) this.fitTextarea();
     const { value, describedBy, invalid, issues } = this.props;
     const editor = this.editor;
     const inputs = editor
@@ -158,7 +207,7 @@ export default class RegistryJsonEditor extends Component<RegistryJsonEditorProp
     const { value, onChange, onBlur, disabled, invalid, describedBy } =
       this.props;
     return (
-      <div className="flex min-h-64 flex-1 flex-col gap-2">
+      <div className="flex flex-col gap-2">
         <div className="flex shrink-0 items-center justify-between gap-3">
           <p className="text-sm font-medium">Record JSON</p>
           {!this.large && (
@@ -185,7 +234,10 @@ export default class RegistryJsonEditor extends Component<RegistryJsonEditorProp
               aria-label="Record JSON"
               aria-describedby={describedBy}
               aria-invalid={invalid}
-              className="border-input min-h-48 w-full flex-1 resize-none rounded-md border p-3 font-mono text-sm"
+              ref={(element) => {
+                this.textarea = element;
+              }}
+              className="border-input w-full resize-none overflow-hidden rounded-md border p-3 font-mono text-sm"
               value={value}
               disabled={disabled}
               onChange={(event) => onChange(event.target.value)}
@@ -195,7 +247,9 @@ export default class RegistryJsonEditor extends Component<RegistryJsonEditorProp
         ) : (
           <>
             <div
-              className="border-input min-h-48 flex-1 overflow-hidden rounded-md border py-2"
+              // Content box, so the measured height is the editor's own.
+              className="border-input box-content overflow-hidden rounded-md border py-2"
+              style={{ height: this.state.height }}
               onBlur={onBlur}
             >
               <MonacoEditor
@@ -228,6 +282,8 @@ export default class RegistryJsonEditor extends Component<RegistryJsonEditorProp
                   formatOnType: false,
                   automaticLayout: true,
                   scrollBeyondLastLine: false,
+                  // Nothing to scroll inside, so the wheel scrolls the page.
+                  scrollbar: { alwaysConsumeMouseWheel: false },
                   accessibilitySupport: "on",
                   maxTokenizationLineLength: 10000,
                 }}

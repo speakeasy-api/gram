@@ -339,22 +339,21 @@ export function AgentKeyServers({
               </label>
               {checked &&
                 (server.kind === "Remote" || server.kind === "Tunneled") && (
-                  <div className="px-4 pb-4 pl-[4.25rem]">
-                    <KeyCredentialChoice
-                      serverId={server.id}
-                      serverName={server.name}
-                      value={
-                        selected.find((s) => s.id === server.id)?.authClientId
-                      }
-                      onChange={(authClientId) =>
-                        onChange(
-                          selected.map((s) =>
-                            s.id === server.id ? { ...s, authClientId } : s,
-                          ),
-                        )
-                      }
-                    />
-                  </div>
+                  <KeyCredentialChoice
+                    className="px-4 pb-4 pl-[4.25rem]"
+                    serverId={server.id}
+                    serverName={server.name}
+                    value={
+                      selected.find((s) => s.id === server.id)?.authClientId
+                    }
+                    onChange={(authClientId) =>
+                      onChange(
+                        selected.map((s) =>
+                          s.id === server.id ? { ...s, authClientId } : s,
+                        ),
+                      )
+                    }
+                  />
                 )}
             </div>
           );
@@ -387,7 +386,7 @@ export function AgentKeyServers({
   );
 }
 
-export function ServerAccounts({
+function ServerAccounts({
   agent,
   servers,
   onReady,

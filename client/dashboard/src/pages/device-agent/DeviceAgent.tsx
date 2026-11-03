@@ -16,9 +16,10 @@ import React from "react";
 import { Navigate, Outlet, useLocation, useNavigate } from "react-router";
 import { AiScanTargetsSection } from "./ai-scan-targets";
 import { DeviceAgentConfigurationTab } from "./device-agent-configuration";
+import { DeviceAgentDevicesTab } from "./device-agent-devices";
 import { DeviceAgentSetup } from "./device-agent-setup";
 
-// Route shell shared by the setup, configuration, and MDM pages.
+// Route shell shared by the setup, devices, configuration, and MDM pages.
 export function DeviceAgentRoot(): React.JSX.Element {
   return <Outlet />;
 }
@@ -56,18 +57,22 @@ function DeviceAgentTabs() {
   // switches never build double-slash URLs.
   const segments = location.pathname.split("/").filter(Boolean);
   const lastSegment = segments[segments.length - 1] ?? "";
+  const onDevicesTab = lastSegment === "devices";
   const onConfigurationTab = lastSegment === "configuration";
   const onScanTargetsTab = lastSegment === "scan-targets";
   const onMdmTab = lastSegment === "mdm-integrations";
   let currentTab = "setup";
-  if (onConfigurationTab && canConfigure) {
+  if (onDevicesTab) {
+    currentTab = "devices";
+  } else if (onConfigurationTab && canConfigure) {
     currentTab = "configuration";
   } else if (onScanTargetsTab && canConfigure) {
     currentTab = "scan-targets";
   } else if (onMdmTab) {
     currentTab = "mdm-integrations";
   }
-  const onSubTab = onMdmTab || onConfigurationTab || onScanTargetsTab;
+  const onSubTab =
+    onDevicesTab || onMdmTab || onConfigurationTab || onScanTargetsTab;
   const basePath =
     "/" + (onSubTab ? segments.slice(0, -1) : segments).join("/");
 
@@ -102,6 +107,7 @@ function DeviceAgentTabs() {
         <div className="border-border -mx-8 border-b px-8">
           <PageTabsList>
             <PageTabsTrigger value="setup">Setup</PageTabsTrigger>
+            <PageTabsTrigger value="devices">Devices</PageTabsTrigger>
             {canConfigure && (
               <PageTabsTrigger value="configuration">
                 Configuration
@@ -126,6 +132,10 @@ function DeviceAgentTabs() {
 
         <TabsContent value="setup" className="mt-6">
           <DeviceAgentSetup />
+        </TabsContent>
+
+        <TabsContent value="devices" className="mt-6">
+          <DeviceAgentDevicesTab />
         </TabsContent>
 
         {canConfigure && (

@@ -416,7 +416,7 @@ func (s *Service) handleWorkloadAssertionGrant(
 	case assertion == "":
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "assertion is required")
 	case len(resources) == 0:
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "resource is required")
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, "resource is required")
 	}
 	canonicalResource, err := endpoint.RootURL(baseURL)
 	if err != nil {

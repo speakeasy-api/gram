@@ -29,6 +29,9 @@ import { Route as OrganizationsIndexRouteImport } from './routes/organizations.i
 import { Route as OrganizationsIdOrSlugRouteImport } from './routes/organizations.$idOrSlug'
 import { Route as ProjectsIndexRouteImport } from './routes/projects.index'
 import { Route as ProjectsIdOrSlugRouteImport } from './routes/projects.$idOrSlug'
+import { Route as RegistryIndexRouteImport } from './routes/registry.index'
+import { Route as RegistryEntryIdRouteImport } from './routes/registry.$entryId'
+import { Route as RegistryNewRouteImport } from './routes/registry.new'
 import { Route as RemoteSessionIssuersIndexRouteImport } from './routes/remote-session-issuers.index'
 import { Route as RemoteSessionIssuersIssuerIdRouteImport } from './routes/remote-session-issuers.$issuerId'
 import { Route as UsersIndexRouteImport } from './routes/users.index'
@@ -147,6 +150,21 @@ const ProjectsIdOrSlugRoute = ProjectsIdOrSlugRouteImport.update({
   path: '/$idOrSlug',
   getParentRoute: () => ProjectsRoute,
 } as any)
+const RegistryIndexRoute = RegistryIndexRouteImport.update({
+  id: '/',
+  path: '/',
+  getParentRoute: () => RegistryRoute,
+} as any)
+const RegistryEntryIdRoute = RegistryEntryIdRouteImport.update({
+  id: '/$entryId',
+  path: '/$entryId',
+  getParentRoute: () => RegistryRoute,
+} as any)
+const RegistryNewRoute = RegistryNewRouteImport.update({
+  id: '/new',
+  path: '/new',
+  getParentRoute: () => RegistryRoute,
+} as any)
 const RemoteSessionIssuersIndexRoute =
   RemoteSessionIssuersIndexRouteImport.update({
     id: '/',
@@ -260,7 +278,7 @@ export interface FileRoutesByFullPath {
   '/onboarding-steps': typeof OnboardingStepsRoute
   '/organizations': typeof OrganizationsRouteWithChildren
   '/projects': typeof ProjectsRouteWithChildren
-  '/registry': typeof RegistryRoute
+  '/registry': typeof RegistryRouteWithChildren
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
   '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
@@ -268,9 +286,12 @@ export interface FileRoutesByFullPath {
   '/users': typeof UsersRouteWithChildren
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
+  '/registry/$entryId': typeof RegistryEntryIdRoute
+  '/registry/new': typeof RegistryNewRoute
   '/remote-session-issuers/$issuerId': typeof RemoteSessionIssuersIssuerIdRouteWithChildren
   '/organizations/': typeof OrganizationsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
+  '/registry/': typeof RegistryIndexRoute
   '/remote-session-issuers/': typeof RemoteSessionIssuersIndexRoute
   '/users/': typeof UsersIndexRoute
   '/organizations/$idOrSlug/activity': typeof OrganizationsIdOrSlugActivityRoute
@@ -297,13 +318,15 @@ export interface FileRoutesByTo {
   '/mcp-setup': typeof McpSetupRoute
   '/onboarding-playbooks': typeof OnboardingPlaybooksRoute
   '/onboarding-steps': typeof OnboardingStepsRoute
-  '/registry': typeof RegistryRoute
   '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
   '/upstream-oauth-migration': typeof UpstreamOauthMigrationRoute
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
+  '/registry/$entryId': typeof RegistryEntryIdRoute
+  '/registry/new': typeof RegistryNewRoute
   '/organizations': typeof OrganizationsIndexRoute
   '/projects': typeof ProjectsIndexRoute
+  '/registry': typeof RegistryIndexRoute
   '/remote-session-issuers': typeof RemoteSessionIssuersIndexRoute
   '/users': typeof UsersIndexRoute
   '/organizations/$idOrSlug/activity': typeof OrganizationsIdOrSlugActivityRoute
@@ -332,7 +355,7 @@ export interface FileRoutesById {
   '/onboarding-steps': typeof OnboardingStepsRoute
   '/organizations': typeof OrganizationsRouteWithChildren
   '/projects': typeof ProjectsRouteWithChildren
-  '/registry': typeof RegistryRoute
+  '/registry': typeof RegistryRouteWithChildren
   '/remote-session-issuers': typeof RemoteSessionIssuersRouteWithChildren
   '/signup-offers': typeof SignupOffersRoute
   '/stoken-calculator': typeof StokenCalculatorRoute
@@ -340,9 +363,12 @@ export interface FileRoutesById {
   '/users': typeof UsersRouteWithChildren
   '/organizations/$idOrSlug': typeof OrganizationsIdOrSlugRouteWithChildren
   '/projects/$idOrSlug': typeof ProjectsIdOrSlugRoute
+  '/registry/$entryId': typeof RegistryEntryIdRoute
+  '/registry/new': typeof RegistryNewRoute
   '/remote-session-issuers/$issuerId': typeof RemoteSessionIssuersIssuerIdRouteWithChildren
   '/organizations/': typeof OrganizationsIndexRoute
   '/projects/': typeof ProjectsIndexRoute
+  '/registry/': typeof RegistryIndexRoute
   '/remote-session-issuers/': typeof RemoteSessionIssuersIndexRoute
   '/users/': typeof UsersIndexRoute
   '/organizations/$idOrSlug/activity': typeof OrganizationsIdOrSlugActivityRoute
@@ -381,9 +407,12 @@ export interface FileRouteTypes {
     | '/users'
     | '/organizations/$idOrSlug'
     | '/projects/$idOrSlug'
+    | '/registry/$entryId'
+    | '/registry/new'
     | '/remote-session-issuers/$issuerId'
     | '/organizations/'
     | '/projects/'
+    | '/registry/'
     | '/remote-session-issuers/'
     | '/users/'
     | '/organizations/$idOrSlug/activity'
@@ -410,13 +439,15 @@ export interface FileRouteTypes {
     | '/mcp-setup'
     | '/onboarding-playbooks'
     | '/onboarding-steps'
-    | '/registry'
     | '/signup-offers'
     | '/stoken-calculator'
     | '/upstream-oauth-migration'
     | '/projects/$idOrSlug'
+    | '/registry/$entryId'
+    | '/registry/new'
     | '/organizations'
     | '/projects'
+    | '/registry'
     | '/remote-session-issuers'
     | '/users'
     | '/organizations/$idOrSlug/activity'
@@ -452,9 +483,12 @@ export interface FileRouteTypes {
     | '/users'
     | '/organizations/$idOrSlug'
     | '/projects/$idOrSlug'
+    | '/registry/$entryId'
+    | '/registry/new'
     | '/remote-session-issuers/$issuerId'
     | '/organizations/'
     | '/projects/'
+    | '/registry/'
     | '/remote-session-issuers/'
     | '/users/'
     | '/organizations/$idOrSlug/activity'
@@ -484,7 +518,7 @@ export interface RootRouteChildren {
   OnboardingStepsRoute: typeof OnboardingStepsRoute
   OrganizationsRoute: typeof OrganizationsRouteWithChildren
   ProjectsRoute: typeof ProjectsRouteWithChildren
-  RegistryRoute: typeof RegistryRoute
+  RegistryRoute: typeof RegistryRouteWithChildren
   RemoteSessionIssuersRoute: typeof RemoteSessionIssuersRouteWithChildren
   SignupOffersRoute: typeof SignupOffersRoute
   StokenCalculatorRoute: typeof StokenCalculatorRoute
@@ -633,6 +667,27 @@ declare module '@tanstack/react-router' {
       fullPath: '/projects/$idOrSlug'
       preLoaderRoute: typeof ProjectsIdOrSlugRouteImport
       parentRoute: typeof ProjectsRoute
+    }
+    '/registry/': {
+      id: '/registry/'
+      path: '/'
+      fullPath: '/registry/'
+      preLoaderRoute: typeof RegistryIndexRouteImport
+      parentRoute: typeof RegistryRoute
+    }
+    '/registry/$entryId': {
+      id: '/registry/$entryId'
+      path: '/$entryId'
+      fullPath: '/registry/$entryId'
+      preLoaderRoute: typeof RegistryEntryIdRouteImport
+      parentRoute: typeof RegistryRoute
+    }
+    '/registry/new': {
+      id: '/registry/new'
+      path: '/new'
+      fullPath: '/registry/new'
+      preLoaderRoute: typeof RegistryNewRouteImport
+      parentRoute: typeof RegistryRoute
     }
     '/remote-session-issuers/': {
       id: '/remote-session-issuers/'
@@ -834,6 +889,22 @@ const ProjectsRouteWithChildren = ProjectsRoute._addFileChildren(
   ProjectsRouteChildren,
 )
 
+interface RegistryRouteChildren {
+  RegistryEntryIdRoute: typeof RegistryEntryIdRoute
+  RegistryNewRoute: typeof RegistryNewRoute
+  RegistryIndexRoute: typeof RegistryIndexRoute
+}
+
+const RegistryRouteChildren: RegistryRouteChildren = {
+  RegistryEntryIdRoute: RegistryEntryIdRoute,
+  RegistryNewRoute: RegistryNewRoute,
+  RegistryIndexRoute: RegistryIndexRoute,
+}
+
+const RegistryRouteWithChildren = RegistryRoute._addFileChildren(
+  RegistryRouteChildren,
+)
+
 interface RemoteSessionIssuersIssuerIdRouteChildren {
   RemoteSessionIssuersIssuerIdConvergenceRoute: typeof RemoteSessionIssuersIssuerIdConvergenceRoute
   RemoteSessionIssuersIssuerIdSettingsRoute: typeof RemoteSessionIssuersIssuerIdSettingsRoute
@@ -890,7 +961,7 @@ const rootRouteChildren: RootRouteChildren = {
   OnboardingStepsRoute: OnboardingStepsRoute,
   OrganizationsRoute: OrganizationsRouteWithChildren,
   ProjectsRoute: ProjectsRouteWithChildren,
-  RegistryRoute: RegistryRoute,
+  RegistryRoute: RegistryRouteWithChildren,
   RemoteSessionIssuersRoute: RemoteSessionIssuersRouteWithChildren,
   SignupOffersRoute: SignupOffersRoute,
   StokenCalculatorRoute: StokenCalculatorRoute,

@@ -5,8 +5,22 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * What kind of event the entry records: 'configuration' for a change to the platform's configuration, 'security' for machine access and other security-relevant activity that is not a configuration decision. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.
+ */
+export const AuditLogCategory = {
+  Configuration: "configuration",
+  Security: "security",
+} as const;
+/**
+ * What kind of event the entry records: 'configuration' for a change to the platform's configuration, 'security' for machine access and other security-relevant activity that is not a configuration decision. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.
+ */
+export type AuditLogCategory = OpenEnum<typeof AuditLogCategory>;
 
 export type AuditLog = {
   /**
@@ -25,6 +39,10 @@ export type AuditLog = {
   afterSnapshot?: any | undefined;
   beforeSnapshot?: any | undefined;
   /**
+   * What kind of event the entry records: 'configuration' for a change to the platform's configuration, 'security' for machine access and other security-relevant activity that is not a configuration decision. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.
+   */
+  category?: AuditLogCategory | undefined;
+  /**
    * The creation date of the audit log.
    */
   createdAt: Date;
@@ -39,6 +57,12 @@ export type AuditLog = {
 };
 
 /** @internal */
+export const AuditLogCategory$inboundSchema: z.ZodMiniType<
+  AuditLogCategory,
+  unknown
+> = openEnums.inboundSchema(AuditLogCategory);
+
+/** @internal */
 export const AuditLog$inboundSchema: z.ZodMiniType<AuditLog, unknown> = z.pipe(
   z.object({
     acting_client_id: z.optional(z.string()),
@@ -50,6 +74,7 @@ export const AuditLog$inboundSchema: z.ZodMiniType<AuditLog, unknown> = z.pipe(
     actor_type: z.string(),
     after_snapshot: z.optional(z.any()),
     before_snapshot: z.optional(z.any()),
+    category: z.optional(AuditLogCategory$inboundSchema),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),

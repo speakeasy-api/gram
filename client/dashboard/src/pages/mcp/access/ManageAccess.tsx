@@ -1,3 +1,4 @@
+import type { ToolSource } from "@/pages/access/useServerTools";
 import { supportsAudienceReading } from "./manageAccessState";
 import {
   InlineChoice,
@@ -119,6 +120,7 @@ export function ManageAccess({
   entries,
   version,
   toolCatalog,
+  toolSource,
   isLoading,
   rolePlugins,
 }: {
@@ -129,6 +131,7 @@ export function ManageAccess({
   version: string;
   /** The server's tools, when this backend exposes a catalogue. */
   toolCatalog?: ToolSelectionTool[];
+  toolSource?: ToolSource;
   isLoading: boolean;
   rolePlugins?: ResourceAudienceRolePlugin[];
 }): JSX.Element {
@@ -498,6 +501,7 @@ export function ManageAccess({
           serverId={resourceId}
           serverName={resourceName}
           catalog={narrowing.catalog ?? toolCatalog}
+          toolSource={toolSource}
           limitedBy={narrowing.limitedBy}
           tools={narrowing.tools}
           dispositions={narrowing.dispositions}

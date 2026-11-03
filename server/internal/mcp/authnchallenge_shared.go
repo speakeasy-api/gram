@@ -28,10 +28,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orggateway"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -138,6 +142,10 @@ type sharedResource struct {
 	// origin is the request authority the request-origin middleware would stamp
 	// on a request to the resource's own host.
 	origin requestorigin.Origin
+
+	// organizationGatewayDefault is set when an ID-JAG exchange naming no
+	// resource was sent to the organization gateway.
+	organizationGatewayDefault bool
 }
 
 // servingSharedAuthorizationServer returns the shared authorization server
@@ -181,6 +189,27 @@ func (s *Service) sharedAuthorizationServerHosts() authserver.Hosts {
 // an organization issuer with an explicit trust link to an upstream issuer.
 func issuerIDJAGConfigured(issuer usersessions_repo.UserSessionIssuer) bool {
 	return !issuer.ProjectID.Valid && issuer.OrganizationID.Valid && issuer.TrustedRemoteSessionIssuerID.Valid
+}
+
+// idJAGAdvertised reports whether the validator's trust lookup would accept
+// ID-JAGs for an issuer whose admission admits some client. Only admitted
+// client ID metadata document clients may exchange one, so disabled admission
+// leaves the grant unusable. Only that or a missing or unusable trust link
+// omits the grant; any other lookup error is returned so metadata fails closed.
+func (s *Service) idJAGAdvertised(ctx context.Context, logger *slog.Logger, organizationID string, issuerID uuid.UUID, cimdAdmissionModeRaw pgtype.Text) (bool, error) {
+	if mode, _ := admission.ResolveMode(cimdAdmissionModeRaw.String, cimdAdmissionModeRaw.Valid); mode == admission.ModeDisabled {
+		return false, nil
+	}
+	_, err := s.idJAGTrust.TrustedIssuer(ctx, organizationID, issuerID)
+	switch {
+	case err == nil:
+		return true, nil
+	case errors.Is(err, idjag.ErrNoTrustedIssuer), errors.Is(err, idjag.ErrTrustedIssuerHasNoJWKS):
+		logger.InfoContext(ctx, "ID-JAG grant not advertised", attr.SlogError(err))
+		return false, nil
+	default:
+		return false, fmt.Errorf("load ID-JAG trust link: %w", err)
+	}
 }
 
 // sharedAuthorizationServerFor builds the shared authorization server of an
@@ -390,8 +419,66 @@ func (s *Service) resolveSharedResource(ctx context.Context, logger *slog.Logger
 	if resource != canonical {
 		return nil, sharedResourceMalformed, nil
 	}
-	endpoint.sharedResource = &sharedResource{origin: origin}
+	endpoint.sharedResource = &sharedResource{origin: origin, organizationGatewayDefault: false}
 	return endpoint, sharedResourceAccepted, nil
+}
+
+// idJAGResourceSourceOrganizationGateway is the logged resource source of an
+// ID-JAG exchange sent to the organization gateway because nothing named a
+// resource.
+const idJAGResourceSourceOrganizationGateway = "organization_gateway_default"
+
+// sharedOrganizationGatewayResource resolves the organization gateway that an
+// ID-JAG exchange naming no resource, in neither the request nor the
+// assertion, is sent to. That is the gateway served for the issuer's
+// organization when it signs users in through this shared authorization
+// server, at the URL the organization's members are given. It returns a nil
+// endpoint when there is none.
+func (s *Service) sharedOrganizationGatewayResource(ctx context.Context, logger *slog.Logger, issuer *sharedIssuer) (*ResolvedMcpEndpoint, string, error) {
+	organization, err := s.orgsRepo.GetOrganizationMetadata(ctx, issuer.organizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return nil, "", nil
+	case err != nil:
+		return nil, "", fmt.Errorf("load organization for gateway default: %w", err)
+	}
+	gatewayIssuerID, unavailable, err := orggateway.Availability(ctx, s.db, organization)
+	if err != nil {
+		return nil, "", fmt.Errorf("resolve organization gateway default: %w", err)
+	}
+	if unavailable != orggateway.UnavailabilityNone || gatewayIssuerID != issuer.authorizationServer.issuerID {
+		return nil, "", nil
+	}
+
+	// Bind to the host the client discovered the resource on (RFC 9728); the auth host uses the stored default.
+	var baseURL *url.URL
+	if origin, ok := requestorigin.FromContext(ctx); ok && !OnAuthenticationHost(ctx) && origin.Surface == requestorigin.SurfacePlatform && origin.BaseURL != "" {
+		baseURL, err = url.Parse(origin.BaseURL)
+		if err != nil {
+			return nil, "", fmt.Errorf("parse organization gateway base URL: %w", err)
+		}
+	} else {
+		hosts := orghost.New(orghost.Config{
+			ServerURL:                  s.serverURL,
+			SiteURL:                    nil,
+			PlatformHosts:              s.platformHosts,
+			LegacyDefaultHost:          nil,
+			NewOrganizationDefaultHost: nil,
+		})
+		baseURL, _ = hosts.StoredPlatformBaseURLsOr(organization.DefaultHost, s.serverURL, nil)
+	}
+	resource := orggateway.URL(baseURL, organization.Slug)
+
+	endpoint, rejection, err := s.resolveSharedResource(ctx, logger, issuer.authorizationServer, resource)
+	if err != nil {
+		return nil, "", err
+	}
+	if rejection != sharedResourceAccepted {
+		logger.InfoContext(ctx, "organization gateway default not resolvable", attr.SlogOAuthFailureReason(string(rejection)))
+		return nil, "", nil
+	}
+	endpoint.sharedResource.organizationGatewayDefault = true
+	return endpoint, resource, nil
 }
 
 // sharedResourceContext derives the request context a request to the
@@ -459,6 +546,12 @@ func (s *Service) sharedResourceContext(ctx context.Context, host string) (conte
 // unknown issuers are refused before their resource is read, so the metric's
 // issuer dimension only ever carries ids of real shared issuers.
 func (s *Service) recordSharedResourceRejection(ctx context.Context, logger *slog.Logger, issuerID uuid.UUID, stage mcpmetrics.OAuthFlowStage, rejection sharedResourceRejection, resources []string) {
+	s.recordSharedResourceRejectionAs(ctx, logger, "shared authorization server refused resource indicator", issuerID, stage, rejection, resources)
+}
+
+// recordSharedResourceRejectionAs is recordSharedResourceRejection under
+// message, with extra attributes on its one log line.
+func (s *Service) recordSharedResourceRejectionAs(ctx context.Context, logger *slog.Logger, message string, issuerID uuid.UUID, stage mcpmetrics.OAuthFlowStage, rejection sharedResourceRejection, resources []string, extra ...slog.Attr) {
 	redacted := make([]string, 0, len(resources))
 	for _, resource := range resources {
 		redacted = append(redacted, redactResourceForLog(resource))
@@ -467,11 +560,15 @@ func (s *Service) recordSharedResourceRejection(ctx context.Context, logger *slo
 	if len(logged) > sharedResourceLogMaxBytes {
 		logged = strings.ToValidUTF8(logged[:sharedResourceLogMaxBytes], "")
 	}
-	logger.InfoContext(ctx, "shared authorization server refused resource indicator",
+	args := []any{
 		attr.SlogOAuthFailureReason(string(rejection)),
 		attr.SlogOAuthFlowStage(string(stage)),
 		attr.SlogOAuthResource(logged),
-	)
+	}
+	for _, a := range extra {
+		args = append(args, a)
+	}
+	logger.InfoContext(ctx, message, args...)
 	s.metrics.RecordOAuthResourceRejected(ctx, issuerID.String(), string(rejection), stage)
 }
 

@@ -116,6 +116,35 @@ func (q *Queries) DeleteAIScanTarget(ctx context.Context, arg DeleteAIScanTarget
 	return i, err
 }
 
+const deviceAgentStateReportExists = `-- name: DeviceAgentStateReportExists :one
+SELECT EXISTS (
+  SELECT 1
+  FROM device_agent_state_reports
+  WHERE organization_id = $1
+    AND LOWER(email) = LOWER($2)
+    AND (
+      ($3::text IS NULL AND serial_number IS NULL)
+      OR LOWER(serial_number) = LOWER($3::text)
+    )
+)::boolean AS found
+`
+
+type DeviceAgentStateReportExistsParams struct {
+	OrganizationID string
+	Email          string
+	SerialNumber   pgtype.Text
+}
+
+// Whether a report from this user on this machine is already stored, matching
+// the upsert's dedup key, so only a report that would add a row is charged to
+// the organization's new-device budget.
+func (q *Queries) DeviceAgentStateReportExists(ctx context.Context, arg DeviceAgentStateReportExistsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, deviceAgentStateReportExists, arg.OrganizationID, arg.Email, arg.SerialNumber)
+	var found bool
+	err := row.Scan(&found)
+	return found, err
+}
+
 const getAIScanTargetForUpdate = `-- name: GetAIScanTargetForUpdate :one
 SELECT organization_id, id, ai_product_id, display_name, category, bundle_ids, binaries, config_dirs, process_names, version_plist_key, cimd_vendor_keys, oauth_client_ids, client_info_names, status, rationale, created_at, updated_at
 FROM ai_scan_targets
