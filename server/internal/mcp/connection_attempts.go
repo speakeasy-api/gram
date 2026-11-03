@@ -274,7 +274,7 @@ func remoteLoginRefusalHappened(err error) mcpconnectionattempts.Code {
 		return mcpconnectionattempts.CodeConnectionChanged
 	}
 	if failure, ok := errors.AsType[*oops.ShareableError](err); ok {
-		switch failure.Code { //nolint:exhaustive // anything else is a failure on our side
+		switch failure.Code {
 		case oops.CodeUnauthorized:
 			return mcpconnectionattempts.CodeSessionChanged
 		case oops.CodeForbidden:
