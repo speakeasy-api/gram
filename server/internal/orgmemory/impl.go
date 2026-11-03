@@ -380,7 +380,7 @@ func digestView(id uuid.UUID, level string, start, end pgtype.Date, content stri
 
 func sessionView(id uuid.UUID, title pgtype.Text, summary string, summarizedAt pgtype.Timestamptz, showTitle bool) *gen.OrgMemorySession {
 	if !showTitle {
-		title = pgtype.Text{}
+		title = pgtype.Text{String: "", Valid: false}
 	}
 	return &gen.OrgMemorySession{
 		ID:           id.String(),
