@@ -2,6 +2,12 @@
 
 GRW-326 contains Slack setup only: the approved four-step flow in the real MCP server details shell. Endpoint matching and catalog handoff recognize only the official Slack MCP endpoint. Other providers keep their existing installation paths and belong to their own setup issues.
 
+## Rollout visibility
+
+The organization's `providerSetupEnabled` product feature gates the Setup sidebar entry, direct route and catalog handoff. Missing or failed feature reads disable Setup. While the feature is loading, the sidebar and catalog handoff stay hidden and the direct route waits without mounting setup; a disabled route redirects to Overview. Existing installation completion remains available when setup is off.
+
+The backend owns the staff-controlled switch and independently refuses connection tests when disabled. Demo defaults remain off. This visibility change adds no API or Platform MCP operation; the existing Command K resource entry still opens Overview, and the route guard also protects remembered setup URLs.
+
 ## Backend contract
 
 The GRW-324 parent supplies the backend and generated SDK contracts. Credential saving uses `remoteSessions.commitServerIdentityConfiguration` with `targetServerOnly: true`. Saved configuration exposes the Client ID, callback and scopes, never the secret. The saved form is disabled and uses placeholder dots; Update credentials requires a new secret.

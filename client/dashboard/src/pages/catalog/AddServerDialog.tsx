@@ -1,3 +1,4 @@
+import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
 import { supportsAutomaticOAuth } from "./hooks/serverMetadata";
 import { providerSetupInstallTarget } from "@/pages/mcp/x/setup/provider-setup";
 import { useNavigate } from "react-router";
@@ -194,6 +195,7 @@ export function AddServerDialog({
 }: AddServerDialogProps): JSX.Element | null {
   const navigate = useNavigate();
   const routes = useRoutes();
+  const providerSetupRollout = useProviderSetupRollout();
   const setupHandoffRef = useRef(false);
 
   // Fetch server details (including remotes) when dialog opens
@@ -338,6 +340,7 @@ export function AddServerDialog({
 
   useEffect(() => {
     if (
+      providerSetupRollout !== "enabled" ||
       !openProviderSetup ||
       !open ||
       headless ||
@@ -355,6 +358,7 @@ export function AddServerDialog({
     onOpenChange(false);
     void navigate(routes.mcp.details.setup.href(target));
   }, [
+    providerSetupRollout,
     openProviderSetup,
     open,
     headless,

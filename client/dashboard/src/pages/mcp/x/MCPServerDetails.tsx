@@ -1,3 +1,4 @@
+import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
 import { ProviderSetupPage } from "./setup/ProviderSetupPage";
 import { isKnownEnumValue } from "@/lib/enum";
 import { useFollowRenamedServer } from "@/pages/mcp/x/useFollowRenamedServer";
@@ -84,6 +85,7 @@ export default function MCPServerDetails(): JSX.Element | null {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
   const location = useLocation();
   const routes = useRoutes();
+  const providerSetupRollout = useProviderSetupRollout();
   const mcpScopedFlag = useFeatureFlag(FEATURE_FLAGS.mcpScopedPolicies);
   const mcpScoped = mcpScopedFlag.status === "enabled";
   const idOrSlug = mcpServerSlug ?? "";
@@ -146,6 +148,14 @@ export default function MCPServerDetails(): JSX.Element | null {
   // Which tabs exist depends on the server's kind, so route only once it loads.
   if (!mcpServer) return null;
   if (activeTab === "setup") {
+    if (providerSetupRollout === "loading") return null;
+    if (providerSetupRollout !== "enabled")
+      return (
+        <Navigate
+          to={routes.mcp.details.overview.href(mcpServerRouteParam(mcpServer))}
+          replace
+        />
+      );
     return (
       <RequireScope scope="mcp:write" resourceId={mcpServer.id} level="page">
         <ProviderSetupPage key={mcpServer.id} mcpServer={mcpServer} />
