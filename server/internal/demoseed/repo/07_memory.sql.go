@@ -36,6 +36,21 @@ func (q *Queries) MemoryCountDigests(ctx context.Context, projectID uuid.UUID) (
 	return count, err
 }
 
+const memoryCountEnabled = `-- name: MemoryCountEnabled :one
+SELECT count(*)::bigint
+FROM chat_analysis_settings
+WHERE organization_id = $1
+  AND judge = 'business_memory'
+  AND enabled
+`
+
+func (q *Queries) MemoryCountEnabled(ctx context.Context, organizationID string) (int64, error) {
+	row := q.db.QueryRow(ctx, memoryCountEnabled, organizationID)
+	var column_1 int64
+	err := row.Scan(&column_1)
+	return column_1, err
+}
+
 const memoryCountMemos = `-- name: MemoryCountMemos :one
 SELECT count(*) FROM memory_memos WHERE project_id = $1
 `
@@ -58,6 +73,29 @@ func (q *Queries) MemoryCountRemembered(ctx context.Context, projectID uuid.UUID
 	var count int64
 	err := row.Scan(&count)
 	return count, err
+}
+
+const memoryEnableForOrganization = `-- name: MemoryEnableForOrganization :exec
+
+INSERT INTO chat_analysis_settings (organization_id, judge, enabled, daily_cap)
+VALUES ($1, 'business_memory', TRUE, 0)
+ON CONFLICT (organization_id, judge) DO UPDATE SET enabled = TRUE
+`
+
+// Organizational Memory: masked session summaries, memos and the day, week
+// and month digests the nightly rollup would have built from them. Every row
+// hangs off the demo project, so the projects delete in the preflight
+// cascades it away before each reseed.
+// Marks a bulk chat as summarized from its masked transcript, the state
+// memory reads. excluded keeps it out of memory the way the session sheet's
+// switch does.
+// Organizational Memory follows the staff admin Business Memory Extraction
+// setting. The demo org gets it switched on so the memory tab, sessions column
+// and session sheet section show. A new row's daily cap of 0 keeps the
+// extraction pipeline from spending anything; an existing row keeps its cap.
+func (q *Queries) MemoryEnableForOrganization(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, memoryEnableForOrganization, organizationID)
+	return err
 }
 
 const memoryInsertDigest = `-- name: MemoryInsertDigest :exec
@@ -130,7 +168,6 @@ func (q *Queries) MemoryInsertMemo(ctx context.Context, arg MemoryInsertMemoPara
 }
 
 const memorySetChatSummary = `-- name: MemorySetChatSummary :exec
-
 UPDATE chats
 SET summary = $1::text,
     summary_redacted = TRUE,
@@ -147,13 +184,6 @@ type MemorySetChatSummaryParams struct {
 	ProjectID   uuid.UUID
 }
 
-// Organizational Memory: masked session summaries, memos and the day, week
-// and month digests the nightly rollup would have built from them. Every row
-// hangs off the demo project, so the projects delete in the preflight
-// cascades it away before each reseed.
-// Marks a bulk chat as summarized from its masked transcript, the state
-// memory reads. excluded keeps it out of memory the way the session sheet's
-// switch does.
 func (q *Queries) MemorySetChatSummary(ctx context.Context, arg MemorySetChatSummaryParams) error {
 	_, err := q.db.Exec(ctx, memorySetChatSummary,
 		arg.Summary,

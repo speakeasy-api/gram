@@ -1,19 +1,18 @@
 import { ResourceListPage } from "@/components/page-templates";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useProject } from "@/contexts/Auth";
-import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { useRBAC } from "@/hooks/useRBAC";
-import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { formatCompact } from "@/lib/format";
 import { useChatDetailSheet } from "@/pages/chatLogs/useChatDetailSheet";
 import { useRoutes } from "@/routes";
-import { useOrgMemoryOverview } from "@gram/client/react-query/orgMemoryOverview.js";
 import { Navigate, Outlet, useLocation, useSearchParams } from "react-router";
 import { AgentSessionsTabs } from "./AgentSessionsTabs";
 import type { DigestLevel } from "./memoryFormat";
 import { OrgMemoryTimeline } from "./OrgMemoryTimeline";
-
-const OVERVIEW_DAYS = 30;
+import {
+  ORG_MEMORY_OVERVIEW_DAYS,
+  useOrgMemoryStatus,
+} from "./useOrgMemoryEnabled";
 
 const LEVELS: { value: DigestLevel; label: string }[] = [
   { value: "month", label: "Months" },
@@ -51,7 +50,7 @@ export function OrgMemoryRedirect(): JSX.Element {
 export function OrgMemoryPage(): JSX.Element {
   const routes = useRoutes();
   const project = useProject();
-  const flag = useFeatureFlag(FEATURE_FLAGS.orgMemory);
+  const { status, overview } = useOrgMemoryStatus();
   const [searchParams, setSearchParams] = useSearchParams();
   const level = parseLevel(searchParams.get("level"));
   const selectedId = searchParams.get("digest");
@@ -60,13 +59,9 @@ export function OrgMemoryPage(): JSX.Element {
   const { hasAnyScope } = useRBAC();
   const canOpenSessions = hasAnyScope(["chat:read"], project.id);
 
-  const enabled = flag.status === "enabled";
-  const overview = useOrgMemoryOverview({ days: OVERVIEW_DAYS }, undefined, {
-    enabled,
-    throwOnError: false,
-  });
+  const enabled = status === "enabled";
 
-  if (flag.status !== "loading" && !enabled) {
+  if (status === "disabled") {
     return <Navigate to={routes.agentSessions.href()} replace />;
   }
 
@@ -98,7 +93,7 @@ export function OrgMemoryPage(): JSX.Element {
                 key: "remembered",
                 label: "Sessions remembered",
                 value: formatCompact(stats.sessionsRemembered),
-                description: `Last ${OVERVIEW_DAYS} days`,
+                description: `Last ${ORG_MEMORY_OVERVIEW_DAYS} days`,
                 tone: "neutral",
                 size: "sm",
               },
@@ -129,7 +124,7 @@ export function OrgMemoryPage(): JSX.Element {
             ]
           : undefined
       }
-      metricsLoading={overview.isPending && enabled}
+      metricsLoading={status === "loading"}
       toolbarActions={
         <SegmentedControl
           ariaLabel="Digest level"

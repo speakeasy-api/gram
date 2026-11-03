@@ -11,7 +11,7 @@ import { invalidateAllOrgMemoryOverview } from "@gram/client/react-query/orgMemo
 import { invalidateAllOrgMemoryRecent } from "@gram/client/react-query/orgMemoryRecent.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
-import { Brain, ChevronDown, ChevronUp, Loader2 } from "lucide-react";
+import { Brain, ChevronDown, ChevronUp } from "lucide-react";
 import { useState } from "react";
 import { Link } from "react-router";
 import { toast } from "sonner";
@@ -37,8 +37,10 @@ export function SessionMemorySection({
   });
   const setExcluded = useChatSetMemoryExcludedMutation();
 
-  // Not in the rollout, or the caller can't read memory state: say nothing.
-  if (memory.isError) return null;
+  // Memory is off for the organization (404), or the caller can't read
+  // memory state: say nothing. Nothing shows until the server has answered,
+  // so organizations without memory never see the section flash.
+  if (memory.isError || memory.isPending) return null;
 
   const data = memory.data;
   const state = data?.state;
@@ -97,11 +99,7 @@ export function SessionMemorySection({
           )}
         </button>
         <div className="flex items-center gap-2">
-          {memory.isPending ? (
-            <Loader2 className="text-muted-foreground size-3.5 animate-spin" />
-          ) : (
-            <MemoryStateBadge state={state} />
-          )}
+          <MemoryStateBadge state={state} />
           {data && canChangeMembership && (
             <Button
               variant="secondary"

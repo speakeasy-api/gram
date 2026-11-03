@@ -63,6 +63,9 @@ var memoryMemos = []struct {
 func (s *seeder) seedMemory(ctx context.Context) error {
 	org := s.orgID()
 	proj := s.projectID()
+	if err := s.q.MemoryEnableForOrganization(ctx, org); err != nil {
+		return fmt.Errorf("enable organizational memory: %w", err)
+	}
 	today := s.now.UTC().Truncate(24 * time.Hour)
 	ts := func(t time.Time) pgtype.Timestamptz {
 		return pgtype.Timestamptz{Time: t, InfinityModifier: pgtype.Finite, Valid: true}

@@ -112,8 +112,9 @@ vi.mock("@gram/client/react-query/summarizeChat.js", () => ({
   useSummarizeChatMutation: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
-vi.mock("@/pages/orgMemory/useOrgMemoryEnabled", () => ({
-  useOrgMemoryEnabled: () => false,
+// Covered by its own tests; here it would only add a memory request.
+vi.mock("@/pages/orgMemory/SessionMemorySection", () => ({
+  SessionMemorySection: () => null,
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({

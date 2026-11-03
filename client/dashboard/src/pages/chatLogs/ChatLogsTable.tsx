@@ -19,7 +19,6 @@ import { WorkUnitsRowMetrics } from "@/pages/chatLogs/WorkUnitsMetrics";
 import { useSession } from "@/contexts/Auth";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
 import { MemoryStateBadge } from "@/pages/orgMemory/MemoryStateBadge";
-import { useOrgMemoryEnabled } from "@/pages/orgMemory/useOrgMemoryEnabled";
 import { useChatSetPinnedMutation } from "@gram/client/react-query/chatSetPinned.js";
 import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
 import { useListChatSessionLinks } from "@gram/client/react-query/listChatSessionLinks.js";
@@ -746,7 +745,9 @@ export function ChatLogsTable({
     [chats, linksData, ancestors],
   );
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
-  const memoryEnabled = useOrgMemoryEnabled();
+  // The server leaves memory state out while Organizational Memory is off for
+  // the organization, so the column follows whatever the page returned.
+  const memoryEnabled = chats.some((chat) => chat.memoryState != null);
 
   const columns: Column<SessionRow>[] = [
     {

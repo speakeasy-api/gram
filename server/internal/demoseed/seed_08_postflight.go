@@ -176,6 +176,11 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			count: byProject(s.q.MemoryCountDigestLevels),
 			fail:  postflightMessage(func(n int64) bool { return n != 2 }, "expected both day and week Organizational Memory digests"),
 		},
+		{
+			what:  "organizational memory setting",
+			count: byOrg(s.q.MemoryCountEnabled),
+			fail:  postflightMustEqual(1, "expected Business Memory Extraction on for the demo org, found %d rows"),
+		},
 
 		// Killswitch aggregate counts are exact: six headers, two successor
 		// versions, eight complete selected snapshots, one expiry marker, and

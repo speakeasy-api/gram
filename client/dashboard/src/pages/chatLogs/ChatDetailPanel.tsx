@@ -47,7 +47,6 @@ import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
 import { useListChatSessionLinks } from "@gram/client/react-query/listChatSessionLinks.js";
 import { useSummarizeChatMutation } from "@gram/client/react-query/summarizeChat.js";
 import { SessionMemorySection } from "@/pages/orgMemory/SessionMemorySection";
-import { useOrgMemoryEnabled } from "@/pages/orgMemory/useOrgMemoryEnabled";
 import { QueryErrorResetBoundary, useQueryClient } from "@tanstack/react-query";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { toast } from "sonner";
@@ -1214,7 +1213,6 @@ function ChatDetailPanel({
     null,
   );
   const [scrollNonce, setScrollNonce] = useState(0);
-  const memoryEnabled = useOrgMemoryEnabled();
   const [localSummary, setLocalSummary] = useState<string | undefined>();
   const [localSummaryGeneratedAt, setLocalSummaryGeneratedAt] = useState<
     Date | undefined
@@ -1867,9 +1865,8 @@ function ChatDetailPanel({
         }}
       />
 
-      {memoryEnabled && (
-        <SessionMemorySection key={`memory-${chatId}`} chatId={chatId} />
-      )}
+      {/* Hides itself while memory is off: the server answers 404. */}
+      <SessionMemorySection key={`memory-${chatId}`} chatId={chatId} />
 
       <SessionLinksSection
         key={`links-${chatId}`}
