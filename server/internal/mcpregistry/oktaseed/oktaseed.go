@@ -657,6 +657,10 @@ func apply(ctx context.Context, svc *mcpregistry.Service, v Vendor) (string, err
 	if iconErr != nil {
 		return "", iconErr
 	}
+	// Only true is ever written. An absent supportsDcr lets catalog listings
+	// fall back to discovered auth metadata, which an explicit false would
+	// override. A stored value is also never replaced, so a seeded false
+	// would stop a later seed from setting it to true.
 	dcrAdded := false
 	if v.SupportsDCR {
 		if filled, dcrAdded, err = withCatalogField(filled, "supportsDcr", true); err != nil {
@@ -803,6 +807,9 @@ func withIcon(data json.RawMessage, iconURL string) (json.RawMessage, bool, erro
 
 // withCatalogField sets one field of the catalog namespace only when the
 // stored record has no value for it, so a value staff set is never replaced.
+// value is stored as its JSON encoding without a type check, so it must match
+// the type the registry contract (mcpregistry/contract) gives key: a string
+// for documentationUrl, a bool for supportsDcr.
 func withCatalogField(data json.RawMessage, key string, value any) (json.RawMessage, bool, error) {
 	var root, meta, catalog map[string]json.RawMessage
 	if err := json.Unmarshal(data, &root); err != nil {
