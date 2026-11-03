@@ -1113,6 +1113,7 @@ func (s *Service) ListOrganizationActivityFiltered(ctx context.Context, filter O
 		Action:                 conv.PtrToPGTextEmpty(filter.Action),
 		SubjectType:            conv.PtrToPGTextEmpty(filter.SubjectType),
 		IncludeAssistantEvents: true,
+		IncludeInternalEvents:  true,
 		SubjectID:              conv.PtrToPGTextEmpty(filter.SubjectID),
 		SubjectIds:             nil,
 		ActingSurface:          conv.PtrToPGTextEmpty(filter.ActingSurface),

@@ -109,10 +109,12 @@ func TestListOrganizationActivity_ScopeAndResponse(t *testing.T) {
 	insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_target", subjectType: "assistant", action: "assistant:run"})
 	insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_target", subjectType: "trial", subjectName: pgtype.Text{String: "Test Trial", Valid: true}, action: "trial:extend"})
 	insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_target", actorID: "system", actorType: "system", subjectType: "organization", action: "system:update"})
+	// Catalogue curation is hidden from customer feeds but stays visible to staff.
+	insertActivity(t, ctx, conn, activitySeed{organizationID: "org_activity_target", subjectType: "catalog_promotion", action: "catalog-promotion:archive", surface: pgtype.Text{String: "admin", Valid: true}})
 
 	result, err := svc.ListOrganizationActivity(ctx, &gen.ListOrganizationActivityPayload{OrganizationID: "org_activity_target"})
 	require.NoError(t, err)
-	require.Len(t, result.Logs, 5)
+	require.Len(t, result.Logs, 6)
 
 	var full, system *gen.AuditLog
 	for _, log := range result.Logs {

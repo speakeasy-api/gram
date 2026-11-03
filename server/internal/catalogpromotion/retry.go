@@ -63,7 +63,7 @@ func (s *Service) RetryDocsTx(ctx context.Context, tx pgx.Tx, request DocsRetryR
 	if err != nil {
 		return Candidate{}, fmt.Errorf("schedule documentation retry: %w", err)
 	}
-	if err := audit.NewLogger().LogCatalogPromotionRetryDocs(ctx, tx, audit.LogCatalogPromotionRetryDocsEvent{OrganizationID: row.OrganizationID, ProjectID: row.ProjectID, Actor: principal, CatalogPromotionURN: urn.NewCatalogPromotion(row.ID)}); err != nil {
+	if err := audit.NewLogger(audit.WithoutOutbox()).LogCatalogPromotionRetryDocs(ctx, tx, audit.LogCatalogPromotionRetryDocsEvent{OrganizationID: row.OrganizationID, ProjectID: row.ProjectID, Actor: principal, CatalogPromotionURN: urn.NewCatalogPromotion(row.ID)}); err != nil {
 		return Candidate{}, fmt.Errorf("audit documentation retry: %w", err)
 	}
 	return s.candidate(row), nil

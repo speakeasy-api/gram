@@ -117,7 +117,9 @@ func (s *Service) CurateTx(ctx context.Context, tx pgx.Tx, request CurationReque
 	if err != nil {
 		return Candidate{}, fmt.Errorf("update candidate curation: %w", err)
 	}
-	logger := audit.NewLogger()
+	// Curation is internal staff activity attributed to the source tenant;
+	// customer webhooks must not receive it.
+	logger := audit.NewLogger(audit.WithoutOutbox())
 	switch request.Action {
 	case "reject":
 		err = logger.LogCatalogPromotionReject(ctx, tx, audit.LogCatalogPromotionRejectEvent{OrganizationID: row.OrganizationID, ProjectID: row.ProjectID, Actor: principal, CatalogPromotionURN: urn.NewCatalogPromotion(row.ID)})

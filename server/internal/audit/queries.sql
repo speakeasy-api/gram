@@ -115,6 +115,11 @@ WHERE a.organization_id = @organization_id
     )
     OR a.subject_type = sqlc.narg(subject_type)::text
   )
+  -- Staff catalogue curation is attributed to the candidate's source tenant
+  -- but is internal Speakeasy activity, so customer feeds never return it,
+  -- not even for an explicit subject_type or action filter. Only the private
+  -- admin caller opts in.
+  AND (@include_internal_events::boolean OR a.subject_type <> 'catalog_promotion')
   AND (
     sqlc.narg(subject_id)::text IS NULL
     OR a.subject_id = sqlc.narg(subject_id)::text
@@ -146,13 +151,14 @@ ORDER BY a.seq DESC
 LIMIT 51;
 
 -- name: ListAuditActorFacets :many
--- Assistant activity events are excluded: facets power the platform audit
--- feed, which hides them (see ListAuditLogs).
+-- Assistant activity and internal catalogue curation events are excluded:
+-- facets power the platform audit feed, which hides them (see ListAuditLogs).
 WITH filtered_logs AS (
   SELECT actor_id, actor_type, actor_display_name, acting_surface, seq
   FROM audit_logs
   WHERE organization_id = @organization_id
     AND subject_type <> 'assistant'
+    AND subject_type <> 'catalog_promotion'
     AND (
       sqlc.narg(project_id)::uuid IS NULL
       OR project_id = sqlc.narg(project_id)::uuid
@@ -202,8 +208,8 @@ LEFT JOIN users u ON u.id = actor_membership.user_id
 ORDER BY actor_counts.count DESC, actor_counts.actor_id ASC;
 
 -- name: ListAuditSurfaceFacets :many
--- Assistant activity events are excluded: facets power the platform audit
--- feed, which hides them (see ListAuditLogs).
+-- Assistant activity and internal catalogue curation events are excluded:
+-- facets power the platform audit feed, which hides them (see ListAuditLogs).
 -- Rows predating attribution have no surface and are counted as 'unknown',
 -- so the facet totals reconcile with the unfiltered feed rather than silently
 -- omitting an organization's older history.
@@ -214,6 +220,7 @@ SELECT
 FROM audit_logs
 WHERE organization_id = @organization_id
   AND subject_type <> 'assistant'
+  AND subject_type <> 'catalog_promotion'
   AND (
     sqlc.narg(project_id)::uuid IS NULL
     OR project_id = sqlc.narg(project_id)::uuid
@@ -225,8 +232,8 @@ GROUP BY COALESCE(acting_surface, 'unknown')
 ORDER BY count DESC, COALESCE(acting_surface, 'unknown') ASC;
 
 -- name: ListAuditActionFacets :many
--- Assistant activity events are excluded: facets power the platform audit
--- feed, which hides them (see ListAuditLogs).
+-- Assistant activity and internal catalogue curation events are excluded:
+-- facets power the platform audit feed, which hides them (see ListAuditLogs).
 SELECT
   action AS value,
   action AS display_name,
@@ -234,6 +241,7 @@ SELECT
 FROM audit_logs
 WHERE organization_id = @organization_id
   AND subject_type <> 'assistant'
+  AND subject_type <> 'catalog_promotion'
   AND (
     sqlc.narg(project_id)::uuid IS NULL
     OR project_id = sqlc.narg(project_id)::uuid

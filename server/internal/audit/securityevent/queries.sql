@@ -75,6 +75,7 @@ WHERE a.organization_id = @organization_id
     )
     OR a.subject_type = sqlc.narg(subject_type)::text
   )
+  AND (@include_internal_events::boolean OR a.subject_type <> 'catalog_promotion')
   AND (
     sqlc.narg(subject_id)::text IS NULL
     OR a.subject_id = sqlc.narg(subject_id)::text
@@ -106,6 +107,7 @@ WITH filtered_logs AS (
   FROM security_audit_logs
   WHERE organization_id = @organization_id
     AND subject_type <> 'assistant'
+    AND subject_type <> 'catalog_promotion'
     AND (
       sqlc.narg(project_id)::uuid IS NULL
       OR project_id = sqlc.narg(project_id)::uuid
@@ -156,6 +158,7 @@ SELECT
 FROM security_audit_logs
 WHERE organization_id = @organization_id
   AND subject_type <> 'assistant'
+  AND subject_type <> 'catalog_promotion'
   AND (
     sqlc.narg(project_id)::uuid IS NULL
     OR project_id = sqlc.narg(project_id)::uuid
@@ -173,6 +176,7 @@ SELECT
 FROM security_audit_logs
 WHERE organization_id = @organization_id
   AND subject_type <> 'assistant'
+  AND subject_type <> 'catalog_promotion'
   AND (
     sqlc.narg(project_id)::uuid IS NULL
     OR project_id = sqlc.narg(project_id)::uuid
