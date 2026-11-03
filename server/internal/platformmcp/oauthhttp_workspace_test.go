@@ -204,7 +204,7 @@ func TestOAuthHTTPUserWithoutOrganizationCreatesWorkspaceAndContinues(t *testing
 	require.Equal(t, http.StatusOK, connect.Code)
 	require.Contains(t, connect.Body.String(), "Acme Inc")
 
-	approve := httptest.NewRequest(http.MethodPost, "/platform-mcp/connect", strings.NewReader(url.Values{"state": {connectState}, "csrf_token": {csrf}, "action": {"approve"}}.Encode()))
+	approve := httptest.NewRequest(http.MethodPost, "/platform-mcp/connect", strings.NewReader(url.Values{"state": {connectState}, "csrf_token": {csrf}, "organization_id": {formValue(t, connect.Body.String(), "organization_id")}, "action": {"approve"}}.Encode()))
 	approve.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	approved := httptest.NewRecorder()
 	service.ConnectHandler().ServeHTTP(approved, approve)
