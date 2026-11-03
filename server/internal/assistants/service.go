@@ -3496,7 +3496,7 @@ func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assi
 	switch managed, mErr := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, assistant.ProjectID); {
 	case mErr == nil:
 		if managed.ID == assistant.ID {
-			variant := feature.VariantAssistantToolsLegacy
+			var variant feature.Variant
 			if strictVariant {
 				resolved, err := s.resolveAssistantToolsVariant(ctx, assistant.ProjectID)
 				if err != nil {

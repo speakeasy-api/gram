@@ -32,7 +32,14 @@ func TestKitLocalCompositionSelectsOnlyNewAssistants(t *testing.T) {
 		WorkloadJWKSURL: "https://external.example/jwks", WorkloadIssuerURL: "https://external.example", WorkloadIssuerBaseURL: "https://issuer.example", WorkloadSubject: "operator-subject", WorkloadAssertionFile: "/run/assertion",
 	}
 	require.NoError(t, core.InstallKitLocalRuntime(config))
-	require.NotEqual(t, origin.String(), core.runtime.ServerURL().String())
+	backend := core.runtime
+	if wrapped, ok := backend.(*telemetryRuntimeBackend); ok {
+		backend = wrapped.inner
+	}
+	versioned, ok := backend.(*versionedRuntimeBackend)
+	require.True(t, ok)
+	require.NotNil(t, versioned.kit.ServerURL())
+	require.NotEqual(t, origin.String(), versioned.kit.ServerURL().String(), "Kit's own server URL is not the inference provider origin")
 	created, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Local Kit", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, false, nil)
 	require.NoError(t, err)
 	require.EqualValues(t, 3, created.RuntimeVersion)

@@ -204,7 +204,7 @@ func TestDescriptorForContextConcurrent(t *testing.T) {
 				ctx := t.Context()
 				automatic := i%2 == 0
 				if automatic {
-					ctx = contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{})
+					ctx = contextvalues.SetAssistantPrincipal(ctx, contextvalues.AssistantPrincipal{AssistantID: uuid.New(), ThreadID: uuid.New()})
 				}
 				desc := DescriptorForContext(ctx, original)
 				var schema jsonschema.Schema
@@ -220,7 +220,11 @@ func TestDescriptorForContextConcurrent(t *testing.T) {
 				if policy == core.ThreadContextWake {
 					input["input"] = map[string]any{"definition_slug": "wake"}
 				}
-				require.Equal(t, needed, resolved.Validate(input) != nil)
+				require.NotContains(t, string(desc.InputSchema), "allOf", "listed schemas must not use top-level composition")
+				// Only the unconditional requirement is expressed in the schema;
+				// conditional ones are enforced when the call is prepared.
+				schemaRequired := needed && policy == core.ThreadContextRequired
+				require.Equal(t, schemaRequired, resolved.Validate(input) != nil)
 				if needed {
 					input["thread_id"] = uuid.NewString()
 					require.NoError(t, resolved.Validate(input))

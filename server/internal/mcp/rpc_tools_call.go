@@ -420,7 +420,7 @@ func handleToolsCall(
 		organizationID:  descriptor.OrganizationID,
 		projectID:       descriptor.ProjectID,
 		sessionID:       payload.sessionID,
-		chatID:          payload.chatID,
+		chatID:          toolCallEnv.GramChatID,
 		toolName:        toolName,
 		toolURN:         toolURN.String(),
 		toolsetSlug:     payload.toolset,
@@ -450,7 +450,7 @@ func handleToolsCall(
 			ResponseStatusCode:    rw.statusCode,
 			MCPURL:                &mcpURL,
 			MCPSessionID:          &payload.sessionID,
-			ChatID:                conv.PtrEmpty(payload.chatID),
+			ChatID:                conv.PtrEmpty(toolCallEnv.GramChatID),
 			MCPServerID:           optionalUUIDString(attributedMCPServerID),
 			MCPEndpointID:         optionalUUIDString(payload.mcpEndpointID),
 			MetaMCPServerID:       conv.PtrEmpty(payload.metaMcpServerID),
@@ -473,8 +473,8 @@ func handleToolsCall(
 		logAttrs.RecordRequestBodyContent(requestBodyBytes)
 		logAttrs.RecordResponseBodyContent(rw.body.Bytes())
 
-		if payload.chatID != "" {
-			logAttrs[attr.GenAIConversationIDKey] = payload.chatID
+		if toolCallEnv.GramChatID != "" {
+			logAttrs[attr.GenAIConversationIDKey] = toolCallEnv.GramChatID
 		}
 		if externalUserID != "" {
 			logAttrs[attr.ExternalUserIDKey] = externalUserID
@@ -524,7 +524,7 @@ func handleToolsCall(
 		ToolName:        toolName,
 		ResourceURI:     "",
 		PromptName:      "",
-		ChatID:          payload.chatID,
+		ChatID:          toolCallEnv.GramChatID,
 		ToolAnnotations: nil,
 	}, mcpriskscan.BorrowPayload(params.Arguments))
 	decision := scan.Scan(ctx, requestSubject)

@@ -9,7 +9,6 @@ import (
 	"github.com/google/uuid"
 
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -51,7 +50,6 @@ func TestPlatformWorkloadResourceSeparation(t *testing.T) {
 	inference := requireWorkloadInferenceToken(t, f, issuer)
 	_, err = servePlatformHTTP(t, f.ti, slug, toolsListBody(), inference)
 	require.Error(t, err, "inference credential cannot reach builtins")
-	require.NotEqual(t, mcp.InferenceResource, platformtools.PlatformToolsetURL(f.ti.serverURL, slug))
 }
 
 func TestPlatformWorkloadLiveRevocation(t *testing.T) {

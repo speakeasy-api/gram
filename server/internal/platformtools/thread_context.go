@@ -133,7 +133,7 @@ func PrepareThreadContext(ctx context.Context, descriptor ToolDescriptor, env to
 // DescriptorForContext returns an independent schema for this request. Shared
 // descriptors and schemas are never mutated, including across concurrent callers.
 func DescriptorForContext(ctx context.Context, descriptor ToolDescriptor) ToolDescriptor {
-	if _, ok := contextvalues.GetAssistantPrincipal(ctx); ok || descriptor.ThreadContext == "" {
+	if automatic, ok := contextvalues.GetAssistantPrincipal(ctx); (ok && automatic.ThreadID != uuid.Nil) || descriptor.ThreadContext == "" {
 		return descriptor
 	}
 	var schema map[string]any
@@ -145,23 +145,20 @@ func DescriptorForContext(ctx context.Context, descriptor ToolDescriptor) ToolDe
 		properties = map[string]any{}
 		schema["properties"] = properties
 	}
-	properties["thread_id"] = map[string]any{"type": "string", "format": "uuid", "description": "Assistant thread ID to use when no automatic assistant context is available."}
-	required, _ := schema["required"].([]any)
+	// Conditional requirements are stated in the description and enforced by
+	// PrepareThreadContext: some tool schema validators reject top-level
+	// composition keywords such as allOf.
+	description := "Assistant thread ID to use when no automatic assistant context is available."
 	switch descriptor.ThreadContext {
 	case core.ThreadContextRequired:
+		required, _ := schema["required"].([]any)
 		schema["required"] = append(required, "thread_id")
-	case core.ThreadContextSlackSelf, core.ThreadContextWake:
-		field, value := "route_replies", "self"
-		if descriptor.ThreadContext == core.ThreadContextWake {
-			field, value = "definition_slug", "wake"
-		}
-		condition := map[string]any{"properties": map[string]any{field: map[string]any{"const": value}}, "required": []string{field}}
-		if descriptor.ThreadContext == core.ThreadContextWake {
-			condition = map[string]any{"properties": map[string]any{"input": condition}, "required": []string{"input"}}
-		}
-		allOf, _ := schema["allOf"].([]any)
-		schema["allOf"] = append(allOf, map[string]any{"if": condition, "then": map[string]any{"required": []string{"thread_id"}}})
+	case core.ThreadContextSlackSelf:
+		description += " Required when route_replies is self."
+	case core.ThreadContextWake:
+		description += " Required when input.definition_slug is wake."
 	}
+	properties["thread_id"] = map[string]any{"type": "string", "format": "uuid", "description": description}
 	encoded, err := json.Marshal(schema)
 	if err != nil {
 		panic(fmt.Errorf("encode platform tool schema: %w", err))

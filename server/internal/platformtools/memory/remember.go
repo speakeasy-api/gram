@@ -44,7 +44,7 @@ func NewRememberTool(svc Service) *RememberTool {
 			ThreadContext: core.ThreadContextRequired,
 			HandlerName:   handlerRemember,
 			Name:          platformtools.ToolNameMemoryRemember,
-			Description:   "Persist a memory for the current assistant. Deduplicates against the nearest existing memory and may supersede a contradicting one. Requires assistant runtime auth.",
+			Description:   "Persist a memory for the current assistant. Deduplicates against the nearest existing memory and may supersede a contradicting one. Uses the assistant runtime's own thread, or an explicit thread_id the caller can write to.",
 			InputSchema:   core.BuildInputSchema[rememberInput](),
 			Variables:     nil,
 			Annotations:   memoryToolAnnotations(readOnly, destructive, idempotent, openWorld),

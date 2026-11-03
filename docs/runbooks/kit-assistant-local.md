@@ -261,7 +261,10 @@ projection rules, and restore constraints in the
 
 Kit connects to built-in toolsets with dedicated resource-bound workload tokens,
 not inference tokens. Without automatically attached thread context, tools that
-need a conversation advertise a required `thread_id`. Kit receives the current
+always need a conversation advertise a required `thread_id`; Slack self-replies
+and wake triggers need it only when `route_replies` is `self` or the trigger
+definition is `wake`. Tools that change state require write access to the
+target assistant. Kit receives the current
 thread ID in per-turn instructions as a convenient default. Explicit targets
 use the existing caller and tool authorization; selecting another authorized
 thread does not require runtime/session attribution. When attached context is

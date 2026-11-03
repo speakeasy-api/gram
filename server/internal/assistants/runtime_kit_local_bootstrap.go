@@ -55,7 +55,7 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 	if json.Unmarshal(b.MCPJSON, &mcp) != nil || mcp.Servers == nil {
 		return fmt.Errorf("kit MCP config requires mcpServers object")
 	}
-	for _, raw := range mcp.Servers {
+	for name, raw := range mcp.Servers {
 		var server struct {
 			Type    string            `json:"type"`
 			URL     string            `json:"url"`
@@ -79,8 +79,14 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 		if server.Type != "streamable-http" || server.Auth.Type != "workload_identity" || server.Auth.TokenFile != b.AssertionFile || server.Auth.TokenEndpoint != b.Workload.Audience+"/token" || server.Auth.EndpointMode != "explicit" || server.Auth.Grant != "jwtBearer" || server.Auth.Resource != server.URL {
 			return fmt.Errorf("kit MCP requires the bound generic workload assertion")
 		}
-		if len(server.Auth.Extensions) != 0 && (len(server.Auth.Extensions) != 1 || server.Auth.Extensions["project_id"] != b.Workload.Identity.ProjectID.String()) {
-			return fmt.Errorf("kit MCP extensions must name the workload project")
+		// Built-in tokens are minted per project; attached servers bind their
+		// project through the endpoint and take no extensions.
+		if strings.HasPrefix(name, "builtin-") {
+			if len(server.Auth.Extensions) != 1 || server.Auth.Extensions["project_id"] != b.Workload.Identity.ProjectID.String() {
+				return fmt.Errorf("kit built-in MCP connections must name the workload project")
+			}
+		} else if len(server.Auth.Extensions) != 0 {
+			return fmt.Errorf("kit attached MCP connections must not carry extensions")
 		}
 		u, err := url.Parse(server.URL)
 		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Fragment != "" || u.RawQuery != "" {

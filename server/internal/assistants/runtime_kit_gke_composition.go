@@ -13,6 +13,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/authserver"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -257,19 +258,19 @@ func (s *ServiceCore) kitPersistedMCPConnections(ctx context.Context, db assista
 			return nil, uuid.Nil, fmt.Errorf("get persisted assistant MCP server: %w", err)
 		}
 		if !server.UserSessionIssuerID.Valid {
-			s.logger.WarnContext(ctx, "omitting Kit MCP connection without a shared issuer")
+			s.logger.WarnContext(ctx, "omitting Kit MCP connection without a shared issuer", attr.SlogAssistantID(assistant.ID.String()), attr.SlogMcpServerID(row.McpServerID.String()))
 			continue
 		}
 		issuer, err := usersessionsrepo.New(db).GetSharedUserSessionIssuerByID(ctx, server.UserSessionIssuerID.UUID)
 		if errors.Is(err, pgx.ErrNoRows) {
-			s.logger.WarnContext(ctx, "omitting Kit MCP connection without a live shared issuer")
+			s.logger.WarnContext(ctx, "omitting Kit MCP connection without a live shared issuer", attr.SlogAssistantID(assistant.ID.String()), attr.SlogMcpServerID(row.McpServerID.String()))
 			continue
 		}
 		if err != nil {
 			return nil, uuid.Nil, fmt.Errorf("get persisted assistant session issuer: %w", err)
 		}
 		if !authserver.IssuerInSharedMode(issuer.UserSessionIssuer) || issuer.ResolvedOrganizationID != assistant.OrganizationID || (issuer.UserSessionIssuer.ProjectID.Valid && issuer.UserSessionIssuer.ProjectID.UUID != assistant.ProjectID) {
-			s.logger.WarnContext(ctx, "omitting Kit MCP connection with an unsupported issuer")
+			s.logger.WarnContext(ctx, "omitting Kit MCP connection with an unsupported issuer", attr.SlogAssistantID(assistant.ID.String()), attr.SlogMcpServerID(row.McpServerID.String()))
 			continue
 		}
 		selected := assistantMCPServerRow{ServerSlug: row.ServerSlug, EnvironmentID: row.EnvironmentID, ToolsetSlug: row.ToolsetSlug, MCPServerID: row.McpServerID, EndpointSlug: row.EndpointSlug, EndpointDomain: row.EndpointDomain, Visibility: row.Visibility, DefaultEnvironmentSlug: row.DefaultEnvironmentSlug, EnvironmentSlug: row.EnvironmentSlug}
@@ -278,14 +279,14 @@ func (s *ServiceCore) kitPersistedMCPConnections(ctx context.Context, db assista
 		}
 		resource := selected.endpointURL(s.serverURL)
 		if resource.Scheme != "https" || resource.Host == "" || resource.User != nil || resource.RawQuery != "" || resource.Fragment != "" {
-			s.logger.WarnContext(ctx, "omitting Kit MCP connection with an invalid HTTPS destination")
+			s.logger.WarnContext(ctx, "omitting Kit MCP connection with an invalid HTTPS destination", attr.SlogAssistantID(assistant.ID.String()), attr.SlogMcpServerID(row.McpServerID.String()))
 			continue
 		}
 		if issuerID == uuid.Nil {
 			issuerID = server.UserSessionIssuerID.UUID
 		}
 		if issuerID != server.UserSessionIssuerID.UUID {
-			s.logger.WarnContext(ctx, "omitting Kit MCP connection with another assertion audience")
+			s.logger.WarnContext(ctx, "omitting Kit MCP connection with another assertion audience", attr.SlogAssistantID(assistant.ID.String()), attr.SlogMcpServerID(row.McpServerID.String()))
 			continue
 		}
 		connections = append(connections, kitMCPConnection{Name: "attached-" + row.McpServerID.String(), Resource: resource, Environment: assistantMCPEnvironment(selected)})

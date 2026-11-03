@@ -66,4 +66,20 @@ func TestKitBuiltinConnectionsUseSeparateResourceBoundWorkloadTokens(t *testing.
 	bootstrap.MCPJSON, err = kitCompositionMCP(config, bootstrap.Workload)
 	require.NoError(t, err)
 	require.ErrorContains(t, validateKitBootstrap(bootstrap), "workload project")
+	// Dropping the project binding from a built-in is not a valid bootstrap.
+	config.mcpConnections[0].ProjectID = uuid.Nil
+	bootstrap.MCPJSON, err = kitCompositionMCP(config, bootstrap.Workload)
+	require.NoError(t, err)
+	require.ErrorContains(t, validateKitBootstrap(bootstrap), "workload project")
+	// Attached connections bind their project through the endpoint instead.
+	attached, err := url.Parse("https://api.example/mcp/attached")
+	require.NoError(t, err)
+	config.mcpConnections = []kitMCPConnection{{Name: "attached-server", Resource: attached, Environment: ""}}
+	bootstrap.MCPJSON, err = kitCompositionMCP(config, bootstrap.Workload)
+	require.NoError(t, err)
+	require.NoError(t, validateKitBootstrap(bootstrap))
+	config.mcpConnections[0].ProjectID = bootstrap.Workload.Identity.ProjectID
+	bootstrap.MCPJSON, err = kitCompositionMCP(config, bootstrap.Workload)
+	require.NoError(t, err)
+	require.ErrorContains(t, validateKitBootstrap(bootstrap), "must not carry extensions")
 }
