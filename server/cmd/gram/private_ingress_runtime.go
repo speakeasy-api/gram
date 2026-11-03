@@ -186,6 +186,10 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		AdmitWorkloadSessionInTx: runtimepolicy.AdmitWorkloadSessionInTx,
 		DevMode:                  c.String("environment") == "local",
 	})
+	authzClient, err := newAuthzClient(logger, meterProvider, authzEngine, featureFlags)
+	if err != nil {
+		return nil, err
+	}
 	_, broker, stop, err := newPubSubClient(ctx, c, logger)
 	if err != nil {
 		return nil, err
@@ -333,7 +337,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	})
 	mcpService.StartRemoteSessionRecheck(ctx)
 	admission := networkingress.NewExpansionAdmission(productFeatures, false, c.Bool("network-ingress-enabled"))
-	metadata := mcpmetadata.NewService(logger, tracerProvider, meterProvider, db, sessionManager, serverURL, siteURL, cacheImpl, authzEngine, auditLogger, admission.CheckExpansion)
+	metadata := mcpmetadata.NewService(logger, tracerProvider, meterProvider, db, sessionManager, serverURL, siteURL, cacheImpl, authzEngine, authzClient, auditLogger, admission.CheckExpansion)
 	r.Runtime, err = buildMCPServerRuntime(mcpServerRuntimeDependencies{MCP: mcpService, Metadata: metadata})
 	if err != nil {
 		return nil, err

@@ -126,7 +126,7 @@ func (s *Service) SetToolMetadataBatch(ctx context.Context, payload *gen.SetTool
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, serverID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), serverID.String()).Edit()); err != nil {
 		return nil, err
 	}
 
@@ -218,7 +218,7 @@ func (s *Service) AddToolMetadataBatch(ctx context.Context, payload *gen.AddTool
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, serverID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), serverID.String()).Edit()); err != nil {
 		return nil, err
 	}
 
@@ -347,7 +347,7 @@ func (s *Service) ListToolMetadata(ctx context.Context, payload *gen.ListToolMet
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, serverID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), serverID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -382,7 +382,7 @@ func (s *Service) SetToolMetadata(ctx context.Context, payload *gen.SetToolMetad
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, serverID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), serverID.String()).Edit()); err != nil {
 		return nil, err
 	}
 
@@ -463,7 +463,7 @@ func (s *Service) DeleteToolMetadata(ctx context.Context, payload *gen.DeleteToo
 		return oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, serverID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), serverID.String()).Edit()); err != nil {
 		return err
 	}
 

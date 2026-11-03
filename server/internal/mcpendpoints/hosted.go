@@ -70,7 +70,7 @@ func (s *Service) updateHostedEndpoint(ctx context.Context, logger *slog.Logger,
 // and commit. It returns the custom domains whose root it cleared, to reconcile after commit.
 func (s *Service) updateHostedEndpointInTx(ctx context.Context, dbtx pgx.Tx, logger *slog.Logger, authCtx *contextvalues.AuthContext, preexisting repo.McpEndpoint, requestedDomainID uuid.NullUUID, slug string) (*types.McpEndpoint, []uuid.UUID, error) {
 	serverID := preexisting.McpServerID.UUID
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, serverID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), serverID.String()).Edit()); err != nil {
 		return nil, nil, err
 	}
 
@@ -241,7 +241,7 @@ func (s *Service) requireEndpointCreateWrite(ctx context.Context, logger *slog.L
 		server, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: mcpServerID.UUID, ProjectID: *authCtx.ProjectID})
 		switch {
 		case err == nil && isCanonicalHosted(server):
-			if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, server.ID.String(), authCtx.ProjectID.String())); err != nil {
+			if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), server.ID.String()).Edit()); err != nil {
 				return false, err
 			}
 			return true, nil
@@ -249,7 +249,7 @@ func (s *Service) requireEndpointCreateWrite(ctx context.Context, logger *slog.L
 			return false, oops.E(oops.CodeUnexpected, err, "get endpoint backing server").LogError(ctx, logger)
 		}
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Edit()); err != nil {
 		return false, err
 	}
 	return false, nil

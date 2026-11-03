@@ -92,7 +92,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	auditLogger := audit.NewLogger()
 
-	svc := mcpendpoints.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, nil, false)
+	svc := mcpendpoints.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), authztest.NewParityClient(t, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())), auditLogger, nil, false)
 
 	return ctx, &testInstance{
 		service:        svc,
@@ -181,7 +181,7 @@ func newTestServiceWithGitHubPublishing(t *testing.T) (context.Context, *testIns
 
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
-	svc := mcpendpoints.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), auditLogger, temporalEnv, true)
+	svc := mcpendpoints.NewService(logger, tracerProvider, conn, sessionManager, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()), authztest.NewParityClient(t, authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())), auditLogger, temporalEnv, true)
 
 	return ctx, &testInstance{
 		service:        svc,

@@ -57,7 +57,7 @@ type Service struct {
 	logger    *slog.Logger
 	db        *pgxpool.Pool
 	auth      *auth.Auth
-	authz     *authz.Engine
+	authz     *authz.Client
 	audit     *audit.Logger
 	features  feature.Provider
 	validator *mcpregistry.Validator
@@ -74,6 +74,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessionManager *sessions.Manager,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	auditLogger *audit.Logger,
 	features feature.Provider,
 	validator *mcpregistry.Validator,
@@ -84,7 +85,7 @@ func NewService(
 		logger:    logger,
 		db:        db,
 		auth:      auth.New(logger, db, sessionManager, authzEngine),
-		authz:     authzEngine,
+		authz:     authzClient,
 		audit:     auditLogger,
 		features:  features,
 		validator: validator,
@@ -113,7 +114,7 @@ func (s *Service) authorize(ctx context.Context, mutation bool) (*contextvalues.
 		return nil, s.logger, oops.C(oops.CodeUnauthorized)
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogUserID(authCtx.UserID))
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return nil, logger, err
 	}
 	if mutation {
