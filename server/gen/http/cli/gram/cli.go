@@ -17414,8 +17414,8 @@ func chatUsage() {
 	fmt.Fprintln(os.Stderr, `    credit-usage: Get the total number of chat credits and usage for the current billing period`)
 	fmt.Fprintln(os.Stderr, `    delete-chat: Soft-delete a chat by its ID`)
 	fmt.Fprintln(os.Stderr, `    set-pinned: Pin or unpin a chat. Pinned chats surface in a dedicated section above recents on the chat page.`)
-	fmt.Fprintln(os.Stderr, `    get-memory: Show whether Organizational Memory reads this session, the masked summary it reads, memos saved from it and the day digest that folded it. Requires the org-memory rollout.`)
-	fmt.Fprintln(os.Stderr, `    set-memory-excluded: Exclude a session from Organizational Memory, or return it. Anyone who can read the session may exclude it; returning someone else's session needs chat:write. Digests that folded an excluded session are rebuilt without it on the next rollup. Requires the org-memory rollout.`)
+	fmt.Fprintln(os.Stderr, `    get-memory: Show whether Organizational Memory reads this session, the masked summary it reads, memos saved from it and the day digest that folded it. Requires Business Memory Extraction turned on for the organization.`)
+	fmt.Fprintln(os.Stderr, `    set-memory-excluded: Exclude a session from Organizational Memory, or return it. Anyone who can read the session may exclude it; returning someone else's session needs chat:write. Digests that folded an excluded session are rebuilt without it on the next rollup. Requires Business Memory Extraction turned on for the organization.`)
 	fmt.Fprintln(os.Stderr, `    summarize: Generate or return a persisted LLM summary of a chat session transcript. When a summary already exists and regenerate is false, returns the cached summary without calling the model.`)
 	fmt.Fprintln(os.Stderr, `    summarize-tool-call: Generate or return a persisted two-sentence summary of one tool call. Concurrent requests share the same cached result.`)
 	fmt.Fprintln(os.Stderr, `    submit-feedback: Submit user feedback for a chat (success/failure)`)
@@ -17695,7 +17695,7 @@ func chatGetMemoryUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Show whether Organizational Memory reads this session, the masked summary it reads, memos saved from it and the day digest that folded it. Requires the org-memory rollout.`)
+	fmt.Fprintln(os.Stderr, `Show whether Organizational Memory reads this session, the masked summary it reads, memos saved from it and the day digest that folded it. Requires Business Memory Extraction turned on for the organization.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -id STRING: `)
@@ -17717,7 +17717,7 @@ func chatSetMemoryExcludedUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Exclude a session from Organizational Memory, or return it. Anyone who can read the session may exclude it; returning someone else's session needs chat:write. Digests that folded an excluded session are rebuilt without it on the next rollup. Requires the org-memory rollout.`)
+	fmt.Fprintln(os.Stderr, `Exclude a session from Organizational Memory, or return it. Anyone who can read the session may exclude it; returning someone else's session needs chat:write. Digests that folded an excluded session are rebuilt without it on the next rollup. Requires Business Memory Extraction turned on for the organization.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

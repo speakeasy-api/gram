@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * getMemory chat
  *
  * @remarks
- * Show whether Organizational Memory reads this session, the masked summary it reads, memos saved from it and the day digest that folded it. Requires the org-memory rollout.
+ * Show whether Organizational Memory reads this session, the masked summary it reads, memos saved from it and the day digest that folded it. Requires Business Memory Extraction turned on for the organization.
  */
 export function chatGetMemory(
   client: GramCore,

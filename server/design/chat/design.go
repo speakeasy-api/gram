@@ -374,7 +374,7 @@ var _ = Service("chat", func() {
 	})
 
 	Method("getMemory", func() {
-		Description("Show whether Organizational Memory reads this session, the masked summary it reads, memos saved from it and the day digest that folded it. Requires the org-memory rollout.")
+		Description("Show whether Organizational Memory reads this session, the masked summary it reads, memos saved from it and the day digest that folded it. Requires Business Memory Extraction turned on for the organization.")
 
 		Security(security.Session, security.ProjectSlug)
 
@@ -401,7 +401,7 @@ var _ = Service("chat", func() {
 	})
 
 	Method("setMemoryExcluded", func() {
-		Description("Exclude a session from Organizational Memory, or return it. Anyone who can read the session may exclude it; returning someone else's session needs chat:write. Digests that folded an excluded session are rebuilt without it on the next rollup. Requires the org-memory rollout.")
+		Description("Exclude a session from Organizational Memory, or return it. Anyone who can read the session may exclude it; returning someone else's session needs chat:write. Digests that folded an excluded session are rebuilt without it on the next rollup. Requires Business Memory Extraction turned on for the organization.")
 
 		Security(security.Session, security.ProjectSlug)
 

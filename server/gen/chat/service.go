@@ -51,13 +51,14 @@ type Service interface {
 	// recents on the chat page.
 	SetPinned(context.Context, *SetPinnedPayload) (err error)
 	// Show whether Organizational Memory reads this session, the masked summary it
-	// reads, memos saved from it and the day digest that folded it. Requires the
-	// org-memory rollout.
+	// reads, memos saved from it and the day digest that folded it. Requires
+	// Business Memory Extraction turned on for the organization.
 	GetMemory(context.Context, *GetMemoryPayload) (res *ChatMemory, err error)
 	// Exclude a session from Organizational Memory, or return it. Anyone who can
 	// read the session may exclude it; returning someone else's session needs
 	// chat:write. Digests that folded an excluded session are rebuilt without it
-	// on the next rollup. Requires the org-memory rollout.
+	// on the next rollup. Requires Business Memory Extraction turned on for the
+	// organization.
 	SetMemoryExcluded(context.Context, *SetMemoryExcludedPayload) (res *ChatMemory, err error)
 	// Generate or return a persisted LLM summary of a chat session transcript.
 	// When a summary already exists and regenerate is false, returns the cached

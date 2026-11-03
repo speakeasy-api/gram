@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/memorygate"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -51,9 +52,10 @@ func (s *Service) SetMemoryExcluded(ctx context.Context, payload *gen.SetMemoryE
 	return s.chatMemory(ctx, authCtx, chat)
 }
 
-// authorizeChatMemory loads a chat the caller can read and requires the
-// org-memory rollout. A disabled rollout reads as not found so the dashboard
-// hides memory controls rather than showing an error.
+// authorizeChatMemory loads a chat the caller can read and requires Business
+// Memory Extraction turned on for the organization. A disabled setting reads
+// as not found so the dashboard hides memory controls rather than showing an
+// error.
 func (s *Service) authorizeChatMemory(ctx context.Context, id string) (*contextvalues.AuthContext, repo.GetChatRow, error) {
 	var none repo.GetChatRow
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -68,9 +70,9 @@ func (s *Service) authorizeChatMemory(ctx context.Context, id string) (*contextv
 	if err != nil {
 		return nil, none, err
 	}
-	enabled, err := OrgMemoryFlag(ctx, s.db, s.flags, authCtx.ActiveOrganizationID)
+	enabled, err := memorygate.Enabled(ctx, s.db, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, none, oops.E(oops.CodeUnexpected, err, "check organizational memory rollout").LogError(ctx, s.logger)
+		return nil, none, oops.E(oops.CodeUnexpected, err, "check business memory extraction setting").LogError(ctx, s.logger)
 	}
 	if !enabled {
 		return nil, none, oops.E(oops.CodeNotFound, nil, "organizational memory is not enabled")

@@ -12,7 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/memorygate"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -95,7 +95,7 @@ func TestChatMemoryNotFoundWhenRolloutOff(t *testing.T) {
 	id := seedChat(t, ctx, ti, userID, "", "Mine")
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	ti.flags.SetFlag(feature.FlagOrgMemory, authCtx.ActiveOrganizationID, false)
+	require.NoError(t, memorygate.Set(ctx, ti.conn, authCtx.ActiveOrganizationID, false))
 
 	_, err := ti.service.GetMemory(ctx, &gen.GetMemoryPayload{ID: id.String()})
 	requireOopsCode(t, err, oops.CodeNotFound)
