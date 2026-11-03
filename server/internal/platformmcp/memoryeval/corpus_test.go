@@ -1,6 +1,7 @@
 package memoryeval_test
 
 import (
+	"regexp"
 	"strings"
 	"testing"
 	"time"
@@ -96,14 +97,56 @@ func TestQuestionMix(t *testing.T) {
 		ids[q.ID] = true
 		kinds[q.Kind]++
 	}
-	require.Len(t, c.Questions, 40)
+	require.Len(t, c.Questions, 55)
 	require.Equal(t, map[memoryeval.QuestionKind]int{
 		memoryeval.QuestionPointLookup: 15,
 		memoryeval.QuestionTimeline:    8,
 		memoryeval.QuestionReversal:    7,
 		memoryeval.QuestionNegative:    5,
 		memoryeval.QuestionIsolation:   5,
+		memoryeval.QuestionParaphrase:  10,
+		memoryeval.QuestionSynthesis:   5,
 	}, kinds)
+}
+
+// questionStopwords are function words a hard question may share with its
+// sources without giving keyword search anything to match.
+var questionStopwords = map[string]bool{
+	"what": true, "which": true, "when": true, "where": true, "does": true,
+	"have": true, "that": true, "this": true, "with": true, "from": true,
+	"their": true, "them": true, "they": true, "each": true, "into": true,
+	"onto": true, "many": true, "much": true, "your": true,
+}
+
+var questionWord = regexp.MustCompile(`[a-z0-9']+`)
+
+func TestHardQuestionsShareNoKeywordsWithSources(t *testing.T) {
+	t.Parallel()
+	c := memoryeval.Build(corpusNow)
+
+	hard := 0
+	for _, q := range c.Questions {
+		if !q.Kind.Hard() {
+			continue
+		}
+		hard++
+		if q.Kind == memoryeval.QuestionSynthesis {
+			require.GreaterOrEqual(t, len(q.Sources), 2, "%s: a synthesis needs several chats", q.ID)
+		}
+		for _, key := range q.Sources {
+			chat, ok := c.Chat(key)
+			require.True(t, ok, key)
+			text := strings.ToLower(chat.Text())
+			for _, word := range questionWord.FindAllString(strings.ToLower(q.Text), -1) {
+				word = strings.TrimSuffix(word, "'s")
+				if len(word) < 4 || questionStopwords[word] {
+					continue
+				}
+				require.NotContains(t, text, word, "%s shares %q with its source %s", q.ID, word, key)
+			}
+		}
+	}
+	require.Equal(t, 15, hard)
 }
 
 func TestQuestionSourcesSupportTheirAnswers(t *testing.T) {
