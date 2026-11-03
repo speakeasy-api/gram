@@ -37,7 +37,7 @@ generation = $4,
 health = 'connected', disconnected_at = NULL, last_error_code = NULL,
 updated_at = clock_timestamp()
 WHERE organization_id = $5 AND id = $6 AND generation = $7 AND slack_team_id = $8
-RETURNING id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, created_at, updated_at
+RETURNING id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, default_project_id, created_at, updated_at
 `
 
 type AuthorizeSlackDirectoryConnectionParams struct {
@@ -78,6 +78,7 @@ func (q *Queries) AuthorizeSlackDirectoryConnection(ctx context.Context, arg Aut
 		&i.LastFullSyncSucceededAt,
 		&i.LastSyncFailedAt,
 		&i.LastErrorCode,
+		&i.DefaultProjectID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -182,7 +183,7 @@ const createSlackDirectoryConnection = `-- name: CreateSlackDirectoryConnection 
 INSERT INTO slack_directory_connections (organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health)
 VALUES ($1, $2, $3, $4, $5, $6, 'connected')
 ON CONFLICT (organization_id, slack_team_id) DO NOTHING
-RETURNING id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, created_at, updated_at
+RETURNING id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, default_project_id, created_at, updated_at
 `
 
 type CreateSlackDirectoryConnectionParams struct {
@@ -219,6 +220,7 @@ func (q *Queries) CreateSlackDirectoryConnection(ctx context.Context, arg Create
 		&i.LastFullSyncSucceededAt,
 		&i.LastSyncFailedAt,
 		&i.LastErrorCode,
+		&i.DefaultProjectID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -335,7 +337,7 @@ UPDATE slack_directory_connections SET
 credentials_encrypted = NULL, granted_scopes = '{}', generation = $1,
 health = 'disconnected', disconnected_at = clock_timestamp(), updated_at = clock_timestamp(), last_error_code = NULL
 WHERE organization_id = $2 AND id = $3 AND generation = $4
-RETURNING id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, created_at, updated_at
+RETURNING id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, default_project_id, created_at, updated_at
 `
 
 type DisconnectSlackDirectoryConnectionParams struct {
@@ -368,6 +370,7 @@ func (q *Queries) DisconnectSlackDirectoryConnection(ctx context.Context, arg Di
 		&i.LastFullSyncSucceededAt,
 		&i.LastSyncFailedAt,
 		&i.LastErrorCode,
+		&i.DefaultProjectID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -408,7 +411,7 @@ func (q *Queries) FailSlackDirectorySync(ctx context.Context, arg FailSlackDirec
 }
 
 const getSlackDirectoryConnection = `-- name: GetSlackDirectoryConnection :one
-SELECT id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, created_at, updated_at FROM slack_directory_connections
+SELECT id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, default_project_id, created_at, updated_at FROM slack_directory_connections
 WHERE organization_id = $1 AND id = $2
 `
 
@@ -435,6 +438,7 @@ func (q *Queries) GetSlackDirectoryConnection(ctx context.Context, arg GetSlackD
 		&i.LastFullSyncSucceededAt,
 		&i.LastSyncFailedAt,
 		&i.LastErrorCode,
+		&i.DefaultProjectID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -592,7 +596,7 @@ func (q *Queries) ListSlackAccountsForUser(ctx context.Context, arg ListSlackAcc
 }
 
 const listSlackDirectoryConnectionSummaries = `-- name: ListSlackDirectoryConnectionSummaries :many
-SELECT c.id, c.organization_id, c.slack_team_id, c.slack_team_name, c.credentials_encrypted, c.granted_scopes, c.generation, c.health, c.disconnected_at, c.last_sync_started_at, c.last_full_sync_generation, c.last_full_sync_succeeded_at, c.last_sync_failed_at, c.last_error_code, c.created_at, c.updated_at,
+SELECT c.id, c.organization_id, c.slack_team_id, c.slack_team_name, c.credentials_encrypted, c.granted_scopes, c.generation, c.health, c.disconnected_at, c.last_sync_started_at, c.last_full_sync_generation, c.last_full_sync_succeeded_at, c.last_sync_failed_at, c.last_error_code, c.default_project_id, c.created_at, c.updated_at,
   (SELECT count(*) FROM slack_directory_memberships m WHERE m.organization_id = c.organization_id
    AND m.slack_team_id = c.slack_team_id AND m.last_seen_at = c.last_full_sync_succeeded_at)::bigint AS member_count
 FROM slack_directory_connections c
@@ -629,6 +633,7 @@ func (q *Queries) ListSlackDirectoryConnectionSummaries(ctx context.Context, org
 			&i.SlackDirectoryConnection.LastFullSyncSucceededAt,
 			&i.SlackDirectoryConnection.LastSyncFailedAt,
 			&i.SlackDirectoryConnection.LastErrorCode,
+			&i.SlackDirectoryConnection.DefaultProjectID,
 			&i.SlackDirectoryConnection.CreatedAt,
 			&i.SlackDirectoryConnection.UpdatedAt,
 			&i.MemberCount,
@@ -644,7 +649,7 @@ func (q *Queries) ListSlackDirectoryConnectionSummaries(ctx context.Context, org
 }
 
 const listSlackDirectoryConnections = `-- name: ListSlackDirectoryConnections :many
-SELECT id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, created_at, updated_at FROM slack_directory_connections
+SELECT id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, default_project_id, created_at, updated_at FROM slack_directory_connections
 WHERE organization_id = $1
 ORDER BY created_at, id
 `
@@ -673,6 +678,7 @@ func (q *Queries) ListSlackDirectoryConnections(ctx context.Context, organizatio
 			&i.LastFullSyncSucceededAt,
 			&i.LastSyncFailedAt,
 			&i.LastErrorCode,
+			&i.DefaultProjectID,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 		); err != nil {
@@ -977,7 +983,7 @@ func (q *Queries) ListSlackEmailMappingCandidates(ctx context.Context, arg ListS
 }
 
 const lockSlackDirectoryConnection = `-- name: LockSlackDirectoryConnection :one
-SELECT id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, created_at, updated_at FROM slack_directory_connections
+SELECT id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, default_project_id, created_at, updated_at FROM slack_directory_connections
 WHERE organization_id = $1 AND id = $2
 FOR UPDATE
 `
@@ -1005,6 +1011,7 @@ func (q *Queries) LockSlackDirectoryConnection(ctx context.Context, arg LockSlac
 		&i.LastFullSyncSucceededAt,
 		&i.LastSyncFailedAt,
 		&i.LastErrorCode,
+		&i.DefaultProjectID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -1012,7 +1019,7 @@ func (q *Queries) LockSlackDirectoryConnection(ctx context.Context, arg LockSlac
 }
 
 const lockSlackDirectoryConnectionByTeam = `-- name: LockSlackDirectoryConnectionByTeam :one
-SELECT id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, created_at, updated_at FROM slack_directory_connections
+SELECT id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, default_project_id, created_at, updated_at FROM slack_directory_connections
 WHERE organization_id = $1 AND slack_team_id = $2
 FOR UPDATE
 `
@@ -1040,6 +1047,7 @@ func (q *Queries) LockSlackDirectoryConnectionByTeam(ctx context.Context, arg Lo
 		&i.LastFullSyncSucceededAt,
 		&i.LastSyncFailedAt,
 		&i.LastErrorCode,
+		&i.DefaultProjectID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
@@ -1143,7 +1151,7 @@ UPDATE slack_directory_connections
 SET last_full_sync_generation = generation, last_full_sync_succeeded_at = $1,
     last_error_code = NULL, health = 'connected', updated_at = clock_timestamp()
 WHERE organization_id = $2 AND id = $3 AND generation = $4
-RETURNING id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, created_at, updated_at
+RETURNING id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, default_project_id, created_at, updated_at
 `
 
 type PublishSlackDirectorySyncParams struct {
@@ -1176,6 +1184,7 @@ func (q *Queries) PublishSlackDirectorySync(ctx context.Context, arg PublishSlac
 		&i.LastFullSyncSucceededAt,
 		&i.LastSyncFailedAt,
 		&i.LastErrorCode,
+		&i.DefaultProjectID,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 	)
