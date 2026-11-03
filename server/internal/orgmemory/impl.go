@@ -4,9 +4,9 @@
 //
 // The text it returns is already masked: summaries come from the redacted
 // transcript, memos are redacted when saved, and digests are written only
-// from those. Reads require an unrestricted chat:read grant on the project,
-// the grant that already shows every session's transcript in Agent Sessions,
-// so this view never discloses more than the caller can already read.
+// from those. Reads require memory:read on the project, the same grant the
+// Platform MCP memory tools require, so people and agents see one corpus
+// under one permission.
 package orgmemory
 
 import (
@@ -97,8 +97,8 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// authorize requires an unrestricted chat:read grant on the active project
-// and the org-memory rollout. A disabled rollout reads as not found, so the
+// authorize requires memory:read on the active project and the org-memory
+// rollout. A disabled rollout reads as not found, so the
 // dashboard hides the tab rather than showing an error.
 func (s *Service) authorize(ctx context.Context) (*contextvalues.AuthContext, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -115,7 +115,7 @@ func (s *Service) authorize(ctx context.Context) (*contextvalues.AuthContext, er
 	if !enforce {
 		return nil, oops.E(oops.CodeForbidden, nil, "organizational memory requires role-based access control")
 	}
-	if err := s.authz.Require(ctx, authz.ChatReadCheck(authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMemoryRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
 	enabled, err := chat.OrgMemoryFlag(ctx, s.db, s.flags, authCtx.ActiveOrganizationID)
@@ -126,6 +126,18 @@ func (s *Service) authorize(ctx context.Context) (*contextvalues.AuthContext, er
 		return nil, oops.E(oops.CodeNotFound, nil, "organizational memory is not enabled")
 	}
 	return authCtx, nil
+}
+
+// titlesVisible reports whether session titles may accompany summaries.
+// Titles are raw, unmasked text, so they go only to callers who can already
+// read the project's sessions with chat:read; memory:read alone gets
+// summaries without titles, the same as the Platform MCP tools.
+func (s *Service) titlesVisible(ctx context.Context, authCtx *contextvalues.AuthContext) (bool, error) {
+	ok, err := s.authz.Evaluate(ctx, authz.ChatReadCheck(authCtx.ProjectID.String()))
+	if err != nil {
+		return false, oops.E(oops.CodeUnexpected, err, "check session title access").LogError(ctx, s.logger)
+	}
+	return ok, nil
 }
 
 // recordRead audits a dashboard read with the sources it showed, mirroring
@@ -233,6 +245,10 @@ func (s *Service) GetOrgMemoryDigest(ctx context.Context, payload *gen.GetOrgMem
 	if err != nil {
 		return nil, err
 	}
+	showTitles, err := s.titlesVisible(ctx, authCtx)
+	if err != nil {
+		return nil, err
+	}
 	id, err := uuid.Parse(payload.ID)
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid digest id")
@@ -272,7 +288,7 @@ func (s *Service) GetOrgMemoryDigest(ctx context.Context, payload *gen.GetOrgMem
 			return nil, oops.E(oops.CodeUnexpected, err, "load digest sessions").LogError(ctx, s.logger)
 		}
 		for _, c := range sessions {
-			result.Sessions = append(result.Sessions, sessionView(c.ID, c.Title, c.Summary, c.SummaryGeneratedAt))
+			result.Sessions = append(result.Sessions, sessionView(c.ID, c.Title, c.Summary, c.SummaryGeneratedAt, showTitles))
 			sources = append(sources, "chat:"+c.ID.String())
 		}
 	}
@@ -303,6 +319,10 @@ func (s *Service) ListOrgMemoryRecent(ctx context.Context, payload *gen.ListOrgM
 	if err != nil {
 		return nil, err
 	}
+	showTitles, err := s.titlesVisible(ctx, authCtx)
+	if err != nil {
+		return nil, err
+	}
 	since := pgtype.Timestamptz{Time: s.now().Add(-recentWindow), InfinityModifier: pgtype.Finite, Valid: true}
 	q := repo.New(s.db)
 	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
@@ -322,7 +342,7 @@ func (s *Service) ListOrgMemoryRecent(ctx context.Context, payload *gen.ListOrgM
 	}
 	sources := make([]string, 0, len(sessions)+len(memos))
 	for _, c := range sessions {
-		result.Sessions = append(result.Sessions, sessionView(c.ID, c.Title, c.Summary, c.SummaryGeneratedAt))
+		result.Sessions = append(result.Sessions, sessionView(c.ID, c.Title, c.Summary, c.SummaryGeneratedAt, showTitles))
 		sources = append(sources, "chat:"+c.ID.String())
 	}
 	for _, m := range memos {
@@ -357,7 +377,10 @@ func digestView(id uuid.UUID, level string, start, end pgtype.Date, content stri
 	}
 }
 
-func sessionView(id uuid.UUID, title pgtype.Text, summary string, summarizedAt pgtype.Timestamptz) *gen.OrgMemorySession {
+func sessionView(id uuid.UUID, title pgtype.Text, summary string, summarizedAt pgtype.Timestamptz, showTitle bool) *gen.OrgMemorySession {
+	if !showTitle {
+		title = pgtype.Text{}
+	}
 	return &gen.OrgMemorySession{
 		ID:           id.String(),
 		Title:        conv.FromPGTextOrEmpty[string](title),

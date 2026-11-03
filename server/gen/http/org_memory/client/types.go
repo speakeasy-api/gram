@@ -839,7 +839,7 @@ type OrgMemoryDigestResponseBody struct {
 type OrgMemorySessionResponseBody struct {
 	// Chat ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// Session title.
+	// Session title. Empty unless the caller also holds chat:read on the project.
 	Title *string `form:"title,omitempty" json:"title,omitempty" xml:"title,omitempty"`
 	// Masked session summary.
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
