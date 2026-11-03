@@ -154,6 +154,31 @@ func (q *Queries) GetExternalOAuthServerMetadata(ctx context.Context, arg GetExt
 	return i, err
 }
 
+const insertExternalOAuthServerMetadataSourceFixture = `-- name: InsertExternalOAuthServerMetadataSourceFixture :exec
+INSERT INTO external_oauth_server_metadata
+  (project_id, slug, metadata, authorization_server_issuer)
+VALUES ($1, $2, $3::jsonb, $4::text)
+`
+
+type InsertExternalOAuthServerMetadataSourceFixtureParams struct {
+	ProjectID                 uuid.UUID
+	Slug                      string
+	Metadata                  []byte
+	AuthorizationServerIssuer pgtype.Text
+}
+
+// Test fixture: inserts any metadata/issuer combination, including ones the
+// source constraint rejects.
+func (q *Queries) InsertExternalOAuthServerMetadataSourceFixture(ctx context.Context, arg InsertExternalOAuthServerMetadataSourceFixtureParams) error {
+	_, err := q.db.Exec(ctx, insertExternalOAuthServerMetadataSourceFixture,
+		arg.ProjectID,
+		arg.Slug,
+		arg.Metadata,
+		arg.AuthorizationServerIssuer,
+	)
+	return err
+}
+
 const updateExternalOAuthServerSource = `-- name: UpdateExternalOAuthServerSource :one
 UPDATE external_oauth_server_metadata
 SET metadata = $1,

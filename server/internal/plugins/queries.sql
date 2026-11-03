@@ -1408,3 +1408,109 @@ WHERE ps.id = @id AND ps.plugin_id = @plugin_id AND ps.deleted IS FALSE
   AND project.id = p.project_id AND project.organization_id = @organization_id
   AND project.deleted IS FALSE
 RETURNING ps.id, ps.plugin_id, ps.project_id, ps.mcp_server_id, ps.meta_mcp_server_id, ps.display_name, ps.policy, ps.sort_order, ps.created_at, ps.updated_at, ps.deleted_at, ps.deleted;
+
+-- name: CountLiveMCPEndpointsForMetaMCPServerFixture :one
+SELECT count(*) FROM mcp_endpoints WHERE meta_mcp_server_id = @meta_mcp_server_id::uuid AND deleted IS FALSE;
+
+-- name: ActivateCustomDomainWithNameFixture :execrows
+-- Test fixture: makes a domain addressable without exercising domain provisioning.
+UPDATE custom_domains SET domain = @domain, verified = TRUE, activated = TRUE WHERE id = @id;
+
+-- name: ActivateCustomDomainFixture :exec
+-- Test fixture: makes a domain addressable without exercising domain provisioning.
+UPDATE custom_domains SET verified = TRUE, activated = TRUE WHERE id = @id;
+
+-- name: SetMCPEndpointDomainRootFixture :execrows
+-- Test fixture: gateway root endpoints are not supported by the public root setter yet.
+UPDATE mcp_endpoints SET is_domain_root = TRUE WHERE id = @id;
+
+-- name: InsertPluginAssignmentFixture :exec
+-- Test fixture: models a pre-existing assignment written outside the admission checks.
+INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn) VALUES (@plugin_id, @organization_id, @principal_urn);
+
+-- name: DeletePluginAssignmentFixture :exec
+DELETE FROM plugin_assignments WHERE plugin_id = @plugin_id AND principal_urn = @principal_urn;
+
+-- name: SetMetaMCPServerUserSessionIssuerFixture :execrows
+-- Test fixture: a NULL issuer models a gateway whose required issuer disappeared after attachment.
+UPDATE meta_mcp_servers SET user_session_issuer_id = sqlc.narg(user_session_issuer_id) WHERE id = @id;
+
+-- name: ClearPublishedMCPFingerprintsFixture :exec
+-- Test fixture: models a pre-fingerprint publication without changing the last-published timestamp.
+UPDATE plugin_github_connections SET published_mcp_fingerprints = NULL WHERE project_id = @project_id;
+
+-- name: SoftDeleteToolsetVersionFixture :exec
+-- Test fixture: no production API soft-deletes an individual historical version.
+UPDATE toolset_versions SET deleted_at = clock_timestamp() WHERE toolset_id = @toolset_id AND version = @version;
+
+-- name: LockPluginForAssignments :one
+-- Locks one exact live plugin. Dashboard and Platform MCP assignment writes
+-- share this lock so concurrent replacements are serialized.
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+FROM plugins
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: ListOrganizationMarketplaceProjectsPage :many
+SELECT c.project_id
+FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id
+WHERE p.organization_id = @organization_id
+  AND p.deleted IS FALSE
+  AND c.project_id > @cursor
+ORDER BY c.project_id ASC
+LIMIT @page_limit;
+
+-- name: ProjectHasMarketplaceConnection :one
+SELECT EXISTS (
+  SELECT 1
+  FROM plugin_github_connections c
+  JOIN projects p ON p.id = c.project_id
+  WHERE c.project_id = @project_id
+    AND p.organization_id = @organization_id
+    AND p.deleted IS FALSE
+);
+
+-- name: GatewayDistributedToPrincipal :one
+-- Whether a live plugin in the project attaches the gateway and is assigned
+-- to the principal.
+SELECT EXISTS (
+  SELECT 1 FROM plugin_servers ps
+  JOIN plugins p ON p.id = ps.plugin_id AND p.organization_id = @organization_id AND p.project_id = @project_id AND p.deleted IS FALSE
+  JOIN plugin_assignments pa ON pa.plugin_id = p.id AND pa.organization_id = p.organization_id AND pa.principal_urn = @principal_urn
+  WHERE ps.meta_mcp_server_id = @gateway_id AND ps.deleted IS FALSE
+);
+
+-- name: GetPluginGatewayNetworkAccessMode :one
+SELECT g.network_access_mode
+FROM meta_mcp_servers g
+JOIN plugins p ON p.organization_id = g.organization_id AND p.project_id = g.project_id AND p.deleted IS FALSE
+WHERE p.id = @plugin_id
+  AND g.id = @gateway_id
+  AND g.organization_id = @organization_id
+  AND g.project_id = @project_id
+  AND g.deleted IS FALSE;
+
+-- name: ListPluginGatewayNetworkAccessModes :many
+SELECT g.network_access_mode
+FROM plugin_servers ps
+JOIN plugins p ON p.id = ps.plugin_id AND p.organization_id = @organization_id AND p.project_id = @project_id AND p.deleted IS FALSE
+JOIN meta_mcp_servers g ON g.id = ps.meta_mcp_server_id AND g.organization_id = p.organization_id AND g.project_id = p.project_id AND g.deleted IS FALSE
+WHERE ps.plugin_id = @plugin_id
+  AND ps.deleted IS FALSE
+  AND g.visibility <> 'disabled';
+
+-- name: ListCompletePluginAudience :many
+SELECT assignment.principal_urn
+FROM plugin_assignments AS assignment
+JOIN plugins AS plugin
+  ON plugin.id = assignment.plugin_id
+ AND plugin.organization_id = assignment.organization_id
+ AND plugin.deleted IS FALSE
+WHERE assignment.plugin_id = @plugin_id
+  AND assignment.organization_id = @organization_id
+  AND plugin.project_id = @project_id
+ORDER BY assignment.principal_urn;

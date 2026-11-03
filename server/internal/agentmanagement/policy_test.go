@@ -11,6 +11,7 @@ import (
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -97,7 +98,7 @@ func TestAgentPolicyRejectsUnsafeDenyAndMalformedGrantsAtomically(t *testing.T) 
 	for _, tt := range tests {
 		agent := createAgent(t, conn, "org-validation", "owner", tt.name+" validation agent")
 		tt.payload.AgentID = agent.ID.String()
-		principal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()).String()
+		principal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
 
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
@@ -105,8 +106,8 @@ func TestAgentPolicyRejectsUnsafeDenyAndMalformedGrantsAtomically(t *testing.T) 
 			_, err := service.CreatePolicyGrant(ctx, &tt.payload)
 			requireOopsCode(t, err, oops.CodeBadRequest)
 
-			var count int
-			require.NoError(t, conn.QueryRow(t.Context(), `SELECT count(*) FROM principal_grants WHERE organization_id = $1 AND principal_urn = $2`, "org-validation", principal).Scan(&count)) //nolint:glint // notestingrawsql: verifies rejected writes are atomic
+			count, err := testrepo.New(conn).CountPrincipalGrantsFixture(t.Context(), testrepo.CountPrincipalGrantsFixtureParams{OrganizationID: "org-validation", PrincipalUrn: principal})
+			require.NoError(t, err)
 			require.Zero(t, count)
 		})
 	}

@@ -8,6 +8,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
+	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -39,7 +40,7 @@ func (f hostedAttachmentFixture) moveHostedToDomain(t *testing.T, domainID uuid.
 
 func (f hostedAttachmentFixture) retirePlatformEndpoints(t *testing.T) {
 	t.Helper()
-	_, err := f.db.Exec(t.Context(), `UPDATE mcp_endpoints SET deleted_at = clock_timestamp() WHERE mcp_server_id = $1 AND project_id = $2`, f.remote.ID, f.projectID) //nolint:glint // notestingrawsql: retire the platform endpoint
+	err := assistantrepo.New(f.db).RetireMCPServerEndpointsFixture(t.Context(), assistantrepo.RetireMCPServerEndpointsFixtureParams{McpServerID: uuid.NullUUID{UUID: f.remote.ID, Valid: true}, ProjectID: f.projectID})
 	require.NoError(t, err)
 }
 
@@ -109,7 +110,7 @@ func TestAssistantServerDomainGate(t *testing.T) {
 			f.retirePlatformEndpoints(t)
 			f.addRemoteEndpoint(t, uuid.NullUUID{UUID: domainID, Valid: true}, "remote-on-domain")
 			if tc.drop {
-				_, err := f.db.Exec(t.Context(), `UPDATE custom_domains SET deleted_at = clock_timestamp() WHERE id = $1`, domainID) //nolint:glint // notestingrawsql: soft-delete the domain
+				err := assistantrepo.New(f.db).SoftDeleteCustomDomainFixture(t.Context(), domainID)
 				require.NoError(t, err)
 			}
 
@@ -136,7 +137,8 @@ func TestAssistantServerPrefersPlatformEndpoint(t *testing.T) {
 	f := newHostedAttachmentFixture(t, "endpoint_addr_prefers_platform")
 	domainID := f.customDomain(t, "org-test", "mcp.example.test", true, true)
 	f.addRemoteEndpoint(t, uuid.NullUUID{UUID: domainID, Valid: true}, "remote-on-domain")
-	_, err := f.db.Exec(t.Context(), `UPDATE mcp_endpoints SET created_at = created_at - interval '1 day' WHERE slug = 'remote-on-domain' AND project_id = $1`, f.projectID) //nolint:glint // notestingrawsql: make the domain endpoint the oldest
+	// Make the domain endpoint the oldest.
+	err := assistantrepo.New(f.db).BackdateMCPEndpointBySlugFixture(t.Context(), assistantrepo.BackdateMCPEndpointBySlugFixtureParams{Slug: "remote-on-domain", ProjectID: f.projectID})
 	require.NoError(t, err)
 	f.addServerRow(t, f.remote.ID, uuid.NullUUID{})
 

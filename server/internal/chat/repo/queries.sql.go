@@ -30,6 +30,16 @@ func (q *Queries) AcquireChatPromptCorrelationLock(ctx context.Context, arg Acqu
 	return err
 }
 
+const acquireToolCallSummaryLock = `-- name: AcquireToolCallSummaryLock :exec
+SELECT pg_advisory_lock($1::bigint)
+`
+
+// Session-level: the caller must release it on the same connection.
+func (q *Queries) AcquireToolCallSummaryLock(ctx context.Context, lockKey int64) error {
+	_, err := q.db.Exec(ctx, acquireToolCallSummaryLock, lockKey)
+	return err
+}
+
 const addUserFeedbackChatResolution = `-- name: AddUserFeedbackChatResolution :exec
 UPDATE chat_user_feedback
 SET chat_resolution_id = $1
@@ -4025,6 +4035,16 @@ func (q *Queries) ListUserFeedbackForChat(ctx context.Context, arg ListUserFeedb
 	return items, nil
 }
 
+const lockChatForCompaction = `-- name: LockChatForCompaction :exec
+SELECT 1 FROM chats WHERE id = $1 FOR UPDATE
+`
+
+// Serializes compaction writes for one chat. A missing chat is not an error.
+func (q *Queries) LockChatForCompaction(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, lockChatForCompaction, id)
+	return err
+}
+
 const lockChatRowForTest = `-- name: LockChatRowForTest :exec
 SELECT id FROM chats WHERE id = $1 AND project_id = $2 FOR NO KEY UPDATE
 `
@@ -4187,6 +4207,15 @@ func (q *Queries) RecordSlackMessageParticipant(ctx context.Context, arg RecordS
 		arg.TeamID,
 		arg.MessageID,
 	)
+	return err
+}
+
+const releaseToolCallSummaryLock = `-- name: ReleaseToolCallSummaryLock :exec
+SELECT pg_advisory_unlock($1::bigint)
+`
+
+func (q *Queries) ReleaseToolCallSummaryLock(ctx context.Context, lockKey int64) error {
+	_, err := q.db.Exec(ctx, releaseToolCallSummaryLock, lockKey)
 	return err
 }
 
