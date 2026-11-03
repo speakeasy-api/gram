@@ -105,3 +105,20 @@ func TestIsCredentialDenial_OnlyDurableDenialCodes(t *testing.T) {
 	require.False(t, isCredentialDenial(errors.New("plain")))
 	require.True(t, isCredentialDenial(fmt.Errorf("wrapped: %w", oops.C(oops.CodeForbidden))))
 }
+
+func TestCredentialCheckFault(t *testing.T) {
+	t.Parallel()
+
+	require.True(t, credentialCheckFault(&pgconn.PgError{Code: "42P01"}))
+	require.True(t, credentialCheckFault(fmt.Errorf("wrapped: %w", oops.E(oops.CodeUnexpected, nil, "engine fault"))))
+	require.True(t, credentialCheckFault(fmt.Errorf("%w: %w", errWorkloadSessionAdmissionLoad, errors.New("plain"))))
+	require.Equal(t, "credential_check_failed", issuerGateFailureReason(&pgconn.PgError{Code: "42P01"}))
+
+	require.False(t, credentialCheckFault(nil))
+	require.False(t, credentialCheckFault(oops.C(oops.CodeForbidden)))
+	require.False(t, credentialCheckFault(pgx.ErrNoRows))
+	require.False(t, credentialCheckFault(fmt.Errorf("%w: %w", errCredentialRejected, oops.C(oops.CodeUnauthorized))))
+
+	require.NotErrorIs(t, markCredentialDenial(&pgconn.PgError{Code: "57P01"}), errCredentialRejected)
+	require.ErrorIs(t, markCredentialDenial(oops.C(oops.CodeForbidden)), errCredentialRejected)
+}

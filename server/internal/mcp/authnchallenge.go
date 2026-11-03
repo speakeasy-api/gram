@@ -461,6 +461,8 @@ func issuerGateFailureReason(err error) string {
 		return issuerGateReasonRevocationUnavailable
 	case errors.Is(err, errWorkloadSessionOutOfReach):
 		return issuerGateReasonWorkloadSessionOutOfReach
+	case credentialCheckFault(err):
+		return "credential_check_failed"
 	default:
 		return issuerGateReasonInvalidBearerToken
 	}
@@ -478,6 +480,18 @@ func issuerGateCheckUnavailable(err error) bool {
 		return true
 	}
 	return errors.Is(err, sessiontokens.ErrRevocationUnavailable)
+}
+
+// credentialCheckFault reports a credential check that failed on our side without judging it.
+func credentialCheckFault(err error) bool {
+	if err == nil || errors.Is(err, errCredentialRejected) {
+		return false
+	}
+	if oops.IsStoreFailure(err) || errors.Is(err, errWorkloadSessionAdmissionLoad) {
+		return true
+	}
+	shareable, ok := errors.AsType[*oops.ShareableError](err)
+	return ok && shareable.Code == oops.CodeUnexpected
 }
 
 // issuerGateReasonWorkloadSessionOutOfReach: a live workload session minted
@@ -1178,7 +1192,7 @@ func (s *Service) authenticateIssuerGate(
 		if issuerGateCheckUnavailable(valErr) {
 			return ctx, nil, nil, outageError(w, valErr, issuerGateCheckUnavailableMessage)
 		}
-		if !errors.Is(valErr, errCredentialRejected) && oops.IsStoreFailure(valErr) {
+		if credentialCheckFault(valErr) {
 			return ctx, nil, nil, oops.E(oops.CodeUnexpected, valErr, "check credential").LogError(ctx, s.logger)
 		}
 		if errors.Is(valErr, errWorkloadSessionOutOfReach) {

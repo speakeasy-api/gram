@@ -189,6 +189,14 @@ func isCredentialDenial(err error) bool {
 	return shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized
 }
 
+// markCredentialDenial marks only a real denial as rejected; other failures judged nothing.
+func markCredentialDenial(err error) error {
+	if isCredentialDenial(err) {
+		return fmt.Errorf("%w: %w", errCredentialRejected, err)
+	}
+	return err
+}
+
 func (s *Service) prepareWorkloadSessionContext(ctx context.Context, organizationID string, subject urn.SessionSubject, credential workloadSessionCredential) (context.Context, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || subject.Kind != urn.SessionSubjectKindWorkload {
