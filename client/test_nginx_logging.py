@@ -28,6 +28,8 @@ class DashboardAccessLoggingTest(unittest.TestCase):
         for app in ("dashboard", "admin"):
             with self.subTest(app=app), tempfile.TemporaryDirectory() as tmp:
                 root = Path(tmp)
+                # The image runs as nonroot; Linux bind mounts keep host modes.
+                root.chmod(0o755)
                 (root / "index.html").write_text("<!doctype html><title>ready</title>")
                 # Exercise the dashboard's real entrypoint/envsubst path; the
                 # admin image loads its configuration directly instead.
@@ -58,7 +60,12 @@ class DashboardAccessLoggingTest(unittest.TestCase):
 
                     def request(path, agent, method="GET", base=base):
                         req = urllib.request.Request(
-                            base + path, headers={"User-Agent": agent}, method=method
+                            base + path,
+                            headers={
+                                "User-Agent": agent,
+                                "X-Forwarded-For": "192.0.2.10",
+                            },
+                            method=method,
                         )
                         try:
                             with urllib.request.urlopen(req, timeout=3) as response:
@@ -86,6 +93,12 @@ class DashboardAccessLoggingTest(unittest.TestCase):
                     # Stop gracefully so all access-log writes are flushed.
                     docker("stop", container)
                     lines = docker("logs", container).splitlines()
+                    self.assertTrue(
+                        any(
+                            '"ordinary-browser" "192.0.2.10"' in line for line in lines
+                        ),
+                        "ordinary access logs must retain the inherited forwarded-for field",
+                    )
                     successful_probes = [
                         line
                         for line in lines
