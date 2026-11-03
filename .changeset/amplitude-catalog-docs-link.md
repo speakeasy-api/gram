@@ -2,4 +2,4 @@
 "server": patch
 ---
 
-The Amplitude catalog entry links to Amplitude's MCP documentation. New environments get the link from the seed; environments that already have the entry keep their stored record until staff add the link in the registry editor.
+The Amplitude catalog entry links to Amplitude's MCP documentation. The catalog seed now also adds a seeded documentation link to existing entries that have none, without replacing a link staff set in the registry editor.

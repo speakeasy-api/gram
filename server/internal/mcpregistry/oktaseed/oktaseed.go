@@ -52,7 +52,7 @@ type Vendor struct {
 const (
 	// applyRevision is raised when Apply changes what it writes for the same
 	// Vendors, so that deployed environments apply the seed again.
-	applyRevision = 2
+	applyRevision = 3
 
 	// versionHexLength keeps 48 bits of the content hash: enough to tell seed
 	// versions apart, short enough to read in a workflow ID.
@@ -653,15 +653,23 @@ func apply(ctx context.Context, svc *mcpregistry.Service, v Vendor) (string, err
 		return "", fmt.Errorf("decode okta mapping: %w", err)
 	}
 	merged, mappingAdded := mergeMapping(current, v.Mapping)
-	iconed, iconAdded, iconErr := withIcon(existing.Data, v.IconURL)
+	filled, iconAdded, iconErr := withIcon(existing.Data, v.IconURL)
 	if iconErr != nil {
 		return "", iconErr
 	}
-	iconed, dcrAdded, dcrErr := withSupportsDCR(iconed, v.SupportsDCR)
-	if dcrErr != nil {
-		return "", dcrErr
+	dcrAdded := false
+	if v.SupportsDCR {
+		if filled, dcrAdded, err = withCatalogField(filled, "supportsDcr", true); err != nil {
+			return "", err
+		}
 	}
-	if !mappingAdded && !iconAdded && !dcrAdded {
+	docsAdded := false
+	if v.DocumentationURL != "" {
+		if filled, docsAdded, err = withCatalogField(filled, "documentationUrl", v.DocumentationURL); err != nil {
+			return "", err
+		}
+	}
+	if !mappingAdded && !iconAdded && !dcrAdded && !docsAdded {
 		// Nothing to write, but a stored record that no longer meets the
 		// contract is reported rather than silently left alone.
 		if issues := svc.ValidateStored(existing.Data); len(issues) > 0 {
@@ -669,7 +677,7 @@ func apply(ctx context.Context, svc *mcpregistry.Service, v Vendor) (string, err
 		}
 		return "unchanged", nil
 	}
-	data, err := withMapping(iconed, merged)
+	data, err := withMapping(filled, merged)
 	if err != nil {
 		return "", err
 	}
@@ -793,12 +801,9 @@ func withIcon(data json.RawMessage, iconURL string) (json.RawMessage, bool, erro
 	return out, true, nil
 }
 
-// withSupportsDCR records registration support only when the stored record
-// says nothing either way, so a value staff set is never replaced.
-func withSupportsDCR(data json.RawMessage, supported bool) (json.RawMessage, bool, error) {
-	if !supported {
-		return data, false, nil
-	}
+// withCatalogField sets one field of the catalog namespace only when the
+// stored record has no value for it, so a value staff set is never replaced.
+func withCatalogField(data json.RawMessage, key string, value any) (json.RawMessage, bool, error) {
 	var root, meta, catalog map[string]json.RawMessage
 	if err := json.Unmarshal(data, &root); err != nil {
 		return nil, false, fmt.Errorf("decode record: %w", err)
@@ -819,11 +824,13 @@ func withSupportsDCR(data json.RawMessage, supported bool) (json.RawMessage, boo
 	if catalog == nil {
 		catalog = map[string]json.RawMessage{}
 	}
-	if _, ok := catalog["supportsDcr"]; ok {
+	if _, ok := catalog[key]; ok {
 		return data, false, nil
 	}
-	catalog["supportsDcr"] = json.RawMessage("true")
 	var err error
+	if catalog[key], err = json.Marshal(value); err != nil {
+		return nil, false, fmt.Errorf("encode catalog field %s: %w", key, err)
+	}
 	if meta[catalogNamespace], err = json.Marshal(catalog); err != nil {
 		return nil, false, fmt.Errorf("encode catalog metadata: %w", err)
 	}
