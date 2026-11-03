@@ -451,9 +451,9 @@ func foundationContext(t *testing.T, engine *Engine, f foundationFixture) contex
 	}
 }
 
-// TestFoundationCompatibilityCorpusCoversContract fails if a contract the F1
-// ticket requires has no fixture, so trimming the corpus cannot silently drop
-// a compatibility obligation.
+// TestFoundationCompatibilityCorpusCoversContract fails if a required
+// compatibility contract has no fixture, so trimming the corpus cannot
+// silently drop a compatibility obligation.
 func TestFoundationCompatibilityCorpusCoversContract(t *testing.T) {
 	t.Parallel()
 

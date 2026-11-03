@@ -226,10 +226,10 @@ func (c inventoryConsumer) key() string {
 }
 
 // TestFoundationInventory freezes every authorization consumer outside the
-// authz package and assigns each one to the Backend Revamp ticket that
-// migrates it (docs/rbac-foundation-migration.md). It fails when a consumer
-// appears, moves or disappears without the inventory following, and when a
-// consumer has no owning ticket. Refresh it with
+// authz package and assigns each one to the migration batch that moves it
+// (docs/rbac-foundation-migration.md). It fails when a consumer appears, moves
+// or disappears without the inventory following, and when a consumer has no
+// owning batch. Refresh it with
 //
 //	go test ./internal/authz -run TestFoundationInventory -update-foundation-inventory
 func TestFoundationInventory(t *testing.T) {
