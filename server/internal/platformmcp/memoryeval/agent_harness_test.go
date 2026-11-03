@@ -124,14 +124,14 @@ func TestJudgedEvalHarnessScoresScriptedAnswers(t *testing.T) {
 	stats := summarize(corpus, 1, arms, answers, verdicts)
 	report := buildReport(corpus, "scripted-answer", "scripted-judge", 1, arms, answers, verdicts)
 	t.Log("\n" + report)
-	require.Contains(t, report, "| B: search_chats | 2% (2–2%)")
+	require.Contains(t, report, "| B: search_chats | 4% (4–4%)")
 
 	none, search := stats[noMemory.name], stats[searchArm.name]
 	require.InDelta(t, 10.0/55, none.accuracyByRun[0], 1e-9, "no memory answers Not found, which is right for the 10 negative and isolation questions")
-	require.InDelta(t, 1.0/55, search.accuracyByRun[0], 1e-9, "the scripted search arm only answers the pooler question")
+	require.InDelta(t, 2.0/55, search.accuracyByRun[0], 1e-9, "the scripted search arm only answers the two pooler questions")
 	require.Equal(t, 45, search.answerable)
 	require.Equal(t, 45, search.citedAnswers)
-	require.Equal(t, 1, search.validCited, "the reversal chat supports only the pooler question")
+	require.Equal(t, 3, search.validCited, "the reversal chat backs the two pooler questions and the list of reversals")
 	require.Empty(t, search.leaks)
 	require.Empty(t, search.isolation)
 	require.Positive(t, search.toolTokens)
