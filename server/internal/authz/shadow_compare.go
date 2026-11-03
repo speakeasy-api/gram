@@ -78,7 +78,9 @@ type ShadowComparison struct {
 	ModelVersion string
 }
 
-// ShadowRecorder receives every comparison the client runs.
+// ShadowRecorder receives every comparison the client runs. It is called on
+// the request path after the comparison's wait, so an implementation must not
+// block: it should only log, count, or hand the record to a buffered sink.
 type ShadowRecorder interface {
 	RecordShadowComparison(ctx context.Context, comparison ShadowComparison)
 }
@@ -175,7 +177,16 @@ func (s *shadowComparer) compare(ctx context.Context, entry string, rt route, op
 	select {
 	case got := <-done:
 		record.Duration = time.Since(start)
-		record.Outcome, record.Detail = classifyShadow(old, got)
+		// An answer that lands with or after the deadline does not count as
+		// a comparison, whichever select case won.
+		switch {
+		case record.Duration >= s.budget.Timeout:
+			record.Outcome, record.Detail = ShadowFailed, "timeout"
+		case ctx.Err() != nil:
+			record.Outcome, record.Detail = ShadowFailed, "canceled"
+		default:
+			record.Outcome, record.Detail = classifyShadow(old, got)
+		}
 	case <-timer.C:
 		record.Duration = time.Since(start)
 		record.Outcome, record.Detail = ShadowFailed, "timeout"

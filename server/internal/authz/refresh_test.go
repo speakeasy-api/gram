@@ -74,3 +74,42 @@ func TestAdmissionBoundaryRequiresPreparedAuthorization(t *testing.T) {
 	_, err := engine.CaptureAdmissionBoundary(enterpriseTestCtx(t.Context()))
 	require.ErrorContains(t, err, "prepared authorization")
 }
+
+func TestRefreshContextKeepsPinnedRoutes(t *testing.T) {
+	t.Parallel()
+	ctx := enterpriseTestCtx(t.Context())
+	conn := newTestDB(t)
+	engine := NewEngine(testenv.NewLogger(t), conn, challengeLoggingAlwaysEnabled, workos.NewStubClient())
+	auth, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	seedOrganization(t, ctx, conn, auth.ActiveOrganizationID)
+	seedConnectedUser(t, ctx, conn, auth.ActiveOrganizationID, auth.UserID, "fixture@example.com", "Fixture User", "fixture-workos-user", "fixture-membership")
+	seedGrant(t, ctx, conn, auth.ActiveOrganizationID, urn.NewPrincipal(urn.PrincipalTypeUser, auth.UserID), ScopeProjectRead, WildcardResource)
+
+	registry, err := DefaultRegistry()
+	require.NoError(t, err)
+	modes := newSwitchableModes(map[string]MigrationMode{"organization": MigrationModeShadow, "project": MigrationModeShadow})
+	router, err := NewMigrationRouter(registry, modes, DefaultMigrationUnits()...)
+	require.NoError(t, err)
+	recorder := &capturedComparisons{}
+	client, err := NewClient(engine, registry, WithMigrationRouter(router), WithShadowRecorder(recorder))
+	require.NoError(t, err)
+
+	project := Project(auth.ActiveOrganizationID, "project-one")
+	admitted, err := client.PrepareContext(ctx)
+	require.NoError(t, err)
+	require.NoError(t, client.Require(admitted, project.Read()))
+	require.Len(t, recorder.all(), 1)
+
+	// The flags flip before the long-lived request refreshes. The refresh
+	// reloads grants but keeps the routes it pinned, so the refreshed call is
+	// still shadowed rather than decided by the registry evaluator.
+	modes.set("organization", MigrationModeNew)
+	modes.set("project", MigrationModeNew)
+	refreshed, err := client.RefreshContext(admitted)
+	require.NoError(t, err)
+	require.Same(t, routePinsFromContext(admitted), routePinsFromContext(refreshed))
+	require.NoError(t, client.Require(refreshed, project.Read()))
+	require.Len(t, recorder.all(), 2, "the refreshed call keeps the pinned shadow route")
+	require.Equal(t, 1, modes.timesAsked("project"))
+}

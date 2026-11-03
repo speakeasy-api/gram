@@ -13,6 +13,7 @@ func TestRBACMigrationVariant(t *testing.T) {
 	flags.SetFlagVariant(RBACMigrationFlag("project"), "org_shadow", RBACMigrationVariantShadow)
 	flags.SetFlagVariant(RBACMigrationFlag("project"), "org_new", RBACMigrationVariantNew)
 	flags.SetFlagVariant(RBACMigrationFlag("project"), "org_other", "unexpected")
+	flags.SetFlagVariant(RBACMigrationFlag("Project!"), "org_new", RBACMigrationVariantNew)
 
 	ctx := t.Context()
 	require.Equal(t, RBACMigrationVariantShadow, RBACMigrationVariant(ctx, flags, "project", "org_shadow"))

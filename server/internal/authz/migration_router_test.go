@@ -221,8 +221,8 @@ func TestRoutesArePinnedPerAuthorizationBoundary(t *testing.T) {
 	require.Equal(t, 1, modes.timesAsked("project"), "each unit is read once per boundary")
 	require.Equal(t, 1, modes.timesAsked("organization"), "dependencies are pinned with their dependents")
 
-	// Re-preparing grants inside the same request keeps the pins, as a
-	// refresh does.
+	// Re-preparing grants inside the same request keeps the pins.
+	// TestRefreshContextKeepsPinnedRoutes covers the database-backed refresh.
 	refreshed := GrantsToContext(ctx, []Grant{grantOf(role, string(ScopeProjectRead), ResourceKindProject, "proj_1")})
 	require.Same(t, routePinsFromContext(ctx), routePinsFromContext(refreshed))
 

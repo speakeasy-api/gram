@@ -13,8 +13,8 @@ flowchart LR
     subgraph after[After]
         H2[handler] -->|authz.Project org, id .Read| C2[Client.Require]
         C2 --> A2[Engine admission and logging]
-        C2 -->|unit flag: old, shadow| E2[Engine decides]
-        C2 -->|unit flag: shadow, new| R2[RegistryEvaluator over the compiled declaration]
+        C2 -->|effective mode: old, shadow| E2[Engine decides]
+        C2 -->|effective mode: shadow, new| R2[RegistryEvaluator over the compiled declaration]
     end
 ```
 

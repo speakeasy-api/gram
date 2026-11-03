@@ -160,8 +160,11 @@ func (c *Client) CaptureAdmissionBoundary(ctx context.Context) (AdmissionBoundar
 }
 
 // Require enforces every operation, recording one challenge as Engine.Require
-// does. A denial maps to forbidden; an invalid operation or missing prepared
-// policies map to unexpected.
+// does. While the engine decides, a call that mixes single operations with
+// alternatives records one challenge for the single operations and one per
+// alternatives operation, as the separate engine calls it replaces did. A
+// denial maps to forbidden; an invalid operation or missing prepared policies
+// map to unexpected.
 func (c *Client) Require(ctx context.Context, ops ...Operation) error {
 	if err := c.validate(ops); err != nil {
 		return c.engine.mapError(ctx, err)
@@ -221,7 +224,9 @@ func (c *Client) requireNew(ctx context.Context, ops []Operation) error {
 
 // Evaluate reports whether every operation is allowed without recording a
 // challenge. Use it where a negative answer is a routine branch rather than a
-// denial. It errors only when an operation cannot be decided.
+// denial. It errors only when an operation cannot be decided. While the engine
+// decides, an alternatives operation still records a challenge, because the
+// engine has no quiet form of it.
 func (c *Client) Evaluate(ctx context.Context, ops ...Operation) (bool, error) {
 	if err := c.validate(ops); err != nil {
 		return false, c.engine.mapError(ctx, err)

@@ -60,7 +60,9 @@ func NewClient(t *testing.T, engine *authz.Engine) *authz.Client {
 
 // NewClientInMode builds the default client with every default migration
 // unit routed to mode, so a migrated service's tests can run against the
-// engine, a shadow comparison, and the registry evaluator alike.
+// engine, a shadow comparison, and the registry evaluator alike. As in
+// production, a context with no active organization always runs old, so a
+// test that wants the shadow or new path must authenticate an organization.
 func NewClientInMode(t *testing.T, engine *authz.Engine, mode authz.MigrationMode) *authz.Client {
 	t.Helper()
 
