@@ -28,6 +28,10 @@ jobs:
       contents: "read"
       pull-requests: read # paths-filter lists the pull request files
     outputs:
+      # False on pushes to main. Main only moves to commits its merge queue
+      # already ran this workflow on, so jobs that only verify the code skip
+      # there; jobs that publish artifacts or warm main-scoped caches still run.
+      verify: ${{ github.event_name != 'push' }}
       server: ${{ steps.gates.outputs.server }}
       client: ${{ steps.gates.outputs.client }}
       cli: ${{ steps.gates.outputs.cli }}
@@ -362,6 +366,8 @@ jobs:
           filters: ${{ matrix.filters }}
           preview-tag: ${{ needs.changes.outputs.preview-tag }}
 
+  # Also runs on pushes to main: it is the only main-branch writer of the pkl
+  # cache that pull request runs restore.
   format-check:
     name: Check formatting with hk
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -1383,7 +1389,7 @@ jobs:
     name: server-checks
     runs-on: blacksmith-16vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.server == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.server == 'true'
     env:
       GOMAXPROCS: 16
     services:
@@ -1460,7 +1466,7 @@ jobs:
     permissions:
       contents: read
     needs: changes
-    if: needs.changes.outputs.infra == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.infra == 'true'
     env:
       GOMAXPROCS: 4
     steps:
@@ -1524,6 +1530,8 @@ jobs:
       - name: Minimize uv cache
         run: uv cache prune --ci
 
+  # Also runs on pushes to main: with infra-build-lint skipped there, it is the
+  # only main-branch writer of the uv cache that pull request runs restore.
   pystreams-build-lint:
     name: Lint and test the pystreams package
     runs-on: blacksmith-4vcpu-ubuntu-2404
@@ -1572,7 +1580,7 @@ jobs:
     name: cli-build-lint
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.cli == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.cli == 'true'
     env:
       GOMAXPROCS: 4
     services:
@@ -1634,7 +1642,7 @@ jobs:
     name: hooks-build-test
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.hooks == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.hooks == 'true'
     env:
       GOMAXPROCS: 4
     steps:
@@ -1669,7 +1677,7 @@ jobs:
     name: glint-test
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.glint == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.glint == 'true'
     env:
       GOMAXPROCS: 4
     steps:
@@ -1701,7 +1709,7 @@ jobs:
     name: plog-build-lint
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.plog == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.plog == 'true'
     env:
       GOMAXPROCS: 4
     steps:
@@ -1748,7 +1756,7 @@ jobs:
     name: server-test (shard ${{ matrix.shard }}/${{ strategy.job-total }})
     runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.server == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.server == 'true'
     strategy:
       # Every shard should report, otherwise a single failure hides the state of
       # the rest of the suite.
@@ -1820,7 +1828,7 @@ jobs:
         # failing runs can be ranked too. Re-running a job replaces its shard's
         # artifact. Read with 'gotestsum tool slowest --jsonfile
         # test-timings.json'; 'mise run ci:shard-timings' turns the JUnit
-        # reports of recent main runs into ci/cmd/shard/timings.txt.
+        # reports of recent merge queue runs into ci/cmd/shard/timings.txt.
         if: always()
         uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
         with:
@@ -1853,7 +1861,7 @@ jobs:
     name: demo-seed-safety
     runs-on: blacksmith-8vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.server == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.server == 'true'
     env:
       GOMAXPROCS: 8
       TESTCONTAINERS_RYUK_DISABLED: true
@@ -2078,6 +2086,7 @@ jobs:
     needs: [changes]
     if: |
       !cancelled() &&
+      needs.changes.outputs.verify == 'true' &&
       needs.changes.outputs.client == 'true'
     steps:
       - name: Checkout
@@ -2146,6 +2155,7 @@ jobs:
     needs: [changes]
     if: |
       !cancelled() &&
+      needs.changes.outputs.verify == 'true' &&
       needs.changes.outputs.client == 'true'
     steps:
       - name: Checkout
@@ -2198,7 +2208,7 @@ jobs:
     name: Check SDK is up-to-date
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: changes
-    if: needs.changes.outputs.sdk-gen == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.sdk-gen == 'true'
     env:
       SPEAKEASY_API_KEY: ${{ secrets.SPEAKEASY_API_KEY }}
     steps:
@@ -2553,7 +2563,7 @@ jobs:
     name: ts-framework-test
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
-    if: needs.changes.outputs.tsframework == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.tsframework == 'true'
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
@@ -2609,6 +2619,8 @@ jobs:
   impeccable:
     name: Detect UI anti-patterns
     runs-on: blacksmith-2vcpu-ubuntu-2404
+    needs: changes
+    if: needs.changes.outputs.verify == 'true'
     # The scan itself takes ~3s; this only guards against a hung npx install.
     # A cold mise cache alone can take >5 minutes on the 2vcpu runner.
     timeout-minutes: 12
@@ -2720,7 +2732,6 @@ jobs:
   svix-sync-webhooks:
     name: Sync webhook event types to Svix
     runs-on: blacksmith-2vcpu-ubuntu-2404
-    needs: [server-checks]
     if: github.event_name == 'push' && github.ref == 'refs/heads/main'
     env:
       SVIX_OPENAPI_FILE: server/internal/outbox/events/catalog_gen.yaml
@@ -2839,7 +2850,7 @@ jobs:
     name: Tunnel agent
     runs-on: blacksmith-4vcpu-ubuntu-2404
     needs: [changes]
-    if: needs.changes.outputs.tunnel == 'true'
+    if: needs.changes.outputs.verify == 'true' && needs.changes.outputs.tunnel == 'true'
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
