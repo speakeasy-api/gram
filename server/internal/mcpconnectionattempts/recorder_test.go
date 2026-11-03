@@ -82,7 +82,7 @@ func newTestRecorderWithLogs(t *testing.T, conn driver.Conn, logsEnabled func(co
 
 	reader := sdkmetric.NewManualReader()
 	provider := sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader))
-	recorder := newRecorder(testenv.NewLogger(t), provider, conn, logsEnabled, nil, cfg)
+	recorder := newRecorder(testenv.NewLogger(t), provider, conn, logsEnabled, cfg)
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -752,7 +752,7 @@ func TestDrop_LogsAreThrottledPerReason(t *testing.T) {
 
 	var logged bytes.Buffer
 	logger := slog.New(slog.NewTextHandler(&logged, nil))
-	recorder := newRecorder(logger, sdkmetric.NewMeterProvider(), &scriptedConn{Conn: nil, block: nil, err: nil, prepares: atomic.Int64{}}, logsOn, nil, testConfig())
+	recorder := newRecorder(logger, sdkmetric.NewMeterProvider(), &scriptedConn{Conn: nil, block: nil, err: nil, prepares: atomic.Int64{}}, logsOn, testConfig())
 	require.NoError(t, recorder.Shutdown(t.Context()))
 
 	recorder.drop(t.Context(), dropQueueFull, 1, nil)
@@ -813,7 +813,7 @@ func TestRecord_SlowInsertsStillSendFullBatchesFromABacklog(t *testing.T) {
 		cfg.queueSize = maxBatch * batches
 		cfg.flushInterval = time.Second
 		reader := sdkmetric.NewManualReader()
-		recorder := testRecorder{Recorder: newRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), conn, logsOn, nil, cfg), reader: reader}
+		recorder := testRecorder{Recorder: newRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(sdkmetric.WithReader(reader)), conn, logsOn, cfg), reader: reader}
 
 		attempt := Begin(testScope())
 		for range maxBatch * batches {
@@ -896,7 +896,7 @@ func TestRecord_BlockedDropLogHoldsNoLock(t *testing.T) {
 	cfg.queueSize = 4
 	cfg.maxBatch = 1
 	cfg.insertTimeout = time.Minute
-	recorder := newRecorder(slog.New(handler), sdkmetric.NewMeterProvider(), conn, logsOn, nil, cfg)
+	recorder := newRecorder(slog.New(handler), sdkmetric.NewMeterProvider(), conn, logsOn, cfg)
 	attempt := Begin(testScope())
 
 	recorder.Step(t.Context(), attempt, StepInboundAuthorize, ResultAccepted)
@@ -932,7 +932,7 @@ func newLoggedRecorder(t *testing.T, conn driver.Conn, logsEnabled func(context.
 	t.Helper()
 
 	var logged bytes.Buffer
-	return newRecorder(slog.New(slog.NewTextHandler(&logged, nil)), sdkmetric.NewMeterProvider(), conn, logsEnabled, nil, cfg), &logged
+	return newRecorder(slog.New(slog.NewTextHandler(&logged, nil)), sdkmetric.NewMeterProvider(), conn, logsEnabled, cfg), &logged
 }
 
 // Metrics may stop exporting during shutdown, so the logs say what the drain lost.
@@ -1016,4 +1016,19 @@ func TestShutdown_UnfinishedReturnsToZero(t *testing.T) {
 
 	require.Zero(t, recorder.unfinished.Load())
 	require.NotContains(t, logged.String(), "unfinished=")
+}
+
+// A panic while building a row is counted, and never reaches the request.
+func TestRecord_APanicNeverReachesTheRequest(t *testing.T) {
+	t.Parallel()
+
+	conn := &scriptedConn{Conn: nil, block: nil, err: nil, prepares: atomic.Int64{}}
+	recorder := newTestRecorder(t, conn, testConfig())
+	explode := Option{apply: func(*Row) { panic("hostile value") }}
+
+	require.NotPanics(t, func() {
+		recorder.Step(t.Context(), Begin(testScope()), StepInboundAuthorize, ResultAccepted, explode)
+	})
+
+	require.Equal(t, int64(1), recorder.dropped(t, dropPanic))
 }

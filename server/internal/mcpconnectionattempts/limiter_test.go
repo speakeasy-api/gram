@@ -301,7 +301,7 @@ func TestRepeats_ABurstThenSilenceAddsUp(t *testing.T) {
 		cfg := testConfig()
 		cfg.queueSize = 4096
 		cfg.repeatsInterval = time.Minute
-		recorder := newRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, logsOn, nil, cfg)
+		recorder := newRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, logsOn, cfg)
 		scope := testScope()
 
 		for range 100 {
@@ -323,7 +323,7 @@ func TestRepeats_ShutdownFlushes(t *testing.T) {
 	conn := &repeatsConn{Conn: nil, rows: atomic.Int64{}, repeats: atomic.Int64{}}
 	cfg := testConfig()
 	cfg.repeatsInterval = time.Hour
-	recorder := newRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, logsOn, nil, cfg)
+	recorder := newRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, logsOn, cfg)
 	scope := testScope()
 	for range 40 {
 		recorder.Once(t.Context(), scope, StepInboundAuthorize, CodeInvalidRequest)

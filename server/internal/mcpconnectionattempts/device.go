@@ -11,29 +11,29 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
 
-// deviceKeyBytes is how much of the hash is kept, 32 hex characters.
-const deviceKeyBytes = 16
+const (
+	// deviceKeyBytes is how much of the hash is kept, 32 hex characters.
+	deviceKeyBytes = 16
+
+	// deviceKeyInfo keeps device keys cryptographically separate from other uses of the same secret.
+	deviceKeyInfo = "gram/connection/device"
+)
+
+// DeriveKey derives a per-organization key for a purpose, as risk.Fingerprinter.DeriveCurrentKey
+// does. This package can't import risk, which depends on it through remotesessions.
+type DeriveKey func(info, organizationID string) ([]byte, error)
 
 // RecorderOption configures a Recorder.
-type RecorderOption func(*[]byte)
+type RecorderOption func(*Recorder)
 
-// WithDeviceKeySecret sets the key device_key is hashed with. Without one device_key stays empty.
-func WithDeviceKeySecret(secret string) RecorderOption {
-	return func(key *[]byte) { *key = []byte(secret) }
+// WithDeviceKeys sets where device keys come from. Without them device_key stays empty.
+func WithDeviceKeys(derive DeriveKey) RecorderOption {
+	return func(r *Recorder) { r.deviceKeys = derive }
 }
 
-func recorderDeviceKey(opts []RecorderOption) []byte {
-	var key []byte
-	for _, opt := range opts {
-		opt(&key)
-	}
-	return key
-}
-
-// connectionIP returns the address that connected to our public ingress, or "" when unsure. The
-// ingress appends it as the last X-Forwarded-For hop, and anything before that came from the caller.
-// RemoteAddr is the ingress itself. A private network request does not pass through that ingress.
-func connectionIP(r *http.Request) string {
+// lastForwardedFor returns the end of the last X-Forwarded-For line, unparsed. A private network
+// request does not pass through our public ingress, so it has no hop we can trust.
+func lastForwardedFor(r *http.Request) string {
 	if origin, ok := requestorigin.FromContext(r.Context()); ok && origin.Surface == requestorigin.SurfacePrivateNetwork {
 		return ""
 	}
@@ -42,7 +42,14 @@ func connectionIP(r *http.Request) string {
 		return ""
 	}
 	line := lines[len(lines)-1]
-	hop := strings.TrimSpace(line[strings.LastIndexByte(line, ',')+1:])
+	return strings.Clone(line[max(0, len(line)-maxForwardedForBytes):])
+}
+
+// connectionIP returns the address that connected to our public ingress, or "" when unsure. The
+// ingress appends it as the last X-Forwarded-For hop, and anything before that came from the caller.
+// RemoteAddr is the ingress itself, so it never stands in.
+func connectionIP(forwardedFor string) string {
+	hop := strings.TrimSpace(forwardedFor[strings.LastIndexByte(forwardedFor, ',')+1:])
 	addr, err := netip.ParseAddr(hop)
 	if err != nil {
 		return ""
@@ -50,16 +57,17 @@ func connectionIP(r *http.Request) string {
 	return addr.Unmap().WithZone("").String()
 }
 
-// stampDevice hashes the waiting address on the writer, after the logs check, and drops the address.
-func (r *Recorder) stampDevice(row *Row) {
-	ip := row.clientIP
-	row.clientIP = ""
-	if ip == "" || len(r.deviceKey) == 0 {
-		return
+// deviceKeyFor hashes an address under the organization's key. With no address, or no usable
+// key, it returns "". After a key rotation a device reads as new.
+func (r *Recorder) deviceKeyFor(organizationID, ip string) string {
+	if ip == "" || r.deviceKeys == nil {
+		return ""
 	}
-	mac := hmac.New(sha256.New, r.deviceKey)
-	mac.Write([]byte(row.OrganizationID))
-	mac.Write([]byte{0})
+	key, err := r.deviceKeys(deviceKeyInfo, organizationID)
+	if err != nil {
+		return ""
+	}
+	mac := hmac.New(sha256.New, key)
 	mac.Write([]byte(ip))
-	row.DeviceKey = hex.EncodeToString(mac.Sum(nil)[:deviceKeyBytes])
+	return hex.EncodeToString(mac.Sum(nil)[:deviceKeyBytes])
 }

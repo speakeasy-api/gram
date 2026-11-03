@@ -20,8 +20,16 @@ const (
 	FamilyOther           = "other"
 )
 
-// maxUserAgentBytes bounds what is read. Real client tokens sit at the start.
-const maxUserAgentBytes = 256
+const (
+	// maxUserAgentBytes bounds what is kept and read. Real client tokens sit at the start.
+	maxUserAgentBytes = 256
+
+	// maxClientVersionBytes bounds a stored version. Real ones are far shorter.
+	maxClientVersionBytes = 32
+
+	// maxForwardedForBytes keeps the end of the header, which holds the only hop we read.
+	maxForwardedForBytes = 128
+)
 
 // clientFamilies is checked in order, so an editor's Electron User-Agent reads as the
 // editor before its Mozilla prefix reads as a browser.
@@ -47,7 +55,7 @@ var clientVersionShape = regexp.MustCompile(`^[0-9]+(\.[0-9]+){0,3}(-[a-zA-Z0-9.
 // the family's own marker and has the shape of a version. A browser's Mozilla/5.0 is no version.
 func classifyUserAgent(userAgent string) (family, version string) {
 	userAgent = userAgent[:min(len(userAgent), maxUserAgentBytes)]
-	lower := strings.ToLower(userAgent)
+	lower := asciiLower(userAgent)
 	for _, candidate := range clientFamilies {
 		for _, marker := range candidate.markers {
 			at := strings.Index(lower, marker)
@@ -63,6 +71,18 @@ func classifyUserAgent(userAgent string) (family, version string) {
 	return FamilyOther, ""
 }
 
+// asciiLower keeps every byte offset, so an index into its result is an index into its input.
+// strings.ToLower can change a string's length.
+func asciiLower(value string) string {
+	lower := []byte(value)
+	for i, b := range lower {
+		if 'A' <= b && b <= 'Z' {
+			lower[i] = b + ('a' - 'A')
+		}
+	}
+	return string(lower)
+}
+
 func versionAfter(rest string) string {
 	if !strings.HasPrefix(rest, "/") {
 		return ""
@@ -71,20 +91,42 @@ func versionAfter(rest string) string {
 	if end := strings.IndexAny(rest, " ;,()"); end >= 0 {
 		rest = rest[:end]
 	}
-	if !clientVersionShape.MatchString(rest) {
+	if len(rest) > maxClientVersionBytes || !clientVersionShape.MatchString(rest) {
 		return ""
 	}
 	return rest
 }
 
-// FromRequest sets what the request says about its client. Without a request it sets nothing.
+// requestClient is what a row keeps from its request until the writer reads it. It is bounded
+// and copied, so a row holds no large header, and it is never stored or logged.
+type requestClient struct {
+	present      bool
+	userAgent    string
+	forwardedFor string
+}
+
+// FromRequest keeps what the request says about its client, for the writer to read. It parses
+// nothing here, so hostile headers can't affect the request. Without a request it sets nothing.
 func FromRequest(r *http.Request) Option {
 	if r == nil {
 		return Option{apply: nil}
 	}
-	family, version := classifyUserAgent(r.UserAgent())
-	ip := connectionIP(r)
-	return Option{apply: func(row *Row) {
-		row.ClientFamily, row.ClientVersion, row.clientIP = family, version, ip
-	}}
+	userAgent := r.UserAgent()
+	client := requestClient{
+		present:      true,
+		userAgent:    strings.Clone(userAgent[:min(len(userAgent), maxUserAgentBytes)]),
+		forwardedFor: lastForwardedFor(r),
+	}
+	return Option{apply: func(row *Row) { row.client = client }}
+}
+
+// stampClient reads a row's request on the writer: its family, version and device key.
+func (r *Recorder) stampClient(row *Row) {
+	client := row.client
+	row.client = requestClient{present: false, userAgent: "", forwardedFor: ""}
+	if !client.present {
+		return
+	}
+	row.ClientFamily, row.ClientVersion = classifyUserAgent(client.userAgent)
+	row.DeviceKey = r.deviceKeyFor(row.OrganizationID, connectionIP(client.forwardedFor))
 }

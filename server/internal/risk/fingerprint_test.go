@@ -265,3 +265,35 @@ func TestFingerprinter_Versions(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, []string{"v1", "v2"}, fp.Versions())
 }
+
+func TestDeriveCurrentKey_IsSeparatePerPurposeAndTenant(t *testing.T) {
+	t.Parallel()
+
+	ring, err := risk.ParsePepperKeyRing([]byte(`{"current":"v1","keys":{"v1":"` + base64.StdEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef")) + `"}}`))
+	require.NoError(t, err)
+
+	key, err := ring.DeriveCurrentKey("gram/connection/device", "org-a")
+	require.NoError(t, err)
+	require.Len(t, key, 32)
+
+	same, err := ring.DeriveCurrentKey("gram/connection/device", "org-a")
+	require.NoError(t, err)
+	require.Equal(t, key, same, "stable until the pepper rotates")
+
+	otherTenant, err := ring.DeriveCurrentKey("gram/connection/device", "org-b")
+	require.NoError(t, err)
+	require.NotEqual(t, key, otherTenant)
+
+	otherPurpose, err := ring.DeriveCurrentKey("gram/risk/fingerprint/tenant-other", "org-a")
+	require.NoError(t, err)
+	require.NotEqual(t, key, otherPurpose)
+}
+
+// A process with no keyring gets an error, never a panic, so its device key stays empty.
+func TestDeriveCurrentKey_ZeroFingerprinterErrors(t *testing.T) {
+	t.Parallel()
+
+	var ring risk.Fingerprinter
+	_, err := ring.DeriveCurrentKey("gram/connection/device", "org-a")
+	require.Error(t, err)
+}
