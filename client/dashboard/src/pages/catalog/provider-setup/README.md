@@ -34,7 +34,7 @@ The organization opens its organization-owned OAuth app settings. New and existi
 
 The backend exposes bounded connection failures rather than distinguishing GitHub organization policy and SSO responses. Inline failures therefore offer the approved organization-approval and SSO instructions as possible corrections without asserting either cause. Credential and app-setting corrections remain available beside them. No simulated success controls are included.
 
-Run `client/dashboard/scripts/github-setup.playwright.txt` through `mise run playwright run-code --filename=...` on an installed GitHub setup page to check both app paths, callback, credential clearing, refresh, completion gating and layouts. Successful live GitHub authorization requires valid OAuth app credentials; controlled-response tests do not establish provider authorization or SSO success.
+Successful live GitHub authorization requires valid OAuth app credentials; controlled-response tests do not establish provider authorization or SSO success.
 
 ## Setup entry and identity
 
