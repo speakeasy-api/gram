@@ -1516,6 +1516,16 @@ type CustomDomain struct {
 	// @access: confidential
 	ConsecutiveFailures pgtype.Int4
 	// @access: confidential
+	DnsTargetToken pgtype.Text
+	// @access: confidential
+	DnsRoutingMethod pgtype.Text
+	// Advisory DNS configuration observation, independent of ownership and infrastructure health.
+	// @access: confidential
+	DnsConfigurationStatus pgtype.Text
+	// Time of the DNS observation; matches health_checked_at only when both observations came from the same check.
+	// @access: confidential
+	DnsCheckedAt pgtype.Timestamptz
+	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential
 	UpdatedAt pgtype.Timestamptz

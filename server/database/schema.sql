@@ -2701,6 +2701,20 @@ CREATE TABLE IF NOT EXISTS custom_domains (
   unhealthy_since timestamptz,
   certificate_expires_at timestamptz,
   consecutive_failures INTEGER CONSTRAINT custom_domains_consecutive_failures_check CHECK (consecutive_failures >= 0),
+  -- Random, immutable DNS label forming this domain's per-domain CNAME target
+  -- (<token>.<suffix>). Cleared on soft delete.
+  dns_target_token TEXT CONSTRAINT custom_domains_dns_target_token_check CHECK (
+    dns_target_token IS NULL
+    OR (
+      dns_target_token <> ''
+      AND char_length(dns_target_token) <= 63
+    )
+  ),
+  -- Routing method the health checks last observed (for example per-domain
+  -- CNAME, shared CNAME or A record). Allowed values are enforced in code.
+  dns_routing_method TEXT,
+  dns_configuration_status TEXT,
+  dns_checked_at timestamptz,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   deleted_at timestamptz,
@@ -2726,6 +2740,12 @@ COMMENT ON COLUMN custom_domains.health_checked_at IS '@access: confidential';
 COMMENT ON COLUMN custom_domains.unhealthy_since IS '@access: confidential';
 COMMENT ON COLUMN custom_domains.certificate_expires_at IS '@access: confidential';
 COMMENT ON COLUMN custom_domains.consecutive_failures IS '@access: confidential';
+COMMENT ON COLUMN custom_domains.dns_target_token IS '@access: confidential';
+COMMENT ON COLUMN custom_domains.dns_routing_method IS '@access: confidential';
+COMMENT ON COLUMN custom_domains.dns_configuration_status IS 'Advisory DNS configuration observation, independent of ownership and infrastructure health.
+@access: confidential';
+COMMENT ON COLUMN custom_domains.dns_checked_at IS 'Time of the DNS observation; matches health_checked_at only when both observations came from the same check.
+@access: confidential';
 COMMENT ON COLUMN custom_domains.created_at IS '@access: confidential';
 COMMENT ON COLUMN custom_domains.updated_at IS '@access: confidential';
 COMMENT ON COLUMN custom_domains.deleted_at IS '@access: confidential';
@@ -2737,6 +2757,10 @@ WHERE deleted IS FALSE;
 
 CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_organization_id_key
 ON custom_domains (organization_id)
+WHERE deleted IS FALSE;
+
+CREATE UNIQUE INDEX IF NOT EXISTS custom_domains_dns_target_token_key
+ON custom_domains (dns_target_token)
 WHERE deleted IS FALSE;
 
 -- Tenant-qualified target for resources that pin a custom domain by id. Hard
