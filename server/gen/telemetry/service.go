@@ -2483,6 +2483,19 @@ type ToolUsageTraceSummary struct {
 	AuthorizerUserID *string
 	// Email of the authorizer when they resolve to a known user
 	AuthorizerLabel *string
+	// Type of the auth client that signed an agent's gateway call in to its
+	// upstream server, such as remote_session for a person's connection or
+	// service_account for a shared credential; absent for calls recorded before it
+	// was tracked
+	AuthClientType *string
+	// Auth client that signed an agent's gateway call in to its upstream server
+	AuthClientID *string
+	// Person whose own connection signed an agent's gateway call in; absent for a
+	// shared credential
+	ConnectionOwnerUserID *string
+	// Display name, or email, of the connection owner when they resolve to a known
+	// user
+	ConnectionOwnerLabel *string
 	// Hook plugin source when the row came from hook telemetry
 	HookSource *string
 	// Telemetry event source

@@ -2423,3 +2423,10 @@ WHERE id = @id;
 -- Test-only fixture: backdates every message in a chat so the team memory
 -- sweep reads the chat's last activity as created_at.
 UPDATE chat_messages SET created_at = @created_at WHERE chat_id = @chat_id;
+
+-- name: SetAPIKeyCreatorFixture :exec
+-- Test-only fixture: an agent key issued by another member of the organization.
+UPDATE api_keys
+SET created_by_user_id = @created_by_user_id
+WHERE id = @id
+  AND organization_id = @organization_id;

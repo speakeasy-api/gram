@@ -116,6 +116,7 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 		connectRoot:         connectRoot,
 		chainUpstream:       nil,
 		catalog:             nil,
+		catalogRecoveryOnly: false,
 		catalogRef:          nil,
 		authentication:      nil,
 		unapprovedMembers:   nil,
@@ -132,6 +133,7 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 		connectURL:          connectURL,
 		consentDiagnostics:  nil,
 		skillsOverMCP:       nil,
+		servedCredentials:   nil,
 	}
 	params, err := json.Marshal(toolsCallParams{Name: tool, Arguments: arguments, Meta: nil})
 	if err != nil {
