@@ -18,6 +18,27 @@ const (
 	FamilyScript          = "script"
 	FamilyBrowser         = "browser"
 	FamilyOther           = "other"
+	FamilyCopilot         = "copilot"
+	FamilyZed             = "zed"
+	FamilyKiro            = "kiro"
+	FamilyReplit          = "replit"
+	FamilyNotion          = "notion"
+
+	// Inferred from product names in Figma's client catalog, not seen in Speakeasy traffic.
+	FamilyXcode         = "xcode"
+	FamilyGrok          = "grok"
+	FamilyAntigravity   = "antigravity"
+	FamilySlack         = "slack"
+	FamilyWindsurf      = "windsurf"
+	FamilyWarp          = "warp"
+	FamilyFactoryDroid  = "factory_droid"
+	FamilyAugment       = "augment"
+	FamilyRovo          = "rovo"
+	FamilyAndroidStudio = "android_studio"
+	FamilyAmazonQ       = "amazon_q"
+	FamilyOpenHands     = "openhands"
+	FamilyServiceNow    = "servicenow"
+	FamilyDevin         = "devin"
 )
 
 const (
@@ -32,19 +53,41 @@ const (
 )
 
 // clientFamilies is checked in order, so an editor's Electron User-Agent reads as the
-// editor before its Mozilla prefix reads as a browser.
+// editor before its Mozilla prefix reads as a browser. A marker matches whole words only.
 var clientFamilies = []struct {
 	family  string
 	markers []string
 }{
 	{FamilyClaudeCode, []string{"claude-code", "claude-cli"}},
-	{FamilyClaudeAI, []string{"claude-user", "claude.ai", "claudebot"}},
-	{FamilyCodexCLI, []string{"codex_cli_rs", "codex_cli", "codex-cli", "codex"}},
-	{FamilyOpenAIConnector, []string{"openai-mcp", "chatgpt-user", "chatgpt", "openai"}},
+	{FamilyClaudeAI, []string{"claude-user", "claude.ai"}},
+	{FamilyCodexCLI, []string{"codex_cli_rs", "codex_cli", "codex-cli", "codex-mcp-client", "codex"}},
+	{FamilyOpenAIConnector, []string{"openai-mcp", "chatgpt-user", "chatgpt"}},
 	{FamilyCursor, []string{"cursor"}},
+	{FamilyCopilot, []string{"copilot"}},
+	{FamilyZed, []string{"zed"}},
+	{FamilyKiro, []string{"kiro"}},
+	{FamilyReplit, []string{"replit-agent-mcp-client", "replit"}},
+	{FamilyNotion, []string{"notion-mcp-client"}},
+
+	// Inferred from product names in Figma's client catalog, not seen in Speakeasy traffic.
+	{FamilyXcode, []string{"xcode"}},
+	{FamilyGrok, []string{"grok"}},
+	{FamilyAntigravity, []string{"antigravity"}},
+	{FamilySlack, []string{"slack"}},
+	{FamilyWindsurf, []string{"windsurf"}},
+	{FamilyWarp, []string{"warp"}},
+	{FamilyFactoryDroid, []string{"droid"}},
+	{FamilyAugment, []string{"augment"}},
+	{FamilyRovo, []string{"rovo"}},
+	{FamilyAndroidStudio, []string{"android studio", "androidstudio"}},
+	{FamilyAmazonQ, []string{"amazon-q", "amazonq"}},
+	{FamilyOpenHands, []string{"openhands"}},
+	{FamilyServiceNow, []string{"servicenow"}},
+	{FamilyDevin, []string{"devin"}},
+
 	{FamilyVSCode, []string{"vscode", "visual studio code"}},
 	{FamilyPerplexity, []string{"perplexity"}},
-	{FamilyScript, []string{"python-httpx", "python-requests", "aiohttp", "node-fetch", "undici", "axios", "node", "curl", "wget", "go-http-client", "okhttp", "java"}},
+	{FamilyScript, []string{"python-httpx", "python-requests", "aiohttp", "node-fetch", "undici", "axios", "node", "libcurl", "curl", "wget", "go-http-client", "okhttp", "java"}},
 	{FamilyBrowser, []string{"mozilla"}},
 }
 
@@ -58,7 +101,7 @@ func classifyUserAgent(userAgent string) (family, version string) {
 	lower := asciiLower(userAgent)
 	for _, candidate := range clientFamilies {
 		for _, marker := range candidate.markers {
-			at := strings.Index(lower, marker)
+			at := markerIndex(lower, marker)
 			if at < 0 {
 				continue
 			}
@@ -69,6 +112,27 @@ func classifyUserAgent(userAgent string) (family, version string) {
 		}
 	}
 	return FamilyOther, ""
+}
+
+// markerIndex finds marker as whole words, so "node" misses "nodeflux" and "zed" misses "authorized".
+func markerIndex(lower, marker string) int {
+	for from := 0; from < len(lower); {
+		at := strings.Index(lower[from:], marker)
+		if at < 0 {
+			return -1
+		}
+		at += from
+		end := at + len(marker)
+		if (at == 0 || !isWordByte(lower[at-1])) && (end == len(lower) || !isWordByte(lower[end])) {
+			return at
+		}
+		from = at + 1
+	}
+	return -1
+}
+
+func isWordByte(b byte) bool {
+	return 'a' <= b && b <= 'z' || '0' <= b && b <= '9'
 }
 
 // asciiLower keeps every byte offset, so an index into its result is an index into its input.
