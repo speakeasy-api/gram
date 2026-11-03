@@ -21,7 +21,7 @@ export type ListManagedDevicesSecurity = {
 /**
  * Only devices in this coverage bucket.
  */
-export const CoverageBucket = {
+export const QueryParamCoverageBucket = {
   AgentActive: "agent_active",
   AgentStale: "agent_stale",
   AgentOtherDevice: "agent_other_device",
@@ -33,12 +33,14 @@ export const CoverageBucket = {
 /**
  * Only devices in this coverage bucket.
  */
-export type CoverageBucket = ClosedEnum<typeof CoverageBucket>;
+export type QueryParamCoverageBucket = ClosedEnum<
+  typeof QueryParamCoverageBucket
+>;
 
 /**
  * Only agent_active devices in this policy state.
  */
-export const PolicyState = {
+export const QueryParamPolicyState = {
   Attested: "attested",
   Outdated: "outdated",
   Unreported: "unreported",
@@ -47,7 +49,7 @@ export const PolicyState = {
 /**
  * Only agent_active devices in this policy state.
  */
-export type PolicyState = ClosedEnum<typeof PolicyState>;
+export type QueryParamPolicyState = ClosedEnum<typeof QueryParamPolicyState>;
 
 export type ListManagedDevicesRequest = {
   /**
@@ -57,11 +59,11 @@ export type ListManagedDevicesRequest = {
   /**
    * Only devices in this coverage bucket.
    */
-  coverageBucket?: CoverageBucket | undefined;
+  coverageBucket?: QueryParamCoverageBucket | undefined;
   /**
    * Only agent_active devices in this policy state.
    */
-  policyState?: PolicyState | undefined;
+  policyState?: QueryParamPolicyState | undefined;
   /**
    * Only devices assigned to these Speakeasy users. Combined with user_emails as an OR, because a device only carries a resolved user id when the MDM's reported email matched a member.
    */
@@ -124,13 +126,14 @@ export function listManagedDevicesSecurityToJSON(
 }
 
 /** @internal */
-export const CoverageBucket$outboundSchema: z.ZodMiniEnum<
-  typeof CoverageBucket
-> = z.enum(CoverageBucket);
+export const QueryParamCoverageBucket$outboundSchema: z.ZodMiniEnum<
+  typeof QueryParamCoverageBucket
+> = z.enum(QueryParamCoverageBucket);
 
 /** @internal */
-export const PolicyState$outboundSchema: z.ZodMiniEnum<typeof PolicyState> = z
-  .enum(PolicyState);
+export const QueryParamPolicyState$outboundSchema: z.ZodMiniEnum<
+  typeof QueryParamPolicyState
+> = z.enum(QueryParamPolicyState);
 
 /** @internal */
 export type ListManagedDevicesRequest$Outbound = {
@@ -152,8 +155,8 @@ export const ListManagedDevicesRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     provider: z.optional(z.string()),
-    coverageBucket: z.optional(CoverageBucket$outboundSchema),
-    policyState: z.optional(PolicyState$outboundSchema),
+    coverageBucket: z.optional(QueryParamCoverageBucket$outboundSchema),
+    policyState: z.optional(QueryParamPolicyState$outboundSchema),
     userIds: z.optional(z.array(z.string())),
     userEmails: z.optional(z.array(z.string())),
     cursor: z.optional(z.string()),

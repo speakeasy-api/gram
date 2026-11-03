@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -141,6 +142,17 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 
 	if err := m.switchServer(ctx, tx, principal, actor.Email, toolset, serverID, remote.ID, candidate, &outcome); err != nil {
 		return outcome, err
+	}
+
+	// The headers written above are upstream credentials, so the server now on
+	// the source gets the typed auth client they yield in the same
+	// transaction, as every other credential header writer does. This runs
+	// after the switch so the source already names the server it serves.
+	if err := authclientbackfill.SyncEMAServers(ctx, tx, organizationID, []uuid.UUID{serverID}); err != nil {
+		return outcome, fmt.Errorf("sync migrated server EMA clients: %w", err)
+	}
+	if err := authclientbackfill.SyncRemoteSource(ctx, tx, organizationID, remote.ID); err != nil {
+		return outcome, fmt.Errorf("sync migrated source auth clients: %w", err)
 	}
 
 	if hasUpstreamClient(candidate) {

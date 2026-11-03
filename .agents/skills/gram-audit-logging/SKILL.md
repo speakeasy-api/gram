@@ -26,7 +26,15 @@ Audit logging is how Speakeasy records _who did what to which resource_. Every m
 
 **Atomicity.** Audit entries are written inside the same database transaction as the mutation they describe, so the state and the record of the state commit together or not at all.
 
-**Outbox event.** By default, every audit entry also publishes a typed webhook event to the outbox (same transaction). The event type is subject-specific — e.g. `audit_log.deployment_event_v1` for deployment actions, `audit_log.project_event_v1` for project actions — allowing webhook subscribers to filter by subject domain rather than receiving all audit activity under the single legacy `audit_log.created` type. The `_v1` suffix signals the version; new event definitions must use this suffix. All subject event vars are declared in `server/internal/outbox/events/audit_log.go`. Operator backfills construct their logger with `audit.NewLogger(audit.WithoutOutbox())`, which records audit rows but publishes no webhook events, so bulk system writes do not flood customer webhooks.
+**Configuration log and security log.** Entries go to one of two tables, and the caller decides which by the package it calls. Both are returned by the staff admin activity view and readable by customers, and entries written through either package publish webhooks (the payload's `category` says which log). Rows written directly, such as demo seed rows and backfills, publish none. The audit log page shows the configuration log by default and the security log on request. Before adding an event, decide which it is:
+
+- **Configuration** (`audit` package, `audit_logs`): a person or the Speakeasy team changed the platform's configuration — created, updated or deleted a resource, granted or revoked access, admitted or withdrew a workload, registered a credential or trust relationship.
+- **Security** (`audit/securityevent` package, `security_audit_logs`): machine access or other security-relevant activity that is not a configuration decision — for example a runtime admitting and withdrawing its own workload identity on every start and teardown. Its frequency follows runtime churn or traffic rather than decisions, and no person chose it, which is why it has its own table. Customers still need it when auditing what their users and automated processes did, so it is kept and delivered rather than dropped.
+- An event written by a system actor must still name what acted. Prefer attributing it to the agent or person it acts for; a bare system principal with no display name renders as "Speakeasy" in the dashboard.
+
+The same action can belong in either log depending on who caused it: a person admitting a workload is a configuration change (`audit.Logger.LogWorkloadAdmissionAdmit`), while the Kit runtime admitting its own workload is a security event (`securityevent.LogWorkloadAdmissionAdmit`). Both take the same event struct. Once customers have seen an action in the configuration log, moving it is a visible change, so choose before shipping rather than after.
+
+**Outbox event.** By default, every audit entry also publishes a typed webhook event to the outbox (same transaction). The event type is subject-specific — e.g. `audit_log.deployment_event_v1` for deployment actions, `audit_log.project_event_v1` for project actions — allowing webhook subscribers to filter by subject domain rather than receiving all audit activity under the single legacy `audit_log.created` type. The `_v1` suffix signals the version; new event definitions must use this suffix. All subject event vars are declared in `server/internal/outbox/events/audit_log.go`. Operator backfills construct their logger with `audit.NewLogger(audit.WithoutOutbox())`, which records audit rows but publishes no webhook events, so bulk system writes do not flood customer webhooks. Security events publish the same event types with `category: "security"`, so subscribers separate the two logs by that field.
 
 ## Server
 
@@ -63,6 +71,7 @@ Audit logging lives in `server/internal/audit/` with its management-API surface 
 | `server/internal/audit/outbox.go`                                    | `appendToOutbox` — translates the inserted audit row into an `AuditLogCreatedPayload` and publishes to the outbox under the subject-specific event def.                                                                |
 | `server/internal/auditapi/impl.go`                                   | Implementation of the `/rpc/auditlogs.*` Goa service (reads). Lives in its own package to keep the `audit` writer surface free of `auth/sessions` and `mv` so any service can call `audit.Log*` without import cycles. |
 | `server/internal/audit/queries.sql`                                  | SQLc queries for the audit log table. Regenerates `server/internal/audit/repo/` via `mise run gen:sqlc-server`.                                                                                                        |
+| `server/internal/audit/securityevent/`                               | Security log writers and readers over `security_audit_logs`, with their own `queries.sql` (regenerates `securityevent/repo/`).                                                                                         |
 | `server/internal/auditapi/{setup_test,list_test,listfacets_test}.go` | Tests for the `auditlogs` management API.                                                                                                                                                                              |
 | `server/internal/outbox/events/audit_log.go`                         | Per-subject `*outbox.EventDef` vars (e.g. `events.Deployment`, `events.Project`). Add a new var here when introducing a new audited subject.                                                                           |
 
@@ -70,12 +79,13 @@ Audit logging lives in `server/internal/audit/` with its management-API surface 
 
 Files under `server/gen/**` and any `repo/` subdirectory carry a `DO NOT EDIT` header.
 
-| Path                                                               | Generator                                                                                                                       |
-| ------------------------------------------------------------------ | ------------------------------------------------------------------------------------------------------------------------------- |
-| `server/gen/auditlogs/`, `server/gen/http/auditlogs/`              | `mise run gen:goa-server` from `server/design/auditlogs/design.go`.                                                             |
-| `server/internal/audit/audittest/repo/`                            | `mise run gen:sqlc-server` from `server/internal/audit/audittest/queries.sql` (separate stanza in `server/database/sqlc.yaml`). |
-| `server/internal/audit/repo/`                                      | `mise run gen:sqlc-server` from `server/internal/audit/queries.sql` (via the `audit` stanza in `server/database/sqlc.yaml`).    |
-| `server/internal/outbox/events/catalog_gen.go`, `catalog_gen.yaml` | `mise run gen:webhooks-server` from `server/cmd/gen-webhooks`. Run after adding a new event def to `audit_log.go`.              |
+| Path                                                               | Generator                                                                                                                              |
+| ------------------------------------------------------------------ | -------------------------------------------------------------------------------------------------------------------------------------- |
+| `server/gen/auditlogs/`, `server/gen/http/auditlogs/`              | `mise run gen:goa-server` from `server/design/auditlogs/design.go`.                                                                    |
+| `server/internal/audit/audittest/repo/`                            | `mise run gen:sqlc-server` from `server/internal/audit/audittest/queries.sql` (separate stanza in `server/database/sqlc.yaml`).        |
+| `server/internal/audit/repo/`                                      | `mise run gen:sqlc-server` from `server/internal/audit/queries.sql` (via the `audit` stanza in `server/database/sqlc.yaml`).           |
+| `server/internal/audit/securityevent/repo/`                        | `mise run gen:sqlc-server` from `server/internal/audit/securityevent/queries.sql` (via its own stanza in `server/database/sqlc.yaml`). |
+| `server/internal/outbox/events/catalog_gen.go`, `catalog_gen.yaml` | `mise run gen:webhooks-server` from `server/cmd/gen-webhooks`. Run after adding a new event def to `audit_log.go`.                     |
 
 ## Server-client contract
 
@@ -83,8 +93,10 @@ Audit entries are surfaced to Speakeasy users through a small, fixed set of endp
 
 **HTTP routes** (design: `server/design/auditlogs/design.go`):
 
-- `GET /rpc/auditlogs.list` — paginated list; supports cursor, `project_slug`, `actor_id`, and `action` filters.
-- `GET /rpc/auditlogs.listFacets` — returns the set of actors and actions that actually appear, for UI facet pickers.
+- `GET /rpc/auditlogs.list` — paginated list; supports cursor, `project_slug`, `actor_id`, `action` and `category` filters. Returns one category, `configuration` by default, whatever the other filters. Each entry carries its `category`.
+- `GET /rpc/auditlogs.listFacets` — returns the set of actors and actions that actually appear, for UI facet pickers. Computed from the requested `category`, `configuration` by default.
+
+`auditlogs.list` and `auditlogs.listFacets` read `audit_logs` for `configuration` and `security_audit_logs` for `security`, and the dashboard's audit log switches between them. The staff admin activity view (`internal/admin`) merges both logs newest first; each table pages by its own `seq`, so its cursor carries a position in each. `securityevent.List` and the facet readers take and return the `audit/repo` types: the `securityevent` queries mirror the `audit` ones column for column, so the conversions compile only while the two stay in step.
 
 **Generated client surfaces** — regenerated by `mise run gen:goa-server` then `mise run gen:sdk`:
 
@@ -103,6 +115,16 @@ When a handler mutates a resource whose subject already has `Action*`/`Log*` def
 4. For updates, populate the typed snapshot fields (`<Subject>SnapshotBefore` / `<Subject>SnapshotAfter`) with the pre- and post-mutation state. For creates and deletes, leave them nil unless the snapshot is independently useful.
 5. Treat audit-log failures as `oops.CodeUnexpected`. Audit logging is not optional — if it fails, fail the request.
 6. Add a test that asserts the event was recorded (see "How to assert audit events in tests" below).
+
+### How to record a security event
+
+Use this when a system component records machine access it performs on its own and repeatedly — see **Configuration log and security log** for how to tell.
+
+1. In `server/internal/audit/securityevent/`, add a `Log<Subject><Verb>` function taking the `audit` package's `Log<Subject><Verb>Event` struct, so the human and system call sites share one event shape. Build `repo.InsertSecurityAuditLogParams` and pass it to `record` with the subject's outbox event def.
+2. Call it from the system call site; human call sites keep calling `audit.Logger`.
+3. When a person's action cascades to entries the system created (for example withdrawing an issuer withdraws a runtime's own admissions), route each cascaded entry to the log its subject's history is in. `securityevent.RuntimeAdmittedSubjects` is the precedent: it reads the audit trail, never customer-editable fields such as tags.
+4. Test it with `audittest.LatestSecurityAuditLogByAction` / `SecurityAuditLogCountByAction`, check the configuration log did not grow, and decode the outbox payload (`GetLatestOutboxPayloadByOrg`) to check its `category`.
+5. Rows written to `audit_logs` before the change stay there. Move them with an application-data backfill under `server/cmd/tools/migrations/` (see `AUDIT_KIT_RUNTIME_SECURITY_BACKFILL.md`), never in a migration file.
 
 ### How to audit a cascading delete of child resources
 
@@ -151,14 +173,14 @@ Use `audittest` helpers in the service's test package — do not query the audit
 
 ## Relevant mise tasks
 
-| Task                           | Purpose                                                                                                                                                                                                             |
-| ------------------------------ | ------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
-| `mise run gen:goa-server`      | Regenerate `server/gen/auditlogs/**` whenever you edit `server/design/auditlogs/design.go`.                                                                                                                         |
-| `mise run gen:sdk`             | Regenerate the TypeScript SDK and CLI bindings after a Goa design change.                                                                                                                                           |
-| `mise run gen:sqlc-server`     | Regenerate `server/internal/audit/repo/` and `audittest/repo/`. Run whenever you change `queries.sql` in either place. Requires `mise run infra:start` (sqlc connects to the local Postgres to type-check queries). |
-| `mise run gen:webhooks-server` | Regenerate `catalog_gen.go` and `catalog_gen.yaml` after adding a new event def to `server/internal/outbox/events/audit_log.go`.                                                                                    |
-| `mise run lint:server`         | `golangci-lint` including `exhaustruct` — keep struct literals complete when adding fields to `Log*Event`.                                                                                                          |
-| `mise run test:server`         | Runs the full server test suite. Takes the same arguments as `go test` (e.g. `./internal/audit/... ./internal/remotemcp/...`).                                                                                      |
+| Task                           | Purpose                                                                                                                                                                                                                                   |
+| ------------------------------ | ----------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------------- |
+| `mise run gen:goa-server`      | Regenerate `server/gen/auditlogs/**` whenever you edit `server/design/auditlogs/design.go`.                                                                                                                                               |
+| `mise run gen:sdk`             | Regenerate the TypeScript SDK and CLI bindings after a Goa design change.                                                                                                                                                                 |
+| `mise run gen:sqlc-server`     | Regenerate `server/internal/audit/repo/`, `audittest/repo/` and `securityevent/repo/`. Run whenever you change `queries.sql` in any of them. Requires `mise run infra:start` (sqlc connects to the local Postgres to type-check queries). |
+| `mise run gen:webhooks-server` | Regenerate `catalog_gen.go` and `catalog_gen.yaml` after adding a new event def to `server/internal/outbox/events/audit_log.go`.                                                                                                          |
+| `mise run lint:server`         | `golangci-lint` including `exhaustruct` — keep struct literals complete when adding fields to `Log*Event`.                                                                                                                                |
+| `mise run test:server`         | Runs the full server test suite. Takes the same arguments as `go test` (e.g. `./internal/audit/... ./internal/remotemcp/...`).                                                                                                            |
 
 ## Maintaining this skill
 
@@ -171,6 +193,7 @@ This file documents conventions that evolve over time. Adding a new action, subj
 - Changing how facets are computed — today they derive from row data with no registration; if that changes, the "no registration step" claim stops being true.
 - Adding a new audit-relevant mise task that belongs on the cheat sheet.
 - Introducing a new top-level concept (a new principal type for actors, a new kind of subject scoping beyond org/project, etc.).
+- Moving an action between the configuration and security logs, adding another log, or changing which readers show which log.
 
 ## Cross-references
 

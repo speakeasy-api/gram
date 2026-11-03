@@ -9397,6 +9397,7 @@ CREATE TABLE IF NOT EXISTS principal_grants (
   effect TEXT,
   drop_resource TEXT,
   selectors JSONB NOT NULL,
+  expires_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -9426,6 +9427,8 @@ COMMENT ON COLUMN principal_grants.drop_resource IS 'Deprecated. Formerly ''*'' 
 @access: confidential';
 COMMENT ON COLUMN principal_grants.selectors IS 'JSON selector constraints attached to a grant. Must be a non-empty JSONB object. Wildcard/unrestricted grants use {"resource_kind":"*","resource_id":"*"}.
 @access: opaque-restricted';
+COMMENT ON COLUMN principal_grants.expires_at IS 'When a temporary grant stops authorizing new requests. NULL = permanent. A row whose expires_at has passed grants nothing and is ignored by every reader.
+@access: confidential';
 
 CREATE UNIQUE INDEX IF NOT EXISTS principal_grants_org_principal_scope_selector_key
 ON principal_grants (organization_id, principal_urn, scope, selectors);
@@ -9436,6 +9439,11 @@ ON principal_grants (organization_id, principal_urn, scope, COALESCE(effect, 'al
 CREATE INDEX IF NOT EXISTS principal_grants_selectors_idx
 ON principal_grants
 USING GIN (selectors);
+
+-- Listing an organization's temporary grants.
+CREATE INDEX IF NOT EXISTS principal_grants_org_expires_at_idx
+ON principal_grants (organization_id, expires_at)
+WHERE expires_at IS NOT NULL;
 
 -- Grants the default auth permission backfill wrote, kept after the grant is
 -- deleted: a rerun never restores what an admin removed, and a rollback

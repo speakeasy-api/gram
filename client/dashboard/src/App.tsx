@@ -56,6 +56,7 @@ import { SHARED_SKILL_BASE_PATH } from "./pages/skills/share-link";
 import { SharedSkillPage } from "./pages/skills/SharedSkillPage";
 import SwitchOrg from "./pages/demo/SwitchOrg";
 import TrialEnded from "./pages/demo/TrialEnded";
+import { pageHrefs, withOrgPages, withProjectPages } from "./route-pages";
 import { useRoutes, useOrgRoutes } from "./routes";
 import { isCliAuthFlowLocation } from "@/lib/cli-auth-flow";
 
@@ -162,6 +163,8 @@ function AppContent() {
 const RouteProvider = () => {
   const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
+  const pagedRoutes = useMemo(() => withProjectPages(routes), [routes]);
+  const pagedOrgRoutes = useMemo(() => withOrgPages(orgRoutes), [orgRoutes]);
   const { addActions, removeActions } = useCommandPalette();
   const { orgSlug, projectSlug } = useSlugs();
   const location = useLocation();
@@ -305,14 +308,15 @@ const RouteProvider = () => {
   // once a project is selected (their goTo() needs the :projectSlug); org pages
   // are always available.
   useEffect(() => {
+    // Nav routes come from their own useRoutes call, so they are matched to
+    // the page map by href. Nested nav routes (People, Agents) count too.
+    const projectPageHrefs = pageHrefs(Object.values(pagedRoutes));
     const projectActions = projectSlug
       ? projectNavRoutes
           .filter(
             ({ route, scope, resourceId, projectId }) =>
               !route.external &&
-              // A roster with child routes renders through indexComponent, not
-              // component, and is just as reachable — the palette takes either.
-              (route.component || route.indexComponent) &&
+              projectPageHrefs.has(route.href()) &&
               route.title &&
               // Mirror the sidebar's per-page scope gating so the palette never
               // offers (nor navigates to) pages the user can't access.
@@ -323,8 +327,8 @@ const RouteProvider = () => {
           )
       : [];
     // Organizational Memory is a tab of Agent Sessions, not a sidebar page,
-    // so it registers on its own behind the same rollout flag and the
-    // memory:read grant on this project its endpoints require.
+    // so it registers on its own: only while memory is on for the
+    // organization and the reader holds memory:read on this project.
     if (
       projectSlug &&
       projectId &&
@@ -344,7 +348,7 @@ const RouteProvider = () => {
     // dev. Filtering here keeps them out of the palette for regular users.
     const showPlatformAdmin = import.meta.env.DEV || isPlatformAdmin;
     const orgActions = orgRoutesToNavActions(
-      orgRoutes,
+      pagedOrgRoutes,
       showPlatformAdmin,
       hasAnyScope(["org:read", "org:admin"]),
     );
@@ -357,10 +361,11 @@ const RouteProvider = () => {
     };
   }, [
     projectNavRoutes,
+    pagedRoutes,
+    pagedOrgRoutes,
     orgMemoryEnabled,
     projectId,
     routes,
-    orgRoutes,
     projectSlug,
     hasAnyScope,
     isPlatformAdmin,
@@ -369,7 +374,7 @@ const RouteProvider = () => {
   ]);
 
   const routeElements = useMemo(() => {
-    const allRoutes = Object.values(routes);
+    const allRoutes = Object.values(pagedRoutes);
     const unauthenticatedRoutes = allRoutes.filter(
       (route) => route.unauthenticated,
     );
@@ -381,7 +386,7 @@ const RouteProvider = () => {
         !outsideStructureRoutes.includes(route) && !route.unauthenticated,
     );
 
-    const orgRouteValues = Object.values(orgRoutes);
+    const orgRouteValues = Object.values(pagedOrgRoutes);
     const orgHomeRoute = orgRouteValues.find((r) => r.url === "");
     const outsideOrgLayoutRoutes = orgRouteValues.filter(
       (route) => route.outsideMainLayout,
@@ -443,7 +448,7 @@ const RouteProvider = () => {
         </Route>
       </Routes>
     );
-  }, [routes, orgRoutes]);
+  }, [pagedRoutes, pagedOrgRoutes]);
 
   // Above the router: the mode-switch animation spans the route swap between
   // its shrink and zoom beats, so its state has to outlive that navigation.

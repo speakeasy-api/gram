@@ -1002,3 +1002,14 @@ WHERE sel.credential_kind = @credential_kind::text
   AND sel.organization_id = @organization_id::text
   AND sel.mcp_server_id = ANY(@mcp_server_ids::uuid[])
   AND sel.deleted IS FALSE;
+
+-- name: ListServersAssociatedWithClient :many
+-- Every live MCP server with an association to the client, tombstoned ones
+-- included, with the organization and project it sits in. Without an
+-- organization it spans every organization, for a platform-global client.
+SELECT DISTINCT a.organization_id, a.mcp_server_id, a.project_id
+FROM mcp_server_remote_session_clients AS a
+JOIN mcp_servers AS s ON s.id = a.mcp_server_id AND s.deleted IS FALSE
+WHERE a.remote_session_client_id = @remote_session_client_id::uuid
+  AND (sqlc.narg('organization_id')::text IS NULL OR a.organization_id = sqlc.narg('organization_id')::text)
+ORDER BY a.organization_id, a.mcp_server_id;

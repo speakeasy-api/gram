@@ -265,6 +265,8 @@ trackedFiles:
   src/funcs/deviceIntegrationsDeleteConfig.ts: {}
   src/funcs/deviceIntegrationsGetConfig.ts: {}
   src/funcs/deviceIntegrationsGetCoverage.ts: {}
+  src/funcs/deviceIntegrationsGetFleetCoverage.ts: {}
+  src/funcs/deviceIntegrationsListFleetDevices.ts: {}
   src/funcs/deviceIntegrationsListManagedDevices.ts: {}
   src/funcs/deviceIntegrationsListProviders.ts: {}
   src/funcs/deviceIntegrationsListSchedules.ts: {}
@@ -1275,6 +1277,8 @@ trackedFiles:
   src/models/components/fetchissuermetadatarequestbody.ts: {}
   src/models/components/fetchopenapiv3fromurlform2.ts: {}
   src/models/components/filteroption.ts: {}
+  src/models/components/fleetcoverage.ts: {}
+  src/models/components/fleetdevice.ts: {}
   src/models/components/functionenvironmentvariable.ts: {}
   src/models/components/functionresourcedefinition.ts: {}
   src/models/components/functiontooldefinition.ts: {}
@@ -1494,6 +1498,7 @@ trackedFiles:
   src/models/components/listexternalkeysresult.ts: {}
   src/models/components/listfilteroptionspayload.ts: {}
   src/models/components/listfilteroptionsresult.ts: {}
+  src/models/components/listfleetdevicesresult.ts: {}
   src/models/components/listglobalremotesessionissuersresult.ts: {}
   src/models/components/listhiddenmcpserversresult.ts: {}
   src/models/components/listhookstracespayload.ts: {}
@@ -2249,6 +2254,7 @@ trackedFiles:
   src/models/components/workloadplatformcatalog.ts: {}
   src/models/components/workloadplatformconstant.ts: {}
   src/models/components/workloadplatformsubject.ts: {}
+  src/models/components/workloadplatformsubjectalternative.ts: {}
   src/models/components/workloadplatformvariable.ts: {}
   src/models/components/workloadtokenendpoint.ts: {}
   src/models/components/workloadtokenendpoints.ts: {}
@@ -2517,6 +2523,7 @@ trackedFiles:
   src/models/operations/getemployeedataflowgraph.ts: {}
   src/models/operations/geteventfacets.ts: {}
   src/models/operations/geteventvolume.ts: {}
+  src/models/operations/getfleetcoverage.ts: {}
   src/models/operations/getgcpiamcredential.ts: {}
   src/models/operations/getgcpiamplatformcredential.ts: {}
   src/models/operations/getgcpkmskey.ts: {}
@@ -2718,6 +2725,7 @@ trackedFiles:
   src/models/operations/listexternalcredentials.ts: {}
   src/models/operations/listexternalkeys.ts: {}
   src/models/operations/listfilteroptions.ts: {}
+  src/models/operations/listfleetdevices.ts: {}
   src/models/operations/listgatewaysessionfacets.ts: {}
   src/models/operations/listgatewaysessions.ts: {}
   src/models/operations/listgcpiamcredentials.ts: {}
@@ -3434,6 +3442,10 @@ trackedFiles:
   src/react-query/fetchOpenAPIv3FromURL.ts: {}
   src/react-query/fetchOrganizationRemoteSessionIssuerMetadata.ts: {}
   src/react-query/fetchRemoteSessionIssuerMetadata.ts: {}
+  src/react-query/fleetCoverage.core.ts: {}
+  src/react-query/fleetCoverage.ts: {}
+  src/react-query/fleetDevices.core.ts: {}
+  src/react-query/fleetDevices.ts: {}
   src/react-query/gatewaySessionFacets.core.ts: {}
   src/react-query/gatewaySessionFacets.ts: {}
   src/react-query/gatewaySessions.core.ts: {}
@@ -7640,6 +7652,15 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getFleetCoverage:
+    speakeasy-default-get-fleet-coverage:
+      responses:
+        "200":
+          application/json: {"active_window_minutes": 152503, "agent_active": 34537, "agent_active_device_attested": 542286, "agent_only_devices": 738446, "agent_other_device": 484702, "agent_stale": 428036, "attestation": "device", "enforcement_halted": 796240, "mdm_connected": false, "missing": 80731, "no_agent": 661434, "no_email": 123154, "organization_id": "<id>", "policy_attested": 652707, "policy_outdated": 573523, "policy_unreported": 793391, "total_devices": 770983, "unresolved_email": 258166}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getGcpIamCredential:
     speakeasy-default-get-gcp-iam-credential:
       parameters:
@@ -9683,6 +9704,9 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   listAuditLogFacets:
     speakeasy-default-list-audit-log-facets:
+      parameters:
+        query:
+          category: "configuration"
       responses:
         "200":
           application/json: {"actions": [], "actors": [], "surfaces": []}
@@ -9692,9 +9716,12 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   listAuditLogs:
     speakeasy-default-list-audit-logs:
+      parameters:
+        query:
+          category: "configuration"
       responses:
         "200":
-          application/json: {"logs": [{"acting_surface": "<value>", "action": "<value>", "actor_id": "<id>", "actor_type": "<value>", "created_at": "2025-08-26T01:50:02.217Z", "id": "<id>", "subject_id": "<id>", "subject_type": "<value>"}]}
+          application/json: {"logs": [{"acting_surface": "<value>", "action": "<value>", "actor_id": "<id>", "actor_type": "<value>", "category": "security", "created_at": "2025-08-26T01:50:02.217Z", "id": "<id>", "subject_id": "<id>", "subject_type": "<value>"}]}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -10108,6 +10135,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listFleetDevices:
+    speakeasy-default-list-fleet-devices:
+      parameters:
+        query:
+          limit: 50
+      responses:
+        "200":
+          application/json: {"devices": []}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   listGatewaySessionFacets:
     speakeasy-default-list-gateway-session-facets:
       responses:

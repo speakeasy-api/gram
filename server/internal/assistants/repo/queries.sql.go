@@ -1698,7 +1698,7 @@ func (q *Queries) GetKitRuntimeControlAuthority(ctx context.Context, arg GetKitR
 
 const getKitRuntimeSessionBinding = `-- name: GetKitRuntimeSessionBinding :one
 SELECT r.id AS runtime_id, t.id AS thread_id, t.chat_id, s.acp_session_id,
-  EXISTS(SELECT 1 FROM chat_messages m WHERE m.chat_id = t.chat_id) AS has_prior_transcript
+  EXISTS(SELECT 1 FROM chat_messages m WHERE m.chat_id = t.chat_id AND m.role <> 'user') AS has_prior_transcript
 FROM assistant_runtimes r
 JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
 JOIN assistant_threads t ON t.assistant_id = a.id AND t.project_id = a.project_id
@@ -1729,6 +1729,8 @@ type GetKitRuntimeSessionBindingRow struct {
 }
 
 // Existence only: never load any previous transcript contents into the guest.
+// Pending user input is the current turn; only a non-user message shows the
+// assistant took part in earlier turns.
 func (q *Queries) GetKitRuntimeSessionBinding(ctx context.Context, arg GetKitRuntimeSessionBindingParams) (GetKitRuntimeSessionBindingRow, error) {
 	row := q.db.QueryRow(ctx, getKitRuntimeSessionBinding,
 		arg.RuntimeID,
@@ -2136,25 +2138,6 @@ func (q *Queries) KitInterruptPending(ctx context.Context, arg KitInterruptPendi
 	var pending bool
 	err := row.Scan(&pending)
 	return pending, err
-}
-
-const kitProtocolHasPriorMessages = `-- name: KitProtocolHasPriorMessages :one
-SELECT EXISTS(SELECT 1 FROM chat_messages
-WHERE project_id= $1 AND chat_id= $2
-AND id <> ALL($3::uuid[])) AS has_prior
-`
-
-type KitProtocolHasPriorMessagesParams struct {
-	ProjectID         uuid.NullUUID
-	ChatID            uuid.UUID
-	CurrentMessageIds []uuid.UUID
-}
-
-func (q *Queries) KitProtocolHasPriorMessages(ctx context.Context, arg KitProtocolHasPriorMessagesParams) (bool, error) {
-	row := q.db.QueryRow(ctx, kitProtocolHasPriorMessages, arg.ProjectID, arg.ChatID, arg.CurrentMessageIds)
-	var has_prior bool
-	err := row.Scan(&has_prior)
-	return has_prior, err
 }
 
 const listActiveAssistantRuntimes = `-- name: ListActiveAssistantRuntimes :many

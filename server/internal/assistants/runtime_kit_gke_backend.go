@@ -19,6 +19,7 @@ import (
 
 	"github.com/distribution/reference"
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/sandbox"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
@@ -31,6 +32,7 @@ import (
 // All lifecycle calls require the caller's shared runtime admission lock.
 // Bootstrap retires old inference authority before minting startup credentials.
 type KitGKERuntimeConfig struct {
+	KitGKEIdentityConfig
 	GKE            GKERuntimeConfig
 	Provision      KitGKEProvisionInput
 	Bootstrap      func(context.Context, assistantRuntimeRecord) (KitLocalBootstrap, error)
@@ -59,7 +61,11 @@ func NewKitGKERuntimeBackend(config KitGKERuntimeConfig) (*KitGKERuntimeBackend,
 	if config.GKE.ServerURL.Scheme != "https" || config.GKE.ServerURL.Host == "" || config.GKE.ServerURL.User != nil {
 		return nil, fmt.Errorf("kit GKE requires an HTTPS management URL")
 	}
+	if err := config.validate(); err != nil {
+		return nil, err
+	}
 	p := config.Provision
+	p.KitGKEIdentityConfig = config.KitGKEIdentityConfig
 	if p.AllowInsecureHTTP {
 		return nil, fmt.Errorf("kit GKE requires HTTPS inference without insecure overrides")
 	}
@@ -120,7 +126,7 @@ func NewKitGKERuntimeBackend(config KitGKERuntimeConfig) (*KitGKERuntimeBackend,
 	p.GatewayToken = nil
 	p.TLSCertificate, p.TLSPrivateKey = nil, nil
 	raw, err := json.Marshal(map[string]any{
-		"tls_proxy_image": kitGKETLSProxyImage, "tls_transport": 1, "workload_generation": 4,
+		"identity_sidecar_image": kitGKEIdentitySidecarImage, "identity_sidecar_script": kitGKEIdentitySidecarScript, "agent_identity": config.KitGKEIdentityConfig, "tls_proxy_image": kitGKETLSProxyImage, "tls_transport": 1, "workload_generation": 4,
 		"identity": p.Identity.labels(), "namespace": p.Identity.Namespace, "image": p.Image,
 		"ingress_cidr": p.IngressCIDR, "guest_port": p.GuestPort, "command": p.Command, "args": p.Args,
 		"allow_insecure_http": p.AllowInsecureHTTP, "resources": p.Resources, "work_size_limit": p.WorkSizeLimit,
@@ -147,6 +153,8 @@ func (k *KitGKERuntimeBackend) validate(r assistantRuntimeRecord) error {
 }
 
 type kitGKEBackendMetadata struct {
+	WarmPoolName      string              `json:"warm_pool_name"`
+	WarmPoolUID       types.UID           `json:"warm_pool_uid"`
 	Workload          *KitWorkloadBinding `json:"workload,omitempty"`
 	ServiceAccountUID types.UID           `json:"service_account_uid,omitempty"`
 	Checkpoint        json.RawMessage     `json:"checkpoint,omitempty"`
@@ -180,7 +188,7 @@ func (k *KitGKERuntimeBackend) metadata(r assistantRuntimeRecord) (kitGKEBackend
 	if err := json.Unmarshal(r.BackendMetadataJSON, &m); err != nil {
 		return m, fmt.Errorf("decode Kit GKE authority: %w", err)
 	}
-	if m.CheckpointMarker == "" || m.Workload == nil || m.Workload.ServiceAccount == "" || m.Workload.Audience == "" || m.Workload.IssuerID == uuid.Nil || m.Workload.Subject == "" || m.ServiceAccountUID == "" || m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Version != 3 || m.Namespace != k.config.GKE.Namespace || m.Fingerprint != k.fingerprint || m.ClaimUID == "" || m.TemplateUID == "" || m.SecretUID == "" || m.SecretName == "" || (!m.Provisioning && (m.ImageDigest == "" || m.ProxyImageDigest == "" || m.ContainerID == "" || m.PodUID == "" || m.PodName == "")) {
+	if m.CheckpointMarker == "" || m.Workload == nil || m.Workload.ServiceAccount == "" || m.Workload.Audience == "" || m.Workload.IssuerID == uuid.Nil || m.Workload.Subject != k.config.subject(k.config.GKE.Namespace, m.Workload.ServiceAccount) || m.ServiceAccountUID == "" || m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Version != 3 || m.Namespace != k.config.GKE.Namespace || m.Fingerprint != k.fingerprint || m.ClaimUID == "" || m.TemplateUID == "" || m.WarmPoolName == "" || m.WarmPoolUID == "" || m.SecretUID == "" || m.SecretName == "" || (!m.Provisioning && (m.ImageDigest == "" || m.ProxyImageDigest == "" || m.ContainerID == "" || m.PodUID == "" || m.PodName == "")) {
 		return m, fmt.Errorf("kit GKE authority or exact compatibility mismatch; explicit fenced reset required")
 	}
 	return m, nil
@@ -208,7 +216,38 @@ func (k *KitGKERuntimeBackend) get(ctx context.Context, r assistantRuntimeRecord
 	if err = k.checkObject(r, o, uid); err != nil {
 		return nil, kitGKEAdmissionTerminalError{err}
 	}
+	if gvr == kitWarmPoolGVR || gvr == kitClaimGVR {
+		var metadata kitGKEBackendMetadata
+		_ = json.Unmarshal(r.BackendMetadataJSON, &metadata)
+		if err := checkKitGKEPoolReference(o, gvr, r, metadata); err != nil {
+			return nil, kitGKEAdmissionTerminalError{err}
+		}
+	}
 	return o, nil
+}
+
+func checkKitGKEPoolReference(o *unstructured.Unstructured, gvr schema.GroupVersionResource, r assistantRuntimeRecord, m kitGKEBackendMetadata) error {
+	if gvr == kitWarmPoolGVR {
+		replicas, found, err := unstructured.NestedInt64(o.Object, "spec", "replicas")
+		if err != nil || !found || replicas != 0 {
+			return fmt.Errorf("kit GKE warm pool must have zero speculative replicas")
+		}
+		template, found, err := unstructured.NestedString(o.Object, "spec", "sandboxTemplateRef", "name")
+		if err != nil || !found || template != kitGKEPoolTemplateName(r, m) {
+			return fmt.Errorf("kit GKE warm pool template binding mismatch")
+		}
+	}
+	if gvr == kitClaimGVR {
+		pool, found, err := unstructured.NestedString(o.Object, "spec", "warmPoolRef", "name")
+		expected := m.WarmPoolName
+		if expected == "" {
+			expected = kitGKEWarmPoolName(kitGKEName(r))
+		}
+		if err != nil || !found || pool != expected {
+			return fmt.Errorf("kit GKE claim warm pool binding mismatch")
+		}
+	}
+	return nil
 }
 
 func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRecord) (result RuntimeBackendEnsureResult, ensureErr error) {
@@ -228,7 +267,7 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 	}
 	if !kitLocalUnprovisionedMetadata(r.BackendMetadataJSON) {
 		var prior kitGKEBackendMetadata
-		if json.Unmarshal(r.BackendMetadataJSON, &prior) == nil && prior.Workload == nil && prior.RuntimeID == r.ID {
+		if json.Unmarshal(r.BackendMetadataJSON, &prior) == nil && (prior.Workload == nil || kitGKEFailedProjectedWorkload(prior, r, k.config.GKE.Namespace)) && prior.RuntimeID == r.ID {
 			if err := k.invalidateLegacy(ctx, r, prior); err != nil {
 				return RuntimeBackendEnsureResult{}, err
 			}
@@ -279,7 +318,7 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 	for _, step := range []struct {
 		gvr  schema.GroupVersionResource
 		name string
-	}{{gkeSandboxClaimGVR, name}, {kitTemplateGVR, kitGKETemplateName(name)}, {kitTemplateGVR, name}} {
+	}{{kitClaimGVR, name}, {kitWarmPoolGVR, kitGKEWarmPoolName(name)}, {kitTemplateGVR, kitGKETemplateName(name)}, {kitTemplateGVR, name}} {
 		_, err := k.config.GKE.Dynamic.Resource(step.gvr).Namespace(k.config.GKE.Namespace).Get(ctx, step.name, metav1.GetOptions{})
 		if err == nil {
 			return RuntimeBackendEnsureResult{}, fmt.Errorf("unrecorded Kit GKE resources require fenced operator reconciliation")
@@ -355,14 +394,19 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 	}
 	maps.Copy(podAnnotations, annotations)
 	_ = unstructured.SetNestedStringMap(objects.Template.Object, podAnnotations, "spec", "podTemplate", "metadata", "annotations")
-	m := kitGKEBackendMetadata{TemplateName: objects.Template.GetName(), ServiceAccountUID: "", Checkpoint: nil, TLSCertificate: in.TLSCertificate, Provisioning: false, CheckpointMarker: string(in.CheckpointMarker), ImageDigest: "", ProxyImageDigest: "", ContainerID: "", AuthorityUID: "", ClaimUID: "", TemplateUID: "", SecretUID: "", PodName: "", PodUID: "", Workload: b.Workload, SecretName: objects.Secret.GetName(), RuntimeID: r.ID, AssistantID: r.AssistantID, ProjectID: r.ProjectID, Version: 3, Namespace: in.Identity.Namespace, Fingerprint: k.fingerprint}
+	m := kitGKEBackendMetadata{WarmPoolName: objects.WarmPool.GetName(), WarmPoolUID: "", TemplateName: objects.Template.GetName(), ServiceAccountUID: "", Checkpoint: nil, TLSCertificate: in.TLSCertificate, Provisioning: false, CheckpointMarker: string(in.CheckpointMarker), ImageDigest: "", ProxyImageDigest: "", ContainerID: "", AuthorityUID: "", ClaimUID: "", TemplateUID: "", SecretUID: "", PodName: "", PodUID: "", Workload: b.Workload, SecretName: objects.Secret.GetName(), RuntimeID: r.ID, AssistantID: r.AssistantID, ProjectID: r.ProjectID, Version: 3, Namespace: in.Identity.Namespace, Fingerprint: k.fingerprint}
 	for _, step := range []struct {
 		gvr schema.GroupVersionResource
 		obj *unstructured.Unstructured
 		uid *types.UID
-	}{{kitServiceAccountGVR, kitWorkloadServiceAccount(in), &m.ServiceAccountUID}, {kitSecretGVR, objects.Secret, &m.SecretUID}, {kitTemplateGVR, objects.Template, &m.TemplateUID}, {gkeSandboxClaimGVR, objects.Claim, &m.ClaimUID}} {
+	}{{kitServiceAccountGVR, k.workloadServiceAccount(in), &m.ServiceAccountUID}, {kitSecretGVR, objects.Secret, &m.SecretUID}, {kitTemplateGVR, objects.Template, &m.TemplateUID}, {kitWarmPoolGVR, objects.WarmPool, &m.WarmPoolUID}, {kitClaimGVR, objects.Claim, &m.ClaimUID}} {
 		step.obj.SetLabels(labels)
-		step.obj.SetAnnotations(annotations)
+		existingAnnotations := step.obj.GetAnnotations()
+		if existingAnnotations == nil {
+			existingAnnotations = map[string]string{}
+		}
+		maps.Copy(existingAnnotations, annotations)
+		step.obj.SetAnnotations(existingAnnotations)
 		created, e := k.config.GKE.Dynamic.Resource(step.gvr).Namespace(in.Identity.Namespace).Create(ctx, step.obj, metav1.CreateOptions{})
 		if e != nil {
 			return RuntimeBackendEnsureResult{}, fmt.Errorf("create Kit GKE %s (partial resources require reconciliation): %w", step.obj.GetKind(), e)
@@ -409,7 +453,7 @@ func (k *KitGKERuntimeBackend) finishColdProvision(ctx context.Context, r assist
 		gvr  schema.GroupVersionResource
 		name string
 		uid  types.UID
-	}{{gkeSandboxClaimGVR, kitGKEName(r), m.ClaimUID}, {kitTemplateGVR, m.templateName(r), m.TemplateUID}, {kitSecretGVR, m.SecretName, m.SecretUID}, {kitServiceAccountGVR, m.Workload.ServiceAccount, m.ServiceAccountUID}} {
+	}{{kitClaimGVR, kitGKEName(r), m.ClaimUID}, {kitWarmPoolGVR, m.WarmPoolName, m.WarmPoolUID}, {kitTemplateGVR, m.templateName(r), m.TemplateUID}, {kitSecretGVR, m.SecretName, m.SecretUID}, {kitServiceAccountGVR, m.Workload.ServiceAccount, m.ServiceAccountUID}} {
 		if _, err := k.get(ctx, r, step.gvr, step.name, step.uid); err != nil {
 			return RuntimeBackendEnsureResult{}, err
 		}
@@ -458,18 +502,19 @@ func (k *KitGKERuntimeBackend) finishColdProvision(ctx context.Context, r assist
 
 func (k *KitGKERuntimeBackend) waitPod(ctx context.Context, r assistantRuntimeRecord, m kitGKEBackendMetadata) (*unstructured.Unstructured, error) {
 	for {
-		if _, err := k.get(ctx, r, gkeSandboxClaimGVR, kitGKEName(r), m.ClaimUID); err != nil {
+		claim, err := k.get(ctx, r, kitClaimGVR, kitGKEName(r), m.ClaimUID)
+		if err != nil {
 			return nil, err
 		}
-		pods, err := k.config.GKE.Dynamic.Resource(gkePodGVR).Namespace(k.config.GKE.Namespace).List(ctx, metav1.ListOptions{LabelSelector: gkeClaimUIDLabel + "=" + string(m.ClaimUID)})
+		pods, err := sandbox.PodsForClaim(ctx, k.config.GKE.Dynamic, k.config.GKE.Namespace, claim, sandbox.SandboxesV1Beta1)
 		if err != nil {
 			return nil, fmt.Errorf("kit GKE waitPod: %w", err)
 		}
-		if len(pods.Items) > 1 {
+		if len(pods) > 1 {
 			return nil, kitGKEAdmissionTerminalError{fmt.Errorf("ambiguous Kit GKE claim pod authority")}
 		}
-		if len(pods.Items) == 1 {
-			p := &pods.Items[0]
+		if len(pods) == 1 {
+			p := &pods[0]
 			if err := k.checkObject(r, p, m.PodUID); err != nil {
 				return nil, kitGKEAdmissionTerminalError{err}
 			}
@@ -487,6 +532,7 @@ func (k *KitGKERuntimeBackend) waitPod(ctx context.Context, r assistantRuntimeRe
 			ip, _, _ := unstructured.NestedString(p.Object, "status", "podIP")
 			if phase == "Running" && net.ParseIP(ip) != nil {
 				if _, _, e := kitGKEProcessIdentity(p); e == nil {
+					// Discovery through the claim already proved ownership.
 					if e = k.checkPod(r, p, m); e != nil {
 						return nil, kitGKEAdmissionTerminalError{e}
 					}
@@ -526,7 +572,7 @@ func (k *KitGKERuntimeBackend) checkPod(r assistantRuntimeRecord, p *unstructure
 	if err := k.checkObject(r, p, m.PodUID); err != nil {
 		return err
 	}
-	if (m.PodName != "" && p.GetName() != m.PodName) || p.GetLabels()[gkeClaimUIDLabel] != string(m.ClaimUID) {
+	if uid, ok := p.GetLabels()[gkeClaimUIDLabel]; (m.PodName != "" && p.GetName() != m.PodName) || (ok && uid != string(m.ClaimUID)) {
 		return fmt.Errorf("kit GKE source pod was replaced outside admission")
 	}
 	serviceAccount, _, _ := unstructured.NestedString(p.Object, "spec", "serviceAccountName")
@@ -548,6 +594,34 @@ func (k *KitGKERuntimeBackend) checkPod(r assistantRuntimeRecord, p *unstructure
 	}
 	return nil
 }
+
+// checkPodClaim proves an unlabelled pod belongs to the admitted claim
+// through the claim's assigned Sandbox and its controller owner references.
+// checkPod has already matched any claim label. The claim is fetched when the
+// caller has not loaded it. Lookup failures are returned unwrapped so callers
+// can retry them.
+func (k *KitGKERuntimeBackend) checkPodClaim(ctx context.Context, r assistantRuntimeRecord, claim, p *unstructured.Unstructured, m kitGKEBackendMetadata) error {
+	if _, ok := p.GetLabels()[gkeClaimUIDLabel]; ok {
+		return nil
+	}
+	if claim == nil {
+		var err error
+		if claim, err = k.get(ctx, r, kitClaimGVR, kitGKEName(r), m.ClaimUID); err != nil {
+			return err
+		}
+	}
+	pods, err := sandbox.PodsForClaim(ctx, k.config.GKE.Dynamic, k.config.GKE.Namespace, claim, sandbox.SandboxesV1Beta1)
+	if err != nil {
+		return fmt.Errorf("kit GKE claim pod ownership: %w", err)
+	}
+	for _, owned := range pods {
+		if owned.GetUID() == p.GetUID() {
+			return nil
+		}
+	}
+	return fmt.Errorf("kit GKE source pod was replaced outside admission")
+}
+
 func (k *KitGKERuntimeBackend) protocol(ctx context.Context, r assistantRuntimeRecord) (runtimeProtocol, error) {
 	return k.protocolForLifecycle(ctx, r, false)
 }
@@ -562,13 +636,18 @@ func (k *KitGKERuntimeBackend) protocolForLifecycle(ctx context.Context, r assis
 		return nil, fmt.Errorf("kit GKE authority is fenced in phase %s", state.Phase)
 	}
 	m := state.Metadata
+	var claim *unstructured.Unstructured
 	for _, s := range []struct {
 		gvr  schema.GroupVersionResource
 		name string
 		uid  types.UID
-	}{{gkeSandboxClaimGVR, kitGKEName(r), m.ClaimUID}, {kitTemplateGVR, m.templateName(r), m.TemplateUID}, {kitSecretGVR, m.SecretName, m.SecretUID}, {kitServiceAccountGVR, m.Workload.ServiceAccount, m.ServiceAccountUID}} {
-		if _, err = k.get(ctx, r, s.gvr, s.name, s.uid); err != nil {
+	}{{kitClaimGVR, kitGKEName(r), m.ClaimUID}, {kitWarmPoolGVR, m.WarmPoolName, m.WarmPoolUID}, {kitTemplateGVR, m.templateName(r), m.TemplateUID}, {kitSecretGVR, m.SecretName, m.SecretUID}, {kitServiceAccountGVR, m.Workload.ServiceAccount, m.ServiceAccountUID}} {
+		o, err := k.get(ctx, r, s.gvr, s.name, s.uid)
+		if err != nil {
 			return nil, err
+		}
+		if s.gvr == kitClaimGVR {
+			claim = o
 		}
 	}
 	pod, err := k.get(ctx, r, gkePodGVR, m.PodName, m.PodUID)
@@ -576,6 +655,9 @@ func (k *KitGKERuntimeBackend) protocolForLifecycle(ctx context.Context, r assis
 		return nil, err
 	}
 	if err = k.checkPod(r, pod, m); err != nil {
+		return nil, err
+	}
+	if err = k.checkPodClaim(ctx, r, claim, pod, m); err != nil {
 		return nil, err
 	}
 	phase, _, _ := unstructured.NestedString(pod.Object, "status", "phase")
@@ -762,6 +844,10 @@ func (k *KitGKERuntimeBackend) fenceColdAdmissionFailure(ctx context.Context, r 
 
 var kitServiceAccountGVR = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "serviceaccounts"}
 
+func (k *KitGKERuntimeBackend) workloadServiceAccount(in KitGKEProvisionInput) *unstructured.Unstructured {
+	return kitWorkloadServiceAccount(in)
+}
+
 func kitWorkloadServiceAccount(in KitGKEProvisionInput) *unstructured.Unstructured {
 	o := kitObject("ServiceAccount", "v1", in.WorkloadServiceAccount, in.Identity)
 	o.Object["automountServiceAccountToken"] = false
@@ -771,8 +857,19 @@ func kitWorkloadServiceAccount(in KitGKEProvisionInput) *unstructured.Unstructur
 // Legacy startup bearer credentials cannot be admitted as workload authority.
 // Verify every recorded UID before fencing and deleting; never discover or adopt
 // resources by name alone. The authority CAS makes a completed reset retryable.
+// Only failed pre-pool projected-token admissions can be automatically replaced.
+// Never use this path to resume an old snapshot or delete a live workload.
+func kitGKEFailedProjectedWorkload(m kitGKEBackendMetadata, r assistantRuntimeRecord, namespace string) bool {
+	return m.RuntimeID == r.ID && m.AssistantID == r.AssistantID && m.ProjectID == r.ProjectID &&
+		m.Version == 3 && m.Namespace == namespace && m.Fingerprint != "" &&
+		m.Provisioning && m.PodName == "" && m.PodUID == "" && len(m.Checkpoint) == 0 &&
+		m.WarmPoolName == "" && m.WarmPoolUID == "" && m.Workload != nil &&
+		m.Workload.ServiceAccount != "" && m.ServiceAccountUID != "" &&
+		m.Workload.Subject == "system:serviceaccount:"+namespace+":"+m.Workload.ServiceAccount
+}
+
 func (k *KitGKERuntimeBackend) invalidateLegacy(ctx context.Context, r assistantRuntimeRecord, m kitGKEBackendMetadata) error {
-	if m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Namespace != k.config.GKE.Namespace || m.Version != 3 || m.Fingerprint == "" {
+	if m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Namespace != k.config.GKE.Namespace || m.Version != 3 || m.Fingerprint == "" {
 		return ErrKitRuntimeBinding
 	}
 	raw, err := k.config.AuthorityStore.Load(ctx, r.LifecycleTx, r)
@@ -782,13 +879,25 @@ func (k *KitGKERuntimeBackend) invalidateLegacy(ctx context.Context, r assistant
 	if !kitGKEEqualMetadata(raw, r.BackendMetadataJSON) {
 		return ErrKitRuntimeBinding
 	}
+	claimGVR, templateGVR := kitClaimGVR, kitTemplateGVR
+	projected := kitGKEFailedProjectedWorkload(m, r, k.config.GKE.Namespace)
+	if projected {
+		claimGVR.Version, templateGVR.Version = "v1alpha1", "v1alpha1"
+	}
 	steps := []struct {
 		gvr  schema.GroupVersionResource
 		name string
 		uid  types.UID
 	}{
-		{gkeSandboxClaimGVR, kitGKEName(r), m.ClaimUID}, {gkePodGVR, m.PodName, m.PodUID},
-		{kitTemplateGVR, m.templateName(r), m.TemplateUID}, {kitSecretGVR, m.SecretName, m.SecretUID},
+		{claimGVR, kitGKEName(r), m.ClaimUID}, {gkePodGVR, m.PodName, m.PodUID},
+		{kitWarmPoolGVR, m.WarmPoolName, m.WarmPoolUID}, {templateGVR, m.templateName(r), m.TemplateUID}, {kitSecretGVR, m.SecretName, m.SecretUID},
+	}
+	if projected {
+		steps = append(steps, struct {
+			gvr  schema.GroupVersionResource
+			name string
+			uid  types.UID
+		}{kitServiceAccountGVR, m.Workload.ServiceAccount, m.ServiceAccountUID})
 	}
 	for _, step := range steps {
 		if step.uid == "" {
@@ -801,9 +910,21 @@ func (k *KitGKERuntimeBackend) invalidateLegacy(ctx context.Context, r assistant
 		if e != nil {
 			return fmt.Errorf("read legacy Kit resource: %w", e)
 		}
+		if projected && step.gvr == claimGVR && sandbox.AssignedName(o) != "" {
+			return fmt.Errorf("refusing to reset an assigned legacy Kit claim")
+		}
 		labels := o.GetLabels()
 		if o.GetUID() != step.uid || labels["gram.ai/assistant-id"] != r.AssistantID.String() || labels["gram.ai/runtime-lineage"] != r.ID.String() || labels["gram.ai/project-id"] != r.ProjectID.String() || o.GetAnnotations()["speakeasy.com/kit-spec"] != m.Fingerprint {
 			return ErrKitRuntimeBinding
+		}
+	}
+	if projected {
+		pods, err := k.config.GKE.Dynamic.Resource(gkePodGVR).Namespace(m.Namespace).List(ctx, metav1.ListOptions{LabelSelector: gkeClaimUIDLabel + "=" + string(m.ClaimUID), Limit: 1})
+		if err != nil {
+			return fmt.Errorf("inspect legacy Kit claim pods: %w", err)
+		}
+		if len(pods.Items) != 0 || pods.GetContinue() != "" {
+			return fmt.Errorf("refusing to reset a legacy Kit claim with a pod")
 		}
 	}
 	if err = k.config.Fence(ctx, r); err != nil {
@@ -862,4 +983,11 @@ func (m kitGKEBackendMetadata) templateName(r assistantRuntimeRecord) string {
 		return m.TemplateName
 	}
 	return kitGKEName(r)
+}
+
+func kitGKEPoolTemplateName(r assistantRuntimeRecord, m kitGKEBackendMetadata) string {
+	if m.RuntimeID == uuid.Nil {
+		return kitGKETemplateName(kitGKEName(r))
+	}
+	return m.templateName(r)
 }

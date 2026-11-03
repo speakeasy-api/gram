@@ -335,13 +335,15 @@ type Service interface {
 	// Edit, enable or disable a signup offer. Existing accepted promotion
 	// applications are unchanged.
 	UpdateSignupOffer(context.Context, *UpdateSignupOfferPayload) (res *AdminSignupOffer, err error)
-	// Returns live Stripe subscription details for confirmation before recording
-	// the subscription on a PAYG organization that has a customer and no
-	// subscription.
+	// Returns eligible live Stripe subscription details before linking it to a
+	// free, PAYG, or unconverted enterprise trial organization with a matching
+	// Stripe customer.
 	GetStripeSubscriptionCandidate(context.Context, *GetStripeSubscriptionCandidatePayload) (res *AdminStripeSubscriptionCandidate, err error)
-	// Records a Stripe subscription ID on a PAYG organization when its
-	// subscription ID is empty, after verifying the subscription belongs to the
-	// organization's Stripe customer.
+	// Links an eligible existing Stripe subscription and atomically activates PAYG
+	// for free organizations or unconverted enterprise trials. Existing PAYG
+	// organizations retain their access policy. Verifies customer ownership,
+	// preserves existing subscription links and redeemed partner anchors, and
+	// accepts same-subscription retries.
 	SetStripeSubscription(context.Context, *SetStripeSubscriptionPayload) (res *AdminOrganization, err error)
 	// Returns estimated usage at current PAYG list prices for every active paying
 	// organization: enterprise organizations not on a running or ending trial, and
@@ -628,7 +630,8 @@ type AdminHookClientsResult struct {
 	// When the grids were read from ClickHouse.
 	QueriedAt string
 	// True when the grids came from the cache rather than a fresh ClickHouse read.
-	// Cached grids last 24 hours and refresh in the background once an hour old.
+	// Cached grids last 48 hours and refresh in the background once an hour old.
+	// The default window is also refreshed nightly.
 	FromCache bool
 	// Every organization that appears in any grid.
 	Organizations []*AdminHookClientOrganization
@@ -1949,7 +1952,13 @@ type AuditLog struct {
 	ActingSurface string
 	// The registered OAuth client the call authenticated as, when it had one.
 	// Absent for calls that carried no OAuth client.
-	ActingClientID     *string
+	ActingClientID *string
+	// What kind of event the entry records: 'configuration' for a change to the
+	// platform's configuration, 'security' for machine access and other
+	// security-relevant activity that is not a configuration decision. Always
+	// present in responses; optional in the schema so clients built against it
+	// still read responses from servers that predate it.
+	Category           *string
 	SubjectID          string
 	SubjectType        string
 	SubjectDisplayName *string
@@ -3015,6 +3024,10 @@ type ProductFeatures struct {
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent bool
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool
 }
 
 // PromoteRegistryCandidatePayload is the payload type of the admin service
@@ -3561,7 +3574,9 @@ func NewViewedProductFeatures(res *ProductFeatures, view string) *adminviews.Pro
 // newProductFeatures converts projected type ProductFeatures to service type
 // ProductFeatures.
 func newProductFeatures(vres *adminviews.ProductFeaturesView) *ProductFeatures {
-	res := &ProductFeatures{}
+	res := &ProductFeatures{
+		UpstreamAuthEnforced: vres.UpstreamAuthEnforced,
+	}
 	if vres.LogsEnabled != nil {
 		res.LogsEnabled = *vres.LogsEnabled
 	}
@@ -3657,6 +3672,7 @@ func newProductFeaturesView(res *ProductFeatures) *adminviews.ProductFeaturesVie
 		OrganizationGatewayDisabled:             &res.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         &res.CodeModeEnabled,
 		DeviceAgent:                             &res.DeviceAgent,
+		UpstreamAuthEnforced:                    res.UpstreamAuthEnforced,
 	}
 	return vres
 }
