@@ -79,8 +79,6 @@ func TestHandleToken_UnsupportedGrantPrecedesClientAuthentication(t *testing.T) 
 	toolset, _, publicClient := seedPrivateToolsetWithIssuer(t, ctx, ti)
 
 	forms := map[string]url.Values{
-		"uncomposed client credentials without client": {"grant_type": {"client_credentials"}},
-		"uncomposed client credentials with client":    {"grant_type": {"client_credentials"}, "client_id": {publicClient.ClientID}},
 		"no client":           {"grant_type": {"urn:example:grant-type:unknown"}},
 		"unregistered client": {"grant_type": {"urn:example:grant-type:unknown"}, "client_id": {"client_" + uuid.NewString()}},
 		"wrong secret":        {"grant_type": {"password"}, "client_id": {publicClient.ClientID}, "client_secret": {"wrong"}},

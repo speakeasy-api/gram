@@ -179,7 +179,7 @@ func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *
 	var row usersessions_repo.UserSessionClient
 	var err error
 	if target != nil {
-		tx, beginErr := s.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
+		tx, beginErr := s.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.ReadCommitted, AccessMode: pgx.ReadWrite, DeferrableMode: pgx.NotDeferrable, BeginQuery: "", CommitQuery: ""})
 		if beginErr != nil {
 			return oops.E(oops.CodeUnexpected, beginErr, "begin agent client registration").LogError(ctx, logger)
 		}
@@ -214,7 +214,7 @@ func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *
 			return oops.E(oops.CodeNotFound, err, "user_session_issuer not found").LogError(ctx, logger)
 		}
 		if isCredentialDenial(err) {
-			return err
+			return fmt.Errorf("register agent OAuth client: %w", err)
 		}
 		return oops.E(oops.CodeUnexpected, err, "failed to create user session client").LogError(ctx, logger)
 	}

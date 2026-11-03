@@ -225,7 +225,7 @@ func (s *ServiceCore) kitPersistedMCPConnections(ctx context.Context, db assista
 			s.logger.WarnContext(ctx, "omitting Kit MCP connection with an unsupported issuer")
 			continue
 		}
-		selected := assistantMCPServerRow{ToolsetSlug: row.ToolsetSlug, MCPServerID: row.McpServerID, EndpointSlug: row.EndpointSlug, EndpointDomain: row.EndpointDomain, Visibility: row.Visibility, DefaultEnvironmentSlug: row.DefaultEnvironmentSlug, EnvironmentSlug: row.EnvironmentSlug}
+		selected := assistantMCPServerRow{ServerSlug: row.ServerSlug, EnvironmentID: row.EnvironmentID, ToolsetSlug: row.ToolsetSlug, MCPServerID: row.McpServerID, EndpointSlug: row.EndpointSlug, EndpointDomain: row.EndpointDomain, Visibility: row.Visibility, DefaultEnvironmentSlug: row.DefaultEnvironmentSlug, EnvironmentSlug: row.EnvironmentSlug}
 		if s.serverURL == nil {
 			return nil, uuid.Nil, errKitMCPIneligible
 		}

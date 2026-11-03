@@ -336,8 +336,8 @@ func TestHandleGetAuthorizationServer_AdvertisesPrivateKeyJWT(t *testing.T) {
 		Grants  []string `json:"grant_types_supported"`
 	}
 	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &meta))
-	// Client authentication remains supported without the removed runtime token issuer.
-	require.NotContains(t, meta.Grants, "client_credentials")
+	// Agent client credentials are supported without an assistant runtime issuer.
+	require.Contains(t, meta.Grants, "client_credentials")
 	require.Contains(t, meta.Methods, "private_key_jwt")
 	require.Contains(t, meta.Algs, "RS256")
 	require.Contains(t, meta.Algs, "ES256")
@@ -380,7 +380,7 @@ func TestHandleGetAuthorizationServer_OmitsIDJAGWithoutTrustedIssuer(t *testing.
 	// workload grant, which is a different use of the same grant type. The
 	// ID-JAG profile is what says the endpoint accepts an authenticated
 	// identity assertion, and it stays absent.
-	require.Equal(t, []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeJWTBearer}, meta.GrantTypes)
+	require.Equal(t, []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, "client_credentials", oauthwire.GrantTypeJWTBearer}, meta.GrantTypes)
 	require.Empty(t, meta.GrantProfiles)
 }
 
@@ -416,7 +416,7 @@ func TestHandleGetAuthorizationServer_AdvertisesIDJAGWithTrustedIssuer(t *testin
 	toolset = setToolsetIssuer(t, ctx, ti.conn, *authCtx.ProjectID, toolset, issuer.ID)
 
 	meta := loadAuthorizationServerGrantMetadata(t, ctx, ti, toolset.McpSlug.String)
-	require.Equal(t, []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, oauthwire.GrantTypeJWTBearer}, meta.GrantTypes)
+	require.Equal(t, []string{oauthwire.GrantTypeAuthorizationCode, oauthwire.GrantTypeRefreshToken, "client_credentials", oauthwire.GrantTypeJWTBearer}, meta.GrantTypes)
 	require.Equal(t, []string{oauthwire.GrantProfileIDJAG}, meta.GrantProfiles)
 
 	// Only admitted client ID metadata document clients may exchange an ID-JAG.

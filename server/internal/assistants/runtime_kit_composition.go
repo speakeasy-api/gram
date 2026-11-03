@@ -199,7 +199,8 @@ func (s *ServiceCore) kitProtocolFactory(c KitLocalCompositionConfig, cidrs []st
 
 // The verified filesystem config owns the machine-auth connections. Do not
 // shadow it with legacy per-turn server overlays or management credentials.
-var errKitMCPDiscoveryUnavailable = errors.New("Kit MCP desired set is unavailable; retry after discovery succeeds")
+var errKitMCPDiscoveryUnavailable = errors.New("kit MCP desired set is unavailable; retry after discovery succeeds")
+var errKitMCPConfigurationUnverified = errors.New("kit runtime MCP configuration is unverified; a state-preserving upgrade is required")
 
 type kitConfiguredRuntimeProtocol struct {
 	*KitRuntimeProtocol
@@ -213,12 +214,18 @@ func (p *kitConfiguredRuntimeProtocol) RunTurn(ctx context.Context, r assistantR
 	if err := json.Unmarshal(r.BackendMetadataJSON, &metadata); err != nil {
 		return ErrKitRuntimeBinding
 	}
-	if metadata.Workload != nil && metadata.Workload.MCPDesiredSetHash != "" && turn.MCPServers == nil {
+	if metadata.Workload == nil || metadata.Workload.MCPDesiredSetHash == "" {
+		// An older runtime has no verified configuration fingerprint. Refuse
+		// dispatch without withdrawing its authority: deployment must not
+		// silently destroy rollback availability or trigger destructive reset.
+		return errKitMCPConfigurationUnverified
+	}
+	if turn.MCPServers == nil {
 		// Omission may be a transient discovery failure, not a desired removal.
 		// Refuse dispatch until verified without destroying live admission.
 		return errKitMCPDiscoveryUnavailable
 	}
-	if metadata.Workload == nil || metadata.Workload.MCPDesiredSetHash == "" || metadata.Workload.MCPDesiredSetHash != kitMCPDesiredSetHash(turn.MCPServers) {
+	if metadata.Workload.MCPDesiredSetHash != kitMCPDesiredSetHash(turn.MCPServers) {
 		// Disconnecting Kit's additive overlay cannot remove filesystem-owned
 		// connections. Withdraw the exact runtime workload before refusing the turn.
 		if p.core == nil {

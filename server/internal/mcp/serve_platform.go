@@ -100,7 +100,7 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 		authedCtx, _, err = s.assistantTokens.AuthorizeRuntime(ctx, token)
 	}
 	if err != nil {
-		return err
+		return fmt.Errorf("authorize platform agent: %w", err)
 	}
 	ctx = authedCtx
 	if project := r.Header.Get("Gram-Project"); project != "" {

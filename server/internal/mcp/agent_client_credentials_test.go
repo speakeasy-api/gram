@@ -2,6 +2,7 @@ package mcp_test
 
 import (
 	"encoding/json"
+	"fmt"
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -162,7 +163,10 @@ func TestAgentClientOrganizationSharedIssuer(t *testing.T) {
 		if err == nil {
 			err = tx.Commit(ctx)
 		}
-		return client, err
+		if err != nil {
+			return client, fmt.Errorf("register test agent client: %w", err)
+		}
+		return client, nil
 	}
 	for _, field := range []string{"organization", "project", "issuer"} {
 		bad := target

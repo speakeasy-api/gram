@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -25,7 +26,7 @@ func (s *Service) handleAgentClientCredentialsGrant(ctx context.Context, w http.
 		if errors.Is(err, pgx.ErrNoRows) || isCredentialDenial(err) {
 			return reject("unauthorized_client")
 		}
-		logger.ErrorContext(ctx, "agent client admission unavailable", "error", err)
+		logger.ErrorContext(ctx, "agent client admission unavailable", attr.SlogError(err))
 		return writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "agent client authorization unavailable")
 	}
 	if !client.SubjectUrn.Valid || method != "private_key_jwt" || client.TokenEndpointAuthMethod.String != "private_key_jwt" || client.UserSessionIssuerID != endpoint.UserSessionIssuerID {
@@ -73,7 +74,7 @@ func (s *Service) handleAgentClientCredentialsGrant(ctx context.Context, w http.
 		return admissionFailure(err)
 	}
 	minted, err := s.mintSession(ctx, endpoint, client, q, mintSessionParams{
-		AuthorizationExpiresAt: nil, DesiredSessionDuration: nil, Replayable: false, SignInID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, CredentialID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ToolSelection: nil, UpstreamClientPicks: nil, Catalog: nil,
+		AuthorizationExpiresAt: nil, DesiredSessionDuration: nil, Replayable: false, SignInID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, CredentialID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ToolSelection: nil, UpstreamClientPicks: nil, AuthClientPicks: nil, Catalog: nil,
 		Policy: sessionIssuancePolicyAgentClient, Audience: resource, BaseURL: baseURL, Subject: subject,
 		AuthorizerUserID: pgtype.Text{String: credential.AuthorizerUserID, Valid: true}, DelegatedGrants: credential.DelegatedGrants, DelegatedGrantsVersion: pgtype.Int4{Int32: credential.DelegatedGrantsVersion, Valid: true},
 	}, logger)
