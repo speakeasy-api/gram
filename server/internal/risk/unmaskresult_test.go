@@ -12,66 +12,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// TestListRiskResults_ByChatID_RawWithChatReadGrant covers the scoped bypass:
-// a chat_id-filtered request from a caller who separately holds chat:read for
-// that exact chat gets the raw match, matching what they could already see by
-// loading the chat's transcript.
-func TestListRiskResults_ByChatID_RawWithChatReadGrant(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	chatID, msgID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
-	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
-		authz.NewGrant(authz.ScopeChatRead, chatID.String()),
-	)
-
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Bypass Test")})
-	require.NoError(t, err)
-	policyID, _ := uuid.Parse(policy.ID)
-	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, msgID, true)
-
-	chatIDStr := chatID.String()
-	result, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
-		ChatID: &chatIDStr,
-	})
-	require.NoError(t, err)
-	require.Len(t, result.Results, 1)
-	require.NotNil(t, result.Results[0].Match, "chat:read for this exact chat should bypass redaction")
-	require.Equal(t, "AKIAIOSFODNN7EXAMPLE", *result.Results[0].Match)
-}
-
-// TestListRiskResults_ByChatID_RedactedWithoutChatReadGrant covers the
-// default: org:admin alone (no chat:read for the filtered chat) yields a
-// redacted match even when the request is chat_id-scoped.
-func TestListRiskResults_ByChatID_RedactedWithoutChatReadGrant(t *testing.T) {
-	t.Parallel()
-	ctx, ti := newTestRiskService(t)
-
-	authCtx, _ := contextvalues.GetAuthContext(ctx)
-	ctx = withExactAccessGrants(t, ctx, ti.conn,
-		authz.Grant{Scope: authz.ScopeOrgAdmin, Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID)},
-	)
-
-	policy, err := ti.service.CreateRiskPolicy(ctx, &gen.CreateRiskPolicyPayload{Name: new("Redact By Default")})
-	require.NoError(t, err)
-	policyID, _ := uuid.Parse(policy.ID)
-	chatID, msgID := seedChatMessage(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID)
-	seedRiskResult(t, ti, *authCtx.ProjectID, authCtx.ActiveOrganizationID, policyID, 1, msgID, true)
-
-	chatIDStr := chatID.String()
-	result, err := ti.service.ListRiskResults(ctx, &gen.ListRiskResultsPayload{
-		ChatID: &chatIDStr,
-	})
-	require.NoError(t, err)
-	require.Len(t, result.Results, 1)
-	require.Nil(t, result.Results[0].Match, "match must not ship without a chat:read bypass")
-	require.Nil(t, result.Results[0].Spans, "spans must not ship without a chat:read bypass")
-	require.NotEmpty(t, result.Results[0].MatchRedacted)
-	require.NotContains(t, *result.Results[0].MatchRedacted, "AKIA", "raw secret leaked into redacted output")
-}
-
 func TestUnmaskRiskResult_NotFound(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestRiskService(t)

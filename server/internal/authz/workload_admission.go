@@ -4,6 +4,7 @@ import (
 	"context"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -51,6 +52,30 @@ func (e *Engine) AdmitWorkloadSession(ctx context.Context) (context.Context, err
 	if err != nil {
 		return ctx, err
 	}
+	return withWorkloadSessionAdmission(ctx, admission)
+}
+
+// WorkloadSessionTxAdmitter admits workload sessions on a caller-owned transaction.
+type WorkloadSessionTxAdmitter func(context.Context, pgx.Tx) (WorkloadSessionAdmission, error)
+
+// AdmitWorkloadSessionInTx fails closed without transaction-bound admission.
+// The caller owns a REPEATABLE READ or SERIALIZABLE transaction and its lifecycle.
+// This never falls back to pool-backed admission while the transaction is held.
+func (e *Engine) AdmitWorkloadSessionInTx(ctx context.Context, tx pgx.Tx) (context.Context, error) {
+	if e.admitWorkloadSessionInTx == nil {
+		return ctx, oops.C(oops.CodeUnauthorized)
+	}
+	admission, err := e.admitWorkloadSessionInTx(ctx, tx)
+	if err != nil {
+		return ctx, err
+	}
+	return withWorkloadSessionAdmission(ctx, admission)
+}
+
+// withWorkloadSessionAdmission installs a freshly verified, application-owned
+// admission, including all three independent policy sets. Callers must never
+// supply cached or client-controlled admission results.
+func withWorkloadSessionAdmission(ctx context.Context, admission WorkloadSessionAdmission) (context.Context, error) {
 	// An admission naming no agent authorizes nothing. Checked here as well as
 	// in the admitter so a future admitter cannot widen the boundary by
 	// returning a zero value.

@@ -53,7 +53,9 @@ vi.mock("@/components/require-scope", () => ({
 vi.mock("./GatewayDiscoverySection", () => ({
   GatewayDiscoverySection: () => null,
 }));
-vi.mock("@/routes", () => ({ useRoutes: vi.fn() }));
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+}));
 vi.mock(
   "@/pages/mcp/x/tabs/settings/sections/authentication/AuthenticationSection",
   () => ({ AuthenticationSectionBody: vi.fn() }),
@@ -473,4 +475,34 @@ it("discards an inferred draft after the current mode becomes unknown", () => {
   expect(save().disabled).toBe(true);
   fireEvent.click(save());
   expect(state.mutate).not.toHaveBeenCalled();
+});
+
+it("uses Python instructions when editing an available Code gateway", () => {
+  render(
+    <GatewayInstructionsSection
+      metaMcpServer={{
+        ...server,
+        instructions: undefined,
+        discoveryMode: "code_mode",
+        codeModeEnabled: true,
+      }}
+    />,
+  );
+  expect(textarea().value).toContain("one execute tool for Python");
+  expect(textarea().value).not.toContain("list_servers");
+});
+
+it("uses Progressive instructions while a saved Code gateway runtime is off", () => {
+  render(
+    <GatewayInstructionsSection
+      metaMcpServer={{
+        ...server,
+        instructions: undefined,
+        discoveryMode: "code_mode",
+        codeModeEnabled: false,
+      }}
+    />,
+  );
+  expect(textarea().value).toContain("list_servers");
+  expect(textarea().value).not.toContain("one execute tool for Python");
 });

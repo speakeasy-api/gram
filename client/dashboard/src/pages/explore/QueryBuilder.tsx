@@ -83,6 +83,7 @@ const OP_LABELS: Record<MeasureOp, string> = {
 /** A timeseries bucket as the rollup segment names it. */
 const GRAIN_LABELS: Record<Grain, string> = {
   none: "none",
+  minute: "1m",
   hour: "1h",
   day: "1d",
   week: "1w",

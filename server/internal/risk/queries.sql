@@ -20,6 +20,7 @@ INSERT INTO risk_policies (
   , user_message
   , prompt
   , model_config
+  , approval_config
   , score
   , version
 )
@@ -44,6 +45,7 @@ VALUES (
   , @user_message
   , sqlc.narg(prompt)::text
   , sqlc.narg(model_config)::jsonb
+  , sqlc.narg(approval_config)::jsonb
   , COALESCE(sqlc.narg(score)::double precision, 5.0)
   , 1
 )
@@ -202,6 +204,7 @@ SET name = @name
   , user_message = @user_message
   , prompt = sqlc.narg(prompt)::text
   , model_config = sqlc.narg(model_config)::jsonb
+  , approval_config = sqlc.narg(approval_config)::jsonb
   -- Descriptive severity: preserve on omit, never contributes to the version bump.
   , score = COALESCE(sqlc.narg(score)::double precision, score)
   , version = CASE
@@ -216,6 +219,7 @@ SET name = @name
         OR action IS DISTINCT FROM @action
         OR prompt IS DISTINCT FROM sqlc.narg(prompt)::text
         OR model_config IS DISTINCT FROM sqlc.narg(model_config)::jsonb
+        OR approval_config IS DISTINCT FROM sqlc.narg(approval_config)::jsonb
         OR audience_type IS DISTINCT FROM @audience_type
       THEN version + 1
       ELSE version
@@ -678,16 +682,6 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
--- name: CountAllFindings :one
--- Project-wide total_count reported with the chat-scoped ListRiskResults
--- page. Skill-anchored rows have no chat, so that listing never returns them.
-SELECT COUNT(*)::BIGINT
-FROM risk_results rr
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
-WHERE rr.project_id = @project_id
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-  AND rr.skill_version_id IS NULL;
-
 -- name: ListRiskUserCategoryBreakdown :many
 -- Per-category finding counts for a single external_user_id in a window.
 -- The category CASE expression must stay in sync with the Go classifier in
@@ -1123,56 +1117,6 @@ WHERE rr.project_id = @project_id
 ORDER BY COALESCE(cm.created_at, ccp.created_at) DESC, rr.id DESC
 LIMIT @page_limit;
 
--- name: ListRiskResultsByChatFound :many
--- chat_user_id resolves the message's own external identity first and falls
--- back to the chat's, matching the ClickHouse listing's ingest-time
--- attribution so a pager sees the same identity on either store.
-SELECT rr.*, COALESCE(cm.chat_id, ccp.chat_id) AS chat_id, COALESCE(cm.created_at, ccp.created_at) AS message_created_at, c.title AS chat_title, COALESCE(NULLIF(cm.external_user_id, ''), c.external_user_id) AS chat_user_id, COALESCE(blk.block_id, '00000000-0000-0000-0000-000000000000'::uuid) AS block_id
-FROM risk_results rr
-LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
-LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
-LEFT JOIN chats c ON c.id = COALESCE(cm.chat_id, ccp.chat_id) AND c.deleted IS FALSE
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
-LEFT JOIN LATERAL (
-  SELECT tcb.id AS block_id FROM tool_call_blocks tcb
-  WHERE tcb.project_id = rr.project_id
-    AND tcb.chat_message_id = rr.chat_message_id
-    AND tcb.deleted IS FALSE
-  ORDER BY tcb.created_at DESC LIMIT 1
-) blk ON TRUE
-WHERE COALESCE(cm.chat_id, ccp.chat_id) = @chat_id
-  AND rr.project_id = @project_id
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-  AND (
-    sqlc.narg(cursor_message_created_at)::timestamptz IS NULL
-    OR (COALESCE(cm.created_at, ccp.created_at), rr.id) < (sqlc.narg(cursor_message_created_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
-  )
-ORDER BY COALESCE(cm.created_at, ccp.created_at) DESC, rr.id DESC
-LIMIT @page_limit;
-
--- name: ListRiskResultsGroupedByChat :many
--- A finding is anchored to either a chat message or a chat content part
--- (attachment), so both anchors resolve the chat; skill-anchored findings
--- have neither and are excluded by the non-null chat check.
-SELECT
-    COALESCE(cm.chat_id, ccp.chat_id)::uuid AS chat_id
-  , c.title AS chat_title
-  , c.external_user_id AS chat_user_id
-  , COUNT(*)::BIGINT AS findings_count
-  , MAX(rr.created_at)::TIMESTAMPTZ AS latest_detected
-FROM risk_results rr
-LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
-LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
-LEFT JOIN chats c ON c.id = COALESCE(cm.chat_id, ccp.chat_id) AND c.deleted IS FALSE
-JOIN risk_policies rp ON rp.id = rr.risk_policy_id AND rp.deleted IS FALSE
-WHERE rr.project_id = @project_id
-  AND rr.found IS TRUE AND rr.excluded_at IS NULL AND rr.false_positive_at IS NULL
-  AND COALESCE(cm.chat_id, ccp.chat_id) IS NOT NULL
-  AND (sqlc.narg(cursor)::uuid IS NULL OR COALESCE(cm.chat_id, ccp.chat_id) <= sqlc.narg(cursor)::uuid)
-GROUP BY COALESCE(cm.chat_id, ccp.chat_id), c.title, c.external_user_id
-ORDER BY COALESCE(cm.chat_id, ccp.chat_id) DESC
-LIMIT @page_limit;
-
 -- name: ListEnabledEnforcingPoliciesByProject :many
 -- Enforcing actions are block (hard deny), warn (challenge: deny + ack link,
 -- allowed after acknowledgement), and quarantine (hard deny + session circuit).
@@ -1447,9 +1391,8 @@ WHERE project_id = @project_id
 SELECT pg_advisory_xact_lock(hashtext(@project_id::text), hashtext(@id::text));
 
 -- name: MarkRiskResultsFalsePositive :many
--- Returns the full rows the UPDATE actually changed for audit logging.
--- ClickHouse copies are selected independently by requested id so a retry can
--- repair a successful append followed by a failed Postgres commit.
+-- Sets the dismissal columns on risk_results rows. Dismissals are recorded in
+-- ClickHouse; only tests that seed dismissed Postgres rows call this.
 UPDATE risk_results
 SET false_positive_at = clock_timestamp()
   , false_positive_reason = sqlc.narg(reason)
@@ -1457,54 +1400,6 @@ WHERE project_id = @project_id
   AND id = ANY(@ids::uuid[])
   AND false_positive_at IS NULL
 RETURNING *;
-
--- name: UnmarkRiskResultsFalsePositive :many
-UPDATE risk_results
-SET false_positive_at = NULL
-  , false_positive_reason = NULL
-WHERE project_id = @project_id
-  AND id = ANY(@ids::uuid[])
-  AND false_positive_at IS NOT NULL
-RETURNING *;
-
--- name: ListFalsePositiveRiskResults :many
--- Powers the Dismissed tab: every result manually marked as a false positive
--- in this project, newest dismissal first. Cursor is (false_positive_at, id)
--- for stable pagination. block_id is always the nil UUID (foundRowToResult maps that to
--- a nil pointer) since the Dismissed tab doesn't need durable tool-call-block
--- links. LEFT JOINs both anchor tables (a result is anchored to exactly one,
--- per risk_results_anchor_check) so content-part-anchored dismissals are not
--- silently dropped.
-SELECT
-    rr.id, rr.risk_policy_id, rr.risk_policy_version, rr.chat_message_id,
-    rr.source, rr.rule_id, rr.description, rr.match, rr.start_pos, rr.end_pos,
-    rr.confidence, rr.tags, rr.spans, rr.created_at,
-    rr.false_positive_at, rr.false_positive_reason,
-    COALESCE(cm.chat_id, ccp.chat_id) AS chat_id,
-    c.title AS chat_title, c.external_user_id AS chat_user_id
-FROM risk_results rr
-LEFT JOIN chat_messages cm ON cm.id = rr.chat_message_id
-LEFT JOIN chat_content_parts ccp ON ccp.id = rr.chat_content_part_id
-LEFT JOIN chats c ON c.id = COALESCE(cm.chat_id, ccp.chat_id) AND c.deleted IS FALSE
-WHERE rr.project_id = @project_id
-  AND rr.false_positive_at IS NOT NULL
-  -- Skill-anchored findings have no chat, so chat_id would come back NULL and
-  -- fail the non-null scan. They need their own read path, not this one.
-  AND rr.skill_version_id IS NULL
-  AND (
-    sqlc.narg(cursor_false_positive_at)::timestamptz IS NULL
-    OR (rr.false_positive_at, rr.id) < (sqlc.narg(cursor_false_positive_at)::timestamptz, sqlc.narg(cursor_id)::uuid)
-  )
-ORDER BY rr.false_positive_at DESC, rr.id DESC
-LIMIT @page_limit;
-
--- name: CountFalsePositiveRiskResults :one
--- Total for ListFalsePositiveRiskResults, which drops skill-anchored rows.
-SELECT COUNT(*)::BIGINT
-FROM risk_results
-WHERE project_id = @project_id
-  AND false_positive_at IS NOT NULL
-  AND skill_version_id IS NULL;
 
 -- Exclusion reconcile sweep -------------------------------------------------
 -- All batches are keyset-paginated by id (id > @cursor, ORDER BY id, LIMIT
@@ -2148,9 +2043,3 @@ WHERE id = @id;
 UPDATE risk_results
 SET false_positive_at = clock_timestamp()
 WHERE id = @id;
-
--- name: GetRiskResultFalsePositiveForTest :one
-SELECT false_positive_at
-FROM risk_results
-WHERE project_id = @project_id
-  AND id = @id;

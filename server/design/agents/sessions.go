@@ -7,8 +7,15 @@ import (
 )
 
 var Session = Type("AgentSession", func() {
-	Required("id", "issuer_id", "issuer_slug", "created_at", "expires_at", "refresh_expires_at")
+	Required("id", "issuer_id", "issuer_slug", "created_at", "expires_at", "refresh_expires_at", "subject_kind")
 	Attribute("id", String, func() { Format(FormatUUID) })
+	Attribute("subject_kind", String, func() {
+		Description("Who signed in: the agent itself, or a workload that federation assigns to the agent.")
+		Enum("agent", "workload")
+	})
+	Attribute("workload_subject", String, func() {
+		Description("The workload's subject as its platform issued it. Set only when subject_kind is workload.")
+	})
 	Attribute("project_id", String, func() { Format(FormatUUID) })
 	Attribute("issuer_id", String, func() { Format(FormatUUID) })
 	Attribute("issuer_slug", String)

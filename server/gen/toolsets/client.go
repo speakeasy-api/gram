@@ -24,7 +24,6 @@ type Client struct {
 	GetToolsetEndpoint                 goa.Endpoint
 	ListToolFiltersEndpoint            goa.Endpoint
 	ListToolSchemaStaticValuesEndpoint goa.Endpoint
-	CheckMCPSlugAvailabilityEndpoint   goa.Endpoint
 	CloneToolsetEndpoint               goa.Endpoint
 	AddExternalOAuthServerEndpoint     goa.Endpoint
 	UpdateExternalOAuthServerEndpoint  goa.Endpoint
@@ -34,7 +33,7 @@ type Client struct {
 }
 
 // NewClient initializes a "toolsets" service client given the endpoints.
-func NewClient(createToolset, listToolsets, listToolsetsForOrg, updateToolset, deleteToolset, getToolset, listToolFilters, listToolSchemaStaticValues, checkMCPSlugAvailability, cloneToolset, addExternalOAuthServer, updateExternalOAuthServer, removeOAuthServer, setUserSessionIssuer, setToolVariationsGroup goa.Endpoint) *Client {
+func NewClient(createToolset, listToolsets, listToolsetsForOrg, updateToolset, deleteToolset, getToolset, listToolFilters, listToolSchemaStaticValues, cloneToolset, addExternalOAuthServer, updateExternalOAuthServer, removeOAuthServer, setUserSessionIssuer, setToolVariationsGroup goa.Endpoint) *Client {
 	return &Client{
 		CreateToolsetEndpoint:              createToolset,
 		ListToolsetsEndpoint:               listToolsets,
@@ -44,7 +43,6 @@ func NewClient(createToolset, listToolsets, listToolsetsForOrg, updateToolset, d
 		GetToolsetEndpoint:                 getToolset,
 		ListToolFiltersEndpoint:            listToolFilters,
 		ListToolSchemaStaticValuesEndpoint: listToolSchemaStaticValues,
-		CheckMCPSlugAvailabilityEndpoint:   checkMCPSlugAvailability,
 		CloneToolsetEndpoint:               cloneToolset,
 		AddExternalOAuthServerEndpoint:     addExternalOAuthServer,
 		UpdateExternalOAuthServerEndpoint:  updateExternalOAuthServer,
@@ -227,29 +225,6 @@ func (c *Client) ListToolSchemaStaticValues(ctx context.Context, p *ListToolSche
 		return
 	}
 	return ires.(*ListToolSchemaStaticValuesResult), nil
-}
-
-// CheckMCPSlugAvailability calls the "checkMCPSlugAvailability" endpoint of
-// the "toolsets" service.
-// CheckMCPSlugAvailability may return the following errors:
-//   - "unauthorized" (type *goa.ServiceError): unauthorized access
-//   - "forbidden" (type *goa.ServiceError): permission denied
-//   - "bad_request" (type *goa.ServiceError): request is invalid
-//   - "not_found" (type *goa.ServiceError): resource not found
-//   - "conflict" (type *goa.ServiceError): resource already exists
-//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
-//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
-//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
-//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
-//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
-//   - error: internal error
-func (c *Client) CheckMCPSlugAvailability(ctx context.Context, p *CheckMCPSlugAvailabilityPayload) (res bool, err error) {
-	var ires any
-	ires, err = c.CheckMCPSlugAvailabilityEndpoint(ctx, p)
-	if err != nil {
-		return
-	}
-	return ires.(bool), nil
 }
 
 // CloneToolset calls the "cloneToolset" endpoint of the "toolsets" service.

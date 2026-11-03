@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/directory"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	plugindelivery "github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
@@ -156,7 +157,14 @@ type Plugin struct {
 	Assignments *PluginAssignmentSummary `json:"assignments,omitempty"`
 
 	// Publication indicates that a package exists, not whether its addresses are current.
-	Publication           string                 `json:"publication"`
+	Publication string `json:"publication"`
+
+	// AutoSyncEnabled reports whether the plugin's changes publish to the
+	// marketplace on their own. When false they wait until someone syncs by
+	// hand, and a plugin never published stays out of the marketplace until
+	// then. Member reads omit it.
+	AutoSyncEnabled *bool `json:"auto_sync_enabled,omitempty"`
+
 	DistributionAdmission *DistributionAdmission `json:"distribution_admission,omitempty"`
 }
 
@@ -170,7 +178,7 @@ type PluginServer struct {
 	// DisplayName is the name the generated package gives this server.
 	DisplayName string `json:"display_name"`
 
-	// Backend is what the entry is backed by: "mcp_server", "gateway", or "unresolved" when it has no current backend.
+	// Backend is what the entry is backed by: "mcp_server" or "gateway".
 	Backend string `json:"backend"`
 
 	// TargetID is the exact typed backend ID. It is present only in
@@ -338,6 +346,12 @@ type PluginPublicationEvidence struct {
 	Fresh         *bool                      `json:"fresh"`
 	Packages      []PluginPublicationPackage `json:"packages"`
 
+	// AwaitingManualSync is true when the plugin's auto sync is off and its
+	// package is not fresh: its changes publish only when someone syncs by
+	// hand, never on their own. The dashboard shows the same plugin as both
+	// "Auto sync off" and "Needs syncing".
+	AwaitingManualSync bool `json:"awaiting_manual_sync"`
+
 	// LastPublish describes the project marketplace's latest publish attempt
 	// and last successful push, which explain why a package is not fresh.
 	LastPublish *PluginLastPublish `json:"last_publish,omitempty"`
@@ -396,24 +410,58 @@ type publicationEvidenceReader interface {
 	ResolvePublicationEvidence(context.Context, string, uuid.UUID, []string) ([]plugindelivery.PublicationEvidence, error)
 }
 
-// readPublicationEvidence projects one plugin's publication evidence. Callers
-// must have checked that a reader is composed.
+// readPublicationEvidence projects one plugin's publication evidence. Whether
+// it awaits a manual sync comes from the evidence itself, which derives it from
+// the plugin's auto sync setting and its package's freshness. Callers must have
+// checked that a reader is composed.
 func (s *PluginsService) readPublicationEvidence(ctx context.Context, principal Principal, projectID uuid.UUID, pluginSlug string) *PluginPublicationEvidence {
-	evidence, err := s.publicationEvidence.ResolvePublicationEvidence(ctx, principal.OrganizationID, projectID, []string{pluginSlug})
-	if err != nil || len(evidence) != 1 || evidence[0].PluginSlug != pluginSlug {
+	evidence, _ := s.readPublicationEvidenceWithOthers(ctx, principal, projectID, pluginSlug, nil)
+	return evidence
+}
+
+// readPublicationEvidenceWithOthers is readPublicationEvidence that also
+// reports, from the same resolution, whether every plugin in others is fresh.
+// Evidence that cannot be read is unavailable, and others then count as not
+// fresh.
+func (s *PluginsService) readPublicationEvidenceWithOthers(ctx context.Context, principal Principal, projectID uuid.UUID, pluginSlug string, others []string) (*PluginPublicationEvidence, bool) {
+	slugs := append([]string{pluginSlug}, others...)
+	evidence, err := s.publicationEvidence.ResolvePublicationEvidence(ctx, principal.OrganizationID, projectID, slugs)
+	target := slices.IndexFunc(evidence, func(plugin plugindelivery.PublicationEvidence) bool { return plugin.PluginSlug == pluginSlug })
+	if err != nil || len(evidence) != len(slugs) || target < 0 {
 		// Package resolution can fail when a private address is incomplete.
 		// Preserve the admin inventory without claiming a package is current.
-		return &PluginPublicationEvidence{Unavailable: true, Packages: []PluginPublicationPackage{}}
+		return &PluginPublicationEvidence{Unavailable: true, Packages: []PluginPublicationPackage{}}, false
 	}
-	packages := make([]PluginPublicationPackage, 0, len(evidence[0].Packages))
-	for _, pkg := range evidence[0].Packages {
+	othersFresh := true
+	for index, plugin := range evidence {
+		if index != target && (plugin.Fresh == nil || !*plugin.Fresh) {
+			othersFresh = false
+		}
+	}
+	packages := make([]PluginPublicationPackage, 0, len(evidence[target].Packages))
+	for _, pkg := range evidence[target].Packages {
 		packages = append(packages, PluginPublicationPackage{ServerName: pkg.ServerName, MCPURL: pkg.MCPURL})
 	}
 	return &PluginPublicationEvidence{
-		NotConfigured: evidence[0].NotConfigured,
-		Fresh:         evidence[0].Fresh,
-		Packages:      packages,
+		NotConfigured:      evidence[target].NotConfigured,
+		Fresh:              evidence[target].Fresh,
+		Packages:           packages,
+		AwaitingManualSync: evidence[target].AwaitingManualSync,
+	}, othersFresh
+}
+
+// AwaitingManualSync reports whether one plugin's change waits for a manual
+// sync, from the publication evidence get_plugin reports to administrators.
+// known is false when no evidence reader is composed or it can't answer.
+func (s *PluginsService) AwaitingManualSync(ctx context.Context, principal Principal, projectID uuid.UUID, pluginSlug string) (awaiting, known bool) {
+	if s == nil || s.publicationEvidence == nil {
+		return false, false
 	}
+	evidence := s.readPublicationEvidence(ctx, principal, projectID, pluginSlug)
+	if evidence.Unavailable {
+		return false, false
+	}
+	return evidence.AwaitingManualSync, true
 }
 
 // PluginsService answers what plugins a project has and what is inside one,
@@ -449,15 +497,25 @@ type PluginsService struct {
 	distributionAdmissionRead distributionAdmissionReader
 
 	// publication and publisher request a plugin publish. republish_plugin
-	// uses both; create_plugin and rename_plugin signal through publisher
-	// after their own publication request commits.
+	// uses both to request a manual sync; create_plugin, rename_plugin, and
+	// set_plugin_auto_sync signal through publisher after their own
+	// publication request commits.
 	publication     plugindelivery.PublicationRequests
-	publisher       plugindelivery.PluginPublishSignaler
+	publisher       plugindelivery.PluginSyncSignaler
 	republishBudget OperationBudget
 
 	metadataLogger *slog.Logger
 	metadataCore   *plugindelivery.PluginMetadataCore
 	metadataBudget OperationBudget
+	// autoSyncGuard is the dashboard's check for turning auto sync off.
+	// set_plugin_auto_sync is unavailable without it.
+	autoSyncGuard pluginAutoSyncGuard
+
+	// orgHosts resolves the platform host stored as an organization's default
+	// host. Nil links follow the request's platform origin. orgHostsLogger
+	// records failed reads of that host.
+	orgHosts       *orghost.Resolver
+	orgHostsLogger *slog.Logger
 }
 
 func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMaterial string) *PluginsService {
@@ -496,6 +554,7 @@ func NewPluginsService(db *pgxpool.Pool, budget OperationBudget, cursorKeyMateri
 		metadataLogger:        nil,
 		metadataCore:          nil,
 		metadataBudget:        OperationBudget{},
+		autoSyncGuard:         nil,
 	}
 }
 
@@ -573,6 +632,21 @@ func (s *PluginsService) WithInstallLinks(dashboardURL, serverURL *url.URL) *Plu
 	if serverURL != nil && serverURL.Scheme == "https" && serverURL.Host != "" && serverURL.User == nil {
 		copyURL := *serverURL
 		s.serverURL = &copyURL
+	}
+	return s
+}
+
+// WithOrganizationHosts makes member links use the platform host stored as the
+// organization's default host, the host the dashboard serves it on. logger
+// records failed reads of that host, after which links fall back to the
+// request's platform origin. A nil logger discards those records.
+func (s *PluginsService) WithOrganizationHosts(resolver *orghost.Resolver, logger *slog.Logger) *PluginsService {
+	if logger == nil {
+		logger = slog.New(slog.DiscardHandler)
+	}
+	if s != nil {
+		s.orgHosts = resolver
+		s.orgHostsLogger = logger
 	}
 	return s
 }
@@ -780,6 +854,12 @@ func (s *PluginsService) GetAssignedPlugin(ctx context.Context, principal Princi
 		return GetPluginOutput{}, fmt.Errorf("list assigned platform mcp plugin skills: %w", err)
 	}
 	servers, serversTruncated := boundedRows(servers, maxPluginMembers)
+	serverAliases, err := pluginMemberAliases(ctx, s.db, project.ID, servers, func(row platformrepo.ListPlatformMCPPluginServersRow) (string, uuid.NullUUID) {
+		return row.McpSlug, row.AliasToolsetID
+	})
+	if err != nil {
+		return GetPluginOutput{}, err
+	}
 	skills, skillsTruncated := boundedRows(skills, maxPluginMembers)
 	output := GetPluginOutput{
 		ProjectID: project.ID.String(),
@@ -789,13 +869,10 @@ func (s *PluginsService) GetAssignedPlugin(ctx context.Context, principal Princi
 	}
 	for _, server := range servers {
 		backend := "mcp_server"
-		switch {
-		case server.GatewayBacked:
+		if server.GatewayBacked {
 			backend = "gateway"
-		case server.Unresolved:
-			backend = "unresolved"
 		}
-		output.Servers = append(output.Servers, PluginServer{DisplayName: server.DisplayName, Backend: backend, MCPSlug: server.McpSlug, Policy: server.Policy, Enabled: server.Enabled})
+		output.Servers = append(output.Servers, PluginServer{DisplayName: server.DisplayName, Backend: backend, MCPSlug: memberSlug(server.McpSlug, server.AliasToolsetID, serverAliases), Policy: server.Policy, Enabled: server.Enabled})
 	}
 	for _, skill := range skills {
 		pinned := ""
@@ -903,6 +980,12 @@ func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, inp
 		return GetPluginOutput{}, fmt.Errorf("list platform mcp plugin memberships: %w", err)
 	}
 	memberships, membershipsMore := boundedRows(memberships, membershipLimit)
+	membershipAliases, err := pluginMemberAliases(ctx, s.db, project.ID, memberships, func(row platformrepo.ListPlatformMCPPluginMembershipsRow) (string, uuid.NullUUID) {
+		return row.McpSlug, row.AliasToolsetID
+	})
+	if err != nil {
+		return GetPluginOutput{}, err
+	}
 	if len(memberships) > 0 && memberships[0].MembershipVersion != membershipVersion {
 		return GetPluginOutput{}, ErrPluginCursorInvalid
 	}
@@ -974,7 +1057,7 @@ func (s *PluginsService) GetPlugin(ctx context.Context, principal Principal, inp
 		if membership.TargetResolved && membership.TargetID.Valid {
 			targetID = membership.TargetID.UUID.String()
 		}
-		output.Servers = append(output.Servers, PluginServer{MembershipID: membership.MembershipID.String(), DisplayName: membership.DisplayName, Backend: membership.TargetKind, TargetID: targetID, MCPSlug: membership.McpSlug, Policy: membership.Policy, Enabled: membership.Enabled})
+		output.Servers = append(output.Servers, PluginServer{MembershipID: membership.MembershipID.String(), DisplayName: membership.DisplayName, Backend: membership.TargetKind, TargetID: targetID, MCPSlug: memberSlug(membership.McpSlug, membership.AliasToolsetID, membershipAliases), Policy: membership.Policy, Enabled: membership.Enabled})
 	}
 	if membershipsMore && len(memberships) > 0 {
 		last := memberships[len(memberships)-1]
@@ -1245,6 +1328,7 @@ func pluginFromInventoryRow(row platformrepo.ListPlatformMCPPluginInventoryRow) 
 			Users:      row.UserAssignmentCount,
 		},
 		Publication:           publication,
+		AutoSyncEnabled:       new(plugindelivery.PluginAutoSyncEnabled(row.AutoSyncEnabled)),
 		DistributionAdmission: nil,
 	}
 }

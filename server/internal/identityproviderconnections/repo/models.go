@@ -110,8 +110,6 @@ type OktaIdentityProviderConnection struct {
 	OrgUrl string
 	// @access: restricted
 	IssuerUrl string
-	// @access: opaque-restricted
-	IssuerUrlOverrideReason pgtype.Text
 	// @access: confidential
 	OwnershipClaimed bool
 	// @access: confidential

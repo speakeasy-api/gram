@@ -3894,6 +3894,7 @@ func unmarshalMcpServerResponseBodyToTypesMcpServer(v *McpServerResponseBody) *t
 		Name:                  v.Name,
 		Slug:                  v.Slug,
 		PlatformEndpointSlug:  v.PlatformEndpointSlug,
+		LegacyPlatformSlug:    v.LegacyPlatformSlug,
 		EnvironmentID:         v.EnvironmentID,
 		UserSessionIssuerID:   v.UserSessionIssuerID,
 		RemoteMcpServerID:     v.RemoteMcpServerID,
@@ -3901,6 +3902,7 @@ func unmarshalMcpServerResponseBodyToTypesMcpServer(v *McpServerResponseBody) *t
 		ToolsetID:             v.ToolsetID,
 		UnproxiedMcpServerID:  v.UnproxiedMcpServerID,
 		ToolVariationsGroupID: v.ToolVariationsGroupID,
+		BuiltinBackend:        v.BuiltinBackend,
 		Visibility:            types.McpServerVisibility(*v.Visibility),
 		NetworkAccessMode:     types.NetworkAccessMode(*v.NetworkAccessMode),
 		PrimaryEndpointID:     v.PrimaryEndpointID,
@@ -3933,6 +3935,7 @@ func unmarshalMcpServerToolsetSummaryResponseBodyToTypesMcpServerToolsetSummary(
 		ExternalMcpProxyOnly:  *v.ExternalMcpProxyOnly,
 		ExternalOauthServerID: v.ExternalOauthServerID,
 		RegistrySpecifier:     v.RegistrySpecifier,
+		HostingMcpServerID:    v.HostingMcpServerID,
 	}
 	res.ExternalMcpSlugs = make([]string, len(v.ExternalMcpSlugs))
 	for i, val := range v.ExternalMcpSlugs {

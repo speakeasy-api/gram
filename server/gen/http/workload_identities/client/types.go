@@ -24,6 +24,10 @@ type RegisterIssuerRequestBody struct {
 	// Where the issuer publishes the keys its assertions are signed with. Must be
 	// an https URL on a fully qualified domain name.
 	JwksURI string `form:"jwks_uri" json:"jwks_uri" xml:"jwks_uri"`
+	// Allow valid assertions with jti or uti identifiers to be exchanged
+	// repeatedly until expiry. Defaults to false. Tokens without replay
+	// identifiers retain existing exact-token compatibility.
+	AllowAssertionReuse *bool `form:"allow_assertion_reuse,omitempty" json:"allow_assertion_reuse,omitempty" xml:"allow_assertion_reuse,omitempty"`
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	// Defaults to true. Checked when a wildcard rule is admitted and again on
 	// every lookup, so clearing it makes wildcard rules already written inert
@@ -37,8 +41,9 @@ type RegisterIssuerRequestBody struct {
 	// tags of at most 64 characters each.
 	Tags []string `form:"tags,omitempty" json:"tags,omitempty" xml:"tags,omitempty"`
 	// Register the issuer for the selected project alone rather than the whole
-	// organization. Requires a caller that names a project; a dashboard session
-	// does not. Defaults to false.
+	// organization. Requires an explicitly selected project via the Gram-Project
+	// header or a project-bound API key. Dashboard sessions require access to that
+	// project. Defaults to false.
 	ProjectScoped bool `form:"project_scoped" json:"project_scoped" xml:"project_scoped"`
 }
 
@@ -59,6 +64,11 @@ type UpdateIssuerRequestBody struct {
 	// de-duplicated on write, then limited to 40 tags of at most 64 characters
 	// each.
 	Tags []string `json:"tags,omitzero"`
+	// Allow valid assertions with jti or uti identifiers to be exchanged
+	// repeatedly until expiry. Omit to preserve the current setting; false
+	// disables this opt-in. Tokens without replay identifiers retain existing
+	// exact-token compatibility.
+	AllowAssertionReuse *bool `form:"allow_assertion_reuse,omitempty" json:"allow_assertion_reuse,omitempty" xml:"allow_assertion_reuse,omitempty"`
 }
 
 // AdmitSubjectRequestBody is the type of the "workloadIdentities" service
@@ -85,8 +95,9 @@ type AdmitSubjectRequestBody struct {
 	// The agent whose policy the admitted workload inherits.
 	AgentID string `form:"agent_id" json:"agent_id" xml:"agent_id"`
 	// Admit the subject for the selected project alone rather than the whole
-	// organization. Requires a caller that names a project; a dashboard session
-	// does not. Defaults to false.
+	// organization. Requires an explicitly selected project via the Gram-Project
+	// header or a project-bound API key. Dashboard sessions require access to that
+	// project. Defaults to false.
 	ProjectScoped bool `form:"project_scoped" json:"project_scoped" xml:"project_scoped"`
 }
 
@@ -2515,6 +2526,10 @@ type WorkloadIssuerResponseBody struct {
 	// What the platform is and what runs on it. Empty rather than absent where
 	// none is set.
 	Description *string `form:"description,omitempty" json:"description,omitempty" xml:"description,omitempty"`
+	// Allow valid assertions with jti or uti identifiers to be exchanged
+	// repeatedly until expiry. Defaults to false. Tokens without replay
+	// identifiers retain existing exact-token compatibility.
+	AllowAssertionReuse *bool `form:"allow_assertion_reuse,omitempty" json:"allow_assertion_reuse,omitempty" xml:"allow_assertion_reuse,omitempty"`
 	// Whether subjects under this issuer may be admitted by a wildcard rule.
 	AllowWildcardAdmission *bool `form:"allow_wildcard_admission,omitempty" json:"allow_wildcard_admission,omitempty" xml:"allow_wildcard_admission,omitempty"`
 	// Free-form labels for grouping and filtering trusted platforms. Empty rather
@@ -2620,6 +2635,25 @@ type WorkloadPlatformSubjectResponseBody struct {
 	Template *string `form:"template,omitempty" json:"template,omitempty" xml:"template,omitempty"`
 	// Whether the rule is the filled template followed by *.
 	Wildcard *bool `form:"wildcard,omitempty" json:"wildcard,omitempty" xml:"wildcard,omitempty"`
+	// Names the default rule beside its alternatives. Empty where there are none.
+	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
+	// Other rules the operator may choose instead, in the order they are offered.
+	// Absent where there are none.
+	Alternatives []*WorkloadPlatformSubjectAlternativeResponseBody `form:"alternatives,omitempty" json:"alternatives,omitempty" xml:"alternatives,omitempty"`
+}
+
+// WorkloadPlatformSubjectAlternativeResponseBody is used to define fields on
+// response body types.
+type WorkloadPlatformSubjectAlternativeResponseBody struct {
+	// Identifies the choice within the platform.
+	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
+	// What the operator chooses it by.
+	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
+	// The subject with {key} placeholders for rule-tier variables; the stem, for a
+	// wildcard rule.
+	Template *string `form:"template,omitempty" json:"template,omitempty" xml:"template,omitempty"`
+	// Whether the rule is the filled template followed by *.
+	Wildcard *bool `form:"wildcard,omitempty" json:"wildcard,omitempty" xml:"wildcard,omitempty"`
 }
 
 // WorkloadFormResponseBody is used to define fields on response body types.
@@ -2704,6 +2738,7 @@ func NewRegisterIssuerRequestBody(p *workloadidentities.RegisterIssuerPayload) *
 		Name:                   p.Name,
 		Issuer:                 p.Issuer,
 		JwksURI:                p.JwksURI,
+		AllowAssertionReuse:    p.AllowAssertionReuse,
 		AllowWildcardAdmission: p.AllowWildcardAdmission,
 		Description:            p.Description,
 		ProjectScoped:          p.ProjectScoped,
@@ -2727,10 +2762,11 @@ func NewRegisterIssuerRequestBody(p *workloadidentities.RegisterIssuerPayload) *
 // the "updateIssuer" endpoint of the "workloadIdentities" service.
 func NewUpdateIssuerRequestBody(p *workloadidentities.UpdateIssuerPayload) *UpdateIssuerRequestBody {
 	body := &UpdateIssuerRequestBody{
-		ID:          p.ID,
-		Name:        p.Name,
-		JwksURI:     p.JwksURI,
-		Description: p.Description,
+		ID:                  p.ID,
+		Name:                p.Name,
+		JwksURI:             p.JwksURI,
+		Description:         p.Description,
+		AllowAssertionReuse: p.AllowAssertionReuse,
 	}
 	if p.Tags != nil {
 		body.Tags = make([]string, len(p.Tags))
@@ -8058,6 +8094,9 @@ func ValidateWorkloadIssuerResponseBody(body *WorkloadIssuerResponseBody) (err e
 	if body.AllowWildcardAdmission == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("allow_wildcard_admission", "body"))
 	}
+	if body.AllowAssertionReuse == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("allow_assertion_reuse", "body"))
+	}
 	if body.Tags == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("tags", "body"))
 	}
@@ -8257,6 +8296,31 @@ func ValidateWorkloadPlatformVariableResponseBody(body *WorkloadPlatformVariable
 // ValidateWorkloadPlatformSubjectResponseBody runs the validations defined on
 // WorkloadPlatformSubjectResponseBody
 func ValidateWorkloadPlatformSubjectResponseBody(body *WorkloadPlatformSubjectResponseBody) (err error) {
+	if body.Template == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("template", "body"))
+	}
+	if body.Wildcard == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("wildcard", "body"))
+	}
+	for _, e := range body.Alternatives {
+		if e != nil {
+			if err2 := ValidateWorkloadPlatformSubjectAlternativeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateWorkloadPlatformSubjectAlternativeResponseBody runs the validations
+// defined on WorkloadPlatformSubjectAlternativeResponseBody
+func ValidateWorkloadPlatformSubjectAlternativeResponseBody(body *WorkloadPlatformSubjectAlternativeResponseBody) (err error) {
+	if body.Key == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key", "body"))
+	}
+	if body.Label == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("label", "body"))
+	}
 	if body.Template == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("template", "body"))
 	}

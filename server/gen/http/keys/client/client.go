@@ -25,6 +25,10 @@ type Client struct {
 	// endpoint.
 	RotateKeyDoer goahttp.Doer
 
+	// ExtendAgentKeys Doer is the HTTP client used to make requests to the
+	// extendAgentKeys endpoint.
+	ExtendAgentKeysDoer goahttp.Doer
+
 	// ListKeys Doer is the HTTP client used to make requests to the listKeys
 	// endpoint.
 	ListKeysDoer goahttp.Doer
@@ -32,6 +36,10 @@ type Client struct {
 	// RevokeKey Doer is the HTTP client used to make requests to the revokeKey
 	// endpoint.
 	RevokeKeyDoer goahttp.Doer
+
+	// UpdateKeyPolicy Doer is the HTTP client used to make requests to the
+	// updateKeyPolicy endpoint.
+	UpdateKeyPolicyDoer goahttp.Doer
 
 	// VerifyKey Doer is the HTTP client used to make requests to the verifyKey
 	// endpoint.
@@ -59,8 +67,10 @@ func NewClient(
 	return &Client{
 		CreateKeyDoer:       doer,
 		RotateKeyDoer:       doer,
+		ExtendAgentKeysDoer: doer,
 		ListKeysDoer:        doer,
 		RevokeKeyDoer:       doer,
+		UpdateKeyPolicyDoer: doer,
 		VerifyKeyDoer:       doer,
 		RestoreResponseBody: restoreBody,
 		scheme:              scheme,
@@ -118,6 +128,30 @@ func (c *Client) RotateKey() goa.Endpoint {
 	}
 }
 
+// ExtendAgentKeys returns an endpoint that makes HTTP requests to the keys
+// service extendAgentKeys server.
+func (c *Client) ExtendAgentKeys() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeExtendAgentKeysRequest(c.encoder)
+		decodeResponse = DecodeExtendAgentKeysResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildExtendAgentKeysRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ExtendAgentKeysDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("keys", "extendAgentKeys", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
 // ListKeys returns an endpoint that makes HTTP requests to the keys service
 // listKeys server.
 func (c *Client) ListKeys() goa.Endpoint {
@@ -161,6 +195,30 @@ func (c *Client) RevokeKey() goa.Endpoint {
 		resp, err := c.RevokeKeyDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("keys", "revokeKey", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// UpdateKeyPolicy returns an endpoint that makes HTTP requests to the keys
+// service updateKeyPolicy server.
+func (c *Client) UpdateKeyPolicy() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeUpdateKeyPolicyRequest(c.encoder)
+		decodeResponse = DecodeUpdateKeyPolicyResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildUpdateKeyPolicyRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.UpdateKeyPolicyDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("keys", "updateKeyPolicy", err)
 		}
 		return decodeResponse(resp)
 	}

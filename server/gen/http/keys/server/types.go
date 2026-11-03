@@ -37,6 +37,12 @@ type CreateKeyRequestBody struct {
 	// mcp:blocked_connect and mcp:blocked_auth blocks, that its server and auth
 	// client access is evaluated against. Not yet enforced. Requires org admin.
 	PolicyGrants []*APIKeyPolicyGrantRequestBody `form:"policy_grants,omitempty" json:"policy_grants,omitempty" xml:"policy_grants,omitempty"`
+	// For an agent key: the upstream credential the key uses on each MCP server it
+	// names. Where typed upstream authentication is enforced, the key is served on
+	// a server with the credential chosen here, checked again on every request.
+	// Shared credentials only: an agent reaches a person's own connection when it
+	// acts for them.
+	AuthClientChoices []*AgentKeyAuthClientChoiceRequestBody `form:"auth_client_choices,omitempty" json:"auth_client_choices,omitempty" xml:"auth_client_choices,omitempty"`
 }
 
 // RotateKeyRequestBody is the type of the "keys" service "rotateKey" endpoint
@@ -54,6 +60,27 @@ type RotateKeyRequestBody struct {
 	RequestedGrants []*AgentPolicyGrantFormRequestBody `form:"requested_grants,omitempty" json:"requested_grants,omitempty" xml:"requested_grants,omitempty"`
 	// Replacement expiry; defaults to 90 days and cannot exceed one year
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
+}
+
+// ExtendAgentKeysRequestBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP request body.
+type ExtendAgentKeysRequestBody struct {
+	// The agent whose keys gain the grants
+	AgentID *string `form:"agent_id,omitempty" json:"agent_id,omitempty" xml:"agent_id,omitempty"`
+	// Server grants to add to each key
+	RequestedGrants []*ExtendAgentKeyGrantFormRequestBody `form:"requested_grants,omitempty" json:"requested_grants,omitempty" xml:"requested_grants,omitempty"`
+	// The upstream credential each key uses on the servers it gains, checked as at
+	// issuance. Recorded only on keys that gain that server.
+	AuthClientChoices []*AgentKeyAuthClientChoiceRequestBody `form:"auth_client_choices,omitempty" json:"auth_client_choices,omitempty" xml:"auth_client_choices,omitempty"`
+}
+
+// UpdateKeyPolicyRequestBody is the type of the "keys" service
+// "updateKeyPolicy" endpoint HTTP request body.
+type UpdateKeyPolicyRequestBody struct {
+	// The ID of the key.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// The key's complete policy. An empty list removes every grant.
+	PolicyGrants []*APIKeyPolicyGrantRequestBody `form:"policy_grants,omitempty" json:"policy_grants,omitempty" xml:"policy_grants,omitempty"`
 }
 
 // CreateKeyResponseBody is the type of the "keys" service "createKey" endpoint
@@ -130,10 +157,53 @@ type RotateKeyResponseBody struct {
 	LastAccessedAt *string `form:"last_accessed_at,omitempty" json:"last_accessed_at,omitempty" xml:"last_accessed_at,omitempty"`
 }
 
+// ExtendAgentKeysResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body.
+type ExtendAgentKeysResponseBody struct {
+	Keys []*KeyResponseBody `form:"keys" json:"keys" xml:"keys"`
+}
+
 // ListKeysResponseBody is the type of the "keys" service "listKeys" endpoint
 // HTTP response body.
 type ListKeysResponseBody struct {
 	Keys []*KeyResponseBody `form:"keys" json:"keys" xml:"keys"`
+}
+
+// UpdateKeyPolicyResponseBody is the type of the "keys" service
+// "updateKeyPolicy" endpoint HTTP response body.
+type UpdateKeyPolicyResponseBody struct {
+	// The ID of the key
+	ID string `form:"id" json:"id" xml:"id"`
+	// The organization ID this key belongs to
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The optional project ID this key is scoped to
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+	// The human creator; immutable authorizer for agent keys
+	CreatedByUserID string `form:"created_by_user_id" json:"created_by_user_id" xml:"created_by_user_id"`
+	// The name of the key
+	Name string `form:"name" json:"name" xml:"name"`
+	// The store prefix of the api key for recognition
+	KeyPrefix string `form:"key_prefix" json:"key_prefix" xml:"key_prefix"`
+	// The token of the api key (only returned on key creation or rotation)
+	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
+	// Legacy transport scopes; always empty for agent keys
+	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
+	// Principal authenticated by this key; agent keys use agent:<uuid>
+	SubjectUrn *string `form:"subject_urn,omitempty" json:"subject_urn,omitempty" xml:"subject_urn,omitempty"`
+	// Immutable delegated policy approved for this credential
+	DelegatedGrants *AgentDelegatedPolicyResponseBody `form:"delegated_grants,omitempty" json:"delegated_grants,omitempty" xml:"delegated_grants,omitempty"`
+	// Delegated policy format version
+	DelegatedGrantsVersion *int `form:"delegated_grants_version,omitempty" json:"delegated_grants_version,omitempty" xml:"delegated_grants_version,omitempty"`
+	// An ordinary key's own policy
+	PolicyGrants []*APIKeyPolicyGrantResponseBody `form:"policy_grants,omitempty" json:"policy_grants,omitempty" xml:"policy_grants,omitempty"`
+	// Required expiry for an agent key; legacy keys may not expire.
+	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
+	// The creation date of the key.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+	// When the key was last updated.
+	UpdatedAt string `form:"updated_at" json:"updated_at" xml:"updated_at"`
+	// When the key was last accessed.
+	LastAccessedAt *string `form:"last_accessed_at,omitempty" json:"last_accessed_at,omitempty" xml:"last_accessed_at,omitempty"`
 }
 
 // VerifyKeyResponseBody is the type of the "keys" service "verifyKey" endpoint
@@ -492,6 +562,188 @@ type RotateKeyUnexpectedResponseBody struct {
 // RotateKeyGatewayErrorResponseBody is the type of the "keys" service
 // "rotateKey" endpoint HTTP response body for the "gateway_error" error.
 type RotateKeyGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExtendAgentKeysUnauthorizedResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body for the "unauthorized" error.
+type ExtendAgentKeysUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExtendAgentKeysForbiddenResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body for the "forbidden" error.
+type ExtendAgentKeysForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExtendAgentKeysBadRequestResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body for the "bad_request" error.
+type ExtendAgentKeysBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExtendAgentKeysNotFoundResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body for the "not_found" error.
+type ExtendAgentKeysNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExtendAgentKeysConflictResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body for the "conflict" error.
+type ExtendAgentKeysConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExtendAgentKeysUnsupportedMediaResponseBody is the type of the "keys"
+// service "extendAgentKeys" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ExtendAgentKeysUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExtendAgentKeysInvalidResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body for the "invalid" error.
+type ExtendAgentKeysInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExtendAgentKeysInvariantViolationResponseBody is the type of the "keys"
+// service "extendAgentKeys" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ExtendAgentKeysInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExtendAgentKeysUnexpectedResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body for the "unexpected" error.
+type ExtendAgentKeysUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// ExtendAgentKeysGatewayErrorResponseBody is the type of the "keys" service
+// "extendAgentKeys" endpoint HTTP response body for the "gateway_error" error.
+type ExtendAgentKeysGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -867,6 +1119,188 @@ type RevokeKeyGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// UpdateKeyPolicyUnauthorizedResponseBody is the type of the "keys" service
+// "updateKeyPolicy" endpoint HTTP response body for the "unauthorized" error.
+type UpdateKeyPolicyUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateKeyPolicyForbiddenResponseBody is the type of the "keys" service
+// "updateKeyPolicy" endpoint HTTP response body for the "forbidden" error.
+type UpdateKeyPolicyForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateKeyPolicyBadRequestResponseBody is the type of the "keys" service
+// "updateKeyPolicy" endpoint HTTP response body for the "bad_request" error.
+type UpdateKeyPolicyBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateKeyPolicyNotFoundResponseBody is the type of the "keys" service
+// "updateKeyPolicy" endpoint HTTP response body for the "not_found" error.
+type UpdateKeyPolicyNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateKeyPolicyConflictResponseBody is the type of the "keys" service
+// "updateKeyPolicy" endpoint HTTP response body for the "conflict" error.
+type UpdateKeyPolicyConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateKeyPolicyUnsupportedMediaResponseBody is the type of the "keys"
+// service "updateKeyPolicy" endpoint HTTP response body for the
+// "unsupported_media" error.
+type UpdateKeyPolicyUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateKeyPolicyInvalidResponseBody is the type of the "keys" service
+// "updateKeyPolicy" endpoint HTTP response body for the "invalid" error.
+type UpdateKeyPolicyInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateKeyPolicyInvariantViolationResponseBody is the type of the "keys"
+// service "updateKeyPolicy" endpoint HTTP response body for the
+// "invariant_violation" error.
+type UpdateKeyPolicyInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateKeyPolicyUnexpectedResponseBody is the type of the "keys" service
+// "updateKeyPolicy" endpoint HTTP response body for the "unexpected" error.
+type UpdateKeyPolicyUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// UpdateKeyPolicyGatewayErrorResponseBody is the type of the "keys" service
+// "updateKeyPolicy" endpoint HTTP response body for the "gateway_error" error.
+type UpdateKeyPolicyGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // VerifyKeyUnauthorizedResponseBody is the type of the "keys" service
 // "verifyKey" endpoint HTTP response body for the "unauthorized" error.
 type VerifyKeyUnauthorizedResponseBody struct {
@@ -1068,16 +1502,21 @@ type AgentPolicySelectorResponseBody struct {
 	ResourceKind string `form:"resource_kind" json:"resource_kind" xml:"resource_kind"`
 	// The resource identifier, or '*' for all resources of this kind.
 	ResourceID string `form:"resource_id" json:"resource_id" xml:"resource_id"`
-	// Auth client type filter (mcp:auth scopes only).
+	// Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).
 	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
-	// Personal connection owner filter (mcp:auth scopes on remote_session clients
-	// only): a user ID, '*', or '$represented_user'.
+	// Personal connection owner filter (mcp:auth and mcp:blocked_auth scopes on
+	// remote_session clients only): a user ID, '*', or '$represented_user'.
 	ConnectionOwner *string `form:"connection_owner,omitempty" json:"connection_owner,omitempty" xml:"connection_owner,omitempty"`
+	// Upstream OAuth client filter (mcp:auth and mcp:blocked_auth scopes on
+	// remote_session clients only). Together with connection_owner it names one
+	// person's connection across every auth client sharing that upstream client.
+	UpstreamClient *string `form:"upstream_client,omitempty" json:"upstream_client,omitempty" xml:"upstream_client,omitempty"`
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP, environment, assistant, and mcp:auth scopes).
+	// Project filter (MCP, environment, assistant, inference, mcp:auth and
+	// mcp:blocked_auth scopes).
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
@@ -1183,16 +1622,21 @@ type AgentPolicySelectorRequestBody struct {
 	ResourceKind *string `form:"resource_kind,omitempty" json:"resource_kind,omitempty" xml:"resource_kind,omitempty"`
 	// The resource identifier, or '*' for all resources of this kind.
 	ResourceID *string `form:"resource_id,omitempty" json:"resource_id,omitempty" xml:"resource_id,omitempty"`
-	// Auth client type filter (mcp:auth scopes only).
+	// Auth client type filter (mcp:auth and mcp:blocked_auth scopes only).
 	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
-	// Personal connection owner filter (mcp:auth scopes on remote_session clients
-	// only): a user ID, '*', or '$represented_user'.
+	// Personal connection owner filter (mcp:auth and mcp:blocked_auth scopes on
+	// remote_session clients only): a user ID, '*', or '$represented_user'.
 	ConnectionOwner *string `form:"connection_owner,omitempty" json:"connection_owner,omitempty" xml:"connection_owner,omitempty"`
+	// Upstream OAuth client filter (mcp:auth and mcp:blocked_auth scopes on
+	// remote_session clients only). Together with connection_owner it names one
+	// person's connection across every auth client sharing that upstream client.
+	UpstreamClient *string `form:"upstream_client,omitempty" json:"upstream_client,omitempty" xml:"upstream_client,omitempty"`
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string `form:"disposition,omitempty" json:"disposition,omitempty" xml:"disposition,omitempty"`
 	// Specific tool name filter (MCP scopes only).
 	Tool *string `form:"tool,omitempty" json:"tool,omitempty" xml:"tool,omitempty"`
-	// Project filter (MCP, environment, assistant, and mcp:auth scopes).
+	// Project filter (MCP, environment, assistant, inference, mcp:auth and
+	// mcp:blocked_auth scopes).
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Server URL filter (risk policy scopes only).
 	ServerURL *string `form:"server_url,omitempty" json:"server_url,omitempty" xml:"server_url,omitempty"`
@@ -1220,6 +1664,26 @@ type APIKeyPolicySelectorRequestBody struct {
 	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
 	// Auth client type filter (mcp:auth only).
 	ClientType *string `form:"client_type,omitempty" json:"client_type,omitempty" xml:"client_type,omitempty"`
+}
+
+// AgentKeyAuthClientChoiceRequestBody is used to define fields on request body
+// types.
+type AgentKeyAuthClientChoiceRequestBody struct {
+	// The MCP server.
+	McpServerID *string `form:"mcp_server_id,omitempty" json:"mcp_server_id,omitempty" xml:"mcp_server_id,omitempty"`
+	// The auth client the key uses there. Omit for a server whose upstream needs
+	// no authentication.
+	AuthClientID *string `form:"auth_client_id,omitempty" json:"auth_client_id,omitempty" xml:"auth_client_id,omitempty"`
+}
+
+// ExtendAgentKeyGrantFormRequestBody is used to define fields on request body
+// types.
+type ExtendAgentKeyGrantFormRequestBody struct {
+	// The grant's scope
+	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
+	// Grant effect
+	Effect   *string                         `form:"effect,omitempty" json:"effect,omitempty" xml:"effect,omitempty"`
+	Selector *AgentPolicySelectorRequestBody `form:"selector,omitempty" json:"selector,omitempty" xml:"selector,omitempty"`
 }
 
 // NewCreateKeyResponseBody builds the HTTP response body from the result of
@@ -1306,6 +1770,25 @@ func NewRotateKeyResponseBody(res *keys.Key) *RotateKeyResponseBody {
 	return body
 }
 
+// NewExtendAgentKeysResponseBody builds the HTTP response body from the result
+// of the "extendAgentKeys" endpoint of the "keys" service.
+func NewExtendAgentKeysResponseBody(res *keys.ListKeysResult) *ExtendAgentKeysResponseBody {
+	body := &ExtendAgentKeysResponseBody{}
+	if res.Keys != nil {
+		body.Keys = make([]*KeyResponseBody, len(res.Keys))
+		for i, val := range res.Keys {
+			if val == nil {
+				body.Keys[i] = nil
+				continue
+			}
+			body.Keys[i] = marshalKeysKeyToKeyResponseBody(val)
+		}
+	} else {
+		body.Keys = []*KeyResponseBody{}
+	}
+	return body
+}
+
 // NewListKeysResponseBody builds the HTTP response body from the result of the
 // "listKeys" endpoint of the "keys" service.
 func NewListKeysResponseBody(res *keys.ListKeysResult) *ListKeysResponseBody {
@@ -1321,6 +1804,48 @@ func NewListKeysResponseBody(res *keys.ListKeysResult) *ListKeysResponseBody {
 		}
 	} else {
 		body.Keys = []*KeyResponseBody{}
+	}
+	return body
+}
+
+// NewUpdateKeyPolicyResponseBody builds the HTTP response body from the result
+// of the "updateKeyPolicy" endpoint of the "keys" service.
+func NewUpdateKeyPolicyResponseBody(res *keys.Key) *UpdateKeyPolicyResponseBody {
+	body := &UpdateKeyPolicyResponseBody{
+		ID:                     res.ID,
+		OrganizationID:         res.OrganizationID,
+		ProjectID:              res.ProjectID,
+		CreatedByUserID:        res.CreatedByUserID,
+		Name:                   res.Name,
+		KeyPrefix:              res.KeyPrefix,
+		Key:                    res.Key,
+		SubjectUrn:             res.SubjectUrn,
+		DelegatedGrantsVersion: res.DelegatedGrantsVersion,
+		ExpiresAt:              res.ExpiresAt,
+		CreatedAt:              res.CreatedAt,
+		UpdatedAt:              res.UpdatedAt,
+		LastAccessedAt:         res.LastAccessedAt,
+	}
+	if res.Scopes != nil {
+		body.Scopes = make([]string, len(res.Scopes))
+		for i, val := range res.Scopes {
+			body.Scopes[i] = val
+		}
+	} else {
+		body.Scopes = []string{}
+	}
+	if res.DelegatedGrants != nil {
+		body.DelegatedGrants = marshalKeysAgentDelegatedPolicyToAgentDelegatedPolicyResponseBody(res.DelegatedGrants)
+	}
+	if res.PolicyGrants != nil {
+		body.PolicyGrants = make([]*APIKeyPolicyGrantResponseBody, len(res.PolicyGrants))
+		for i, val := range res.PolicyGrants {
+			if val == nil {
+				body.PolicyGrants[i] = nil
+				continue
+			}
+			body.PolicyGrants[i] = marshalKeysAPIKeyPolicyGrantToAPIKeyPolicyGrantResponseBody(val)
+		}
 	}
 	return body
 }
@@ -1635,6 +2160,146 @@ func NewRotateKeyGatewayErrorResponseBody(res *goa.ServiceError) *RotateKeyGatew
 	return body
 }
 
+// NewExtendAgentKeysUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "extendAgentKeys" endpoint of the "keys" service.
+func NewExtendAgentKeysUnauthorizedResponseBody(res *goa.ServiceError) *ExtendAgentKeysUnauthorizedResponseBody {
+	body := &ExtendAgentKeysUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExtendAgentKeysForbiddenResponseBody builds the HTTP response body from
+// the result of the "extendAgentKeys" endpoint of the "keys" service.
+func NewExtendAgentKeysForbiddenResponseBody(res *goa.ServiceError) *ExtendAgentKeysForbiddenResponseBody {
+	body := &ExtendAgentKeysForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExtendAgentKeysBadRequestResponseBody builds the HTTP response body from
+// the result of the "extendAgentKeys" endpoint of the "keys" service.
+func NewExtendAgentKeysBadRequestResponseBody(res *goa.ServiceError) *ExtendAgentKeysBadRequestResponseBody {
+	body := &ExtendAgentKeysBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExtendAgentKeysNotFoundResponseBody builds the HTTP response body from
+// the result of the "extendAgentKeys" endpoint of the "keys" service.
+func NewExtendAgentKeysNotFoundResponseBody(res *goa.ServiceError) *ExtendAgentKeysNotFoundResponseBody {
+	body := &ExtendAgentKeysNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExtendAgentKeysConflictResponseBody builds the HTTP response body from
+// the result of the "extendAgentKeys" endpoint of the "keys" service.
+func NewExtendAgentKeysConflictResponseBody(res *goa.ServiceError) *ExtendAgentKeysConflictResponseBody {
+	body := &ExtendAgentKeysConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExtendAgentKeysUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "extendAgentKeys" endpoint of the "keys" service.
+func NewExtendAgentKeysUnsupportedMediaResponseBody(res *goa.ServiceError) *ExtendAgentKeysUnsupportedMediaResponseBody {
+	body := &ExtendAgentKeysUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExtendAgentKeysInvalidResponseBody builds the HTTP response body from the
+// result of the "extendAgentKeys" endpoint of the "keys" service.
+func NewExtendAgentKeysInvalidResponseBody(res *goa.ServiceError) *ExtendAgentKeysInvalidResponseBody {
+	body := &ExtendAgentKeysInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExtendAgentKeysInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "extendAgentKeys" endpoint of the "keys" service.
+func NewExtendAgentKeysInvariantViolationResponseBody(res *goa.ServiceError) *ExtendAgentKeysInvariantViolationResponseBody {
+	body := &ExtendAgentKeysInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExtendAgentKeysUnexpectedResponseBody builds the HTTP response body from
+// the result of the "extendAgentKeys" endpoint of the "keys" service.
+func NewExtendAgentKeysUnexpectedResponseBody(res *goa.ServiceError) *ExtendAgentKeysUnexpectedResponseBody {
+	body := &ExtendAgentKeysUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewExtendAgentKeysGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "extendAgentKeys" endpoint of the "keys" service.
+func NewExtendAgentKeysGatewayErrorResponseBody(res *goa.ServiceError) *ExtendAgentKeysGatewayErrorResponseBody {
+	body := &ExtendAgentKeysGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewListKeysUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "listKeys" endpoint of the "keys" service.
 func NewListKeysUnauthorizedResponseBody(res *goa.ServiceError) *ListKeysUnauthorizedResponseBody {
@@ -1915,6 +2580,146 @@ func NewRevokeKeyGatewayErrorResponseBody(res *goa.ServiceError) *RevokeKeyGatew
 	return body
 }
 
+// NewUpdateKeyPolicyUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "updateKeyPolicy" endpoint of the "keys" service.
+func NewUpdateKeyPolicyUnauthorizedResponseBody(res *goa.ServiceError) *UpdateKeyPolicyUnauthorizedResponseBody {
+	body := &UpdateKeyPolicyUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateKeyPolicyForbiddenResponseBody builds the HTTP response body from
+// the result of the "updateKeyPolicy" endpoint of the "keys" service.
+func NewUpdateKeyPolicyForbiddenResponseBody(res *goa.ServiceError) *UpdateKeyPolicyForbiddenResponseBody {
+	body := &UpdateKeyPolicyForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateKeyPolicyBadRequestResponseBody builds the HTTP response body from
+// the result of the "updateKeyPolicy" endpoint of the "keys" service.
+func NewUpdateKeyPolicyBadRequestResponseBody(res *goa.ServiceError) *UpdateKeyPolicyBadRequestResponseBody {
+	body := &UpdateKeyPolicyBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateKeyPolicyNotFoundResponseBody builds the HTTP response body from
+// the result of the "updateKeyPolicy" endpoint of the "keys" service.
+func NewUpdateKeyPolicyNotFoundResponseBody(res *goa.ServiceError) *UpdateKeyPolicyNotFoundResponseBody {
+	body := &UpdateKeyPolicyNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateKeyPolicyConflictResponseBody builds the HTTP response body from
+// the result of the "updateKeyPolicy" endpoint of the "keys" service.
+func NewUpdateKeyPolicyConflictResponseBody(res *goa.ServiceError) *UpdateKeyPolicyConflictResponseBody {
+	body := &UpdateKeyPolicyConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateKeyPolicyUnsupportedMediaResponseBody builds the HTTP response body
+// from the result of the "updateKeyPolicy" endpoint of the "keys" service.
+func NewUpdateKeyPolicyUnsupportedMediaResponseBody(res *goa.ServiceError) *UpdateKeyPolicyUnsupportedMediaResponseBody {
+	body := &UpdateKeyPolicyUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateKeyPolicyInvalidResponseBody builds the HTTP response body from the
+// result of the "updateKeyPolicy" endpoint of the "keys" service.
+func NewUpdateKeyPolicyInvalidResponseBody(res *goa.ServiceError) *UpdateKeyPolicyInvalidResponseBody {
+	body := &UpdateKeyPolicyInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateKeyPolicyInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "updateKeyPolicy" endpoint of the "keys" service.
+func NewUpdateKeyPolicyInvariantViolationResponseBody(res *goa.ServiceError) *UpdateKeyPolicyInvariantViolationResponseBody {
+	body := &UpdateKeyPolicyInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateKeyPolicyUnexpectedResponseBody builds the HTTP response body from
+// the result of the "updateKeyPolicy" endpoint of the "keys" service.
+func NewUpdateKeyPolicyUnexpectedResponseBody(res *goa.ServiceError) *UpdateKeyPolicyUnexpectedResponseBody {
+	body := &UpdateKeyPolicyUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewUpdateKeyPolicyGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "updateKeyPolicy" endpoint of the "keys" service.
+func NewUpdateKeyPolicyGatewayErrorResponseBody(res *goa.ServiceError) *UpdateKeyPolicyGatewayErrorResponseBody {
+	body := &UpdateKeyPolicyGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewVerifyKeyUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "verifyKey" endpoint of the "keys" service.
 func NewVerifyKeyUnauthorizedResponseBody(res *goa.ServiceError) *VerifyKeyUnauthorizedResponseBody {
@@ -2090,6 +2895,16 @@ func NewCreateKeyPayload(body *CreateKeyRequestBody, sessionToken *string) *keys
 			v.PolicyGrants[i] = unmarshalAPIKeyPolicyGrantRequestBodyToKeysAPIKeyPolicyGrant(val)
 		}
 	}
+	if body.AuthClientChoices != nil {
+		v.AuthClientChoices = make([]*keys.AgentKeyAuthClientChoice, len(body.AuthClientChoices))
+		for i, val := range body.AuthClientChoices {
+			if val == nil {
+				v.AuthClientChoices[i] = nil
+				continue
+			}
+			v.AuthClientChoices[i] = unmarshalAgentKeyAuthClientChoiceRequestBodyToKeysAgentKeyAuthClientChoice(val)
+		}
+	}
 	v.SessionToken = sessionToken
 
 	return v
@@ -2122,6 +2937,35 @@ func NewRotateKeyPayload(body *RotateKeyRequestBody, sessionToken *string) *keys
 	return v
 }
 
+// NewExtendAgentKeysPayload builds a keys service extendAgentKeys endpoint
+// payload.
+func NewExtendAgentKeysPayload(body *ExtendAgentKeysRequestBody, sessionToken *string) *keys.ExtendAgentKeysPayload {
+	v := &keys.ExtendAgentKeysPayload{
+		AgentID: *body.AgentID,
+	}
+	v.RequestedGrants = make([]*keys.ExtendAgentKeyGrantForm, len(body.RequestedGrants))
+	for i, val := range body.RequestedGrants {
+		if val == nil {
+			v.RequestedGrants[i] = nil
+			continue
+		}
+		v.RequestedGrants[i] = unmarshalExtendAgentKeyGrantFormRequestBodyToKeysExtendAgentKeyGrantForm(val)
+	}
+	if body.AuthClientChoices != nil {
+		v.AuthClientChoices = make([]*keys.AgentKeyAuthClientChoice, len(body.AuthClientChoices))
+		for i, val := range body.AuthClientChoices {
+			if val == nil {
+				v.AuthClientChoices[i] = nil
+				continue
+			}
+			v.AuthClientChoices[i] = unmarshalAgentKeyAuthClientChoiceRequestBodyToKeysAgentKeyAuthClientChoice(val)
+		}
+	}
+	v.SessionToken = sessionToken
+
+	return v
+}
+
 // NewListKeysPayload builds a keys service listKeys endpoint payload.
 func NewListKeysPayload(agentID *string, sessionToken *string) *keys.ListKeysPayload {
 	v := &keys.ListKeysPayload{}
@@ -2135,6 +2979,25 @@ func NewListKeysPayload(agentID *string, sessionToken *string) *keys.ListKeysPay
 func NewRevokeKeyPayload(id string, sessionToken *string) *keys.RevokeKeyPayload {
 	v := &keys.RevokeKeyPayload{}
 	v.ID = id
+	v.SessionToken = sessionToken
+
+	return v
+}
+
+// NewUpdateKeyPolicyPayload builds a keys service updateKeyPolicy endpoint
+// payload.
+func NewUpdateKeyPolicyPayload(body *UpdateKeyPolicyRequestBody, sessionToken *string) *keys.UpdateKeyPolicyPayload {
+	v := &keys.UpdateKeyPolicyPayload{
+		ID: *body.ID,
+	}
+	v.PolicyGrants = make([]*keys.APIKeyPolicyGrant, len(body.PolicyGrants))
+	for i, val := range body.PolicyGrants {
+		if val == nil {
+			v.PolicyGrants[i] = nil
+			continue
+		}
+		v.PolicyGrants[i] = unmarshalAPIKeyPolicyGrantRequestBodyToKeysAPIKeyPolicyGrant(val)
+	}
 	v.SessionToken = sessionToken
 
 	return v
@@ -2190,6 +3053,16 @@ func ValidateCreateKeyRequestBody(body *CreateKeyRequestBody) (err error) {
 			}
 		}
 	}
+	if len(body.AuthClientChoices) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.auth_client_choices", body.AuthClientChoices, len(body.AuthClientChoices), 100, false))
+	}
+	for _, e := range body.AuthClientChoices {
+		if e != nil {
+			if err2 := ValidateAgentKeyAuthClientChoiceRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
 	return
 }
 
@@ -2234,6 +3107,69 @@ func ValidateRotateKeyRequestBody(body *RotateKeyRequestBody) (err error) {
 	return
 }
 
+// ValidateExtendAgentKeysRequestBody runs the validations defined on
+// ExtendAgentKeysRequestBody
+func ValidateExtendAgentKeysRequestBody(body *ExtendAgentKeysRequestBody) (err error) {
+	if body.AgentID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("agent_id", "body"))
+	}
+	if body.RequestedGrants == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("requested_grants", "body"))
+	}
+	if body.AgentID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.agent_id", *body.AgentID, goa.FormatUUID))
+	}
+	if len(body.RequestedGrants) < 1 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.requested_grants", body.RequestedGrants, len(body.RequestedGrants), 1, true))
+	}
+	if len(body.RequestedGrants) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.requested_grants", body.RequestedGrants, len(body.RequestedGrants), 100, false))
+	}
+	for _, e := range body.RequestedGrants {
+		if e != nil {
+			if err2 := ValidateExtendAgentKeyGrantFormRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if len(body.AuthClientChoices) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.auth_client_choices", body.AuthClientChoices, len(body.AuthClientChoices), 100, false))
+	}
+	for _, e := range body.AuthClientChoices {
+		if e != nil {
+			if err2 := ValidateAgentKeyAuthClientChoiceRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateUpdateKeyPolicyRequestBody runs the validations defined on
+// UpdateKeyPolicyRequestBody
+func ValidateUpdateKeyPolicyRequestBody(body *UpdateKeyPolicyRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.PolicyGrants == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("policy_grants", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if len(body.PolicyGrants) > 100 {
+		err = goa.MergeErrors(err, goa.InvalidLengthError("body.policy_grants", body.PolicyGrants, len(body.PolicyGrants), 100, false))
+	}
+	for _, e := range body.PolicyGrants {
+		if e != nil {
+			if err2 := ValidateAPIKeyPolicyGrantRequestBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
 // ValidateAgentPolicyGrantFormRequestBody runs the validations defined on
 // AgentPolicyGrantFormRequestBody
 func ValidateAgentPolicyGrantFormRequestBody(body *AgentPolicyGrantFormRequestBody) (err error) {
@@ -2274,8 +3210,8 @@ func ValidateAgentPolicySelectorRequestBody(body *AgentPolicySelectorRequestBody
 		err = goa.MergeErrors(err, goa.MissingFieldError("resource_id", "body"))
 	}
 	if body.ResourceKind != nil {
-		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "assistant" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "agent" || *body.ResourceKind == "mcp_auth_client" || *body.ResourceKind == "*") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "agent", "mcp_auth_client", "*"}))
+		if !(*body.ResourceKind == "project" || *body.ResourceKind == "mcp" || *body.ResourceKind == "org" || *body.ResourceKind == "environment" || *body.ResourceKind == "skill" || *body.ResourceKind == "assistant" || *body.ResourceKind == "risk_policy" || *body.ResourceKind == "chat" || *body.ResourceKind == "inference" || *body.ResourceKind == "agent" || *body.ResourceKind == "mcp_auth_client" || *body.ResourceKind == "*") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.resource_kind", *body.ResourceKind, []any{"project", "mcp", "org", "environment", "skill", "assistant", "risk_policy", "chat", "inference", "agent", "mcp_auth_client", "*"}))
 		}
 	}
 	if body.ClientType != nil {
@@ -2336,6 +3272,51 @@ func ValidateAPIKeyPolicySelectorRequestBody(body *APIKeyPolicySelectorRequestBo
 	if body.ClientType != nil {
 		if !(*body.ClientType == "service_account" || *body.ClientType == "static_credential" || *body.ClientType == "pass_through" || *body.ClientType == "ema" || *body.ClientType == "*") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.client_type", *body.ClientType, []any{"service_account", "static_credential", "pass_through", "ema", "*"}))
+		}
+	}
+	return
+}
+
+// ValidateAgentKeyAuthClientChoiceRequestBody runs the validations defined on
+// AgentKeyAuthClientChoiceRequestBody
+func ValidateAgentKeyAuthClientChoiceRequestBody(body *AgentKeyAuthClientChoiceRequestBody) (err error) {
+	if body.McpServerID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("mcp_server_id", "body"))
+	}
+	if body.McpServerID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.mcp_server_id", *body.McpServerID, goa.FormatUUID))
+	}
+	if body.AuthClientID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.auth_client_id", *body.AuthClientID, goa.FormatUUID))
+	}
+	return
+}
+
+// ValidateExtendAgentKeyGrantFormRequestBody runs the validations defined on
+// ExtendAgentKeyGrantFormRequestBody
+func ValidateExtendAgentKeyGrantFormRequestBody(body *ExtendAgentKeyGrantFormRequestBody) (err error) {
+	if body.Scope == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scope", "body"))
+	}
+	if body.Effect == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("effect", "body"))
+	}
+	if body.Selector == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("selector", "body"))
+	}
+	if body.Scope != nil {
+		if !(*body.Scope == "mcp:connect") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.scope", *body.Scope, []any{"mcp:connect"}))
+		}
+	}
+	if body.Effect != nil {
+		if !(*body.Effect == "allow") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.effect", *body.Effect, []any{"allow"}))
+		}
+	}
+	if body.Selector != nil {
+		if err2 := ValidateAgentPolicySelectorRequestBody(body.Selector); err2 != nil {
+			err = goa.MergeErrors(err, err2)
 		}
 	}
 	return

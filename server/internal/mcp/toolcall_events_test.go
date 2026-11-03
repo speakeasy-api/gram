@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
 // hostedToolFixture is a public hosted MCP server with one HTTP tool.
@@ -38,7 +37,7 @@ func seedHostedTool(t *testing.T, ctx context.Context, ti *testInstance, toolNam
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	slug := "events-" + uuid.NewString()[:8]
-	toolset := createPublicMCPToolset(t, ctx, toolsets_repo.New(ti.conn), authCtx, slug)
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slug)
 	server := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug, "public", uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.Nil)
 	addHTTPTools(t, ctx, ti, toolset.ID, *authCtx.ProjectID, authCtx.ActiveOrganizationID, toolName)
 

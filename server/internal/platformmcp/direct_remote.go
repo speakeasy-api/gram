@@ -2,6 +2,7 @@
 package platformmcp
 
 import (
+	"bufio"
 	"bytes"
 	"context"
 	"encoding/json"
@@ -15,6 +16,7 @@ import (
 	"sync"
 	"time"
 	"unicode"
+	"unicode/utf8"
 
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
@@ -66,6 +68,18 @@ type DirectRemoteInspection struct {
 	OAuthDiscovery         string   `json:"oauth_discovery"`
 	Trust                  string   `json:"trust"`
 	RequiresDashboardSetup bool     `json:"requires_dashboard_setup"`
+
+	// ServerName is the upstream's own serverInfo.name from initialize, as the
+	// upstream sent it. It is empty when initialize did not succeed. It is
+	// untrusted and left out of inspection results. Registration passes it
+	// through directRemoteServerName before using it as the default display
+	// name, which is then shown like any name the caller could have chosen.
+	ServerName string `json:"-"`
+	// AttachmentSupported reports that attach_platform_mcp_identity_provider
+	// can obtain a client from the discovered provider on its own. A dynamic
+	// registration endpoint only the dashboard's automatic setup can use leaves
+	// it false.
+	AttachmentSupported bool `json:"-"`
 }
 
 // DirectRemoteInspector is the boundary shared by candidate inspection and
@@ -76,9 +90,9 @@ type DirectRemoteInspector interface {
 }
 
 // GuardianDirectRemoteInspector canonicalizes, validates, and probes one
-// direct remote MCP using Guardian before every network hop. It supports only
-// Streamable HTTP's JSON response form; standalone SSE is intentionally not a
-// D1 admission path.
+// direct remote MCP using Guardian before every network hop. It supports both
+// JSON and SSE responses to Streamable HTTP POST requests; standalone SSE is
+// intentionally not an admission path.
 type GuardianDirectRemoteInspector struct {
 	policy *guardian.Policy
 }
@@ -128,7 +142,11 @@ func (s *GuardianDirectRemoteInspector) inspect(ctx context.Context, rawURL stri
 	sdk := mcp.NewClient(&mcp.Implementation{Name: "gram-platform-mcp", Version: "1", Title: "", Description: "", WebsiteURL: "", Icons: nil}, nil)
 	session, err := sdk.Connect(probeCtx, sdkTransport, nil)
 	var toolList *mcp.ListToolsResult
+	serverName := ""
 	if err == nil {
+		if initialized := session.InitializeResult(); initialized != nil && initialized.ServerInfo != nil {
+			serverName = initialized.ServerInfo.Name
+		}
 		// A successful fallback supersedes discovery's authentication challenge.
 		// tools/list can still record a fresh challenge of its own.
 		transport.mu.Lock()
@@ -144,11 +162,13 @@ func (s *GuardianDirectRemoteInspector) inspect(ctx context.Context, rawURL stri
 	}
 	if err != nil {
 		if authenticationURL != "" {
-			oauthDiscovery, discoveryErr := directRemoteOAuthDiscovery(probeCtx, s.policy, client, authenticationURL)
+			oauthDiscovery, attachmentSupported, discoveryErr := directRemoteOAuthDiscovery(probeCtx, s.policy, client, authenticationURL)
 			if discoveryErr != nil {
 				return DirectRemoteInspection{}, sanitizedSetupFailure(discoveryErr)
 			}
-			return directRemoteInspection(authenticationURL, nil, "authentication_required", oauthDiscovery, true), nil
+			inspection := directRemoteInspection(authenticationURL, nil, "authentication_required", oauthDiscovery, true)
+			inspection.AttachmentSupported = attachmentSupported
+			return inspection, nil
 		}
 		return DirectRemoteInspection{}, directRemoteProbeError(probeCtx, err)
 	}
@@ -167,7 +187,9 @@ func (s *GuardianDirectRemoteInspector) inspect(ctx context.Context, rawURL stri
 			}
 		}
 	}
-	return directRemoteInspection(finalURL, names, "anonymous", "not_advertised", false), nil
+	inspection := directRemoteInspection(finalURL, names, "anonymous", "not_advertised", false)
+	inspection.ServerName = serverName
+	return inspection, nil
 }
 
 // directRemoteTransport retains connections even when SDK negotiation fails.
@@ -196,8 +218,9 @@ func (b *directRemoteResponseBudget) consumeRequest() error {
 }
 
 // directRemoteRoundTripper serializes accounting across SDK requests, redirects,
-// OAuth discovery and session cleanup. Bodies are buffered within the aggregate
-// cap so redirects and SDK-discarded error bodies also consume the same budget.
+// OAuth discovery and session cleanup. Finite bodies are buffered within the
+// aggregate cap. SSE bodies are metered as the SDK reads through the first
+// complete JSON-RPC response, so an open stream cannot hold inspection forever.
 type directRemoteRoundTripper struct {
 	base   http.RoundTripper
 	policy *guardian.Policy
@@ -320,9 +343,13 @@ func (rt *directRemoteRoundTripper) roundTrip(req *http.Request) (*http.Response
 	}
 	mediaType := strings.ToLower(strings.TrimSpace(strings.Split(resp.Header.Get("Content-Type"), ";")[0]))
 	successfulMCP := purpose == directRemoteMCPRequest && resp.StatusCode >= http.StatusOK && resp.StatusCode < http.StatusMultipleChoices
-	// Reject SSE before buffering: a stream would otherwise hold the body open.
 	if successfulMCP && mediaType == "text/event-stream" {
-		return nil, setupFailure(SetupCategoryInvalidMCPResponse, ErrDirectRemoteRejected)
+		payload, err := rt.bufferSSEThroughResponse(body)
+		if err != nil {
+			return nil, err
+		}
+		resp.Body = io.NopCloser(bytes.NewReader(payload))
+		return resp, nil
 	}
 	payload, err := io.ReadAll(io.LimitReader(resp.Body, int64(rt.budget.remaining)+1))
 	exceeded := len(payload) > rt.budget.remaining
@@ -339,6 +366,77 @@ func (rt *directRemoteRoundTripper) roundTrip(req *http.Request) (*http.Response
 	}
 	resp.Body = io.NopCloser(bytes.NewReader(payload))
 	return resp, nil
+}
+
+type directRemoteCountingReader struct {
+	reader io.Reader
+	read   int
+}
+
+func (r *directRemoteCountingReader) Read(p []byte) (int, error) {
+	n, err := r.reader.Read(p)
+	r.read += n
+	return n, err
+}
+
+func (rt *directRemoteRoundTripper) bufferSSEThroughResponse(body io.Reader) ([]byte, error) {
+	available := rt.budget.remaining
+	counted := &directRemoteCountingReader{reader: io.LimitReader(body, int64(available)+1), read: 0}
+	reader := bufio.NewReader(counted)
+	payload := make([]byte, 0, min(4096, available))
+	eventName := ""
+	data := make([]string, 0, 1)
+
+	for {
+		line, readErr := reader.ReadString('\n')
+		payload = append(payload, line...)
+		if counted.read > available {
+			rt.budget.remaining = 0
+			return nil, setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
+		}
+		text := strings.TrimSuffix(strings.TrimSuffix(line, "\n"), "\r")
+		switch {
+		case text == "":
+			if directRemoteSSEEventIsResponse(eventName, data) {
+				rt.budget.remaining -= counted.read
+				return payload, nil
+			}
+			eventName = ""
+			data = data[:0]
+		case strings.HasPrefix(text, ":"):
+		case text == "data":
+			data = append(data, "")
+		case strings.HasPrefix(text, "data:"):
+			data = append(data, strings.TrimPrefix(strings.TrimPrefix(text, "data:"), " "))
+		case text == "event":
+			eventName = ""
+		case strings.HasPrefix(text, "event:"):
+			eventName = strings.TrimPrefix(strings.TrimPrefix(text, "event:"), " ")
+		}
+		if readErr != nil {
+			rt.budget.remaining -= counted.read
+			if errors.Is(readErr, io.EOF) {
+				return payload, nil
+			}
+			return nil, directRemoteTransportError(rt.ctx, readErr)
+		}
+	}
+}
+
+func directRemoteSSEEventIsResponse(eventName string, data []string) bool {
+	if (eventName != "" && eventName != "message") || len(data) == 0 {
+		return false
+	}
+	var message struct {
+		ID     json.RawMessage `json:"id"`
+		Method string          `json:"method"`
+		Result json.RawMessage `json:"result"`
+		Error  json.RawMessage `json:"error"`
+	}
+	if err := json.Unmarshal([]byte(strings.Join(data, "\n")), &message); err != nil {
+		return false
+	}
+	return len(message.ID) > 0 && message.Method == "" && (message.Result != nil || message.Error != nil)
 }
 
 func directRemoteValidationError(ctx context.Context, err error) error {
@@ -382,19 +480,27 @@ type directRemoteHTTPClient interface {
 // directRemoteOAuthDiscovery returns a safe discovery category or a sanitized
 // temporary failure. Metadata URLs are derived from the canonical resource or a
 // discovered issuer, rechecked with Guardian before egress, and charged to the
-// inspection response budget.
-func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, client directRemoteHTTPClient, resourceURL string) (string, error) {
+// inspection response budget. The boolean reports whether attachment can use
+// the automatic registration path the category names.
+func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, client directRemoteHTTPClient, resourceURL string) (string, bool, error) {
 	available := false
+	// A dynamic registration endpoint only the dashboard can use is kept as a
+	// fallback while later servers are checked, because attachment skips such
+	// a server and connects the first one it can use.
+	fallback := ""
 	for _, metadataURL := range directRemoteProtectedResourceMetadataURLs(resourceURL) {
 		metadata, status, err := directRemoteGetJSON(ctx, policy, client, metadataURL)
 		if transientDirectRemoteMetadataStatus(status) {
 			err = setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
 		}
 		if setupCategoryFromError(err) == SetupCategoryTemporarilyUnavailable {
-			if available {
-				return oauthDiscoveryAvailable, nil
+			if fallback != "" {
+				return fallback, false, nil
 			}
-			return "", err
+			if available {
+				return oauthDiscoveryAvailable, false, nil
+			}
+			return "", false, err
 		}
 		if err != nil || status != http.StatusOK {
 			continue
@@ -417,25 +523,36 @@ func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, cl
 					err = setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable)
 				}
 				if setupCategoryFromError(err) == SetupCategoryTemporarilyUnavailable {
-					if available {
-						return oauthDiscoveryAvailable, nil
+					if fallback != "" {
+						return fallback, false, nil
 					}
-					return "", err
+					if available {
+						return oauthDiscoveryAvailable, false, nil
+					}
+					return "", false, err
 				}
 				if err != nil || status != http.StatusOK {
 					continue
 				}
-				if discovery := directRemoteAutomaticRegistration(authorizationMetadata); discovery != "" {
-					return discovery, nil
+				discovery, attachmentSupported := directRemoteAutomaticRegistration(authorizationMetadata)
+				if attachmentSupported {
+					return discovery, true, nil
+				}
+				if discovery != "" {
+					fallback = discovery
+					continue
 				}
 				available = true
 			}
 		}
 	}
-	if available {
-		return oauthDiscoveryAvailable, nil
+	if fallback != "" {
+		return fallback, false, nil
 	}
-	return oauthDiscoveryIncomplete, nil
+	if available {
+		return oauthDiscoveryAvailable, false, nil
+	}
+	return oauthDiscoveryIncomplete, false, nil
 }
 
 // directRemoteAutomaticRegistration names the automatic client registration
@@ -444,8 +561,9 @@ func directRemoteOAuthDiscovery(ctx context.Context, policy *guardian.Policy, cl
 // attachment can use it, then a Client ID Metadata Document under the
 // predicate the dashboard's automatic setup and attachment share. A valid
 // dynamic registration endpoint attachment cannot use still counts, since the
-// dashboard's automatic setup registers public clients through it.
-func directRemoteAutomaticRegistration(metadata map[string]any) string {
+// dashboard's automatic setup registers public clients through it; the boolean
+// is false only in that case, because attachment cannot connect it.
+func directRemoteAutomaticRegistration(metadata map[string]any) (string, bool) {
 	endpoint, _ := metadata["registration_endpoint"].(string)
 	supported, _ := metadata["client_id_metadata_document_supported"].(bool)
 	var methods []string
@@ -459,13 +577,13 @@ func directRemoteAutomaticRegistration(metadata map[string]any) string {
 	}
 	switch {
 	case attachmentCanUseDynamicRegistration(endpoint, methods):
-		return oauthDiscoveryAvailableDCR
+		return oauthDiscoveryAvailableDCR, true
 	case remotesessions.SupportsClientIDMetadataDocument(supported, methods):
-		return oauthDiscoveryAvailableCIMD
+		return oauthDiscoveryAvailableCIMD, true
 	case validDynamicClientRegistrationEndpoint(endpoint):
-		return oauthDiscoveryAvailableDCR
+		return oauthDiscoveryAvailableDCR, false
 	default:
-		return ""
+		return "", false
 	}
 }
 
@@ -551,7 +669,30 @@ func directRemoteInspection(canonicalURL string, toolNames []string, authenticat
 		OAuthDiscovery:         oauthDiscovery,
 		Trust:                  "user_supplied_unreviewed",
 		RequiresDashboardSetup: requiresDashboardSetup,
+		ServerName:             "",
+		AttachmentSupported:    false,
 	}
+}
+
+// directRemoteServerName makes an upstream's self-reported name safe to use as
+// a display name. Characters that are not printable become spaces, runs of
+// spaces collapse to one, and the result is cut on a character boundary to
+// the display name limit.
+func directRemoteServerName(name string) string {
+	name = strings.Join(strings.Fields(strings.Map(func(r rune) rune {
+		if unicode.IsPrint(r) {
+			return r
+		}
+		return ' '
+	}, name)), " ")
+	if len(name) > directRemoteDisplayNameMaxBytes {
+		cut := directRemoteDisplayNameMaxBytes
+		for cut > 0 && !utf8.RuneStart(name[cut]) {
+			cut--
+		}
+		name = name[:cut]
+	}
+	return strings.TrimSpace(name)
 }
 
 // canonicalDirectRemoteURL is intentionally pure so persistence can repeat the

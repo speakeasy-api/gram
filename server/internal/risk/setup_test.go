@@ -39,6 +39,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
 	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
+	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 	"github.com/speakeasy-api/gram/server/internal/risk/celenv"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/policybypass"
@@ -306,7 +307,7 @@ func newTestRiskService(t *testing.T, configure ...func(*testInstance)) (context
 		return ti.reconcileShadowMCPPolicyURLs(ctx, db, input)
 	}, func(ctx context.Context, projectID uuid.UUID, canonicalURLs []string) ([]string, error) {
 		return ti.shadowMCPInventoryURLLookup(ctx, projectID, canonicalURLs)
-	}, ti.findingEvidence, chrepo.New(chConn), ti.assetStorage, metering.NewRiskRecorder(ti.riskPublisher), ti.platformToolsets)
+	}, ti.findingEvidence, chrepo.New(chConn), ti.assetStorage, metering.NewRiskRecorder(ti.riskPublisher), ti.platformToolsets, approval.NewService(logger, ti.conn, testenv.DefaultSiteURL(t), auditLogger))
 
 	return ctx, ti
 }

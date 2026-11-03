@@ -403,18 +403,22 @@ const findMCPResourceVisibility = `-- name: FindMCPResourceVisibility :one
 SELECT resource_type, visibility FROM (
   SELECT
     'toolset'::text AS resource_type,
-    (CASE
-      WHEN NOT toolsets.mcp_enabled THEN 'disabled'
-      WHEN toolsets.mcp_is_public THEN 'public'
-      ELSE 'private'
-    END)::text AS visibility,
+    COALESCE(cw.visibility, 'disabled')::text AS visibility,
     2 AS source_rank
   FROM toolsets
   JOIN projects ON projects.id = toolsets.project_id
+  -- The canonical wrapper owns a hosted toolset's visibility.
+  LEFT JOIN mcp_servers cw ON cw.id = toolsets.id AND cw.toolset_id = toolsets.id AND cw.project_id = toolsets.project_id AND cw.deleted IS FALSE
   WHERE projects.organization_id = $1
     AND toolsets.id = $2::uuid
     AND toolsets.deleted IS FALSE
     AND projects.deleted IS FALSE
+    -- A server that kept the toolset's id after leaving it answers for that id instead.
+    AND NOT EXISTS (
+      SELECT 1 FROM mcp_servers kept
+      WHERE kept.id = toolsets.id AND kept.project_id = toolsets.project_id AND kept.deleted IS FALSE
+        AND kept.toolset_id IS DISTINCT FROM toolsets.id
+    )
   UNION ALL
   SELECT 'mcp_server'::text AS resource_type, mcp_servers.visibility::text AS visibility, 1 AS source_rank
   FROM mcp_servers
@@ -449,10 +453,9 @@ type FindMCPResourceVisibilityRow struct {
 // Resolves who may connect to one MCP resource without an access rule, as the
 // same three-valued visibility mcp_servers stores: 'public' endpoints skip the
 // connect check, 'private' ones enforce it, and 'disabled' ones serve nobody.
-// A gateway toolset is public when its MCP endpoint is, and serves nobody
-// while its MCP endpoint is switched off. A hosted wrapper can share its
-// toolset's id; when either row serves nobody, nobody can connect, so
-// 'disabled' wins, and otherwise the wrapper's own visibility does. A gateway
+// A hosted toolset reads its canonical wrapper's visibility, and one without
+// a wrapper serves nobody; the wrapper row itself reports the same id, and
+// 'disabled' wins between them. A gateway
 // (meta server) is reported as such: it has no connect check of its own, each
 // member server is checked instead. Resources are found by the same
 // identifiers and tenancy rules as FindMCPResourceProject.
@@ -3379,6 +3382,17 @@ func (q *Queries) LockAgentRoleAssignments(ctx context.Context, arg LockAgentRol
 	return err
 }
 
+const lockAuthPermissionBackfill = `-- name: LockAuthPermissionBackfill :exec
+SELECT pg_advisory_xact_lock(hashtext('authclientbackfill:' || $1::text))
+`
+
+// Takes the organization's auth client backfill lock for the transaction's
+// life; the key must match authclientbackfill's LockOrganizationBackfill.
+func (q *Queries) LockAuthPermissionBackfill(ctx context.Context, organizationID string) error {
+	_, err := q.db.Exec(ctx, lockAuthPermissionBackfill, organizationID)
+	return err
+}
+
 const lockChallengeResolutions = `-- name: LockChallengeResolutions :exec
 SELECT pg_advisory_xact_lock(hashtextextended(
   jsonb_build_array('access.challenge-resolution', $1::text)::text, 0
@@ -3635,6 +3649,26 @@ func (q *Queries) MarkOrganizationRoleDeletedLocally(ctx context.Context, arg Ma
 	return result.RowsAffected(), nil
 }
 
+const markPrincipalAuthPermissionsTakenOver = `-- name: MarkPrincipalAuthPermissionsTakenOver :exec
+UPDATE auth_permission_provisions
+SET taken_over_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND taken_over_at IS NULL
+`
+
+type MarkPrincipalAuthPermissionsTakenOverParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+}
+
+// An explicit write of a principal's whole policy takes every grant the
+// backfill provisioned for it over, including ones since removed.
+func (q *Queries) MarkPrincipalAuthPermissionsTakenOver(ctx context.Context, arg MarkPrincipalAuthPermissionsTakenOverParams) error {
+	_, err := q.db.Exec(ctx, markPrincipalAuthPermissionsTakenOver, arg.OrganizationID, arg.PrincipalUrn)
+	return err
+}
+
 const recordAuthPermissionDefault = `-- name: RecordAuthPermissionDefault :exec
 INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind)
 VALUES ($1, $2, $3, $4, $5)
@@ -3652,6 +3686,36 @@ type RecordAuthPermissionDefaultParams struct {
 // Records a default grant written at organization creation.
 func (q *Queries) RecordAuthPermissionDefault(ctx context.Context, arg RecordAuthPermissionDefaultParams) error {
 	_, err := q.db.Exec(ctx, recordAuthPermissionDefault,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+		arg.Kind,
+	)
+	return err
+}
+
+const recordAuthPermissionPolicyTakeover = `-- name: RecordAuthPermissionPolicyTakeover :exec
+INSERT INTO auth_permission_provisions (organization_id, principal_urn, scope, selectors, kind, taken_over_at)
+VALUES ($1, $2, $3, $4, $5, clock_timestamp())
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO UPDATE
+SET taken_over_at = COALESCE(auth_permission_provisions.taken_over_at, EXCLUDED.taken_over_at),
+    updated_at = clock_timestamp()
+`
+
+type RecordAuthPermissionPolicyTakeoverParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	Scope          string
+	Selectors      []byte
+	Kind           string
+}
+
+// Records that an explicit write owns the principal's policy even when it
+// leaves no grant to mark, so the backfill never treats the principal as
+// untouched.
+func (q *Queries) RecordAuthPermissionPolicyTakeover(ctx context.Context, arg RecordAuthPermissionPolicyTakeoverParams) error {
+	_, err := q.db.Exec(ctx, recordAuthPermissionPolicyTakeover,
 		arg.OrganizationID,
 		arg.PrincipalUrn,
 		arg.Scope,

@@ -1,0 +1,244 @@
+import { ServerInfoPopover } from "./ServerInfoPopover";
+import { useState, type JSX } from "react";
+import {
+  Accordion,
+  AccordionContent,
+  AccordionItem,
+  AccordionTrigger,
+} from "@/components/ui/Accordion";
+import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
+import { Text } from "@/components/ui/Text";
+import { IdentityAvatar } from "@/components/identity-avatar";
+import { useSession } from "@/contexts/Auth";
+import {
+  connectionLifetime,
+  connectionLifetimeLabel,
+} from "@/components/sessions/connection-lifetime";
+import { useOAuthPopup } from "@/components/sessions/useOAuthPopup";
+import { AlertTriangle, Check, LockKeyhole, RefreshCw, X } from "lucide-react";
+import { SignInPath } from "./SignInPath";
+import { WizardStepHeader } from "./WizardChrome";
+import type { OwnerConnections } from "./useOwnerConnections";
+import type { InventoryServer } from "./useServerInventory";
+
+export function StepAuthentication({
+  servers,
+  connections,
+  allServers,
+  onRemove,
+}: {
+  servers: InventoryServer[];
+  connections: OwnerConnections;
+  allServers: boolean;
+  onRemove: (id: string) => void;
+}): JSX.Element {
+  const { user } = useSession();
+  const oauth = useOAuthPopup(connections.refetch);
+  const [openRows, setOpenRows] = useState<string[]>([]);
+  // Editing shows the agent's assigned connection, unless it no longer works
+  // and the editor has a usable one: saving assigns that in its place,
+  // exactly as creating does. Until the editor's own connection is known,
+  // its checking or error state stands rather than a premature verdict.
+  const displayedConnections = new Map(connections.byServer);
+  for (const [serverId, assigned] of connections.assignedByServer ?? []) {
+    const own = connections.byServer.get(serverId)?.status;
+    const keepOwn =
+      assigned.status !== "ready" &&
+      assigned.status !== "not-required" &&
+      (own === "ready" || own === "checking" || own === "error");
+    if (!keepOwn) displayedConnections.set(serverId, assigned);
+  }
+  const missing = servers.filter(
+    (server) =>
+      server.issuerId &&
+      ["missing", "ended", "error"].includes(
+        displayedConnections.get(server.id)?.status ?? "checking",
+      ),
+  );
+  return (
+    <div className="space-y-5">
+      <WizardStepHeader
+        title="MCP sign-in"
+        description="Choose how Speakeasy signs in to each selected MCP server when the agent calls it. Open a row to manage its connection, or remove a server here."
+      />
+      <SignInPath hop="mcp" />
+      {allServers && missing.length > 0 && (
+        <Text role="alert" warning small>
+          No usable connection available for:{" "}
+          {missing.map((server) => server.name).join(", ")}.
+        </Text>
+      )}
+      {oauth.blocked && (
+        <Text role="alert" warning small>
+          Allow popups, then try connecting again.
+        </Text>
+      )}
+      {/* Every row starts closed: its badge already says how Speakeasy signs
+          in, and a row opens only to manage that connection. */}
+      <Accordion
+        type="multiple"
+        value={openRows}
+        onValueChange={setOpenRows}
+        className="border-border border"
+      >
+        {servers.map((server) => {
+          const connection = displayedConnections.get(server.id);
+          const shared =
+            !server.issuerId || connection?.status === "not-required";
+          const expired = connection?.status === "ended";
+          const sessions =
+            connection?.status === "ready" || connection?.status === "ended"
+              ? connection.sessions
+              : [];
+          const session = sessions[0];
+          const mine = session?.subjectUrn === `user:${user.id}`;
+          const label = shared
+            ? "Shared credential"
+            : expired
+              ? "Expired"
+              : connection?.status === "ready"
+                ? mine
+                  ? "Your connection"
+                  : `${session?.subjectDisplayName || session?.subjectEmail || "Another member"}'s connection`
+                : connection?.status === "checking" || !connection
+                  ? "Checking connection…"
+                  : connection.status === "error"
+                    ? "Could not check connection"
+                    : "Requires connection";
+          return (
+            <AccordionItem
+              key={server.id}
+              value={server.id}
+              className="px-4 data-[state=open]:bg-muted/30"
+            >
+              <div
+                className={
+                  session && !mine
+                    ? "flex items-center gap-3 bg-muted/40"
+                    : "flex items-center gap-3"
+                }
+              >
+                <div className="min-w-0 flex-1">
+                  <AccordionTrigger className="items-center hover:no-underline">
+                    <span className="min-w-0 flex-1">
+                      <span className="block truncate text-sm font-medium">
+                        {server.name}
+                      </span>
+                    </span>
+                    {session && (
+                      <IdentityAvatar
+                        label={
+                          session.subjectDisplayName ||
+                          session.subjectEmail ||
+                          "Connection owner"
+                        }
+                        src={mine ? user.photoUrl : undefined}
+                        className="size-7"
+                        textClassName="text-xs"
+                      />
+                    )}
+                    <Badge
+                      // Blue, like the step's MCP sign-in arrow: each pill
+                      // says how Speakeasy signs in to that server.
+                      variant={
+                        expired || connection?.status === "missing"
+                          ? "warning"
+                          : shared || connection?.status === "ready"
+                            ? "information"
+                            : "neutral"
+                      }
+                      size="sm"
+                    >
+                      {session && !mine && (
+                        <LockKeyhole
+                          className="mr-1 size-3"
+                          aria-hidden="true"
+                        />
+                      )}
+                      {session && mine && !expired && (
+                        <Check className="mr-1 size-3" aria-hidden="true" />
+                      )}
+                      {expired && (
+                        <AlertTriangle
+                          className="mr-1 size-3"
+                          aria-hidden="true"
+                        />
+                      )}
+                      {label}
+                    </Badge>
+                  </AccordionTrigger>
+                </div>
+                <ServerInfoPopover server={server} />
+                <Button
+                  variant="tertiary"
+                  size="sm"
+                  aria-label={`Remove ${server.name}`}
+                  title="Remove MCP server"
+                  onClick={() => onRemove(server.id)}
+                >
+                  <X className="size-4" />
+                </Button>
+              </div>
+              <AccordionContent>
+                {shared ? (
+                  <Text small muted>
+                    This server uses a shared credential. No personal connection
+                    is needed.
+                  </Text>
+                ) : (
+                  <div className="flex flex-wrap items-center gap-3 py-1">
+                    <div className="min-w-0 flex-1">
+                      <Text small warning={expired} className="text-sm">
+                        {expired ? "Your connection has expired" : label}
+                      </Text>
+                      {session && (
+                        <Text small muted className="mt-1 text-xs">
+                          {connectionLifetimeLabel(connectionLifetime(session))}
+                        </Text>
+                      )}
+                    </div>
+                    {server.connectUrl && (
+                      <Button
+                        size="xs"
+                        variant={expired || !session ? "primary" : "secondary"}
+                        onClick={() => {
+                          const url = new URL(server.connectUrl!);
+                          if (session?.remoteSessionClientId) {
+                            url.searchParams.set(
+                              "reauthenticate_client_id",
+                              session.remoteSessionClientId,
+                            );
+                          }
+                          oauth.open(url.toString());
+                        }}
+                      >
+                        {session ? "Reauthenticate" : "Connect account"}
+                      </Button>
+                    )}
+                    {!server.connectUrl && !session && (
+                      <Text small muted>
+                        Connection setup is unavailable for this server.
+                      </Text>
+                    )}
+                    <Button
+                      variant="tertiary"
+                      size="sm"
+                      aria-label={`Refresh ${server.name} connection status`}
+                      title="Refresh connection status"
+                      onClick={() => {
+                        void connections.refetch();
+                      }}
+                    >
+                      <RefreshCw className="size-4" />
+                    </Button>
+                  </div>
+                )}
+              </AccordionContent>
+            </AccordionItem>
+          );
+        })}
+      </Accordion>
+    </div>
+  );
+}

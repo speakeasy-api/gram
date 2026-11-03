@@ -45,8 +45,8 @@ WHERE organization_id = @organization_id
 ORDER BY (project_id IS NULL) DESC, name;
 
 -- name: CreateWorkloadIssuer :one
-INSERT INTO workload_issuers (organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission)
-VALUES (@organization_id, @project_id, @name, sqlc.narg(description), @tags, @issuer, @jwks_uri, @allow_wildcard_admission)
+INSERT INTO workload_issuers (organization_id, project_id, name, description, tags, issuer, jwks_uri, allow_wildcard_admission, allow_assertion_reuse)
+VALUES (@organization_id, @project_id, @name, sqlc.narg(description), @tags, @issuer, @jwks_uri, @allow_wildcard_admission, sqlc.narg(allow_assertion_reuse))
 RETURNING *;
 
 -- name: UpdateWorkloadIssuer :one
@@ -59,6 +59,7 @@ SET name = @name,
     description = sqlc.narg(description),
     tags = @tags,
     jwks_uri = @jwks_uri,
+    allow_assertion_reuse = sqlc.narg(allow_assertion_reuse),
     updated_at = clock_timestamp()
 WHERE organization_id = @organization_id
   AND (project_id IS NULL OR project_id = @project_id)

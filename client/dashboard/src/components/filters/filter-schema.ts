@@ -20,10 +20,35 @@ import { pluralizeNoun } from "@/lib/format";
  */
 
 export type DateRangeValue = {
+  /** Exclusive instant computed in the timezone where the calendar was selected. */
+  calendarEnd?: Date;
   preset: DateRangePreset | null;
   customRange: { from: Date; to: Date } | null;
   customLabel: string | null;
 };
+
+/** Preserve the selected final day's boundary when a link crosses timezones. */
+export function calendarDateRangeValue(from: Date, to: Date): DateRangeValue {
+  const calendarEnd = new Date(to);
+  calendarEnd.setDate(calendarEnd.getDate() + 1);
+  return {
+    preset: null,
+    customRange: { from, to },
+    customLabel: null,
+    calendarEnd,
+  };
+}
+
+/** Bounds for querying or saving a custom range, separate from calendar display dates. */
+export function customDateRangeBounds(
+  value: DateRangeValue | undefined,
+): { from: Date; to: Date } | null {
+  if (!value?.customRange) return null;
+  return {
+    from: value.customRange.from,
+    to: value.calendarEnd ?? value.customRange.to,
+  };
+}
 
 export interface FilterOption {
   label: string;
@@ -113,10 +138,14 @@ interface BaseDimension<K extends FilterKind> {
 type MultiselectDimension = BaseDimension<"multiselect">;
 type SelectDimension = BaseDimension<"select">;
 interface TextDimension extends BaseDimension<"text"> {
+  /** Zero for builders that submit explicitly; otherwise debounce live filtering. */
+  debounceMs?: number;
   /** Operator applied server-side; defaults to `contains`. */
   operator?: Operator;
 }
 interface NumberDimension extends BaseDimension<"number"> {
+  /** Zero for builders that submit explicitly; otherwise debounce live filtering. */
+  debounceMs?: number;
   /** Optional bounds / granularity forwarded to the numeric input. */
   min?: number;
   max?: number;

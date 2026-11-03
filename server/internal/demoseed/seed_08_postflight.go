@@ -14,6 +14,13 @@ import (
 // postflight asserts the demo data landed and nothing leaked outside the demo
 // org. Any failure rolls the whole Postgres seed back.
 func (s *seeder) postflight(ctx context.Context) error {
+	count, err := s.q.PostflightCountRegistryPromotionCandidates(ctx, repo.PostflightCountRegistryPromotionCandidatesParams{OrgID: s.orgID(), ProjectID: s.projectID()})
+	if err != nil {
+		return fmt.Errorf("count synthetic catalogue promotion candidates: %w", err)
+	}
+	if count != 3 {
+		return fmt.Errorf("expected three ineligible catalogue promotion candidates, got %d", count)
+	}
 	if err := s.postflightCore(ctx); err != nil {
 		return err
 	}
@@ -126,6 +133,16 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		read("chats", &chatCount, byOrg(s.q.PostflightCountChats)),
 		read("risk findings", &findingCount, byOrg(s.q.PostflightCountFindings)),
 		read("members", &memberCount, byOrg(s.q.PostflightCountMembers)),
+		{
+			what:  "security audit logs",
+			count: byOrg(s.q.PostflightCountSecurityAuditLogs),
+			fail:  postflightMustEqual(6, "expected 6 security audit logs, found %d"),
+		},
+		{
+			what:  "auth client associations",
+			count: byOrg(s.q.PostflightCountAuthClientAssociations),
+			fail:  postflightMustEqual(4, "expected 4 auth client associations, found %d"),
+		},
 		{
 			what:  "setup tasks",
 			count: byOrg(s.q.PostflightCountSetupTasks),
@@ -345,6 +362,12 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			count: byOrg(s.q.PostflightCountPolicyMissingCustomRules),
 			fail:  postflightMustBeZero("%d policy custom_rule_ids have no rule row"),
 		},
+		// The four seeded tool approval requests: pending, used, denied and expired.
+		{
+			what:  "tool approval requests",
+			count: byOrg(s.q.PostflightCountApprovals),
+			fail:  postflightMustEqual(4, "expected 4 tool approval requests, found %d"),
+		},
 		{
 			what: "foreign-org chats",
 			count: func() (int64, error) {
@@ -383,7 +406,7 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		{
 			what:  "gateway members",
 			count: byProject(s.q.PostflightCountGatewayMembers),
-			fail:  postflightMustEqual(4, "expected 4 gateway members, found %d"),
+			fail:  postflightMustEqual(6, "expected 6 gateway members, found %d"),
 		},
 		{
 			what:  "removed gateway members",
@@ -391,14 +414,29 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			fail:  postflightMustEqual(1, "expected 1 removed gateway member, found %d"),
 		},
 		{
+			what:  "mcp skill links",
+			count: byProject(s.q.PostflightCountMCPSkillLinks),
+			fail:  postflightMustEqual(5, "expected 5 MCP skill links, found %d"),
+		},
+		{
+			what:  "approvals server",
+			count: byProject(s.q.PostflightCountApprovalsServers),
+			fail:  postflightMustEqual(1, "expected 1 approvals server with an endpoint in the Default plugin, found %d"),
+		},
+		{
 			what:  "hosted toolset wrappers",
-			count: byProject(s.q.PostflightCountUnwrappedToolsets),
-			fail:  postflightMustBeZero("%d hosted toolsets lack a matching canonical wrapper and endpoint"),
+			count: byProject(s.q.PostflightCountHostedToolsetDrift),
+			fail:  postflightMustBeZero("%d toolsets have a canonical wrapper out of step with them"),
+		},
+		{
+			what:  "canonical wrappers",
+			count: byProject(s.q.PostflightCountCanonicalWrappers),
+			fail:  postflightMustEqual(4, "expected 4 canonical hosted MCP servers (support, ops, partner, discovery), found %d"),
 		},
 		{
 			what:  "gateway endpoints",
 			count: byProject(s.q.PostflightCountGatewayEndpoints),
-			fail:  postflightMustEqual(1, "expected 1 gateway endpoint, found %d"),
+			fail:  postflightMustEqual(2, "expected 2 gateway endpoints, found %d"),
 		},
 		// A member whose server lost its backend can never be dispatched to,
 		// so it would sit in the gateway's table permanently unavailable.
@@ -444,6 +482,30 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			what:  "mdm devices",
 			count: byOrg(s.q.PostflightCountMDMDevices),
 			fail:  postflightMustEqual(7, "expected 7 mdm devices, found %d"),
+		},
+		// The machines only their agents list, which the Devices tab marks
+		// "Not in an MDM": one enforcing, one gone quiet.
+		{
+			what:  "agent-only device syncs",
+			count: byOrg(s.q.PostflightCountAgentOnlyDeviceSyncs),
+			fail:  postflightMustEqual(2, "expected 2 device agent syncs for serials no MDM device holds, found %d"),
+		},
+		// The policy states coverage refines agent_active into: two attested
+		// machines (one agent-only) and one behind, beside one with no report.
+		{
+			what:  "device agent state reports",
+			count: byOrg(s.q.PostflightCountDeviceAgentStateReports),
+			fail:  postflightMustEqual(3, "expected 3 device agent state reports, found %d"),
+		},
+		{
+			what:  "attested device agent state reports",
+			count: byOrg(s.q.PostflightCountAttestedDeviceAgentStateReports),
+			fail:  postflightMustEqual(2, "expected 2 state reports applying their served etag, found %d"),
+		},
+		{
+			what:  "outdated device agent state reports",
+			count: byOrg(s.q.PostflightCountOutdatedDeviceAgentStateReports),
+			fail:  postflightMustEqual(1, "expected 1 state report behind on policy with a permission error, found %d"),
 		},
 		{
 			what:  "device integration configs",

@@ -100,6 +100,23 @@ func marshalErrorResponse(id jsonrpc.ID, reject *RejectError) ([]byte, error) {
 	return bs, nil
 }
 
+// marshalToolResultError produces a tools/call response whose result carries
+// message as text content and is marked isError.
+func marshalToolResultError(id jsonrpc.ID, message string) ([]byte, error) {
+	bs, err := json.Marshal(map[string]any{
+		"jsonrpc": "2.0",
+		"id":      id.Raw(),
+		"result": map[string]any{
+			"content": []map[string]any{{"type": "text", "text": message}},
+			"isError": true,
+		},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("marshal tool error result: %w", err)
+	}
+	return bs, nil
+}
+
 // marshalLogNotification produces a "notifications/message" log
 // notification carrying the rejection reason. originalMethod is included
 // in the data payload so observers can see which message was suppressed.

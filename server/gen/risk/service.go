@@ -141,6 +141,16 @@ type Service interface {
 	DenyRiskPolicyBypassRequest(context.Context, *DenyRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error)
 	// Revoke a previously approved risk policy bypass request.
 	RevokeRiskPolicyBypassRequest(context.Context, *RevokeRiskPolicyBypassRequestPayload) (res *RiskPolicyBypassRequest, err error)
+	// List tool approval requests held by require_approval policies, newest first.
+	// Org admins see every request; others see requests they can approve and their
+	// own.
+	ListRiskPolicyApprovals(context.Context, *ListRiskPolicyApprovalsPayload) (res *ListRiskPolicyApprovalsResult, err error)
+	// Get one tool approval request, including a preview of the call's arguments.
+	GetRiskPolicyApproval(context.Context, *GetRiskPolicyApprovalPayload) (res *RiskPolicyApproval, err error)
+	// Approve or deny a pending tool approval request. Only a listed approver may
+	// decide, and never the person who made the call. An approval releases one
+	// retry of the exact call.
+	DecideRiskPolicyApproval(context.Context, *DecideRiskPolicyApprovalPayload) (res *RiskPolicyApproval, err error)
 	// Manually trigger risk analysis for a policy, starting or signaling the drain
 	// workflow. Defaults to the most recent 100 unanalyzed messages; pass
 	// `limit=0` to backfill every unanalyzed message.
@@ -224,7 +234,7 @@ const ServiceName = "risk"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [54]string{"createRiskPolicy", "listRiskPolicies", "listMCPPlatformToolsets", "listRiskPoliciesForMcpServer", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listSessionQuarantines", "releaseSessionQuarantine", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "revealRiskResultPayload", "listRiskResultsByChat", "markRiskResultsFalsePositive", "unmarkRiskResultsFalsePositive", "listDismissedRiskResults", "getRiskOverview", "listRiskCategories", "listRiskPresets", "suggestRiskPolicy", "compileExpr", "getRiskUserBreakdown", "getRiskSignals", "getRiskMcpServerCounts", "getRiskAnalysisStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
+var MethodNames = [57]string{"createRiskPolicy", "listRiskPolicies", "listMCPPlatformToolsets", "listRiskPoliciesForMcpServer", "listBuiltinExclusions", "getRiskPolicy", "updateRiskPolicy", "deleteRiskPolicy", "listSessionQuarantines", "releaseSessionQuarantine", "listRiskResults", "listRiskResultsForAgent", "unmaskRiskResult", "revealRiskResultPayload", "listRiskResultsByChat", "markRiskResultsFalsePositive", "unmarkRiskResultsFalsePositive", "listDismissedRiskResults", "getRiskOverview", "listRiskCategories", "listRiskPresets", "suggestRiskPolicy", "compileExpr", "getRiskUserBreakdown", "getRiskSignals", "getRiskMcpServerCounts", "getRiskAnalysisStatus", "createRiskPolicyBypassRequest", "acknowledgeRiskPolicyChallenge", "getRiskPolicyChallenge", "declineRiskPolicyChallenge", "getRiskBlock", "submitRiskBlockFeedback", "listRiskPolicyBypassRequests", "approveRiskPolicyBypassRequest", "denyRiskPolicyBypassRequest", "revokeRiskPolicyBypassRequest", "listRiskPolicyApprovals", "getRiskPolicyApproval", "decideRiskPolicyApproval", "triggerRiskAnalysis", "createCustomDetectionRule", "listCustomDetectionRules", "getCustomDetectionRule", "updateCustomDetectionRule", "deleteCustomDetectionRule", "listRiskExclusions", "createRiskExclusion", "updateRiskExclusion", "deleteRiskExclusion", "suggestCustomDetectionRule", "suggestExclusion", "testDetectionRule", "evaluatePromptGuardrail", "saveRiskEvalReview", "listRiskEvalReviews", "deleteRiskEvalReview"}
 
 // AcknowledgeRiskPolicyChallengePayload is the payload type of the risk
 // service acknowledgeRiskPolicyChallenge method.
@@ -382,8 +392,10 @@ type CreateRiskPolicyPayload struct {
 	CustomRuleIds []string
 	// Whether the policy is active.
 	Enabled *bool
-	// Policy action: flag, warn (challenge), block, or quarantine (deny and freeze
-	// the hook session). MCP-scoped policies support flag and block only.
+	// Policy action: flag, warn (challenge), block, quarantine (deny and freeze
+	// the hook session), or require_approval (hold the call until a listed
+	// approver approves it). MCP-scoped policies support flag, block and
+	// require_approval.
 	Action string
 	// Policy audience type: everyone or targeted.
 	AudienceType string
@@ -392,7 +404,7 @@ type CreateRiskPolicyPayload struct {
 	AudiencePrincipalUrns []string
 	// Optional MCP server and tool restriction. Omit or send an empty server list
 	// to apply the policy to every MCP server. When a non-empty scope is set, the
-	// action must be flag or block.
+	// action must be flag, block or require_approval; require_approval needs one.
 	McpScope *types.RiskMCPScope
 	// Complete desired canonical URL allow set for this policy. Omit or send empty
 	// to create no URL-specific allow decisions.
@@ -416,9 +428,26 @@ type CreateRiskPolicyPayload struct {
 	Prompt *string
 	// For prompt_based policies: per-policy LLM-judge model configuration.
 	ModelConfig *types.RiskPolicyModelConfig
+	// For require_approval policies: who may approve held calls. Required when
+	// action is require_approval, rejected otherwise.
+	ApprovalConfig *types.RiskPolicyApprovalConfig
 	// CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit
 	// to apply the default (5).
 	Score float64
+}
+
+// DecideRiskPolicyApprovalPayload is the payload type of the risk service
+// decideRiskPolicyApproval method.
+type DecideRiskPolicyApprovalPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The approval request ID.
+	ID string
+	// The decision.
+	Decision string
+	// Optional message for the agent.
+	Note *string
 }
 
 // DeclineRiskPolicyChallengePayload is the payload type of the risk service
@@ -571,6 +600,16 @@ type GetRiskOverviewPayload struct {
 	From *string
 	// Exclusive end of the overview window. Defaults to now.
 	To *string
+}
+
+// GetRiskPolicyApprovalPayload is the payload type of the risk service
+// getRiskPolicyApproval method.
+type GetRiskPolicyApprovalPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The approval request ID.
+	ID string
 }
 
 // GetRiskPolicyChallengePayload is the payload type of the risk service
@@ -767,6 +806,29 @@ type ListRiskPoliciesPayload struct {
 type ListRiskPoliciesResult struct {
 	// The list of risk policies.
 	Policies []*types.RiskPolicy
+}
+
+// ListRiskPolicyApprovalsPayload is the payload type of the risk service
+// listRiskPolicyApprovals method.
+type ListRiskPolicyApprovalsPayload struct {
+	ApikeyToken      *string
+	SessionToken     *string
+	ProjectSlugInput *string
+	// Optional status filter. An open request past its window counts as expired.
+	Status *string
+	// Continue after this approval request ID.
+	Cursor *string
+	// Maximum number of requests to return.
+	Limit int32
+}
+
+// ListRiskPolicyApprovalsResult is the result type of the risk service
+// listRiskPolicyApprovals method.
+type ListRiskPolicyApprovalsResult struct {
+	// Approval requests, newest first.
+	Approvals []*RiskPolicyApproval
+	// Pass as cursor to fetch the next page. Absent on the last page.
+	NextCursor *string
 }
 
 // ListRiskPolicyBypassRequestsPayload is the payload type of the risk service
@@ -1230,6 +1292,61 @@ type RiskOverviewUser struct {
 	ExternalUserID string
 	// Finding count for this user.
 	Findings int64
+}
+
+// RiskPolicyApproval is the result type of the risk service
+// getRiskPolicyApproval method.
+type RiskPolicyApproval struct {
+	// The approval request ID.
+	ID string
+	// The require_approval risk policy that held the call.
+	PolicyID string
+	// The policy's name.
+	PolicyName string
+	// The policy version when the call was held.
+	PolicyVersion int64
+	// The request's status. An open request past its window is expired.
+	Status string
+	// The principal that made the call: agent:<id> or user:<id>.
+	RequesterUrn string
+	// The MCP surface that received the call.
+	Surface string
+	// The hosted toolset that served the call, when known.
+	ToolsetID *string
+	// The chat the call belongs to, when known.
+	ChatID *string
+	// The tool that was called.
+	ToolName string
+	// A shortened preview of the call's arguments: long strings are cut and only
+	// the first keys are kept.
+	ArgumentsPreview map[string]any
+	// The agent's reason, once it requested approval.
+	Reason *string
+	// What the agent asked to be approved, such as exact_once.
+	RequestedScope *string
+	// What the approver granted, once approved.
+	GrantedScope *string
+	// The approver who decided.
+	DecidedByUrn *string
+	// Where the decision came from.
+	DecidedVia *string
+	// The approver's message for the agent.
+	DecisionNote *string
+	// Whether the caller can decide this request now.
+	CanDecide bool
+	// When the agent requested approval.
+	RequestedAt *string
+	// When an approver decided.
+	DecidedAt *string
+	// When the request stops waiting for a decision, or the approval stops
+	// covering a retry.
+	ExpiresAt *string
+	// When a retry used the approval.
+	ConsumedAt *string
+	// When the call was first held.
+	CreatedAt string
+	// Last update timestamp.
+	UpdatedAt string
 }
 
 // RiskPolicyBypassRequest is the result type of the risk service
@@ -1784,8 +1901,10 @@ type UpdateRiskPolicyPayload struct {
 	CustomRuleIds []string
 	// Whether the policy is active.
 	Enabled *bool
-	// Policy action: flag, warn (challenge), block, or quarantine (deny and freeze
-	// the hook session). MCP-scoped policies support flag and block only.
+	// Policy action: flag, warn (challenge), block, quarantine (deny and freeze
+	// the hook session), or require_approval (hold the call until a listed
+	// approver approves it). MCP-scoped policies support flag, block and
+	// require_approval.
 	Action *string
 	// Policy audience type: everyone or targeted. Omit to preserve the current
 	// audience type.
@@ -1795,7 +1914,8 @@ type UpdateRiskPolicyPayload struct {
 	AudiencePrincipalUrns []string
 	// Optional MCP server and tool restriction. Omit to preserve; send an empty
 	// server list to clear and apply the policy to every MCP server. When the
-	// resulting policy keeps an MCP scope, the action must be flag or block.
+	// resulting policy keeps an MCP scope, the action must be flag, block or
+	// require_approval; require_approval needs one.
 	McpScope *types.RiskMCPScope
 	// Complete desired canonical URL allow set for this policy. Omit to preserve;
 	// send empty to clear.
@@ -1823,6 +1943,9 @@ type UpdateRiskPolicyPayload struct {
 	// For prompt_based policies: per-policy LLM-judge model configuration. Omit to
 	// preserve the current value.
 	ModelConfig *types.RiskPolicyModelConfig
+	// For require_approval policies: who may approve held calls. Omit to preserve
+	// the current value.
+	ApprovalConfig *types.RiskPolicyApprovalConfig
 	// CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit
 	// to preserve the current value.
 	Score *float64

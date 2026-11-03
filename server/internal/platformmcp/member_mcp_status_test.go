@@ -151,6 +151,8 @@ func TestMemberMCPConnectionStatusProjectsOnlyCallerState(t *testing.T) {
 	active := map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive}}
 	resolverFlags := &feature.InMemory{}
 	resolverFlags.SetFlag(feature.FlagAuthClientResolver, principal.OrganizationID, true)
+	secondID := associateMemberMCPClient(t, ctx, conn, principal.OrganizationID, project.ID, mcpID, remoteIssuerID)
+	second := remotesessions.Client{ID: secondID, RemoteSessionIssuerID: remoteIssuerID}
 
 	for _, test := range []struct {
 		name       string
@@ -163,6 +165,8 @@ func TestMemberMCPConnectionStatusProjectsOnlyCallerState(t *testing.T) {
 		{name: "resolver serves a registration without the sign-in link", reader: testMemberMCPConnectionReader{authClients: []remotesessions.Client{client}, authStatuses: active}, resolver: true, state: MCPConnectionStateActive, nextAction: "use_mcp"},
 		{name: "resolver does not report a grant it would not serve", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{client}, statuses: active, authClients: []remotesessions.Client{client}}, resolver: true, state: MCPConnectionStateNotConnected, nextAction: "connect"},
 		{name: "resolver with no reachable registration", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{client}, statuses: active}, resolver: true, state: MCPConnectionStateSetupRequired, reason: "upstream_authorization_not_configured", nextAction: "ask_administrator"},
+		{name: "resolver lets the member choose among several credentials", reader: testMemberMCPConnectionReader{authClients: []remotesessions.Client{client, second}}, resolver: true, state: MCPConnectionStateNotConnected, reason: "choose_on_connect", nextAction: "connect"},
+		{name: "resolver reports any active connection among several", reader: testMemberMCPConnectionReader{authClients: []remotesessions.Client{client, second}, authStatuses: map[uuid.UUID]remotesessions.RemoteSessionState{secondID: {Status: remotesessions.RemoteSessionActive}}}, resolver: true, state: MCPConnectionStateActive, nextAction: "use_mcp"},
 		{name: "resolver off reads the sign-in link", reader: testMemberMCPConnectionReader{authClients: []remotesessions.Client{client}, authStatuses: active}, state: MCPConnectionStateSetupRequired, reason: "upstream_authorization_not_configured", nextAction: "ask_administrator"},
 		{name: "not connected", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{{ID: clientID, RemoteSessionIssuerID: remoteIssuerID}}}, state: MCPConnectionStateNotConnected, nextAction: "connect"},
 		{name: "active", reader: testMemberMCPConnectionReader{clients: []remotesessions.Client{{ID: clientID, RemoteSessionIssuerID: remoteIssuerID}}, statuses: map[uuid.UUID]remotesessions.RemoteSessionState{clientID: {Status: remotesessions.RemoteSessionActive}}}, state: MCPConnectionStateActive, nextAction: "use_mcp"},

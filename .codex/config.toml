@@ -6,7 +6,7 @@ args = ["x", "--", "go", "run", "./server/cmd/dev-mcp"]
 
 [mcp_servers.pitchfork]
 command = "pitchfork"
-args = ["mcp"]
+args = ["mcp", "--local"]
 
 [mcp_servers.mise]
 command = "mise"

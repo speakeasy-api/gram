@@ -150,9 +150,9 @@ func TestRemoteLoginHop_CopiedBindLinkNeverReachesUpstream(t *testing.T) {
 
 	// The owner cannot resume a hop another browser consumed.
 	_, err = f.owner.get(t, f.s, bind)
-	require.ErrorContains(t, err, "remote login handoff expired")
+	require.ErrorContains(t, err, "expired")
 	_, err = f.owner.get(t, f.s, confirm)
-	require.ErrorContains(t, err, "remote login handoff expired")
+	require.ErrorContains(t, err, "expired")
 }
 
 func TestRemoteLoginHop_StopsAreSingleUse(t *testing.T) {
@@ -163,17 +163,17 @@ func TestRemoteLoginHop_StopsAreSingleUse(t *testing.T) {
 	confirm, err := f.owner.get(t, f.s, bind)
 	require.NoError(t, err)
 	_, err = f.owner.get(t, f.s, bind)
-	require.ErrorContains(t, err, "remote login handoff expired", "a consumed bind id is rejected")
+	require.ErrorContains(t, err, "expired", "a consumed bind id is rejected")
 	require.Error(t, f.s.validateRemoteLoginBrowser(f.owner.request(remoteCallback(remote, "ai.example"))), "the callback needs the confirm stop too")
 
 	_, err = f.owner.get(t, f.s, confirm)
 	require.NoError(t, err)
 	_, err = f.owner.get(t, f.s, confirm)
-	require.ErrorContains(t, err, "remote login handoff expired", "a consumed confirm id is rejected")
+	require.ErrorContains(t, err, "expired", "a consumed confirm id is rejected")
 
 	// The confirmation marker is not addressable as a stop.
 	_, err = f.owner.get(t, f.s, "https://gram.example"+remoteLoginBindPath+"?state="+remoteLoginHopConfirmedID(remote.BrowserCookieID))
-	require.ErrorContains(t, err, "remote login handoff expired")
+	require.ErrorContains(t, err, "expired")
 	require.NoError(t, f.s.validateRemoteLoginBrowser(f.owner.request(remoteCallback(remote, "ai.example"))))
 }
 

@@ -16,9 +16,6 @@ import (
 
 // Fixtures seeds a Fake with in-memory Okta data.
 type Fixtures struct {
-	// Users are directory users returned by ListUsers.
-	Users []User
-
 	// Apps are the applications returned by ListApps and GetApp.
 	Apps []App
 
@@ -27,9 +24,6 @@ type Fixtures struct {
 
 	// AppGroups maps an application id to its group assignments.
 	AppGroups map[string][]AppGroup
-
-	// Groups are the groups returned by ListGroups.
-	Groups []Group
 
 	// GrantedScopes are the scopes VerifyScopes reports as granted.
 	GrantedScopes []string
@@ -282,22 +276,6 @@ func (f *Fake) listAppGroups(cfg *Config, req ListAppGroupsRequest) ([]AppGroup,
 	return slices.Clone(f.fixtures.AppGroups[req.AppID]), nil
 }
 
-func (f *Fake) listGroups(cfg *Config, req ListGroupsRequest) ([]Group, error) {
-	if err := f.record("ListGroups", cfg); err != nil {
-		return nil, err
-	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	out := make([]Group, 0, len(f.fixtures.Groups))
-	for _, g := range f.fixtures.Groups {
-		if req.Search != "" && !strings.HasPrefix(strings.ToLower(g.Name), strings.ToLower(req.Search)) {
-			continue
-		}
-		out = append(out, g)
-	}
-	return out, nil
-}
-
 func (f *Fake) verifyScopes(cfg *Config, required []string) (*ScopeVerification, error) {
 	if err := f.record("VerifyScopes", cfg); err != nil {
 		return nil, err
@@ -323,19 +301,6 @@ func (f *Fake) verifyScopes(cfg *Config, required []string) (*ScopeVerification,
 		return &ScopeVerification{Granted: granted, Missing: missing, DPoPBound: false, ExpiresAt: time.Time{}}, nil
 	}
 	return &ScopeVerification{Granted: granted, Missing: missing, DPoPBound: !f.bearerOnly, ExpiresAt: time.Now().Add(time.Hour)}, nil
-}
-
-func (f *Fake) listUsers(cfg *Config, req ListUsersRequest) ([]User, error) {
-	if err := f.record("ListUsers", cfg); err != nil {
-		return nil, err
-	}
-	f.mu.Lock()
-	defer f.mu.Unlock()
-	users := f.fixtures.Users
-	if req.Limit > 0 && req.Limit < len(users) {
-		users = users[:req.Limit]
-	}
-	return slices.Clone(users), nil
 }
 
 // configuredFake is a FakeFactory client: it shares its org's Fake but
@@ -364,16 +329,8 @@ func (f *Fake) ListAppGroups(_ context.Context, req ListAppGroupsRequest) ([]App
 	return f.listAppGroups(nil, req)
 }
 
-func (f *Fake) ListGroups(_ context.Context, req ListGroupsRequest) ([]Group, error) {
-	return f.listGroups(nil, req)
-}
-
 func (f *Fake) VerifyScopes(_ context.Context, required []string) (*ScopeVerification, error) {
 	return f.verifyScopes(nil, required)
-}
-
-func (f *Fake) ListUsers(_ context.Context, req ListUsersRequest) ([]User, error) {
-	return f.listUsers(nil, req)
 }
 
 func (c *configuredFake) ListApps(_ context.Context, req ListAppsRequest) ([]App, error) {
@@ -392,14 +349,6 @@ func (c *configuredFake) ListAppGroups(_ context.Context, req ListAppGroupsReque
 	return c.fake.listAppGroups(&c.cfg, req)
 }
 
-func (c *configuredFake) ListGroups(_ context.Context, req ListGroupsRequest) ([]Group, error) {
-	return c.fake.listGroups(&c.cfg, req)
-}
-
 func (c *configuredFake) VerifyScopes(_ context.Context, required []string) (*ScopeVerification, error) {
 	return c.fake.verifyScopes(&c.cfg, required)
-}
-
-func (c *configuredFake) ListUsers(_ context.Context, req ListUsersRequest) ([]User, error) {
-	return c.fake.listUsers(&c.cfg, req)
 }

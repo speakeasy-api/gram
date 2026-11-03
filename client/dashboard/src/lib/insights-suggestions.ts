@@ -1167,7 +1167,7 @@ export function costExplorerSuggestions(args: {
  * Resolve the route-level suggestions for a project-scoped pathname
  * (`/:orgSlug/projects/:projectSlug/...`). Walks segments longest-first so
  * deeper entries (e.g. `"logs/risk-events"`) beat their parents, and detail
- * pages (`/mcp/x/foo/overview`) inherit from their section (`"mcp"`).
+ * pages (`/mcp/foo/overview`) inherit from their section (`"mcp"`).
  * Function-valued (parameterized) entries are skipped — those need page data
  * and reach the provider via <InsightsConfig> instead. Returns undefined for
  * non-project paths and unknown sections.

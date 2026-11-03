@@ -1,6 +1,6 @@
-import { createMCPClient } from "@ai-sdk/mcp";
 import { useQuery, type UseQueryResult } from "@tanstack/react-query";
 import { z } from "zod";
+import { createMCPClientWithVersionFallback } from "@/lib/mcp-client";
 
 /**
  * MCP tool annotation hints (the optional `annotations` object on a tool in the
@@ -108,7 +108,7 @@ export function useProxiedMcpTools(
       // `enabled` guards against an undefined URL, but narrow for the type.
       if (!mcpUrl) throw new Error("No MCP URL configured");
 
-      const client = await createMCPClient({
+      const client = await createMCPClientWithVersionFallback({
         clientName: "gram-dashboard-proxied-mcp-client",
         transport: {
           type: "http",

@@ -28,13 +28,8 @@ vi.mock("@/hooks/useKillswitchAccess", () => ({
 vi.mock("@/contexts/Auth", () => ({
   useSession: () => ({ session: "session-1" }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    killswitch: {
-      detail: { href: (id: string) => `/acme/killswitch/${id}`, goTo: vi.fn() },
-    },
-    mcpSessions: { href: () => "/acme/mcp-sessions" },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "acme", projectSlug: "default" }),
 }));
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
 vi.mock("@gram/client/react-query/killswitches.js", () => ({

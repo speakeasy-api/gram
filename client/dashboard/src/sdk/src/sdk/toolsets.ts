@@ -3,7 +3,6 @@
  */
 
 import { toolsetsAddExternalOAuthServer } from "../funcs/toolsetsAddExternalOAuthServer.js";
-import { toolsetsCheckMCPSlugAvailability } from "../funcs/toolsetsCheckMCPSlugAvailability.js";
 import { toolsetsCloneBySlug } from "../funcs/toolsetsCloneBySlug.js";
 import { toolsetsCreate } from "../funcs/toolsetsCreate.js";
 import { toolsetsDeleteBySlug } from "../funcs/toolsetsDeleteBySlug.js";
@@ -27,10 +26,6 @@ import {
   AddExternalOAuthServerRequest,
   AddExternalOAuthServerSecurity,
 } from "../models/operations/addexternaloauthserver.js";
-import {
-  CheckMCPSlugAvailabilityRequest,
-  CheckMCPSlugAvailabilitySecurity,
-} from "../models/operations/checkmcpslugavailability.js";
 import {
   CloneToolsetRequest,
   CloneToolsetSecurity,
@@ -98,29 +93,6 @@ export class Toolsets extends ClientSDK {
     options?: RequestOptions,
   ): Promise<Toolset> {
     return unwrapAsync(toolsetsAddExternalOAuthServer(
-      this,
-      request,
-      security,
-      options,
-    ));
-  }
-
-  /**
-   * checkMCPSlugAvailability toolsets
-   *
-   * @remarks
-   * Check if a MCP slug is taken in any scope (true means taken).
-   *
-   * Deprecated: use mcpEndpoints.checkSlugAvailability instead, which is scoped to one domain and returns true when available.
-   *
-   * @deprecated method: This will be removed in a future release, please migrate away from it as soon as possible.
-   */
-  async checkMCPSlugAvailability(
-    request: CheckMCPSlugAvailabilityRequest,
-    security?: CheckMCPSlugAvailabilitySecurity | undefined,
-    options?: RequestOptions,
-  ): Promise<boolean> {
-    return unwrapAsync(toolsetsCheckMCPSlugAvailability(
       this,
       request,
       security,
@@ -324,7 +296,7 @@ export class Toolsets extends ClientSDK {
    * @remarks
    * Link a toolset to a user_session_issuer (or pass null to unlink). The user_session_issuer must already exist in the caller's project.
    *
-   * Deprecated: use mcpServers.update instead.
+   * Deprecated: use mcpServers.update with user_session_issuer_id, or clear_user_session_issuer to unlink. This endpoint will be removed on 2026-11-25.
    *
    * @deprecated method: This will be removed in a future release, please migrate away from it as soon as possible.
    */

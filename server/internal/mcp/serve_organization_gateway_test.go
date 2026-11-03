@@ -21,6 +21,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
@@ -453,12 +454,70 @@ func TestOrganizationGatewayRoutes_ShadowedEndpointKeepsItsRoutes(t *testing.T) 
 	require.Contains(t, w.Body.String(), `"client_id"`)
 }
 
+func getGatewayPath(t *testing.T, router goahttp.Muxer, path string) *httptest.ResponseRecorder {
+	t.Helper()
+	req := httptest.NewRequest(http.MethodGet, path, nil)
+	req.Header.Set("Accept", "application/json, text/event-stream")
+	w := httptest.NewRecorder()
+	router.ServeHTTP(w, req)
+	return w
+}
+
+// A GET from an MCP client opens no standalone stream on the organization
+// gateway, as on a stored gateway; browsers get the landing page instead.
+func TestOrganizationGatewayRoutes_ClientGetIsMethodNotAllowed(t *testing.T) {
+	t.Parallel()
+	_, ti := newTestMCPService(t)
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, ti.service.Service, nil)
+
+	w := getGatewayPath(t, router, "/mcp/gateway/any-organization")
+	require.Equal(t, http.StatusMethodNotAllowed, w.Code, w.Body.String())
+}
+
+// An endpoint whose slug is "gateway" keeps its own GET routes, which the
+// organization gateway's GET route would otherwise capture.
+func TestOrganizationGatewayRoutes_ShadowedEndpointKeepsItsGetRoutes(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	router := goahttp.NewMuxer()
+	mcp.Attach(router, ti.service.Service, nil)
+
+	w := getGatewayPath(t, router, "/mcp/gateway/authorize")
+	require.Equal(t, http.StatusMethodNotAllowed, w.Code, "without such an endpoint the path names an organization")
+
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "gateway", issuerID)
+
+	w = getGatewayPath(t, router, "/mcp/gateway/authorize")
+	require.NotEqual(t, http.StatusMethodNotAllowed, w.Code, "the endpoint's own authorize route answers")
+}
+
 // The gateway's consent page lists only the servers the person can reach,
 // and a reachable server's connect page shows the connection behind it: a
 // client whose only servers are hidden from them stays off every page, along
 // with the service behind it.
 func TestServeConsent_OrganizationGatewayPicksTools(t *testing.T) {
 	t.Parallel()
+	for _, tc := range []struct {
+		mode metamcp.DiscoveryMode
+		all  bool
+	}{
+		{metamcp.DiscoveryModeProgressive, false},
+		{metamcp.DiscoveryModeCode, false},
+		{metamcp.DiscoveryModeCode, true},
+	} {
+		t.Run(fmt.Sprintf("%s/all=%t", tc.mode, tc.all), func(t *testing.T) {
+			t.Parallel()
+			testOrganizationGatewayPicksTools(t, tc.mode, tc.all)
+		})
+	}
+}
+
+func testOrganizationGatewayPicksTools(t *testing.T, mode metamcp.DiscoveryMode, all bool) {
+	t.Helper()
 	ctx, ti := newTestMCPService(t)
 	fx := seedOrganizationGateway(t, ctx, ti)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
@@ -466,11 +525,53 @@ func TestServeConsent_OrganizationGatewayPicksTools(t *testing.T) {
 	decoy := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, "meta-"+uuid.NewString(), uuid.Nil)
 	hosted := seedHostedMetaMember(t, ctx, ti, decoy.ID, "Hosted tools", 3, mcpservers.VisibilityPrivate, "alpha", "beta")
 	setToolsetMcpPrivate(t, ctx, ti, hosted.toolsetID, *authCtx.ProjectID)
-	upstream := newCatalogUpstream(t, 1)
+	upstream := newCatalogUpstream(t, 2)
 	remoteID := seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, decoy.ID, "Remote", "remote-counted", 4, upstream.url)
 	require.NoError(t, testrepo.New(ti.conn).SetMCPServerVisibilityFixture(ctx, testrepo.SetMCPServerVisibilityFixtureParams{ID: remoteID, ProjectID: *authCtx.ProjectID, Visibility: mcpservers.VisibilityPrivate}))
 	for _, id := range []uuid.UUID{hosted.serverID, hosted.toolsetID, remoteID} {
 		seedUserMCPConnectGrant(t, ctx, ti.conn, authCtx.ActiveOrganizationID, fx.subject.ID, id.String())
+	}
+	if mode == metamcp.DiscoveryModeCode {
+		enableCodeMode(t, ctx, ti)
+		mcp.SetTestCodeExecutor(ti.service.Service, &recordingCodeExecutor{run: func(ctx context.Context, code string, host codemode.Host) (*codemode.ExecutionResult, error) {
+			if code != "discover" {
+				result, err := host.Call(ctx, code, json.RawMessage(`{}`))
+				if err != nil {
+					return &codemode.ExecutionResult{Error: &codemode.ExecutionError{Code: "tool_unavailable", Message: err.Error()}}, nil
+				}
+				raw, err := json.Marshal(result)
+				require.NoError(t, err)
+				return &codemode.ExecutionResult{Value: raw}, nil
+			}
+			servers, err := host.Servers(ctx, codemode.PageArgs{})
+			require.NoError(t, err)
+			names := make(map[string]string)
+			for _, server := range servers.Items {
+				names[server.Slug] = server.Name
+				require.NotNil(t, server.Connection)
+			}
+			require.Equal(t, "Hosted tools", names[hosted.slug])
+			require.Equal(t, "Remote", names["remote-counted"])
+			page, err := host.Search(ctx, codemode.SearchArgs{Query: ""})
+			require.NoError(t, err)
+			require.False(t, page.Incomplete)
+			paths := make([]string, 0, len(page.Items))
+			for _, item := range page.Items {
+				paths = append(paths, item.Path)
+			}
+			require.Contains(t, paths, hosted.slug+"--alpha")
+			require.Contains(t, paths, "remote-counted--tool_000")
+			if !all {
+				require.NotContains(t, paths, hosted.slug+"--beta")
+				require.NotContains(t, paths, "remote-counted--tool_001")
+			}
+			for _, path := range []string{hosted.slug + "--alpha", "remote-counted--tool_000"} {
+				described, err := host.Describe(ctx, path)
+				require.NoError(t, err)
+				require.Contains(t, string(described.Definition), `"inputSchema"`)
+			}
+			return &codemode.ExecutionResult{Value: json.RawMessage(`true`)}, nil
+		}})
 	}
 	// The browser request carries identity, while admission loads persisted grants.
 	caller := contextvalues.SetAuthContext(t.Context(), authCtx)
@@ -526,8 +627,16 @@ func TestServeConsent_OrganizationGatewayPicksTools(t *testing.T) {
 	form.Set("csrf_token", csrfToken)
 	form.Set("action", "approve")
 	form.Set("tool_inventory_id", attempt)
-	form.Set("tool_filtering", "on")
-	form.Add("tools", hosted.slug+"--alpha")
+	form.Set("discovery_mode", string(mode))
+	form.Set("tool_catalog_mode", string(toolfilter.CatalogModeCached))
+	form.Set("tool_filtering", "off")
+	if !all {
+		form.Set("tool_filtering", "on")
+		form.Add("tools", hosted.slug+"--alpha")
+		if mode == metamcp.DiscoveryModeCode {
+			form.Add("tools", "remote-counted--tool_000")
+		}
+	}
 	req := httptest.NewRequest(http.MethodPost, "/mcp/gateway/"+fx.organizationSlug+"/connect", strings.NewReader(form.Encode()))
 	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 	approve := httptest.NewRecorder()
@@ -544,10 +653,14 @@ func TestServeConsent_OrganizationGatewayPicksTools(t *testing.T) {
 	require.NoError(t, err)
 	policy, err := toolfilter.ParseSessionPolicy(raw)
 	require.NoError(t, err)
-	require.NotNil(t, policy.Selection)
-	require.Equal(t, "meta_mcp_server:"+endpoint.MetaMcpServerID.UUID.String(), policy.Selection.Resource)
-	require.True(t, policy.Selection.AllowsName(hosted.slug+"--alpha"))
-	require.False(t, policy.Selection.AllowsName(hosted.slug+"--beta"))
+	if all {
+		require.Nil(t, policy.Selection)
+	} else {
+		require.NotNil(t, policy.Selection)
+		require.Equal(t, "meta_mcp_server:"+endpoint.MetaMcpServerID.UUID.String(), policy.Selection.Resource)
+		require.True(t, policy.Selection.AllowsName(hosted.slug+"--alpha"))
+		require.False(t, policy.Selection.AllowsName(hosted.slug+"--beta"))
+	}
 	require.NotNil(t, policy.Catalog)
 	tokenForm := url.Values{"grant_type": {"authorization_code"}, "code": {code}, "client_id": {client.ClientID}, "redirect_uri": {client.RedirectUris[0]}, "code_verifier": {gatewayConsentVerifier}}
 	tokenRequest := httptest.NewRequest(http.MethodPost, "/mcp/gateway/"+fx.organizationSlug+"/token", strings.NewReader(tokenForm.Encode())).WithContext(ctx)
@@ -561,8 +674,15 @@ func TestServeConsent_OrganizationGatewayPicksTools(t *testing.T) {
 	require.NoError(t, json.Unmarshal(issued.Body.Bytes(), &tokens))
 	tokenCalls := seedExpiredCatalogCredential(t, ctx, ti, fx.issuerID, fx.subject)
 	before := upstream.requests.Load()
-	for _, name := range []string{"list_servers", "describe_server", "connection_status"} {
+	namesToCall := []string{"list_servers", "describe_server", "connection_status"}
+	if mode == metamcp.DiscoveryModeCode {
+		namesToCall = []string{"execute"}
+	}
+	for _, name := range namesToCall {
 		arguments := map[string]any{}
+		if name == "execute" {
+			arguments["code"] = "discover"
+		}
 		if name == "describe_server" {
 			arguments["server"] = hosted.slug
 		}
@@ -574,6 +694,27 @@ func TestServeConsent_OrganizationGatewayPicksTools(t *testing.T) {
 	}
 	require.Equal(t, before, upstream.requests.Load(), "organization gateway discovery reuses the consent catalog")
 	require.Zero(t, tokenCalls.Load(), "organization gateway discovery never refreshes credentials")
+	if mode == metamcp.DiscoveryModeCode {
+		upstream.future.Store(true)
+		// A tool added after consent is never callable; one the upstream
+		// already had is callable only if the consent selected it.
+		refused := []string{"remote-counted--tool_002"}
+		if !all {
+			refused = append(refused, "remote-counted--tool_001")
+		}
+		for _, path := range refused {
+			body := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": path}})
+			rejected, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, tokens.AccessToken, body)
+			require.NoError(t, err)
+			require.Contains(t, rejected.Body.String(), `"isError":true`, path)
+			require.Equal(t, before, upstream.requests.Load(), path)
+		}
+		body := makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "remote-counted--tool_000"}})
+		called, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, tokens.AccessToken, body)
+		require.NoError(t, err)
+		require.Contains(t, called.Body.String(), "executed live")
+		require.EqualValues(t, 1, upstream.calls.Load())
+	}
 }
 
 func TestServeConsent_OrganizationGatewayListsOnlyReachableServersClients(t *testing.T) {

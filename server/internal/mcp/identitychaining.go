@@ -107,8 +107,11 @@ func (s *Service) resolveDirectUpstreamToken(ctx context.Context, w http.Respons
 	}
 	// A typed auth client is authoritative: its own material or none, never
 	// identity chaining or another client in its place.
-	if authentication.authClient != nil {
-		if choice.noAuth() {
+	if authentication.authClient != nil || authentication.attachedSession != uuid.Nil {
+		// An attached agent's checked connection is likewise its only
+		// credential: a chained identity is not the connection it was
+		// permitted.
+		if selected && choice.noAuth() {
 			return none, nil
 		}
 		return s.resolveStrictUpstreamToken(ctx, w, logger, authentication, upstreamResource, tunneled, backendIssuerID)
@@ -284,7 +287,7 @@ func (s *Service) metaMemberChainer(gate *metaGateContext, member metaMember, ki
 		case !outcome.Applicable():
 			return "", nil
 		case outcome.Reason == identitychaining.ReasonReauthenticationRequired:
-			return "", &metaMemberError{message: fmt.Sprintf("server %q needs a fresh sign-in to renew enterprise-managed access; sign in to this gateway again", member.slug)}
+			return "", memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q needs a fresh sign-in to renew enterprise-managed access; sign in to this gateway again", member.slug)}}
 		case outcome.Retryable:
 			return "", &metaMemberError{message: fmt.Sprintf("server %q enterprise-managed authorization is temporarily unavailable (%s); retry shortly", member.slug, outcome.Reason)}
 		}

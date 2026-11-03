@@ -21,6 +21,8 @@ export const AUDIT_ACTIONS = [
   "access_role:create",
   "access_role:delete",
   "access_role:update",
+  "agent:connection_block_create",
+  "agent:connection_block_delete",
   "agent:create",
   "agent:delete",
   "agent:owner_loss",
@@ -40,9 +42,19 @@ export const AUDIT_ACTIONS = [
   "ai_tool_decision:set",
   "api_key:create",
   "api_key:revoke",
+  "api_key:update_policy",
   "asset:create",
+  "auth-client:attach-mcp-server",
+  "auth-client:create",
+  "auth-client:detach-mcp-server",
+  "auth-client:disable",
+  "auth-client:enable",
+  "auth-client:update",
+  "auth-client:update-audience",
+  "auth-client:update-headers",
   "assistant:identity_provision",
   "assistant:tool_call",
+  "assistant:update_execution_profile",
   "aws_iam_credential:create",
   "aws_iam_credential:delete",
   "aws_iam_credential:update",
@@ -54,6 +66,10 @@ export const AUDIT_ACTIONS = [
   "billing_metadata:create_stripe_portal",
   "billing_metadata:resume_stripe_subscription",
   "billing_metadata:update",
+  "catalog-promotion:archive",
+  "catalog-promotion:reject",
+  "catalog-promotion:restore",
+  "catalog-promotion:retry-docs",
   "chat_analysis_settings:upsert",
   "chat_session:access",
   "chat_session:handoff_export",
@@ -106,6 +122,9 @@ export const AUDIT_ACTIONS = [
   "identity-provider-connection:verify",
   "internal_session_issuer:disable",
   "internal_session_issuer:enable",
+  "issuance-selection-profile:create",
+  "issuance-selection-profile:delete",
+  "issuance-selection-profile:update",
   "json_web_key:activate",
   "json_web_key:delete",
   "json_web_key:publish",
@@ -126,9 +145,11 @@ export const AUDIT_ACTIONS = [
   "mcp-endpoint:update",
   "mcp-server:create",
   "mcp-server:delete",
+  "mcp-server:promote-catalogue",
   "mcp-server:update",
   "mcp-server:update-scope-pin",
   "mcp-server:update-tool-metadata",
+  "mcp-server:update-upstream-auth-requirement",
   "mcp_approval_request:approve",
   "mcp_approval_request:create",
   "mcp_approval_request:deny",
@@ -241,6 +262,9 @@ export const AUDIT_ACTIONS = [
   "risk_exclusion:create",
   "risk_exclusion:delete",
   "risk_exclusion:update",
+  "risk_policy:approval_approve",
+  "risk_policy:approval_deny",
+  "risk_policy:approval_request",
   "risk_policy:bypass_request_approve",
   "risk_policy:bypass_request_create",
   "risk_policy:bypass_request_deny",
@@ -268,14 +292,17 @@ export const AUDIT_ACTIONS = [
   "skill:archive",
   "skill:create",
   "skill:distribute",
+  "skill:link",
   "skill:restore_version",
   "skill:share_link_create",
   "skill:share_link_revoke",
   "skill:suggestion_approve",
   "skill:suggestion_dismiss",
   "skill:undistribute",
+  "skill:unlink",
   "skill:update",
   "skill:update_distribution",
+  "skill:update_link",
   "skill_efficacy_settings:upsert",
   "spend_rule:archive",
   "spend_rule:create",
@@ -378,6 +405,10 @@ export function staticActionPhrase(action: AuditAction): string {
     case "access_role:delete":
       return "deleted access role";
 
+    case "agent:connection_block_create":
+      return "blocked connection access for agent";
+    case "agent:connection_block_delete":
+      return "unblocked connection access for agent";
     case "agent:create":
       return "created agent";
     case "agent:delete":
@@ -419,13 +450,34 @@ export function staticActionPhrase(action: AuditAction): string {
       return "created API key";
     case "api_key:revoke":
       return "revoked API key";
+    case "api_key:update_policy":
+      return "changed the access policy of API key";
 
     case "asset:create":
       return "uploaded asset";
+
+    case "auth-client:create":
+      return "created auth client";
+    case "auth-client:update":
+      return "renamed auth client";
+    case "auth-client:update-headers":
+      return "changed the headers of auth client";
+    case "auth-client:attach-mcp-server":
+      return "added an MCP server to auth client";
+    case "auth-client:enable":
+      return "enabled auth client";
+    case "auth-client:disable":
+      return "disabled auth client";
+    case "auth-client:detach-mcp-server":
+      return "removed an MCP server from auth client";
+    case "auth-client:update-audience":
+      return "changed who can use auth client";
     case "assistant:identity_provision":
       return "gave a dedicated agent to assistant";
     case "assistant:tool_call":
       return "ran assistant tool";
+    case "assistant:update_execution_profile":
+      return "changed the upstream credentials of assistant";
 
     case "aws_iam_credential:create":
       return "added AWS IAM credential";
@@ -487,6 +539,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "enabled Speakeasy signing with issuer";
     case "internal_session_issuer:disable":
       return "disabled Speakeasy signing with issuer";
+    case "issuance-selection-profile:create":
+      return "set the upstream credentials of headless caller";
+    case "issuance-selection-profile:update":
+      return "changed the upstream credentials of headless caller";
+    case "issuance-selection-profile:delete":
+      return "removed the upstream credential choices of headless caller";
     case "json_web_key:publish":
       return "published JSON Web Key";
     case "json_web_key:activate":
@@ -508,6 +566,14 @@ export function staticActionPhrase(action: AuditAction): string {
       return "resumed Stripe subscription for";
     case "billing_metadata:update":
       return "updated billing metadata";
+    case "catalog-promotion:archive":
+      return "archived catalog promotion candidate";
+    case "catalog-promotion:reject":
+      return "rejected catalog promotion candidate";
+    case "catalog-promotion:restore":
+      return "restored catalog promotion candidate";
+    case "catalog-promotion:retry-docs":
+      return "retried setup documentation for";
     case "chat_analysis_settings:upsert":
       return "updated chat analysis settings";
     case "chat_session:access":
@@ -625,6 +691,8 @@ export function staticActionPhrase(action: AuditAction): string {
     case "meta-mcp:remove_member":
       return "removed meta MCP member";
 
+    case "mcp-server:promote-catalogue":
+      return "published to the MCP catalog";
     case "mcp-server:create":
       return "created MCP server";
     case "mcp-server:update":
@@ -635,6 +703,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated pinned scopes on MCP server";
     case "mcp-server:update-tool-metadata":
       return "updated tool metadata on MCP server";
+    case "mcp-server:update-upstream-auth-requirement":
+      return "changed whether the upstream needs authentication on MCP server";
 
     case "mcp_approval_request:approve":
       return "approved MCP access to";
@@ -869,6 +939,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "deleted risk policy";
     case "risk_policy:trigger":
       return "triggered risk policy";
+    case "risk_policy:approval_request":
+      return "requested approval of a tool call under";
+    case "risk_policy:approval_approve":
+      return "approved a held tool call under";
+    case "risk_policy:approval_deny":
+      return "denied a held tool call under";
     case "risk_policy:bypass_request_create":
       return "requested a bypass for";
     case "risk_policy:bypass_request_approve":
@@ -927,6 +1003,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "stopped distributing skill";
     case "skill:update_distribution":
       return "updated distribution for skill";
+    case "skill:link":
+      return "linked skill";
+    case "skill:update_link":
+      return "updated a link for skill";
+    case "skill:unlink":
+      return "unlinked skill";
     case "skill:share_link_create":
       return "created a share link for";
     case "skill:share_link_revoke":

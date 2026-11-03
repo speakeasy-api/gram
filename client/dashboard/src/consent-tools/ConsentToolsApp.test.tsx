@@ -509,6 +509,85 @@ describe("ConsentToolsApp", () => {
     expect(await screen.findByText("get_thing")).toBeTruthy();
   });
 
+  it("selects only the tools a search shows, keeping earlier picks", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await openPicker(user);
+    await user.click(screen.getByRole("checkbox", { name: /plain_tool/ }));
+    await user.type(screen.getByRole("searchbox"), "thing");
+
+    const selectAll = screen.getByRole("checkbox", { name: /Select all 2/ });
+    expect(selectAll.getAttribute("aria-checked")).toBe("false");
+    await user.click(selectAll);
+
+    expect(formFieldValues("tools")).toEqual([
+      "delete_thing",
+      "get_thing",
+      "plain_tool",
+    ]);
+    expect(formFieldValues("tool_annotations")).toEqual([]);
+    expect(formFieldValues("tool_annotations_live")).toEqual([]);
+  });
+
+  it("clears only the tools a search shows", async () => {
+    const user = userEvent.setup();
+    renderApp();
+    await openPicker(user);
+    await user.click(screen.getByRole("checkbox", { name: /Select all 3/ }));
+    await user.type(screen.getByRole("searchbox"), "thing");
+
+    const selectAll = screen.getByRole("checkbox", { name: /Select all 2/ });
+    expect(selectAll.getAttribute("aria-checked")).toBe("true");
+    await user.click(selectAll);
+
+    expect(formFieldValues("tools")).toEqual(["plain_tool"]);
+  });
+
+  it("picks a group's search matches by name instead of granting it", async () => {
+    listTools.mockResolvedValue({
+      tools: [
+        { name: "get_thing", annotations: { readOnlyHint: true } },
+        { name: "list_things", annotations: { readOnlyHint: true } },
+        { name: "plain_tool" },
+      ],
+      nextCursor: undefined,
+    });
+    const user = userEvent.setup();
+    renderApp();
+    await openPicker(user);
+    await user.click(screen.getByRole("button", { name: /Read/ }));
+    await user.type(screen.getByRole("searchbox"), "get");
+    await user.click(screen.getByRole("checkbox", { name: /Select all 1/ }));
+
+    expect(formFieldValues("tools")).toEqual(["get_thing"]);
+    expect(formFieldValues("tool_annotations")).toEqual([]);
+    expect(formFieldValues("tool_annotations_live")).toEqual([]);
+  });
+
+  it("clearing a granted group's search matches keeps its hidden tools", async () => {
+    listTools.mockResolvedValue({
+      tools: [
+        { name: "get_thing", annotations: { readOnlyHint: true } },
+        { name: "list_things", annotations: { readOnlyHint: true } },
+      ],
+      nextCursor: undefined,
+    });
+    const user = userEvent.setup();
+    renderApp();
+    await openPicker(user);
+    await user.click(screen.getByRole("button", { name: /Read/ }));
+    await user.click(screen.getByRole("checkbox", { name: /Select all 2/ }));
+    expect(formFieldValues("tool_annotations_live")).toEqual(["read_only"]);
+
+    await user.type(screen.getByRole("searchbox"), "get");
+    const selectAll = screen.getByRole("checkbox", { name: /Select all 1/ });
+    expect(selectAll.getAttribute("aria-checked")).toBe("true");
+    await user.click(selectAll);
+
+    expect(formFieldValues("tool_annotations_live")).toEqual([]);
+    expect(formFieldValues("tools")).toEqual(["list_things"]);
+  });
+
   it("discards prefilled grants that no longer match any tool, with notice", async () => {
     renderApp({
       prefill: {

@@ -229,7 +229,13 @@ export function ToolSelectionPanel({
           tools: server.tools.filter((t) => t.name.toLowerCase().includes(q)),
         };
       })
-      .filter((s) => s.tools.length > 0);
+      .filter((s) => {
+        // Keep discovery status and recovery controls visible even when the
+        // tool being searched for has not been loaded yet.
+        return (
+          s.status === "loading" || s.status === "error" || s.tools.length > 0
+        );
+      });
   }, [servers, q]);
 
   useEffect(() => {
@@ -615,12 +621,10 @@ function ServerRow({
         (s) => s.serverId === server.id && s.toolName === tool.name,
       );
       return (
-        <button
+        <label
           key={tool.name}
-          type="button"
-          onClick={() => onToggleTool(server.id, tool.name)}
           className={cn(
-            "hover:bg-accent flex w-full cursor-pointer items-center gap-2 py-1.5 pr-3 text-sm",
+            "hover:bg-accent has-focus-visible:outline-2 has-focus-visible:outline-offset-2 has-focus-visible:[outline-style:auto] flex w-full cursor-pointer items-center gap-2 py-1.5 pr-3 text-sm",
             // Tools sit under their server's chevron. A flattened single
             // server has no header above them, so the indent would leave
             // them floating away from the edge they belong to.
@@ -629,11 +633,11 @@ function ServerRow({
         >
           <Checkbox
             checked={isSelected}
-            className="focus-visible:border-input pointer-events-none focus-visible:ring-0"
-            tabIndex={-1}
+            onCheckedChange={() => onToggleTool(server.id, tool.name)}
+            className="focus-visible:border-input focus-visible:ring-0 focus-visible:outline-none"
           />
           <HighlightMatch text={tool.name} query={q} className="truncate" />
-        </button>
+        </label>
       );
     });
   }

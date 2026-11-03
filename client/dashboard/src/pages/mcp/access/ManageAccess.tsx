@@ -1,3 +1,4 @@
+import type { ToolSource } from "@/pages/access/useServerTools";
 import { supportsAudienceReading } from "./manageAccessState";
 import {
   InlineChoice,
@@ -38,6 +39,7 @@ import {
 } from "@/pages/access/directorySourcesForRole";
 import { RoleDirectorySourceLine } from "./RoleDirectorySourceLine";
 import {
+  Ban,
   Bot,
   ChevronLeft,
   ChevronRight,
@@ -66,6 +68,7 @@ import { ToolNarrowingDialog } from "./ToolNarrowingDialog";
 import { pageCount, pageOf } from "./manageAccessState";
 import {
   accessSummary,
+  blockedScopes,
   buildAccessRows,
   cappingBlocks,
   keptIndividually,
@@ -117,6 +120,7 @@ export function ManageAccess({
   entries,
   version,
   toolCatalog,
+  toolSource,
   isLoading,
   rolePlugins,
 }: {
@@ -127,6 +131,7 @@ export function ManageAccess({
   version: string;
   /** The server's tools, when this backend exposes a catalogue. */
   toolCatalog?: ToolSelectionTool[];
+  toolSource?: ToolSource;
   isLoading: boolean;
   rolePlugins?: ResourceAudienceRolePlugin[];
 }): JSX.Element {
@@ -496,6 +501,7 @@ export function ManageAccess({
           serverId={resourceId}
           serverName={resourceName}
           catalog={narrowing.catalog ?? toolCatalog}
+          toolSource={toolSource}
           limitedBy={narrowing.limitedBy}
           tools={narrowing.tools}
           dispositions={narrowing.dispositions}
@@ -616,6 +622,7 @@ function PrincipalRow({
   const reaches = inheritedGrants(row).length > 0;
   const canRemove = canManage;
   const showFaces = row.kind === "role" && faces.length > 0;
+  const blocked = blockedScopes(row, catalog).length > 0;
 
   return (
     <div className="border-border col-span-full grid grid-cols-subgrid border-b last:border-b-0">
@@ -643,9 +650,18 @@ function PrincipalRow({
           />
         </div>
 
-        <Text muted small className="min-w-0 truncate">
-          {accessSummary(row, catalog)}
-        </Text>
+        {/* A blocking row outranks grants reaching the same people, so it
+            reads as an exception rather than as an empty row. */}
+        {blocked ? (
+          <Text small destructive className="flex min-w-0 items-center gap-1.5">
+            <Ban className="h-3.5 w-3.5 shrink-0" aria-hidden />
+            <span className="truncate">{accessSummary(row, catalog)}</span>
+          </Text>
+        ) : (
+          <Text muted small className="min-w-0 truncate">
+            {accessSummary(row, catalog)}
+          </Text>
+        )}
 
         {rolePlugins !== undefined && (
           <div className="min-w-0">
@@ -804,7 +820,7 @@ function ScopeLine({
         </Text>
       </div>
       {options.length === 0 ? (
-        <Text small className="px-1">
+        <Text small destructive={state.blocked} className="px-1">
           {state.value}
         </Text>
       ) : (
@@ -817,6 +833,11 @@ function ScopeLine({
             value={state.value}
             disabled={pending || !canManage}
             options={options}
+            className={
+              state.blocked
+                ? "text-default-destructive hover:text-default-destructive"
+                : undefined
+            }
           />
         </RequireScope>
       )}
@@ -869,12 +890,15 @@ function scopeOptions({
   // A block this row cannot lift closes the line, and nothing granted here
   // would survive it: the change has to be made where the block is.
   if (!state.granted && state.capped) return [];
+  // Closing a line something else grants writes a block, which then
+  // outranks those grants, so the choice is named for what it leaves.
+  const revokeLabel = state.subtracts ? "Blocked" : "No access";
 
   if (scope !== "use") {
     // View and manage cover the server itself; there is nothing inside one
     // to narrow, so the line is on or off.
     if (state.granted) {
-      return [{ label: "No access", onSelect: onRevoke }];
+      return [{ label: revokeLabel, onSelect: onRevoke }];
     }
     return [{ label: "Allowed", onSelect: onAllow }];
   }
@@ -906,7 +930,7 @@ function scopeOptions({
     }
   }
   if (state.canRevoke) {
-    options.push({ label: "No access", onSelect: onRevoke });
+    options.push({ label: revokeLabel, onSelect: onRevoke });
   }
   return options;
 }

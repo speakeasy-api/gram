@@ -15,8 +15,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/killswitches/mcptoolexecution"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 )
@@ -30,7 +30,7 @@ func TestServePublic_HostedToolsCallKillswitch(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 	require.NotEmpty(t, authCtx.UserID)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, "killswitch-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "killswitch-"+uuid.NewString()[:8])
 	endpointSlug := "killswitch-" + uuid.NewString()
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
 	mcpServer := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{}, issuerID)
@@ -103,7 +103,7 @@ func TestServePublic_LegacyFallbackHostedToolsCallKillswitch(t *testing.T) {
 
 	toolset, token := createIssuerGatedLegacyToolset(t, ctx, ti, authCtx, "ks-fallback-")
 	// Canonical wrapper exposed on a different slug, so the toolset slug misses mcp_endpoints.
-	createToolsetMcpEndpointWithID(t, ctx, ti.conn, toolset.ID, *authCtx.ProjectID, toolset.ID, "ks-canonical-"+uuid.NewString(), "public", uuid.NullUUID{}, toolset.UserSessionIssuerID.UUID)
+	testenv.SetHostedMCP(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, testenv.HostedMCP{Slug: "ks-canonical-" + uuid.NewString()})
 
 	before, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsCallBody("missing_tool"), token, nil)
 	require.NoError(t, err)
@@ -118,41 +118,14 @@ func TestServePublic_LegacyFallbackHostedToolsCallKillswitch(t *testing.T) {
 	require.JSONEq(t, `{"jsonrpc":"2.0","id":3,"error":{"code":-32003,"message":"Tool calls paused for maintenance.","data":{"code":"mcp_tool_calls_paused"}}}`, paused.Body.String())
 }
 
-// Without a canonical wrapper the fallback has no fronting server, so a kill
-// switch keyed on the toolset id does not apply.
-func TestServePublic_LegacyFallbackWithoutWrapperSkipsHostedKillswitch(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestMCPService(t)
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	require.True(t, ok)
-	require.NotNil(t, authCtx.ProjectID)
-	require.NotEmpty(t, authCtx.UserID)
-
-	toolset, token := createIssuerGatedLegacyToolset(t, ctx, ti, authCtx, "ks-nowrap-")
-	insertHostedKillswitchPrescription(t, ctx, ti, authCtx.ActiveOrganizationID, authCtx.UserID, toolset.ID, "Tool calls paused for maintenance.")
-
-	response, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeToolsCallBody("missing_tool"), token, nil)
-	require.NoError(t, err)
-	require.Equal(t, http.StatusOK, response.Code)
-	require.Contains(t, response.Body.String(), "tool not found")
-	require.NotContains(t, response.Body.String(), "mcp_tool_calls_paused")
-}
-
 // createIssuerGatedLegacyToolset creates a public issuer-gated toolset with no
 // mcp_endpoints row and a user-session bearer for the in-toolset gate.
-func createIssuerGatedLegacyToolset(t *testing.T, ctx context.Context, ti *testInstance, authCtx *contextvalues.AuthContext, slugPrefix string) (toolsetsrepo.Toolset, string) {
+func createIssuerGatedLegacyToolset(t *testing.T, ctx context.Context, ti *testInstance, authCtx *contextvalues.AuthContext, slugPrefix string) (hostedToolset, string) {
 	t.Helper()
 
-	repo := toolsetsrepo.New(ti.conn)
-	toolset := createPublicMCPToolset(t, ctx, repo, authCtx, slugPrefix+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, slugPrefix+uuid.NewString()[:8])
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
-	toolset, err := repo.UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-		UserSessionIssuerID: uuid.NullUUID{UUID: issuerID, Valid: true},
-		Slug:                toolset.Slug,
-		ProjectID:           toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	toolset = setToolsetIssuer(t, ctx, ti.conn, toolset.ProjectID, toolset, issuerID)
 
 	subject := urn.NewUserSubject(authCtx.UserID)
 	token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{

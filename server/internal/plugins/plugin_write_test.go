@@ -5,6 +5,7 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net/url"
 	"testing"
 	"time"
 
@@ -22,6 +23,7 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -153,6 +155,21 @@ func TestGatewayPluginAttachmentWithEnabledGate(t *testing.T) {
 	}
 	require.NoError(t, json.Unmarshal(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"], &config))
 	require.Equal(t, "https://app.getgram.ai/mcp/gateway-test", config.MCPServers["Gateway"].URL)
+
+	// A stored platform default host moves the gateway's platform address; the
+	// custom-domain and private addresses below keep their own hosts.
+	ti.service.WithOrganizationHosts(orghost.New(orghost.Config{
+		ServerURL:                  &url.URL{Scheme: "https", Host: "app.getgram.ai"},
+		SiteURL:                    nil,
+		PlatformHosts:              map[string]string{"platform.example.test": "https://platform.example.test"},
+		LegacyDefaultHost:          nil,
+		NewOrganizationDefaultHost: nil,
+	}))
+	setOrganizationDefaultHost(t, ctx, ti, "https://platform.example.test")
+	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
+	require.NoError(t, err)
+	require.NoError(t, json.Unmarshal(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"], &config))
+	require.Equal(t, "https://platform.example.test/mcp/gateway-test", config.MCPServers["Gateway"].URL)
 
 	domain := inactiveDomain
 	//nolint:glint // notestingrawsql: This test needs an addressable domain without exercising domain provisioning.

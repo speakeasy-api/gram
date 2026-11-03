@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
@@ -35,6 +36,8 @@ func TestMain(m *testing.M) {
 		log.Fatalf("launch test postgres: %v", err)
 	}
 	cloneTestDatabase = cloneFunc
+	// Tests write upstream_client grants unless they turn the gate off.
+	authz.SetUpstreamSelectorWriteGate(func(context.Context, string) (bool, error) { return true, nil })
 	code := m.Run()
 	if err := container.Terminate(ctx); err != nil {
 		log.Fatalf("terminate test postgres: %v", err)

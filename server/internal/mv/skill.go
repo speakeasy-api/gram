@@ -34,29 +34,30 @@ func BuildSkillFeedbackListView(rows []repo.SkillFeedback) []*gen.SkillFeedback 
 	return result
 }
 
-func BuildSkillView(skill repo.Skill, latestVersionID uuid.UUID, versionCount int64, hasValidVersion bool, shareToken pgtype.Text) *types.Skill {
+func BuildSkillView(skill repo.Skill, latestVersionID uuid.UUID, versionCount int64, hasValidVersion bool, shareToken pgtype.Text, lastLoadedOverMCPAt pgtype.Timestamptz) *types.Skill {
 	var latestVersionIDValue *string
 	if latestVersionID != uuid.Nil {
 		latestVersionIDValue = conv.PtrEmpty(latestVersionID.String())
 	}
 	return &types.Skill{
-		ID:              skill.ID.String(),
-		ProjectID:       skill.ProjectID.String(),
-		Name:            skill.Name,
-		DisplayName:     skill.DisplayName,
-		Summary:         conv.FromPGText[string](skill.Summary),
-		SourceKind:      skill.SourceKind,
-		Classification:  skill.Classification,
-		Tags:            skillTagsOrEmpty(skill.Tags),
-		LatestVersionID: latestVersionIDValue,
-		VersionCount:    versionCount,
-		HasValidVersion: hasValidVersion,
-		FirstSeenAt:     conv.PtrEmpty(conv.FromPGTimestamptz(skill.FirstSeenAt)),
-		LastSeenAt:      conv.PtrEmpty(conv.FromPGTimestamptz(skill.LastSeenAt)),
-		SeenCount:       skill.SeenCount,
-		ShareToken:      conv.FromPGText[string](shareToken),
-		CreatedAt:       conv.FromPGTimestamptz(skill.CreatedAt),
-		UpdatedAt:       conv.FromPGTimestamptz(skill.UpdatedAt),
+		ID:                  skill.ID.String(),
+		ProjectID:           skill.ProjectID.String(),
+		Name:                skill.Name,
+		DisplayName:         skill.DisplayName,
+		Summary:             conv.FromPGText[string](skill.Summary),
+		SourceKind:          skill.SourceKind,
+		Classification:      skill.Classification,
+		Tags:                skillTagsOrEmpty(skill.Tags),
+		LatestVersionID:     latestVersionIDValue,
+		VersionCount:        versionCount,
+		HasValidVersion:     hasValidVersion,
+		FirstSeenAt:         conv.PtrEmpty(conv.FromPGTimestamptz(skill.FirstSeenAt)),
+		LastSeenAt:          conv.PtrEmpty(conv.FromPGTimestamptz(skill.LastSeenAt)),
+		SeenCount:           skill.SeenCount,
+		LastLoadedOverMcpAt: conv.PtrEmpty(conv.FromPGTimestamptz(lastLoadedOverMCPAt)),
+		ShareToken:          conv.FromPGText[string](shareToken),
+		CreatedAt:           conv.FromPGTimestamptz(skill.CreatedAt),
+		UpdatedAt:           conv.FromPGTimestamptz(skill.UpdatedAt),
 	}
 }
 
@@ -70,7 +71,7 @@ func skillTagsOrEmpty(tags []string) []string {
 func BuildSkillListView(rows []repo.ListSkillsRow) []*types.Skill {
 	result := make([]*types.Skill, len(rows))
 	for i, row := range rows {
-		result[i] = BuildSkillView(row.Skill, row.LatestVersionID, row.VersionCount, row.HasValidVersion, row.ShareToken)
+		result[i] = BuildSkillView(row.Skill, row.LatestVersionID, row.VersionCount, row.HasValidVersion, row.ShareToken, row.LastLoadedOverMcpAt)
 	}
 
 	return result
@@ -143,23 +144,28 @@ func BuildSkillVersionListView(rows []repo.ListSkillVersionsRow, frontmatter fun
 	return result, nil
 }
 
-func BuildSkillDistributionView(distribution repo.SkillDistribution, skillName, skillDisplayName string, pluginName, assistantName *string, resolvedVersionID uuid.UUID) *types.SkillDistribution {
+// BuildSkillDistributionView renders one distribution. lastLoadedOverMCPAt is
+// the newest MCP activation of the skill (invalid when agents never loaded it
+// over MCP); it describes the skill, so every distribution of it carries the
+// same value.
+func BuildSkillDistributionView(distribution repo.SkillDistribution, skillName, skillDisplayName string, pluginName, assistantName *string, resolvedVersionID uuid.UUID, lastLoadedOverMCPAt pgtype.Timestamptz) *types.SkillDistribution {
 	return &types.SkillDistribution{
-		ID:                distribution.ID.String(),
-		ProjectID:         distribution.ProjectID.String(),
-		SkillID:           distribution.SkillID.String(),
-		SkillName:         skillName,
-		SkillDisplayName:  skillDisplayName,
-		PluginID:          conv.FromNullableUUID(distribution.PluginID),
-		PluginName:        pluginName,
-		AssistantID:       conv.FromNullableUUID(distribution.AssistantID),
-		AssistantName:     assistantName,
-		PinnedVersionID:   conv.FromNullableUUID(distribution.PinnedVersionID),
-		ResolvedVersionID: resolvedVersionID.String(),
-		Channel:           distribution.Channel,
-		CreatedByUserID:   distribution.CreatedByUserID,
-		CreatedAt:         conv.FromPGTimestamptz(distribution.CreatedAt),
-		UpdatedAt:         conv.FromPGTimestamptz(distribution.UpdatedAt),
+		ID:                  distribution.ID.String(),
+		ProjectID:           distribution.ProjectID.String(),
+		SkillID:             distribution.SkillID.String(),
+		SkillName:           skillName,
+		SkillDisplayName:    skillDisplayName,
+		PluginID:            conv.FromNullableUUID(distribution.PluginID),
+		PluginName:          pluginName,
+		AssistantID:         conv.FromNullableUUID(distribution.AssistantID),
+		AssistantName:       assistantName,
+		PinnedVersionID:     conv.FromNullableUUID(distribution.PinnedVersionID),
+		ResolvedVersionID:   resolvedVersionID.String(),
+		Channel:             distribution.Channel,
+		CreatedByUserID:     distribution.CreatedByUserID,
+		CreatedAt:           conv.FromPGTimestamptz(distribution.CreatedAt),
+		UpdatedAt:           conv.FromPGTimestamptz(distribution.UpdatedAt),
+		LastLoadedOverMcpAt: conv.PtrEmpty(conv.FromPGTimestamptz(lastLoadedOverMCPAt)),
 	}
 }
 
@@ -173,6 +179,7 @@ func BuildSkillDistributionListView(rows []repo.ListActiveSkillDistributionsRow)
 			PinnedVersionID: conv.FromNullableUUID(row.SkillDistribution.PinnedVersionID), ResolvedVersionID: row.ResolvedVersionID.String(),
 			Channel: row.SkillDistribution.Channel, CreatedByUserID: row.SkillDistribution.CreatedByUserID,
 			CreatedAt: conv.FromPGTimestamptz(row.SkillDistribution.CreatedAt), UpdatedAt: conv.FromPGTimestamptz(row.SkillDistribution.UpdatedAt),
+			LastLoadedOverMcpAt: conv.PtrEmpty(conv.FromPGTimestamptz(row.LastLoadedOverMcpAt)),
 		}
 	}
 

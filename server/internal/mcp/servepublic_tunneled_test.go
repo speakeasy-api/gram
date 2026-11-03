@@ -49,7 +49,20 @@ func requestID(body string) string {
 	return string(req.ID)
 }
 
+// requestMethod reads the JSON-RPC method so a tool name or argument that
+// mentions another method cannot select the wrong fake response.
+func requestMethod(body string) string {
+	var req struct {
+		Method string `json:"method"`
+	}
+	if err := json.Unmarshal([]byte(body), &req); err != nil {
+		return ""
+	}
+	return req.Method
+}
+
 type fakeTunnelGateway struct {
+	toolNames      []string
 	t              *testing.T
 	agentSessionID string
 	// backendSessionID is the Mcp-Session-Id the fake customer backend mints
@@ -139,15 +152,16 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 		w.WriteHeader(http.StatusOK)
 		return
 	case http.MethodPost:
-		if strings.Contains(buf.String(), `"server/discover"`) {
+		method := requestMethod(buf.String())
+		if method == "server/discover" {
 			http.Error(w, "method not found", http.StatusNotFound)
 			return
 		}
-		if strings.Contains(buf.String(), `"notifications/initialized"`) {
+		if method == "notifications/initialized" {
 			w.WriteHeader(http.StatusAccepted)
 			return
 		}
-		if strings.Contains(buf.String(), `"initialize"`) {
+		if method == "initialize" {
 			if g.backendSessionID != "" {
 				w.Header().Set("Mcp-Session-Id", g.backendSessionID)
 			}
@@ -159,7 +173,16 @@ func (g *fakeTunnelGateway) ServeHTTP(w http.ResponseWriter, r *http.Request) {
 			http.Error(w, "unknown session", http.StatusNotFound)
 			return
 		}
-		if strings.Contains(buf.String(), `"tools/call"`) {
+		if g.toolNames != nil && method == "tools/list" {
+			tools := make([]map[string]any, 0, len(g.toolNames))
+			for _, name := range g.toolNames {
+				tools = append(tools, map[string]any{"name": name, "inputSchema": map[string]any{"type": "object"}})
+			}
+			w.Header().Set("Content-Type", "application/json")
+			_ = json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": json.RawMessage(requestID(buf.String())), "result": map[string]any{"tools": tools}})
+			return
+		}
+		if method == "tools/call" {
 			w.Header().Set("Content-Type", "application/json")
 			_, _ = fmt.Fprint(w, `{"jsonrpc":"2.0","id":`+requestID(buf.String())+`,"result":{"content":[{"type":"text","text":"pong through the tunnel"}],"isError":false}}`)
 			return

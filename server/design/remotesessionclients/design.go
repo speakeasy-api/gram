@@ -865,6 +865,12 @@ var UpdateRemoteSessionClientForm = Type("UpdateRemoteSessionClientForm", func()
 	Attribute("id", String, "The remote_session_client id.", func() {
 		Format(FormatUUID)
 	})
+	Attribute("client_id", String, "Correct the client_id registered with the issuer. Refused for Client ID Metadata Document (CIMD) clients and clients managed by an identity provider connection. A changed value revokes every remote session obtained through the client, so each user must reconnect. Omit to leave unchanged.", func() {
+		MinLength(1)
+	})
+	Attribute("display_name", String, "Replace the client's display name. Pass an empty string to clear it so the client shows its client_id. Omit to leave unchanged.", func() {
+		MaxLength(200)
+	})
 	Attribute("client_secret", String, "Rotate the client secret. Speakeasy re-encrypts before persisting.")
 	Attribute("token_endpoint_auth_method", String, "Change how the client authenticates at the issuer's token endpoint.", tokenEndpointAuthMethodEnum)
 	Attribute("token_endpoint_auth_audience_format", String, "Change the aud claim format used in private_key_jwt assertions. Omit to leave unchanged.", tokenEndpointAuthAudienceFormatEnum)
@@ -949,6 +955,7 @@ var RemoteSessionClient = Type("RemoteSessionClient", func() {
 		})
 	})
 	Attribute("client_id", String, "The client_id used to identify this client at the issuer's token and authorization endpoints.")
+	Attribute("display_name", String, "Administrator-chosen name for the client. Null when unset, in which case the client is shown by its client_id.")
 	Attribute("client_id_metadata_uri", String, "When set, the client is in Client ID Metadata Document (CIMD) mode: Speakeasy hosts its OAuth client metadata document at this URL and uses it as the client_id. Null for non-CIMD clients.")
 	Attribute("client_id_issued_at", String, func() {
 		Format(FormatDateTime)

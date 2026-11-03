@@ -6,6 +6,7 @@ import (
 	"slices"
 
 	gen "github.com/speakeasy-api/gram/server/gen/analytics"
+	signalquery "github.com/speakeasy-api/gram/server/internal/telemetry/analytics/signals"
 )
 
 // Dimension value listing guardrails.
@@ -21,6 +22,10 @@ type ValuesRequest struct {
 	FromUnixNano int64
 	ToUnixNano   int64
 	Limit        int
+	// SignalScope is required for signal attribute discovery.
+	SignalScope *signalquery.Scope
+	// Attribute is an exact label key when Dimension is attribute.
+	Attribute string
 }
 
 // DimensionValue is one value and how many rows at the dataset's grain
@@ -28,6 +33,8 @@ type ValuesRequest struct {
 type DimensionValue struct {
 	Value string
 	Count int64
+	// Present distinguishes missing signal labels from present empty values.
+	Present *bool
 }
 
 // CompileValues turns a values request into SQL. A dimension with a Typeahead
@@ -102,7 +109,7 @@ func (p *Plan) RunValues(ctx context.Context, conn Querier) ([]DimensionValue, e
 		if err := rows.Scan(&value, &count); err != nil {
 			return nil, fmt.Errorf("scan dimension value: %w", err)
 		}
-		out = append(out, DimensionValue{Value: value, Count: int64(min(count, uint64(1<<63-1)))})
+		out = append(out, DimensionValue{Value: value, Count: int64(min(count, uint64(1<<63-1))), Present: nil})
 	}
 	if err := rows.Err(); err != nil {
 		return nil, fmt.Errorf("read dimension values: %w", err)
@@ -120,6 +127,11 @@ func (s *Service) DimensionValues(ctx context.Context, payload *gen.DimensionVal
 	if err := s.authorizeDataset(ctx, authCtx, payload.Dataset); err != nil {
 		return nil, err
 	}
+	if payload.Dataset == signalquery.Dataset {
+		if err := s.requireSignals(ctx, authCtx.ActiveOrganizationID); err != nil {
+			return nil, err
+		}
+	}
 
 	from, to, err := ParseWindow(payload.From, payload.To)
 	if err != nil {
@@ -131,6 +143,11 @@ func (s *Service) DimensionValues(ctx context.Context, payload *gen.DimensionVal
 		FromUnixNano: from,
 		ToUnixNano:   to,
 		Limit:        payload.Limit,
+		SignalScope:  nil,
+		Attribute:    deref(payload.Attribute),
+	}
+	if payload.SignalScope != nil {
+		req.SignalScope = &signalquery.Scope{SensorID: payload.SignalScope.SensorID, Trigger: payload.SignalScope.Trigger, RunID: deref(payload.SignalScope.RunID)}
 	}
 
 	tenant := Tenant{OrganizationID: authCtx.ActiveOrganizationID, ProjectID: authCtx.ProjectID.String()}
@@ -141,7 +158,7 @@ func (s *Service) DimensionValues(ctx context.Context, payload *gen.DimensionVal
 
 	out := make([]*gen.AnalyticsDimensionValue, 0, len(values))
 	for _, v := range values {
-		out = append(out, &gen.AnalyticsDimensionValue{Value: v.Value, Count: v.Count})
+		out = append(out, &gen.AnalyticsDimensionValue{Value: v.Value, Count: v.Count, Present: v.Present})
 	}
 	return &gen.AnalyticsDimensionValuesResult{Dataset: req.Dataset, Dimension: req.Dimension, Values: out}, nil
 }

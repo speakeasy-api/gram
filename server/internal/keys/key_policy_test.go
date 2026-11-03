@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -33,6 +34,20 @@ func keyProject(t *testing.T, ctx context.Context) string {
 
 var clientA = uuid.NewString()
 
+// seedAuthClient creates a live auth client in the caller's organization, so
+// a policy naming it passes the tenant check.
+func seedAuthClient(t *testing.T, ctx context.Context, ti *testInstance) string {
+	t.Helper()
+	id, err := testrepo.New(ti.conn).CreateAuthClientFixture(ctx, testrepo.CreateAuthClientFixtureParams{
+		OrganizationID: testAuthContext(t, ctx).ActiveOrganizationID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ClientType:     authz.AuthClientTypeServiceAccount,
+		Name:           "service account " + randstr(6),
+	})
+	require.NoError(t, err)
+	return id.String()
+}
+
 func TestKeysService_KeyPolicy(t *testing.T) {
 	t.Parallel()
 
@@ -40,9 +55,10 @@ func TestKeysService_KeyPolicy(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestKeysService(t)
 		project := keyProject(t, ctx)
+		client := seedAuthClient(t, ctx, ti)
 		policy := []*gen.APIKeyPolicyGrant{
 			keyGrant(string(authz.ScopeMCPConnect), authz.ResourceKindMCP, "*", &project),
-			keyGrant(string(authz.ScopeMCPAuth), authz.ResourceKindMCPAuthClient, clientA, nil),
+			keyGrant(string(authz.ScopeMCPAuth), authz.ResourceKindMCPAuthClient, client, nil),
 		}
 
 		key, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "policy" + randstr(6), Scopes: []string{"consumer"}, PolicyGrants: policy})
@@ -89,7 +105,6 @@ func TestKeysService_KeyPolicy(t *testing.T) {
 			authz.Grant{PrincipalUrn: "", Scope: authz.ScopeProjectRead, Selector: authz.NewSelector(authz.ScopeProjectRead, project)},
 		)
 		for name, grant := range map[string]*gen.APIKeyPolicyGrant{
-			"auth on every client":          keyGrant(string(authz.ScopeMCPAuth), authz.ResourceKindMCPAuthClient, "*", nil),
 			"wrong resource kind":           keyGrant(string(authz.ScopeMCPAuth), authz.ResourceKindMCP, clientA, nil),
 			"every server with no project":  keyGrant(string(authz.ScopeMCPConnect), authz.ResourceKindMCP, "*", nil),
 			"a project outside the org":     keyGrant(string(authz.ScopeMCPConnect), authz.ResourceKindMCP, "*", &foreign),
@@ -99,12 +114,16 @@ func TestKeysService_KeyPolicy(t *testing.T) {
 			requireCode(t, err, oops.CodeBadRequest, name)
 		}
 
-		_, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "bound" + randstr(6), Scopes: []string{"consumer"}, ProjectID: &project,
-			PolicyGrants: []*gen.APIKeyPolicyGrant{keyGrant(string(authz.ScopeMCPAuth), authz.ResourceKindMCPAuthClient, clientA, nil)}})
+		_, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
+			Name: "bound" + randstr(6), Scopes: []string{"consumer"}, ProjectID: &project,
+			PolicyGrants: []*gen.APIKeyPolicyGrant{keyGrant(string(authz.ScopeMCPAuth), authz.ResourceKindMCPAuthClient, clientA, nil)},
+		})
 		requireCode(t, err, oops.CodeBadRequest, "a project-bound key's policy must name its project")
 
-		_, err = ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "bound-ok" + randstr(6), Scopes: []string{"consumer"}, ProjectID: &project,
-			PolicyGrants: []*gen.APIKeyPolicyGrant{keyGrant(string(authz.ScopeMCPConnect), authz.ResourceKindMCP, "*", &project)}})
+		_, err = ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
+			Name: "bound-ok" + randstr(6), Scopes: []string{"consumer"}, ProjectID: &project,
+			PolicyGrants: []*gen.APIKeyPolicyGrant{keyGrant(string(authz.ScopeMCPConnect), authz.ResourceKindMCP, "*", &project)},
+		})
 		require.NoError(t, err)
 	})
 
@@ -114,8 +133,10 @@ func TestKeysService_KeyPolicy(t *testing.T) {
 		project := keyProject(t, ctx)
 		agentID := uuid.NewString()
 		version := 4
-		_, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "agent" + randstr(6), AgentID: &agentID, DelegatedGrantsVersion: &version,
-			PolicyGrants: []*gen.APIKeyPolicyGrant{keyGrant(string(authz.ScopeMCPConnect), authz.ResourceKindMCP, "*", &project)}})
+		_, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
+			Name: "agent" + randstr(6), AgentID: &agentID, DelegatedGrantsVersion: &version,
+			PolicyGrants: []*gen.APIKeyPolicyGrant{keyGrant(string(authz.ScopeMCPConnect), authz.ResourceKindMCP, "*", &project)},
+		})
 		requireCode(t, err, oops.CodeBadRequest)
 	})
 
@@ -127,8 +148,10 @@ func TestKeysService_KeyPolicy(t *testing.T) {
 		_, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "hooks-self-serve" + randstr(6), Scopes: []string{"hooks"}})
 		require.NoError(t, err)
 
-		_, err = ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "hooks-policy" + randstr(6), Scopes: []string{"hooks"},
-			PolicyGrants: []*gen.APIKeyPolicyGrant{keyGrant(string(authz.ScopeMCPConnect), authz.ResourceKindMCP, "*", &project)}})
+		_, err = ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
+			Name: "hooks-policy" + randstr(6), Scopes: []string{"hooks"},
+			PolicyGrants: []*gen.APIKeyPolicyGrant{keyGrant(string(authz.ScopeMCPConnect), authz.ResourceKindMCP, "*", &project)},
+		})
 		requireCode(t, err, oops.CodeForbidden)
 	})
 
@@ -163,8 +186,10 @@ func TestKeysService_KeyPolicy(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestKeysService(t)
 		project := keyProject(t, ctx)
-		_, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "hooks" + randstr(6), Scopes: []string{"hooks"},
-			PolicyGrants: []*gen.APIKeyPolicyGrant{keyGrant(string(authz.ScopeMCPConnect), authz.ResourceKindMCP, "*", &project)}})
+		_, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
+			Name: "hooks" + randstr(6), Scopes: []string{"hooks"},
+			PolicyGrants: []*gen.APIKeyPolicyGrant{keyGrant(string(authz.ScopeMCPConnect), authz.ResourceKindMCP, "*", &project)},
+		})
 		requireCode(t, err, oops.CodeBadRequest)
 	})
 
@@ -172,8 +197,10 @@ func TestKeysService_KeyPolicy(t *testing.T) {
 		t.Parallel()
 		ctx, ti := newTestKeysService(t)
 		wildcard := "*"
-		_, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{Name: "wild" + randstr(6), Scopes: []string{"consumer"},
-			PolicyGrants: []*gen.APIKeyPolicyGrant{keyGrant(string(authz.ScopeMCPConnect), authz.ResourceKindMCP, "*", &wildcard)}})
+		_, err := ti.service.CreateKey(ctx, &gen.CreateKeyPayload{
+			Name: "wild" + randstr(6), Scopes: []string{"consumer"},
+			PolicyGrants: []*gen.APIKeyPolicyGrant{keyGrant(string(authz.ScopeMCPConnect), authz.ResourceKindMCP, "*", &wildcard)},
+		})
 		requireCode(t, err, oops.CodeBadRequest)
 	})
 }

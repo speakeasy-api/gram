@@ -7,6 +7,7 @@ import (
 	"strings"
 
 	"github.com/Masterminds/squirrel"
+	signalquery "github.com/speakeasy-api/gram/server/internal/telemetry/analytics/signals"
 )
 
 // ErrorCode names what failed in a request, so a client can correct it
@@ -90,6 +91,8 @@ type Request struct {
 	OrderBy      []OrderBy
 	Limit        int
 	Ungrouped    bool
+	// SignalQuery selects the catalog's named signal-measurement contract.
+	SignalQuery *signalquery.Request
 }
 
 // Reads lists the fields the request touches, which is what LoadLookups
@@ -166,7 +169,7 @@ func Compile(catalog *Catalog, tenant Tenant, lookups LookupMaps, req Request) (
 		grain = TimeGrainNone
 	}
 	if !slices.Contains(timeGrains, grain) {
-		return nil, newError(ErrUnsupportedGrain, name, "grain", string(grain), fmt.Sprintf("grain %q is not one of none, hour, day, week, month", grain))
+		return nil, newError(ErrUnsupportedGrain, name, "grain", string(grain), fmt.Sprintf("grain %q is not one of none, minute, hour, day, week, month", grain))
 	}
 	if req.Ungrouped && ds.Kind == KindMetric {
 		return nil, newError(ErrAggregatesOnly, name, "ungrouped", "true", fmt.Sprintf("dataset %s answers counts and other aggregates, never its rows; group by dimensions instead", name))
@@ -508,6 +511,8 @@ func spanExceeds(from, to, limit int64) bool {
 func bucketExpr(grain TimeGrain, timeExpr string) string {
 	ts := fmt.Sprintf("fromUnixTimestamp64Nano(%s, 'UTC')", timeExpr)
 	switch grain {
+	case TimeGrainMinute:
+		return fmt.Sprintf("toStartOfMinute(fromUnixTimestamp64Nano(%s, 'UTC'))", timeExpr)
 	case TimeGrainHour:
 		return fmt.Sprintf("toStartOfHour(%s)", ts)
 	case TimeGrainDay:

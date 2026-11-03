@@ -2,19 +2,13 @@ import { ClaudeCodeSettingsInstall } from "@/components/claude-code-settings-ins
 import { Button } from "@/components/ui/Button";
 import { CopyButton } from "@/components/ui/CopyButton";
 import { Dialog } from "@/components/ui/Dialog";
-import {
-  Tooltip,
-  TooltipContent,
-  TooltipTrigger,
-} from "@/components/ui/Tooltip";
-import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
 import { useMarketplaceSettings } from "@gram/client/react-query/marketplaceSettings";
 import { usePublishStatus } from "@gram/client/react-query/publishStatus";
 import { ExternalLink, Sparkles } from "lucide-react";
 import { useEffect, useState } from "react";
 import { Link } from "react-router";
-import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
+import { AgentProviderPicker } from "@/components/agent-providers/AgentProviderPicker";
 import {
   ACTIVE_AGENT_PROVIDER_IDS,
   agentProvidersForSurface,
@@ -373,48 +367,12 @@ export function HooksSetupDialog({
 
         {showPublishedPanel && publishStatus?.repoUrl && <PublishedRepoPanel />}
 
-        <div className="flex flex-wrap gap-3">
-          {providers.map((p) => {
-            const button = (
-              <button
-                key={p.id}
-                onClick={() => {
-                  void (p.available && setSelected(p.id));
-                }}
-                disabled={!p.available}
-                className={cn(
-                  "relative flex items-center gap-2 border px-3 py-2 text-sm font-medium transition-colors",
-                  selected === p.id
-                    ? "border-primary bg-primary/5"
-                    : "border-border hover:border-primary/50 hover:bg-muted/50",
-                  !p.available &&
-                    "hover:border-border cursor-not-allowed opacity-50 hover:bg-transparent",
-                )}
-              >
-                <AgentProviderIcon source={p.iconSource} className="size-5" />
-                {p.name}
-                {!p.available && (
-                  <span className="text-muted-foreground ml-1 text-[10px] tracking-wide uppercase">
-                    Coming soon
-                  </span>
-                )}
-              </button>
-            );
-
-            if (!p.available) {
-              return (
-                <Tooltip key={p.id}>
-                  <TooltipTrigger asChild>{button}</TooltipTrigger>
-                  <TooltipContent>
-                    <p>Coming soon</p>
-                  </TooltipContent>
-                </Tooltip>
-              );
-            }
-
-            return button;
-          })}
-        </div>
+        <AgentProviderPicker
+          aria-label="AI tool"
+          providers={providers}
+          value={selected}
+          onValueChange={setSelected}
+        />
 
         <div className="min-h-0 overflow-y-auto">
           {selected === "claude" && (

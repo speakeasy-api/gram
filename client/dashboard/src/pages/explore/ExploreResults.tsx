@@ -210,6 +210,7 @@ function ChartOrReason({
     >
       <div className={height === undefined ? "min-h-0 flex-1" : undefined}>
         <ResultChart
+          timeZone="UTC"
           seriesSet={seriesSet}
           unit={unit}
           chartType={drawn}

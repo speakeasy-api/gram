@@ -39,7 +39,7 @@ var _ = Service("risk", func() {
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
-			Attribute("action", String, "Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.", func() {
+			Attribute("action", String, "Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.", func() {
 				shared.RiskPolicyActionEnum()
 				Default("flag")
 			})
@@ -48,7 +48,7 @@ var _ = Service("risk", func() {
 				Default("everyone")
 			})
 			Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs this policy applies to. For audience_type=everyone, the server stores user:all.")
-			Attribute("mcp_scope", shared.RiskMCPScope, "Optional MCP server and tool restriction. Omit or send an empty server list to apply the policy to every MCP server. When a non-empty scope is set, the action must be flag or block.")
+			Attribute("mcp_scope", shared.RiskMCPScope, "Optional MCP server and tool restriction. Omit or send an empty server list to apply the policy to every MCP server. When a non-empty scope is set, the action must be flag, block or require_approval; require_approval needs one.")
 			Attribute("shadow_mcp_allowed_urls", ArrayOf(String), "Complete desired canonical URL allow set for this policy. Omit or send empty to create no URL-specific allow decisions.", func() {
 				Meta("struct:tag:json", "shadow_mcp_allowed_urls")
 			})
@@ -62,6 +62,7 @@ var _ = Service("risk", func() {
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding.")
 			Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Required when policy_type is prompt_based.")
 			Attribute("model_config", shared.RiskPolicyModelConfig, "For prompt_based policies: per-policy LLM-judge model configuration.")
+			Attribute("approval_config", shared.RiskPolicyApprovalConfig, "For require_approval policies: who may approve held calls. Required when action is require_approval, rejected otherwise.")
 			Attribute("score", Float64, "CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit to apply the default (5).", func() {
 				Minimum(0.1)
 				Maximum(10)
@@ -246,14 +247,14 @@ var _ = Service("risk", func() {
 			Attribute("disabled_rules", ArrayOf(String), "Canonical rule_ids the user has unchecked within otherwise-enabled categories. Matching findings are dropped at scan time.")
 			Attribute("custom_rule_ids", ArrayOf(String), "Custom detection rule ids to attach as detectors: a match produces a finding. Omit to preserve the current selection.")
 			Attribute("enabled", Boolean, "Whether the policy is active.")
-			Attribute("action", String, "Policy action: flag, warn (challenge), block, or quarantine (deny and freeze the hook session). MCP-scoped policies support flag and block only.", func() {
+			Attribute("action", String, "Policy action: flag, warn (challenge), block, quarantine (deny and freeze the hook session), or require_approval (hold the call until a listed approver approves it). MCP-scoped policies support flag, block and require_approval.", func() {
 				shared.RiskPolicyActionEnum()
 			})
 			Attribute("audience_type", String, "Policy audience type: everyone or targeted. Omit to preserve the current audience type.", func() {
 				shared.RiskPolicyAudienceTypeEnum()
 			})
 			Attribute("audience_principal_urns", ArrayOf(String), "Principal URNs this policy applies to. Omit to preserve the current target principals.")
-			Attribute("mcp_scope", shared.RiskMCPScope, "Optional MCP server and tool restriction. Omit to preserve; send an empty server list to clear and apply the policy to every MCP server. When the resulting policy keeps an MCP scope, the action must be flag or block.")
+			Attribute("mcp_scope", shared.RiskMCPScope, "Optional MCP server and tool restriction. Omit to preserve; send an empty server list to clear and apply the policy to every MCP server. When the resulting policy keeps an MCP scope, the action must be flag, block or require_approval; require_approval needs one.")
 			Attribute("shadow_mcp_allowed_urls", ArrayOf(String), "Complete desired canonical URL allow set for this policy. Omit to preserve; send empty to clear.", func() {
 				Meta("struct:tag:json", "shadow_mcp_allowed_urls")
 			})
@@ -270,6 +271,7 @@ var _ = Service("risk", func() {
 			Attribute("user_message", String, "Optional message shown to end users when this policy blocks an action or surfaces a flagged finding. Send an empty string to clear.")
 			Attribute("prompt", String, "For prompt_based policies: the guardrail prompt the LLM judge evaluates each in-scope message against. Omit to preserve the current value.")
 			Attribute("model_config", shared.RiskPolicyModelConfig, "For prompt_based policies: per-policy LLM-judge model configuration. Omit to preserve the current value.")
+			Attribute("approval_config", shared.RiskPolicyApprovalConfig, "For require_approval policies: who may approve held calls. Omit to preserve the current value.")
 			Attribute("score", Float64, "CVSS-style severity (0.1-10) assigned to findings this policy produces. Omit to preserve the current value.", func() {
 				Minimum(0.1)
 				Maximum(10)
@@ -1289,6 +1291,111 @@ var _ = Service("risk", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskRevokePolicyBypassRequest", "type": "mutation"}`)
 	})
 
+	Method("listRiskPolicyApprovals", func() {
+		Description("List tool approval requests held by require_approval policies, newest first. Org admins see every request; others see requests they can approve and their own.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("status", String, "Optional status filter. An open request past its window counts as expired.", func() {
+				Enum("blocked", "pending", "approved", "denied", "consumed", "expired")
+			})
+			Attribute("cursor", String, "Continue after this approval request ID.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("limit", Int32, "Maximum number of requests to return.", func() {
+				Minimum(1)
+				Maximum(100)
+				Default(50)
+			})
+		})
+
+		Result(ListRiskPolicyApprovalsResult)
+
+		HTTP(func() {
+			GET("/rpc/risk.listApprovals")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("status")
+			Param("cursor")
+			Param("limit")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listRiskPolicyApprovals")
+		Meta("openapi:extension:x-speakeasy-group", "risk.approvals")
+		Meta("openapi:extension:x-speakeasy-name-override", "list")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskListApprovals"}`)
+	})
+
+	Method("getRiskPolicyApproval", func() {
+		Description("Get one tool approval request, including a preview of the call's arguments.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The approval request ID.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+		})
+
+		Result(RiskPolicyApproval)
+
+		HTTP(func() {
+			GET("/rpc/risk.getApproval")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Param("id")
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getRiskPolicyApproval")
+		Meta("openapi:extension:x-speakeasy-group", "risk.approvals")
+		Meta("openapi:extension:x-speakeasy-name-override", "get")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskGetApproval"}`)
+	})
+
+	Method("decideRiskPolicyApproval", func() {
+		Description("Approve or deny a pending tool approval request. Only a listed approver may decide, and never the person who made the call. An approval releases one retry of the exact call.")
+
+		Payload(func() {
+			security.ByKeyPayload()
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The approval request ID.", func() {
+				Format(FormatUUID)
+			})
+			Attribute("decision", String, "The decision.", func() {
+				Enum("approve", "deny")
+			})
+			Attribute("note", String, "Optional message for the agent.", func() {
+				MaxLength(500)
+			})
+			Required("id", "decision")
+		})
+
+		Result(RiskPolicyApproval)
+
+		HTTP(func() {
+			POST("/rpc/risk.decideApproval")
+			security.ByKeyHeader()
+			security.SessionHeader()
+			security.ProjectHeader()
+			Body(RiskPolicyApprovalDecisionRequestBody)
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "decideRiskPolicyApproval")
+		Meta("openapi:extension:x-speakeasy-group", "risk.approvals")
+		Meta("openapi:extension:x-speakeasy-name-override", "decide")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RiskDecideApproval", "type": "mutation"}`)
+	})
+
 	Method("triggerRiskAnalysis", func() {
 		Description("Manually trigger risk analysis for a policy, starting or signaling the drain workflow. Defaults to the most recent 100 unanalyzed messages; pass `limit=0` to backfill every unanalyzed message.")
 
@@ -2235,6 +2342,79 @@ var RiskPolicyBypassRequest = Type("RiskPolicyBypassRequest", func() {
 		Format(FormatDateTime)
 	})
 	Required("id", "policy_id", "target_dimensions", "requester_user_id", "status", "granted_principal_urns", "created_at", "updated_at")
+})
+
+var RiskPolicyApproval = Type("RiskPolicyApproval", func() {
+	Attribute("id", String, "The approval request ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("policy_id", String, "The require_approval risk policy that held the call.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("policy_name", String, "The policy's name.")
+	Attribute("policy_version", Int64, "The policy version when the call was held.")
+	Attribute("status", String, "The request's status. An open request past its window is expired.", func() {
+		Enum("blocked", "pending", "approved", "denied", "consumed", "expired")
+	})
+	Attribute("requester_urn", String, "The principal that made the call: agent:<id> or user:<id>.")
+	Attribute("surface", String, "The MCP surface that received the call.")
+	Attribute("toolset_id", String, "The hosted toolset that served the call, when known.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("chat_id", String, "The chat the call belongs to, when known.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("tool_name", String, "The tool that was called.")
+	Attribute("arguments_preview", MapOf(String, Any), "A shortened preview of the call's arguments: long strings are cut and only the first keys are kept.")
+	Attribute("reason", String, "The agent's reason, once it requested approval.")
+	Attribute("requested_scope", String, "What the agent asked to be approved, such as exact_once.")
+	Attribute("granted_scope", String, "What the approver granted, once approved.")
+	Attribute("decided_by_urn", String, "The approver who decided.")
+	Attribute("decided_via", String, "Where the decision came from.", func() {
+		Enum("slack", "dashboard", "api")
+	})
+	Attribute("decision_note", String, "The approver's message for the agent.")
+	Attribute("can_decide", Boolean, "Whether the caller can decide this request now.")
+	Attribute("requested_at", String, "When the agent requested approval.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("decided_at", String, "When an approver decided.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("expires_at", String, "When the request stops waiting for a decision, or the approval stops covering a retry.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("consumed_at", String, "When a retry used the approval.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("created_at", String, "When the call was first held.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, "Last update timestamp.", func() {
+		Format(FormatDateTime)
+	})
+	Required("id", "policy_id", "policy_name", "policy_version", "status", "requester_urn", "surface", "tool_name", "arguments_preview", "can_decide", "created_at", "updated_at")
+})
+
+var ListRiskPolicyApprovalsResult = Type("ListRiskPolicyApprovalsResult", func() {
+	Attribute("approvals", ArrayOf(RiskPolicyApproval), "Approval requests, newest first.")
+	Attribute("next_cursor", String, "Pass as cursor to fetch the next page. Absent on the last page.")
+	Required("approvals")
+})
+
+var RiskPolicyApprovalDecisionRequestBody = Type("RiskPolicyApprovalDecisionRequestBody", func() {
+	Meta("openapi:typename", "RiskPolicyApprovalDecisionRequestBody")
+
+	Attribute("id", String, "The approval request ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("decision", String, "The decision.", func() {
+		Enum("approve", "deny")
+	})
+	Attribute("note", String, "Optional message for the agent.", func() {
+		MaxLength(500)
+	})
+	Required("id", "decision")
 })
 
 var RiskBlock = Type("RiskBlock", func() {

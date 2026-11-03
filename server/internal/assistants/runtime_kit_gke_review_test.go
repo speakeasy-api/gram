@@ -62,7 +62,7 @@ func TestKitGKEStoppedReapPreservesReusableLineage(t *testing.T) {
 	state, _, err := k.loadAuthority(t.Context(), r)
 	require.NoError(t, err)
 	require.Equal(t, "stopped", state.Phase)
-	_, err = k.get(t.Context(), r, kitTemplateGVR, kitGKEName(r), state.Metadata.TemplateUID)
+	_, err = k.get(t.Context(), r, kitTemplateGVR, kitGKETemplateName(kitGKEName(r)), state.Metadata.TemplateUID)
 	require.NoError(t, err)
 	_, err = k.get(t.Context(), r, kitSecretGVR, state.Metadata.SecretName, state.Metadata.SecretUID)
 	require.NoError(t, err)
@@ -128,7 +128,15 @@ func TestKitGKEColdCreationFailureCleansOwnedResources(t *testing.T) {
 		t.Run(failed, func(t *testing.T) {
 			t.Parallel()
 			k, client, r, fences := kitGKEBackendFixture(t)
-			var secretName string
+			var secretName, serviceAccountName string
+			client.PrependReactor("create", "serviceaccounts", func(action ktesting.Action) (bool, runtime.Object, error) {
+				creation, ok := action.(ktesting.CreateAction)
+				require.True(t, ok)
+				serviceAccount, ok := creation.GetObject().(*unstructured.Unstructured)
+				require.True(t, ok)
+				serviceAccountName = serviceAccount.GetName()
+				return false, nil, nil
+			})
 			client.PrependReactor("create", "secrets", func(action ktesting.Action) (bool, runtime.Object, error) {
 				create, ok := action.(ktesting.CreateAction)
 				require.True(t, ok)
@@ -148,9 +156,9 @@ func TestKitGKEColdCreationFailureCleansOwnedResources(t *testing.T) {
 				gvr  schema.GroupVersionResource
 				name string
 			}
-			expected := []objectIdentity{{gvr: kitSecretGVR, name: secretName}}
+			expected := []objectIdentity{{gvr: kitServiceAccountGVR, name: serviceAccountName}, {gvr: kitSecretGVR, name: secretName}}
 			if failed == gkeSandboxClaimGVR.Resource {
-				expected = append(expected, objectIdentity{gvr: kitTemplateGVR, name: kitGKEName(r)})
+				expected = append(expected, objectIdentity{gvr: kitTemplateGVR, name: kitGKETemplateName(kitGKEName(r))})
 			}
 			deleted := []objectIdentity{}
 			for _, action := range client.Actions() {

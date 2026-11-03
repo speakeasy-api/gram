@@ -523,8 +523,17 @@ var _ = Service("organizationUserSessionIssuers", func() {
 })
 
 var CreateUserSessionIssuerForm = Type("CreateUserSessionIssuerForm", func() {
+	Attribute("authorization_server_mode", String, "Authorization-server topology. Shared mode supports standalone workload token exchange without an MCP server.", func() {
+		Enum("endpoint", "shared")
+		Default("endpoint")
+	})
 	Description("Form for creating a user_session_issuer.")
 
+	userSessionIssuerCreationAttributes()
+})
+
+// userSessionIssuerCreationAttributes excludes project-only authorization-server options.
+func userSessionIssuerCreationAttributes() {
 	Attribute("slug", String, "Issuer slug. Unique for project-owned issuers; organization-owned issuer slugs may repeat.")
 	Attribute("authn_challenge_mode", String, "How multi-remote authn challenges are presented: chain | interactive.", func() {
 		Enum("chain", "interactive")
@@ -535,7 +544,7 @@ var CreateUserSessionIssuerForm = Type("CreateUserSessionIssuerForm", func() {
 	})
 
 	Required("slug", "authn_challenge_mode", "session_duration_hours")
-})
+}
 
 var UpdateUserSessionIssuerForm = Type("UpdateUserSessionIssuerForm", func() {
 	Description("Form for updating a user_session_issuer. All non-id fields are optional patches.")
@@ -560,7 +569,7 @@ var UpdateUserSessionIssuerForm = Type("UpdateUserSessionIssuerForm", func() {
 
 var CreateOrganizationUserSessionIssuerForm = Type("CreateOrganizationUserSessionIssuerForm", func() {
 	Description("Form for creating an organization-owned user_session_issuer.")
-	Extend(CreateUserSessionIssuerForm)
+	userSessionIssuerCreationAttributes()
 	Attribute("trusted_remote_session_issuer_id", String, "Organization-level or global remote_session_issuer whose assertions this issuer trusts. Omit to leave enterprise-managed authorization disabled.", func() {
 		Format(FormatUUID)
 	})

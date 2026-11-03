@@ -30,6 +30,9 @@ paths:
               schema:
                 format: int64
                 type: integer
+            Content-Security-Policy:
+              schema:
+                type: string
             Content-Type:
               schema:
                 type: string
@@ -39,12 +42,15 @@ paths:
             Last-Modified:
               schema:
                 type: string
+            X-Content-Type-Options:
+              schema:
+                type: string
           content:
             image/*:
               schema:
                 type: string
                 format: binary
-                description: PNG, JPEG, GIF or WebP image bytes; Content-Type preserves the stored image MIME type.
+                description: PNG, JPEG, GIF, WebP or validated static SVG image bytes; Content-Type preserves the stored image MIME type.
         "400":
           content:
             application/json:
@@ -111,7 +117,7 @@ paths:
       x-speakeasy-name-override: serveImage
   /admin/assets.uploadImage:
     post:
-      description: Upload a global issuer logo, limited to 4 MiB and PNG, JPEG, GIF or WebP.
+      description: 'Upload a platform logo, limited to 4 MiB and PNG, JPEG, GIF, WebP or static SVG with local clip paths. This is a direct upload, not a staged proposal: successful uploads are publicly served immediately and remain stored.'
       operationId: adminUploadPlatformImage
       parameters:
         - allowEmptyValue: true
@@ -125,7 +131,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UploadImageResult'
+                $ref: '#/components/schemas/AdminUploadImageResult'
           description: OK response.
         "400":
           content:
@@ -793,6 +799,77 @@ paths:
       x-speakeasy-name-override: getHookClients
       x-speakeasy-react-hook:
         name: AdminGetHookClients
+  /admin/mcpAuthGrants.backfill:
+    post:
+      description: Grants unrestricted mcp:auth to every principal that holds any mcp:connect grant, in every organization. The connect grant's selectors are ignored. Safe to run more than once.
+      operationId: adminBackfillMcpAuthGrants
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminBackfillMCPAuthGrantsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: backfillMcpAuthGrants admin
+      tags:
+        - admin
+      x-speakeasy-name-override: backfillMcpAuthGrants
+      x-speakeasy-react-hook:
+        name: AdminBackfillMcpAuthGrants
   /admin/onboarding.playbooks:
     get:
       description: Read every playbook, or, when an organization is named, the shared ones and its own.
@@ -3409,6 +3486,81 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: resumeStripeSubscription
+  /admin/organization.setAdoptionDashboardUrl:
+    post:
+      description: Sets or clears the link to an organization's adoption dashboard shown on the admin overview. An empty or absent URL clears it.
+      operationId: adminSetAdoptionDashboardUrl
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetAdoptionDashboardURLRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganization'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: setAdoptionDashboardUrl admin
+      tags:
+        - admin
+      x-speakeasy-name-override: setAdoptionDashboardUrl
   /admin/organization.setInferenceKeyMonthlyLimit:
     post:
       tags:
@@ -5082,6 +5234,81 @@ paths:
       tags:
         - admin
       x-speakeasy-name-override: createRegistryEntry
+  /admin/registry.curatePromotionCandidate:
+    post:
+      description: Reject, archive, or restore one exact unpublished catalogue candidate. Hidden candidates cannot be promoted until restored and refreshed.
+      operationId: adminCurateRegistryPromotionCandidate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/CurateRegistryPromotionCandidateRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminRegistryPromotionCandidate'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: curateRegistryPromotionCandidate admin
+      tags:
+        - admin
+      x-speakeasy-name-override: curateRegistryPromotionCandidate
   /admin/registry.get:
     get:
       description: Staff-only registry administration.
@@ -5404,6 +5631,328 @@ paths:
       tags:
         - admin
       x-speakeasy-name-override: listRegistryOktaUnmapped
+  /admin/registry.promoteCandidate:
+    post:
+      description: Publish an explicitly reviewed public catalogue entry and queue setup documentation. Customer credentials are never copied.
+      operationId: adminPromoteRegistryCandidate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/PromoteRegistryCandidateRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminRegistryPromotionCandidate'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: promoteRegistryCandidate admin
+      tags:
+        - admin
+      x-speakeasy-name-override: promoteRegistryCandidate
+  /admin/registry.promotionCandidate:
+    post:
+      description: Refresh health evidence for one exact remote MCP deployment before staff review.
+      operationId: adminGetRegistryPromotionCandidate
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/GetRegistryPromotionCandidateRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminRegistryPromotionCandidate'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: getRegistryPromotionCandidate admin
+      tags:
+        - admin
+      x-speakeasy-name-override: getRegistryPromotionCandidate
+  /admin/registry.promotionCandidates:
+    get:
+      description: List observed remote MCP candidates and durable promotion delivery status. Active excludes endpoints already in the catalogue; candidate includes all unpublished active entries. No source URLs or credentials are returned.
+      operationId: adminListRegistryPromotionCandidates
+      parameters:
+        - allowEmptyValue: true
+          in: query
+          name: cursor
+          schema:
+            type: string
+        - allowEmptyValue: true
+          in: query
+          name: status
+          schema:
+            default: active
+            enum:
+              - active
+              - all
+              - candidate
+              - rejected
+              - archived
+              - promoted
+            type: string
+        - allowEmptyValue: true
+          in: query
+          name: limit
+          schema:
+            default: 25
+            format: int64
+            maximum: 50
+            minimum: 1
+            type: integer
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminRegistryPromotionCandidates'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: listRegistryPromotionCandidates admin
+      tags:
+        - admin
+      x-speakeasy-name-override: listRegistryPromotionCandidates
+  /admin/registry.retryPromotionDocs:
+    post:
+      description: Retry a failed setup-guide request for one exact reviewed promotion without republishing the catalogue entry.
+      operationId: adminRetryRegistryPromotionDocs
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/RetryRegistryPromotionDocsRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminRegistryPromotionCandidate'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: retryRegistryPromotionDocs admin
+      tags:
+        - admin
+      x-speakeasy-name-override: retryRegistryPromotionDocs
   /admin/registry.save:
     post:
       description: Staff-only registry administration.
@@ -7415,6 +7964,156 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: startTrial
+  /admin/upstreamOAuthMigration.disableEnforcement:
+    post:
+      description: 'Disables upstream auth enforcement for one organization. This is its rollback: requests return to the upstream client choice within a minute. Safe to call when enforcement is already off.'
+      operationId: adminDisableUpstreamAuthEnforcement
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/DisableUpstreamAuthEnforcementRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUpstreamOAuthMigrationStatus'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: disableUpstreamAuthEnforcement admin
+      tags:
+        - admin
+      x-speakeasy-name-override: disableUpstreamAuthEnforcement
+  /admin/upstreamOAuthMigration.enableEnforcement:
+    post:
+      description: 'Enables upstream auth enforcement for one organization: its direct proxied servers and assistant turns are served by the typed auth client resolver, and using the chosen auth client requires mcp:auth. Refused unless the organization is migrated, its auth clients are recorded, its default auth permissions are granted, every credential choice that can name an auth client does, and its assistant profiles are recorded. Choices left ambiguous and profile gaps are not blocking: those credentials are asked to reconnect and those turns are refused with the reason. Shadow parity and the cross-organization denial notice are confirmed by the caller, since they are read from telemetry and communication outside the database. Enabled enforcement does not depend on the auth-client-resolver flags.'
+      operationId: adminEnableUpstreamAuthEnforcement
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/EnableUpstreamAuthEnforcementRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminUpstreamOAuthMigrationStatus'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: enableUpstreamAuthEnforcement admin
+      tags:
+        - admin
+      x-speakeasy-name-override: enableUpstreamAuthEnforcement
   /admin/upstreamOAuthMigration.organizations:
     get:
       description: Lists every organization the upstream OAuth migration applies to, so staff can check and migrate them one by one.
@@ -7820,6 +8519,15 @@ paths:
       x-speakeasy-name-override: listUserOrganizations
 components:
   schemas:
+    AdminBackfillMCPAuthGrantsResult:
+      type: object
+      properties:
+        granted:
+          type: integer
+          description: How many principals gained the mcp:auth grant.
+          format: int64
+      required:
+        - granted
     AdminBulkUpdateAccountTypeResult:
       type: object
       properties:
@@ -8551,16 +9259,62 @@ components:
           description: Legacy authentication in force. Set only when the server has no user session issuer.
           enum:
             - external_oauth
-            - oauth_proxy
             - gram_private
         server:
           $ref: '#/components/schemas/AdminMcpServerHealthServer'
+        upstream_auth:
+          $ref: '#/components/schemas/AdminMcpServerHealthUpstreamAuth'
         user_session_issuer:
           $ref: '#/components/schemas/AdminMcpServerHealthUserSessionIssuer'
       description: 'Health of one MCP server: its authentication configuration and session counts. Tool calls are read separately through getMcpServerToolCalls. Never carries secrets, error text, subjects, users or emails.'
       required:
         - server
         - correlation
+    AdminMcpServerHealthAuthClient:
+      type: object
+      properties:
+        client_type:
+          type: string
+          description: How the client authenticates upstream.
+          enum:
+            - remote_session
+            - service_account
+            - static_credential
+            - pass_through
+            - ema
+        enabled:
+          type: boolean
+          description: Whether the client can be used.
+        header_count:
+          type: integer
+          description: Headers the client sends upstream.
+          format: int64
+        id:
+          type: string
+          description: Auth client id.
+          format: uuid
+        remote_session_client_id:
+          type: string
+          description: The OAuth registration behind an OAuth-backed client.
+          format: uuid
+        server_count:
+          type: integer
+          description: Servers offering the client, this one included.
+          format: int64
+        source:
+          type: string
+          description: backfill when created from existing configuration, admin when an administrator created it.
+          enum:
+            - backfill
+            - admin
+      description: One auth client the server offers for reaching its upstream. Never carries its name or header values.
+      required:
+        - id
+        - client_type
+        - source
+        - enabled
+        - server_count
+        - header_count
     AdminMcpServerHealthCorrelation:
       type: object
       properties:
@@ -8796,6 +9550,28 @@ components:
       required:
         - issuer_id
         - client_id
+    AdminMcpServerHealthUpstreamAuth:
+      type: object
+      properties:
+        auth_clients:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminMcpServerHealthAuthClient'
+        requires_upstream_auth:
+          type: boolean
+          description: 'Whether the upstream needs authentication: true when the server offers at least one enabled auth client.'
+        status:
+          type: string
+          description: configured (at least one enabled auth client), setup_incomplete (no auth client was ever linked to it, live or detached, but it has upstream credentials that no auth client records yet) or no_auth_required.
+          enum:
+            - configured
+            - setup_incomplete
+            - no_auth_required
+      description: Whether the server's upstream needs authentication and the auth clients it offers.
+      required:
+        - status
+        - requires_upstream_auth
+        - auth_clients
     AdminMcpServerHealthUserSessionIssuer:
       type: object
       properties:
@@ -9307,6 +10083,10 @@ components:
         account_type:
           type: string
           description: Speakeasy account type (e.g. free, pro, payg, enterprise).
+        adoption_dashboard_url:
+          type: string
+          description: Staff-entered link to the organization's adoption dashboard. Absent when none has been set.
+          format: uri
         created_at:
           type: string
           description: The creation date of the organization.
@@ -9740,6 +10520,162 @@ components:
           type: string
       required:
         - entries
+    AdminRegistryPromotionAuthDiscovery:
+      type: object
+      properties:
+        auth_setup:
+          type: string
+          enum:
+            - none
+            - dcr
+            - cimd
+            - manual
+            - unknown
+        status:
+          type: string
+          enum:
+            - complete
+            - partial
+            - unavailable
+            - not_required
+        supports_cimd:
+          type: boolean
+        supports_dcr:
+          type: boolean
+      description: Publicly advertised authentication capabilities, not a verified OAuth connection.
+      required:
+        - supports_dcr
+        - supports_cimd
+        - auth_setup
+        - status
+    AdminRegistryPromotionCandidate:
+      type: object
+      properties:
+        auth_discovery:
+          $ref: '#/components/schemas/AdminRegistryPromotionAuthDiscovery'
+        can_override_eligibility:
+          type: boolean
+          description: Whether staff may explicitly accept this candidate's health evidence.
+        checked_at:
+          type: string
+          format: date-time
+        created_at:
+          type: string
+          format: date-time
+        curation_revision:
+          type: string
+          format: uuid
+        delivery_error:
+          type: string
+        docs_attempts:
+          type: integer
+          format: int64
+        docs_last_attempt_at:
+          type: string
+          format: date-time
+        docs_next_attempt_at:
+          type: string
+          format: date-time
+        docs_queued_at:
+          type: string
+          format: date-time
+        docs_retry_allowed:
+          type: boolean
+        docs_revision:
+          type: string
+        docs_status:
+          type: string
+        docs_url:
+          type: string
+        eligible:
+          type: boolean
+        id:
+          type: string
+        mcp_server_id:
+          type: string
+        observed_days:
+          type: integer
+          format: int64
+        observed_failures:
+          type: integer
+          format: int64
+        observed_successes:
+          type: integer
+          format: int64
+        organization_id:
+          type: string
+        project_id:
+          type: string
+        promoted_at:
+          type: string
+          format: date-time
+        public_title:
+          type: string
+        reason:
+          type: string
+        registry_entry_id:
+          type: string
+        remote_mcp_server_id:
+          type: string
+        source_name:
+          type: string
+        source_revision:
+          type: string
+        status:
+          type: string
+        suggested_metadata:
+          $ref: '#/components/schemas/AdminRegistryPromotionSuggestions'
+      required:
+        - created_at
+        - curation_revision
+        - id
+        - organization_id
+        - project_id
+        - mcp_server_id
+        - remote_mcp_server_id
+        - source_revision
+        - eligible
+        - can_override_eligibility
+        - reason
+        - status
+        - observed_successes
+        - observed_failures
+        - observed_days
+        - docs_revision
+        - docs_retry_allowed
+        - docs_attempts
+    AdminRegistryPromotionCandidates:
+      type: object
+      properties:
+        candidates:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminRegistryPromotionCandidate'
+        next_cursor:
+          type: string
+      required:
+        - candidates
+    AdminRegistryPromotionSuggestions:
+      type: object
+      properties:
+        auth_mode:
+          type: string
+          enum:
+            - none
+            - oauth
+        docs_slug:
+          type: string
+        documentation_url:
+          type: string
+        public_description:
+          type: string
+        public_name:
+          type: string
+        public_title:
+          type: string
+        public_url:
+          type: string
+      description: Untrusted observed metadata suggestions. Staff must edit and explicitly confirm every value before publication.
     AdminRegistrySummary:
       type: object
       properties:
@@ -9914,6 +10850,36 @@ components:
         - id
         - customer_id
         - status
+    AdminUploadImageResult:
+      type: object
+      properties:
+        asset:
+          $ref: '#/components/schemas/Asset'
+        url:
+          type: string
+          description: Canonical public URL for the uploaded image
+      required:
+        - asset
+        - url
+    AdminUpstreamAuthEnforcement:
+      type: object
+      properties:
+        blockers:
+          type: array
+          items:
+            type: string
+          description: What keeps enforcement from being turned on, empty when ready.
+        enabled:
+          type: boolean
+          description: Whether enforcement is on.
+        ready:
+          type: boolean
+          description: Whether the coverage enforcement needs is in place, so it can be turned on.
+      description: One organization's upstream auth enforcement.
+      required:
+        - enabled
+        - ready
+        - blockers
     AdminUpstreamOAuthMigrationAuthClientKind:
       type: object
       properties:
@@ -9960,14 +10926,18 @@ components:
           type: integer
           description: Configured identities and server links decided.
           format: int64
+        attachments_waiting:
+          type: integer
+          description: Agent attachments whose grants a run does not write while the organization's upstream selector writes are not allowed. While any wait, complete is false.
+          format: int64
         complete:
           type: boolean
-          description: Whether every configured identity has its auth client, server links and header copies recorded, no backfilled record is left to retire, no server offering one is left undecided, and no phase failed.
+          description: Whether every configured identity has its auth client, server links and header copies recorded, no backfilled record is left to retire, and no phase failed.
         failed_phases:
           type: array
           items:
             type: string
-          description: 'Phases whose check failed: oauth, headers, ema, reconcile or mark. The counts cover the other phases.'
+          description: 'Phases whose check failed: oauth, headers, ema, ema_warnings, reconcile, mark, selections or grants. The counts cover the other phases.'
         in_progress:
           type: boolean
           description: Whether a run is recording typed auth clients for the organization right now. The other counts are then empty; check again when it finishes.
@@ -9980,6 +10950,10 @@ components:
           type: integer
           description: Auth clients not yet recorded.
           format: int64
+        pending_grants:
+          type: integer
+          description: Default auth permission grants (mcp:auth) the organization's roles, users, agents and API keys are missing, which a run adds. Enforcement needs them, so existing callers keep their access.
+          format: int64
         pending_headers:
           type: integer
           description: Header copies and EMA scope sets not yet up to date.
@@ -9990,12 +10964,33 @@ components:
           format: int64
         pending_marked_servers:
           type: integer
-          description: Servers offering a backfilled auth client whose need for upstream authentication is still undecided, not yet marked as needing it.
+          description: 'Deprecated: always 0. Whether a server needs upstream authentication follows from the auth clients it offers, so no server is marked.'
           format: int64
         pending_retirements:
           type: integer
           description: Backfilled auth clients and server links the configuration no longer yields, not yet retired.
           format: int64
+        pending_selection_mappings:
+          type: integer
+          description: Live credential choices with exactly one auth client to name, not yet named.
+          format: int64
+        selection_classes:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUpstreamOAuthMigrationSelectionClass'
+          description: Credential choice coverage for each credential class.
+        selection_gap_count:
+          type: integer
+          description: Every live credential choice left without a usable auth client, including those beyond selection_gaps.
+          format: int64
+        selection_gaps:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUpstreamOAuthMigrationSelectionGap'
+          description: The first live credential choices left without a usable auth client.
+        selections_complete:
+          type: boolean
+          description: Whether every live credential choice names a usable auth client or is an explicit no-auth choice, and the selections check did not fail.
         unresolved:
           type: integer
           description: Configured identities that cannot be recorded without a guess and need attention.
@@ -10025,6 +11020,49 @@ components:
         - warnings
         - kinds
         - failed_phases
+    AdminUpstreamOAuthMigrationExecutionProfileGap:
+      type: object
+      properties:
+        execution_context:
+          type: string
+          description: user_backed for turns run for a user the event identified, userless for turns run as the trigger's workload.
+        reason:
+          type: string
+          description: 'Why there is no choice: selection_required (several clients could serve it), personal_requires_user (only a personal client serves it, and the turn has no user), no_client (no live, enabled auth client carries its upstream OAuth client) or setup_incomplete (no auth client was ever linked to it, live or detached, but it has upstream credentials that no auth client records yet).'
+        servers:
+          type: integer
+          description: Profile and server pairs with no choice for this reason.
+          format: int64
+      description: MCP servers execution-selection profiles hold no choice for, for one execution context and reason.
+      required:
+        - execution_context
+        - reason
+        - servers
+    AdminUpstreamOAuthMigrationExecutionProfiles:
+      type: object
+      properties:
+        complete:
+          type: boolean
+          description: Whether every profile is recorded and holds a choice for every server its assistant reaches.
+        gaps:
+          type: array
+          items:
+            $ref: '#/components/schemas/AdminUpstreamOAuthMigrationExecutionProfileGap'
+          description: 'Servers the profiles hold no choice for, by execution context and reason. They are never guessed: configure the server''s auth clients.'
+        pending_versions:
+          type: integer
+          description: Profile versions not yet recorded.
+          format: int64
+        targets:
+          type: integer
+          description: Assistant and trigger pairs, each with a profile per execution context.
+          format: int64
+      description: Where one organization stands in recording, for each assistant, trigger and execution context, the versioned auth client choices its turns use.
+      required:
+        - complete
+        - targets
+        - pending_versions
+        - gaps
     AdminUpstreamOAuthMigrationOrganization:
       type: object
       properties:
@@ -10083,13 +11121,21 @@ components:
           type: integer
           description: 'Default auth permissions this run granted across the organization: the personal default and shared client grants for every recorded client, and API key policies once every client is recorded. The auth-permission-defaults backfill grants the rest.'
           format: int64
+        execution_profile_versions_written:
+          type: integer
+          description: Execution-selection profile versions this run recorded.
+          format: int64
+        selections_mapped:
+          type: integer
+          description: Credential choices this run named a typed auth client on.
+          format: int64
         selections_written:
           type: integer
           description: Credential choices recorded.
           format: int64
         servers_marked_requiring_upstream_auth:
           type: integer
-          description: Servers marked as needing upstream authentication because they offer a backfilled auth client.
+          description: 'Deprecated: always omitted. Whether a server needs upstream authentication follows from the auth clients it offers, so no server is marked.'
           format: int64
         status:
           $ref: '#/components/schemas/AdminUpstreamOAuthMigrationStatus'
@@ -10099,6 +11145,88 @@ components:
         - associations_skipped
         - selections_written
         - status
+    AdminUpstreamOAuthMigrationSelectionClass:
+      type: object
+      properties:
+        ambiguous:
+          type: integer
+          description: 'Choices several auth clients could serve. They are never guessed: configure the server or ask the credential to reconnect.'
+          format: int64
+        credential_class:
+          type: string
+          description: 'The class: interactive, id_jag, dashboard_mint, workload or agent.'
+        mapped:
+          type: integer
+          description: Choices that already name a usable auth client.
+          format: int64
+        no_auth:
+          type: integer
+          description: Explicit no-auth choices on servers with no auth client.
+          format: int64
+        no_client:
+          type: integer
+          description: Choices whose upstream OAuth client has no live, enabled auth client linked to the server.
+          format: int64
+        pending:
+          type: integer
+          description: Choices with exactly one auth client to name, not yet named.
+          format: int64
+        selections:
+          type: integer
+          description: Live credential choices of this class.
+          format: int64
+        stale_no_auth:
+          type: integer
+          description: No-auth choices, and choices naming the server's headers, on servers that now offer an OAuth-backed client; the credential reconnects.
+          format: int64
+        unusable:
+          type: integer
+          description: Choices naming an auth client that is no longer usable for the server; the credential reconnects.
+          format: int64
+      description: How the live credential choices of one credential class map onto typed auth clients.
+      required:
+        - credential_class
+        - selections
+        - mapped
+        - pending
+        - no_auth
+        - ambiguous
+        - no_client
+        - stale_no_auth
+        - unusable
+    AdminUpstreamOAuthMigrationSelectionGap:
+      type: object
+      properties:
+        credential_class:
+          type: string
+          description: The class of the credential the choice belongs to.
+        credential_id:
+          type: string
+          description: The credential.
+          format: uuid
+        mcp_server_id:
+          type: string
+          description: The server the choice is for.
+          format: uuid
+        outcome:
+          type: string
+          description: 'Why the choice has no usable auth client: ambiguous, no_client, stale_no_auth, unusable or skipped_race.'
+        project_id:
+          type: string
+          description: The server's project.
+          format: uuid
+        selection_id:
+          type: string
+          description: The choice.
+          format: uuid
+      description: One live credential choice left without a usable typed auth client.
+      required:
+        - selection_id
+        - credential_class
+        - credential_id
+        - mcp_server_id
+        - project_id
+        - outcome
     AdminUpstreamOAuthMigrationServer:
       type: object
       properties:
@@ -10123,6 +11251,10 @@ components:
           type: integer
           description: Live user session credentials scanned.
           format: int64
+        enforcement:
+          $ref: '#/components/schemas/AdminUpstreamAuthEnforcement'
+        execution_profiles:
+          $ref: '#/components/schemas/AdminUpstreamOAuthMigrationExecutionProfiles'
         migrated:
           type: boolean
           description: Whether the organization has nothing left to write and no server needing configuration.
@@ -10335,6 +11467,12 @@ components:
           type: string
         after_snapshot: {}
         before_snapshot: {}
+        category:
+          type: string
+          description: 'What kind of event the entry records: ''configuration'' for a change to the platform''s configuration, ''security'' for machine access and other security-relevant activity that is not a configuration decision. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.'
+          enum:
+            - configuration
+            - security
         created_at:
           type: string
           description: The creation date of the audit log.
@@ -10460,12 +11598,23 @@ components:
     CreateOrganizationRequestBody:
       type: object
       properties:
+        name:
+          type: string
+          description: Organization display name. When omitted, a name is derived from the registrable company domain.
+          minLength: 1
+          maxLength: 100
         ownership_confirmed:
           type: boolean
           description: The operator confirms that domain ownership was established outside this form.
+        slug:
+          type: string
+          description: Preferred organization URL slug. When omitted, a unique slug is derived from the organization name. Explicit slugs use lowercase letters, numbers, and hyphens.
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          minLength: 2
+          maxLength: 100
         url:
           type: string
-          description: Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes the name and verified email domain.
+          description: Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes the verified email domain.
           minLength: 1
       required:
         - url
@@ -10625,6 +11774,31 @@ components:
         - name
         - stripe_promotion_code_id
         - signup_flow
+    CurateRegistryPromotionCandidateRequestBody:
+      type: object
+      properties:
+        action:
+          type: string
+          enum:
+            - reject
+            - archive
+            - restore
+        curation_revision:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+        promotion_id:
+          type: string
+          format: uuid
+        retry_key:
+          type: string
+      required:
+        - organization_id
+        - promotion_id
+        - curation_revision
+        - action
+        - retry_key
     DeleteOnboardingPlaybookRequestBody:
       type: object
       properties:
@@ -10648,6 +11822,14 @@ components:
           minLength: 1
       required:
         - id
+    DisableUpstreamAuthEnforcementRequestBody:
+      type: object
+      properties:
+        organization_id:
+          type: string
+          description: The organization ID.
+      required:
+        - organization_id
     EMAProvider:
       type: object
       properties:
@@ -10715,6 +11897,22 @@ components:
           minLength: 1
       required:
         - id
+    EnableUpstreamAuthEnforcementRequestBody:
+      type: object
+      properties:
+        cross_organization_denial_communicated:
+          type: boolean
+          description: The organization was told that valid credentials from another organization are refused on its public servers once enforcement is on, instead of being served anonymously.
+        organization_id:
+          type: string
+          description: The organization ID.
+        shadow_parity_confirmed:
+          type: boolean
+          description: The caller checked the organization's mandatory authorization shadow (mcp.authz.mandatory_shadow) and found no unexplained new denial.
+      required:
+        - organization_id
+        - shadow_parity_confirmed
+        - cross_organization_denial_communicated
     Error:
       type: object
       properties:
@@ -10772,6 +11970,21 @@ components:
           description: Issuer URL to fetch metadata for (e.g. https://login.linear.com).
       required:
         - issuer
+    GetRegistryPromotionCandidateRequestBody:
+      type: object
+      properties:
+        mcp_server_id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+        project_id:
+          type: string
+          format: uuid
+      required:
+        - organization_id
+        - project_id
+        - mcp_server_id
     GlobalRemoteSessionIssuer:
       type: object
       properties:
@@ -11046,6 +12259,9 @@ components:
         authz_challenge_logging_enabled:
           type: boolean
           description: Whether authz challenge logging to ClickHouse is enabled
+        code_mode_enabled:
+          type: boolean
+          description: Whether the organization has the staff-managed gateway Code Mode entitlement
         custom_model_keys_enabled:
           type: boolean
           description: Whether the organization can supply its own model provider API keys (BYOK)
@@ -11103,6 +12319,9 @@ components:
         tool_io_logs_enabled:
           type: boolean
           description: Whether tool I/O logging is enabled
+        upstream_auth_enforced:
+          type: boolean
+          description: Whether upstream auth enforcement is on for the organization. Absent when the state could not be read. Staff change it through the admin enforcement endpoint.
       required:
         - logs_enabled
         - tool_io_logs_enabled
@@ -11124,7 +12343,66 @@ components:
         - network_ingress_enabled
         - signals_intelligence_enabled
         - organization_gateway_disabled
+        - code_mode_enabled
         - device_agent
+    PromoteRegistryCandidateRequestBody:
+      type: object
+      properties:
+        auth_mode:
+          type: string
+          enum:
+            - none
+            - oauth
+        curation_revision:
+          type: string
+          format: uuid
+        docs_slug:
+          type: string
+        documentation_url:
+          type: string
+        mcp_server_id:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+        override_eligibility:
+          type: boolean
+          description: Explicitly accept insufficient, failed, or unavailable health evidence. Source safety checks still apply.
+          default: false
+        project_id:
+          type: string
+          format: uuid
+        public_description:
+          type: string
+          description: Public description, at most 100 Unicode code points.
+        public_metadata_confirmed:
+          type: boolean
+        public_name:
+          type: string
+        public_title:
+          type: string
+          description: Public title, at most 100 Unicode code points.
+        public_url:
+          type: string
+        retry_key:
+          type: string
+        source_revision:
+          type: string
+      required:
+        - organization_id
+        - project_id
+        - mcp_server_id
+        - curation_revision
+        - source_revision
+        - public_name
+        - public_title
+        - public_description
+        - public_url
+        - documentation_url
+        - docs_slug
+        - auth_mode
+        - retry_key
+        - public_metadata_confirmed
     RearmTrialRequestBody:
       type: object
       properties:
@@ -11526,6 +12804,24 @@ components:
           type: string
       required:
         - organization_id
+    RetryRegistryPromotionDocsRequestBody:
+      type: object
+      properties:
+        docs_revision:
+          type: string
+          format: uuid
+        organization_id:
+          type: string
+        promotion_id:
+          type: string
+          format: uuid
+        retry_key:
+          type: string
+      required:
+        - organization_id
+        - promotion_id
+        - docs_revision
+        - retry_key
     RiskIDRequestBody:
       type: object
       properties:
@@ -11558,6 +12854,17 @@ components:
         - id
         - updated_at
         - data_json
+    SetAdoptionDashboardURLRequestBody:
+      type: object
+      properties:
+        adoption_dashboard_url:
+          type: string
+          description: An https URL, or empty to clear the link.
+          maxLength: 2048
+        organization_id:
+          type: string
+      required:
+        - organization_id
     SetInferenceKeyMonthlyLimitRequestBody:
       type: object
       properties:
@@ -11627,6 +12934,7 @@ components:
             - network_ingress
             - signals_intelligence
             - organization_gateway_disabled
+            - code_mode
           maxLength: 60
         organization_id:
           type: string
@@ -12219,13 +13527,6 @@ components:
       required:
         - revision
         - draft
-    UploadImageResult:
-      type: object
-      properties:
-        asset:
-          $ref: '#/components/schemas/Asset'
-      required:
-        - asset
   securitySchemes:
     apikey_header_Authorization:
       type: apiKey

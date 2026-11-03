@@ -45,7 +45,6 @@ import (
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	tunneledmcprepo "github.com/speakeasy-api/gram/server/internal/tunneledmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -279,7 +278,6 @@ func TestServePublic_McpEndpoint_ToolsetBacked_ResolvesViaEndpoints(t *testing.T
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsetsrepo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -288,7 +286,7 @@ func TestServePublic_McpEndpoint_ToolsetBacked_ResolvesViaEndpoints(t *testing.T
 	// Toolset's mcp_slug is intentionally different from the endpoint
 	// slug — confirms resolution flows through mcp_endpoints, not the
 	// legacy toolset.mcp_slug query.
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "toolset-slug-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "toolset-slug-"+uuid.NewString()[:8])
 
 	endpointSlug := "endpoint-" + uuid.NewString()
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{}, uuid.Nil)
@@ -303,11 +301,10 @@ func TestServePublic_McpEndpoint_ToolsetBacked_UnsupportedVersionPrecedesIssuerA
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsetsrepo.New(ti.conn)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "wrapped-unsupported-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "wrapped-unsupported-"+uuid.NewString()[:8])
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
 	endpointSlug := "endpoint-" + uuid.NewString()
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{}, issuerID)
@@ -328,7 +325,6 @@ func TestServePublic_NoMcpEndpoint_FallsBackToLegacyToolset(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsetsrepo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -336,7 +332,7 @@ func TestServePublic_NoMcpEndpoint_FallsBackToLegacyToolset(t *testing.T) {
 
 	// No mcp_endpoints row is created — the slug is only addressable
 	// via the legacy toolsets.mcp_slug path.
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "legacy-only-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "legacy-only-"+uuid.NewString()[:8])
 
 	w, err := servePublicHTTP(t, ctx, ti, toolset.McpSlug.String, makeInitializeBody(), "", nil)
 	require.NoError(t, err)
@@ -491,6 +487,53 @@ func TestServePublic_McpEndpoint_RemoteBacked_Proxies(t *testing.T) {
 	require.NotContains(t, w.Body.String(), `"code":-32022`)
 }
 
+// TestServePublic_McpEndpoint_RemoteBacked_CacheLabelFollowsCaller confirms
+// the handler marks an anonymous caller of a public remote-backed endpoint as
+// such, so the upstream's own cache hints relay untouched, while a caller
+// authenticated as a user is labelled private: an intermediary must not serve
+// a result fetched behind Speakeasy's identity to anyone else.
+func TestServePublic_McpEndpoint_RemoteBacked_CacheLabelFollowsCaller(t *testing.T) {
+	t.Parallel()
+
+	const upstreamToolsList = `{"jsonrpc":"2.0","id":1,"result":{"ttlMs":60000,"cacheScope":"public","tools":[{"name":"a","inputSchema":{}}]}}`
+
+	ctx, ti := newTestMCPService(t)
+
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(upstreamToolsList))
+	}))
+	t.Cleanup(upstream.Close)
+
+	endpointSlug := "endpoint-" + uuid.NewString()
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	mcpServer, _ := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, endpointSlug, "public", issuerID)
+	anonymousToken := mintIssuerBearerForEndpoint(t, ctx, ti, endpointSlug, mcpServer, authCtx.ActiveOrganizationID)
+	userToken := mintIssuerBearerForEndpointSubject(t, ctx, ti, endpointSlug, mcpServer, authCtx.ActiveOrganizationID, urn.NewUserSubject(authCtx.UserID))
+	headers := map[string]string{mcpversions.HTTPHeader: mcpversions.Version20260728}
+
+	// The request context carries no AuthContext of its own, so only the
+	// issuer gate decides whether the caller is authenticated.
+	w, err := servePublicHTTP(t, t.Context(), ti, endpointSlug, toolsListBody(), anonymousToken, headers)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+	require.JSONEq(t, upstreamToolsList, w.Body.String())
+
+	w, err = servePublicHTTP(t, t.Context(), ti, endpointSlug, toolsListBody(), userToken, headers)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusOK, w.Code, "body=%s", w.Body.String())
+	var envelope struct {
+		Result map[string]json.RawMessage `json:"result"`
+	}
+	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &envelope))
+	require.JSONEq(t, `"private"`, string(envelope.Result["cacheScope"]))
+	require.JSONEq(t, `60000`, string(envelope.Result["ttlMs"]))
+}
+
 // TestServePublic_McpEndpoint_PrivateRemoteBacked_NoAuth_Returns401
 // confirms private-visibility remote-backed mcp_endpoints reject an
 // unauthenticated request at the issuer gate, before the proxy fires.
@@ -566,7 +609,6 @@ func TestServePublic_McpEndpoint_DisabledMcpServer_DoesNotFallBack(t *testing.T)
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsetsrepo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -576,8 +618,8 @@ func TestServePublic_McpEndpoint_DisabledMcpServer_DoesNotFallBack(t *testing.T)
 	// public toolset shares the slug via createPublicMCPToolset and must not
 	// shadow the authoritative disabled endpoint.
 	sharedSlug := "shared-" + uuid.NewString()[:8]
-	disabledToolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "disabled-"+uuid.NewString()[:8])
-	createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, sharedSlug)
+	disabledToolset := createPublicMCPToolset(t, ctx, ti, authCtx, "disabled-"+uuid.NewString()[:8])
+	createPublicMCPToolset(t, ctx, ti, authCtx, sharedSlug)
 
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, disabledToolset.ID, sharedSlug, "disabled", uuid.NullUUID{}, uuid.Nil)
 
@@ -594,14 +636,13 @@ func TestServePublic_McpEndpoint_UnknownVisibility_DoesNotServe(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsetsrepo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
 	slug := "unknown-vis-" + uuid.NewString()[:8]
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "unknown-vis-ts-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "unknown-vis-ts-"+uuid.NewString()[:8])
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug, "archived", uuid.NullUUID{}, uuid.Nil)
 
 	_, err := servePublicHTTP(t, ctx, ti, slug, makeInitializeBody(), "", nil)
@@ -617,13 +658,12 @@ func TestServePublic_PrivateOnlyEndpointDoesNotFallBackToLegacyToolset(t *testin
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsetsrepo.New(ti.conn)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
 
 	sharedSlug := "private-only-shared-" + uuid.NewString()[:8]
-	privateToolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "private-backend-"+uuid.NewString()[:8])
-	createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, sharedSlug)
+	privateToolset := createPublicMCPToolset(t, ctx, ti, authCtx, "private-backend-"+uuid.NewString()[:8])
+	createPublicMCPToolset(t, ctx, ti, authCtx, sharedSlug)
 	server := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, privateToolset.ID, sharedSlug, "public", uuid.NullUUID{}, uuid.Nil)
 	rows, err := testrepo.New(ti.conn).SetMCPServerNetworkAccessModeFixture(ctx, testrepo.SetMCPServerNetworkAccessModeFixtureParams{
 		NetworkAccessMode: pgtype.Text{String: string(networkaccess.ModePrivateOnly), Valid: true},
@@ -648,7 +688,7 @@ func TestResolveMCPEndpointAndServerPrivateOriginUsesIngressNamespace(t *testing
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), authCtx, "private-resolver-backend-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "private-resolver-backend-"+uuid.NewString()[:8])
 	slug := "private-resolver-" + uuid.NewString()[:8]
 	server := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, slug, "public", uuid.NullUUID{}, uuid.Nil)
 	rows, err := testrepo.New(ti.conn).SetMCPServerNetworkAccessModeFixture(ctx, testrepo.SetMCPServerNetworkAccessModeFixtureParams{
@@ -699,10 +739,9 @@ func TestLoadResolvedMcpEndpointPrivateOnlyDoesNotFallBack(t *testing.T) {
 	ctx, ti := newTestMCPService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	toolsetsRepo := toolsetsrepo.New(ti.conn)
 	sharedSlug := "oauth-private-only-" + uuid.NewString()[:8]
-	endpointToolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "oauth-endpoint-"+uuid.NewString()[:8])
-	createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, sharedSlug)
+	endpointToolset := createPublicMCPToolset(t, ctx, ti, authCtx, "oauth-endpoint-"+uuid.NewString()[:8])
+	createPublicMCPToolset(t, ctx, ti, authCtx, sharedSlug)
 	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
 	server := createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, endpointToolset.ID, sharedSlug, "public", uuid.NullUUID{}, issuerID)
 	rows, err := testrepo.New(ti.conn).SetMCPServerNetworkAccessModeFixture(ctx, testrepo.SetMCPServerNetworkAccessModeFixtureParams{
@@ -729,7 +768,6 @@ func TestServePublic_PlatformDomain_DoesNotResolveCustomDomainEndpoint(t *testin
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
-	toolsetsRepo := toolsetsrepo.New(ti.conn)
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
@@ -752,7 +790,7 @@ func TestServePublic_PlatformDomain_DoesNotResolveCustomDomainEndpoint(t *testin
 	})
 	require.NoError(t, err)
 
-	toolset := createPublicMCPToolset(t, ctx, toolsetsRepo, authCtx, "custom-only-"+uuid.NewString()[:8])
+	toolset := createPublicMCPToolset(t, ctx, ti, authCtx, "custom-only-"+uuid.NewString()[:8])
 	endpointSlug := "endpoint-" + uuid.NewString()
 	createToolsetMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, toolset.ID, endpointSlug, "public", uuid.NullUUID{UUID: customDomain.ID, Valid: true}, uuid.Nil)
 

@@ -32,13 +32,11 @@ JOIN remote_session_client_user_session_issuers link
  AND link.user_session_issuer_id = us.user_session_issuer_id
 WHERE b.organization_id = @org_id::text AND b.project_id = @project_id::uuid
   AND b.revoked_at IS NULL AND a.suspended_at IS NULL AND a.revoked_at IS NULL
-  AND b.remote_session_id = @remote_session_id::uuid
+  AND b.remote_session_id = ANY(@remote_session_ids::uuid[])
   AND b.remote_session_client_id = rs.remote_session_client_id
-  AND b.grant_generation = rs.grant_generation
   AND b.user_session_issuer_id = us.user_session_issuer_id
-  AND rs.subject_urn = us.subject_urn
-  AND rs.subject_urn = 'user:' || a.owner_user_id
-  AND b.attached_by_subject_id = 'user:' || a.owner_user_id
+  AND rs.subject_urn = b.attached_by_subject_id
+  AND b.attached_by_subject_id = rs.subject_urn
   AND rs.access_token_encrypted = 'DEMO-NOT-VALID-CIPHERTEXT'
   AND rs.refresh_token_encrypted IS NULL AND rs.auto_refresh IS FALSE;
 
@@ -129,9 +127,9 @@ WHERE project_id = @project_id::uuid
 -- credential kind, plus the pre-column row. A rerun that dropped or
 -- duplicated any of them would leave the badges telling a different story
 -- than the one they were seeded to tell.
--- One issuer per Connections credential story (acme-partner-gateway), three
--- project MCP issuers, and the organization-wide workforce issuer used by
--- GitHub.
+-- Two upstream MCP issuers, two independent gateway issuers, one
+-- Connections issuer, and the approvals server's issuer; GitHub uses the
+-- organization workforce issuer.
 -- name: PostflightIDProjectUserSessionIssuers :one
 SELECT count(*) FROM user_session_issuers
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
@@ -153,12 +151,14 @@ SELECT count(*) FROM user_session_clients
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
 
 -- EMA: two ready bindings, no cached credentials, and one saved provider
--- order. The workforce sign-in must not trust the fictional provider.
--- name: PostflightIDWorkforceTrustsEMAProvider :one
+-- order. The workforce issuer accepts ID-JAGs from the fictional provider
+-- without federating interactive sign-in through it.
+-- name: PostflightIDWorkforceInboundEMATrust :one
 SELECT count(*) FROM user_session_issuers
 WHERE id = @workforce_issuer::uuid
   AND organization_id = @org_id::text
-  AND trusted_remote_session_issuer_id = @ema_provider::uuid;
+  AND trusted_remote_session_issuer_id = @ema_provider::uuid
+  AND trusted_remote_session_client_id IS NULL;
 
 -- name: PostflightIDReadyEMABindings :one
 SELECT count(*) FROM remote_session_ema_bindings
@@ -222,14 +222,15 @@ SELECT count(*) FROM mcp_server_remote_session_clients
 WHERE project_id = @project_id::uuid AND deleted IS FALSE;
 
 -- Check both the total and the expected credential/server/client tuples so
--- eight misassigned choices cannot satisfy postflight.
+-- twenty-six misassigned choices cannot satisfy postflight.
 -- name: PostflightIDUpstreamClientChoices :one
 WITH live AS (
   SELECT * FROM upstream_client_selections
   WHERE project_id = @project_id::uuid AND deleted IS FALSE
+    AND credential_kind = 'user_session'
 )
 SELECT count(*) FROM live
-WHERE (SELECT count(*) FROM live) = 8
+WHERE (SELECT count(*) FROM live) = 26
   AND credential_kind = 'user_session'
   AND (
     (credential_id = ANY(@linear_session_ids::uuid[])
@@ -242,21 +243,119 @@ WHERE (SELECT count(*) FROM live) = 8
      AND remote_session_client_id IS NULL
      AND client_attachment_scope IS NULL
      AND no_auth IS TRUE)
+    OR
+    (credential_id = ANY(@org_session_ids::uuid[])
+     AND mcp_server_id = ANY(@org_no_auth_server_ids::uuid[])
+     AND remote_session_client_id IS NULL
+     AND client_attachment_scope IS NULL
+     AND no_auth IS TRUE)
+    OR
+    (credential_id = ANY(@org_session_ids::uuid[])
+     AND mcp_server_id = @github_server_id::uuid
+     AND remote_session_client_id IS NULL
+     AND auth_client_id = @github_auth_client_id::uuid
+     AND no_auth IS FALSE
+     AND EXISTS (SELECT 1 FROM mcp_auth_clients ac
+                 JOIN mcp_server_auth_clients l
+                   ON l.auth_client_id = ac.id AND l.mcp_server_id = live.mcp_server_id
+                  AND l.project_id = @project_id::uuid AND l.deleted IS FALSE
+                 WHERE ac.id = live.auth_client_id AND ac.organization_id = live.organization_id
+                   AND ac.deleted IS FALSE AND ac.enabled))
+    OR
+    (credential_id = ANY(@org_session_ids::uuid[])
+     AND no_auth IS FALSE
+     AND EXISTS (SELECT 1 FROM mcp_server_remote_session_clients a
+                 JOIN remote_session_clients c ON c.id = a.remote_session_client_id AND c.deleted IS FALSE
+                 JOIN user_sessions us ON us.id = live.credential_id
+                 JOIN remote_session_client_user_session_issuers binding
+                   ON binding.remote_session_client_id = c.id
+                  AND binding.user_session_issuer_id = us.user_session_issuer_id
+                 WHERE a.mcp_server_id = live.mcp_server_id
+                   AND a.remote_session_client_id = live.remote_session_client_id
+                   AND a.deleted IS FALSE))
   );
 
--- Live choices that are not the intended ones: Linear through its main
--- client, Slack with no upstream authentication, each on a seeded session.
+-- Count live choices outside the intended set: Linear through its main client,
+-- Slack with no upstream authentication, the organization gateway's GitHub
+-- choice of the caller's own token and its tunneled inventory choice, each on a
+-- seeded session.
 -- name: PostflightIDMisassignedUpstreamClientChoices :one
 SELECT count(*)
 FROM upstream_client_selections u
 WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
+  AND u.credential_kind = 'user_session'
   AND NOT (
     EXISTS (SELECT 1 FROM user_sessions s WHERE s.id = u.credential_id AND s.deleted IS FALSE)
     AND (
       (u.mcp_server_id = @linear_server_id::uuid AND u.remote_session_client_id = @linear_client_id::uuid)
       OR (u.mcp_server_id = @slack_server_id::uuid AND u.no_auth)
+      OR (u.credential_id = ANY(@org_session_ids::uuid[])
+          AND u.mcp_server_id = ANY(@org_no_auth_server_ids::uuid[]) AND u.no_auth)
+      OR (u.credential_id = ANY(@org_session_ids::uuid[])
+          AND u.mcp_server_id = @github_server_id::uuid AND u.remote_session_client_id IS NULL
+          AND u.auth_client_id = @github_auth_client_id::uuid AND NOT u.no_auth
+          AND EXISTS (SELECT 1 FROM mcp_auth_clients ac
+                      JOIN mcp_server_auth_clients l
+                        ON l.auth_client_id = ac.id AND l.mcp_server_id = u.mcp_server_id
+                       AND l.project_id = @project_id::uuid AND l.deleted IS FALSE
+                      WHERE ac.id = u.auth_client_id AND ac.organization_id = u.organization_id
+                        AND ac.deleted IS FALSE AND ac.enabled))
+      OR (u.credential_id = ANY(@org_session_ids::uuid[]) AND NOT u.no_auth
+          AND EXISTS (SELECT 1 FROM mcp_server_remote_session_clients a
+                      WHERE a.mcp_server_id = u.mcp_server_id
+                        AND a.remote_session_client_id = u.remote_session_client_id
+                        AND a.deleted IS FALSE))
     )
   );
+
+-- The headless app's one profile, choosing the shared token on Linear,
+-- which is still enabled and offered there.
+-- name: PostflightIDIssuanceProfileChoices :one
+SELECT count(*)
+FROM upstream_client_selections u
+JOIN issuance_selection_profiles p
+  ON p.id = u.credential_id AND p.organization_id = u.organization_id
+ AND p.deleted IS FALSE
+JOIN mcp_auth_clients ac
+  ON ac.id = u.auth_client_id AND ac.organization_id = u.organization_id
+ AND ac.deleted IS FALSE AND ac.enabled
+JOIN mcp_server_auth_clients l
+  ON l.auth_client_id = ac.id AND l.mcp_server_id = u.mcp_server_id
+ AND l.project_id = @project_id::uuid AND l.deleted IS FALSE
+WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
+  AND u.credential_kind = 'issuance_profile'
+  AND p.user_session_client_id = @client_id::uuid
+  AND u.mcp_server_id = @linear_server_id::uuid
+  AND u.auth_client_id = @auth_client_id::uuid;
+
+-- The identity-bound assistant's person-backed and userless turns use the
+-- shared token on Linear, by an administrator's choice in each profile's
+-- latest version, and the token is still enabled and offered there.
+-- name: PostflightIDExecutionProfileChoices :one
+SELECT count(*)
+FROM upstream_client_selections u
+JOIN execution_selection_profile_versions v
+  ON v.id = u.credential_id
+ AND v.version = (
+   SELECT max(latest.version)
+   FROM execution_selection_profile_versions latest
+   WHERE latest.profile_id = v.profile_id
+ )
+JOIN execution_selection_profiles p
+  ON p.id = v.profile_id AND p.deleted IS FALSE
+JOIN mcp_auth_clients ac
+  ON ac.id = u.auth_client_id AND ac.organization_id = u.organization_id
+ AND ac.deleted IS FALSE AND ac.enabled
+JOIN mcp_server_auth_clients l
+  ON l.auth_client_id = ac.id AND l.mcp_server_id = u.mcp_server_id
+ AND l.project_id = @project_id::uuid AND l.deleted IS FALSE
+WHERE u.project_id = @project_id::uuid AND u.deleted IS FALSE
+  AND u.credential_kind = 'execution_profile_version'
+  AND u.source = 'admin'
+  AND p.assistant_id = @assistant_id::uuid
+  AND p.execution_context IN ('user_backed', 'userless')
+  AND u.mcp_server_id = @linear_server_id::uuid
+  AND u.auth_client_id = @auth_client_id::uuid;
 
 -- name: PostflightIDServiceAccountHeaders :one
 SELECT count(*)
@@ -569,3 +668,42 @@ LEFT JOIN sigint_custom_signals cs
 WHERE ss.project_id = @project_id::uuid AND ss.deleted IS FALSE
   AND (s.id IS NULL OR s.deleted IS TRUE
     OR cs.id IS NULL OR cs.deleted IS TRUE);
+
+-- name: PostflightIDGatewayIssuers :one
+SELECT count(DISTINCT user_session_issuer_id)::bigint
+FROM meta_mcp_servers
+WHERE project_id = @project_id::uuid AND deleted IS FALSE;
+
+-- Only the dedicated workload and its owner may receive inference grants.
+-- name: PostflightIDInferenceGrants :one
+SELECT count(*) FROM principal_grants
+WHERE organization_id = @org_id::text AND scope = 'inference:execute';
+
+-- Verify admission, assignment, active agent and both explicit grant ceilings
+-- together, rather than accepting unrelated rows that happen to meet counts.
+-- name: PostflightIDInferenceWorkload :one
+SELECT count(*)
+FROM workload_issuers i
+JOIN workload_identity_admissions a
+  ON a.organization_id = i.organization_id AND a.workload_issuer_id = i.id
+JOIN workload_agent_assignments w
+  ON w.organization_id = a.organization_id AND w.workload_issuer_id = a.workload_issuer_id
+  AND w.subject = a.subject AND w.match_kind = a.match_kind
+JOIN agents ag ON ag.organization_id = w.organization_id AND ag.id = w.agent_id
+JOIN principal_grants agent_grant
+  ON agent_grant.organization_id = ag.organization_id AND agent_grant.principal_urn = 'agent:' || ag.id::text
+JOIN principal_grants owner_grant
+  ON owner_grant.organization_id = ag.organization_id AND owner_grant.principal_urn = 'user:' || ag.owner_user_id
+WHERE i.organization_id = @org_id::text AND i.id = @issuer_id::uuid
+  AND i.deleted IS FALSE AND i.project_id IS NULL
+  AND i.issuer = 'https://inference.example.com'
+  AND i.jwks_uri = 'https://inference.example.com/.well-known/jwks.json'
+  AND i.allow_wildcard_admission IS FALSE
+  AND a.deleted IS FALSE AND a.project_id = @project_id::uuid
+  AND a.subject = 'service:acme:summary-worker' AND a.match_kind = 'exact'
+  AND w.deleted IS FALSE AND ag.id = @agent_id::uuid
+  AND ag.project_id = @project_id::uuid AND ag.suspended_at IS NULL AND ag.revoked_at IS NULL
+  AND agent_grant.scope = 'inference:execute' AND owner_grant.scope = agent_grant.scope
+  AND agent_grant.selectors = jsonb_build_object(
+    'resource_kind', 'inference', 'resource_id', '*', 'project_id', ag.project_id::text)
+  AND owner_grant.selectors = agent_grant.selectors;

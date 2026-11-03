@@ -171,8 +171,10 @@ func TestStoreRemoteSessionGrant_ReconsentInTheSameOrganizationUpdatesInPlace(t 
 	require.NoError(t, err)
 	require.Equal(t, "second-token", tokens[r.issuerID].Token)
 
-	_, err = r.agentGrant(ctx)
-	require.ErrorIs(t, err, pgx.ErrNoRows, "an attachment pins the previous grant generation, as before")
+	attached, err := r.agentGrant(ctx)
+	require.NoError(t, err)
+	require.Equal(t, second.ID, attached.ID)
+	require.Equal(t, second.GrantGeneration, attached.GrantGeneration, "the attachment reads current credentials from the same row")
 }
 
 func TestStoreRemoteSessionGrant_WithoutOrganizationProvenanceIsRefused(t *testing.T) {

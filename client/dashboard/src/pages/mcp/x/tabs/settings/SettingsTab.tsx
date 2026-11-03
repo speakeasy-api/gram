@@ -7,7 +7,25 @@ import {
   ServerUrlSection,
 } from "./sections/ServerUrlSection";
 
+import { SettingsSection } from "@/components/detail/settings-section";
+import { RequireScope } from "@/components/require-scope";
+import { FieldError } from "@/components/ui/Field";
+import { Text } from "@/components/ui/Text";
+import {
+  type UpstreamAuthEnforcementStatus,
+  useUpstreamAuthEnforcement,
+} from "@/hooks/useUpstreamAuthEnforcement";
 import { useResolvedMcpServerUrl } from "@/hooks/useToolsetUrl";
+import type { Toolset } from "@/lib/toolTypes";
+import {
+  MCPAuthenticationTab,
+  ToolsetOAuthSection,
+} from "@/pages/mcp/MCPEnvironmentSettings";
+import { MCPPerformanceTab } from "@/pages/mcp/MCPPerformanceTab";
+import { PageSection } from "@/pages/mcp/PageSection";
+import { ExportJsonSection } from "@/pages/mcp/x/hosted/ExportJsonSection";
+import { ServerInstructionsSection } from "@/pages/mcp/x/hosted/ServerInstructionsSection";
+import { isCanonicalHostedWrapper } from "@/pages/mcp/x/MCPServerDetailsRouting";
 import { getTunneledMcpServerArgs } from "@/lib/sources";
 import type { McpEndpoint } from "@gram/client/models/components/mcpendpoint.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
@@ -20,12 +38,17 @@ import {
   AgentSetupSection,
   MCP_AGENT_SETUP_SECTION_ID,
 } from "./sections/AgentSetupSection";
+import { BuiltinServerSection } from "./sections/BuiltinServerSection";
 import { CallerIdentitySection } from "./sections/CallerIdentitySection";
 import {
   IDENTITY_CHAINING_SECTION_ID,
   IdentityChainingSection,
 } from "./sections/authentication/IdentityChainingSection";
 import { GeneralSection } from "./sections/GeneralSection";
+import {
+  UPSTREAM_CREDENTIALS_SECTION_ID,
+  UpstreamCredentialsSection,
+} from "./sections/authentication/UpstreamCredentialsSection";
 import { DangerZoneSection } from "./sections/DangerZoneSection";
 import { NetworkAccessSection } from "./sections/NetworkAccessSection";
 import {
@@ -50,8 +73,13 @@ import {
 
 // Every section that can be deep-linked from elsewhere in the dashboard
 // (readiness bar, visibility picker, rate-limit hint, connections panel).
+const MCP_PERFORMANCE_SECTION_ID = "performance";
+const MCP_ENVIRONMENT_SECTION_ID = "environment";
+
 const SCROLLABLE_SECTION_IDS: readonly string[] = [
   MCP_SERVER_URL_SECTION_ID,
+  MCP_PERFORMANCE_SECTION_ID,
+  MCP_ENVIRONMENT_SECTION_ID,
   MCP_AUTHENTICATION_SECTION_ID,
   MCP_RESOURCE_IDENTIFIER_SECTION_ID,
   MCP_PUBLIC_ACCESS_SECTION_ID,
@@ -59,6 +87,7 @@ const SCROLLABLE_SECTION_IDS: readonly string[] = [
   MCP_AGENT_SETUP_SECTION_ID,
   IDENTITY_CHAINING_SECTION_ID,
   MCP_SESSIONS_SECTION_ID,
+  UPSTREAM_CREDENTIALS_SECTION_ID,
 ];
 
 // `ready` flips once the source-backed sections can be on the page: they
@@ -87,10 +116,13 @@ export function SettingsTab({
   mcpServer,
   endpoints,
   isLoadingEndpoints,
+  hostedToolset,
 }: {
   mcpServer: McpServer;
   endpoints: McpEndpoint[];
   isLoadingEndpoints: boolean;
+  /** The toolset a hosted server serves; it adds the hosted-only sections. */
+  hostedToolset?: Toolset;
 }): JSX.Element {
   const isUnproxied = !!mcpServer.unproxiedMcpServerId;
   // Only remote and tunneled sources add sections to the page; the unproxied
@@ -99,6 +131,9 @@ export function SettingsTab({
     !!mcpServer.remoteMcpServerId || !!mcpServer.tunneledMcpServerId;
   const remoteMcpServerId = mcpServer.remoteMcpServerId;
   const { mcpUrl } = useResolvedMcpServerUrl(endpoints, isLoadingEndpoints);
+  // Enforcing organizations configure upstream identity through credentials;
+  // the others keep the legacy Identity panel. Only one renders.
+  const upstreamAuth = useUpstreamAuthEnforcement();
 
   // The source rows behind this server. Each section edits the source
   // directly, so they are fetched once here rather than per section.
@@ -129,7 +164,17 @@ export function SettingsTab({
     !!remoteMcpServer ||
     !!tunneledMcpServer;
 
-  useScrollToSettingsHash(sourceSettled);
+  useScrollToSettingsHash(sourceSettled && upstreamAuth !== "loading");
+
+  // Speakeasy manages a built-in server, such as the approvals server, so it
+  // has no settings to edit.
+  if (mcpServer.builtinBackend) {
+    return (
+      <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
+        <BuiltinServerSection />
+      </div>
+    );
+  }
 
   let deleteTarget: SourceBackedDeleteTarget | undefined;
   if (remoteMcpServer) {
@@ -138,6 +183,80 @@ export function SettingsTab({
     deleteTarget = { kind: "tunneled", source: tunneledMcpServer };
   } else if (unproxiedMcpServer) {
     deleteTarget = { kind: "unproxied", source: unproxiedMcpServer };
+  }
+
+  if (hostedToolset) {
+    // Toolset columns sync onto the canonical server only.
+    const canonical = isCanonicalHostedWrapper(mcpServer);
+    return (
+      <div className="mx-auto w-full max-w-[1270px] space-y-10 px-8 py-8">
+        <GeneralSection mcpServer={mcpServer} />
+        {canonical ? (
+          <RequireScope
+            scope="mcp:write"
+            resourceId={hostedToolset.id}
+            level="section"
+          >
+            <ServerUrlSection
+              backend={{ mcpServerId: mcpServer.id }}
+              endpoints={endpoints}
+              isLoadingEndpoints={isLoadingEndpoints}
+              mcpServer={mcpServer}
+            />
+            <NetworkAccessSection
+              mcpServer={mcpServer}
+              endpoints={endpoints}
+              toolset={hostedToolset}
+            />
+            <div id={MCP_AUTHENTICATION_SECTION_ID}>
+              <ToolsetOAuthSection toolset={hostedToolset} />
+            </div>
+            <div id={MCP_ENVIRONMENT_SECTION_ID}>
+              <MCPAuthenticationTab toolset={hostedToolset} showOAuth={false} />
+            </div>
+          </RequireScope>
+        ) : (
+          <>
+            <ServerUrlSection
+              backend={{ mcpServerId: mcpServer.id }}
+              endpoints={endpoints}
+              isLoadingEndpoints={isLoadingEndpoints}
+              mcpServer={mcpServer}
+            />
+            <NetworkAccessSection mcpServer={mcpServer} endpoints={endpoints} />
+            <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
+          </>
+        )}
+        <RequireScope
+          scope="mcp:write"
+          resourceId={hostedToolset.id}
+          level="section"
+        >
+          <div id={MCP_PERFORMANCE_SECTION_ID}>
+            <MCPPerformanceTab toolset={hostedToolset} />
+          </div>
+        </RequireScope>
+        <PageSection
+          heading="Server Instructions"
+          description="Instructions returned to LLMs when they connect to your MCP server. Describe how your tools work together, required workflows, and any constraints."
+        >
+          <ServerInstructionsSection
+            mcpServerId={mcpServer.id}
+            writeResourceId={hostedToolset.id}
+            name={mcpServer.name || hostedToolset.name}
+            tools={hostedToolset.tools}
+          />
+        </PageSection>
+        <ToolFilteringSection mcpServer={mcpServer} />
+        {/* Export reads the toolset's canonical server only. */}
+        {canonical && <ExportJsonSection mcpServer={mcpServer} />}
+        <DangerZoneSection
+          mcpServer={mcpServer}
+          endpoints={endpoints}
+          hostedToolset={canonical ? hostedToolset : undefined}
+        />
+      </div>
+    );
   }
 
   if (remoteMcpServerId) {
@@ -155,7 +274,19 @@ export function SettingsTab({
             remote server needs. Upstream headers live inside its Custom
             Headers disclosure; they are governed by the identity choice, not
             a peer of it. */}
-        <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
+        {upstreamAuth === "legacy" ? (
+          <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
+        ) : upstreamAuth === "enforced" ? (
+          // Links to the legacy Identity anchor land on its replacement.
+          <div id={MCP_AUTHENTICATION_SECTION_ID}>
+            <UpstreamCredentialsSection mcpServer={mcpServer} />
+          </div>
+        ) : (
+          <UpstreamIdentityPendingSection
+            id={MCP_AUTHENTICATION_SECTION_ID}
+            status={upstreamAuth}
+          />
+        )}
         <IdentityChainingSection mcpServer={mcpServer} />
         <ServerUrlSection
           backend={{ mcpServerId: mcpServer.id }}
@@ -195,6 +326,18 @@ export function SettingsTab({
         </>
       )}
       <AuthenticationSection mcpServer={mcpServer} mcpUrl={mcpUrl} />
+      {/* Hosted toolsets keep their own authentication, and unproxied
+          servers reach the upstream without Speakeasy in between. */}
+      {isUnproxied ||
+      mcpServer.toolsetId ||
+      upstreamAuth === "legacy" ? null : upstreamAuth === "enforced" ? (
+        <UpstreamCredentialsSection mcpServer={mcpServer} />
+      ) : (
+        <UpstreamIdentityPendingSection
+          id={UPSTREAM_CREDENTIALS_SECTION_ID}
+          status={upstreamAuth}
+        />
+      )}
       {tunneledMcpServer ? (
         <Fragment key={tunneledMcpServer.id}>
           <ResourceIdentifierSection tunneledMcpServer={tunneledMcpServer} />
@@ -216,5 +359,40 @@ export function SettingsTab({
         sourceUnavailable={sourceUnavailable}
       />
     </div>
+  );
+}
+
+/**
+ * Placeholder for the Identity section while the enforcement state that picks
+ * its contents is loading or unavailable. It renders no controls, so no write
+ * surface appears for the wrong mode.
+ */
+function UpstreamIdentityPendingSection({
+  id,
+  status,
+}: {
+  id: string;
+  status: Extract<UpstreamAuthEnforcementStatus, "loading" | "error">;
+}): JSX.Element {
+  return (
+    <SettingsSection id={id}>
+      <SettingsSection.Header>
+        <SettingsSection.Title>Identity</SettingsSection.Title>
+      </SettingsSection.Header>
+      <SettingsSection.Panel>
+        <SettingsSection.Body>
+          {status === "loading" ? (
+            <Text muted small>
+              Loading…
+            </Text>
+          ) : (
+            <FieldError>
+              The identity settings could not be loaded. Refresh the page to try
+              again.
+            </FieldError>
+          )}
+        </SettingsSection.Body>
+      </SettingsSection.Panel>
+    </SettingsSection>
   );
 }

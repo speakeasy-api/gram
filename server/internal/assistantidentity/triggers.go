@@ -194,6 +194,7 @@ func (s *Service) projectIssuer(ctx context.Context, tx pgx.Tx, org string, proj
 		if err := s.audit.LogWorkloadIssuerCreate(ctx, tx, audit.LogWorkloadIssuerCreateEvent{
 			OrganizationID: org, ProjectID: projectID, Actor: actor.principal, ActorDisplayName: actor.displayName, ActorSlug: nil,
 			IssuerURN: urn.NewWorkloadIssuer(issuer.ID), IssuerName: issuer.Name, IssuerSnapshotAfter: workloadpolicy.IssuerSnapshot(issuer),
+			Metadata: nil,
 		}); err != nil {
 			return workloadrepo.WorkloadIssuer{}, fmt.Errorf("audit assistant trigger issuer: %w", err)
 		}

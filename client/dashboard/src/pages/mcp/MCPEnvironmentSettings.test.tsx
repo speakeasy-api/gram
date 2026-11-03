@@ -2,6 +2,7 @@ import { TooltipProvider } from "@/components/ui/Tooltip";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 
 vi.mock("@/components/sources/sources-hooks", () => ({
@@ -19,12 +20,8 @@ vi.mock("@/hooks/useMissingEnvironmentVariables", () => ({
 vi.mock("@/hooks/useToolsetUrl", () => ({
   useMcpUrl: () => ({ url: "https://gram.example/mcp/server" }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    environments: {
-      Link: ({ children }: { children: ReactNode }) => <a>{children}</a>,
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@gram/client/react-query/createEnvironment.js", () => ({
   useCreateEnvironmentMutation: () => ({ mutate: vi.fn(), isPending: false }),
@@ -60,7 +57,7 @@ vi.mock("@gram/client/react-query/updateEnvironment.js", () => ({
 vi.mock("./useEnvironmentVariables", () => ({
   useEnvironmentVariables: () => [],
 }));
-vi.mock("./MCPDetails", () => ({
+vi.mock("./PageSection", () => ({
   PageSection: ({
     children,
     action,
@@ -73,6 +70,8 @@ vi.mock("./MCPDetails", () => ({
       {children}
     </section>
   ),
+}));
+vi.mock("./OAuthDetailsModal", () => ({
   OAuthDetailsModal: ({
     isOpen,
     onManageMetadata,
@@ -83,6 +82,8 @@ vi.mock("./MCPDetails", () => ({
     isOpen ? (
       <button onClick={onManageMetadata}>Manage metadata source</button>
     ) : null,
+}));
+vi.mock("./oauth-wizard", () => ({
   ConnectOAuthModal: ({
     isOpen,
     existingConfig,
@@ -128,6 +129,7 @@ describe("MCPAuthenticationTab external OAuth metadata recommendation", () => {
           <MCPAuthenticationTab toolset={toolset} />
         </TooltipProvider>
       </QueryClientProvider>,
+      { wrapper: MemoryRouter },
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Review update" }));
@@ -156,6 +158,7 @@ describe("MCPAuthenticationTab external OAuth metadata recommendation", () => {
           <MCPAuthenticationTab toolset={toolset} />
         </TooltipProvider>
       </QueryClientProvider>,
+      { wrapper: MemoryRouter },
     );
 
     expect(screen.getByRole("button", { name: "Manage" })).toBeTruthy();
@@ -180,6 +183,7 @@ describe("MCPAuthenticationTab external OAuth metadata recommendation", () => {
           <MCPAuthenticationTab toolset={toolset} />
         </TooltipProvider>
       </QueryClientProvider>,
+      { wrapper: MemoryRouter },
     );
 
     fireEvent.click(screen.getByRole("button", { name: "Manage" }));

@@ -33,10 +33,8 @@ func TestKitGKECompositionRejectsLocalAndMissingAuthority(t *testing.T) {
 		KitLocalCompositionConfig: KitLocalCompositionConfig{
 			Environment: "production", Image: "registry.example/kit:0.2.17", Origin: origin,
 			MCPResource: resource, MCPIssuer: issuer, MCPUserSessionIssuerID: uuid.New(),
-			TurnStream: new(chat.TurnStream),
-			ProvisionMCP: func(context.Context, KitMCPProvisionRequest) (KitMCPProvisionResult, error) {
-				return KitMCPProvisionResult{}, nil
-			},
+			TurnStream:      new(chat.TurnStream),
+			WorkloadJWKSURL: "https://external.example/keys", WorkloadIssuerURL: "https://external.example", WorkloadIssuerBaseURL: "https://issuer.example",
 		},
 		GKE: GKERuntimeConfig{Dynamic: fake.NewSimpleDynamicClient(runtime.NewScheme()), Namespace: "assistants", RunnerCIDRBlocks: []string{"10.0.0.0/16"}},
 	}
@@ -46,6 +44,8 @@ func TestKitGKECompositionRejectsLocalAndMissingAuthority(t *testing.T) {
 		mutate func(*KitGKECompositionConfig)
 	}{
 		{"local", func(c *KitGKECompositionConfig) { c.Environment = "local" }},
+		{"missing JWKS", func(c *KitGKECompositionConfig) { c.WorkloadJWKSURL = "" }},
+		{"insecure JWKS", func(c *KitGKECompositionConfig) { c.WorkloadJWKSURL = "http://external.example/keys" }},
 		{"missing environment", func(c *KitGKECompositionConfig) { c.Environment = "" }},
 		{"local network", func(c *KitGKECompositionConfig) { c.Network = "local-relay" }},
 		{"local CA", func(c *KitGKECompositionConfig) { c.ExtraCACertFile = "ca.pem" }},
@@ -55,7 +55,7 @@ func TestKitGKECompositionRejectsLocalAndMissingAuthority(t *testing.T) {
 		{"invalid network bounds", func(c *KitGKECompositionConfig) { c.GKE.RunnerCIDRBlocks = []string{"10.0.0.0/16", "garbage"} }},
 		{"missing network bounds", func(c *KitGKECompositionConfig) { c.GKE.RunnerCIDRBlocks = nil }},
 		{"missing issuer", func(c *KitGKECompositionConfig) { c.MCPUserSessionIssuerID = uuid.Nil }},
-		{"missing provisioner", func(c *KitGKECompositionConfig) { c.ProvisionMCP = nil }},
+		{"missing workload issuer", func(c *KitGKECompositionConfig) { c.WorkloadIssuerURL = "" }},
 		{"missing transcript", func(c *KitGKECompositionConfig) { c.TurnStream = nil }},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
@@ -92,6 +92,11 @@ func TestKitGKEFencePreservesCanonicalSession(t *testing.T) {
 		ProjectID: key.ProjectID, RuntimeID: key.RuntimeID, State: runtimeStateStopped,
 		StartingState: runtimeStateStarting, ActiveState: runtimeStateActive, ExpiringState: runtimeStateExpiring,
 	}))
+	// Retirement must not bypass validation of supplied workload authority.
+	r.BackendMetadataJSON = []byte(`{"workload":{"subject":"retired-binding"}}`)
+	require.ErrorIs(t, core.fenceKitRuntimeAlreadyLocked(t.Context(), r), ErrKitRuntimeBinding)
+	// This fixture has no workload binding; use its persisted metadata instead.
+	r.BackendMetadataJSON = nil
 	require.NoError(t, core.fenceKitRuntimeAlreadyLocked(t.Context(), r), "permanent cleanup must not resurrect retired gateway authority")
 	_, err = core.LoadKitGatewayToken(t.Context(), key.ProjectID, key.AssistantID, key.RuntimeID)
 	require.Error(t, err)
@@ -127,10 +132,7 @@ func TestKitGKERejectsMalformedOCIReferences(t *testing.T) {
 			require.Error(t, err)
 		})
 	}
-	in := kitGKEInput()
-	in.MCPFiles = map[string][]byte{"speakeasy.json": []byte("must-not-shadow-inference")}
-	_, err := RenderKitGKEProvision(in)
-	require.Error(t, err)
+
 }
 
 func TestKitGKELifecycleReloadsAndCommitsRecoveryEvidence(t *testing.T) {

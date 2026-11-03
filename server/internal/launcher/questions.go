@@ -62,6 +62,7 @@ var kindLabels = map[string]string{
 	"project":        "Project",
 	"recent":         "Recently visited page",
 	"mcp_server":     "MCP server",
+	"gateway":        "MCP gateway",
 	"catalog":        "Catalog entry",
 	"plugin":         "Plugin",
 	"marketplace":    "Plugin marketplace",

@@ -346,10 +346,12 @@ func TestBuildAgentPluginsView_ETagTracksServers(t *testing.T) {
 		return mv.BuildAgentPluginsView(rows, testMarketplaceURL, map[uuid.UUID][]*gen.AgentPluginServer{row.PluginID.UUID: servers}).Etag
 	}
 
-	unlinked := with(&gen.AgentPluginServer{Name: "Linear", DashboardURL: nil})
-	require.Equal(t, unlinked, with(&gen.AgentPluginServer{Name: "Linear", DashboardURL: nil}))
-	require.NotEqual(t, unlinked, with(&gen.AgentPluginServer{Name: "Linear", DashboardURL: new("https://dashboard.example/linear")}),
+	unlinked := with(&gen.AgentPluginServer{ID: nil, Name: "Linear", DashboardURL: nil})
+	require.Equal(t, unlinked, with(&gen.AgentPluginServer{ID: nil, Name: "Linear", DashboardURL: nil}))
+	require.NotEqual(t, unlinked, with(&gen.AgentPluginServer{ID: nil, Name: "Linear", DashboardURL: new("https://dashboard.example/linear")}),
 		"gaining a dashboard link changes the ETag")
-	require.NotEqual(t, unlinked, with(&gen.AgentPluginServer{Name: "GitHub", DashboardURL: nil}),
+	require.NotEqual(t, unlinked, with(&gen.AgentPluginServer{ID: nil, Name: "GitHub", DashboardURL: nil}),
 		"a renamed server changes the ETag")
+	require.NotEqual(t, unlinked, with(&gen.AgentPluginServer{ID: new("srv-1"), Name: "Linear", DashboardURL: nil}),
+		"gaining a server id changes the ETag, so cached agents pick it up")
 }

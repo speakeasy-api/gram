@@ -110,6 +110,8 @@ type RiskPolicy struct {
 	Prompt pgtype.Text
 	// @access: confidential
 	ModelConfig []byte
+	// @access: opaque-restricted
+	ApprovalConfig []byte
 	// @access: confidential
 	Score float64
 	// @access: confidential

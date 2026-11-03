@@ -1,16 +1,22 @@
 package demoseed
 
 import (
+	"bytes"
 	"context"
+	_ "embed"
+	"encoding/json"
 	"errors"
 	"fmt"
 	"log/slog"
+	"net/url"
 	"os/exec"
 	"strings"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/redis/go-redis/v9"
+	"go.opentelemetry.io/otel"
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidentity"
 	"github.com/speakeasy-api/gram/server/internal/assets"
@@ -18,6 +24,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
@@ -47,6 +55,8 @@ func localMCPAppFunctionID() string { return LocalSpec().FixedUUID("0000-4000-a0
 
 // LocalFixturesOptions configures RunLocalFixtures.
 type LocalFixturesOptions struct {
+	// SiteURL is the canonical public asset origin; nil skips the catalog logo fixture.
+	SiteURL *url.URL
 	// DeveloperEmail identifies the developer to adopt into the local org.
 	// Empty means "read it from `git config user.email`", which is exactly
 	// what the dev-idp does when it bootstraps its default user.
@@ -56,6 +66,8 @@ type LocalFixturesOptions struct {
 	// ObservedEnv holds the current values of StaleOverrideVars, so the
 	// fixtures can warn when mise.local.toml is shadowing them.
 	ObservedEnv map[string]string
+	// Slack connects the org to the developer's Slack test app, when set.
+	Slack LocalSlackOptions
 }
 
 // RunLocalFixtures adds everything the local development organization needs on
@@ -71,9 +83,11 @@ type LocalFixturesOptions struct {
 //     a default environment, both with well-known ids so mise.toml can
 //     hardcode them;
 //   - the global MCP registry row, which is not tenant-scoped and so cannot
-//     live in the seed proper.
+//     live in the seed proper;
+//   - a global catalog logo entry and public platform asset when SiteURL is set.
 //
-// Every write is idempotent, and every one is scoped to LocalSpec's org.
+// Writes are idempotent. Tenant writes are scoped to LocalSpec's org; the
+// registry entries, platform assets, and system roles are global.
 // Call it only after Run has completed with LocalSpec: the seed deletes and
 // recreates the org's memberships, so adopting you has to come after it.
 func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, blob assets.BlobStore, cache *redis.Client, opts LocalFixturesOptions) error {
@@ -144,11 +158,14 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		{"grant tool log visibility", localToolLogVisibilitySQL, []any{spec.OrgID, dev.ID}},
 		{"enable platform mcp", localPlatformMCPFeatureSQL, []any{spec.OrgID}},
 		{"enable sso and directory sync", localIdentityFeaturesSQL, []any{spec.OrgID}},
+		{"approve tool calls", localToolApproverSQL, []any{spec.OrgID, spec.FixedUUID(approvalPolicyFixedID), "user:" + dev.ID}},
 		{"verify developer email domain", localVerifiedDomainSQL, []any{spec.OrgID, emailDomain(dev.Email)}},
 		{"api key", localAPIKeySQL, []any{spec.OrgID, spec.ProjectID(), dev.ID, localAPIKeyID(), LocalAPIKeyName, apiKeyHash, apiKey[:len(auth.APIKeyPrefix(env))+5]}},
 		{"api key policy", localAPIKeyPolicySQL, []any{spec.OrgID, localAPIKeyID(), spec.ProjectID()}},
 		{"default environment", localEnvironmentSQL, []any{spec.OrgID, spec.ProjectID(), localEnvironmentID()}},
 		{"mcp registry", localMCPRegistrySQL, nil},
+		{"enable code mode", localCodeModeFeatureSQL, []any{spec.OrgID}},
+		{"code mode gateway", localCodeModeGatewaySQL, []any{spec.OrgID, spec.ProjectID()}},
 		{"mcp app asset", localMCPAppAssetSQL, []any{
 			localMCPAppAssetID(), spec.ProjectID(), spec.OrgID, app.url, app.size, app.sha256,
 		}},
@@ -168,10 +185,18 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		return fmt.Errorf("commit local fixtures: %w", err)
 	}
 
-	logger.InfoContext(ctx, "local fixtures applied")
-
 	warnOnStaleOverrides(ctx, logger, opts.ObservedEnv, apiKey)
 	bustLocalCaches(ctx, logger, cache, spec.OrgID, dev.ID)
+
+	if err := connectLocalSlack(ctx, logger, db, spec.OrgID, dev, opts.Slack); err != nil {
+		return err
+	}
+	if opts.SiteURL != nil {
+		if err := seedLocalCatalogIcon(ctx, logger, db, blob, opts.SiteURL); err != nil {
+			return fmt.Errorf("seed local catalog icon: %w", err)
+		}
+	}
+	logger.InfoContext(ctx, "local fixtures applied")
 	return nil
 }
 
@@ -266,6 +291,7 @@ func bustLocalCaches(ctx context.Context, logger *slog.Logger, cache *redis.Clie
 		productfeatures.FeatureSessionCapture,
 		productfeatures.FeatureSkills,
 		productfeatures.FeaturePlatformMCP,
+		productfeatures.FeatureCodeMode,
 		productfeatures.FeatureSSO,
 		productfeatures.FeatureSCIM,
 	} {
@@ -366,6 +392,25 @@ VALUES ($1, 'platform_mcp')
 ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
 `
 
+// Code Mode is a staff-managed entitlement; enabled locally so the seeded Code
+// Mode gateway runs against the local runtime. The shared demo org never gets
+// it: once a deployment runs the code runtime, Code Mode spends runner
+// capacity on whoever explores the demo.
+const localCodeModeFeatureSQL = `
+INSERT INTO organization_features (organization_id, feature_name)
+VALUES ($1, 'code_mode')
+ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
+`
+
+// The developer approves the seeded tool approval policy too, so the Tool
+// approvals tab offers Approve once and Deny locally. The shared demo org keeps
+// its demo approvers only.
+const localToolApproverSQL = `
+UPDATE risk_policies
+SET approval_config = jsonb_set(approval_config, '{approvers}', (approval_config -> 'approvers') || to_jsonb($3::text))
+WHERE organization_id = $1 AND id = $2::uuid AND NOT (approval_config -> 'approvers') ? $3::text
+`
+
 // SSO and directory sync (scim) are paid entitlements that gate the WorkOS
 // admin portal; enabled locally so the identity setup flow works end to end.
 const localIdentityFeaturesSQL = `
@@ -414,6 +459,13 @@ ON CONFLICT (project_id, slug) WHERE deleted IS FALSE
 DO UPDATE SET name = EXCLUDED.name, updated_at = clock_timestamp()
 `
 
+// The shared seed stores this gateway as Progressive because the demo org has
+// no code runtime; local stacks can run one, so the gateway shows Code Mode.
+const localCodeModeGatewaySQL = `
+UPDATE meta_mcp_servers SET discovery_mode = 'code_mode', updated_at = clock_timestamp()
+WHERE organization_id = $1 AND project_id = $2 AND name = 'Python Code Gateway' AND deleted IS FALSE
+`
+
 // The default registry backing the Catalog page. Global, not tenant-scoped,
 // which is precisely why it cannot live in the tenant seed.
 const localMCPRegistrySQL = `
@@ -428,4 +480,44 @@ func emailDomain(email string) string {
 		return ""
 	}
 	return strings.ToLower(email[at+1:])
+}
+
+//go:embed fixtures/catalog-logo.svg
+var localCatalogLogo []byte
+
+const localCatalogName = "example.test/local-catalog-logo"
+
+// seedLocalCatalogIcon is global staff data, never part of tenant demo phases.
+func seedLocalCatalogIcon(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, blob assets.BlobStore, siteURL *url.URL) error {
+	validator, err := mcpregistry.LoadValidator()
+	if err != nil {
+		return fmt.Errorf("load catalog validator: %w", err)
+	}
+	registry := mcpregistry.New(db, validator).WithAssetBaseURL(siteURL)
+	// Preserve staff edits on reseed, including removal of either icon slot.
+	if _, err := registry.GetByName(ctx, localCatalogName); err == nil {
+		return nil
+	} else if !errors.Is(err, mcpregistry.ErrNotFound) {
+		return fmt.Errorf("look up local catalog icon: %w", err)
+	}
+	tp := otel.GetTracerProvider()
+	images := assets.NewPlatformService(logger, tp, guardian.NewDefaultPolicy(tp), db, blob)
+	uploaded, err := images.StorePlatformImage(ctx, logger, "local-fixture@example.test", bytes.NewReader(localCatalogLogo), int64(len(localCatalogLogo)), "image/svg+xml")
+	if err != nil {
+		return fmt.Errorf("store local catalog icon: %w", err)
+	}
+	id, err := uuid.Parse(uploaded.Asset.ID)
+	if err != nil {
+		return fmt.Errorf("parse local catalog asset ID: %w", err)
+	}
+	icon := &mcpregistry.CatalogIcon{Src: assets.ServeImageURL(siteURL, id), MimeType: "image/svg+xml", Sizes: []string{"any"}}
+	raw, err := mcpregistry.WithCatalogIcons(json.RawMessage(`{"server":{"name":"example.test/local-catalog-logo","description":"Fictional local catalog logo fixture","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://example.test/mcp"}]}}`), mcpregistry.CatalogIcons{Default: icon, Dark: icon})
+	if err != nil {
+		return fmt.Errorf("encode local catalog icons: %w", err)
+	}
+	_, err = registry.Create(ctx, raw)
+	if err != nil {
+		return fmt.Errorf("create local catalog entry: %w", err)
+	}
+	return nil
 }

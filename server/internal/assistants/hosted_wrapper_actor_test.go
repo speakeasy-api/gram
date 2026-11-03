@@ -5,7 +5,6 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/gen/types"
@@ -27,11 +26,11 @@ func TestUpdateAssistantWithoutUserEnablesHostedWrapperAsCreator(t *testing.T) {
 	require.NoError(t, err)
 	ts, err := toolsetsrepo.New(db).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{
 		OrganizationID: "org-test", ProjectID: project, Name: "Linear", Slug: "linear",
-		McpSlug: pgtype.Text{String: "org-test-linear-background", Valid: true}, McpEnabled: false,
 	})
 	require.NoError(t, err)
+	createCanonicalWrapper(t, db, ts, "org-test-linear-background", "disabled")
 
-	// No auth context: the hosted wrapper sync is attributed to the assistant's creator.
+	// No auth context: enabling the hosted wrapper is attributed to the assistant's creator.
 	_, err = core.UpdateAssistant(t.Context(), project, record.ID, nil, nil, nil,
 		[]*types.AssistantToolsetRef{{ToolsetSlug: ts.Slug, EnvironmentSlug: nil}}, nil, nil, nil, nil, allowAllMCPEnable)
 	require.NoError(t, err)
@@ -40,7 +39,7 @@ func TestUpdateAssistantWithoutUserEnablesHostedWrapperAsCreator(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "private", server.Visibility)
 
-	created, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionMcpServerCreate)
+	created, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionMcpServerUpdate)
 	require.NoError(t, err)
 	require.Equal(t, "user-1", created.ActorID)
 	require.Equal(t, ts.ID.String(), created.SubjectID)
@@ -56,9 +55,9 @@ func TestUpdateAssistantByAgentEnablesHostedWrapperAsAgent(t *testing.T) {
 	require.NoError(t, err)
 	ts, err := toolsetsrepo.New(db).CreateToolset(t.Context(), toolsetsrepo.CreateToolsetParams{
 		OrganizationID: "org-test", ProjectID: project, Name: "Linear", Slug: "linear",
-		McpSlug: pgtype.Text{String: "org-test-linear-agent", Valid: true}, McpEnabled: false,
 	})
 	require.NoError(t, err)
+	createCanonicalWrapper(t, db, ts, "org-test-linear-agent", "disabled")
 
 	agentID := uuid.NewString()
 	ctx := agentContext(t.Context(), project, agentID)
@@ -68,7 +67,7 @@ func TestUpdateAssistantByAgentEnablesHostedWrapperAsAgent(t *testing.T) {
 		[]*types.AssistantToolsetRef{{ToolsetSlug: ts.Slug, EnvironmentSlug: nil}}, nil, nil, nil, nil, allowAllMCPEnable)
 	require.NoError(t, err)
 
-	created, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionMcpServerCreate)
+	created, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionMcpServerUpdate)
 	require.NoError(t, err)
 	require.Equal(t, agentID, created.ActorID)
 	require.Equal(t, string(urn.PrincipalTypeAgent), created.ActorType)

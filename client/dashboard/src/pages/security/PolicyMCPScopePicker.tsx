@@ -28,6 +28,7 @@ import { useQueries } from "@tanstack/react-query";
 import { ChevronDown, Info, Loader2, Network, Server, X } from "lucide-react";
 import { useMemo, useState } from "react";
 import { Link } from "react-router";
+import { pluralize } from "@/lib/format";
 
 type AnnotationFields = Partial<Record<ToolAnnotation, boolean>>;
 
@@ -112,7 +113,11 @@ export function PolicyMCPScopePicker({
     undefined,
     { throwOnError: false },
   );
-  const concreteServers = serversQuery.data?.mcpServers ?? [];
+  // Built-in servers, such as the approvals server, are served before any
+  // policy runs, so no policy can scope them.
+  const concreteServers = (serversQuery.data?.mcpServers ?? []).filter(
+    (server) => !server.builtinBackend,
+  );
   const remoteServers = concreteServers.filter(
     (server) => !server.toolsetId && !!server.remoteMcpServerId,
   );
@@ -756,7 +761,7 @@ function FocusedServerPane({
   const note = !selected
     ? "Not in scope"
     : custom
-      ? `Custom · ${selectedTools.length} of ${server.tools.length}`
+      ? customScopeNote(server, selectedTools)
       : wildcard
         ? "All tools, unconditionally — including ones added later"
         : toolAnnotations.length === 0
@@ -776,7 +781,7 @@ function FocusedServerPane({
           <p className="text-muted-foreground text-xs">
             {server.kind === "gateway"
               ? `${server.memberCount ?? gatewayMembers.length} member servers`
-              : `${server.tools.length} tools`}
+              : `${pluralize(server.tools.length, "tool")}${server.toolSource === "discovered" ? " discovered" : ""}`}
           </p>
         </div>
         {selected ? (
@@ -905,6 +910,38 @@ function FocusedServerPane({
   );
 }
 
+/**
+ * The note for a hand-picked tool list. A policy can name tools the server's
+ * list does not have, for example on a remote server whose tools were never
+ * discovered; counting them against that list would read as "1 of 0".
+ */
+function customScopeNote(
+  server: PickerServer,
+  selectedTools: string[],
+): string {
+  const listed = new Set(server.tools.map((tool) => tool.name));
+  const missingCount = selectedTools.filter((name) => !listed.has(name)).length;
+  if (missingCount === 0) {
+    return `Custom · ${selectedTools.length} of ${server.tools.length}`;
+  }
+  // Without a complete tool list there is nothing to count against.
+  if (
+    server.toolsLoading ||
+    server.toolsError ||
+    server.toolSource === "unlisted"
+  ) {
+    return `Custom · ${pluralize(selectedTools.length, "tool")}`;
+  }
+  const missing =
+    server.toolSource === "discovered"
+      ? "not discovered yet"
+      : "not on this server";
+  if (server.tools.length === 0) {
+    return `Custom · ${pluralize(missingCount, "tool")}, ${missing}`;
+  }
+  return `Custom · ${selectedTools.length - missingCount} of ${server.tools.length}, plus ${missingCount} ${missing}`;
+}
+
 function noToolsMessage(source: PickerServer["toolSource"]): string {
   switch (source) {
     case "discovered":
@@ -969,7 +1006,7 @@ function EmptyToolListNotice({
       </Text>
       {discovered ? (
         <Link
-          to={routes.mcp.x.inspect.href(mcpServerRouteParam(server))}
+          to={routes.mcp.details.inspect.href(mcpServerRouteParam(server))}
           target="_blank"
           rel="noopener noreferrer"
           className="text-muted-foreground hover:text-foreground inline-block text-xs underline"

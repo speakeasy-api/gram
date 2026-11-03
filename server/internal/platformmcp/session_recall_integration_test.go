@@ -17,20 +17,35 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/chrepo"
 	"github.com/speakeasy-api/gram/server/internal/risk/maskdisplay"
 	"github.com/speakeasy-api/gram/server/internal/scanners"
+	"github.com/speakeasy-api/gram/server/internal/sessionhandoff"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
-func newRecallService(t *testing.T, conn *pgxpool.Pool, enabled *bool) *SessionRecallService {
+// newRecallService composes recall over the test database and a ClickHouse
+// findings store, returned so a test can seed the findings recall masks.
+func newRecallService(t *testing.T, conn *pgxpool.Pool, enabled *bool) (*SessionRecallService, *chrepo.Queries) {
 	t.Helper()
+	chConn, err := platformMCPInfra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	findings := chrepo.New(chConn)
 	return NewSessionRecallService(testenv.NewLogger(t), conn, platformrepo.New(conn), audit.NewLogger(), func(_ context.Context, _ string) (bool, error) {
 		return *enabled, nil
-	}, nil, nil, nil, allowBudget())
+	}, findings, allowBudget()), findings
+}
+
+type recordingHandoffMinter struct {
+	inputs []sessionhandoff.SessionHandoffMintInput
+}
+
+func (m *recordingHandoffMinter) Valid() bool { return true }
+func (m *recordingHandoffMinter) Mint(_ context.Context, input sessionhandoff.SessionHandoffMintInput) (sessionhandoff.SessionHandoffMintResult, error) {
+	m.inputs = append(m.inputs, input)
+	return sessionhandoff.SessionHandoffMintResult{URL: "https://example.test/shared/handoffs/token", ExpiresAt: "2026-08-20T10:15:00Z"}, nil
 }
 
 // seedRecallChat inserts a captured chat the way hook ingest records one: the
@@ -97,9 +112,9 @@ func seedRecallMessage(t *testing.T, ctx context.Context, conn *pgxpool.Pool, ch
 	return id
 }
 
-// seedRecallFinding records one open finding against a message, under an
-// enabled policy, with the given content span.
-func seedRecallFinding(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, organizationID string, messageID uuid.UUID, source, ruleID, match string, start, end int) (uuid.UUID, uuid.UUID) {
+// seedRecallFinding records one live ClickHouse finding against a message,
+// under an enabled policy, with the given content span.
+func seedRecallFinding(t *testing.T, ctx context.Context, conn *pgxpool.Pool, findings *chrepo.Queries, chatID, projectID uuid.UUID, organizationID string, messageID uuid.UUID, source, ruleID, match string, start, end int) {
 	t.Helper()
 	policyID, err := testrepo.New(conn).SeedRiskPolicyFixture(ctx, testrepo.SeedRiskPolicyFixtureParams{
 		ProjectID:      projectID,
@@ -108,21 +123,26 @@ func seedRecallFinding(t *testing.T, ctx context.Context, conn *pgxpool.Pool, pr
 		Sources:        []string{source},
 	})
 	require.NoError(t, err)
-	spans := `[{"match":"` + match + `","field":"content","start_pos":` + itoa(start) + `,"end_pos":` + itoa(end) + `}]`
-	findingID, err := testrepo.New(conn).SeedRiskResultFixture(ctx, testrepo.SeedRiskResultFixtureParams{
-		ProjectID:      projectID,
-		OrganizationID: organizationID,
-		RiskPolicyID:   policyID,
-		ChatMessageID:  uuid.NullUUID{UUID: messageID, Valid: true},
-		Source:         source,
-		RuleID:         conv.ToPGText(ruleID),
-		Match:          conv.ToPGText(match),
-		StartPos:       pgtype.Int4{Int32: int32(start), Valid: true}, // #nosec G115 -- test offsets are tiny.
-		EndPos:         pgtype.Int4{Int32: int32(end), Valid: true},   // #nosec G115 -- test offsets are tiny.
-		Spans:          []byte(spans),
-	})
-	require.NoError(t, err)
-	return policyID, findingID
+	now := time.Now().UTC()
+	require.NoError(t, findings.InsertRiskFindings(ctx, []chrepo.RiskFindingRow{{
+		ID:                uuid.New(),
+		CreatedAt:         now,
+		OrganizationID:    organizationID,
+		ProjectID:         projectID.String(),
+		ChatMessageID:     messageID.String(),
+		RiskPolicyID:      policyID.String(),
+		RiskPolicyVersion: 1,
+		RuleID:            ruleID,
+		Source:            source,
+		StartPos:          int32(start), // #nosec G115 -- test offsets are tiny.
+		EndPos:            int32(end),   // #nosec G115 -- test offsets are tiny.
+		ChatID:            chatID.String(),
+		MessageCreatedAt:  now,
+		MatchLen:          uint32(len(match)), // #nosec G115 -- fixture matches are bounded literals.
+		MatchRedacted:     maskdisplay.Display(source, ruleID, match),
+		Surface:           scanners.SurfaceContent,
+		EventKind:         chrepo.EventKindFinding,
+	}}))
 }
 
 // seedRecallUserAccount inserts a provider account row; accountType is the
@@ -162,10 +182,19 @@ func TestSessionRecallListReturnsOnlyOwnedSessions(t *testing.T) {
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	enabled := true
-	svc := newRecallService(t, conn, &enabled)
+	svc, _ := newRecallService(t, conn, &enabled)
 
 	ownedSession := "ses_" + uuid.NewString()
 	ownedChatID := seedRecallChat(t, ctx, conn, project.ID, principal.OrganizationID, principal.UserID, ownedSession, "fix flaky auth test", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+	require.NoError(t, testrepo.New(conn).SetCapturedAgentChatSummaryFixture(ctx, testrepo.SetCapturedAgentChatSummaryFixtureParams{
+		Summary:   conv.ToPGText("sensitive transcript-derived summary"),
+		ID:        ownedChatID,
+		ProjectID: project.ID,
+	}))
+	require.NoError(t, testrepo.New(conn).SetCapturedAgentChatSummaryFixture(ctx, testrepo.SetCapturedAgentChatSummaryFixtureParams{
+		Summary: conv.ToPGText("sensitive transcript-derived summary"),
+		ID:      ownedChatID, ProjectID: project.ID,
+	}))
 
 	teamAccountID := seedRecallUserAccount(t, ctx, conn, principal.OrganizationID, conv.ToPGText("team"))
 	personalAccountID := seedRecallUserAccount(t, ctx, conn, principal.OrganizationID, conv.ToPGText("personal"))
@@ -200,6 +229,8 @@ func TestSessionRecallListReturnsOnlyOwnedSessions(t *testing.T) {
 	require.Contains(t, byChatID, teamChatID.String())
 	require.Equal(t, ownedSession, byChatID[ownedChatID.String()].SessionID, "the harness-native session id is served, not the chat uuid")
 	require.Equal(t, "fix flaky auth test", byChatID[ownedChatID.String()].Title)
+	require.Empty(t, byChatID[ownedChatID.String()].Summary, "stored transcript-derived summaries must not be returned")
+	require.Empty(t, byChatID[ownedChatID.String()].Summary, "stored transcript-derived summaries must not be returned")
 	require.Equal(t, project.Slug, byChatID[ownedChatID.String()].ProjectSlug)
 	require.NotContains(t, byChatID, deletedChatID.String())
 
@@ -220,7 +251,9 @@ func TestSessionRecallContinueMasksAndRecords(t *testing.T) {
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	enabled := true
-	svc := newRecallService(t, conn, &enabled)
+	svc, findings := newRecallService(t, conn, &enabled)
+	minter := &recordingHandoffMinter{}
+	svc.WithHandoffMinter(minter)
 
 	sessionID := "ses_" + uuid.NewString()
 	chatID := seedRecallChat(t, ctx, conn, project.ID, principal.OrganizationID, principal.UserID, sessionID, "fix flaky auth test", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
@@ -250,7 +283,7 @@ func TestSessionRecallContinueMasksAndRecords(t *testing.T) {
 	})
 
 	start := strings.Index(userContent, secret)
-	seedRecallFinding(t, ctx, conn, project.ID, principal.OrganizationID, userMessageID, "gitleaks", "secret.aws_access_token", secret, start, start+len(secret))
+	seedRecallFinding(t, ctx, conn, findings, chatID, project.ID, principal.OrganizationID, userMessageID, "gitleaks", "secret.aws_access_token", secret, start, start+len(secret))
 
 	before, err := audittest.AuditLogCountByAction(ctx, conn, audit.ActionChatSessionRecall)
 	require.NoError(t, err)
@@ -274,6 +307,14 @@ func TestSessionRecallContinueMasksAndRecords(t *testing.T) {
 	require.Contains(t, out.NotCarriedOver, "tool inputs and outputs (redacted; tool names retained)")
 	require.Contains(t, out.NotCarriedOver, "files touched (derived from tool inputs, which are redacted)")
 	require.Contains(t, out.Notes, "1 messages are awaiting risk analysis; their content was withheld")
+
+	_, err = svc.CreateSessionHandoffLink(ctx, principal, CreateSessionHandoffLinkInput{SessionID: sessionID, Confirmed: true})
+	require.NoError(t, err)
+	require.Len(t, minter.inputs, 1)
+	require.Equal(t, out.Digest, minter.inputs[0].Content)
+	require.Contains(t, minter.inputs[0].Content, masked)
+	require.NotContains(t, minter.inputs[0].Content, secret)
+	require.NotContains(t, minter.inputs[0].Content, "/repo/auth/login.go")
 
 	// Case 3: one NULL-child recall edge and one content-free audit record,
 	// committed together.
@@ -314,75 +355,6 @@ func TestSessionRecallContinueMasksAndRecords(t *testing.T) {
 	require.EqualValues(t, 2, countRecallLinks(t, ctx, conn, chatID))
 }
 
-func TestSessionRecallMasksSameSpanWithClickHouseCutover(t *testing.T) {
-	t.Parallel()
-	ctx := t.Context()
-	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_session_recall_clickhouse")
-	require.NoError(t, err)
-	chConn, err := platformMCPInfra.NewClickhouseClient(t)
-	require.NoError(t, err)
-	principal, project := seedRegistrationLifecycle(t, ctx, conn)
-
-	flags := &feature.InMemory{}
-	portability := func(context.Context, string) (bool, error) { return true, nil }
-	svc := NewSessionRecallService(
-		testenv.NewLogger(t),
-		conn,
-		platformrepo.New(conn),
-		audit.NewLogger(),
-		portability,
-		flags,
-		NewPostgresOrganizationSlugResolver(conn),
-		chrepo.New(chConn),
-		allowBudget(),
-	)
-
-	sessionID := "ses_" + uuid.NewString()
-	chatID := seedRecallChat(t, ctx, conn, project.ID, principal.OrganizationID, principal.UserID, sessionID, "cutover masking", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
-	const secret = "AKIAIOSFODNN7EXAMPLE"
-	content := "Token: " + secret
-	at := time.Now().UTC().Add(-time.Hour)
-	messageID := seedRecallMessage(t, ctx, conn, chatID, project.ID, recallMessageSeed{
-		role: "user", content: content, at: at, generation: 0, toolCalls: "", source: "claude-code", analyzed: true, contentAssetURL: "",
-	})
-	start := strings.Index(content, secret)
-	policyID, findingID := seedRecallFinding(t, ctx, conn, project.ID, principal.OrganizationID, messageID, "gitleaks", "secret.aws_access_token", secret, start, start+len(secret))
-	require.NoError(t, chrepo.New(chConn).InsertRiskFindings(ctx, []chrepo.RiskFindingRow{{
-		ID:                findingID,
-		CreatedAt:         at,
-		OrganizationID:    principal.OrganizationID,
-		ProjectID:         project.ID.String(),
-		ChatMessageID:     messageID.String(),
-		RiskPolicyID:      policyID.String(),
-		RiskPolicyVersion: 1,
-		RuleID:            "secret.aws_access_token",
-		Source:            "gitleaks",
-		StartPos:          int32(start),               // #nosec G115 -- fixture offset is bounded.
-		EndPos:            int32(start + len(secret)), // #nosec G115 -- fixture offset is bounded.
-		ChatID:            chatID.String(),
-		MessageCreatedAt:  at,
-		MatchLen:          uint32(len(secret)), // #nosec G115 -- fixture match is bounded.
-		MatchRedacted:     maskdisplay.Display("gitleaks", "secret.aws_access_token", secret),
-		Surface:           scanners.SurfaceContent,
-		EventKind:         chrepo.EventKindFinding,
-	}}))
-
-	flags.SetFlag(feature.FlagRiskFindingsClickHouseCutover, principal.OrganizationID, false)
-	postgresResult, err := svc.ContinueSession(ctx, principal, ContinueSessionInput{SessionID: sessionID})
-	require.NoError(t, err)
-
-	flags.SetFlag(feature.FlagRiskFindingsClickHouseCutover, principal.OrganizationID, true)
-	clickHouseResult, err := svc.ContinueSession(ctx, principal, ContinueSessionInput{SessionID: sessionID})
-	require.NoError(t, err)
-
-	masked := maskdisplay.Display("gitleaks", "secret.aws_access_token", secret)
-	require.Contains(t, postgresResult.Digest, masked)
-	require.Contains(t, clickHouseResult.Digest, masked)
-	require.NotContains(t, postgresResult.Digest, secret)
-	require.NotContains(t, clickHouseResult.Digest, secret)
-	require.Equal(t, postgresResult.Digest, clickHouseResult.Digest)
-}
-
 // Case 4b: a finding whose offsets cannot be applied exactly withholds the
 // whole message rather than serving prose known to carry an unmasked finding,
 // and the fidelity notes say so.
@@ -395,7 +367,7 @@ func TestSessionRecallContinueWithholdsWhenFindingCannotBeMasked(t *testing.T) {
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	enabled := true
-	svc := newRecallService(t, conn, &enabled)
+	svc, findings := newRecallService(t, conn, &enabled)
 
 	sessionID := "ses_" + uuid.NewString()
 	chatID := seedRecallChat(t, ctx, conn, project.ID, principal.OrganizationID, principal.UserID, sessionID, "stale offsets session", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
@@ -406,7 +378,7 @@ func TestSessionRecallContinueWithholdsWhenFindingCannotBeMasked(t *testing.T) {
 		role: "user", content: content, at: base, generation: 0, toolCalls: "", source: "claude-code", analyzed: true, contentAssetURL: "",
 	})
 	// Offsets beyond the content: the mask cannot be applied exactly.
-	seedRecallFinding(t, ctx, conn, project.ID, principal.OrganizationID, messageID, "gitleaks", "secret.generic", "stale", 1000, 1006)
+	seedRecallFinding(t, ctx, conn, findings, chatID, project.ID, principal.OrganizationID, messageID, "gitleaks", "secret.generic", "stale", 1000, 1006)
 
 	out, err := svc.ContinueSession(ctx, principal, ContinueSessionInput{SessionID: sessionID})
 	require.NoError(t, err)
@@ -427,7 +399,7 @@ func TestSessionRecallRefusesWhenFeatureDisabled(t *testing.T) {
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	enabled := false
-	svc := newRecallService(t, conn, &enabled)
+	svc, _ := newRecallService(t, conn, &enabled)
 
 	sessionID := "ses_" + uuid.NewString()
 	chatID := seedRecallChat(t, ctx, conn, project.ID, principal.OrganizationID, principal.UserID, sessionID, "gated session", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
@@ -458,7 +430,7 @@ func TestSessionRecallContinueHidesForeignAndUnknownSessions(t *testing.T) {
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	enabled := true
-	svc := newRecallService(t, conn, &enabled)
+	svc, _ := newRecallService(t, conn, &enabled)
 
 	foreignSession := "ses_" + uuid.NewString()
 	seedRecallChat(t, ctx, conn, project.ID, principal.OrganizationID, "user_"+uuid.NewString(), foreignSession, "not yours", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
@@ -496,7 +468,7 @@ func TestSessionRecallContinueCapsRowRead(t *testing.T) {
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	enabled := true
-	svc := newRecallService(t, conn, &enabled)
+	svc, _ := newRecallService(t, conn, &enabled)
 
 	sessionID := "ses_" + uuid.NewString()
 	chatID := seedRecallChat(t, ctx, conn, project.ID, principal.OrganizationID, principal.UserID, sessionID, "very long session", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
@@ -526,7 +498,7 @@ func TestSessionRecallContinueServesLatestGenerationOnly(t *testing.T) {
 
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	enabled := true
-	svc := newRecallService(t, conn, &enabled)
+	svc, _ := newRecallService(t, conn, &enabled)
 
 	sessionID := "ses_" + uuid.NewString()
 	chatID := seedRecallChat(t, ctx, conn, project.ID, principal.OrganizationID, principal.UserID, sessionID, "compacted session", uuid.NullUUID{UUID: uuid.Nil, Valid: false})

@@ -34,4 +34,8 @@ type McpServerToolsetSummary struct {
 	ExternalOauthServerID *string
 	// The registry specifier the toolset originated from, if any
 	RegistrySpecifier *string
+	// The ID of the MCP server that stands in for the toolset: its canonical
+	// server, whose ID is the toolset's, or when it has none, its oldest live
+	// server with a live endpoint. Absent when it has neither.
+	HostingMcpServerID *string
 }

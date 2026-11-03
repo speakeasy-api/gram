@@ -59,7 +59,7 @@ function ServerLink({ server }: { server: EMAServiceServer }): JSX.Element {
   const name = serverDisplayName(server);
   return (
     <Link
-      to={`${routes.mcp.x.settings.href(mcpServerRouteParam(server))}#${IDENTITY_CHAINING_SECTION_ID}`}
+      to={`${routes.mcp.details.settings.href(mcpServerRouteParam(server))}#${IDENTITY_CHAINING_SECTION_ID}`}
       className="block truncate font-medium underline-offset-4 hover:underline"
       title={name}
     >

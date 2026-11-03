@@ -1,11 +1,11 @@
+import { useOrganization, useSession } from "@/contexts/Auth";
 import {
-  useIsPlatformAdmin,
-  useOrganization,
-  useSession,
-} from "@/contexts/Auth";
-import { getRBACScopeOverrideHeader } from "@/components/dev-toolbar-utils";
-import { useProjectSlugForRequests, useSdkClient } from "@/contexts/Sdk";
+  useProjectSlugForRequests,
+  useSdkClient,
+  useSlugs,
+} from "@/contexts/Sdk";
 import { DEMO_ORG_SLUG } from "@/lib/demo";
+import { useRBACScopeOverride } from "@/hooks/useRBACScopeOverride";
 import { encodeIdentityUrn, withIdentityWindow } from "@/lib/identity-urn";
 import { fetchRegisteredAgents } from "@/pages/identities/identityRoster";
 import { useRoutes } from "@/routes";
@@ -26,22 +26,22 @@ export function useAgentIdentityCandidates({
 }): LauncherCandidate[] {
   const organization = useOrganization();
   const session = useSession();
-  const isPlatformAdmin = useIsPlatformAdmin();
+  const scopeOverride = useRBACScopeOverride();
   const sdk = useSdkClient();
   const projectSlug = useProjectSlugForRequests();
+  const { projectSlug: routeProjectSlug } = useSlugs();
   const routes = useRoutes({ projectSlug });
   const navigate = useNavigate();
   const { search } = useLocation();
 
   // Keep this aligned with the registered-agent query on the identities index
   // and the agent-management page. Those APIs deliberately reject support,
-  // impersonated, demo, and RBAC-override sessions.
+  // impersonated, and demo sessions.
   const queryEnabled =
     enabled &&
     organization.slug !== DEMO_ORG_SLUG &&
     !session.organizationOverride &&
-    !session.impersonatorEmail &&
-    getRBACScopeOverrideHeader(import.meta.env.DEV || isPlatformAdmin) === null;
+    !session.impersonatorEmail;
 
   const {
     data,
@@ -62,6 +62,7 @@ export function useAgentIdentityCandidates({
       "[]",
       "[]",
       "",
+      scopeOverride,
     ],
     queryFn: ({ pageParam, signal }) =>
       fetchRegisteredAgents(
@@ -99,9 +100,9 @@ export function useAgentIdentityCandidates({
     if (!queryEnabled) return [];
     return (data?.pages ?? [])
       .flatMap((page) => page.items)
-      .map((agent): LauncherCandidate => {
+      .flatMap((agent): LauncherCandidate[] => {
         const urn = `agent:${agent.id}`;
-        return {
+        const identity: LauncherCandidate = {
           id: `agent-identity:${agent.id}`,
           // Identity names share the same privacy treatment as people.
           kind: "person",
@@ -121,6 +122,34 @@ export function useAgentIdentityCandidates({
             );
           },
         };
+        // Request headers may fall back to the default project in the org shell;
+        // only a real project route can offer this project-scoped control.
+        if (!routeProjectSlug || !agent.permissions?.write) return [identity];
+        return [
+          identity,
+          {
+            ...identity,
+            id: `agent-inference-access:${agent.id}`,
+            title: `${agent.name} · Permissions`,
+            detail: "Edit permissions · inference project access",
+            keywords: [
+              ...identity.keywords,
+              "inference",
+              "inference:execute",
+              "permissions",
+            ],
+            run: () => {
+              void navigate(
+                withIdentityWindow(
+                  routes.identities.detail.permissions.href(
+                    encodeIdentityUrn(urn),
+                  ),
+                  search,
+                ),
+              );
+            },
+          },
+        ];
       });
-  }, [data, navigate, queryEnabled, routes, search]);
+  }, [data, navigate, queryEnabled, routes, routeProjectSlug, search]);
 }

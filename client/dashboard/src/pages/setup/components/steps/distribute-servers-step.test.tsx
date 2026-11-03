@@ -6,6 +6,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { DistributeServersStep } from "./distribute-servers-step";
 
@@ -58,9 +59,9 @@ vi.mock("../step-container", () => ({
     </>
   ),
 }));
-vi.mock("@/contexts/Sdk", () => ({ useSdkClient: () => serverState.client }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({ mcp: { catalog: { Link: () => null } } }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSdkClient: () => serverState.client,
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: vi.fn() }),
@@ -119,37 +120,48 @@ beforeEach(() => {
 });
 
 function renderStep(onComplete: () => void) {
-  render(<DistributeServersStep onComplete={onComplete} />);
+  render(
+    <MemoryRouter>
+      <DistributeServersStep onComplete={onComplete} />
+    </MemoryRouter>,
+  );
 }
 
 describe("DistributeServersStep", () => {
-  it("surfaces a blocked install instead of spinning forever", async () => {
-    serverState.catalog.data.servers = [
-      {
-        registryId: "registry-1",
-        registrySpecifier: "example/server",
-        title: "Example Server",
-        description: "Example description",
-        supportsDcr: true,
-        remotes: [
-          { url: "https://example.com/mcp", transportType: "streamable-http" },
-        ],
-      },
-    ];
-    serverState.workflow.installBlockedReason =
-      "Could not load the organization's issuers.";
-    renderStep(() => {});
+  it.each(["dcr", "cimd"])(
+    "offers %s servers and surfaces blocked installs",
+    async (method) => {
+      serverState.catalog.data.servers = [
+        {
+          registryId: "registry-1",
+          registrySpecifier: "example/server",
+          title: "Example Server",
+          description: "Example description",
+          supportsDcr: method === "dcr",
+          supportsCimd: method === "cimd",
+          remotes: [
+            {
+              url: "https://example.com/mcp",
+              transportType: "streamable-http",
+            },
+          ],
+        },
+      ];
+      serverState.workflow.installBlockedReason =
+        "Could not load the organization's issuers.";
+      renderStep(() => {});
 
-    fireEvent.click(screen.getByRole("button", { name: /Example Server/ }));
-    fireEvent.click(
-      screen.getByRole("button", { name: "Distribute 1 server" }),
-    );
+      fireEvent.click(screen.getByRole("button", { name: /Example Server/ }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Distribute 1 server" }),
+      );
 
-    expect(
-      await screen.findByText("Could not load the organization's issuers."),
-    ).toBeTruthy();
-    expect(serverState.workflow.startInstall).not.toHaveBeenCalled();
-  });
+      expect(
+        await screen.findByText("Could not load the organization's issuers."),
+      ).toBeTruthy();
+      expect(serverState.workflow.startInstall).not.toHaveBeenCalled();
+    },
+  );
 
   it("keeps successful deployment instructions visible until Finish completes the step", async () => {
     serverState.catalog.data.servers = [

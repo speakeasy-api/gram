@@ -24,7 +24,7 @@ func reasonOutcomeCounts(t *testing.T, reader *sdkmetric.ManualReader) map[remot
 	t.Helper()
 	var rm metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(t.Context(), &rm))
-	counts := map[remotesessionmetrics.IssuerMetadataRefreshReason]map[remotesessionmetrics.IssuerMetadataRefreshOutcome]int64{}
+	counts := make(map[remotesessionmetrics.IssuerMetadataRefreshReason]map[remotesessionmetrics.IssuerMetadataRefreshOutcome]int64)
 	for _, scope := range rm.ScopeMetrics {
 		for _, m := range scope.Metrics {
 			if m.Name != "gram.remote_session_issuer.metadata_refresh" {
@@ -37,7 +37,7 @@ func reasonOutcomeCounts(t *testing.T, reader *sdkmetric.ManualReader) map[remot
 				outcomeValue, _ := dp.Attributes.Value(attr.OutcomeKey)
 				reason := remotesessionmetrics.IssuerMetadataRefreshReason(reasonValue.AsString())
 				if counts[reason] == nil {
-					counts[reason] = map[remotesessionmetrics.IssuerMetadataRefreshOutcome]int64{}
+					counts[reason] = make(map[remotesessionmetrics.IssuerMetadataRefreshOutcome]int64)
 				}
 				counts[reason][remotesessionmetrics.IssuerMetadataRefreshOutcome(outcomeValue.AsString())] += dp.Value
 			}

@@ -1,5 +1,6 @@
 import type { ExternalMCPServer } from "@gram/client/models/components/externalmcpserver.js";
 import type { PulseMCPServer } from "../hooks";
+import type { SetupType } from "../filter-defaults";
 import type { FilterState } from "./useFilterState";
 
 /**
@@ -21,8 +22,8 @@ export interface ParsedServerMetadata {
   // Auth
   authType: string;
   authTypeDisplay: string;
-  /** True when the server needs manual auth setup (no DCR support). */
-  requiresManualSetup: boolean;
+  /** The setup path supported by the available catalog evidence. */
+  setupType: SetupType;
 
   // Tools
   toolCount: number;
@@ -39,16 +40,36 @@ export function isPulseMcpServer(
   return !!server.meta;
 }
 
-/**
- * Whether connecting to a server requires manual auth setup. A server is
- * "automatic" only when its OAuth authorization server advertises a dynamic
- * client registration endpoint (DCR, RFC 7591), which Speakeasy registers a client
- * against on the fly. Everything else — OAuth 2.0 without DCR, API-key servers,
- * etc. — needs the user to supply credentials manually. Backed by the
- * server-computed `supports_dcr` flag from the Pulse catalog payload.
- */
+/** Automatic OAuth setup still verifies the live issuer during installation. */
+export function supportsAutomaticOAuth(server: PulseMCPServer): boolean {
+  return server.supportsDcr || server.supportsCimd === true;
+}
+
+/** Missing capability evidence is inconclusive, not a manual-setup requirement. */
+export function serverSetupType(server: PulseMCPServer): SetupType {
+  switch (server.authSetup) {
+    case "none":
+    case "dcr":
+    case "cimd":
+      return "auto";
+    case "manual":
+      return "manual";
+    case "unknown":
+    case undefined:
+      break;
+  }
+  if (supportsAutomaticOAuth(server)) return "auto";
+  const authType =
+    server.meta?.["com.pulsemcp/server-version"]?.[
+      "remotes[0]"
+    ]?.authOptions?.[0]?.type?.toLowerCase();
+  if (authType === "none") return "auto";
+  if (authType?.includes("api") || authType?.includes("key")) return "manual";
+  return "unknown";
+}
+
 export function requiresManualSetup(server: PulseMCPServer): boolean {
-  return !server.supportsDcr;
+  return serverSetupType(server) === "manual";
 }
 
 export type PulseMcpAuthType = "none" | "apikey" | "oauth" | "other";
@@ -57,12 +78,16 @@ export type PulseMcpAuthType = "none" | "apikey" | "oauth" | "other";
  * Extract the authentication type from server metadata.
  */
 export function extractAuthType(server: PulseMCPServer): PulseMcpAuthType {
+  if (server.authSetup === "none") return "none";
+  if (["dcr", "cimd", "manual"].includes(server.authSetup ?? ""))
+    return "oauth";
   const versionMeta = server.meta?.["com.pulsemcp/server-version"];
   const remote = versionMeta?.["remotes[0]"];
   const authOptions = remote?.authOptions?.[0];
 
   if (!authOptions || !authOptions.type) {
-    return "none";
+    if (supportsAutomaticOAuth(server)) return "oauth";
+    return server.authSetup === "unknown" ? "other" : "none";
   }
 
   const authTypeLower = authOptions.type.toLowerCase();
@@ -148,7 +173,7 @@ export function parseServerMetadata(
     status: versionMeta?.status,
     authType,
     authTypeDisplay: getAuthTypeDisplay(authType),
-    requiresManualSetup: requiresManualSetup(server),
+    setupType: serverSetupType(server),
     toolCount: server.toolCount,
     isReadOnly: server.isReadOnly,
     publishedAt: versionMeta?.publishedAt
@@ -233,15 +258,11 @@ export function filterAndSortServers(
     );
   }
 
-  // Setup filter (manual vs automatic / DCR)
+  // Unknown evidence must not match either confirmed setup path.
   if (filters.setupTypes.length > 0) {
-    filtered = filtered.filter((s) => {
-      const manual = s.metadata.requiresManualSetup;
-      return (
-        (filters.setupTypes.includes("manual") && manual) ||
-        (filters.setupTypes.includes("auto") && !manual)
-      );
-    });
+    filtered = filtered.filter((s) =>
+      filters.setupTypes.includes(s.metadata.setupType),
+    );
   }
 
   // Tool behavior filter

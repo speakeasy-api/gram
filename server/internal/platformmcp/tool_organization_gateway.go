@@ -8,6 +8,7 @@ import (
 	"fmt"
 	"net/url"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
@@ -15,7 +16,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 // Administrator assignment review already has list_access_members,
@@ -26,8 +29,14 @@ import (
 const getMyOrganizationGatewayName = "get_my_organization_gateway"
 
 const getMyOrganizationGatewayDescription = "Get the one MCP URL that gives you every MCP server in your organization you are allowed to reach, across all projects, signed in with your organization account. " +
-	"Returns available=true with the url to add to an MCP client, or available=false with unavailable_reason and the next action. It names no servers: once connected, the gateway's list_servers tool lists the servers your access reaches by slug, prefixed with the project only when two projects share a slug. A connection that chooses Direct at sign-in lists each tool as server--tool instead. " +
+	"Returns available=true with the url to add to an MCP client, or available=false with unavailable_reason and the next action. It names no servers: once connected, the tool discovery mode chosen at sign-in decides how the gateway exposes the servers your access reaches. " +
+	"Progressive offers list_servers, which lists those servers by slug, prefixed with the project only when two projects share a slug, then describe_server, describe_tools and execute_tool. Direct lists each tool in tools/list as server--tool. Code Mode offers a single execute tool that runs Python to search, describe and call those tools. " +
 	"For a connection limited to one project, use get_my_project_gateway instead. No token, credential, or other member's access is returned."
+
+// organizationGatewayNextAction gives each tool discovery mode its own first
+// step: only Progressive exposes list_servers.
+const organizationGatewayNextAction = "Add url to your MCP client as a remote server and sign in with your organization account when prompted, choosing a tool discovery mode. " +
+	"Then follow the mode you chose. Progressive: call list_servers, then describe_server, describe_tools and execute_tool. Direct: call the server--tool tools listed by tools/list. Code Mode: run Python with the execute tool."
 
 // getMyOrganizationGatewayMeta is shared by the live and unavailable
 // registrations. The gateway is the caller's own connection target, so only
@@ -57,12 +66,25 @@ type GetMyOrganizationGatewayOutput struct {
 type OrganizationGatewayService struct {
 	db        *pgxpool.Pool
 	serverURL *url.URL
+
+	// orgHosts resolves the platform host stored as an organization's default
+	// host. Nil URLs follow the request's platform origin.
+	orgHosts *orghost.Resolver
 }
 
 // NewOrganizationGatewayService returns a service that builds gateway URLs
 // under serverURL.
 func NewOrganizationGatewayService(db *pgxpool.Pool, serverURL *url.URL) *OrganizationGatewayService {
-	return &OrganizationGatewayService{db: db, serverURL: serverURL}
+	return &OrganizationGatewayService{db: db, serverURL: serverURL, orgHosts: nil}
+}
+
+// WithOrganizationHosts makes gateway URLs use the platform host stored as the
+// organization's default host, the host the dashboard serves it on.
+func (s *OrganizationGatewayService) WithOrganizationHosts(resolver *orghost.Resolver) *OrganizationGatewayService {
+	if s != nil {
+		s.orgHosts = resolver
+	}
+	return s
 }
 
 func (s *OrganizationGatewayService) valid() bool {
@@ -71,6 +93,16 @@ func (s *OrganizationGatewayService) valid() bool {
 
 // Get returns the principal's organization gateway.
 func (s *OrganizationGatewayService) Get(ctx context.Context, principal Principal) (GetMyOrganizationGatewayOutput, error) {
+	return s.get(ctx, principal, orggateway.Availability)
+}
+
+// getForPlatformMCP is Get as Platform MCP's own use of the gateway sees it:
+// on unless an administrator turned it off explicitly.
+func (s *OrganizationGatewayService) getForPlatformMCP(ctx context.Context, principal Principal) (GetMyOrganizationGatewayOutput, error) {
+	return s.get(ctx, principal, orggateway.PlatformAvailability)
+}
+
+func (s *OrganizationGatewayService) get(ctx context.Context, principal Principal, availability func(context.Context, usersessionsrepo.DBTX, repo.OrganizationMetadatum) (uuid.UUID, orggateway.Unavailability, error)) (GetMyOrganizationGatewayOutput, error) {
 	organization, err := repo.New(s.db).GetOrganizationMetadata(ctx, principal.OrganizationID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -79,17 +111,18 @@ func (s *OrganizationGatewayService) Get(ctx context.Context, principal Principa
 		return GetMyOrganizationGatewayOutput{}, fmt.Errorf("load organization: %w", err)
 	}
 
-	_, unavailable, err := orggateway.Availability(ctx, s.db, organization)
+	_, unavailable, err := availability(ctx, s.db, organization)
 	if err != nil {
 		return GetMyOrganizationGatewayOutput{}, fmt.Errorf("resolve organization gateway: %w", err)
 	}
 	switch unavailable {
 	case orggateway.UnavailabilityNone:
+		baseURL, _ := organizationBaseURLs(ctx, s.orgHosts, organization.DefaultHost, s.serverURL, nil)
 		return GetMyOrganizationGatewayOutput{
 			Available:         true,
-			URL:               orggateway.URL(platformBaseURL(ctx, s.serverURL), organization.Slug),
+			URL:               orggateway.URL(baseURL, organization.Slug),
 			UnavailableReason: "",
-			NextAction:        "Add url to your MCP client as a remote server and sign in with your organization account when prompted. Then call list_servers through it.",
+			NextAction:        organizationGatewayNextAction,
 		}, nil
 	case orggateway.UnavailabilityNoOrganizationIssuer:
 		return unavailableOrganizationGateway(unavailable, "Ask an organization administrator to set up an organization-wide authorization server."), nil
@@ -102,6 +135,36 @@ func (s *OrganizationGatewayService) Get(ctx context.Context, principal Principa
 	default:
 		return unavailableOrganizationGateway(unavailable, "This organization is disabled. Contact your organization administrator."), nil
 	}
+}
+
+// organizationGatewayIssuer is the issuer a served organization gateway signs
+// users in through, and its URL; both are empty when no gateway is served.
+type organizationGatewayIssuer struct {
+	// IssuerID is the gateway's user session issuer.
+	IssuerID string
+
+	// URL is the gateway's MCP URL.
+	URL string
+}
+
+// servingIssuer reads the organization gateway's issuer and URL.
+func (s *OrganizationGatewayService) servingIssuer(ctx context.Context, organizationID string) (organizationGatewayIssuer, error) {
+	organization, err := repo.New(s.db).GetOrganizationMetadata(ctx, organizationID)
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		return organizationGatewayIssuer{}, nil
+	case err != nil:
+		return organizationGatewayIssuer{}, fmt.Errorf("load organization: %w", err)
+	}
+	issuerID, unavailable, err := orggateway.Availability(ctx, s.db, organization)
+	if err != nil {
+		return organizationGatewayIssuer{}, fmt.Errorf("resolve organization gateway: %w", err)
+	}
+	if unavailable != orggateway.UnavailabilityNone {
+		return organizationGatewayIssuer{}, nil
+	}
+	baseURL, _ := organizationBaseURLs(ctx, s.orgHosts, organization.DefaultHost, s.serverURL, nil)
+	return organizationGatewayIssuer{IssuerID: issuerID.String(), URL: orggateway.URL(baseURL, organization.Slug)}, nil
 }
 
 func unavailableOrganizationGateway(reason orggateway.Unavailability, nextAction string) GetMyOrganizationGatewayOutput {

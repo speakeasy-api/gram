@@ -42,6 +42,12 @@ type Service interface {
 	// Discovery funnel and per-member execution breakdown for one gateway (meta
 	// MCP server), from gateway-attributed telemetry.
 	GetMetaMcpServerUsage(context.Context, *GetMetaMcpServerUsagePayload) (res *GetMetaMcpServerUsageResult, err error)
+	// Observability overview metrics for calls dispatched through the caller's
+	// Organization Gateway, across every project in the organization.
+	GetOrganizationGatewayOverview(context.Context, *GetOrganizationGatewayOverviewPayload) (res *GetObservabilityOverviewResult, err error)
+	// Discovery funnel and per-server execution breakdown for the caller's
+	// Organization Gateway, across every project in the organization.
+	GetOrganizationGatewayUsage(context.Context, *GetOrganizationGatewayUsagePayload) (res *GetMetaMcpServerUsageResult, err error)
 	// Get project-level overview including total chats, tool calls, active
 	// servers/users, and top lists
 	GetProjectOverview(context.Context, *GetProjectOverviewPayload) (res *GetProjectOverviewResult, err error)
@@ -140,7 +146,7 @@ const ServiceName = "telemetry"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [36]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getMcpNetworkTraffic", "getMetaMcpServerUsage", "getProjectOverview", "getUnproxiedMcpServerUsage", "getUnproxiedMcpServerToolUsage", "getUnproxiedMcpServerUserUsage", "getUnproxiedMcpServerClientUsage", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageClients", "getToolUsageClientToolBreakdown", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "listHooksTraces"}
+var MethodNames = [38]string{"searchLogs", "searchToolCalls", "searchChats", "searchUsers", "captureEvent", "getProjectMetricsSummary", "getUserMetricsSummary", "getEmployeeDataFlowGraph", "getObservabilityOverview", "getMcpNetworkTraffic", "getMetaMcpServerUsage", "getOrganizationGatewayOverview", "getOrganizationGatewayUsage", "getProjectOverview", "getUnproxiedMcpServerUsage", "getUnproxiedMcpServerToolUsage", "getUnproxiedMcpServerUserUsage", "getUnproxiedMcpServerClientUsage", "query", "queryTumDetails", "listSessions", "listFilterOptions", "listAttributeKeys", "getHooksSummary", "getToolUsageSummary", "getToolUsageTotals", "getToolUsageTargets", "getToolUsageUsers", "getToolUsageClients", "getToolUsageClientToolBreakdown", "getToolUsageTargetTimeSeries", "getToolUsageUserTimeSeries", "getToolUsageUsersByTarget", "getToolUsageTargetToolBreakdown", "listToolUsageTraces", "getToolUsageFilterOptions", "getMcpServerActivity", "listHooksTraces"}
 
 // CaptureEventPayload is the payload type of the telemetry service
 // captureEvent method.
@@ -443,6 +449,26 @@ type GetObservabilityOverviewResult struct {
 	IntervalSeconds int64
 }
 
+// GetOrganizationGatewayOverviewPayload is the payload type of the telemetry
+// service getOrganizationGatewayOverview method.
+type GetOrganizationGatewayOverviewPayload struct {
+	SessionToken *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+}
+
+// GetOrganizationGatewayUsagePayload is the payload type of the telemetry
+// service getOrganizationGatewayUsage method.
+type GetOrganizationGatewayUsagePayload struct {
+	SessionToken *string
+	// Start time in ISO 8601 format
+	From string
+	// End time in ISO 8601 format
+	To string
+}
+
 // GetProjectMetricsSummaryPayload is the payload type of the telemetry service
 // getProjectMetricsSummary method.
 type GetProjectMetricsSummaryPayload struct {
@@ -490,15 +516,22 @@ type GetToolUsageClientToolBreakdownPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilter
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
@@ -536,15 +569,22 @@ type GetToolUsageClientsPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilter
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
@@ -582,6 +622,34 @@ type GetToolUsageFilterOptionsPayload struct {
 	To string
 	// Filter option types to include. Empty means all option types.
 	OptionTypes []ToolUsageFilterOptionType
+	// Target types to include. Empty means all target types.
+	TargetTypes []ToolUsageTargetType
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to narrow by. Not
+	// applied to the server options.
+	HostedToolsetSlugs []string
+	// MCP server ids to narrow by. Not applied to the server options.
+	McpServerIds []string
+	// Shadow MCP server names to narrow by. Not applied to the server options.
+	ShadowServerNames []string
+	// Gateway (meta MCP server) ids to narrow by. Not applied to the server
+	// options.
+	MetaMcpServerIds []string
+	// Typed user identities to narrow by. Not applied to the email user options.
+	UserFilters []*ToolUsageUserFilter
+	// Agent identities to narrow by. Not applied to the agent user options.
+	AgentIds []string
+	// Hook plugin sources to narrow by.
+	HookSources []string
+	// MCP client keys to narrow by. Not applied to the client options.
+	ClientKeys []string
+	// Optional account type filter ('team' or 'personal').
+	AccountType *string
+	// Trace outcomes to narrow by. Empty means all.
+	Statuses []ToolUsageStatus
+	// Free-text attribute search string from the q URL param.
+	Query *string
+	// Arbitrary attribute filter conditions from the af URL param
+	Filters []*LogFilter
 }
 
 // GetToolUsageFilterOptionsResult is the result type of the telemetry service
@@ -611,15 +679,22 @@ type GetToolUsageSummaryPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilter
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
@@ -673,15 +748,22 @@ type GetToolUsageTargetTimeSeriesPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilter
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
@@ -719,15 +801,22 @@ type GetToolUsageTargetToolBreakdownPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilter
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
@@ -765,15 +854,22 @@ type GetToolUsageTargetsPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilter
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
@@ -811,15 +907,22 @@ type GetToolUsageTotalsPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilter
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
@@ -857,15 +960,22 @@ type GetToolUsageUserTimeSeriesPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilter
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
@@ -903,15 +1013,22 @@ type GetToolUsageUsersByTargetPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilter
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
@@ -949,15 +1066,22 @@ type GetToolUsageUsersPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilter
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
@@ -1333,15 +1457,22 @@ type ListToolUsageTracesPayload struct {
 	To string
 	// Target types to include. Empty means all target types.
 	TargetTypes []ToolUsageTargetType
-	// Hosted MCP toolset slugs to include
+	// Deprecated: use mcp_server_ids. Hosted MCP toolset slugs to include
 	HostedToolsetSlugs []string
+	// MCP server ids to include. Matches calls served by the server, including
+	// calls recorded before they carried a server id.
+	McpServerIds []string
 	// Shadow MCP server names to include
 	ShadowServerNames []string
 	// Gateway (meta MCP server) ids to include: calls dispatched through the
 	// gateway to its members plus calls observed against the gateway itself
 	MetaMcpServerIds []string
-	// Typed user identities to include
+	// Typed user identities to include. An email also matches the calls an agent
+	// made on that person's behalf.
 	UserFilters []*ToolUsageUserFilter
+	// Agent identities to include. Combined with user_filters by AND, so an agent
+	// and a person select the calls that agent made on that person's behalf.
+	AgentIds []string
 	// Hook plugin sources to include. Direct hosted MCP calls have no hook source
 	// and are excluded when this filter is set.
 	HookSources []string
@@ -1446,6 +1577,9 @@ type MetaMcpMemberUsage struct {
 	ErrorCount int64
 	// ISO 8601 timestamp of the most recent call
 	LastCalledAt *string
+	// Display name of the server. Set for Organization Gateway usage, whose
+	// servers span projects the caller may not have loaded.
+	McpServerName *string
 }
 
 // Model usage statistics
@@ -2185,6 +2319,8 @@ type ToolUsageHostedServerFilterOption struct {
 	ToolsetSlug string
 	// Hosted MCP toolset display name
 	ToolsetName string
+	// MCP server id to filter by; absent when the server has no mcp_servers row
+	McpServerID *string
 	// Number of tool usage events observed for the hosted MCP server
 	EventCount int64
 }
@@ -2213,6 +2349,8 @@ type ToolUsageTargetSummary struct {
 	TargetID string
 	// User-facing label for the target
 	TargetLabel string
+	// MCP server id for hosted and tunneled targets; absent for other targets
+	McpServerID *string
 	// Total number of tool usage events for the target
 	EventCount int64
 	// Number of distinct tools observed for the target
@@ -2332,12 +2470,32 @@ type ToolUsageTraceSummary struct {
 	TargetID string
 	// User-facing target label
 	TargetLabel string
+	// MCP server id for hosted and tunneled targets; absent for other targets
+	McpServerID *string
 	// Stable user identity value
 	UserKey string
 	// User-facing user identity label
 	UserLabel string
 	// Type of user identity represented by the row
 	UserKind ToolUsageUserKind
+	// Person an agent call acted on behalf of; absent for direct calls and for
+	// agents that sign in as themselves
+	AuthorizerUserID *string
+	// Email of the authorizer when they resolve to a known user
+	AuthorizerLabel *string
+	// Type of the auth client that signed an agent's gateway call in to its
+	// upstream server, such as remote_session for a person's connection or
+	// service_account for a shared credential; absent for calls recorded before it
+	// was tracked
+	AuthClientType *string
+	// Auth client that signed an agent's gateway call in to its upstream server
+	AuthClientID *string
+	// Person whose own connection signed an agent's gateway call in; absent for a
+	// shared credential
+	ConnectionOwnerUserID *string
+	// Display name, or email, of the connection owner when they resolve to a known
+	// user
+	ConnectionOwnerLabel *string
 	// Hook plugin source when the row came from hook telemetry
 	HookSource *string
 	// Telemetry event source

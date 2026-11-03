@@ -87,10 +87,16 @@ type GetProductFeaturesResponseBody struct {
 	// Whether an organization admin turned the organization gateway off, so its
 	// routes answer 404
 	OrganizationGatewayDisabled *bool `form:"organization_gateway_disabled,omitempty" json:"organization_gateway_disabled,omitempty" xml:"organization_gateway_disabled,omitempty"`
+	// Whether the organization has the staff-managed gateway Code Mode entitlement
+	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
 	// Whether the organization uses the device agent (any device has polled
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent *bool `form:"device_agent,omitempty" json:"device_agent,omitempty" xml:"device_agent,omitempty"`
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool `form:"upstream_auth_enforced,omitempty" json:"upstream_auth_enforced,omitempty" xml:"upstream_auth_enforced,omitempty"`
 }
 
 // GetProductFeaturesUnauthorizedResponseBody is the type of the "features"
@@ -702,7 +708,9 @@ func NewGetProductFeaturesProductFeaturesOK(body *GetProductFeaturesResponseBody
 		NetworkIngressEnabled:                   body.NetworkIngressEnabled,
 		SignalsIntelligenceEnabled:              body.SignalsIntelligenceEnabled,
 		OrganizationGatewayDisabled:             body.OrganizationGatewayDisabled,
+		CodeModeEnabled:                         body.CodeModeEnabled,
 		DeviceAgent:                             body.DeviceAgent,
+		UpstreamAuthEnforced:                    body.UpstreamAuthEnforced,
 	}
 
 	return v
