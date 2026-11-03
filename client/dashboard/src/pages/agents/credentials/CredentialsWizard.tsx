@@ -216,12 +216,16 @@ const SUMMARY_ROW_FOR_FIELD = new Map<string, string>([
 ]);
 
 /**
- * The rail's row for the branch or environment a GitHub Actions rule is
- * narrowed to, once it is named. None for the whole repository.
+ * The rail's row for what a GitHub Actions rule narrows the repository to:
+ * its pull requests, or a branch or environment once it is named. None for
+ * the whole repository.
  */
 function githubActionsScopeRow(
   scope: JobScope,
 ): { label: string; value: ReactNode }[] {
+  if (scope.kind === "pull_request") {
+    return [{ label: "Jobs", value: "Pull requests" }];
+  }
   if (scope.kind === "repository" || scope.name === "") return [];
   return [
     {
@@ -1754,7 +1758,7 @@ export function CredentialsWizard({
               },
             ]
           : []),
-        // The one branch or environment the rule narrows the repository to.
+        // What the rule narrows the repository to, if anything.
         ...(credential === "workload" && platformKey === GITHUB_ACTIONS_KEY
           ? githubActionsScopeRow(jobScope(workload.values))
           : []),

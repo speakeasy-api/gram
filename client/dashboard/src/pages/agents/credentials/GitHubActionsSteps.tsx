@@ -244,18 +244,24 @@ export function JobScopeChoice({
   );
 }
 
+/**
+ * Why forks cannot use a workflow that runs on pull requests, and the event
+ * that would let them.
+ */
+const FORK_NOTE = (
+  <>
+    On <code>pull_request</code>, forks get no GitHub token, and the job&apos;s{" "}
+    <code>if:</code> skips them. Don&apos;t run it on{" "}
+    <code>pull_request_target</code>: that event gives a fork&apos;s pull
+    request a token the rule admits.
+  </>
+);
+
 /** What the workflow's triggers and the rule mean together, by scope. */
 function ScopeNote({ scope }: { scope: JobScope }): JSX.Element {
   switch (scope.kind) {
     case "repository":
-      return (
-        <li>
-          On <code>pull_request</code>, forks get no GitHub token, and the
-          job&apos;s <code>if:</code> skips them. Don&apos;t run it on{" "}
-          <code>pull_request_target</code>: that event gives a fork&apos;s pull
-          request a token the rule admits.
-        </li>
-      );
+      return <li>{FORK_NOTE}</li>;
     case "branch":
       return (
         <li>
@@ -271,6 +277,13 @@ function ScopeNote({ scope }: { scope: JobScope }): JSX.Element {
           environment. Set its protection rules under Settings &gt; Environments
           before you add the workflow: GitHub creates an environment a workflow
           names with no rules.
+        </li>
+      );
+    case "pull_request":
+      return (
+        <li>
+          The rule admits only pull request jobs that use no environment, so the
+          workflow runs on pull requests alone. {FORK_NOTE}
         </li>
       );
   }
@@ -439,6 +452,22 @@ function ruleWarningText(
           deploy, under the repository&apos;s Settings &gt; Environments before
           you add the workflow. A workflow that names an environment nobody has
           set up creates it with no rules.
+        </>,
+      ];
+    case "pull_request":
+      return [
+        <>
+          Pull request jobs in <strong>{repository}</strong> can sign in as{" "}
+          {agent}, unless they use an environment. Jobs on pushed branches and
+          tags cannot. {rule}
+        </>,
+        <>
+          Anyone who can push a branch to the repository can open a pull request
+          that runs such a job, with the workflow as their branch has it, so
+          nobody reviews it first. Forks get no token on{" "}
+          <code>pull_request</code>, but a <code>pull_request_target</code>{" "}
+          workflow with <code>id-token: write</code> gets the same subject, a
+          fork&apos;s pull request included.
         </>,
       ];
   }
