@@ -25,3 +25,16 @@ UPDATE chats SET memory_excluded_at = clock_timestamp() WHERE id = @id;
 INSERT INTO memory_digests (organization_id, project_id, level, period_start, period_end, content)
 VALUES (@organization_id, @project_id, @level, @period_start, @period_end, @content)
 RETURNING id;
+
+-- name: InsertMemoryMemoAtFixture :one
+INSERT INTO memory_memos (organization_id, project_id, chat_id, content, created_at)
+VALUES (@organization_id, @project_id, sqlc.narg(chat_id)::uuid, @content, @created_at)
+RETURNING id;
+
+-- name: InsertMemoryDigestSourcesFixture :one
+INSERT INTO memory_digests (organization_id, project_id, level, period_start, period_end, content,
+                            chat_ids, memo_ids, child_digest_ids)
+VALUES (@organization_id, @project_id, @level, @period_start, @period_end, @content,
+        coalesce(@chat_ids::uuid[], '{}'), coalesce(@memo_ids::uuid[], '{}'),
+        coalesce(@child_digest_ids::uuid[], '{}'))
+RETURNING id;

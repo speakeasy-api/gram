@@ -88,6 +88,71 @@ func (q *Queries) InsertMemoryDigestFixture(ctx context.Context, arg InsertMemor
 	return id, err
 }
 
+const insertMemoryDigestSourcesFixture = `-- name: InsertMemoryDigestSourcesFixture :one
+INSERT INTO memory_digests (organization_id, project_id, level, period_start, period_end, content,
+                            chat_ids, memo_ids, child_digest_ids)
+VALUES ($1, $2, $3, $4, $5, $6,
+        coalesce($7::uuid[], '{}'), coalesce($8::uuid[], '{}'),
+        coalesce($9::uuid[], '{}'))
+RETURNING id
+`
+
+type InsertMemoryDigestSourcesFixtureParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Level          string
+	PeriodStart    pgtype.Date
+	PeriodEnd      pgtype.Date
+	Content        string
+	ChatIds        []uuid.UUID
+	MemoIds        []uuid.UUID
+	ChildDigestIds []uuid.UUID
+}
+
+func (q *Queries) InsertMemoryDigestSourcesFixture(ctx context.Context, arg InsertMemoryDigestSourcesFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertMemoryDigestSourcesFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Level,
+		arg.PeriodStart,
+		arg.PeriodEnd,
+		arg.Content,
+		arg.ChatIds,
+		arg.MemoIds,
+		arg.ChildDigestIds,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const insertMemoryMemoAtFixture = `-- name: InsertMemoryMemoAtFixture :one
+INSERT INTO memory_memos (organization_id, project_id, chat_id, content, created_at)
+VALUES ($1, $2, $3::uuid, $4, $5)
+RETURNING id
+`
+
+type InsertMemoryMemoAtFixtureParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	ChatID         uuid.NullUUID
+	Content        string
+	CreatedAt      pgtype.Timestamptz
+}
+
+func (q *Queries) InsertMemoryMemoAtFixture(ctx context.Context, arg InsertMemoryMemoAtFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, insertMemoryMemoAtFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.ChatID,
+		arg.Content,
+		arg.CreatedAt,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const setChatMemorySummaryFixture = `-- name: SetChatMemorySummaryFixture :exec
 UPDATE chats
 SET summary = $1, summary_generated_at = $2, summary_redacted = true
