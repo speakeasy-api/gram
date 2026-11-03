@@ -49,11 +49,18 @@ func TestKitProductionTurnFailureRetiresUnusableRuntime(t *testing.T) {
 				require.True(t, result.RetryAdmission, "an unusable Kit runtime is replaced on readmission")
 				require.Equal(t, runtimeStateFailed, after.State)
 				require.True(t, after.Deleted)
+				require.EqualValues(t, 1, stops.Load(), "a retired runtime is torn down")
 				return
 			}
 			require.NoError(t, err)
+			require.True(t, result.RetryAdmission)
+			require.False(t, result.ProcessedAnyEvent)
 			require.Zero(t, stops.Load())
 			require.False(t, after.Deleted, "a transient failure keeps the runtime")
+			require.Equal(t, runtimeStateActive, after.State)
+			event, err := q.GetLatestAssistantThreadEventByThreadID(t.Context(), assistantrepo.GetLatestAssistantThreadEventByThreadIDParams{AssistantThreadID: thread, ProjectID: project})
+			require.NoError(t, err)
+			require.Equal(t, eventStatusPending, event.Status, "the refused turn is requeued")
 		})
 	}
 }

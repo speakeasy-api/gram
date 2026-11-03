@@ -218,9 +218,8 @@ func (p *kitConfiguredRuntimeProtocol) RunTurn(ctx context.Context, r assistantR
 		return ErrKitRuntimeBinding
 	}
 	if metadata.Workload == nil || metadata.Workload.MCPDesiredSetHash == "" {
-		// An older runtime has no verified configuration fingerprint. Refuse
-		// dispatch without withdrawing its authority: deployment must not
-		// silently destroy rollback availability or trigger destructive reset.
+		// An older runtime has no verified configuration fingerprint. The turn
+		// worker revokes and replaces it with a fresh runtime.
 		return errKitMCPConfigurationUnverified
 	}
 	if turn.MCPServers == nil {
@@ -230,7 +229,8 @@ func (p *kitConfiguredRuntimeProtocol) RunTurn(ctx context.Context, r assistantR
 	}
 	if metadata.Workload.MCPDesiredSetHash != kitMCPDesiredSetHash(turn.MCPServers) {
 		// Disconnecting Kit's additive overlay cannot remove filesystem-owned
-		// connections. Withdraw the exact runtime workload before refusing the turn.
+		// connections. Withdraw the exact runtime workload; the turn worker then
+		// replaces the runtime with one configured for the new set.
 		if p.core == nil {
 			return ErrKitMCPDesiredSetUnsupported
 		}

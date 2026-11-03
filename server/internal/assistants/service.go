@@ -3131,11 +3131,14 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 				// A Kit runtime that cannot serve turns is replaced, dropping its
 				// conversation. Revoke its credentials, then retire it through the
 				// unhealthy-runtime path below.
+				// Retire only once its credentials are withdrawn; a failed revoke
+				// retries the activity and repeating it is harmless.
 				revokeCtx, cancelRevoke := context.WithTimeout(context.WithoutCancel(ctx), teardownCapCleanupTimeout)
-				if err := s.revokeKitWorkload(revokeCtx, s.db, runtimeRecord); err != nil {
-					s.logger.WarnContext(ctx, "revoke retired Kit runtime", attr.SlogAssistantThreadID(thread.ID.String()), attr.SlogError(err))
-				}
+				revokeErr := s.revokeKitWorkload(revokeCtx, s.db, runtimeRecord)
 				cancelRevoke()
+				if revokeErr != nil {
+					return ProcessThreadEventsResult{}, fmt.Errorf("revoke unusable Kit runtime before retirement: %w", errors.Join(revokeErr, runErr))
+				}
 				if !errors.Is(runErr, ErrRuntimeUnhealthy) {
 					runErr = errors.Join(ErrRuntimeUnhealthy, runErr)
 				}
