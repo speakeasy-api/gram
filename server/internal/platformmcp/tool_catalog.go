@@ -29,7 +29,9 @@ type InspectCatalogCandidateInput struct {
 
 // CandidateInspection is the safe common projection for reviewed and direct
 // candidate paths. Direct remote URLs are always marked unreviewed and never
-// enter the reviewed catalogue.
+// enter the reviewed catalogue. ToolNames and ToolCount are present, even when
+// empty, exactly when a direct remote URL's tools were listed; reviewed
+// catalogue entries do not publish tool declarations, so both are absent there.
 type CandidateInspection struct {
 	// SupportsDCR is advertised dynamic registration support for a reviewed catalogue entry.
 	SupportsDCR *bool `json:"supports_dcr,omitempty" jsonschema:"reviewed catalog only: advertised dynamic client registration support, not a verified OAuth connection; false alone does not establish manual setup"`
@@ -45,8 +47,8 @@ type CandidateInspection struct {
 	Description            string                      `json:"description,omitempty"`
 	Version                string                      `json:"version,omitempty"`
 	Transport              string                      `json:"transport"`
-	ToolNames              []string                    `json:"tool_names,omitempty"`
-	ToolCount              *int                        `json:"tool_count,omitempty"`
+	ToolNames              []string                    `json:"tool_names,omitzero" jsonschema:"names of the tools the remote URL listed; absent when not known, such as for a reviewed catalog entry or a URL that requires sign-in"`
+	ToolCount              *int                        `json:"tool_count,omitempty" jsonschema:"number of tools the server offers; absent when not known"`
 	Configuration          []CatalogConfigurationField `json:"configuration,omitempty"`
 	RequiresDashboardSetup bool                        `json:"requires_dashboard_setup"`
 	Trust                  string                      `json:"trust"`
@@ -161,7 +163,11 @@ func registerCandidateInspectionTool(reg *Registrar, catalog Catalog, directRemo
 				return directRemoteInspectionUnavailableToolResult(setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable))
 			}
 			category := setupCategoryFromInspection(inspection)
-			return nil, CandidateInspection{CanonicalURL: inspection.CanonicalURL, Transport: inspection.Transport, ToolNames: inspection.ToolNames, ToolCount: new(inspection.ToolCount), RequiresDashboardSetup: inspection.RequiresDashboardSetup, Trust: inspection.Trust, Authentication: inspection.Authentication, OAuthDiscovery: inspection.OAuthDiscovery, AutomaticClientRegistration: automaticClientRegistrationFromInspection(inspection), SetupCategory: category, Actions: inspectionResultActions(category)}, nil
+			var toolCount *int
+			if inspection.ToolNames != nil {
+				toolCount = new(inspection.ToolCount)
+			}
+			return nil, CandidateInspection{CanonicalURL: inspection.CanonicalURL, Transport: inspection.Transport, ToolNames: inspection.ToolNames, ToolCount: toolCount, RequiresDashboardSetup: inspection.RequiresDashboardSetup, Trust: inspection.Trust, Authentication: inspection.Authentication, OAuthDiscovery: inspection.OAuthDiscovery, AutomaticClientRegistration: automaticClientRegistrationFromInspection(inspection), SetupCategory: category, Actions: inspectionResultActions(category)}, nil
 		}
 		if catalog == nil {
 			return nil, CandidateInspection{}, ErrCatalogUnavailable
