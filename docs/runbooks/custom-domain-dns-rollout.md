@@ -1,6 +1,6 @@
 # Custom domain DNS observations rollout
 
-The schema PR must finish applying in each environment before application images that read the new columns deploy. The nullable columns are safe for the previously deployed image. Use the normal release and Atlas Operator process; do not run migrations directly against remote databases.
+The migrations must finish applying in each environment before deploying the application image built from the schema PR (#8394) or any descendant. SQLc generates directly from the declared schema, so even that first image reads the four new columns and its custom-domain queries fail against the pre-migration schema. The `skip-migration-check` label permits the generated readers in the migration PR; it does not enforce deployment ordering or wait for schema readiness. The nullable columns are safe for the previously deployed image. Use the normal release and Atlas Operator process; do not run migrations directly against remote databases.
 
 After that prerequisite, token/API foundations, observation workers, and dashboard/admin surfaces can deploy separately. API fields remain absent before the first observation. DNS configuration is advisory, TXT proves ownership, and infrastructure failures never automatically deactivate a domain. Previously disabled domains still require explicit reverification.
 
