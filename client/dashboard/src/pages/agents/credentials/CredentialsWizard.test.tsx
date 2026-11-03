@@ -1231,6 +1231,33 @@ describe("Connecting a GKE cluster", () => {
     ).toBe(true);
   });
 
+  it("asks for a shared authorization server when there is none", async () => {
+    mocks.platforms.mockReturnValue([gke]);
+    mocks.tokenEndpoints.mockReturnValue([]);
+    mocks.mcpServers.mockResolvedValue({
+      mcpServers: [{ ...githubServer, userSessionIssuerId: "usi_private" }],
+    });
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Review Agent" },
+    });
+    await nameChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(await screen.findByRole("radio", { name: /GKE/ }));
+
+    expect(
+      await screen.findByText(
+        "Set up a shared authorization server for this agent's servers, or remove the ones that sign people in, to continue.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
   it("waits for the providers to load before letting a new agent continue", async () => {
     mocks.platforms.mockReturnValue([gke]);
     mocks.tokenEndpoints.mockReturnValue([sharedServer]);

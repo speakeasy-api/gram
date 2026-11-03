@@ -263,7 +263,7 @@ export function SetupWarning({
  * The agent's servers that won't accept tokens from the chosen shared
  * authorization server, each with a way to move it there.
  */
-export function ProviderMismatchNotice({
+function ProviderMismatchNotice({
   mismatch,
   onMoved,
 }: {

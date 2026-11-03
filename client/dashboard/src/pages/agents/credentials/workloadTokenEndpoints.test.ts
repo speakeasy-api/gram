@@ -199,6 +199,18 @@ it("recommends the organization's server when no server uses one yet", () => {
   expect(result.current.recommendedEndpointId).toBe("org");
 });
 
+it("recommends the organization's server for an agent whose servers don't sign in", () => {
+  endpointQuery.items = [
+    endpoint("proj", "proj", "proj-a", "Alpha"),
+    endpoint("org", "organization"),
+  ];
+  const { result } = renderHook(() =>
+    useSetupValues(undefined, [server("hosted")]),
+  );
+  expect(result.current.mismatch).toBeNull();
+  expect(result.current.recommendedEndpointId).toBe("org");
+});
+
 it("checks the servers against the shared server the reader chooses", () => {
   endpointQuery.items = [endpoint("one", "one"), endpoint("two", "two")];
   const { result } = renderHook(() =>

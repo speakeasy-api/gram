@@ -53,10 +53,11 @@ import { useSetupValues, type SetupValues } from "./workloadTokenEndpoints";
 export interface WorkloadSetup {
   exchange: SetupValues;
   /**
-   * Whether the platform gets its tokens its own way rather than from a shared
-   * authorization server, so none is chosen for it.
+   * Whether the platform takes its tokens from a shared authorization server,
+   * so one is chosen for it. False until the platform's setup is known, and
+   * for a platform that gets its tokens its own way.
    */
-  ownTokenExchange: boolean;
+  usesSharedServer: boolean;
   /** The platform's steps, each of which is a step of the wizard. */
   steps: SetupStep[];
   /**
@@ -444,7 +445,7 @@ export function useWorkloadSetup({
 
   return {
     exchange: setupValues,
-    ownTokenExchange: setup?.ownTokenExchange === true,
+    usesSharedServer: setup !== undefined && setup.ownTokenExchange !== true,
     steps: setup?.steps ?? [],
     requirements: setup?.requirements ?? null,
     // A disabled fieldset disables every control inside it, the catalog's

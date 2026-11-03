@@ -1927,7 +1927,7 @@ export function CredentialsWizard({
             />
             {credential === "workload" &&
               platformKey !== null &&
-              !workload.ownTokenExchange && (
+              workload.usesSharedServer && (
                 <SharedServerChoice
                   setupValues={workload.exchange}
                   onMoved={inventory.refetch}
@@ -2107,7 +2107,9 @@ export function CredentialsWizard({
             workload.exchange.mismatch !== null;
           if (mismatched && !refused) {
             note =
-              "Move this agent's servers onto the shared authorization server you chose, or remove the ones that aren't, to continue.";
+              workload.exchange.mismatch?.target === null
+                ? "Set up a shared authorization server for this agent's servers, or remove the ones that sign people in, to continue."
+                : "Move this agent's servers onto the shared authorization server you chose, or remove the ones that aren't, to continue.";
           }
           // Until the providers load, a mismatch can't be ruled out.
           const checkingProviders =

@@ -137,10 +137,10 @@ export function useSetupValues(
     most > 0
       ? inScope.filter((endpoint) => usedBy(endpoint) === most)
       : inScope;
-  // With servers to move, the organization's own breaks a tie; with none, the
-  // list's own order stands.
+  // For an agent, the organization's own breaks a tie. A flow with no servers,
+  // such as inference setup, keeps the list's own order.
   const recommended =
-    (signingIn.length > 0
+    (servers.length > 0
       ? favored.find((endpoint) => endpoint.projectId === "")
       : undefined) ?? favored[0];
   const selected =
