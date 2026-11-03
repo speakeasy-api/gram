@@ -10,6 +10,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/endpointaddr"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -98,17 +99,9 @@ func EnrichViews(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, ser
 	if endpointsErr != nil {
 		logger.WarnContext(ctx, "list mcp servers with endpoints", attr.SlogError(endpointsErr))
 	}
-	legacySlugs, legacyErr := repo.New(db).ListLegacyPlatformAliasSlugs(ctx, repo.ListLegacyPlatformAliasSlugsParams{
-		OrganizationID: organizationID,
-		ProjectIds:     projectIDs,
-		McpServerIds:   serverIDs,
-	})
+	legacySlug, legacyErr := legacyalias.PlatformServedSlugs(ctx, db, organizationID, projectIDs, serverIDs)
 	if legacyErr != nil {
 		logger.WarnContext(ctx, "list legacy platform alias slugs", attr.SlogError(legacyErr))
-	}
-	legacySlug := make(map[uuid.UUID]string, len(legacySlugs))
-	for _, row := range legacySlugs {
-		legacySlug[row.McpServerID] = row.Slug
 	}
 	hasEndpoint := make(map[uuid.UUID]struct{}, len(withEndpoints))
 	for _, id := range withEndpoints {

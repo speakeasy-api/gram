@@ -191,9 +191,9 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		return nil, oops.E(oops.CodeUnexpected, err, "error saving toolset").LogError(ctx, logger)
 	}
 
-	// Only an MCP-enabled toolset reaches the Default plugin, so a plain
-	// toolset must not enqueue a publish.
-	s.triggerPluginPublish(ctx, authCtx, created.McpEnabled, created.PluginCreated)
+	// Only a toolset that joined the Default plugin changed generated plugin
+	// output, so every other creation must not enqueue a publish.
+	s.triggerPluginPublish(ctx, authCtx, created.AddedToDefaultPlugin, created.PluginCreated)
 
 	toolsetDetails, err := mv.DescribeToolset(ctx, logger, s.db, mv.ProjectID(*authCtx.ProjectID), mv.ToolsetSlug(createdToolset.Slug), &s.toolsetCache, nil)
 	if err != nil {
@@ -530,7 +530,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "update automatic plugin distribution").LogError(ctx, logger)
 		}
-		carried, err := toolsetCarriedByPlugin(ctx, dbtx, authCtx, updatedToolset.ID)
+		carried, err := s.toolsetCarriedByPlugin(ctx, dbtx, authCtx, updatedToolset.ID)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "check toolset plugin membership").LogError(ctx, logger)
 		}
@@ -638,7 +638,7 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 	}
 	carried := false
 	if hosting.Enabled {
-		carried, err = toolsetCarriedByPlugin(ctx, dbtx, authCtx, toDelete.ID)
+		carried, err = s.toolsetCarriedByPlugin(ctx, dbtx, authCtx, toDelete.ID)
 		if err != nil {
 			return oops.E(oops.CodeUnexpected, err, "check toolset plugin membership").LogError(ctx, logger)
 		}
@@ -811,8 +811,6 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 		ProjectID:              *authCtx.ProjectID,
 		Description:            originalToolset.Description,
 		DefaultEnvironmentSlug: originalToolset.DefaultEnvironmentSlug,
-		McpSlug:                conv.PtrToPGText(nil),
-		McpEnabled:             false,
 	}
 
 	// Try to create the cloned toolset, handling name conflicts.

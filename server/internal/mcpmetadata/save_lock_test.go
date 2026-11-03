@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpmetadata/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -20,7 +21,7 @@ func TestSetMcpMetadata_SerializesConcurrentSaves(t *testing.T) {
 
 	ctx, ti := newTestMCPMetadataService(t)
 	toolset := createHostedToolset(t, ctx, ti, "hosted-save-lock")
-	createCanonicalWrapper(t, ctx, ti, toolset)
+	createCanonicalWrapper(t, ctx, ti, toolset, mcpservers.VisibilityPrivate)
 
 	tx := testenv.BeginTx(t, ctx, ti.conn)
 	other := repo.New(tx)

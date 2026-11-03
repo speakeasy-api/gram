@@ -147,6 +147,9 @@ type mintSessionParams struct {
 	// UpstreamClientPicks is the consent page's upstream client pick per MCP
 	// server, recorded as a new credential's choices.
 	UpstreamClientPicks map[uuid.UUID]uuid.UUID
+	// AuthClientPicks is the typed auth client picked per MCP server, recorded
+	// with the registration UpstreamClientPicks names for it.
+	AuthClientPicks map[uuid.UUID]uuid.UUID
 	// Catalog supplies the exact auth-client bindings approved by browser consent.
 	Catalog *connectionCatalog
 }
@@ -328,7 +331,11 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 
 	credentialError := oauthwire.ClientAuthenticationError(r)
 	if credentialError == oautherr.CodeInvalidRequest {
-		logOAuthClientCredentialEvent(ctx, endpoint.LogWith(s.logger), r, "oauth token request rejected", "", "", r.PostForm.Get(oauthwire.ParamGrantType), credentialError)
+		if grantType := r.PostForm.Get(oauthwire.ParamGrantType); grantType == oauthwire.GrantTypeJWTBearer {
+			s.rejectTokenClient(ctx, endpoint.LogWith(s.logger), r, endpoint, grantType, "", "", credentialError, mcpmetrics.IDJAGRejectionClientInvalid)
+		} else {
+			logOAuthClientCredentialEvent(ctx, endpoint.LogWith(s.logger), r, "oauth token request rejected", "", "", grantType, credentialError)
+		}
 		return writeTokenError(ctx, w, s.logger, http.StatusBadRequest, credentialError, "invalid client authentication request")
 	}
 
@@ -351,7 +358,7 @@ func (s *Service) ServeToken(w http.ResponseWriter, r *http.Request, endpoint *R
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeUnsupportedGrantType, "unsupported grant_type")
 	}
 	if credentialError == oautherr.CodeInvalidClient {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", "", "", grantType, credentialError)
+		s.rejectTokenClient(ctx, logger, r, endpoint, grantType, "", "", credentialError, mcpmetrics.IDJAGRejectionClientInvalid)
 		return writeInvalidClientError(ctx, w, r, logger, clientAuthFailureDescription)
 	}
 	return s.serveTokenGrant(ctx, w, r, endpoint, logger, grantType, creds, grant)
@@ -431,7 +438,7 @@ func (s *Service) authenticateTokenClient(
 	presentedAuthMethod := creds.method
 	clientID, reason := resolvePresentedClientID(creds)
 	if reason != "" {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, reason)
+		s.rejectTokenClient(ctx, logger, r, endpoint, grantType, clientID, presentedAuthMethod, reason, mcpmetrics.IDJAGRejectionClientInvalid)
 		return nil, writeInvalidClientError(ctx, w, r, logger, "client_id is required")
 	}
 	// Only a grant that resolves CIMD would fetch a client_id naming this
@@ -442,26 +449,29 @@ func (s *Service) authenticateTokenClient(
 			return nil, oops.E(oops.CodeUnexpected, err, "check client_id against endpoint URLs").LogError(ctx, logger)
 		}
 		if namesEndpoint {
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, clientIDNamesEndpointReason)
+			s.rejectTokenClient(ctx, logger, r, endpoint, grantType, clientID, presentedAuthMethod, clientIDNamesEndpointReason, mcpmetrics.IDJAGRejectionClientInvalid)
 			return nil, writeInvalidClientError(ctx, w, r, logger, clientIDNamesEndpointDescription)
 		}
 	}
 	clientRow, err := s.resolveUserSessionClient(ctx, logger, endpoint, clientID, resolveMode)
 	if err != nil {
 		if admissionErr, ok := errors.AsType[*admission.DenialError](err); ok {
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_admission_denied")
+			s.rejectTokenClient(ctx, logger, r, endpoint, grantType, clientID, presentedAuthMethod, "cimd_admission_denied", mcpmetrics.IDJAGRejectionClientNotAdmitted)
 			return nil, writeInvalidClientError(ctx, w, r, logger, admissionErr.Description())
 		}
 		if _, ok := errors.AsType[*oauthwire.Error](err); ok {
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_metadata_invalid")
+			s.rejectTokenClient(ctx, logger, r, endpoint, grantType, clientID, presentedAuthMethod, "cimd_metadata_invalid", mcpmetrics.IDJAGRejectionClientInvalid)
 			return nil, writeInvalidClientError(ctx, w, r, logger, clientAuthFailureDescription)
 		}
 		if errors.Is(err, errCIMDFetchFailed) {
-			logger.InfoContext(ctx, "cimd document fetch failed", attr.SlogError(err))
+			if grantType != oauthwire.GrantTypeJWTBearer {
+				logger.InfoContext(ctx, "cimd document fetch failed", attr.SlogError(err))
+			}
+			s.failTokenClient(ctx, logger, endpoint, grantType, mcpmetrics.IDJAGRejectionClientMetadataUnavailable, err)
 			return nil, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "failed to fetch client metadata document")
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "unknown_client_id")
+			s.rejectTokenClient(ctx, logger, r, endpoint, grantType, clientID, presentedAuthMethod, "unknown_client_id", mcpmetrics.IDJAGRejectionClientInvalid)
 			return nil, writeInvalidClientError(ctx, w, r, logger, clientAuthFailureDescription)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "lookup user session client").LogError(ctx, logger)
@@ -493,7 +503,7 @@ func (s *Service) authenticateTokenClient(
 			)
 		}
 		if mode == admission.ModeDisabled {
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "cimd_admission_disabled")
+			s.rejectTokenClient(ctx, logger, r, endpoint, grantType, clientID, presentedAuthMethod, "cimd_admission_disabled", mcpmetrics.IDJAGRejectionClientNotAdmitted)
 			return nil, writeTokenPolicyError(ctx, w, logger, grantType, "this server does not accept client ID metadata documents")
 		}
 	}
@@ -505,7 +515,7 @@ func (s *Service) authenticateTokenClient(
 		return nil, oops.E(oops.CodeUnexpected, err, "build authorization server URLs").LogError(ctx, logger)
 	}
 	if reason := s.authenticateOAuthClient(ctx, logger, endpoint.UserSessionIssuerID, urls, clientAssertionAtToken, clientRow, creds); reason != "" {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, reason)
+		s.rejectTokenClient(ctx, logger, r, endpoint, grantType, clientID, presentedAuthMethod, reason, mcpmetrics.IDJAGRejectionClientInvalid)
 		return nil, writeInvalidClientError(ctx, w, r, logger, clientAuthFailureDescription)
 	}
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authenticated", clientID, presentedAuthMethod, grantType, "")
@@ -521,7 +531,7 @@ func (s *Service) authenticateTokenClient(
 	// disabled case (AIS-406).
 	if err := s.checkAIToolGatewayBlock(ctx, logger, endpoint.OrganizationID, clientID); err != nil {
 		if blockedErr, ok := errors.AsType[*AIToolBlockedError](err); ok {
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, presentedAuthMethod, grantType, "ai_tool_blocked")
+			s.rejectTokenClient(ctx, logger, r, endpoint, grantType, clientID, presentedAuthMethod, "ai_tool_blocked", mcpmetrics.IDJAGRejectionClientBlocked)
 			// This refusal ends an authorization-code exchange before the grant
 			// handler that records token-stage failures is reached, so the
 			// failure is recorded here. Refresh grants stay excluded, as they
@@ -532,6 +542,7 @@ func (s *Service) authenticateTokenClient(
 			return nil, writeTokenPolicyError(ctx, w, logger, grantType, blockedErr.Description())
 		}
 		if errors.Is(err, ErrAIToolBlockCheckUnavailable) {
+			s.failTokenClient(ctx, logger, endpoint, grantType, mcpmetrics.IDJAGRejectionClientCheckUnavailable, err)
 			return nil, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "cannot determine whether this client is permitted right now")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "check ai tool gateway block").LogError(ctx, logger)
@@ -554,10 +565,20 @@ func (s *Service) handleTokenJWTBearerGrant(
 	presentedAuthMethod string,
 	logger *slog.Logger,
 ) error {
+	exchange, logger := s.startIDJAGExchange(endpoint, logger)
+	defer exchange.record(ctx)
+	// Only a CIMD client the issuer's admission gate let through may exchange
+	// an ID-JAG. Each exchange starts a new authorization, so presets applies
+	// here, unlike on refresh: retiring a catalog entry stops its exchanges on
+	// every presets-mode issuer, while sessions already minted are unaffected.
+	if !clientRow.ClientIDMetadataUri.Valid {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, string(mcpmetrics.IDJAGRejectionClientNotCIMD), exchange.reject(mcpmetrics.IDJAGRejectionClientNotCIMD, nil)...)
+		return writeTokenPolicyError(ctx, w, logger, oauthwire.GrantTypeJWTBearer, "this client is not allowed to use the ID-JAG grant")
+	}
 	req := usersessions.JWTBearerTokenRequestFromForm(r.PostForm)
 	req.SetDefaults()
 	if err := req.Validate(); err != nil {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "invalid_request")
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "invalid_request", exchange.reject(mcpmetrics.IDJAGRejectionInvalidRequest, nil)...)
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
@@ -566,7 +587,7 @@ func (s *Service) handleTokenJWTBearerGrant(
 		return oops.E(oops.CodeUnexpected, err, "build ID-JAG resource identifier").LogError(ctx, logger)
 	}
 	if err := oauthwire.ValidateResourceIndicators(req.Resources, canonicalResource); err != nil {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "resource_mismatch")
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "resource_mismatch", exchange.reject(mcpmetrics.IDJAGRejectionResourceMismatch, nil)...)
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 	// The assertion is addressed to the issuer the authorization server
@@ -581,11 +602,15 @@ func (s *Service) handleTokenJWTBearerGrant(
 		UserSessionIssuerID: endpoint.UserSessionIssuerID,
 		Audience:            assertionAudience,
 		Resource:            canonicalResource,
+		ResourceIndicated:   len(req.Resources) > 0,
 		ClientID:            clientRow.ClientID,
 	})
+	if idjag.ReasonOf(err) == idjag.ReasonResourceNotIndicated {
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, oautherr.CodeInvalidTarget, exchange.rejectAssertion(err)...)
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, sharedResourceDescription(sharedResourceMissing))
+	}
 	if err != nil {
-		logger.InfoContext(ctx, "oauth ID-JAG token request rejected", attr.SlogError(err))
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "invalid_grant")
+		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "invalid_grant", exchange.rejectAssertion(err)...)
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "assertion is invalid")
 	}
 
@@ -609,10 +634,30 @@ func (s *Service) handleTokenJWTBearerGrant(
 	}
 	if err != nil {
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && (shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized) {
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "subject_not_authorized")
+			// The assertion is already spent; without a resource claim the request alone chose this server.
+			if result.Claims.Resource == "" {
+				logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, oautherr.CodeInvalidTarget, exchange.reject(mcpmetrics.IDJAGRejectionResourceNotAvailable, nil)...)
+				return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, "resource is not available to this user")
+			}
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "subject_not_authorized", exchange.reject(mcpmetrics.IDJAGRejectionSubjectNotAuthorized, nil)...)
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "assertion is invalid")
 		}
 		return oops.E(oops.CodeUnexpected, err, "authorize ID-JAG subject").LogError(ctx, logger)
+	}
+
+	// Inbound EMA establishes who the session is for, never which upstream
+	// credential it uses: that is decided like any headless caller's.
+	requested, err := parseRequestedAuthClients(r.PostForm[tokenParamUpstreamAuthClient])
+	if err != nil {
+		return err
+	}
+	upstreamPicks, authClientPicks, err := s.headlessAuthClientPicks(authorizationCtx, endpoint, result.Subject, headlessCaller{clientID: uuid.NullUUID{UUID: clientRow.ID, Valid: true}, workloadIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, workloadSubject: ""}, requested)
+	if err != nil {
+		if _, ok := errors.AsType[*oops.OAuthError](err); ok {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request rejected", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "upstream_credential_choice", exchange.reject(mcpmetrics.IDJAGRejectionUpstreamCredentialChoice, err)...)
+			return err
+		}
+		return oops.E(oops.CodeUnexpected, err, "decide upstream credentials").LogError(ctx, logger)
 	}
 
 	dbtx, err := s.db.Begin(ctx)
@@ -635,7 +680,8 @@ func (s *Service) handleTokenJWTBearerGrant(
 		CredentialID:           uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Subject:                result.Subject,
 		ToolSelection:          nil,
-		UpstreamClientPicks:    nil,
+		UpstreamClientPicks:    upstreamPicks,
+		AuthClientPicks:        authClientPicks,
 		Catalog:                nil,
 	}, logger)
 	if err != nil {
@@ -644,12 +690,10 @@ func (s *Service) handleTokenJWTBearerGrant(
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit ID-JAG session exchange").LogError(ctx, logger)
 	}
+	exchange.accept()
+	logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request completed", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "", exchange.acceptedAttrs()...)
 
-	if err := writeTokenSuccess(ctx, w, logger, minted.Body); err != nil {
-		return err
-	}
-	logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request completed", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, "")
-	return nil
+	return writeTokenSuccess(ctx, w, logger, minted.Body)
 }
 
 // handleTokenAuthorizationCodeGrant implements RFC 6749 §4.1.3. Reads the
@@ -944,6 +988,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		Subject:                subject,
 		ToolSelection:          toolSelection,
 		UpstreamClientPicks:    grant.UpstreamClientPicks,
+		AuthClientPicks:        grant.AuthClientPicks,
 		Catalog:                catalog,
 	}, logger)
 	if err != nil {
@@ -1402,6 +1447,7 @@ func (s *Service) rotateRefreshToken(
 		Subject:                oldSession.SubjectUrn,
 		ToolSelection:          oldSession.ToolSelection,
 		UpstreamClientPicks:    nil,
+		AuthClientPicks:        nil,
 		Catalog:                nil,
 	}, logger)
 	if err != nil {
@@ -1939,6 +1985,7 @@ func (s *Service) mintSession(
 		DesiredSessionDuration: params.DesiredSessionDuration,
 		Replayable:             params.Replayable,
 		UpstreamClientPicks:    params.UpstreamClientPicks,
+		AuthClientPicks:        params.AuthClientPicks,
 		Catalog:                params.Catalog,
 	}, logger)
 }
@@ -2014,6 +2061,9 @@ type sessionIssuance struct {
 	// UpstreamClientPicks is the consent page's upstream client pick per MCP
 	// server, recorded with a new credential's choices.
 	UpstreamClientPicks map[uuid.UUID]uuid.UUID
+	// AuthClientPicks is the typed auth client picked per MCP server, recorded
+	// with the registration UpstreamClientPicks names for it.
+	AuthClientPicks map[uuid.UUID]uuid.UUID
 	// Catalog supplies the exact auth-client bindings approved by browser consent.
 	Catalog *connectionCatalog
 }
@@ -2147,6 +2197,17 @@ func (s *Service) issueSession(
 			for serverID, clientID := range issuance.UpstreamClientPicks {
 				pickedServers = append(pickedServers, serverID)
 				pickedClients = append(pickedClients, clientID)
+				// The zero id is read as no typed pick.
+				pickedAuthClients = append(pickedAuthClients, issuance.AuthClientPicks[serverID])
+			}
+			for serverID, authClientID := range issuance.AuthClientPicks {
+				if _, ok := issuance.UpstreamClientPicks[serverID]; ok {
+					continue
+				}
+				// A headers-only client has no registration.
+				pickedServers = append(pickedServers, serverID)
+				pickedClients = append(pickedClients, uuid.Nil)
+				pickedAuthClients = append(pickedAuthClients, authClientID)
 			}
 		}
 		if _, err := queries.RecordUpstreamClientSelections(ctx, usersessions_repo.RecordUpstreamClientSelectionsParams{

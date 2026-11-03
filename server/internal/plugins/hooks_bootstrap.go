@@ -50,6 +50,7 @@ func renderHooksConfig(cfg GenerateConfig) ([]byte, error) {
 		Project:      cfg.ProjectSlug,
 		Org:          cfg.OrgID,
 		HooksAPIKey:  cfg.HooksAPIKey,
+		AgentKey:     cfg.HooksKeyIsAgent,
 		BrowserLogin: cfg.BrowserLogin,
 		// Legacy observability-mode flag; new plugins never set it. Outage
 		// tolerance flows to the binary at run time via ingest effects

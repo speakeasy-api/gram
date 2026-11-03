@@ -168,7 +168,7 @@ func outcomeCounts(t *testing.T, reader *sdkmetric.ManualReader) map[remotesessi
 	t.Helper()
 	var rm metricdata.ResourceMetrics
 	require.NoError(t, reader.Collect(t.Context(), &rm))
-	counts := map[remotesessionmetrics.IssuerMetadataRefreshOutcome]int64{}
+	counts := make(map[remotesessionmetrics.IssuerMetadataRefreshOutcome]int64)
 	for _, scope := range rm.ScopeMetrics {
 		for _, m := range scope.Metrics {
 			if m.Name != "gram.remote_session_issuer.metadata_refresh" {

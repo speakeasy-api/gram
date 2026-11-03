@@ -49,6 +49,25 @@ const (
 	AuthClientTypeEMA              = "ema"
 )
 
+// IsSharedAuthClientType reports whether clientType serves every caller with
+// one credential that belongs to nobody, as opposed to a person's own
+// connection or identity-provider sign-in.
+func IsSharedAuthClientType(clientType string) bool {
+	switch clientType {
+	case AuthClientTypeServiceAccount, AuthClientTypeStaticCredential, AuthClientTypePassThrough:
+		return true
+	}
+	return false
+}
+
+// IsAgentKeyAuthClientType reports whether an agent key can be set up to use
+// clientType: a shared credential that needs nothing from the caller's
+// request, since the agent gateway does not carry the caller's headers to its
+// servers.
+func IsAgentKeyAuthClientType(clientType string) bool {
+	return IsSharedAuthClientType(clientType) && clientType != AuthClientTypePassThrough
+}
+
 var validAuthClientTypes = map[string]bool{
 	AuthClientTypeRemoteSession:    true,
 	AuthClientTypeServiceAccount:   true,

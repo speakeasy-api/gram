@@ -96,7 +96,7 @@ func TestRun_AdminDetachedEMALinkStaysDetached(t *testing.T) {
 	clientID, issuerID := f.emaClient()
 	resource := "https://mcp.vendor.example.com/mcp"
 	first := f.serverAt(resource, usi)
-	second := f.serverAt(resource+"/", otherUSI)
+	second := f.serverAt(resource, otherUSI)
 	f.binding(usi, issuerID, clientID, resource, []string{"read"})
 	f.binding(otherUSI, issuerID, clientID, resource, []string{"read"})
 	f.run(true)

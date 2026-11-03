@@ -22,6 +22,7 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcprequests"
@@ -32,6 +33,7 @@ import (
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -128,6 +130,10 @@ type memberDial struct {
 	// sessionKey fingerprints the route and credential the build sends, so
 	// a shared member session never outlives either.
 	sessionKey string
+
+	// credential names the auth client the build signs the member in
+	// upstream with; the zero value when routing recorded none.
+	credential contextvalues.UpstreamCredential
 }
 
 func memberSessionKey(route any, token string) string {
@@ -199,6 +205,9 @@ func (s *Service) routeMetaMember(
 	if err != nil {
 		return memberDial{}, "", fmt.Errorf("load meta MCP member server: %w", err)
 	}
+	// Collect what an agent's member authorization served, so the routed
+	// token can be named on the call's log row.
+	gate.servedCredentials = map[uuid.UUID]contextvalues.UpstreamCredential{}
 	tokens, err := s.resolveMemberTokens(ctx, &gate, member)
 	if err != nil {
 		return memberDial{}, "", err
@@ -225,6 +234,12 @@ func (s *Service) routeMetaMember(
 		}
 		routed, terr := routeMetaMemberToken(tokens, member, strings.TrimRight(remoteServer.Url, "/"))
 		upstreamToken := routed.Token
+		// A resolved agent credential that does not route to this member is
+		// not permission to dial it anonymously. Header/no-auth members have
+		// no token map and retain their existing path.
+		if terr == nil && gate.agentID != uuid.Nil && upstreamToken == "" && len(tokens) != 0 && !member.upstreamNoAuth {
+			return memberDial{}, "remote", agentMemberCredentialError(member)
+		}
 		if terr == nil && upstreamToken == "" && gate.chainUpstream != nil && !member.upstreamNoAuth && (member.authClient == nil || member.authClient.outcome == authClientLegacy) {
 			upstreamToken, terr = gate.chainUpstream(ctx, member, remoteServer.Url)
 		}
@@ -232,14 +247,14 @@ func (s *Service) routeMetaMember(
 			return memberDial{}, "remote", terr
 		}
 		options := []remotemcp.BuildOption{remotemcp.WithoutToolsCallIdentityCoverage(), remotemcp.WithMetaMCPServerID(gate.metaServerID.String())}
-		if member.authClient != nil && member.authClient.outcome != authClientLegacy {
+		if member.authClient != nil && (member.authClient.outcome != authClientLegacy || member.authClient.sendsClientHeaders()) {
 			options = append(options, remotemcp.WithAuthClientHeaders(member.authClient.headers))
 		}
 		var authHeaders []proxy.ConfiguredHeader
 		if member.authClient != nil && member.authClient.outcome != authClientLegacy {
 			authHeaders = member.authClient.headers
 		}
-		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, connectURL: "", sessionKey: memberSessionKey([]any{remoteServer.Url, remoteServer.TransportType, headers, authHeaders}, upstreamToken), build: func(context.Context) (*proxy.Proxy, error) {
+		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, connectURL: "", sessionKey: memberSessionKey([]any{remoteServer.Url, remoteServer.TransportType, headers, authHeaders}, upstreamToken), credential: memberServedCredential(gate, member, routed), build: func(context.Context) (*proxy.Proxy, error) {
 			// No WWW-Authenticate relay: a member's auth challenge must not
 			// invite the client to re-authenticate against the meta MCP.
 			p := s.remoteProxyManager.Build(logger, &remoteServer, member.serverID.String(), headers, member.visibility, gate.organizationID, member.projectID.String(), upstreamToken, "", nil, options...)
@@ -253,6 +268,12 @@ func (s *Service) routeMetaMember(
 	case member.tunneledServerID.Valid:
 		routed, terr := routeMetaMemberToken(tokens, member, strings.TrimRight(member.tunneledResourceIdentifier, "/"))
 		upstreamToken := routed.Token
+		// A resolved agent credential that does not route to this member is
+		// not permission to dial it anonymously. Header/no-auth members have
+		// no token map and retain their existing path.
+		if terr == nil && gate.agentID != uuid.Nil && upstreamToken == "" && len(tokens) != 0 && !member.upstreamNoAuth {
+			return memberDial{}, "tunneled", agentMemberCredentialError(member)
+		}
 		if terr == nil && upstreamToken == "" && gate.chainUpstream != nil && !member.upstreamNoAuth && (member.authClient == nil || member.authClient.outcome == authClientLegacy) {
 			upstreamToken, terr = gate.chainUpstream(ctx, member, member.tunneledResourceIdentifier)
 		}
@@ -262,7 +283,7 @@ func (s *Service) routeMetaMember(
 		// Per-member namespace so one caller's handshake, calls, and DELETE
 		// land on one tunnel gateway.
 		affinity := tunnelrouting.HashedClientAffinityKey("meta:"+member.serverID.String(), callerIdentity)
-		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, connectURL: "", sessionKey: memberSessionKey([]any{member.tunneledResourceIdentifier, affinity}, upstreamToken), build: func(ctx context.Context) (*proxy.Proxy, error) {
+		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, connectURL: "", sessionKey: memberSessionKey([]any{member.tunneledResourceIdentifier, affinity}, upstreamToken), credential: memberServedCredential(gate, member, routed), build: func(ctx context.Context) (*proxy.Proxy, error) {
 			p, berr := s.tunnelManager.buildProxy(ctx, logger, buildProxyParams{
 				ClientAffinityKey:  affinity,
 				ProjectID:          member.projectID,
@@ -293,6 +314,36 @@ func dispatchOutcome(anonymous bool) mcpmetrics.MetaDispatchOutcome {
 		return mcpmetrics.MetaDispatchAnonymous
 	}
 	return mcpmetrics.MetaDispatchCredentialed
+}
+
+// memberServerContext names the member server's own project as the owner its
+// proxied tool call is metered and logged under, when the caller's
+// authentication names no project to fall back to. An agent gateway's key is
+// scoped to its organization, not a project, so without this the remotemcp
+// interceptors find no owner and the call is neither metered nor logged.
+// Best effort: a lookup failure leaves the context as it was.
+func (s *Service) memberServerContext(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) context.Context {
+	if serverCtx, ok := remotemcp.GetServerContext(ctx); ok && serverCtx.OrganizationID != "" && serverCtx.ProjectID != uuid.Nil {
+		return ctx
+	}
+	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, member.projectID)
+	if err != nil {
+		logger.WarnContext(ctx, "resolve meta MCP member owner", attr.SlogError(err))
+		return ctx
+	}
+	// A member is always in the gateway's organization; one that is not is
+	// never charged or logged under another tenant.
+	if project.ID != gate.organizationID {
+		return ctx
+	}
+	accountType, _ := mv.ResolveOrganizationTier(ctx, logger, s.billingRepository, project.ID, billing.Tier(project.GramAccountType))
+	return remotemcp.WithServerContext(ctx, remotemcp.ServerContext{
+		OrganizationID:   project.ID,
+		OrganizationSlug: project.Slug,
+		ProjectID:        project.ProjectID,
+		ProjectSlug:      project.ProjectSlug,
+		AccountType:      string(accountType),
+	})
 }
 
 // memberAttributionContext gives member exchanges the identity billing and
@@ -394,6 +445,7 @@ func (s *Service) executeProxiedMemberTool(
 	meta *mcprequests.WireMeta,
 ) (json.RawMessage, error) {
 	ctx = s.memberAttributionContext(ctx, logger, gate)
+	ctx = s.memberServerContext(ctx, logger, gate, member)
 	// A proxied member's tool-call log is written by the remotemcp interceptor,
 	// which never sees the gate, so carry the caller's identity down to it.
 	clientIdentity, _ := resolveClientIdentity(ctx, logger, s.sessionClientInfo, &mcpInputs{ //nolint:exhaustruct // only the record's identity fields matter here
@@ -416,7 +468,7 @@ func (s *Service) executeProxiedMemberTool(
 	dial, err := redial(ctx, gate, member)
 	if err != nil {
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
-			return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
+			return marshalMetaMemberFailure(ctx, logger, req.ID, err, memberErr.message)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "dial meta MCP member").LogError(ctx, logger)
 	}
@@ -433,7 +485,7 @@ func (s *Service) executeProxiedMemberTool(
 		upstreamResult, _, err = s.callOnMemberSession(ctx, logger, dial, redial, member, toolName, arguments)
 	}
 	if err != nil {
-		return marshalMetaToolError(ctx, logger, req.ID, err.Error())
+		return marshalMetaMemberFailure(ctx, logger, req.ID, err, err.Error())
 	}
 
 	bs, err := json.Marshal(&result[json.RawMessage]{
@@ -457,6 +509,12 @@ func (s *Service) callOnMemberSession(ctx context.Context, logger *slog.Logger, 
 		return nil, false, err
 	}
 	defer ms.release(ctx, logger)
+	// The remotemcp interceptor writes this call's log row and never sees the
+	// gate, so carry down which auth client signs the member in. A recheck
+	// while waiting for a pooled session may have routed the member to another
+	// credential, so name the route the session was opened on; a route that
+	// recorded none clears any credential named before.
+	ctx = contextvalues.SetUpstreamCredential(ctx, ms.dial.credential)
 	upstreamResult, err := callMemberTool(ctx, ms.session, &mcp.CallToolParams{
 		Name: toolName, Arguments: arguments, Meta: nil, InputResponses: nil, RequestState: "",
 	})

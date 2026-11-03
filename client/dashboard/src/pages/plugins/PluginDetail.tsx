@@ -52,6 +52,9 @@ import { useMembers } from "@gram/client/react-query/members";
 import { useRoles } from "@gram/client/react-query/roles";
 import { useSyncedAgentUsers } from "@gram/client/react-query/syncedAgentUsers.js";
 import type { PublishStatusResult } from "@gram/client/models/components/publishstatusresult.js";
+import { GramError } from "@gram/client/models/errors/gramerror.js";
+import { handleError } from "@/lib/errors";
+import { Alert } from "@/components/ui/Alert";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import {
@@ -62,8 +65,10 @@ import {
   DropdownMenuTrigger,
 } from "@/components/ui/Dropdown";
 import { Icon } from "@/components/ui/Icon";
+import { Label } from "@/components/ui/Label";
 import { SearchBar } from "@/components/ui/SearchBar";
 import { Stack } from "@/components/ui/Stack";
+import { Switch } from "@/components/ui/Switch";
 import { useQueryClient } from "@tanstack/react-query";
 import { formatDistanceToNow } from "date-fns";
 import { Trash2 } from "lucide-react";
@@ -107,6 +112,7 @@ import {
   memberMapByUrn,
   roleMapByUrn,
 } from "./principals";
+import { pluginUpToDate } from "./plugin-sync-state";
 import { PublishDialog } from "./PublishDialog";
 import { SectionEmptyState } from "./SectionEmptyState";
 import { usePluginAssignmentsVisible } from "./use-plugin-assignments-visible";
@@ -211,6 +217,8 @@ function PluginDetailContent({
   // renders.
   const section = activePluginSection(location.pathname, pluginId);
   const [isEditOpen, setIsEditOpen] = useState(false);
+  // The server's refusal to turn auto sync off, shown next to the switch.
+  const [autoSyncError, setAutoSyncError] = useState<string | null>(null);
   const [isAddServerOpen, setIsAddServerOpen] = useState(false);
   const [isDownloadMenuOpen, setIsDownloadMenuOpen] = useState(false);
   const [isInstallSheetOpen, setIsInstallSheetOpen] = useState(false);
@@ -222,10 +230,12 @@ function PluginDetailContent({
   const [serverSearch, setServerSearch] = useState("");
   const [assignmentSearch, setAssignmentSearch] = useState("");
   // The component stays mounted when only :pluginId changes, so stale searches
-  // would filter the new plugin's lists.
+  // would filter the new plugin's lists and an auto sync refusal would show
+  // on a plugin it wasn't about.
   useEffect(() => {
     setServerSearch("");
     setAssignmentSearch("");
+    setAutoSyncError(null);
   }, [pluginId]);
 
   const scope = usePluginQueryScope();
@@ -327,6 +337,7 @@ function PluginDetailContent({
       const managing = publishModeRef.current === "manage";
       setIsPublishDialogOpen(false);
       setIsManageCollaboratorsOpen(false);
+      setAutoSyncError(null);
       void invalidateAllPublishStatus(queryClient);
       toast.success(
         managing ? "Collaborators added" : "Plugins published to GitHub",
@@ -354,10 +365,9 @@ function PluginDetailContent({
   // the fresh-per-render wrapper object (mirrors Plugins.tsx).
   const { mutate: publishMutate } = publishMutation;
   // Mirror the in-flight flag into a ref so detached callbacks can gate on the
-  // current pending state. The "Publish now" toast action closure is created
-  // when offerPublish runs (before any publish starts), so it can't read a live
-  // isPending — without this guard, stacking edits into multiple toasts lets a
-  // user fire concurrent publishes that the disabled buttons prevent.
+  // current pending state: a callback captured before a publish started can't
+  // read a live isPending, and without this guard could fire a concurrent
+  // publish that the disabled buttons prevent.
   const isPublishingRef = useRef(publishMutation.isPending);
   isPublishingRef.current = publishMutation.isPending;
   const handlePublish = useCallback(
@@ -383,24 +393,30 @@ function PluginDetailContent({
     [canPublish, publishMutate],
   );
 
-  // Nudge the user to publish straight after an edit instead of hunting for
-  // Sync on the marketplace banner. A connected project republishes in one
-  // click; a configured-but-unconnected project needs the first-publish dialog
-  // (it collects collaborators). Unconfigured projects get no nudge — there's
-  // nowhere to publish to.
+  // Undefined (an older cached record) reads as on, the server's default.
+  const autoSyncOff = plugin.autoSyncEnabled === false;
+
+  // A connected marketplace republishes on its own after every plugin change,
+  // so say so rather than asking for a manual sync — unless this plugin's auto
+  // sync is off, when its changes wait for Sync changes. A deletion is never
+  // held. A configured-but-unconnected project still needs the first-publish
+  // dialog (it collects collaborators). Unconfigured projects get no nudge —
+  // there's nowhere to publish to.
   const offerPublish = useCallback(
-    (message: string) => {
+    (message: string, held: boolean = autoSyncOff) => {
       if (!canPublish || !publishStatus?.configured) return;
+      if (publishStatus.connected) {
+        toast.success(message, {
+          description: held
+            ? "Auto sync is off for this plugin, so changes publish when someone clicks Sync changes."
+            : "Changes sync to your marketplace automatically.",
+        });
+        return;
+      }
       toast.success(message, {
         action: {
           label: "Publish now",
-          onClick: () => {
-            if (publishStatus.connected) {
-              handlePublish([]);
-            } else {
-              setIsPublishDialogOpen(true);
-            }
-          },
+          onClick: () => setIsPublishDialogOpen(true),
         },
       });
     },
@@ -408,7 +424,7 @@ function PluginDetailContent({
       canPublish,
       publishStatus?.configured,
       publishStatus?.connected,
-      handlePublish,
+      autoSyncOff,
     ],
   );
 
@@ -429,7 +445,7 @@ function PluginDetailContent({
       await invalidateAllPlugins(queryClient);
       await invalidateAllResourceAudience(queryClient);
       void invalidateAllPublishStatus(queryClient);
-      offerPublish("Plugin deleted");
+      offerPublish("Plugin deleted", false);
       void navigate(routes.plugins.href());
     },
   });
@@ -463,6 +479,52 @@ function PluginDetailContent({
           name: fd.get("name") as string,
           slug: fd.get("slug") as string,
           description: (fd.get("description") as string) || undefined,
+        },
+      },
+    });
+  };
+
+  const autoSyncMutation = useUpdatePluginMutation({
+    onSuccess: (updated) => {
+      setAutoSyncError(null);
+      void invalidateAll();
+      toast.success(
+        updated.autoSyncEnabled
+          ? "Auto sync turned on"
+          : "Auto sync turned off",
+        {
+          description: updated.autoSyncEnabled
+            ? "Changes to this plugin, including any that were waiting, now publish automatically."
+            : "Changes to this plugin now wait until someone clicks Sync changes.",
+        },
+      );
+    },
+    onError: (error) => {
+      // A 412 is the server refusing while changes wait to sync, which Sync
+      // changes next to the switch fixes. Anything else, including a 400 a
+      // sync can't fix, is a toast.
+      if (error instanceof GramError && error.statusCode === 412) {
+        setAutoSyncError(error.message);
+        return;
+      }
+      handleError(error, { title: "Couldn't change auto sync" });
+    },
+  });
+
+  // Sends the plugin's current details back unchanged: the server refuses to
+  // turn auto sync off in the same update as an edit.
+  const handleAutoSyncChange = (enabled: boolean) => {
+    if (!canPublish) return;
+    setAutoSyncError(null);
+    autoSyncMutation.mutate({
+      security: { sessionHeaderGramSession: "" },
+      request: {
+        updatePluginForm: {
+          id: pluginId!,
+          name: plugin.name,
+          slug: plugin.slug,
+          description: plugin.description || undefined,
+          autoSyncEnabled: enabled,
         },
       },
     });
@@ -833,7 +895,10 @@ function PluginDetailContent({
                 )}
               </StatTileGroup>
 
-              <PublishFreshnessIndicator publishStatus={publishStatus} />
+              <PublishFreshnessIndicator
+                publishStatus={publishStatus}
+                pluginSlug={plugin?.slug}
+              />
             </section>
           )}
 
@@ -973,7 +1038,9 @@ function PluginDetailContent({
                   </SettingsSection.Body>
                   <SettingsSection.Footer>
                     <SettingsSection.FooterHint>
-                      Editing republishes the plugin on your next sync.
+                      {autoSyncOff
+                        ? "Edits wait until someone clicks Sync changes."
+                        : "Edits sync to your marketplace automatically."}
                     </SettingsSection.FooterHint>
                     <SettingsSection.FooterActions>
                       <Button size="sm" onClick={() => setIsEditOpen(true)}>
@@ -981,6 +1048,53 @@ function PluginDetailContent({
                       </Button>
                     </SettingsSection.FooterActions>
                   </SettingsSection.Footer>
+                </SettingsSection.Panel>
+              </SettingsSection>
+
+              <SettingsSection>
+                <SettingsSection.Header>
+                  <SettingsSection.Title>
+                    Marketplace sync
+                  </SettingsSection.Title>
+                </SettingsSection.Header>
+                <SettingsSection.Panel>
+                  <SettingsSection.Body className="space-y-3">
+                    <div className="flex items-start justify-between gap-4">
+                      <div className="space-y-1">
+                        <Label id="plugin-auto-sync-label">
+                          Sync changes automatically
+                        </Label>
+                        <Text small muted className="max-w-xl">
+                          {autoSyncOff
+                            ? "Changes to this plugin wait until someone clicks Sync changes. Everyone keeps the version last published."
+                            : "Changes to this plugin publish to your marketplace on their own."}
+                        </Text>
+                      </div>
+                      <Switch
+                        aria-labelledby="plugin-auto-sync-label"
+                        checked={!autoSyncOff}
+                        onCheckedChange={handleAutoSyncChange}
+                        disabled={autoSyncMutation.isPending}
+                      />
+                    </div>
+                    {autoSyncError && (
+                      <Alert variant="warning" title={null}>
+                        <div className="flex flex-wrap items-center justify-between gap-3">
+                          <span>{autoSyncError}</span>
+                          {publishStatus?.connected && (
+                            <Button
+                              size="sm"
+                              variant="secondary"
+                              onClick={() => handlePublish([])}
+                              disabled={publishMutation.isPending}
+                            >
+                              Sync changes
+                            </Button>
+                          )}
+                        </div>
+                      </Alert>
+                    )}
+                  </SettingsSection.Body>
                 </SettingsSection.Panel>
               </SettingsSection>
 
@@ -1035,6 +1149,12 @@ function PluginDetailContent({
                     name="slug"
                     defaultValue={plugin.slug}
                     required
+                    readOnly={autoSyncOff}
+                    hint={
+                      autoSyncOff
+                        ? "Turn on auto sync to change the slug."
+                        : undefined
+                    }
                   />
                   <InputField
                     label="Description"
@@ -1314,15 +1434,18 @@ export function PluginInstallControl({
 // freshness is unknown and there's nothing published to show.
 function PublishFreshnessIndicator({
   publishStatus,
+  pluginSlug,
 }: {
   publishStatus: PublishStatusResult | undefined;
+  pluginSlug: string | undefined;
 }): JSX.Element | null {
   if (!publishStatus?.connected) return null;
 
   // up_to_date is absent when freshness can't be determined (connection
   // predates fingerprinting) — treat only the explicit booleans as known.
-  const hasUnpublishedChanges = publishStatus.upToDate === false;
-  const isUpToDate = publishStatus.upToDate === true;
+  const upToDate = pluginUpToDate(publishStatus, pluginSlug);
+  const hasUnpublishedChanges = upToDate === false;
+  const isUpToDate = upToDate === true;
 
   // Each row is omitted when its value is unknown rather than guessed. The
   // live version is rendered in its own mono cell so the long timestamp-based

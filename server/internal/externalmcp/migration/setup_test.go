@@ -23,7 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/migration"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/migration/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
+	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
@@ -117,7 +117,7 @@ type serverOptions struct {
 	otherTool bool
 	// perTool seeds a per-tool (direct) definition instead of the proxy tool.
 	perTool bool
-	// mcpOff seeds the toolset with MCP turned off.
+	// mcpOff seeds the toolset's server disabled.
 	mcpOff bool
 	// sharedIssuer signs the server in through another server's issuer
 	// instead of creating its own.
@@ -139,9 +139,10 @@ func seedServer(t *testing.T, ctx context.Context, ti *testInstance, opts server
 	toolset, err := toolsets.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: ti.organizationID, ProjectID: ti.projectID,
 		Name: opts.slug, Slug: opts.slug, Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug: conv.ToPGText(opts.slug + "-mcp"), McpEnabled: !opts.mcpOff,
 	})
 	require.NoError(t, err)
+	mcpSlug := opts.slug + "-mcp"
+	testenv.SetLegacyAlias(t, ctx, ti.conn, ti.projectID, toolset.ID, mcpSlug, uuid.NullUUID{})
 	toolURNs := []urn.Tool{toolURN}
 	if opts.otherTool {
 		toolURNs = append(toolURNs, urn.NewTool(urn.ToolKindHTTP, opts.slug, "extra"))
@@ -154,22 +155,14 @@ func seedServer(t *testing.T, ctx context.Context, ti *testInstance, opts server
 	server := fixtureServer{toolset: toolset, issuerID: uuid.Nil, clientID: uuid.Nil}
 	switch {
 	case opts.sharedIssuer != nil:
-		toolset, err = toolsets.UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-			UserSessionIssuerID: conv.ToNullUUID(opts.sharedIssuer.issuerID), Slug: toolset.Slug, ProjectID: ti.projectID,
-		})
-		require.NoError(t, err)
-		server.toolset, server.issuerID, server.clientID = toolset, opts.sharedIssuer.issuerID, opts.sharedIssuer.clientID
+		server.issuerID, server.clientID = opts.sharedIssuer.issuerID, opts.sharedIssuer.clientID
 	case !opts.noIssuer:
 		issuer, err := usersessionsrepo.New(ti.conn).CreateUserSessionIssuer(ctx, usersessionsrepo.CreateUserSessionIssuerParams{
 			ProjectID: ti.projectID, OrganizationID: conv.ToPGText(ti.organizationID), Slug: opts.slug + "-issuer", AuthnChallengeMode: "interactive",
 			SessionDuration: pgtype.Interval{Microseconds: int64(24 * time.Hour / time.Microsecond), Days: 0, Months: 0, Valid: true},
 		})
 		require.NoError(t, err)
-		toolset, err = toolsets.UpdateToolsetUserSessionIssuer(ctx, toolsetsrepo.UpdateToolsetUserSessionIssuerParams{
-			UserSessionIssuerID: conv.ToNullUUID(issuer.ID), Slug: toolset.Slug, ProjectID: ti.projectID,
-		})
-		require.NoError(t, err)
-		server.toolset, server.issuerID = toolset, issuer.ID
+		server.issuerID = issuer.ID
 		if opts.noClient {
 			break
 		}
@@ -182,11 +175,22 @@ func seedServer(t *testing.T, ctx context.Context, ti *testInstance, opts server
 	}
 
 	if !opts.noWrapper {
-		tx := testenv.BeginTx(t, ctx, ti.conn)
-		_, err := hostedmcp.BackfillSync(ctx, tx, audit.NewLogger(), hostedmcp.SystemActor("test"), server.toolset)
+		visibility := "private"
+		if opts.mcpOff {
+			visibility = "disabled"
+		}
+		issuerID := uuid.NullUUID{UUID: server.issuerID, Valid: server.issuerID != uuid.Nil}
+		_, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
+			ID: toolset.ID, ProjectID: ti.projectID, Name: conv.ToPGText(toolset.Name), Slug: conv.ToPGText(mcpSlug),
+			EnvironmentID: uuid.NullUUID{}, UserSessionIssuerID: issuerID, RemoteMcpServerID: uuid.NullUUID{}, TunneledMcpServerID: uuid.NullUUID{},
+			ToolsetID: conv.ToNullUUID(toolset.ID), UnproxiedMcpServerID: uuid.NullUUID{}, ToolVariationsGroupID: uuid.NullUUID{},
+			Visibility: visibility, NetworkAccessMode: pgtype.Text{},
+		})
 		require.NoError(t, err)
-		require.NoError(t, tx.Commit(ctx))
+		testenv.SetHostedMCP(t, ctx, ti.conn, ti.projectID, toolset.ID, testenv.HostedMCP{Slug: mcpSlug})
 	}
+	server.toolset, err = toolsets.GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: toolset.ID, ProjectID: ti.projectID})
+	require.NoError(t, err)
 	return server
 }
 

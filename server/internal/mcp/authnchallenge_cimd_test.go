@@ -27,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -186,7 +185,7 @@ func (ds *cimdDocServer) certPool() *x509.CertPool {
 // catalog preset, so "presets" mode would deny every one of them
 // before a document was ever fetched. Admission itself is covered by
 // authnchallenge_cimd_admission_test.go, which seeds modes explicitly.
-func newTestCIMDService(t *testing.T) (context.Context, *testInstance, *cimdDocServer, toolsets_repo.Toolset) {
+func newTestCIMDService(t *testing.T) (context.Context, *testInstance, *cimdDocServer, hostedToolset) {
 	t.Helper()
 
 	return newTestCIMDServiceWithMeterProvider(t, testenv.NewMeterProvider(t))
@@ -194,7 +193,7 @@ func newTestCIMDService(t *testing.T) (context.Context, *testInstance, *cimdDocS
 
 // newTestCIMDServiceWithMeterProvider is newTestCIMDService over a caller's
 // meter provider, for tests that read the admission counter back.
-func newTestCIMDServiceWithMeterProvider(t *testing.T, meterProvider metric.MeterProvider) (context.Context, *testInstance, *cimdDocServer, toolsets_repo.Toolset) {
+func newTestCIMDServiceWithMeterProvider(t *testing.T, meterProvider metric.MeterProvider) (context.Context, *testInstance, *cimdDocServer, hostedToolset) {
 	t.Helper()
 
 	ds := startCIMDDocServer(t)
@@ -202,17 +201,7 @@ func newTestCIMDServiceWithMeterProvider(t *testing.T, meterProvider metric.Mete
 
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 	setIssuerAdmissionMode(t, ctx, ti, toolset, admission.ModeOpen)
-	toolset, err := toolsets_repo.New(ti.conn).UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "public"})
 
 	return ctx, ti, ds, toolset
 }
@@ -502,7 +491,7 @@ func doCIMDConsentGet(t *testing.T, ti *testInstance, mcpSlug, stateID string) *
 
 // getCIMDClientRow reads the persisted client row for the doc server's
 // client_id, which every cache assertion is made against.
-func getCIMDClientRow(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, clientID string) usersessions_repo.UserSessionClient {
+func getCIMDClientRow(t *testing.T, ctx context.Context, ti *testInstance, toolset hostedToolset, clientID string) usersessions_repo.UserSessionClient {
 	t.Helper()
 
 	row, err := usersessions_repo.New(ti.conn).GetUserSessionClientByClientID(ctx, usersessions_repo.GetUserSessionClientByClientIDParams{

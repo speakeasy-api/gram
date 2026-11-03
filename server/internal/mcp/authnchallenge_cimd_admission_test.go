@@ -32,8 +32,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
-	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -41,7 +41,7 @@ import (
 // setIssuerAdmissionMode writes an explicit admission mode onto the toolset's
 // issuer. Passing an empty mode leaves the column NULL, which is the state a
 // freshly-created issuer is in.
-func setIssuerAdmissionMode(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, mode admission.Mode) {
+func setIssuerAdmissionMode(t *testing.T, ctx context.Context, ti *testInstance, toolset hostedToolset, mode admission.Mode) {
 	t.Helper()
 
 	if mode == "" {
@@ -61,21 +61,11 @@ func setIssuerAdmissionMode(t *testing.T, ctx context.Context, ti *testInstance,
 // absence the application has to interpret. Tests covering an unconfigured
 // issuer start here; clearIssuerAdmissionMode covers the older rows that
 // predate the create default.
-func seedFreshIssuerToolset(t *testing.T, ctx context.Context, ti *testInstance) toolsets_repo.Toolset {
+func seedFreshIssuerToolset(t *testing.T, ctx context.Context, ti *testInstance) hostedToolset {
 	t.Helper()
 
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
-	toolset, err := toolsets_repo.New(ti.conn).UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "public"})
 
 	issuer, err := usersessions_repo.New(ti.conn).GetUserSessionIssuerByID(ctx, usersessions_repo.GetUserSessionIssuerByIDParams{
 		ID:        toolset.UserSessionIssuerID.UUID,
@@ -92,7 +82,7 @@ func seedFreshIssuerToolset(t *testing.T, ctx context.Context, ti *testInstance)
 // every row created before the create query wrote a mode explicitly. It has
 // no management API equivalent on purpose: this reproduces stored history,
 // not something an operator can do.
-func clearIssuerAdmissionMode(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset) {
+func clearIssuerAdmissionMode(t *testing.T, ctx context.Context, ti *testInstance, toolset hostedToolset) {
 	t.Helper()
 
 	err := testrepo.New(ti.conn).SetUserSessionIssuerCIMDAdmissionMode(ctx, testrepo.SetUserSessionIssuerCIMDAdmissionModeParams{
@@ -129,7 +119,7 @@ func admissionDecisionPoints(t *testing.T, reader *sdkmetric.ManualReader) map[a
 
 // allowCustomCimdURL adds an issuer-specific allowed CIMD document URL,
 // the operator-side remedy for a client the catalog does not cover.
-func allowCustomCimdURL(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, clientID string) {
+func allowCustomCimdURL(t *testing.T, ctx context.Context, ti *testInstance, toolset hostedToolset, clientID string) {
 	t.Helper()
 
 	row, err := usersessions_repo.New(ti.conn).CreateUserSessionIssuerCimdClient(ctx, usersessions_repo.CreateUserSessionIssuerCimdClientParams{
@@ -146,7 +136,7 @@ func allowCustomCimdURL(t *testing.T, ctx context.Context, ti *testInstance, too
 
 // revokeCustomCimdURL soft-deletes an issuer's custom CIMD URL, the
 // operator action whose blast radius the /token asymmetry bounds.
-func revokeCustomCimdURL(t *testing.T, ctx context.Context, ti *testInstance, toolset toolsets_repo.Toolset, clientID string) {
+func revokeCustomCimdURL(t *testing.T, ctx context.Context, ti *testInstance, toolset hostedToolset, clientID string) {
 	t.Helper()
 
 	rows, err := usersessions_repo.New(ti.conn).ListUserSessionIssuerCimdClientsByIssuerID(ctx, usersessions_repo.ListUserSessionIssuerCimdClientsByIssuerIDParams{

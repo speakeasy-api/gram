@@ -422,6 +422,7 @@ func (s *seeder) orgMemberships(ctx context.Context) error {
 	org := s.orgID()
 	if err := runOrgSteps([]orgStep{
 		{"delete agent grants", func() error { return s.q.OrgDeleteAgentGrants(ctx, org) }},
+		{"delete auth permission provisions", func() error { return s.q.OrgDeleteAuthPermissionProvisions(ctx, org) }},
 		{"delete agents", func() error { return s.q.OrgDeleteAgents(ctx, org) }},
 		{"delete slack identity mappings", func() error { return s.q.OrgDeleteSlackIdentityMappings(ctx, org) }},
 		{"delete memberships", func() error { return s.q.OrgDeleteMemberships(ctx, org) }},

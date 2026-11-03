@@ -85,6 +85,23 @@ func (q *Queries) AddMCPServerToolMetadata(ctx context.Context, arg AddMCPServer
 	return items, nil
 }
 
+const countEMAClientHeadersFixture = `-- name: CountEMAClientHeadersFixture :one
+SELECT count(*) FROM mcp_auth_client_headers
+WHERE auth_client_id = $1 AND organization_id = $2 AND NOT deleted
+`
+
+type CountEMAClientHeadersFixtureParams struct {
+	AuthClientID   uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) CountEMAClientHeadersFixture(ctx context.Context, arg CountEMAClientHeadersFixtureParams) (int64, error) {
+	row := q.db.QueryRow(ctx, countEMAClientHeadersFixture, arg.AuthClientID, arg.OrganizationID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const createMCPServer = `-- name: CreateMCPServer :one
 INSERT INTO mcp_servers (
     id,
@@ -782,81 +799,6 @@ func (q *Queries) ListEnabledMCPServersByToolsetID(ctx context.Context, arg List
 	return items, nil
 }
 
-const listLegacyPlatformAliasSlugs = `-- name: ListLegacyPlatformAliasSlugs :many
-SELECT t.id AS mcp_server_id, t.mcp_slug::text AS slug
-FROM toolsets t
-JOIN projects p
-  ON p.id = t.project_id
-  AND p.organization_id = $1
-  AND p.deleted IS FALSE
-JOIN mcp_servers s
-  ON s.id = t.id
-  AND s.project_id = t.project_id
-  AND s.toolset_id = t.id
-  AND s.deleted IS FALSE
-WHERE t.id = ANY($2::uuid[])
-  AND t.project_id = ANY($3::uuid[])
-  AND t.organization_id = $1
-  AND t.mcp_slug IS NOT NULL
-  AND t.custom_domain_id IS NOT NULL
-  AND t.deleted IS FALSE
-  AND NOT EXISTS (
-    SELECT 1
-    FROM toolsets o
-    WHERE o.mcp_slug = t.mcp_slug
-      AND o.custom_domain_id IS NULL
-      AND o.deleted IS FALSE
-  )
-  AND NOT EXISTS (
-    SELECT 1
-    FROM toolsets o
-    WHERE o.mcp_slug = t.mcp_slug
-      AND o.custom_domain_id IS NOT NULL
-      AND o.id <> t.id
-      AND o.deleted IS FALSE
-  )
-  AND NOT EXISTS (
-    SELECT 1
-    FROM mcp_endpoints e
-    WHERE e.slug = t.mcp_slug
-      AND e.custom_domain_id IS NULL
-      AND e.deleted IS FALSE
-  )
-`
-
-type ListLegacyPlatformAliasSlugsParams struct {
-	OrganizationID string
-	McpServerIds   []uuid.UUID
-	ProjectIds     []uuid.UUID
-}
-
-type ListLegacyPlatformAliasSlugsRow struct {
-	McpServerID uuid.UUID
-	Slug        string
-}
-
-// Canonical hosted servers whose toolset alias sits on a custom domain and is the only alias with its slug, with no
-// live platform endpoint holding it: the loose legacy lookup serves that alias on the platform host too.
-func (q *Queries) ListLegacyPlatformAliasSlugs(ctx context.Context, arg ListLegacyPlatformAliasSlugsParams) ([]ListLegacyPlatformAliasSlugsRow, error) {
-	rows, err := q.db.Query(ctx, listLegacyPlatformAliasSlugs, arg.OrganizationID, arg.McpServerIds, arg.ProjectIds)
-	if err != nil {
-		return nil, err
-	}
-	defer rows.Close()
-	var items []ListLegacyPlatformAliasSlugsRow
-	for rows.Next() {
-		var i ListLegacyPlatformAliasSlugsRow
-		if err := rows.Scan(&i.McpServerID, &i.Slug); err != nil {
-			return nil, err
-		}
-		items = append(items, i)
-	}
-	if err := rows.Err(); err != nil {
-		return nil, err
-	}
-	return items, nil
-}
-
 const listLiveMCPServerIDsInOrganization = `-- name: ListLiveMCPServerIDsInOrganization :many
 SELECT m.id
 FROM mcp_servers AS m
@@ -1390,6 +1332,49 @@ func (q *Queries) ListMCPServersForTelemetryByProjectID(ctx context.Context, pro
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listProjectsSharingOrganizationUserSessionIssuers = `-- name: ListProjectsSharingOrganizationUserSessionIssuers :many
+SELECT DISTINCT s.project_id
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id
+JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
+WHERE s.user_session_issuer_id = ANY($1::uuid[])
+  AND usi.project_id IS NULL
+  AND usi.organization_id = $2::text
+  AND usi.deleted IS FALSE
+  AND p.organization_id = $2::text
+  AND p.deleted IS FALSE
+  AND s.deleted IS FALSE
+ORDER BY s.project_id
+`
+
+type ListProjectsSharingOrganizationUserSessionIssuersParams struct {
+	UserSessionIssuerIds []uuid.UUID
+	OrganizationID       string
+}
+
+// Projects of the organization with a live MCP server on one of the named
+// organization-level user session issuers. Their servers share the issuer's
+// client bindings, so a binding change on it is resynced in each of them.
+func (q *Queries) ListProjectsSharingOrganizationUserSessionIssuers(ctx context.Context, arg ListProjectsSharingOrganizationUserSessionIssuersParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listProjectsSharingOrganizationUserSessionIssuers, arg.UserSessionIssuerIds, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var project_id uuid.UUID
+		if err := rows.Scan(&project_id); err != nil {
+			return nil, err
+		}
+		items = append(items, project_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1967,6 +1952,22 @@ func (q *Queries) ResyncMCPServerRemoteSessionIssuers(ctx context.Context, arg R
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setEMABindingGatewayIssuerFixture = `-- name: SetEMABindingGatewayIssuerFixture :exec
+UPDATE remote_session_ema_bindings SET user_session_issuer_id = $1
+WHERE remote_session_client_id = $2 AND project_id = $3
+`
+
+type SetEMABindingGatewayIssuerFixtureParams struct {
+	UserSessionIssuerID   uuid.UUID
+	RemoteSessionClientID uuid.NullUUID
+	ProjectID             uuid.UUID
+}
+
+func (q *Queries) SetEMABindingGatewayIssuerFixture(ctx context.Context, arg SetEMABindingGatewayIssuerFixtureParams) error {
+	_, err := q.db.Exec(ctx, setEMABindingGatewayIssuerFixture, arg.UserSessionIssuerID, arg.RemoteSessionClientID, arg.ProjectID)
+	return err
 }
 
 const setMCPServerToolMetadata = `-- name: SetMCPServerToolMetadata :many

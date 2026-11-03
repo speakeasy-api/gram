@@ -120,6 +120,7 @@ type Endpoints struct {
 	RunUpstreamOAuthMigration               goa.Endpoint
 	EnableUpstreamAuthEnforcement           goa.Endpoint
 	DisableUpstreamAuthEnforcement          goa.Endpoint
+	BackfillMcpAuthGrants                   goa.Endpoint
 }
 
 // UploadPlatformImageRequestData holds both the payload and the HTTP request
@@ -248,6 +249,7 @@ func NewEndpoints(s Service) *Endpoints {
 		RunUpstreamOAuthMigration:               NewRunUpstreamOAuthMigrationEndpoint(s, a.APIKeyAuth),
 		EnableUpstreamAuthEnforcement:           NewEnableUpstreamAuthEnforcementEndpoint(s, a.APIKeyAuth),
 		DisableUpstreamAuthEnforcement:          NewDisableUpstreamAuthEnforcementEndpoint(s, a.APIKeyAuth),
+		BackfillMcpAuthGrants:                   NewBackfillMcpAuthGrantsEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -356,6 +358,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.RunUpstreamOAuthMigration = m(e.RunUpstreamOAuthMigration)
 	e.EnableUpstreamAuthEnforcement = m(e.EnableUpstreamAuthEnforcement)
 	e.DisableUpstreamAuthEnforcement = m(e.DisableUpstreamAuthEnforcement)
+	e.BackfillMcpAuthGrants = m(e.BackfillMcpAuthGrants)
 }
 
 // NewLoginEndpoint returns an endpoint function that calls the method "login"
@@ -2688,5 +2691,28 @@ func NewDisableUpstreamAuthEnforcementEndpoint(s Service, authAPIKeyFn security.
 			return nil, err
 		}
 		return s.DisableUpstreamAuthEnforcement(ctx, p)
+	}
+}
+
+// NewBackfillMcpAuthGrantsEndpoint returns an endpoint function that calls the
+// method "backfillMcpAuthGrants" of service "admin".
+func NewBackfillMcpAuthGrantsEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*BackfillMcpAuthGrantsPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.BackfillMcpAuthGrants(ctx, p)
 	}
 }

@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"sync"
 	"testing"
 
@@ -194,6 +195,8 @@ func TestMetaMemberChainer(t *testing.T) {
 				var memberErr *metaMemberError
 				require.ErrorAs(t, err, &memberErr, "chaining failures surface as member-scoped tool errors")
 				require.Contains(t, memberErr.message, `"docs"`)
+				_, credential := errors.AsType[memberCredentialError](err)
+				require.Equal(t, tc.outcome.Reason == identitychaining.ReasonReauthenticationRequired, credential, "only sign-in failures should offer reconnect")
 			} else {
 				require.NoError(t, err)
 			}

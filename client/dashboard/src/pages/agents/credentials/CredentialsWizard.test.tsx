@@ -11,6 +11,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import { MemoryRouter } from "react-router";
+import { toast } from "sonner";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { invalidateAgentPolicy } from "../agent-policy-grants";
 import { CredentialsWizard } from "./CredentialsWizard";
@@ -29,17 +30,37 @@ const mocks = vi.hoisted(() => ({
   platformsStatus: "success" as "success" | "pending" | "error",
   registerIssuer: vi.fn(),
   admitSubject: vi.fn(),
+  withdrawSubject: vi.fn(),
+  workloadIssuers: vi.fn(),
+  workloadAdmissions: vi.fn(),
+  workloadList: vi.fn(),
   projectId: "project_one",
   canFederate: true,
   canReadWorkloads: true,
+  canIngestHooks: false,
   renameAgent: vi.fn(),
   createGrant: vi.fn(),
   deleteGrant: vi.fn(),
+  extendAgentKeys: vi.fn(),
   agentList: vi.fn(),
+  nameCheckFails: false,
   sessions: vi.fn(),
   sessionClients: vi.fn(),
+  serverAuth: vi.fn(),
   bindings: vi.fn(),
   attach: vi.fn(),
+  detach: vi.fn(),
+  plugins: vi.fn(),
+  getPlugin: vi.fn(),
+  listPolicyGrants: vi.fn(),
+}));
+
+vi.mock("@gram/client/react-query/mcpServerAuthClientChoices.js", () => ({
+  useMcpServerAuthClientChoices: () => ({
+    isError: false,
+    isSuccess: true,
+    data: { choices: [] },
+  }),
 }));
 
 vi.mock("@gram/client/react-query/members.js", () => ({
@@ -80,14 +101,37 @@ vi.mock("@/contexts/Auth", () => ({
     user: { id: "user_owner", displayName: "Example Owner", email: "o@e.test" },
   }),
 }));
+// The name check answers as soon as a name is typed rather than after the
+// pause the page waits for.
+vi.mock("@/hooks/useDebouncedValue", () => ({
+  useDebouncedValue: <T,>(value: T) => value,
+}));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({
     agents: {
+      list: async () => {
+        if (mocks.nameCheckFails) throw new Error("network down");
+        return { result: { items: mocks.agentList() } };
+      },
       create: mocks.createAgent,
       listDelegableGrants: mocks.listDelegableGrants,
+      listPolicyGrants: mocks.listPolicyGrants,
       checkPolicyGrants: mocks.checkPolicyGrants,
     },
-    keys: { create: mocks.createKey, list: mocks.listKeys },
+    keys: {
+      create: mocks.createKey,
+      list: mocks.listKeys,
+      extendAgentKeys: mocks.extendAgentKeys,
+    },
+    plugins: { getPlugin: mocks.getPlugin },
+    // Read per project, for the projects that trust a platform on their own.
+    // Each project sees its own rows among every issuer listed.
+    workloadIdentities: { list: mocks.workloadList },
+    authClients: {
+      listMcpServerChoices: async () => ({ choices: [] }),
+      // How each server signs in upstream, read from its own auth clients.
+      getMcpServerAuthentication: mocks.serverAuth,
+    },
     // A person's own connections, read once per project before the agent
     // exists and as the agent's candidates once it does.
     remoteSessions: {
@@ -96,6 +140,7 @@ vi.mock("@/contexts/Sdk", () => ({
       ],
       listBindings: async () => ({ items: await mocks.bindings() }),
       attachBinding: mocks.attach,
+      detachBinding: mocks.detach,
     },
     remoteSessionClients: {
       list: async (request: object) => [
@@ -135,21 +180,28 @@ vi.mock("@gram/client/react-query/workloadPlatforms.js", () => ({
     };
   },
 }));
-// Reading the workload catalog is its own permission; everything else this
-// flow checks follows canFederate.
+// Reading the workload catalog and sending hook events are their own
+// permissions; everything else this flow checks follows canFederate.
 function hasScope(scope: string): boolean {
   if (scope === "workload:read") return mocks.canReadWorkloads;
+  if (scope === "org:hooks_ingest") return mocks.canIngestHooks;
   return mocks.canFederate;
 }
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     hasAllScopes: (scopes: string[]) => scopes.every(hasScope),
     hasAnyScope: (scopes: string[]) => scopes.some(hasScope),
+    hasScope,
     isLoading: false,
   }),
 }));
 vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
-  useWorkloadIdentities: () => ({ data: { issuers: [], admissions: [] } }),
+  useWorkloadIdentities: () => ({
+    data: {
+      issuers: mocks.workloadIssuers(),
+      admissions: mocks.workloadAdmissions(),
+    },
+  }),
   invalidateAllWorkloadIdentities: vi.fn(),
 }));
 vi.mock("@gram/client/react-query/workloadTokenEndpoints.js", () => ({
@@ -167,6 +219,11 @@ vi.mock("@gram/client/react-query/registerWorkloadIssuer.js", () => ({
 vi.mock("@gram/client/react-query/admitWorkloadSubject.js", () => ({
   useAdmitWorkloadSubjectMutation: () => ({ mutateAsync: mocks.admitSubject }),
 }));
+vi.mock("@gram/client/react-query/withdrawWorkloadSubject.js", () => ({
+  useWithdrawWorkloadSubjectMutation: () => ({
+    mutateAsync: mocks.withdrawSubject,
+  }),
+}));
 // Editing writes through these three: the name, and the grants that decide
 // which servers the agent reaches.
 vi.mock("@gram/client/react-query/renameAgent.js", () => ({
@@ -180,6 +237,14 @@ vi.mock("@gram/client/react-query/agentsCreatePolicyGrant.js", () => ({
 vi.mock("@gram/client/react-query/agentsDeletePolicyGrant.js", () => ({
   useAgentsDeletePolicyGrantMutation: () => ({
     mutateAsync: mocks.deleteGrant,
+  }),
+}));
+// The GitHub Actions setup lists the plugins the job will receive.
+vi.mock("@gram/client/react-query/plugins.js", () => ({
+  usePlugins: () => ({
+    data: { plugins: mocks.plugins() },
+    isPending: false,
+    isError: false,
   }),
 }));
 // Only read to keep a prefilled name from colliding with one in use.
@@ -248,10 +313,20 @@ function setup(initialPlatformKey?: string, initialEntry = "/") {
 }
 
 async function continueFromAuthentication() {
-  await screen.findByRole("heading", { name: "MCP authentication" });
+  await screen.findByRole("heading", { name: "MCP sign-in" });
   const next = screen.getByRole("button", { name: "Continue" });
   await waitFor(() => expect(next.hasAttribute("disabled")).toBe(false));
   fireEvent.click(next);
+}
+
+/** Continue, once the typed name has been checked and found free. */
+async function nameChecked() {
+  await waitFor(() =>
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false),
+  );
 }
 
 async function reachCredentialStep() {
@@ -259,6 +334,7 @@ async function reachCredentialStep() {
   fireEvent.change(screen.getByLabelText("Name"), {
     target: { value: "Release Bot" },
   });
+  await nameChecked();
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
   fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -307,15 +383,25 @@ beforeEach(() => {
   mocks.projectId = "project_one";
   mocks.canFederate = true;
   mocks.canReadWorkloads = true;
+  mocks.canIngestHooks = false;
   mocks.platformsStatus = "success";
   mocks.platforms.mockReturnValue([]);
   mocks.tokenEndpoints.mockReturnValue([]);
   mocks.agentList.mockReturnValue([]);
+  mocks.nameCheckFails = false;
   mocks.renameAgent.mockResolvedValue({});
   mocks.createGrant.mockResolvedValue({});
   mocks.deleteGrant.mockResolvedValue({});
+  mocks.extendAgentKeys.mockResolvedValue({ keys: [] });
   mocks.registerIssuer.mockResolvedValue({});
   mocks.admitSubject.mockResolvedValue({});
+  mocks.withdrawSubject.mockResolvedValue({});
+  mocks.workloadIssuers.mockReturnValue([]);
+  mocks.workloadAdmissions.mockReturnValue([]);
+  mocks.workloadList.mockImplementation(async () => ({
+    issuers: mocks.workloadIssuers(),
+    admissions: mocks.workloadAdmissions(),
+  }));
   vi.stubGlobal("fetch", mocks.fetch);
   mocks.mcpServers.mockResolvedValue({
     mcpServers: [
@@ -335,8 +421,17 @@ beforeEach(() => {
   mocks.toolsets.mockResolvedValue({ toolsets: [] });
   mocks.sessions.mockResolvedValue([]);
   mocks.sessionClients.mockResolvedValue([]);
+  mocks.serverAuth.mockResolvedValue({
+    status: "configured",
+    clients: [
+      { id: "auth_personal", clientType: "remote_session", enabled: true },
+    ],
+  });
   mocks.bindings.mockResolvedValue([]);
   mocks.attach.mockResolvedValue({});
+  mocks.plugins.mockReturnValue([]);
+  mocks.getPlugin.mockReset();
+  mocks.listPolicyGrants.mockResolvedValue([]);
   mocks.createAgent.mockResolvedValue({ id: "agent_new", name: "Release Bot" });
   mocks.listDelegableGrants.mockResolvedValue([grant]);
   mocks.checkPolicyGrants.mockImplementation(answerChecks());
@@ -373,9 +468,66 @@ describe("Provisioning a new agent", () => {
     setup(platform.key, "/?step=3");
 
     expect(
-      await screen.findByRole("heading", { name: "MCP selection" }),
+      await screen.findByRole("heading", { name: "MCP Selection" }),
     ).toBeTruthy();
     expect(mocks.createAgent).not.toHaveBeenCalled();
+  });
+
+  it("holds a name another agent has on the first step, whatever its case", async () => {
+    mocks.agentList.mockReturnValue([
+      { id: "agent_other", name: "Release Bot" },
+    ]);
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "release bot" },
+    });
+
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "already exists",
+    );
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect(screen.getByText("Pick a name no other agent has.")).toBeTruthy();
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot 2" },
+    });
+    await nameChecked();
+    expect(screen.queryByRole("alert")).toBeNull();
+  });
+
+  it("asks again about a name it already checked before letting it through", async () => {
+    setup();
+    const field = screen.getByLabelText("Name");
+    fireEvent.change(field, { target: { value: "Release Bot" } });
+    await nameChecked();
+    fireEvent.change(field, { target: { value: "Deploy Bot" } });
+    await nameChecked();
+
+    // Taken since it was last asked about.
+    mocks.agentList.mockReturnValue([
+      { id: "agent_other", name: "Release Bot" },
+    ]);
+    fireEvent.change(field, { target: { value: "Release Bot" } });
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "already exists",
+    );
+  });
+
+  it("lets the server decide when the name check fails", async () => {
+    mocks.nameCheckFails = true;
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot" },
+    });
+    await nameChecked();
+    expect(screen.queryByRole("alert")).toBeNull();
   });
 
   it("will not move on without a name or a server", async () => {
@@ -389,14 +541,57 @@ describe("Provisioning a new agent", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Release Bot" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
-    await screen.findByRole("heading", { name: "MCP selection" });
+    await screen.findByRole("heading", { name: "MCP Selection" });
     expect(
       (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
         .disabled,
     ).toBe(true);
     expect(screen.getByText("Select at least one MCP server.")).toBeTruthy();
+  });
+
+  it("says what the agent can do, with its scopes one focus away", async () => {
+    await reachCredentialStep();
+
+    fireEvent.focus(screen.getByText("Call its servers"));
+    expect(
+      (await screen.findAllByText("mcp:auth on all auth clients")).length,
+    ).toBeGreaterThan(0);
+    expect(
+      screen.getAllByText("mcp:connect on the selected servers").length,
+    ).toBeGreaterThan(0);
+  });
+
+  it("says nothing about what it can do until a server is chosen", async () => {
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot" },
+    });
+    await nameChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const server = await screen.findByRole("checkbox", { name: "GitHub" });
+    expect(screen.queryByText("Call its servers")).toBeNull();
+
+    fireEvent.click(server);
+    expect(screen.getByText("Call its servers")).toBeTruthy();
+  });
+
+  it("names all servers in its scopes under All servers", async () => {
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Everything here" },
+    });
+    await nameChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await enabledAllServers());
+
+    fireEvent.focus(screen.getByText("Call its servers"));
+    expect(
+      (await screen.findAllByText("mcp:connect on all servers in the project"))
+        .length,
+    ).toBeGreaterThan(0);
   });
 
   it("creates the agent, issues its first key and mints one setup command", async () => {
@@ -417,6 +612,11 @@ describe("Provisioning a new agent", () => {
           projectId: "project_one",
         },
       },
+      {
+        effect: "allow",
+        scope: "mcp:auth",
+        selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
+      },
     ]);
     expect(
       mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.projectId,
@@ -434,6 +634,52 @@ describe("Provisioning a new agent", () => {
       ),
     );
     expect(mocks.fetch).toHaveBeenCalledTimes(1);
+  });
+
+  it("gives a new agent hook ingestion in its project, and asks its first key for it", async () => {
+    mocks.canIngestHooks = true;
+    const hooksGrant = {
+      effect: "allow",
+      scope: "org:hooks_ingest",
+      selector: { resourceKind: "org", resourceId: "org_example" },
+    };
+    // Discovery that names servers answers with the server grant; discovery
+    // that names none answers with the organization grants.
+    mocks.listDelegableGrants.mockImplementation(
+      async (request: { toolsetIds?: string[] }) =>
+        request.toolsetIds ? [grant] : [hooksGrant],
+    );
+    fireEvent.click(await reachCredentialStep());
+
+    await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants,
+    ).toContainEqual({
+      effect: "allow",
+      scope: "org:hooks_ingest",
+      selector: {
+        resourceKind: "org",
+        resourceId: "org_example",
+        projectId: "project_one",
+      },
+    });
+    // The key narrows the hooks grant to the agent's project.
+    expect(
+      mocks.createKey.mock.calls[0]?.[0]?.createKeyForm?.requestedGrants,
+    ).toContainEqual({
+      ...hooksGrant,
+      selector: { ...hooksGrant.selector, projectId: "project_one" },
+    });
+  });
+
+  it("does not give hook ingestion when its creator cannot grant it", async () => {
+    fireEvent.click(await reachCredentialStep());
+
+    await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+    const scopes = (
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants ?? []
+    ).map((policy: { scope: string }) => policy.scope);
+    expect(scopes).not.toContain("org:hooks_ingest");
   });
 
   it("keeps the agent when the key fails, and says which part did not happen", async () => {
@@ -485,6 +731,7 @@ const platform = {
       patternMessage: "",
     },
   ],
+  // No label or alternatives, as a server that predates them sends.
   subject: {
     template: "spiffe://example/org/{org_id}/agent/",
     wildcard: true,
@@ -497,6 +744,7 @@ async function reachPlatformSetup() {
   fireEvent.change(screen.getByLabelText("Name"), {
     target: { value: "Release Bot" },
   });
+  await nameChecked();
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
   fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
   fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -509,6 +757,27 @@ async function reachPlatformSetup() {
   return screen.findByRole("heading", {
     name: "Anthropic organization",
   });
+}
+
+/** Opens the wizard on a preselected catalog entry's credential step. */
+async function reachPreselectedCredentialStep(entry: typeof platform) {
+  mocks.platforms.mockReturnValue([entry]);
+  setup(entry.key);
+  fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+  fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+  await continueFromAuthentication();
+}
+
+/** The preset offers no radio, Continue goes nowhere, and nothing is written. */
+function expectNoPresetSetup() {
+  expect(screen.queryByRole("radio", { name: /Claude Tag/ })).toBeNull();
+  const next = screen.getByRole("button", { name: "Continue" });
+  expect(next.hasAttribute("disabled")).toBe(true);
+  fireEvent.click(next);
+  expect(screen.queryByLabelText("Anthropic organization ID")).toBeNull();
+  expect(mocks.createAgent).not.toHaveBeenCalled();
+  expect(mocks.registerIssuer).not.toHaveBeenCalled();
+  expect(mocks.admitSubject).not.toHaveBeenCalled();
 }
 
 describe("Federating a platform's own tokens", () => {
@@ -548,27 +817,14 @@ describe("Federating a platform's own tokens", () => {
         })),
       },
     ],
-    ["disabled platform", { ...platform, enabled: false }],
     ["unknown platform", { ...platform, key: "constructor" }],
   ])(
     "keeps %s visible without allowing preselected setup",
     async (_case, unavailable) => {
-      mocks.platforms.mockReturnValue([unavailable]);
-      setup(unavailable.key);
-      fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
-      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-
-      await continueFromAuthentication();
+      await reachPreselectedCredentialStep(unavailable);
       expect(await screen.findByText("Unavailable")).toBeTruthy();
       expect(screen.getByText(platform.description)).toBeTruthy();
-      expect(screen.queryByRole("radio", { name: /Claude Tag/ })).toBeNull();
-      const next = screen.getByRole("button", { name: "Continue" });
-      expect(next.hasAttribute("disabled")).toBe(true);
-      fireEvent.click(next);
-      expect(screen.queryByLabelText("Anthropic organization ID")).toBeNull();
-      expect(mocks.createAgent).not.toHaveBeenCalled();
-      expect(mocks.registerIssuer).not.toHaveBeenCalled();
-      expect(mocks.admitSubject).not.toHaveBeenCalled();
+      expectNoPresetSetup();
 
       // The independent custom flow remains an available recovery path,
       // under the advanced options.
@@ -583,6 +839,17 @@ describe("Federating a platform's own tokens", () => {
       ).toBe(false);
     },
   );
+
+  // A platform listed but not offered yet, such as one waiting on a release,
+  // is named among the platforms coming soon rather than shown as a setup
+  // that cannot be finished.
+  it("names a disabled platform as coming soon without allowing preselected setup", async () => {
+    await reachPreselectedCredentialStep({ ...platform, enabled: false });
+    expect(await screen.findByText(/Coming soon: .*Claude Tag\./)).toBeTruthy();
+    expect(screen.queryByText("Unavailable")).toBeNull();
+    expect(screen.queryByText(platform.description)).toBeNull();
+    expectNoPresetSetup();
+  });
 
   it("keeps the credential to API keys without permission to trust a platform", async () => {
     mocks.canFederate = false;
@@ -623,12 +890,21 @@ describe("Federating a platform's own tokens", () => {
   });
 
   it("names the platforms still to come once the catalog has answered", async () => {
-    mocks.platforms.mockReturnValue([platform]);
+    // GitHub Actions is in the catalog but not offered yet.
+    mocks.platforms.mockReturnValue([
+      platform,
+      {
+        ...platform,
+        key: "github-actions",
+        displayName: "GitHub Actions",
+        enabled: false,
+      },
+    ]);
     await reachCredentialStep();
 
     expect(
       screen.getByText(
-        /Coming soon: GitHub Actions, Kubernetes, SPIFFE, Google Cloud\./,
+        /Coming soon: Kubernetes, SPIFFE, Google Cloud, GitHub Actions\./,
       ),
     ).toBeTruthy();
   });
@@ -776,6 +1052,8 @@ const gke = {
   subject: {
     template: "system:serviceaccount:{namespace}:{service_account}",
     wildcard: false,
+    label: "",
+    alternatives: [],
   },
 };
 
@@ -786,6 +1064,7 @@ describe("Connecting a GKE cluster", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Billing Worker" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -868,6 +1147,7 @@ describe("Connecting a GKE cluster", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Review Agent" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     for (const server of servers) {
       fireEvent.click(
@@ -1045,6 +1325,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Project bound" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -1067,6 +1348,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "No project yet" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -1085,6 +1367,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Everything here" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(await enabledAllServers());
 
@@ -1102,6 +1385,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Everything here" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     const all = await screen.findByRole("checkbox", { name: "All servers" });
@@ -1192,6 +1476,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Some servers" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     expect(
@@ -1216,7 +1501,7 @@ describe("Agent project", () => {
         (form: { selector: { resourceId: string } }) =>
           form.selector.resourceId,
       ),
-    ).toEqual(["toolset_one"]);
+    ).toEqual(["toolset_one", "*"]);
   });
 
   it("saves no server the check has not answered for", async () => {
@@ -1227,6 +1512,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Unchecked" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     expect(
       await screen.findByText("Could not check which servers you can reach."),
@@ -1254,6 +1540,7 @@ describe("Agent project", () => {
       fireEvent.change(screen.getByLabelText("Name"), {
         target: { value: "Rechecked access" },
       });
+      await nameChecked();
       fireEvent.click(screen.getByRole("button", { name: "Continue" }));
       await enabledAllServers();
       fireEvent.click(screen.getByRole("checkbox", { name: selection }));
@@ -1309,6 +1596,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Waiting for access" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     const all = await screen.findByRole("checkbox", { name: "All servers" });
@@ -1358,6 +1646,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Several batches" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByText("Could not check which servers you can reach.");
 
@@ -1397,7 +1686,7 @@ describe("Agent project", () => {
         (form: { selector: { resourceId: string } }) =>
           form.selector.resourceId,
       ),
-    ).toEqual(["toolset_0"]);
+    ).toEqual(["toolset_0", "*"]);
   });
 
   it("holds All servers until the check answers, and retries one that failed", async () => {
@@ -1406,6 +1695,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Everything here" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
 
     const all = await screen.findByRole("checkbox", { name: "All servers" });
@@ -1428,6 +1718,7 @@ describe("Agent project", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Everything here" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     fireEvent.click(await enabledAllServers());
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
@@ -1447,6 +1738,11 @@ describe("Agent project", () => {
           resourceId: "*",
           projectId: "project_one",
         },
+      },
+      {
+        effect: "allow",
+        scope: "mcp:auth",
+        selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
       },
     ]);
   });
@@ -1478,6 +1774,16 @@ describe("Editing an agent that already exists", () => {
     },
   ] as never;
 
+  // Agents the wizard saved hold mcp:auth beside their server grants.
+  const AUTH = {
+    id: "grant_auth",
+    effect: "allow",
+    scope: "mcp:auth",
+    selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
+    createdAt: new Date(),
+    updatedAt: new Date(),
+  };
+
   function editing(over: { grants?: unknown } = {}) {
     const client = new QueryClient({
       defaultOptions: { queries: { retry: false } },
@@ -1489,7 +1795,7 @@ describe("Editing an agent that already exists", () => {
           <CredentialsWizard
             agent={agent}
             editing
-            grants={(over.grants ?? grants) as never}
+            grants={[...((over.grants ?? grants) as never[]), AUTH] as never}
             onDone={(id) => {
               onDone(id);
             }}
@@ -1502,7 +1808,7 @@ describe("Editing an agent that already exists", () => {
   }
 
   async function authenticationSave() {
-    if (screen.queryByRole("heading", { name: "MCP selection" })) {
+    if (screen.queryByRole("heading", { name: "MCP Selection" })) {
       fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     }
     return screen.findByRole("button", { name: "Save changes and exit" });
@@ -1520,8 +1826,8 @@ describe("Editing an agent that already exists", () => {
     // Marked done rather than ahead: an agent that exists has settled what
     // it signs in with. The state is asserted, not merely the label: a cell
     // carries its state in its own accessible name.
-    const credential = screen.getByRole("button", { name: /Credential/ });
-    expect(credential.getAttribute("aria-label")).toBe("Credential (done)");
+    const credential = screen.getByRole("button", { name: /Agent sign-in/ });
+    expect(credential.getAttribute("aria-label")).toBe("Agent sign-in (done)");
     expect(credential.textContent).not.toContain("Current");
     // The step the reader is on keeps its place even though everything from
     // the credential on is settled.
@@ -1534,8 +1840,8 @@ describe("Editing an agent that already exists", () => {
     editing();
     // Settled steps are still destinations, and a reader standing on one has
     // to be able to see where they are.
-    fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
-    const credential = screen.getByRole("button", { name: /Credential/ });
+    fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
+    const credential = screen.getByRole("button", { name: /Agent sign-in/ });
     expect(credential.getAttribute("aria-current")).toBe("step");
     expect(credential.textContent).toContain("Current");
   });
@@ -1549,11 +1855,22 @@ describe("Editing an agent that already exists", () => {
     );
   });
 
+  it("does not guess what the agent can do", async () => {
+    editing();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const server = await screen.findByRole("checkbox", { name: "GitHub" });
+    await waitFor(() =>
+      expect(server.getAttribute("data-state")).toBe("checked"),
+    );
+    expect(screen.queryByText("Call its servers")).toBeNull();
+  });
+
   it("saves a rename and leaves without touching the grants", async () => {
     const { onDone } = editing();
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Renamed Bot" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("checkbox", { name: "GitHub" });
     fireEvent.click(await authenticationSave());
@@ -1564,7 +1881,30 @@ describe("Editing an agent that already exists", () => {
     ).toEqual({ id: "agent_one", name: "Renamed Bot" });
     expect(mocks.createGrant).not.toHaveBeenCalled();
     expect(mocks.deleteGrant).not.toHaveBeenCalled();
-    await waitFor(() => expect(onDone).toHaveBeenCalledWith(undefined));
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
+  });
+
+  it("lets an agent keep its own name, and holds a rename to another's", async () => {
+    mocks.agentList.mockReturnValue([
+      { id: "agent_one", name: "Release Bot" },
+      { id: "agent_other", name: "Deploy Bot" },
+    ]);
+    editing();
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(false);
+
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Deploy Bot" },
+    });
+    expect((await screen.findByRole("alert")).textContent).toContain(
+      "already exists",
+    );
+    expect(
+      (screen.getByRole("button", { name: "Continue" }) as HTMLButtonElement)
+        .disabled,
+    ).toBe(true);
   });
 
   it("writes nothing when neither the name nor the servers changed", async () => {
@@ -1573,7 +1913,7 @@ describe("Editing an agent that already exists", () => {
     await screen.findByRole("checkbox", { name: "GitHub" });
     fireEvent.click(await authenticationSave());
 
-    await waitFor(() => expect(onDone).toHaveBeenCalledWith(undefined));
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
     expect(mocks.renameAgent).not.toHaveBeenCalled();
     expect(mocks.createGrant).not.toHaveBeenCalled();
     expect(mocks.deleteGrant).not.toHaveBeenCalled();
@@ -1627,7 +1967,69 @@ describe("Editing an agent that already exists", () => {
     expect(mocks.deleteGrant).not.toHaveBeenCalled();
   });
 
-  it("keeps an unavailable assignment removable when its issuer has no clients", async () => {
+  it("gives the agent's keys the servers it was just granted", async () => {
+    const { onDone } = editing({ grants: [] });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(await authenticationSave());
+
+    await waitFor(() => expect(mocks.extendAgentKeys).toHaveBeenCalledTimes(1));
+    // A key stores what it was issued with, so the gateway its runtime calls
+    // lists a new server only once the key holds the grant too.
+    expect(mocks.extendAgentKeys.mock.calls[0]?.[0]).toEqual({
+      extendAgentKeysForm: {
+        agentId: "agent_one",
+        requestedGrants: [
+          {
+            effect: "allow",
+            scope: "mcp:connect",
+            selector: {
+              resourceKind: "mcp",
+              resourceId: "toolset_one",
+              projectId: "project_one",
+            },
+          },
+        ],
+        authClientChoices: [],
+      },
+    });
+    expect(mocks.createGrant).toHaveBeenCalledTimes(1);
+    expect(mocks.createGrant.mock.invocationCallOrder.at(-1) ?? 0).toBeLessThan(
+      mocks.extendAgentKeys.mock.invocationCallOrder[0] ?? 0,
+    );
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
+  });
+
+  it("leaves the keys alone when no server was added", async () => {
+    const { onDone } = editing();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("checkbox", { name: "GitHub" });
+    fireEvent.click(await authenticationSave());
+
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
+    expect(mocks.extendAgentKeys).not.toHaveBeenCalled();
+  });
+
+  it("still finishes the edit when the keys cannot follow", async () => {
+    mocks.extendAgentKeys.mockRejectedValue(new Error("forbidden"));
+    const warning = vi.spyOn(toast, "warning");
+    const { onDone } = editing({ grants: [] });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(await authenticationSave());
+
+    // The grants are saved by then, so the edit is not undone over the keys.
+    await waitFor(() => expect(onDone).toHaveBeenCalledWith("agent_one"));
+    expect(mocks.createGrant).toHaveBeenCalled();
+    expect(warning).toHaveBeenCalledWith(
+      expect.stringContaining(
+        "existing keys still reach only their old servers",
+      ),
+    );
+    warning.mockRestore();
+  });
+
+  it("leaves an unavailable assignment for an explicit detach when saving", async () => {
     mocks.mcpServers.mockResolvedValue({
       mcpServers: [
         {
@@ -1654,25 +2056,17 @@ describe("Editing an agent that already exists", () => {
       },
     ]);
     mocks.sessionClients.mockResolvedValue([]);
-    editing();
+    mocks.detach.mockResolvedValue({});
+    const { onDone } = editing();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
     await screen.findByRole("checkbox", { name: "GitHub" });
-    await authenticationSave();
-    fireEvent.click(
-      await screen.findByRole("button", {
-        name: /GitHub.*Requires connection/,
-      }),
-    );
-    expect(
-      await screen.findByRole("button", {
-        name: "Disconnect unavailable account",
-      }),
-    ).toBeTruthy();
-    expect(
-      screen.queryByText(
-        "This server uses a shared credential. No personal connection is needed.",
-      ),
-    ).toBeNull();
+    const save = await authenticationSave();
+    // The row says what is wrong; removing it is an explicit choice on the
+    // agent's Credentials page, never a side effect of saving.
+    await screen.findByRole("button", { name: /GitHub.*Requires connection/ });
+    fireEvent.click(save);
+    await waitFor(() => expect(onDone).toHaveBeenCalled());
+    expect(mocks.detach).not.toHaveBeenCalled();
   });
 
   it("creates no agent: this one already exists", async () => {
@@ -1862,13 +2256,18 @@ describe("Editing an agent that already exists", () => {
     // "All servers" names the reach it actually has, not the agent's project.
     expect(screen.getByText(/Every server in Example Org/)).toBeTruthy();
 
-    fireEvent.click(screen.getByRole("button", { name: /Credential/ }));
+    fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
     fireEvent.click(await screen.findByRole("button", { name: "Issue key" }));
 
+    // Discovery offers no wildcard here, only the servers one by one, so the
+    // key falls back to naming every server in reach.
     await waitFor(() =>
-      expect(mocks.listDelegableGrants).toHaveBeenCalledTimes(1),
+      expect(mocks.listDelegableGrants).toHaveBeenCalledTimes(2),
     );
-    expect(mocks.listDelegableGrants.mock.calls[0]?.[0]?.toolsetIds).toEqual([
+    expect(mocks.listDelegableGrants.mock.calls[0]?.[0]?.carryExclusions).toBe(
+      true,
+    );
+    expect(mocks.listDelegableGrants.mock.calls[1]?.[0]?.toolsetIds).toEqual([
       "toolset_one",
       "toolset_two",
     ]);
@@ -1880,6 +2279,41 @@ describe("Editing an agent that already exists", () => {
           form.selector.resourceId,
       ),
     ).toEqual(["toolset_one", "toolset_two"]);
+  });
+
+  it("issues an All servers key with the wildcard, so it reaches servers added later", async () => {
+    // A key reaches only what it stores. Today's servers listed out would
+    // leave every server added after this key unreachable.
+    const exclusion = {
+      effect: "allow",
+      scope: "mcp:blocked_connect",
+      selector: {
+        resourceKind: "mcp",
+        resourceId: "toolset_blocked",
+        projectId: "project_one",
+      },
+    };
+    const wildcard = {
+      effect: "allow",
+      scope: "mcp:connect",
+      selector: { resourceKind: "mcp", resourceId: "*" },
+    };
+    mocks.listDelegableGrants.mockResolvedValue([wildcard, exclusion]);
+    editing({ grants: [WILDCARD] });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const all = await screen.findByRole("checkbox", { name: "All servers" });
+    await waitFor(() => expect(all.getAttribute("data-state")).toBe("checked"));
+
+    fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
+    fireEvent.click(await screen.findByRole("button", { name: "Issue key" }));
+
+    await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+    expect(mocks.listDelegableGrants).toHaveBeenCalledTimes(1);
+    const form = mocks.createKey.mock.calls[0]?.[0]?.createKeyForm;
+    // The owner's blocked server travels with the wildcard, which needs a
+    // version that can store an exclusion.
+    expect(form?.requestedGrants).toEqual([wildcard, exclusion]);
+    expect(form?.delegatedGrantsVersion).toBe(4);
   });
 
   it("creates the wildcard once when a later removal fails", async () => {
@@ -2023,6 +2457,411 @@ describe("Editing an agent that already exists", () => {
     expect(await screen.findByText("Grant is locked")).toBeTruthy();
     expect(onDone).not.toHaveBeenCalled();
   });
+  describe("its GKE workload", () => {
+    const cluster =
+      "https://container.googleapis.com/v1/projects/acme-prod/locations/us-central1/clusters/payments";
+    const admission = {
+      id: "admission_one",
+      agentId: "agent_one",
+      agentName: "Release Bot",
+      issuer: cluster,
+      issuerName: "GKE payments (acme-prod, us-central1)",
+      matchKind: "exact",
+      name: "",
+      organizationId: "org_example",
+      projectId: "",
+      subject: "system:serviceaccount:default:my-workload",
+      tags: [],
+      wildcardActive: false,
+      workloadIssuerId: "issuer_one",
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    beforeEach(() => {
+      mocks.platforms.mockReturnValue([gke]);
+      mocks.workloadIssuers.mockReturnValue([
+        {
+          id: "issuer_one",
+          name: admission.issuerName,
+          issuer: cluster,
+          jwksUri: `${cluster}/jwks`,
+          organizationId: "org_example",
+          projectId: "",
+        },
+      ]);
+      mocks.workloadAdmissions.mockReturnValue([admission]);
+    });
+
+    async function reachWorkloadStep() {
+      editing();
+      fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Your cluster" });
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Your workload" });
+    }
+
+    it("reads an unchanged workload back without writing", async () => {
+      await reachWorkloadStep();
+      expect(
+        (screen.getByLabelText("Namespace") as HTMLInputElement).value,
+      ).toBe("default");
+      expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+      expect(mocks.admitSubject).not.toHaveBeenCalled();
+      expect(mocks.withdrawSubject).not.toHaveBeenCalled();
+    });
+
+    it("saves a changed service account by replacing the rule", async () => {
+      await reachWorkloadStep();
+      fireEvent.change(screen.getByLabelText("Namespace"), {
+        target: { value: "pr-review" },
+      });
+      fireEvent.change(screen.getByLabelText("Service account"), {
+        target: { value: "review-agent" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+      await waitFor(() => expect(mocks.withdrawSubject).toHaveBeenCalledOnce());
+      // The cluster is already trusted, so only the rule changes.
+      expect(mocks.registerIssuer).not.toHaveBeenCalled();
+      expect(mocks.admitSubject.mock.calls[0]?.[0]?.request).toEqual({
+        admitWorkloadSubjectForm: {
+          projectScoped: false,
+          issuer: cluster,
+          subject: "system:serviceaccount:pr-review:review-agent",
+          matchKind: "exact",
+          agentId: "agent_one",
+          tags: [],
+        },
+      });
+      // The new rule first, so the agent is never left without one.
+      expect(mocks.admitSubject.mock.invocationCallOrder[0]!).toBeLessThan(
+        mocks.withdrawSubject.mock.invocationCallOrder[0]!,
+      );
+      expect(mocks.withdrawSubject.mock.calls[0]?.[0]).toEqual({
+        request: { id: "admission_one" },
+      });
+    });
+
+    it("keeps a project's rule with that project", async () => {
+      mocks.workloadAdmissions.mockReturnValue([
+        { ...admission, projectId: "project_two" },
+      ]);
+      await reachWorkloadStep();
+      fireEvent.change(screen.getByLabelText("Service account"), {
+        target: { value: "review-agent" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+      await waitFor(() => expect(mocks.withdrawSubject).toHaveBeenCalledOnce());
+      expect(mocks.admitSubject.mock.calls[0]?.[0]?.request).toMatchObject({
+        gramProject: "project-two",
+        admitWorkloadSubjectForm: { projectScoped: true },
+      });
+      expect(mocks.withdrawSubject.mock.calls[0]?.[0]).toEqual({
+        request: { id: "admission_one" },
+      });
+    });
+
+    it("trusts a new cluster and moves the rule to it", async () => {
+      editing();
+      fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Your cluster" });
+      fireEvent.change(screen.getByLabelText("Cluster name"), {
+        target: { value: "review" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Your workload" });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+      await waitFor(() => expect(mocks.withdrawSubject).toHaveBeenCalledOnce());
+      const moved = cluster.replace(/payments$/, "review");
+      expect(
+        mocks.registerIssuer.mock.calls[0]?.[0]?.request
+          ?.registerWorkloadIssuerForm?.issuer,
+      ).toBe(moved);
+      expect(
+        mocks.admitSubject.mock.calls[0]?.[0]?.request
+          ?.admitWorkloadSubjectForm,
+      ).toMatchObject({
+        issuer: moved,
+        subject: admission.subject,
+      });
+    });
+
+    it("keeps the replaced rule's label and tags", async () => {
+      mocks.workloadAdmissions.mockReturnValue([
+        { ...admission, name: "Billing pods", tags: ["prod"] },
+      ]);
+      await reachWorkloadStep();
+      fireEvent.change(screen.getByLabelText("Service account"), {
+        target: { value: "review-agent" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+      await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledOnce());
+      expect(
+        mocks.admitSubject.mock.calls[0]?.[0]?.request
+          ?.admitWorkloadSubjectForm,
+      ).toMatchObject({ name: "Billing pods", tags: ["prod"] });
+    });
+
+    it("withdraws every superseded rule after a failed withdrawal and another change", async () => {
+      mocks.admitSubject.mockImplementation(
+        async ({
+          request,
+        }: {
+          request: { admitWorkloadSubjectForm: Record<string, string> };
+        }) => {
+          const form = request.admitWorkloadSubjectForm;
+          return {
+            issuers: [],
+            admissions: [
+              {
+                ...admission,
+                id: `admission_${form["subject"]?.split(":").pop()}`,
+                issuer: form["issuer"],
+                subject: form["subject"],
+                matchKind: form["matchKind"],
+              },
+            ],
+          };
+        },
+      );
+      mocks.withdrawSubject.mockRejectedValueOnce(new Error("boom"));
+      await reachWorkloadStep();
+      fireEvent.change(screen.getByLabelText("Service account"), {
+        target: { value: "first-try" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+      await screen.findByText(/the old one could not be removed/);
+
+      fireEvent.change(screen.getByLabelText("Service account"), {
+        target: { value: "review-agent" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+      await waitFor(() =>
+        expect(mocks.withdrawSubject).toHaveBeenCalledTimes(3),
+      );
+      expect(mocks.admitSubject).toHaveBeenCalledTimes(2);
+      // The original rule, retried, and the first replacement the second
+      // change superseded: only the latest rule is left.
+      expect(
+        mocks.withdrawSubject.mock.calls.slice(1).map((call) => call[0]),
+      ).toEqual([
+        { request: { id: "admission_one" } },
+        { request: { id: "admission_first-try" } },
+      ]);
+    });
+
+    it("lets someone without workload permission read the rule but not change it", async () => {
+      mocks.canFederate = false;
+      await reachWorkloadStep();
+      // Disabled through the fieldset around it. Browsers disable every
+      // control inside; jsdom does not reflect that on the input itself.
+      expect(
+        screen.getByLabelText("Service account").closest("fieldset")?.disabled,
+      ).toBe(true);
+      expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+      expect(mocks.admitSubject).not.toHaveBeenCalled();
+      expect(mocks.withdrawSubject).not.toHaveBeenCalled();
+    });
+
+    it("retries only the withdrawal when that alone failed", async () => {
+      mocks.withdrawSubject.mockRejectedValueOnce(new Error("boom"));
+      await reachWorkloadStep();
+      fireEvent.change(screen.getByLabelText("Service account"), {
+        target: { value: "review-agent" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+      await screen.findByText(/the old one could not be removed/);
+
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+      await waitFor(() =>
+        expect(mocks.withdrawSubject).toHaveBeenCalledTimes(2),
+      );
+      expect(mocks.admitSubject).toHaveBeenCalledOnce();
+    });
+  });
+  describe("its Claude Tag or custom issuer", () => {
+    const base = {
+      agentId: "agent_one",
+      agentName: "Release Bot",
+      name: "",
+      organizationId: "org_example",
+      projectId: "",
+      tags: [],
+      wildcardActive: false,
+      createdAt: new Date(),
+      updatedAt: new Date(),
+    };
+
+    function trust(id: string, issuer: string) {
+      mocks.workloadIssuers.mockReturnValue([
+        {
+          id,
+          name: "Trusted platform",
+          issuer,
+          jwksUri: `${issuer}/jwks`,
+          organizationId: "org_example",
+          projectId: "",
+        },
+      ]);
+    }
+
+    it("replaces a Claude Tag rule when the organization changes", async () => {
+      mocks.platforms.mockReturnValue([platform]);
+      trust("issuer_tag", "https://issuer.example");
+      mocks.workloadAdmissions.mockReturnValue([
+        {
+          ...base,
+          id: "admission_tag",
+          issuer: "https://issuer.example",
+          issuerName: "Claude Tag",
+          matchKind: "wildcard",
+          subject: "spiffe://example/org/org-123/agent/*",
+          workloadIssuerId: "issuer_tag",
+        },
+      ]);
+      editing();
+      fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Anthropic organization" });
+      const field = screen.getByLabelText(
+        "Anthropic organization ID",
+      ) as HTMLInputElement;
+      expect(field.value).toBe("org-123");
+      expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+
+      fireEvent.change(field, { target: { value: "org-456" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+      await waitFor(() => expect(mocks.withdrawSubject).toHaveBeenCalledOnce());
+      expect(
+        mocks.admitSubject.mock.calls[0]?.[0]?.request
+          ?.admitWorkloadSubjectForm,
+      ).toMatchObject({
+        issuer: "https://issuer.example",
+        subject: "spiffe://example/org/org-456/agent/*",
+        matchKind: "wildcard",
+        agentId: "agent_one",
+      });
+      expect(mocks.withdrawSubject.mock.calls[0]?.[0]).toEqual({
+        request: { id: "admission_tag" },
+      });
+    });
+
+    // An issuer registered through the custom flow stays editable there when
+    // the catalog later lists its platform but does not offer it yet.
+    it("edits a rule under a platform not offered yet as a custom issuer's", async () => {
+      mocks.platforms.mockReturnValue([{ ...platform, enabled: false }]);
+      trust("issuer_tag", "https://issuer.example");
+      mocks.workloadAdmissions.mockReturnValue([
+        {
+          ...base,
+          id: "admission_tag",
+          issuer: "https://issuer.example",
+          issuerName: "Trusted platform",
+          matchKind: "exact",
+          subject: "spiffe://example/org/org-123/agent/one",
+          workloadIssuerId: "issuer_tag",
+        },
+      ]);
+      editing();
+      fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Identity provider" });
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Which workloads" });
+      expect((screen.getByLabelText("Subject") as HTMLInputElement).value).toBe(
+        "spiffe://example/org/org-123/agent/one",
+      );
+    });
+
+    it("keeps a custom rule with its project under an organization issuer", async () => {
+      trust("issuer_custom", "https://idp.example");
+      mocks.workloadAdmissions.mockReturnValue([
+        {
+          ...base,
+          id: "admission_custom",
+          issuer: "https://idp.example",
+          issuerName: "Trusted platform",
+          matchKind: "exact",
+          subject: "workload-a",
+          projectId: "project_two",
+          workloadIssuerId: "issuer_custom",
+        },
+      ]);
+      editing();
+      fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Identity provider" });
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Which workloads" });
+      fireEvent.change(screen.getByLabelText("Subject"), {
+        target: { value: "workload-b" },
+      });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+      await waitFor(() => expect(mocks.withdrawSubject).toHaveBeenCalledOnce());
+      expect(mocks.admitSubject.mock.calls[0]?.[0]?.request).toMatchObject({
+        gramProject: "project-two",
+        admitWorkloadSubjectForm: {
+          projectScoped: true,
+          subject: "workload-b",
+        },
+      });
+    });
+
+    it("fills in a custom issuer's rule and replaces it when changed", async () => {
+      trust("issuer_custom", "https://idp.example");
+      mocks.workloadAdmissions.mockReturnValue([
+        {
+          ...base,
+          id: "admission_custom",
+          issuer: "https://idp.example",
+          issuerName: "Trusted platform",
+          matchKind: "wildcard",
+          subject: "workloads/billing/*",
+          workloadIssuerId: "issuer_custom",
+        },
+      ]);
+      editing();
+      fireEvent.click(screen.getByRole("button", { name: /Agent sign-in/ }));
+      fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Identity provider" });
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+      await screen.findByRole("heading", { name: "Which workloads" });
+      const field = screen.getByLabelText("Subject") as HTMLInputElement;
+      // The stem as typed: the `*` belongs to the match kind.
+      expect(field.value).toBe("workloads/billing/");
+      // Unchanged, so the step is read and passed, not saved.
+      expect(screen.queryByRole("button", { name: "Save changes" })).toBeNull();
+
+      fireEvent.change(field, { target: { value: "workloads/review/" } });
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+
+      await waitFor(() => expect(mocks.withdrawSubject).toHaveBeenCalledOnce());
+      expect(mocks.admitSubject.mock.calls[0]?.[0]?.request).toMatchObject({
+        gramProject: "project-one",
+        admitWorkloadSubjectForm: {
+          projectScoped: false,
+          issuer: "https://idp.example",
+          subject: "workloads/review/*",
+          matchKind: "wildcard",
+          agentId: "agent_one",
+        },
+      });
+      expect(mocks.withdrawSubject.mock.calls[0]?.[0]).toEqual({
+        request: { id: "admission_custom" },
+      });
+    });
+  });
 });
 
 describe("Servers that sign in as a person", () => {
@@ -2057,8 +2896,9 @@ describe("Servers that sign in as a person", () => {
     fireEvent.change(screen.getByLabelText("Name"), {
       target: { value: "Release Bot" },
     });
+    await nameChecked();
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP selection" });
+    await screen.findByRole("heading", { name: "MCP Selection" });
     await screen.findByRole("checkbox", { name: "Linear" });
   }
 
@@ -2087,10 +2927,11 @@ describe("Servers that sign in as a person", () => {
     expect(screen.queryByText(/owner@upstream.test/)).toBeNull();
     fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP authentication" });
+    await screen.findByRole("heading", { name: "MCP sign-in" });
     expect(
-      await screen.findByText(/Your connection|Uses your connection/),
-    ).toBeTruthy();
+      (await screen.findAllByText(/Your connection|Uses your connection/))
+        .length,
+    ).toBeGreaterThan(0);
     // Read as the creator, before the agent exists.
     expect(mocks.sessions).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -2115,6 +2956,11 @@ describe("Servers that sign in as a person", () => {
           resourceId: "server_linear",
           projectId: "project_one",
         },
+      },
+      {
+        effect: "allow",
+        scope: "mcp:auth",
+        selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
       },
     ]);
     // The issuer's sign-ins are read in the server's own project, before the
@@ -2229,7 +3075,7 @@ describe("Servers that sign in as a person", () => {
       await waitFor(() => expect(server.hasAttribute("disabled")).toBe(false));
       fireEvent.click(server);
       fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-      await screen.findByRole("heading", { name: "MCP authentication" });
+      await screen.findByRole("heading", { name: "MCP sign-in" });
       const next = screen.getByRole("button", { name: "Continue" });
       await waitFor(() => expect(next.hasAttribute("disabled")).toBe(true));
       fireEvent.click(next);
@@ -2244,6 +3090,7 @@ describe("Servers that sign in as a person", () => {
       const open = vi
         .spyOn(window, "open")
         .mockReturnValue(popup as unknown as Window);
+      // Rows start closed: open Linear's to reach its connection.
       fireEvent.click(
         screen.getByRole("button", {
           name: /Linear.*(?:Expired|Requires connection)/,
@@ -2281,15 +3128,64 @@ describe("Servers that sign in as a person", () => {
     },
   );
 
+  it("treats a server whose own auth is a shared credential as shared, whatever its issuer lists", async () => {
+    // The issuer is shared across the organization: its personal sign-in
+    // belongs to another server, not this one.
+    mocks.serverAuth.mockResolvedValue({
+      status: "configured",
+      clients: [
+        { id: "auth_token", clientType: "static_credential", enabled: true },
+      ],
+    });
+    await reachServers();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "MCP sign-in" });
+    expect(
+      await screen.findByRole("button", { name: /Linear.*Shared credential/ }),
+    ).toBeTruthy();
+    expect(screen.queryByText("Requires connection")).toBeNull();
+    // The summary does not claim an assigned connection for it either.
+    expect(
+      screen.queryByText("all tools, using an assigned connection"),
+    ).toBeNull();
+    await continueFromAuthentication();
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Create agent" }),
+    );
+    await waitFor(() => expect(mocks.createKey).toHaveBeenCalledTimes(1));
+    expect(mocks.serverAuth).toHaveBeenCalledWith(
+      { mcpServerId: "server_linear" },
+      undefined,
+      expect.anything(),
+    );
+    expect(mocks.attach).not.toHaveBeenCalled();
+  });
+
+  it("keeps Continue locked when a server's auth cannot be read", async () => {
+    mocks.sessions.mockResolvedValue([mine]);
+    mocks.serverAuth.mockRejectedValue(new Error("network down"));
+    await reachServers();
+    fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "MCP sign-in" });
+    expect(
+      await screen.findByRole("button", {
+        name: /Linear.*Could not check connection/,
+      }),
+    ).toBeTruthy();
+    expect(
+      screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
+    ).toBe(true);
+  });
+
   it("removes a selected server from authentication without backtracking", async () => {
     await reachServers();
     fireEvent.click(screen.getByRole("checkbox", { name: "Linear" }));
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP authentication" });
+    await screen.findByRole("heading", { name: "MCP sign-in" });
     fireEvent.click(screen.getByRole("button", { name: "Remove Linear" }));
-    expect(
-      screen.getByRole("heading", { name: "MCP authentication" }),
-    ).toBeTruthy();
+    expect(screen.getByRole("heading", { name: "MCP sign-in" })).toBeTruthy();
     expect(screen.queryByRole("button", { name: "Remove Linear" })).toBeNull();
     expect(
       screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
@@ -2301,7 +3197,7 @@ describe("Servers that sign in as a person", () => {
     await reachServers();
     fireEvent.click(await enabledAllServers());
     fireEvent.click(screen.getByRole("button", { name: "Continue" }));
-    await screen.findByRole("heading", { name: "MCP authentication" });
+    await screen.findByRole("heading", { name: "MCP sign-in" });
     expect(
       (await screen.findByText(/No usable connection available for/))
         .textContent,
@@ -2327,5 +3223,620 @@ describe("Servers that sign in as a person", () => {
       "The agent was created, but it could not use your connection. attachment refused",
     );
     expect(mocks.createKey).not.toHaveBeenCalled();
+  });
+});
+
+const githubActions = {
+  key: "github-actions",
+  displayName: "GitHub Actions",
+  description: "Jobs in one repository.",
+  icon: "",
+  enabled: true,
+  issuer: {
+    value: "https://token.actions.githubusercontent.com",
+    visibility: "read-only",
+  },
+  jwksUri: {
+    value: "https://token.actions.githubusercontent.com/.well-known/jwks",
+    visibility: "hidden",
+  },
+  variables: [
+    ["owner", "Owner", "[A-Za-z0-9][A-Za-z0-9-]{0,38}(?:@[0-9]+)?"],
+    ["repo", "Repository", "[A-Za-z0-9._-]{1,100}(?:@[0-9]+)?"],
+    [
+      "branch",
+      "Branch",
+      "[^\\x00-\\x20\\x7f/:*?\\[\\\\^~]+(?:/[^\\x00-\\x20\\x7f/:*?\\[\\\\^~]+)*",
+    ],
+    ["environment", "Environment", "[^:*\\x00-\\x1f\\x7f]{1,255}"],
+  ].map(([key, label, pattern]) => ({
+    key,
+    tier: "rule",
+    label,
+    help: "",
+    placeholder: "",
+    pattern,
+    patternMessage: "",
+  })),
+  subject: {
+    template: "repo:{owner}/{repo}:",
+    wildcard: true,
+    label: "Whole repository",
+    alternatives: [
+      {
+        key: "branch",
+        label: "One branch",
+        template: "repo:{owner}/{repo}:ref:refs/heads/{branch}",
+        wildcard: false,
+      },
+      {
+        key: "environment",
+        label: "One environment",
+        template: "repo:{owner}/{repo}:environment:{environment}",
+        wildcard: false,
+      },
+    ],
+  },
+};
+
+describe("Connecting a GitHub repository", () => {
+  /** Names acme/payments-api on the repository step. */
+  function fillRepository() {
+    fireEvent.change(screen.getByLabelText("Owner"), {
+      target: { value: "acme" },
+    });
+    fireEvent.change(screen.getByLabelText("Repository"), {
+      target: { value: "payments-api" },
+    });
+  }
+
+  /** Chooses GitHub Actions for a new agent and fills in the repository. */
+  async function reachRepositoryStep({ fill = true } = {}) {
+    mocks.platforms.mockReturnValue([githubActions]);
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Release Bot" },
+    });
+    await nameChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(
+      await screen.findByRole("radio", { name: /GitHub Actions/ }),
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "Your repository" });
+    if (fill) fillRepository();
+  }
+
+  /** Sets up GitHub Actions for an agent that already exists. */
+  async function reachRepositoryStepForExistingAgent() {
+    mocks.platforms.mockReturnValue([githubActions]);
+    const client = new QueryClient({
+      defaultOptions: { queries: { retry: false } },
+    });
+    render(
+      <MemoryRouter>
+        <QueryClientProvider client={client}>
+          <CredentialsWizard
+            agent={
+              {
+                id: "agent_one",
+                name: "Release Bot",
+                lifecycle: "active",
+                projectId: "project_one",
+                ownerUserId: "user_owner",
+                permissions: { write: true, authorize: true },
+              } as never
+            }
+            initialPlatformKey="github-actions"
+            onDone={() => {}}
+            verifyPollMs={20}
+          />
+        </QueryClientProvider>
+      </MemoryRouter>,
+    );
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(await screen.findByRole("button", { name: "Continue" }));
+    await screen.findByRole("heading", { name: "Your repository" });
+    fillRepository();
+  }
+
+  it("checks every grant an existing agent lacks before writing any of them", async () => {
+    // The agent already polls; it lacks only the hooks grant.
+    mocks.listPolicyGrants.mockResolvedValue([
+      {
+        id: "grant_sync",
+        effect: "allow",
+        scope: "org:device_agent_sync",
+        selector: { resourceKind: "org", resourceId: "*" },
+      },
+    ]);
+    await reachRepositoryStepForExistingAgent();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+    await waitFor(() => expect(mocks.createGrant).toHaveBeenCalledTimes(1));
+    const lastCheck = mocks.checkPolicyGrants.mock.calls.at(-1)?.[0];
+    expect(lastCheck?.checkAgentPolicyGrantsForm).toEqual({
+      agentId: "agent_one",
+      policyGrants: [
+        {
+          effect: "allow",
+          scope: "org:hooks_ingest",
+          selector: {
+            resourceKind: "org",
+            resourceId: "org_example",
+            projectId: "project_one",
+          },
+        },
+      ],
+    });
+    expect(
+      mocks.createGrant.mock.calls[0]?.[0]?.request?.createAgentPolicyGrantForm
+        ?.scope,
+    ).toBe("org:hooks_ingest");
+  });
+
+  it("asks again on connect what an existing agent lacks, rather than trusting what it lacked on opening", async () => {
+    // On opening, the agent lacks both grants; by the time Connect is
+    // pressed, something else has given it both.
+    mocks.listPolicyGrants.mockResolvedValue([]);
+    await reachRepositoryStepForExistingAgent();
+    await waitFor(() => expect(mocks.checkPolicyGrants).toHaveBeenCalled());
+    mocks.listPolicyGrants.mockResolvedValue([
+      {
+        id: "grant_sync",
+        effect: "allow",
+        scope: "org:device_agent_sync",
+        selector: { resourceKind: "org", resourceId: "*" },
+      },
+      {
+        id: "grant_hooks",
+        effect: "allow",
+        scope: "org:hooks_ingest",
+        selector: {
+          resourceKind: "org",
+          resourceId: "org_example",
+          projectId: "project_one",
+        },
+      },
+    ]);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+    await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
+    expect(mocks.createGrant).not.toHaveBeenCalled();
+  });
+
+  it("writes no grant to an existing agent when one of them would be refused", async () => {
+    mocks.checkPolicyGrants.mockImplementation(
+      (request: {
+        checkAgentPolicyGrantsForm: { policyGrants: { scope: string }[] };
+      }) =>
+        Promise.resolve({
+          results: request.checkAgentPolicyGrantsForm.policyGrants.map(
+            (grant) =>
+              grant.scope === "org:hooks_ingest"
+                ? { allowed: false, limitedBy: "owner" }
+                : { allowed: true },
+          ),
+        }),
+    );
+    await reachRepositoryStepForExistingAgent();
+    await waitFor(() => expect(mocks.checkPolicyGrants).toHaveBeenCalled());
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+    expect(
+      await screen.findByText(/owner does not hold org:hooks_ingest/),
+    ).toBeTruthy();
+    expect(mocks.createGrant).not.toHaveBeenCalled();
+    expect(mocks.admitSubject).not.toHaveBeenCalled();
+  });
+
+  it("trusts GitHub for the organization and gives the agent what the device agent needs", async () => {
+    await reachRepositoryStep();
+    expect(screen.getByText("repo:acme/payments-api:*")).toBeTruthy();
+    // The summary says what the device agent's grants add, with their scopes
+    // one focus away like the agent's own.
+    const can = screen.getByText(
+      "Call its servers, fetch its plugins, record its sessions",
+    );
+    fireEvent.focus(can);
+    expect(
+      (await screen.findAllByText("org:device_agent_sync")).length,
+    ).toBeGreaterThan(0);
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+
+    await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
+    // The device-agent endpoint reads organization-tier rules only, so
+    // neither write names a project.
+    expect(mocks.registerIssuer.mock.calls[0]?.[0]?.request).toEqual({
+      registerWorkloadIssuerForm: expect.objectContaining({
+        issuer: "https://token.actions.githubusercontent.com",
+        jwksUri: "https://token.actions.githubusercontent.com/.well-known/jwks",
+      }),
+    });
+    expect(mocks.admitSubject.mock.calls[0]?.[0]?.request).toEqual({
+      admitWorkloadSubjectForm: {
+        issuer: "https://token.actions.githubusercontent.com",
+        subject: "repo:acme/payments-api:*",
+        matchKind: "wildcard",
+        agentId: "agent_new",
+        tags: [],
+      },
+    });
+    expect(
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants,
+    ).toEqual(
+      expect.arrayContaining([
+        {
+          effect: "allow",
+          scope: "org:device_agent_sync",
+          selector: { resourceKind: "org", resourceId: "*" },
+        },
+        {
+          effect: "allow",
+          scope: "org:hooks_ingest",
+          selector: {
+            resourceKind: "org",
+            resourceId: "org_example",
+            projectId: "project_one",
+          },
+        },
+      ]),
+    );
+    // The hook grant every new agent gets and the one the platform needs are
+    // the same grant, sent once.
+    expect(
+      mocks.createAgent.mock.calls[0]?.[0]?.createAgentForm?.policyGrants.filter(
+        (grant: { scope: string }) => grant.scope === "org:hooks_ingest",
+      ),
+    ).toHaveLength(1);
+    await screen.findByRole("heading", { name: "What the job gets" });
+  });
+
+  it("admits one environment's jobs alone, and runs the workflow in it", async () => {
+    await reachRepositoryStep();
+    const connect = screen.getByRole("button", {
+      name: "Connect GitHub Actions",
+    });
+    fireEvent.click(screen.getByRole("radio", { name: "One environment" }));
+    // The environment is now part of the rule, so it must be named first.
+    expect(connect.hasAttribute("disabled")).toBe(true);
+    fireEvent.change(screen.getByLabelText("Environment"), {
+      target: { value: "production" },
+    });
+    expect(
+      screen.getByText("repo:acme/payments-api:environment:production"),
+    ).toBeTruthy();
+    expect(screen.getByText(/protection rules pass/)).toBeTruthy();
+    fireEvent.click(connect);
+
+    await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.admitSubject.mock.calls[0]?.[0]?.request?.admitWorkloadSubjectForm,
+    ).toMatchObject({
+      subject: "repo:acme/payments-api:environment:production",
+      matchKind: "exact",
+    });
+    await screen.findByRole("heading", { name: "What the job gets" });
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const workflow = await screen.findByLabelText(
+      ".github/workflows/speakeasy.yml",
+    );
+    expect(workflow.textContent).toMatch(/^ {4}environment: "production" #/m);
+    expect(workflow.textContent).not.toContain("pull_request");
+  });
+
+  it("admits one branch's jobs alone with an exact rule", async () => {
+    await reachRepositoryStep();
+    fireEvent.click(screen.getByRole("radio", { name: "One branch" }));
+    fireEvent.change(screen.getByLabelText("Branch"), {
+      target: { value: "release/v2" },
+    });
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+    await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
+    expect(
+      mocks.admitSubject.mock.calls[0]?.[0]?.request?.admitWorkloadSubjectForm,
+    ).toMatchObject({
+      subject: "repo:acme/payments-api:ref:refs/heads/release/v2",
+      matchKind: "exact",
+    });
+  });
+
+  it("registers its own issuer when only a project trusts GitHub, and says that project's servers read the project's", async () => {
+    mocks.workloadIssuers.mockReturnValue([
+      {
+        id: "issuer_project",
+        organizationId: "org_example",
+        projectId: "project_one",
+        name: "Project GitHub",
+        issuer: "https://token.actions.githubusercontent.com",
+        jwksUri: "https://token.actions.githubusercontent.com/.well-known/jwks",
+      },
+    ]);
+    await reachRepositoryStep();
+    expect(
+      (await screen.findByText(/also trusts GitHub Actions on its own/))
+        .textContent,
+    ).toBe(
+      "The project Project one also trusts GitHub Actions on its own, at the same issuer URL. Its MCP servers check a job against the project's own issuer instead of the rule saved here, so the job reaches them as another identity, or not at all. Projects you cannot open were not checked.",
+    );
+    // The remedy is withdrawing the project's own issuer, not an agent's
+    // access, which would leave the issuer shadowing the rule. The call that
+    // does it is under the technical details.
+    expect(
+      screen.getByText(/the project's own issuer has to be withdrawn/),
+    ).toBeTruthy();
+    expect(screen.getByText("Technical details")).toBeTruthy();
+    expect(
+      screen.getByText(
+        "DELETE /rpc/workloadIdentities.withdrawIssuer?id=issuer_project",
+      ),
+    ).toBeTruthy();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+    await waitFor(() => expect(mocks.admitSubject).toHaveBeenCalledTimes(1));
+    expect(mocks.registerIssuer).toHaveBeenCalledTimes(1);
+  });
+
+  // The rule is organization-wide, so a project the setup is not running in
+  // overrides it for that project's servers all the same.
+  it("names every project that trusts GitHub on its own, not only this one", async () => {
+    const own = (id: string, projectId: string) => ({
+      id,
+      organizationId: "org_example",
+      projectId,
+      name: "Project GitHub",
+      issuer: "https://token.actions.githubusercontent.com",
+      jwksUri: "https://token.actions.githubusercontent.com/.well-known/jwks",
+    });
+    mocks.workloadIssuers.mockReturnValue([
+      own("issuer_one", "project_one"),
+      own("issuer_two", "project_two"),
+      // Another platform's issuer in a project is no concern of this rule.
+      { ...own("issuer_other", "project_two"), issuer: "https://idp.example" },
+    ]);
+    await reachRepositoryStep();
+    expect(
+      (await screen.findByText(/also trust GitHub Actions on their own/))
+        .textContent,
+    ).toMatch(/^The projects Project one, Project two also trust/);
+    for (const [id, slug] of [
+      ["issuer_one", "project-one"],
+      ["issuer_two", "project-two"],
+    ]) {
+      const call = screen.getByText(
+        `DELETE /rpc/workloadIdentities.withdrawIssuer?id=${id}`,
+      );
+      expect(call.parentElement?.textContent).toContain(
+        `Gram-Project: ${slug}`,
+      );
+    }
+    expect(screen.queryByText(/issuer_other/)).toBeNull();
+  });
+
+  // Nothing can shadow a rule that does not exist yet, so no project is read
+  // until the repository makes one.
+  it("reads no project's issuers until the setup makes a rule", async () => {
+    await reachRepositoryStep({ fill: false });
+    expect(mocks.workloadList).not.toHaveBeenCalled();
+    fillRepository();
+    await waitFor(() => expect(mocks.workloadList).toHaveBeenCalledTimes(2));
+  });
+
+  it("says which projects it could not check for an issuer of their own", async () => {
+    mocks.workloadList.mockImplementation(
+      async (request: { gramProject: string }) => {
+        if (request.gramProject === "project-two") throw new Error("denied");
+        return { issuers: [], admissions: [] };
+      },
+    );
+    await reachRepositoryStep();
+    expect(
+      await screen.findByText(
+        "Speakeasy could not check whether Project two also trusts GitHub Actions on its own, nor any project you cannot open.",
+      ),
+    ).toBeTruthy();
+    expect(
+      screen.queryByText(/also trusts GitHub Actions on its own, at/),
+    ).toBeNull();
+  });
+
+  it("creates nothing when the device agent's permissions cannot be given", async () => {
+    mocks.checkPolicyGrants.mockImplementation(
+      (request: {
+        checkAgentPolicyGrantsForm: { policyGrants: { scope: string }[] };
+      }) =>
+        Promise.resolve({
+          results: request.checkAgentPolicyGrantsForm.policyGrants.map(
+            (grant) =>
+              grant.scope === "org:hooks_ingest"
+                ? { allowed: false, limitedBy: "caller" }
+                : { allowed: true },
+          ),
+        }),
+    );
+    await reachRepositoryStep();
+    const connect = screen.getByRole("button", {
+      name: "Connect GitHub Actions",
+    });
+    await waitFor(() => expect(mocks.checkPolicyGrants).toHaveBeenCalled());
+    fireEvent.click(connect);
+    expect(
+      await screen.findByText(/You do not hold org:hooks_ingest/),
+    ).toBeTruthy();
+    expect(mocks.createAgent).not.toHaveBeenCalled();
+    expect(mocks.admitSubject).not.toHaveBeenCalled();
+  });
+
+  it("lists the plugins the job receives and the servers it cannot use", async () => {
+    const everyone = {
+      id: "plugin_ci",
+      name: "CI tools",
+      assignmentCount: 1,
+      agentPluginsV1Compatible: true,
+      autoCreated: false,
+      createdAt: new Date(0),
+    };
+    mocks.plugins.mockReturnValue([
+      everyone,
+      {
+        ...everyone,
+        id: "plugin_none",
+        name: "Unassigned",
+        assignmentCount: 0,
+      },
+    ]);
+    const servers = [
+      {
+        id: "s1",
+        displayName: "GitHub",
+        toolsetId: "toolset_one",
+        policy: "required",
+        sortOrder: 0,
+        createdAt: new Date(0),
+      },
+      {
+        id: "s2",
+        displayName: "Billing",
+        toolsetId: "toolset_billing",
+        policy: "required",
+        sortOrder: 1,
+        createdAt: new Date(0),
+      },
+    ];
+    // GitHub signs in through Speakeasy; Billing's own row has no
+    // authorization server, so the job skips it whether or not it is given.
+    mocks.mcpServers.mockResolvedValue({
+      mcpServers: [
+        {
+          id: "server_one",
+          name: "GitHub",
+          slug: "github",
+          projectId: "project_one",
+          toolsetId: "toolset_one",
+          userSessionIssuerId: "issuer_one",
+          visibility: "private",
+          networkAccessMode: "dual",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+        {
+          id: "server_billing",
+          name: "Billing",
+          slug: "billing",
+          projectId: "project_one",
+          toolsetId: "toolset_billing",
+          toolset: { hostingMcpServerId: "server_billing" },
+          visibility: "private",
+          networkAccessMode: "dual",
+          createdAt: new Date(),
+          updatedAt: new Date(),
+        },
+      ],
+    });
+    mocks.getPlugin.mockResolvedValue({
+      ...everyone,
+      assignments: [
+        {
+          id: "a",
+          principalUrn: "*",
+          installMode: "required",
+          createdAt: new Date(0),
+        },
+      ],
+      servers: [
+        ...servers,
+        {
+          id: "s3",
+          displayName: "Analytics",
+          toolsetId: "toolset_analytics",
+          policy: "required",
+          sortOrder: 2,
+          createdAt: new Date(0),
+        },
+      ],
+    });
+    await reachRepositoryStep();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+    await screen.findByRole("heading", { name: "What the job gets" });
+    expect(await screen.findByText("CI tools")).toBeTruthy();
+    expect(mocks.getPlugin).toHaveBeenCalledTimes(1);
+    expect((await screen.findByText(/The job skips Billing/)).textContent).toBe(
+      "The job skips Billing: a job gets its token from a Speakeasy authorization server, and that server has none.",
+    );
+    expect(
+      await screen.findByText(/Release Bot cannot use Analytics,/),
+    ).toBeTruthy();
+    expect(screen.queryByText(/cannot use .*Billing/)).toBeNull();
+  });
+
+  it("fills the workflow with the organization and the hook events project", async () => {
+    mocks.plugins.mockReturnValue([]);
+    await reachRepositoryStep();
+    fireEvent.click(
+      screen.getByRole("button", { name: "Connect GitHub Actions" }),
+    );
+    await screen.findByRole("heading", { name: "What the job gets" });
+    expect(
+      screen.getByText(/No plugin in this project is installed for Everyone/),
+    ).toBeTruthy();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    const workflow = await screen.findByLabelText(
+      ".github/workflows/speakeasy.yml",
+    );
+    expect(workflow.textContent).toContain("organization-id: org_example");
+    expect(workflow.textContent).toContain("project: project-one");
+    expect(workflow.textContent).toMatch(
+      /anthropics\/claude-code-action@[0-9a-f]{40}/,
+    );
+    // The agents are tabs, like the ways to connect an agent with a key, each
+    // labelled with the product's logo and name; the workflow is the panel.
+    const tabs = screen.getByRole("tablist", { name: "Workflow agent" });
+    const claude = screen.getByRole("tab", { name: "Claude Code" });
+    expect(claude.getAttribute("aria-selected")).toBe("true");
+    expect(claude.querySelector("svg")).toBeTruthy();
+    expect(tabs.contains(claude)).toBe(true);
+    expect(screen.getByRole("tabpanel").contains(workflow)).toBe(true);
+
+    const codex = screen.getByRole("tab", { name: "OpenAI Codex" });
+    expect(codex.querySelector("svg")).toBeTruthy();
+    // Radix tabs select on mouse down, as a pointer press does.
+    fireEvent.mouseDown(codex);
+    expect(codex.getAttribute("aria-selected")).toBe("true");
+    expect(workflow.textContent).toMatch(/openai\/codex-action@[0-9a-f]{40}/);
+    expect(workflow.textContent).toContain(
+      "openai-api-key: ${{ secrets.OPENAI_API_KEY }}",
+    );
+    expect(workflow.textContent).toContain("codex-home: ${{ env.CODEX_HOME }}");
+    expect(workflow.textContent).not.toContain("anthropics/claude-code-action");
+    expect(
+      screen.getByRole("link", { name: "Codex action" }).getAttribute("href"),
+    ).toBe("https://learn.chatgpt.com/docs/github-action");
+
+    // Arrow keys move between the agents, as in any tab list.
+    codex.focus();
+    fireEvent.keyDown(codex, { key: "ArrowLeft" });
+    await waitFor(() => expect(document.activeElement).toBe(claude));
+    await waitFor(() =>
+      expect(claude.getAttribute("aria-selected")).toBe("true"),
+    );
+    expect(workflow.textContent).toMatch(
+      /anthropics\/claude-code-action@[0-9a-f]{40}/,
+    );
+    expect(workflow.textContent).not.toContain("openai/codex-action");
   });
 });

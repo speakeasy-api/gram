@@ -505,8 +505,8 @@ func TestPolicyEvaluator_DrainPublishesFlagFindingsReturnedWithError(t *testing.
 		drained <- evaluator.Drain(t.Context())
 	}()
 	select {
-	case <-drained:
-		t.Fatal("drain returned before the flag scan completed")
+	case err := <-drained:
+		t.Fatalf("drain returned before the flag scan completed: %v", err)
 	default:
 	}
 	close(release)

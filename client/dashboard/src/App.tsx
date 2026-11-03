@@ -18,6 +18,10 @@ import {
 import { AppLayout, LoginCheck, OrgLayout } from "./components/app-layout.tsx";
 import { ModeSwitchProvider } from "./components/mode-switch-stage.tsx";
 import { CommandPalette } from "./components/command-palette";
+import {
+  orgRoutesToNavActions,
+  routeToNavAction,
+} from "./components/command-palette/navigation-actions";
 import { GuideEntryRedirect } from "./components/project-guide/GuideEntryRedirect";
 import {
   getRecentLabelOverride,
@@ -33,7 +37,6 @@ import { useRBAC } from "./hooks/useRBAC";
 import { useKillswitchAccess } from "./hooks/useKillswitchAccess";
 import { AuthProvider, ProjectProvider } from "./contexts/AuthProvider.tsx";
 import { useCommandPalette } from "./contexts/CommandPalette";
-import type { CommandAction } from "./contexts/CommandPalette";
 import { CommandPaletteProvider } from "./contexts/CommandPaletteProvider";
 import { useSlugs } from "./contexts/Sdk.tsx";
 import { SdkProvider } from "./contexts/SdkProvider.tsx";
@@ -52,7 +55,8 @@ import { SHARED_SKILL_BASE_PATH } from "./pages/skills/share-link";
 import { SharedSkillPage } from "./pages/skills/SharedSkillPage";
 import SwitchOrg from "./pages/demo/SwitchOrg";
 import TrialEnded from "./pages/demo/TrialEnded";
-import { AppRoute, useRoutes, useOrgRoutes } from "./routes";
+import { pageHrefs, withOrgPages, withProjectPages } from "./route-pages";
+import { useRoutes, useOrgRoutes } from "./routes";
 import { isCliAuthFlowLocation } from "@/lib/cli-auth-flow";
 
 // Logout may have navigated here after Clear-Site-Data emptied localStorage.
@@ -158,6 +162,8 @@ function AppContent() {
 const RouteProvider = () => {
   const routes = useRoutes();
   const orgRoutes = useOrgRoutes();
+  const pagedRoutes = useMemo(() => withProjectPages(routes), [routes]);
+  const pagedOrgRoutes = useMemo(() => withOrgPages(orgRoutes), [orgRoutes]);
   const { addActions, removeActions } = useCommandPalette();
   const { orgSlug, projectSlug } = useSlugs();
   const location = useLocation();
@@ -299,14 +305,15 @@ const RouteProvider = () => {
   // once a project is selected (their goTo() needs the :projectSlug); org pages
   // are always available.
   useEffect(() => {
+    // Nav routes come from their own useRoutes call, so they are matched to
+    // the page map by href. Nested nav routes (People, Agents) count too.
+    const projectPageHrefs = pageHrefs(Object.values(pagedRoutes));
     const projectActions = projectSlug
       ? projectNavRoutes
           .filter(
             ({ route, scope, resourceId, projectId }) =>
               !route.external &&
-              // A roster with child routes renders through indexComponent, not
-              // component, and is just as reachable — the palette takes either.
-              (route.component || route.indexComponent) &&
+              projectPageHrefs.has(route.href()) &&
               route.title &&
               // Mirror the sidebar's per-page scope gating so the palette never
               // offers (nor navigates to) pages the user can't access.
@@ -320,20 +327,10 @@ const RouteProvider = () => {
     // follow the sidebar's audience rule: platform admins, or anyone in local
     // dev. Filtering here keeps them out of the palette for regular users.
     const showPlatformAdmin = import.meta.env.DEV || isPlatformAdmin;
-    const paletteOrgRoutes = Object.fromEntries(
-      Object.entries(orgRoutes).filter(
-        ([key, route]) =>
-          (showPlatformAdmin || !route.url.startsWith("platform-")) &&
-          // Killswitch routes only redirect to identity access.
-          key !== "killswitch" &&
-          // Parameterized routes have no destination without an id.
-          !route.url.includes(":"),
-      ),
-    );
-    const orgActions = routesToNavActions(
-      paletteOrgRoutes,
-      "Organization",
-      "nav-org",
+    const orgActions = orgRoutesToNavActions(
+      pagedOrgRoutes,
+      showPlatformAdmin,
+      hasAnyScope(["org:read", "org:admin"]),
     );
 
     const allActions = [...projectActions, ...orgActions];
@@ -344,7 +341,8 @@ const RouteProvider = () => {
     };
   }, [
     projectNavRoutes,
-    orgRoutes,
+    pagedRoutes,
+    pagedOrgRoutes,
     projectSlug,
     hasAnyScope,
     isPlatformAdmin,
@@ -353,7 +351,7 @@ const RouteProvider = () => {
   ]);
 
   const routeElements = useMemo(() => {
-    const allRoutes = Object.values(routes);
+    const allRoutes = Object.values(pagedRoutes);
     const unauthenticatedRoutes = allRoutes.filter(
       (route) => route.unauthenticated,
     );
@@ -365,7 +363,7 @@ const RouteProvider = () => {
         !outsideStructureRoutes.includes(route) && !route.unauthenticated,
     );
 
-    const orgRouteValues = Object.values(orgRoutes);
+    const orgRouteValues = Object.values(pagedOrgRoutes);
     const orgHomeRoute = orgRouteValues.find((r) => r.url === "");
     const outsideOrgLayoutRoutes = orgRouteValues.filter(
       (route) => route.outsideMainLayout,
@@ -427,54 +425,12 @@ const RouteProvider = () => {
         </Route>
       </Routes>
     );
-  }, [routes, orgRoutes]);
+  }, [pagedRoutes, pagedOrgRoutes]);
 
   // Above the router: the mode-switch animation spans the route swap between
   // its shrink and zoom beats, so its state has to outlive that navigation.
   return <ModeSwitchProvider>{routeElements}</ModeSwitchProvider>;
 };
-
-// Convert a single route into a command-palette navigation action.
-const routeToNavAction = (
-  route: AppRoute,
-  group: string,
-  id: string,
-): CommandAction => {
-  // AppRoute type-omits the raw `icon` string (exposing only the <Icon>
-  // component), but the builder spreads it through, so it's present at runtime.
-  // CommandAction renders the string name, so read it back here.
-  const iconName = (route as unknown as { icon?: string }).icon;
-  return {
-    id,
-    label: route.title,
-    icon: typeof iconName === "string" ? iconName : undefined,
-    onSelect: () => route.goTo(),
-    group,
-    stage: route.stage,
-  };
-};
-
-// Flatten a route map into command-palette navigation actions. Only top-level
-// pages a user can actually land on: external links, unauthenticated pages, and
-// full-screen pages outside the main layout are excluded.
-const routesToNavActions = (
-  routeMap: Record<string, AppRoute>,
-  group: string,
-  idPrefix: string,
-): CommandAction[] =>
-  Object.entries(routeMap)
-    .filter(
-      ([, route]) =>
-        !route.external &&
-        !route.unauthenticated &&
-        !route.outsideMainLayout &&
-        Boolean(route.component) &&
-        Boolean(route.title) &&
-        !route.legacyRedirect,
-    )
-    .map(([key, route]) =>
-      routeToNavAction(route, group, `${idPrefix}-${key}`),
-    );
 
 type LocalAuthFlow = {
   cliCallbackUrl: string;

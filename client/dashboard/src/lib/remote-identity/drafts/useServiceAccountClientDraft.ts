@@ -1,4 +1,6 @@
 import { useSdkClient } from "@/contexts/Sdk";
+import type { Gram } from "@gram/client";
+import type { RequestOptions } from "@gram/client/lib/sdks.js";
 import { isExpectedAPIError } from "@/lib/errors";
 import type { RemoteSessionClient } from "@gram/client/models/components/remotesessionclient.js";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
@@ -58,8 +60,102 @@ export type ServiceAccountClientDraft = {
   replacing: boolean;
   canSave: (format: ServiceAccountOAuthFormat) => boolean;
   save: (format: ServiceAccountOAuthFormat) => Promise<boolean>;
+  /**
+   * What Save would commit, as plain data, for binding to a server that does
+   * not exist yet. Null until there is something to commit.
+   */
+  spec: (format: ServiceAccountOAuthFormat) => ServiceAccountClientSpec | null;
   reset: () => void;
 };
+
+/**
+ * A service account client to bind once its server exists: the fields for a
+ * client secret client to create, or the signing key client already made.
+ */
+export type ServiceAccountClientSpec =
+  | {
+      format: "client-secret";
+      issuerId: string;
+      issuerName: string;
+      clientId: string;
+      clientSecret: string;
+      secretMethod: SecretMethod;
+      scopes: string[];
+      audience: string;
+    }
+  | {
+      format: "signing-key";
+      issuerId: string;
+      issuerName: string;
+      clientRowId: string;
+    };
+
+/**
+ * Binds a service account client to a newly created server, creating a client
+ * secret client first. Throws when the provider or the commit refuses it; a
+ * client secret client made here is deleted on a refusal.
+ */
+export async function bindServiceAccountClient(
+  client: Gram,
+  spec: ServiceAccountClientSpec,
+  mcpServerId: string,
+  options?: RequestOptions,
+): Promise<void> {
+  const madeHere =
+    spec.format === "client-secret"
+      ? await client.remoteSessionClients.create(
+          {
+            createRemoteSessionClientForm: {
+              remoteSessionIssuerId: spec.issuerId,
+              clientId: spec.clientId,
+              credentialOwner: "self",
+              scope: spec.scopes.length > 0 ? spec.scopes : undefined,
+              audience: spec.audience || undefined,
+              tokenEndpointAuthMethod: spec.secretMethod,
+              clientSecret: spec.clientSecret,
+            },
+          },
+          undefined,
+          options,
+        )
+      : null;
+  const discard = () => {
+    if (!madeHere) return;
+    void client.remoteSessionClients
+      .delete({ id: madeHere.id }, undefined, options)
+      .catch((error: unknown) =>
+        console.error("Couldn't delete an unbound client", error),
+      );
+  };
+  let result;
+  try {
+    result = await client.remoteSessions.commitServerIdentityConfiguration(
+      {
+        commitServerIdentityConfigurationForm: {
+          mcpServerId,
+          providerId: spec.issuerId,
+          clientMode: "existing",
+          existingClientId:
+            madeHere?.id ??
+            (spec.format === "signing-key" ? spec.clientRowId : ""),
+        },
+      },
+      undefined,
+      options,
+    );
+  } catch (error) {
+    if (isExpectedAPIError(error)) discard();
+    throw error;
+  }
+  // A commit that names no status bound nothing, failure or not.
+  if (result.failure || !result.status) {
+    discard();
+    throw new Error(
+      result.failure?.providerMessage ??
+        `Couldn't connect this server to ${spec.issuerName}.`,
+    );
+  }
+}
 
 /**
  * The OAuth half of the Service Account choice: a client that holds one
@@ -75,12 +171,20 @@ export function useServiceAccountClientDraft({
   mcpServerId,
   boundClient,
   enabled = true,
+  deleteCreatedOnUnmount = true,
 }: {
-  mcpServerId: string;
+  /** The server Save binds to. Absent while the server is being created. */
+  mcpServerId?: string;
   /** The Service Account choice is on screen, so its providers are needed. */
   enabled?: boolean;
   /** The service account client this server uses now, if any. */
   boundClient: RemoteSessionClient | undefined;
+  /**
+   * Delete a signing key client made by "Create client" when the draft
+   * unmounts unbound. The creation dialog turns this off: its draft unmounts
+   * before the server exists, and the install binds the client afterwards.
+   */
+  deleteCreatedOnUnmount?: boolean;
 }): ServiceAccountClientDraft {
   const client = useSdkClient();
   const queryClient = useQueryClient();
@@ -181,6 +285,8 @@ export function useServiceAccountClientDraft({
   const pendingDelete = useRef<ReturnType<typeof setTimeout> | null>(null);
   // Set once the unmount is real, so a create still in flight cleans up.
   const disposed = useRef(false);
+  const deleteOnUnmount = useRef(deleteCreatedOnUnmount);
+  deleteOnUnmount.current = deleteCreatedOnUnmount;
   useEffect(() => {
     createdRef.current = created;
     if (!created) return;
@@ -198,7 +304,9 @@ export function useServiceAccountClientDraft({
       pendingDelete.current = setTimeout(() => {
         pendingDelete.current = null;
         disposed.current = true;
-        if (createdRef.current) void deleteClient(createdRef.current.id);
+        if (createdRef.current && deleteOnUnmount.current) {
+          void deleteClient(createdRef.current.id);
+        }
       }, 0);
     };
   }, [deleteClient]);
@@ -302,7 +410,7 @@ export function useServiceAccountClientDraft({
 
   /** Binds the client to this server, creating a client secret one first. */
   const save = async (format: ServiceAccountOAuthFormat): Promise<boolean> => {
-    if (!canSave(format) || !issuer) return false;
+    if (!canSave(format) || !issuer || !mcpServerId) return false;
     setSaving(true);
     const fields = JSON.stringify([
       issuer.id,
@@ -412,6 +520,27 @@ export function useServiceAccountClientDraft({
     replacing,
     canSave,
     save,
+    spec: (format) => {
+      if (!canSave(format) || !issuer) return null;
+      if (format === "signing-key") {
+        return {
+          format,
+          issuerId: issuer.id,
+          issuerName: issuer.name ?? "the identity provider",
+          clientRowId: created!.id,
+        };
+      }
+      return {
+        format,
+        issuerId: issuer.id,
+        issuerName: issuer.name ?? "the identity provider",
+        clientId: clientId.trim(),
+        clientSecret: clientSecret.trim(),
+        secretMethod,
+        scopes,
+        audience: audience.trim(),
+      };
+    },
     reset,
   };
 }

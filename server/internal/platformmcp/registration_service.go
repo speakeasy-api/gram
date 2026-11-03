@@ -5,12 +5,17 @@ import (
 	"context"
 	"errors"
 	"fmt"
+	"html/template"
+	"log/slog"
 	"net/url"
 	"strings"
 	"time"
 	"unicode"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgxpool"
+
+	"github.com/speakeasy-api/gram/server/internal/assets"
 )
 
 var ErrRegistrationUnavailable = errors.New("platform mcp catalog registration unavailable")
@@ -58,6 +63,9 @@ type RegisterCatalogMCPResult struct {
 	Receipt             OperationReceipt
 	Registration        string
 	SecretFieldsPending []CatalogConfigurationField
+
+	// ServerName is the display name the MCP server was added under.
+	ServerName string
 }
 
 // RegistrationDashboardSetup is the persisted, server-owned dashboard target
@@ -66,6 +74,9 @@ type RegisterCatalogMCPResult struct {
 type RegistrationDashboardSetup struct {
 	OrganizationSlug string
 	MCPServerRoute   string
+
+	// ServerName is the MCP server's display name, which may be empty.
+	ServerName string
 }
 
 // RegistrationService is the handler-facing boundary for one reviewed catalog
@@ -85,6 +96,7 @@ type RegistrationService struct {
 	clientAdmission            *ClientAdmissionService
 	budgets                    OperationBudgets
 	telemetry                  LifecycleTelemetry
+	logos                      *cardLogos
 }
 
 func NewRegistrationService(catalog Catalog, gate CatalogRegistrationGateChecker, store RegistrationPersistence) *RegistrationService {
@@ -119,6 +131,23 @@ func (s *RegistrationService) WithTelemetry(telemetry LifecycleTelemetry) *Regis
 		s.telemetry = telemetry
 	}
 	return s
+}
+
+// WithCardLogos lets result cards show the logo stored for an MCP server.
+// Without it every card shows the server's first letter.
+func (s *RegistrationService) WithCardLogos(logger *slog.Logger, db *pgxpool.Pool, storage assets.BlobStore) *RegistrationService {
+	if s != nil && logger != nil && db != nil && storage != nil {
+		s.logos = &cardLogos{logger: logger, db: db, storage: storage}
+	}
+	return s
+}
+
+// cardLogo is the stored logo of a registration's MCP server, or empty.
+func (s *RegistrationService) cardLogo(ctx context.Context, principal Principal, project ResolvedProject, registrationID string) template.URL {
+	if s == nil {
+		return ""
+	}
+	return s.logos.registrationLogo(ctx, principal.OrganizationID, project.ID, registrationID)
 }
 
 func (s *RegistrationService) WithReadiness(readiness *ReadinessService) *RegistrationService {
@@ -336,28 +365,46 @@ func (s *RegistrationService) dashboardSettingsURL(ctx context.Context, principa
 	return s.dashboardURL.JoinPath(setup.OrganizationSlug, "projects", project.Slug, "mcp", setup.MCPServerRoute, "settings").String() + "#authentication", nil
 }
 
-// DashboardAuthorizationURL returns the Inspect page only after the upstream
-// provider is attached. Inspect owns the visible Connect/Authorize action.
-func (s *RegistrationService) DashboardAuthorizationURL(ctx context.Context, principal Principal, projectSlug, registrationID string) (string, error) {
+// DashboardAuthorization is where a user signs in to an MCP server's
+// upstream provider after it is attached.
+type DashboardAuthorization struct {
+	// URL is the MCP server's Inspect page, which owns the visible
+	// Connect/Authorize action.
+	URL string
+
+	// ServerName is the MCP server's display name, which may be empty.
+	ServerName string
+
+	// Logo is the MCP server's stored logo for its card, or empty.
+	Logo template.URL
+}
+
+// DashboardAuthorization returns the Inspect page only after the upstream
+// provider is attached.
+func (s *RegistrationService) DashboardAuthorization(ctx context.Context, principal Principal, projectSlug, registrationID string) (DashboardAuthorization, error) {
 	if s == nil || s.store == nil || s.dashboardURL == nil || projectSlug == "" || registrationID == "" {
-		return "", ErrRegistrationUnavailable
+		return DashboardAuthorization{}, ErrRegistrationUnavailable
 	}
 	parsedID, err := uuid.Parse(registrationID)
 	if err != nil {
-		return "", ErrSetupHandoffInvalid
+		return DashboardAuthorization{}, ErrSetupHandoffInvalid
 	}
 	project, err := s.store.ResolveProject(ctx, principal.OrganizationID, projectSlug)
 	if err != nil {
-		return "", fmt.Errorf("resolve authorization setup project: %w", err)
+		return DashboardAuthorization{}, fmt.Errorf("resolve authorization setup project: %w", err)
 	}
 	setup, err := s.store.ResolveRegistrationDashboardSetup(ctx, principal, project, parsedID)
 	if err != nil {
-		return "", err
+		return DashboardAuthorization{}, err
 	}
 	if setup.OrganizationSlug == "" || setup.MCPServerRoute == "" {
-		return "", ErrRegistrationUnavailable
+		return DashboardAuthorization{}, ErrRegistrationUnavailable
 	}
-	return s.dashboardURL.JoinPath(setup.OrganizationSlug, "projects", project.Slug, "mcp", setup.MCPServerRoute, "inspect").String(), nil
+	return DashboardAuthorization{
+		URL:        s.dashboardURL.JoinPath(setup.OrganizationSlug, "projects", project.Slug, "mcp", setup.MCPServerRoute, "inspect").String(),
+		ServerName: setup.ServerName,
+		Logo:       s.cardLogo(ctx, principal, project, registrationID),
+	}, nil
 }
 
 // AttachDefaultIdentityProvider attaches the one OAuth provider advertised by
@@ -502,6 +549,12 @@ type RegisterRemoteMCPResult struct {
 	Registration      string
 	NextAction        string
 	DashboardSetupURL string
+	// AutomaticClientRegistration says how an OAuth client is obtained from the
+	// server's provider; empty when the server needs no sign-in.
+	AutomaticClientRegistration string
+
+	// ServerName is the display name the MCP server was added under.
+	ServerName string
 }
 
 // RegisterRemoteMCP re-inspects the exact URL before persistence. An inspection
@@ -539,13 +592,17 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 	if err := s.requireEligibleTarget(ctx, principal.OrganizationID, project); err != nil {
 		return RegisterRemoteMCPResult{}, err
 	}
+	// The idempotency hash covers only what the caller chose: their display
+	// name, or the URL when they gave none. The upstream's own name can change
+	// between a call and its retry, so it must not change the request's hash.
+	requestedName := displayName
+	if requestedName == "" {
+		requestedName = inspection.CanonicalURL
+	}
 	if displayName == "" {
-		displayName = inspection.CanonicalURL
+		displayName = defaultDirectRemoteDisplayName(inspection)
 	}
-	if len(displayName) > directRemoteDisplayNameMaxBytes || strings.IndexFunc(displayName, isDirectRemoteDisplayNameBreak) >= 0 {
-		return RegisterRemoteMCPResult{}, ErrRegistrationInvalid
-	}
-	configurationHash := catalogConfigurationHash(CatalogConfigurationValues{"name": displayName})
+	configurationHash := catalogConfigurationHash(CatalogConfigurationValues{"name": requestedName})
 	request := CatalogRegistrationRequest{
 		ProjectSlug:       project.Slug,
 		SourceKind:        directRemoteSourceKind,
@@ -581,10 +638,16 @@ func (s *RegistrationService) RegisterRemoteMCP(ctx context.Context, principal P
 		if err != nil {
 			return RegisterRemoteMCPResult{}, fmt.Errorf("resolve direct remote dashboard setup: %w", err)
 		}
-		nextAction = "secure_dashboard_setup_required"
+		nextAction = nextActionSecureDashboardSetup
+		// Attachment can set up the provider's client automatically, so the
+		// only step left is the user's sign-in, which the agent can connect in
+		// chat. The dashboard link stays as the fallback.
+		if inspection.AttachmentSupported {
+			nextAction = nextActionConnectSignIn
+		}
 	}
 	s.telemetry.Record(ctx, LifecycleEvent{Operation: "direct_remote_registration", Phase: "complete", Outcome: "succeeded", State: ""})
-	return RegisterRemoteMCPResult{Project: project, RemoteURL: inspection.CanonicalURL, Receipt: receipt, Registration: receipt.RegistrationID.UUID.String(), NextAction: nextAction, DashboardSetupURL: setupURL}, nil
+	return RegisterRemoteMCPResult{Project: project, ServerName: displayName, RemoteURL: inspection.CanonicalURL, Receipt: receipt, Registration: receipt.RegistrationID.UUID.String(), NextAction: nextAction, DashboardSetupURL: setupURL, AutomaticClientRegistration: automaticClientRegistrationFromInspection(inspection)}, nil
 }
 
 func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal Principal, input RegisterCatalogMCPInput) (RegisterCatalogMCPResult, error) {
@@ -673,6 +736,7 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 	s.telemetry.Record(ctx, LifecycleEvent{Operation: "registration", Phase: "complete", Outcome: "succeeded", State: ""})
 	return RegisterCatalogMCPResult{
 		Project:             project,
+		ServerName:          configuration.displayName,
 		ProviderKey:         catalog.ProviderKey,
 		CatalogRef:          catalog.CatalogRef,
 		SetupIntent:         catalog.SetupIntent,
@@ -687,6 +751,20 @@ func (s *RegistrationService) RegisterCatalogMCP(ctx context.Context, principal 
 // plugin, audit, and MCP surfaces, so accepting only CR/LF is insufficient.
 func isDirectRemoteDisplayNameBreak(value rune) bool {
 	return unicode.IsControl(value) || value == '\u2028' || value == '\u2029'
+}
+
+// defaultDirectRemoteDisplayName names a remote MCP whose caller gave no name:
+// the upstream's own server name, then the URL's host name, then the URL.
+func defaultDirectRemoteDisplayName(inspection DirectRemoteInspection) string {
+	if name := directRemoteServerName(inspection.ServerName); name != "" {
+		return name
+	}
+	if parsed, err := url.Parse(inspection.CanonicalURL); err == nil {
+		if host := directRemoteServerName(parsed.Hostname()); host != "" {
+			return host
+		}
+	}
+	return inspection.CanonicalURL
 }
 
 func catalogDisplayName(catalog CatalogDetails) string {

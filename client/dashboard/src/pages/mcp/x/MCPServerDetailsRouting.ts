@@ -6,6 +6,7 @@ const VALID_TABS = [
   "resources",
   "prompts",
   "inspect",
+  "skills",
   "team-access",
   "guardrails",
   "sessions",
@@ -104,6 +105,8 @@ export function mcpServerTabHref(
       return routes.mcp.details.prompts.href(mcpServerSlug);
     case "inspect":
       return routes.mcp.details.inspect.href(mcpServerSlug);
+    case "skills":
+      return routes.mcp.details.skills.href(mcpServerSlug);
     case "team-access":
       return routes.mcp.details.teamAccess.href(mcpServerSlug);
     case "guardrails":

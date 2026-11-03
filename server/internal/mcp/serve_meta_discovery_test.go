@@ -215,9 +215,13 @@ func TestGatewayDirectListsReachableMembersWhenOneIsDown(t *testing.T) {
 	slug := "gateway-" + uuid.NewString()
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
 	member := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted tools", 1, mcpservers.VisibilityPublic, "alpha")
-	down := httptest.NewServer(http.NotFoundHandler())
+	// Keep the port reserved: closing it lets another parallel test bind the
+	// same address and accidentally turn the unavailable member into a live one.
+	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(down.Close)
 	downURL := down.URL
-	down.Close()
 	downSlug := "down-" + uuid.NewString()[:8]
 	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Down tools", downSlug, 2, downURL)
 	setGatewayMode(t, ctx, ti, gateway.ID, "direct")

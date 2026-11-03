@@ -5,6 +5,11 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import {
+  AgentKeyAuthClientChoice,
+  AgentKeyAuthClientChoice$Outbound,
+  AgentKeyAuthClientChoice$outboundSchema,
+} from "./agentkeyauthclientchoice.js";
+import {
   AgentPolicyGrantForm,
   AgentPolicyGrantForm$Outbound,
   AgentPolicyGrantForm$outboundSchema,
@@ -20,6 +25,10 @@ export type CreateKeyForm = {
    * First-class agent subject. Omit for an ordinary API key.
    */
   agentId?: string | undefined;
+  /**
+   * For an agent key: the upstream credential the key uses on each MCP server it names. Where typed upstream authentication is enforced, the key is served on a server with the credential chosen here, checked again on every request. Shared credentials only: an agent reaches a person's own connection when it acts for them.
+   */
+  authClientChoices?: Array<AgentKeyAuthClientChoice> | undefined;
   /**
    * Delegated policy format version. Required for agent keys.
    */
@@ -53,6 +62,7 @@ export type CreateKeyForm = {
 /** @internal */
 export type CreateKeyForm$Outbound = {
   agent_id?: string | undefined;
+  auth_client_choices?: Array<AgentKeyAuthClientChoice$Outbound> | undefined;
   delegated_grants_version?: number | undefined;
   expires_at?: string | undefined;
   name: string;
@@ -69,6 +79,9 @@ export const CreateKeyForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     agentId: z.optional(z.string()),
+    authClientChoices: z.optional(
+      z.array(AgentKeyAuthClientChoice$outboundSchema),
+    ),
     delegatedGrantsVersion: z.optional(z.int()),
     expiresAt: z.optional(z.pipe(z.date(), z.transform(v => v.toISOString()))),
     name: z.string(),
@@ -80,6 +93,7 @@ export const CreateKeyForm$outboundSchema: z.ZodMiniType<
   z.transform((v) => {
     return remap$(v, {
       agentId: "agent_id",
+      authClientChoices: "auth_client_choices",
       delegatedGrantsVersion: "delegated_grants_version",
       expiresAt: "expires_at",
       policyGrants: "policy_grants",

@@ -11,12 +11,13 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/instances"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
-	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -63,14 +64,18 @@ func seedInstanceToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 		Slug:                   slug,
 		Description:            pgtype.Text{String: "", Valid: false},
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: slug, Valid: true},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+	tx := testenv.BeginTx(t, ctx, conn)
+	_, err = hostedmcp.CreateCanonical(ctx, tx, audit.NewLogger(), hostedmcp.SystemActor("test"), hostedmcp.CreateCanonicalInput{
+		Toolset: toolset, Slug: slug, Visibility: mcpservers.VisibilityPrivate,
+	})
+	require.NoError(t, err)
+	require.NoError(t, tx.Commit(ctx))
 	return toolset
 }
 
-func instanceMCPURL(t *testing.T, ctx context.Context, svc *Service, slug string) string {
+func instanceMCPURLs(t *testing.T, ctx context.Context, svc *Service, slug string) []string {
 	t.Helper()
 
 	got, err := svc.GetInstance(ctx, &gen.GetInstanceForm{
@@ -81,11 +86,15 @@ func instanceMCPURL(t *testing.T, ctx context.Context, svc *Service, slug string
 		ToolsetSlug:       types.Slug(slug),
 	})
 	require.NoError(t, err)
-	require.Len(t, got.McpServers, 1)
-	return got.McpServers[0].URL
+	urls := make([]string, 0, len(got.McpServers))
+	for _, server := range got.McpServers {
+		urls = append(urls, server.URL)
+	}
+	return urls
 }
 
-func TestGetInstance_LegacyToolsetURLSkipsUnservedCustomDomain(t *testing.T) {
+// A disabled wrapper advertises its address, which never names a custom domain the middleware would not serve.
+func TestGetInstance_DisabledWrapperURLSkipsUnservedCustomDomain(t *testing.T) {
 	t.Parallel()
 
 	tests := map[string]struct {
@@ -110,17 +119,19 @@ func TestGetInstance_LegacyToolsetURLSkipsUnservedCustomDomain(t *testing.T) {
 
 			toolset := seedInstanceToolset(t, ctx, conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
 			domain := seedInstanceDomain(t, ctx, conn, authCtx.ActiveOrganizationID, tt.state)
-			require.NoError(t, testrepo.New(conn).SetToolsetCustomDomain(ctx, testrepo.SetToolsetCustomDomainParams{
-				CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true},
-				Slug:           toolset.Slug,
-				ProjectID:      toolset.ProjectID,
-			}))
+			slug := "domain-" + uuid.NewString()[:8]
+			testenv.SetHostedMCP(t, ctx, conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{
+				Visibility:          mcpservers.VisibilityDisabled,
+				UserSessionIssuerID: nil,
+				Slug:                slug,
+				CustomDomainID:      uuid.NullUUID{UUID: domain.ID, Valid: true},
+			})
 
-			want := svc.serverURL.String() + "/mcp/" + toolset.McpSlug.String
+			want := []string{}
 			if tt.wantDomain {
-				want = "https://" + domain.Domain + "/mcp/" + toolset.McpSlug.String
+				want = []string{"https://" + domain.Domain + "/mcp/" + slug}
 			}
-			require.Equal(t, want, instanceMCPURL(t, ctx, svc, toolset.Slug))
+			require.Equal(t, want, instanceMCPURLs(t, ctx, svc, toolset.Slug))
 		})
 	}
 }
@@ -138,45 +149,28 @@ func TestGetInstance_WrapperURLSkipsUnservedCustomDomain(t *testing.T) {
 			require.NotNil(t, authCtx)
 
 			toolset := seedInstanceToolset(t, ctx, conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID)
-			wrapper, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
-				ID:                    uuid.New(),
-				ProjectID:             *authCtx.ProjectID,
-				Name:                  pgtype.Text{String: toolset.Slug + "-srv", Valid: true},
-				Slug:                  pgtype.Text{String: toolset.Slug + "-srv", Valid: true},
-				EnvironmentID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-				UserSessionIssuerID:   uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-				RemoteMcpServerID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-				ToolsetID:             uuid.NullUUID{UUID: toolset.ID, Valid: true},
-				ToolVariationsGroupID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-				Visibility:            mcpservers.VisibilityPrivate,
-			})
-			require.NoError(t, err)
-
 			domain := seedInstanceDomain(t, ctx, conn, authCtx.ActiveOrganizationID, domainState{verified: true})
-			endpoints := mcpendpointsrepo.New(conn)
-			_, err = endpoints.CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
-				ProjectID:       *authCtx.ProjectID,
-				CustomDomainID:  uuid.NullUUID{UUID: domain.ID, Valid: true},
-				McpServerID:     uuid.NullUUID{UUID: wrapper.ID, Valid: true},
-				MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-				Slug:            "unserved-" + uuid.NewString()[:8],
+			testenv.SetHostedMCP(t, ctx, conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{
+				Visibility:          "",
+				UserSessionIssuerID: nil,
+				Slug:                "unserved-" + uuid.NewString()[:8],
+				CustomDomainID:      uuid.NullUUID{UUID: domain.ID, Valid: true},
 			})
-			require.NoError(t, err)
 
-			want := svc.serverURL.String() + "/mcp/" + toolset.McpSlug.String
+			want := []string{}
 			if withPlatform {
 				platformSlug := "platform-" + uuid.NewString()[:8]
-				_, err = endpoints.CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
+				_, err := mcpendpointsrepo.New(conn).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 					ProjectID:       *authCtx.ProjectID,
 					CustomDomainID:  uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-					McpServerID:     uuid.NullUUID{UUID: wrapper.ID, Valid: true},
+					McpServerID:     uuid.NullUUID{UUID: toolset.ID, Valid: true},
 					MetaMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 					Slug:            platformSlug,
 				})
 				require.NoError(t, err)
-				want = svc.serverURL.String() + "/mcp/" + platformSlug
+				want = []string{svc.serverURL.String() + "/mcp/" + platformSlug}
 			}
-			require.Equal(t, want, instanceMCPURL(t, ctx, svc, toolset.Slug))
+			require.Equal(t, want, instanceMCPURLs(t, ctx, svc, toolset.Slug))
 		})
 	}
 }

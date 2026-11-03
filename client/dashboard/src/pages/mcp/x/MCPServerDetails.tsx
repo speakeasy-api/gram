@@ -48,6 +48,7 @@ import { ArrowRight, Check, ChevronDown } from "lucide-react";
 import { Link, Navigate, useLocation, useParams } from "react-router";
 import { toast } from "sonner";
 import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
+import { RemoteTeamAccessTab } from "./tabs/RemoteTeamAccessTab";
 import {
   activeTabFromPath,
   mcpServerTabHref,
@@ -75,6 +76,8 @@ import { SettingsTab } from "./tabs/settings/SettingsTab";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { GuardrailsTab } from "./tabs/guardrails/GuardrailsTab";
+import { RemoteSkillsTabRoute } from "./tabs/skills/RemoteSkillsTab";
+import { MCPSkillsTabRoute } from "../MCPSkillsTab";
 
 export default function MCPServerDetails(): JSX.Element | null {
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
@@ -183,10 +186,13 @@ export default function MCPServerDetails(): JSX.Element | null {
   const renderTabContent = () => {
     // Hosted tabs and settings need the toolset; never fall back to another layout.
     // Overview needs the loaded toolset only when the read's summary is missing.
+    // Skills reads links by server id and owns its flag and access checks.
     const needsToolset =
       activeTab === "overview"
         ? !mcpServer.toolset
-        : activeTab !== "sessions" && activeTab !== "guardrails";
+        : activeTab !== "sessions" &&
+          activeTab !== "guardrails" &&
+          activeTab !== "skills";
     if (hosted && needsToolset && !hostedToolset) {
       if (isLoadingToolset) return null;
       return (
@@ -253,6 +259,21 @@ export default function MCPServerDetails(): JSX.Element | null {
             />
           )
         );
+      case "skills":
+        // Hosted servers list their own links; remote-backed servers list
+        // theirs with a note on how agents load them. The routes check the
+        // flag before the scope, and any other server lands on the overview.
+        return (
+          mcpServer &&
+          (hosted ? (
+            <MCPSkillsTabRoute mcpServer={mcpServer} mcpServerSlug={idOrSlug} />
+          ) : (
+            <RemoteSkillsTabRoute
+              mcpServer={mcpServer}
+              mcpServerSlug={idOrSlug}
+            />
+          ))
+        );
       case "team-access":
         return (
           mcpServer && (
@@ -263,11 +284,15 @@ export default function MCPServerDetails(): JSX.Element | null {
                 level="page"
               >
                 {/* Reads gate on the toolset id like the API; grants key on the server id that endpoint calls check. */}
-                <MCPTeamAccessTab
-                  resourceId={mcpServer.id}
-                  serverName={mcpServer.name ?? undefined}
-                  tools={hostedToolset?.tools}
-                />
+                {mcpServer.remoteMcpServerId ? (
+                  <RemoteTeamAccessTab server={mcpServer} />
+                ) : (
+                  <MCPTeamAccessTab
+                    resourceId={mcpServer.id}
+                    serverName={mcpServer.name ?? undefined}
+                    tools={hostedToolset?.tools}
+                  />
+                )}
               </RequireScope>
             </RequireScope>
           )

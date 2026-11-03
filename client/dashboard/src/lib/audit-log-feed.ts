@@ -62,3 +62,37 @@ export type FacetOption = {
   displayName: string;
   value: string;
 };
+
+export type ActorRun = {
+  key: string;
+  actorId: string;
+  actorType: string;
+  logs: AuditLog[];
+};
+
+/**
+ * Splits a day's entries into runs of consecutive entries by the same actor.
+ * An agent's runtime writes a security entry on every start and teardown, so
+ * a run reads as one process at work rather than a column of repeats.
+ */
+export function groupConsecutiveByActor(logs: AuditLog[]): ActorRun[] {
+  const runs: ActorRun[] = [];
+  for (const log of logs) {
+    const last = runs[runs.length - 1];
+    if (
+      last &&
+      last.actorId === log.actorId &&
+      last.actorType === log.actorType
+    ) {
+      last.logs.push(log);
+      continue;
+    }
+    runs.push({
+      key: log.id,
+      actorId: log.actorId,
+      actorType: log.actorType,
+      logs: [log],
+    });
+  }
+  return runs;
+}

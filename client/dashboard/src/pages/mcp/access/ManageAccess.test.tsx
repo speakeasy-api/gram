@@ -1,6 +1,13 @@
 import { unrecognized } from "@gram/client/types/unrecognized.js";
 import type { ResourceAudienceEntry } from "@gram/client/models/components/resourceaudienceentry.js";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  within,
+} from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 // What the page sends when a row changes. The rules the surface writes are the
@@ -97,22 +104,8 @@ vi.mock("@tanstack/react-query", () => ({
   useQueryClient: () => ({ invalidateQueries: invalidate }),
 }));
 
-vi.mock("react-router", () => ({
-  useNavigate: () => vi.fn(),
-  Link: ({ to, children }: { to: string; children: React.ReactNode }) => (
-    <a href={to}>{children}</a>
-  ),
-}));
-
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    plugins: { detail: { href: (id: string) => `/org/plugins/${id}` } },
-  }),
-  useOrgRoutes: () => ({
-    plugins: { detail: { href: (id: string) => `/org/plugins/${id}` } },
-    access: { roles: { href: () => "/org/access/roles" } },
-    identity: { href: () => "/org/identity" },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
 vi.mock("@/hooks/useRBAC", () => ({
@@ -158,15 +151,17 @@ function renderList(entries: ResourceAudienceEntry[]) {
   return render(
     // The facepile's avatars carry tooltips, which the app provides at the
     // root.
-    <TooltipProvider>
-      <ManageAccess
-        resourceId="server-1"
-        resourceName="Acme Ops"
-        entries={entries}
-        version="v1"
-        isLoading={false}
-      />
-    </TooltipProvider>,
+    <MemoryRouter>
+      <TooltipProvider>
+        <ManageAccess
+          resourceId="server-1"
+          resourceName="Acme Ops"
+          entries={entries}
+          version="v1"
+          isLoading={false}
+        />
+      </TooltipProvider>
+    </MemoryRouter>,
   );
 }
 
@@ -552,15 +547,17 @@ describe("role plugin distribution", () => {
     slug: "tools",
   };
   const ui = (rolePlugins: (typeof plugin)[], entries = [role]) => (
-    <TooltipProvider>
-      <ManageAccess
-        resourceId="server-1"
-        entries={entries}
-        version="v1"
-        isLoading={false}
-        rolePlugins={rolePlugins}
-      />
-    </TooltipProvider>
+    <MemoryRouter>
+      <TooltipProvider>
+        <ManageAccess
+          resourceId="server-1"
+          entries={entries}
+          version="v1"
+          isLoading={false}
+          rolePlugins={rolePlugins}
+        />
+      </TooltipProvider>
+    </MemoryRouter>
   );
 
   it("shows an empty distribution without inventing links", () => {
@@ -583,7 +580,7 @@ describe("role plugin distribution", () => {
     );
     expect(
       screen.getByRole("link", { name: "Tools" }).getAttribute("href"),
-    ).toBe("/org/plugins/plugin-1");
+    ).toBe("/org/projects/project/plugins/plugin-1");
     expect(screen.queryByText("Unrelated")).toBeNull();
   });
 
@@ -743,15 +740,17 @@ describe("directory sources on role rows", () => {
     expect(screen.getByText(/Via directory/)).toBeDefined();
     permission.admin = false;
     rerender(
-      <TooltipProvider>
-        <ManageAccess
-          resourceId="server-1"
-          resourceName="Acme Ops"
-          entries={[role]}
-          version="v1"
-          isLoading={false}
-        />
-      </TooltipProvider>,
+      <MemoryRouter>
+        <TooltipProvider>
+          <ManageAccess
+            resourceId="server-1"
+            resourceName="Acme Ops"
+            entries={[role]}
+            version="v1"
+            isLoading={false}
+          />
+        </TooltipProvider>
+      </MemoryRouter>,
     );
     expect(screen.queryByText(/Via directory/)).toBeNull();
   });
@@ -761,19 +760,23 @@ it("closes an open mutation dialog when a refreshed rule becomes unsupported", (
   const props = { resourceId: "server-1", version: "v1", isLoading: false };
   const known = entry({ appliesTo: "all_resources" });
   const { rerender } = render(
-    <TooltipProvider>
-      <ManageAccess {...props} entries={[known]} />
-    </TooltipProvider>,
+    <MemoryRouter>
+      <TooltipProvider>
+        <ManageAccess {...props} entries={[known]} />
+      </TooltipProvider>
+    </MemoryRouter>,
   );
   fireEvent.click(screen.getByLabelText("Remove Hana Sato from this server"));
   expect(screen.getByRole("button", { name: "Remove" })).toBeDefined();
   rerender(
-    <TooltipProvider>
-      <ManageAccess
-        {...props}
-        entries={[known, entry({ level: unrecognized("future_level") })]}
-      />
-    </TooltipProvider>,
+    <MemoryRouter>
+      <TooltipProvider>
+        <ManageAccess
+          {...props}
+          entries={[known, entry({ level: unrecognized("future_level") })]}
+        />
+      </TooltipProvider>
+    </MemoryRouter>,
   );
   expect(screen.queryByRole("button", { name: "Remove" })).toBeNull();
   expect(screen.getByText(/Some access rules are not supported/)).toBeDefined();
@@ -836,4 +839,32 @@ it("keeps an unsupported principal visible with all audience edits disabled", ()
       .hasAttribute("disabled"),
   ).toBe(true);
   expect(mutate).not.toHaveBeenCalled();
+});
+
+it("forwards remote discovery failures and retry into the actual narrowing dialog", () => {
+  const retry = vi.fn<() => void>();
+  render(
+    <TooltipProvider>
+      <ManageAccess
+        resourceId="server-1"
+        resourceName="Example server"
+        entries={[entry({})]}
+        version="v1"
+        isLoading={false}
+        toolSource={{ status: "error", retry }}
+      />
+    </TooltipProvider>,
+    { wrapper: MemoryRouter },
+  );
+  expandFirstRow();
+  fireEvent.pointerDown(screen.getByRole("button", { name: /All tools/ }), {
+    button: 0,
+    ctrlKey: false,
+  });
+  fireEvent.click(screen.getByRole("menuitem", { name: "Specific tools…" }));
+  const dialog = within(screen.getByRole("dialog"));
+  fireEvent.click(dialog.getByRole("button", { name: "By tool" }));
+  expect(dialog.getByText("Couldn't load this server's tools.")).toBeTruthy();
+  fireEvent.click(dialog.getByRole("button", { name: "Retry" }));
+  expect(retry).toHaveBeenCalledOnce();
 });

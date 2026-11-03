@@ -51,6 +51,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/sessionhandoff"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -95,6 +96,13 @@ type Service struct {
 	// connectionsLimiter bounds getMyConnections reads per member. Nil leaves
 	// it unlimited.
 	connectionsLimiter *ratelimit.Limiter
+
+	// stateReportLimiter bounds reportState writes per device. Nil leaves it
+	// unlimited.
+	stateReportLimiter *ratelimit.Limiter
+	// newStateReportLimiter bounds, per organization, the reports that add a
+	// row. Nil leaves it unlimited.
+	newStateReportLimiter *ratelimit.Limiter
 }
 
 // WorkloadTokenTargets resolves where a workload exchanges an identity
@@ -126,24 +134,26 @@ func NewService(
 ) *Service {
 	logger = logger.With(attr.SlogComponent("agent"))
 	return &Service{
-		tracer:             tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
-		logger:             logger,
-		db:                 db,
-		repo:               repo.New(db),
-		auth:               auth.New(logger, db, sessions, authzEngine),
-		authz:              authzEngine,
-		audit:              auditLogger,
-		productFeatures:    productFeatures,
-		serverURL:          serverURL,
-		orgHosts:           orgHosts,
-		blobStore:          blobStore,
-		telemetry:          telemetryLogger,
-		growth:             growthEmitter,
-		workloadTokens:     nil,
-		deviceAgentTokens:  deviceAgentTokens,
-		agentVersions:      nil,
-		connectionStatuses: nil,
-		connectionsLimiter: nil,
+		tracer:                tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/agent"),
+		logger:                logger,
+		db:                    db,
+		repo:                  repo.New(db),
+		auth:                  auth.New(logger, db, sessions, authzEngine),
+		authz:                 authzEngine,
+		audit:                 auditLogger,
+		productFeatures:       productFeatures,
+		serverURL:             serverURL,
+		orgHosts:              orgHosts,
+		blobStore:             blobStore,
+		telemetry:             telemetryLogger,
+		growth:                growthEmitter,
+		workloadTokens:        nil,
+		deviceAgentTokens:     deviceAgentTokens,
+		agentVersions:         nil,
+		connectionStatuses:    nil,
+		connectionsLimiter:    nil,
+		stateReportLimiter:    nil,
+		newStateReportLimiter: nil,
 	}
 }
 
@@ -161,10 +171,11 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server := srv.New(endpoints, mux, goahttp.RequestDecoder, goahttp.ResponseEncoder, nil, nil)
 	// Only getPlugins accepts device-agent tokens.
 	server.GetPlugins = deviceagenttoken.BearerChallenge(server.GetPlugins)
+	server.ReportState = limitStateReportBody(server.ReportState)
 	srv.Mount(mux, server)
 	// Public capability-URL route for minted session handoffs (see
 	// handoffs.go): unauthenticated by design, the token is the credential.
-	o11y.AttachHandler(mux, http.MethodGet, "/shared/handoffs/{token}", oops.ErrHandle(service.logger, service.ServeSessionHandoff).ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodGet, sessionhandoff.PublicRoutePattern, oops.ErrHandle(service.logger, service.ServeSessionHandoff).ServeHTTP)
 }
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
@@ -369,7 +380,27 @@ func (s *Service) GetPlugins(ctx context.Context, payload *gen.GetPluginsPayload
 	}
 
 	result, _, err := s.pluginSetFor(ctx, authCtx, principals)
-	return result, err
+	if err != nil {
+		return nil, err
+	}
+
+	// Device attestation compares an agent's reported applied etag against
+	// this one (device-agent ADR-0029). Best-effort and endpoints only, like
+	// the heartbeat row it lands on.
+	if environment == deviceidentity.EnvironmentEndpoint {
+		if err := s.repo.RecordDeviceAgentServedEtag(ctx, repo.RecordDeviceAgentServedEtagParams{
+			ServedEtag:     conv.ToPGText(result.Etag),
+			OrganizationID: authCtx.ActiveOrganizationID,
+			Email:          email,
+		}); err != nil {
+			s.logger.WarnContext(ctx, "failed to record device agent served etag",
+				attr.SlogError(err),
+				attr.SlogOrganizationID(authCtx.ActiveOrganizationID),
+			)
+		}
+	}
+
+	return result, nil
 }
 
 // pollingEmail resolves the enrolled user's email by credential type. An org

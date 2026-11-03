@@ -6,7 +6,16 @@ import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { useOrganization } from "@/contexts/Auth";
 import { Checkbox } from "@/components/ui/Checkbox";
 import { CreationIdentityChoice } from "@/pages/mcp/x/tabs/settings/sections/authentication/CreationIdentityChoice";
-import { useAgentCredentialFields } from "@/lib/remote-identity";
+import {
+  isOAuthFormat,
+  ServiceAccountPanel,
+  useAgentCredentialFields,
+  useCustomerManagedKeys,
+  useServiceAccountClientDraft,
+  type AgentCredentialFields,
+  type ServiceAccountClientSpec,
+  type ServiceAccountFormat,
+} from "@/lib/remote-identity";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
 import { useProject } from "@/contexts/Auth";
@@ -15,6 +24,7 @@ import { useQuery, useQueryClient } from "@tanstack/react-query";
 import { invalidateAllListMCPCatalog } from "@gram/client/react-query/listMCPCatalog.js";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
+import { Card } from "@/components/ui/Card";
 import type { PulseMCPServer } from "@/pages/catalog/hooks";
 import { useRoutes } from "@/routes";
 import { Button } from "@/components/ui/Button";
@@ -30,11 +40,10 @@ import {
   Plug,
   Plus,
   Server as ServerIcon,
-  Settings,
   TriangleAlert,
   X,
 } from "lucide-react";
-import { useEffect, useRef, useState } from "react";
+import { useCallback, useEffect, useRef, useState } from "react";
 import {
   type CompletePhase,
   type ConfigurePhase,
@@ -221,6 +230,72 @@ export function AddServerDialog({
     }
     // eslint-disable-next-line react-hooks/exhaustive-deps -- only reset when dialog open/close state changes, not on every releaseState update
   }, [open]);
+
+  // Signing key clients are made from the configure step, before the server
+  // exists, so their drafts cannot clean them up: a draft unmounts on every
+  // step change. Track them here until an install takes them over, and delete
+  // any the dialog lets go of — a changed choice, Back, or closing.
+  const client = useSdkClient();
+  const pendingSigningClients = useRef(new Set<string>());
+  const deleteSigningClient = useCallback(
+    (id: string) => {
+      void client.remoteSessionClients
+        .delete(
+          { id },
+          undefined,
+          projectSlug
+            ? { headers: { "gram-project": projectSlug } }
+            : undefined,
+        )
+        .catch((error: unknown) =>
+          console.error("Couldn't delete an unused signing key client", error),
+        );
+    },
+    [client, projectSlug],
+  );
+  const referencedSigningClients =
+    releaseState.phase === "configure"
+      ? releaseState.serverConfigs
+          .flatMap((config) =>
+            config.serviceAccountClient?.format === "signing-key"
+              ? [config.serviceAccountClient.clientRowId]
+              : [],
+          )
+          .join(",")
+      : null;
+  useEffect(() => {
+    const pending = pendingSigningClients.current;
+    if (
+      releaseState.phase === "installing" ||
+      releaseState.phase === "complete"
+    ) {
+      // The install binds them, or reports the server for setup.
+      pending.clear();
+      return;
+    }
+    if (referencedSigningClients === null) return;
+    const referenced = new Set(
+      referencedSigningClients ? referencedSigningClients.split(",") : [],
+    );
+    for (const id of pending) {
+      if (!referenced.has(id)) {
+        pending.delete(id);
+        deleteSigningClient(id);
+      }
+    }
+    for (const id of referenced) pending.add(id);
+  }, [releaseState.phase, referencedSigningClients, deleteSigningClient]);
+  useEffect(() => {
+    if (open) return;
+    for (const id of pendingSigningClients.current) deleteSigningClient(id);
+    pendingSigningClients.current.clear();
+  }, [open, deleteSigningClient]);
+  useEffect(
+    () => () => {
+      for (const id of pendingSigningClients.current) deleteSigningClient(id);
+    },
+    [deleteSigningClient],
+  );
 
   useEffect(() => {
     autoStartRef.current = false;
@@ -515,9 +590,7 @@ function PhaseContent({
         />
       );
     case "guardrails":
-      return (
-        <CatalogGuardrailsPhase releaseState={releaseState} onClose={onClose} />
-      );
+      return <CatalogGuardrailsPhase releaseState={releaseState} />;
     case "installing":
       return <InstallStatusList statuses={releaseState.statuses} />;
     case "complete":
@@ -915,7 +988,12 @@ function CatalogServerIdentity({
   rbacLoading: boolean;
 }) {
   const credential = useAgentCredentialFields();
-  const authorizationValue = credential.authorizationValue;
+  const [format, setFormat] = useState<ServiceAccountFormat>("bearer");
+  // A static credential and an OAuth client are alternatives: only the one
+  // on screen reaches the install.
+  const authorizationValue = isOAuthFormat(format)
+    ? ""
+    : credential.authorizationValue;
   // releaseState is rebuilt every render; its updater is not, so depend on the
   // updater alone or this re-runs on every parent render.
   const { updateServerConfig } = releaseState;
@@ -951,8 +1029,91 @@ function CatalogServerIdentity({
         authenticationRequired={false}
         canCreateIdentity={canCreateIdentity}
         rbacLoading={rbacLoading}
+        serviceAccountPanel={
+          config.identityMode === "agent" ? (
+            <CatalogServiceAccount
+              config={config}
+              index={index}
+              updateServerConfig={updateServerConfig}
+              projectSlug={releaseState.projectSlug}
+              format={format}
+              onFormatChange={setFormat}
+              credential={credential}
+            />
+          ) : null
+        }
       />
     </div>
+  );
+}
+
+/**
+ * The full Service Account choice — static credentials and OAuth clients —
+ * mounted only while Service Account is chosen, so its provider lookups run
+ * only then. The server doesn't exist yet, so the OAuth client is collected
+ * here and bound by the install once the server is created.
+ */
+function CatalogServiceAccount({
+  config,
+  index,
+  updateServerConfig,
+  projectSlug,
+  format,
+  onFormatChange,
+  credential,
+}: {
+  config: ServerConfig;
+  index: number;
+  updateServerConfig: ConfigurePhase["updateServerConfig"];
+  /** The project the server is installed into, which may not be this one. */
+  projectSlug?: string;
+  format: ServiceAccountFormat;
+  onFormatChange: (format: ServiceAccountFormat) => void;
+  credential: AgentCredentialFields;
+}) {
+  const routes = useRoutes(projectSlug ? { projectSlug } : undefined);
+  // This draft unmounts when the dialog moves on, before the install binds
+  // its signing key client, so unmounting must not delete that client.
+  const clientDraft = useServiceAccountClientDraft({
+    boundClient: undefined,
+    deleteCreatedOnUnmount: false,
+  });
+  const { entitled: customerManagedKeys } = useCustomerManagedKeys();
+  const serviceAccountKey = JSON.stringify(
+    isOAuthFormat(format) ? clientDraft.spec(format) : null,
+  );
+
+  // The spec is rebuilt every render, so compare it by value.
+  useEffect(() => {
+    if (JSON.stringify(config.serviceAccountClient) !== serviceAccountKey) {
+      updateServerConfig(index, {
+        serviceAccountClient: JSON.parse(
+          serviceAccountKey,
+        ) as ServiceAccountClientSpec | null,
+      });
+    }
+  }, [
+    serviceAccountKey,
+    config.serviceAccountClient,
+    index,
+    updateServerConfig,
+  ]);
+
+  return (
+    <ServiceAccountPanel
+      compact
+      format={format}
+      onFormatChange={onFormatChange}
+      agentDraft={credential}
+      clientDraft={clientDraft}
+      upstreamName={config.name || "this server"}
+      disabled={false}
+      customerManagedKeys={customerManagedKeys}
+      providersHref={routes.remoteIdentityProviders.href()}
+      clientHref={(issuerId, clientId) =>
+        routes.remoteIdentityProviders.clientDetail.href(issuerId, clientId)
+      }
+    />
   );
 }
 
@@ -1322,21 +1483,14 @@ function CompletePhaseContent({
 
   return (
     <div className="space-y-4 pb-2">
-      {/* Success header when all done */}
-      {allSucceeded && (
-        <div className="flex items-center gap-3 border border-emerald-500/20 bg-emerald-500/10 p-3">
-          <div className="flex h-8 w-8 items-center justify-center rounded-full bg-emerald-500/20">
-            <Check className="h-4 w-4 text-emerald-600 dark:text-emerald-400" />
-          </div>
-          <div>
-            <Text className="font-medium text-emerald-700 dark:text-emerald-300">
-              {successCount === 1
-                ? "Server added successfully"
-                : `${successCount} servers added successfully`}
-            </Text>
-          </div>
-        </div>
-      )}
+      {/* The added server, linking to its page, when all done */}
+      {allSucceeded && firstCompleted ? (
+        <AddedServerCard
+          status={firstCompleted}
+          releaseState={releaseState}
+          moreCount={successCount - 1}
+        />
+      ) : null}
 
       <GuardrailOutcomeNotice outcome={releaseState.guardrail} />
 
@@ -1501,6 +1655,75 @@ function InstallStatusIcon({
   }
 }
 
+/** The added server as a card that opens its page — the primary next step. */
+function AddedServerCard({
+  status,
+  releaseState,
+  moreCount,
+}: {
+  status: ServerInstallStatus;
+  releaseState: CompletePhase;
+  /** Other servers added alongside this one. */
+  moreCount: number;
+}) {
+  const routes = useTargetRoutes(releaseState);
+  const server = status.server;
+
+  return (
+    <routes.mcp.details.Link
+      params={[status.mcpServerParam!]}
+      className="focus-visible:ring-ring block no-underline hover:no-underline focus-visible:ring-2 focus-visible:ring-offset-2 focus-visible:outline-none"
+    >
+      <Card.Entity
+        className="min-h-[128px] cursor-pointer [&_*]:no-underline"
+        iconRailClassName="w-32"
+        icon={
+          server?.iconUrl ? (
+            <img
+              src={server.iconUrl}
+              alt=""
+              className={cn(
+                "h-10 w-10 object-contain",
+                catalogLogoClassName(server.registrySpecifier),
+              )}
+            />
+          ) : (
+            <ServerIcon className="text-muted-foreground h-8 w-8" />
+          )
+        }
+        overlay={
+          <div className="absolute top-2 left-2 flex h-5 w-5 items-center justify-center rounded-full bg-emerald-500/20">
+            <Check className="h-3 w-3 text-emerald-600 dark:text-emerald-400" />
+          </div>
+        }
+      >
+        <div className="flex h-full flex-col gap-1">
+          <Text
+            small
+            className="font-medium text-emerald-700 dark:text-emerald-300"
+          >
+            {moreCount > 0
+              ? `Added to your project, with ${moreCount} more`
+              : "Added to your project"}
+          </Text>
+          <Card.Title className="truncate leading-tight">
+            {status.name}
+          </Card.Title>
+          {status.mcpEndpointUrl ? (
+            <Card.Description className="font-mono text-xs">
+              {status.mcpEndpointUrl}
+            </Card.Description>
+          ) : null}
+          <span className="text-foreground mt-auto flex items-center gap-1 pt-2 text-sm font-medium">
+            View server
+            <ArrowRight className="h-4 w-4 transition-transform group-hover:translate-x-0.5" />
+          </span>
+        </div>
+      </Card.Entity>
+    </routes.mcp.details.Link>
+  );
+}
+
 function NextSteps({
   status,
   releaseState,
@@ -1547,22 +1770,6 @@ function NextSteps({
             </div>
           </a>
         )}
-        <routes.mcp.details.Link
-          params={[status.mcpServerParam!]}
-          className="no-underline hover:no-underline"
-        >
-          <div className="group hover:border-foreground/20 hover:bg-muted/30 flex h-full items-center gap-3 border p-3 transition-all [&_*]:no-underline">
-            <div className="flex h-8 w-8 shrink-0 items-center justify-center bg-orange-500/10 dark:bg-orange-500/20">
-              <Settings className="h-4 w-4 text-orange-600 dark:text-orange-400" />
-            </div>
-            <div className="flex-1">
-              <Text className="text-sm font-medium no-underline">
-                Configure MCP settings
-              </Text>
-            </div>
-            <ArrowRight className="text-muted-foreground h-4 w-4 opacity-0 transition-opacity group-hover:opacity-100" />
-          </div>
-        </routes.mcp.details.Link>
       </div>
     </div>
   );

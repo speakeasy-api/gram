@@ -242,7 +242,7 @@ func TestSubmitClientID_VerifiesAndPersists(t *testing.T) {
 	require.Nil(t, submitted.LastError)
 
 	fake := si.oktaFakes.Fake(fullOrgURL)
-	require.Equal(t, []string{"VerifyScopes", "ListApps", "ListUsers", "ListGroups"}, fake.Calls())
+	require.Equal(t, []string{"VerifyScopes", "ListApps"}, fake.Calls())
 
 	managed, err := si.provisioner.GetManagedClient(ctx, si.orgID, mustParseUUID(t, created.ID))
 	require.NoError(t, err)
@@ -302,9 +302,9 @@ func TestSubmitClientID_DegradedStillPersists(t *testing.T) {
 
 	require.Equal(t, identityproviderconnections.StatusDegraded, submitted.Status)
 	require.True(t, submitted.ClientIDSubmitted)
-	require.Equal(t, []string{"okta.apps.read"}, submitted.GrantedScopes)
-	require.Equal(t, []string{"okta.users.read", "okta.groups.read"}, submitted.MissingScopes)
-	require.Equal(t, []string{identityproviderconnections.ReasonMissingScope}, submitted.VerificationReasons)
+	require.Empty(t, submitted.GrantedScopes)
+	require.Equal(t, []string{"okta.apps.read"}, submitted.MissingScopes)
+	require.Equal(t, []string{identityproviderconnections.ReasonMissingScope, identityproviderconnections.ReasonDPoPNotBound}, submitted.VerificationReasons, "a refused scope mints no token")
 	require.Nil(t, submitted.LastError, "reasons are not failures")
 	require.Nil(t, submitted.LastVerifiedAt, "only a verified outcome advances last_verified_at")
 }
@@ -388,7 +388,6 @@ func TestVerify_ReadFailureDegrades(t *testing.T) {
 	require.Equal(t, []string{identityproviderconnections.ReasonReadFailedApps, identityproviderconnections.ReasonMissingRole}, verified.VerificationReasons)
 	require.Nil(t, verified.LastError)
 	require.Equal(t, allScopes(), verified.GrantedScopes)
-	require.Contains(t, fake.Calls(), "ListUsers", "every granted scope is read")
 
 	// The token mint failing as a non-credential error keeps the status and
 	// records the typed failure.

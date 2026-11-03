@@ -254,6 +254,11 @@ func (r *Registrar) FilterExternalTools(ctx context.Context, principal Principal
 	}
 	grants, grantsLoaded := authz.GrantsFromContext(ctx)
 	allowlist := clientToolAllowlist(principal.ClientID)
+	// The small discovery surface reaches every tool by design, so the
+	// allowlist only narrows the full catalogue.
+	if discoveryModeFromContext(ctx) != discoveryFull {
+		allowlist = nil
+	}
 	visible := make([]*mcp.Tool, 0, len(tools))
 	for _, tool := range tools {
 		descriptor, ok := descriptors[tool.Name]
@@ -363,6 +368,9 @@ func addResource(r *Registrar, resource *mcp.Resource, meta ResourceMeta, read f
 					URI:      resource.URI,
 					MIMEType: resource.MIMEType,
 					Text:     text,
+					// MCP Apps hosts read a view's presentation hints from
+					// the contents they render.
+					Meta: resource.Meta,
 				}}}, nil
 		})
 	}

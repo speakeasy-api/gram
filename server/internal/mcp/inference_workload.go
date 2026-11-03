@@ -94,7 +94,7 @@ func (s *Service) handleInferenceWorkloadGrant(ctx context.Context, w http.Respo
 	// no project_id). Persist the exact target in the immutable resource and
 	// ceiling so completion never takes tenancy from caller headers.
 	session.Resource = InferenceResource + ":" + projectID.String()
-	return s.issueWorkloadGrantSession(ctx, w, logger, workloadGrantIssuance{client: nil, beforeCommit: nil, presented: presented, credential: credential, projectID: &projectID, endpoint: nil, session: session})
+	return s.issueWorkloadGrantSession(ctx, w, logger, workloadGrantIssuance{client: nil, beforeCommit: nil, presented: presented, credential: credential, projectID: &projectID, endpoint: nil, session: session, choosesUpstream: false, requestedAuthClients: nil})
 }
 
 // AuthorizeWorkloadInference implements the completion-only authentication

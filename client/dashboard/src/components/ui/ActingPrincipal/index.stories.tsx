@@ -106,6 +106,38 @@ export const Unlinked: Story = {
   },
 };
 
+/** A shared credential served the call: nobody's own connection, so no "on behalf of". */
+export const SharedCredential: Story = {
+  args: {
+    agent: {
+      id: "00000000-0000-4000-a000-000000000001",
+      name: "Release assistant",
+    },
+    authorizer: { id: "user_locl_amara", name: "Amara Okafor" },
+    signedInWith: {
+      label: "shared credential",
+      detail: "Signed in with: Service account",
+    },
+    linked: true,
+  },
+};
+
+/** A person's own connection served the call; their face stands beside the words. */
+export const PersonalConnection: Story = {
+  args: {
+    agent: {
+      id: "00000000-0000-4000-a000-000000000001",
+      name: "Release assistant",
+    },
+    signedInWith: {
+      label: "Alex Morgan's connection",
+      detail: "Signed in with: Personal connection",
+      person: { id: "user_locl_alex", name: "Alex Morgan" },
+    },
+    linked: true,
+  },
+};
+
 /** A long agent name beside a long person name, in a narrow column. */
 export const Truncating: Story = {
   args: {

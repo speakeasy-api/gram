@@ -3579,3 +3579,18 @@ func BuildDisableUpstreamAuthEnforcementPayload(adminDisableUpstreamAuthEnforcem
 
 	return v, nil
 }
+
+// BuildBackfillMcpAuthGrantsPayload builds the payload for the admin
+// backfillMcpAuthGrants endpoint from CLI flags.
+func BuildBackfillMcpAuthGrantsPayload(adminBackfillMcpAuthGrantsAdminSessionToken string) (*admin.BackfillMcpAuthGrantsPayload, error) {
+	var adminSessionToken *string
+	{
+		if adminBackfillMcpAuthGrantsAdminSessionToken != "" {
+			adminSessionToken = &adminBackfillMcpAuthGrantsAdminSessionToken
+		}
+	}
+	v := &admin.BackfillMcpAuthGrantsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v, nil
+}

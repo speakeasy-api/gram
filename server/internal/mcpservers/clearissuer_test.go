@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remoterepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
-	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
@@ -156,9 +155,6 @@ func TestUpdateMcpServer_ClearsHostedIssuer(t *testing.T) {
 	require.NoError(t, err)
 	require.Nil(t, updated.UserSessionIssuerID)
 	requireNoIssuer(t, ctx, f.ti, f.projectID, f.toolset.ID.String())
-	toolset, err := toolsetsrepo.New(f.ti.conn).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{ID: f.toolset.ID, ProjectID: f.projectID})
-	require.NoError(t, err)
-	require.False(t, toolset.UserSessionIssuerID.Valid, "the frozen toolset column is not written")
 
 	reattached, err := f.ti.service.UpdateMcpServer(ctx, f.payload(types.McpServerVisibility("private"), func(p *gen.UpdateMcpServerPayload) { p.UserSessionIssuerID = &issuer }))
 	require.NoError(t, err)
@@ -199,6 +195,12 @@ func createOrganizationIssuer(t *testing.T, ctx context.Context, ti *testInstanc
 // issuer get a derived remote issuer.
 func linkRemoteClient(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID uuid.UUID, issuerID string) uuid.UUID {
 	t.Helper()
+	issuer, _ := linkRemoteClientWithID(t, ctx, ti, organizationID, projectID, issuerID)
+	return issuer
+}
+
+func linkRemoteClientWithID(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID uuid.UUID, issuerID string) (uuid.UUID, uuid.UUID) {
+	t.Helper()
 
 	q := remoterepo.New(ti.conn)
 	slug := "clear-remote-" + uuid.NewString()[:8]
@@ -218,7 +220,7 @@ func linkRemoteClient(t *testing.T, ctx context.Context, ti *testInstance, organ
 		RemoteSessionClientID: client.ID, UserSessionIssuerID: uuid.MustParse(issuerID),
 	}))
 	require.NoError(t, remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, ti.conn, organizationID, projectID, []uuid.UUID{uuid.MustParse(issuerID)}))
-	return remoteIssuer.ID
+	return remoteIssuer.ID, client.ID
 }
 
 func storedServer(t *testing.T, ctx context.Context, ti *testInstance, projectID uuid.UUID, id string) mcpserversrepo.McpServer {

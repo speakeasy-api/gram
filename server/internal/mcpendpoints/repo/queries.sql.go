@@ -12,7 +12,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
-const checkUnifiedSlugAvailability = `-- name: CheckUnifiedSlugAvailability :one
+const checkEndpointSlugAvailability = `-- name: CheckEndpointSlugAvailability :one
 SELECT (
   $1::boolean
   OR $2::uuid IS NULL
@@ -38,86 +38,31 @@ SELECT (
           AND s.toolset_id = $5::uuid
       )
     )
-) AND NOT EXISTS (
-  SELECT 1
-  FROM toolsets t
-  WHERE t.mcp_slug = $4
-    AND t.custom_domain_id IS NOT DISTINCT FROM $2::uuid
-    AND t.deleted IS FALSE
-    AND (
-      $5::uuid IS NULL
-      OR t.id <> $5::uuid
-    )
-    AND (
-      $6::uuid IS NULL
-      OR NOT EXISTS (
-        SELECT 1
-        FROM mcp_servers s
-        WHERE s.id = $6::uuid
-          AND s.toolset_id = t.id
-      )
-    )
-) AND (
-  $2::uuid IS NOT NULL
-  OR EXISTS (
-    SELECT 1
-    FROM toolsets pa
-    WHERE pa.mcp_slug = $4
-      AND pa.custom_domain_id IS NULL
-      AND pa.deleted IS FALSE
-  )
-  OR NOT EXISTS (
-    SELECT 1
-    FROM toolsets t
-    JOIN projects p ON p.id = t.project_id AND p.deleted IS FALSE
-    WHERE t.mcp_slug = $4
-      AND t.custom_domain_id IS NOT NULL
-      AND t.deleted IS FALSE
-      AND (
-        $5::uuid IS NULL
-        OR t.id <> $5::uuid
-      )
-      AND (
-        $6::uuid IS NULL
-        OR $6::uuid <> t.id
-        OR NOT EXISTS (
-          SELECT 1
-          FROM mcp_servers s
-          WHERE s.id = t.id
-            AND s.toolset_id = t.id
-        )
-      )
-  )
 )
 `
 
-type CheckUnifiedSlugAvailabilityParams struct {
-	SkipDomainCheck    bool
-	CustomDomainID     uuid.NullUUID
-	OrganizationID     string
-	Slug               string
-	ExcludeToolsetID   uuid.NullUUID
-	ExcludeMcpServerID uuid.NullUUID
+type CheckEndpointSlugAvailabilityParams struct {
+	SkipDomainCheck  bool
+	CustomDomainID   uuid.NullUUID
+	OrganizationID   string
+	Slug             string
+	ExcludeToolsetID uuid.NullUUID
 }
 
-// True when no live mcp_endpoints.slug or toolsets.mcp_slug holds the slug in
-// the namespace (platform when custom_domain_id is NULL, else that domain).
-// Not project-scoped, mirroring the partial unique indexes. Owner exclusions:
-// exclude_toolset_id discounts that toolset's row and its wrapper's endpoints;
-// exclude_mcp_server_id discounts the toolset backing that server. Unless
+// True when no live mcp_endpoints.slug holds the slug in the namespace
+// (platform when custom_domain_id is NULL, else that domain). Callers also
+// check the legacy toolset alias (legacyalias.Taken).
+// Not project-scoped, mirroring the partial unique index. exclude_toolset_id
+// discounts the endpoints of servers backed by that toolset. Unless
 // skip_domain_check, a supplied domain must be live and owned by
 // organization_id or the result is false (blocks probing foreign domains).
-// On the platform, a custom-domain alias in a live project also holds the slug
-// while no platform alias does, since the loose legacy lookup serves it there;
-// only that toolset or its canonical server may claim it.
-func (q *Queries) CheckUnifiedSlugAvailability(ctx context.Context, arg CheckUnifiedSlugAvailabilityParams) (pgtype.Bool, error) {
-	row := q.db.QueryRow(ctx, checkUnifiedSlugAvailability,
+func (q *Queries) CheckEndpointSlugAvailability(ctx context.Context, arg CheckEndpointSlugAvailabilityParams) (pgtype.Bool, error) {
+	row := q.db.QueryRow(ctx, checkEndpointSlugAvailability,
 		arg.SkipDomainCheck,
 		arg.CustomDomainID,
 		arg.OrganizationID,
 		arg.Slug,
 		arg.ExcludeToolsetID,
-		arg.ExcludeMcpServerID,
 	)
 	var column_1 pgtype.Bool
 	err := row.Scan(&column_1)

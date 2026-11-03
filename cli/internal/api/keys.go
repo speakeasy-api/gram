@@ -41,6 +41,7 @@ func NewKeysClient(options *KeysClientOptions) *KeysClient {
 	keysClient := keys.NewClient(
 		httpClient.CreateKey(),
 		httpClient.RotateKey(),
+		httpClient.ExtendAgentKeys(),
 		httpClient.ListKeys(),
 		httpClient.RevokeKey(),
 		httpClient.UpdateKeyPolicy(),

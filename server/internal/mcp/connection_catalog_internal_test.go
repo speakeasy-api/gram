@@ -1,7 +1,12 @@
 package mcp
 
 import (
+	"bytes"
 	"encoding/json"
+	"errors"
+	"log/slog"
+	"maps"
+	"sync"
 	"testing"
 	"time"
 
@@ -10,14 +15,268 @@ import (
 	"github.com/redis/go-redis/v9"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
+
+func TestConnectionCatalogValidationDiagnostics(t *testing.T) {
+	t.Parallel()
+	upstreamError := errors.New("private upstream error")
+	tests := []struct {
+		name        string
+		change      func(*metaGateContext, *metaMember)
+		reason      string
+		message     string
+		comparisons map[string]any
+	}{
+		{name: "valid", change: func(*metaGateContext, *metaMember) {}},
+		{name: "without catalog", change: func(g *metaGateContext, _ *metaMember) { g.catalog = nil }},
+		{name: "cached discovery skips auth comparison", change: func(g *metaGateContext, _ *metaMember) {
+			g.execute = false
+			g.catalog.Members["source"] = connectionCatalogMember{ServerID: g.catalog.Members["source"].ServerID, ProjectID: g.catalog.Members["source"].ProjectID, BackendHash: "private configuration hash"}
+		}},
+		{name: "live discovery checks auth", change: func(g *metaGateContext, m *metaMember) {
+			g.execute = false
+			g.catalogRef.Mode = toolfilter.CatalogModeLive
+			m.authClient = nil
+		}, reason: "authentication_changed", message: "This server's authentication changed. Give consent again to approve it.", comparisons: map[string]any{"auth_recorded": true, "registration_id_matches": true, "auth_client_id_matches": false}},
+		{name: "missing member", change: func(g *metaGateContext, _ *metaMember) { delete(g.catalog.Members, "source") }, reason: "member_not_approved", message: catalogMemberNotApproved, comparisons: map[string]any{"member_recorded": false, "server_id_matches": false, "project_id_matches": false}},
+		{name: "changed server", change: func(_ *metaGateContext, m *metaMember) { m.serverID = uuid.New() }, reason: "member_not_approved", message: catalogMemberNotApproved, comparisons: map[string]any{"member_recorded": true, "server_id_matches": false, "project_id_matches": true}},
+		{name: "changed project", change: func(_ *metaGateContext, m *metaMember) { m.projectID = uuid.New() }, reason: "member_not_approved", message: catalogMemberNotApproved, comparisons: map[string]any{"member_recorded": true, "server_id_matches": true, "project_id_matches": false}},
+		{name: "missing recorded auth", change: func(g *metaGateContext, _ *metaMember) {
+			a := g.catalog.Members["source"]
+			a.Auth = nil
+			g.catalog.Members["source"] = a
+		}, reason: "authentication_changed", message: "This server's authentication changed. Give consent again to approve it.", comparisons: map[string]any{"auth_recorded": false, "registration_id_matches": false, "auth_client_id_matches": false}},
+		{name: "changed registration", change: func(_ *metaGateContext, m *metaMember) {
+			m.chosenClientID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+		}, reason: "authentication_changed", message: "This server's authentication changed. Give consent again to approve it.", comparisons: map[string]any{"auth_recorded": true, "registration_id_matches": false, "auth_client_id_matches": true}},
+		{name: "changed auth client", change: func(_ *metaGateContext, m *metaMember) { m.authClient.clientID = uuid.New() }, reason: "authentication_changed", message: "This server's authentication changed. Give consent again to approve it.", comparisons: map[string]any{"auth_recorded": true, "registration_id_matches": true, "auth_client_id_matches": false}},
+		{name: "changed configuration", change: func(_ *metaGateContext, m *metaMember) { m.configurationHash = "private changed hash" }, reason: "configuration_changed", message: "This server's configuration changed. Give consent again to approve it.", comparisons: map[string]any{"configuration_hash_present": true, "approved_hash_recorded": true}},
+		{name: "missing configuration", change: func(_ *metaGateContext, m *metaMember) { m.configurationHash = "" }, reason: "configuration_changed", message: "This server's configuration changed. Give consent again to approve it.", comparisons: map[string]any{"configuration_hash_present": false, "approved_hash_recorded": true}},
+		{name: "missing approved configuration", change: func(g *metaGateContext, _ *metaMember) {
+			a := g.catalog.Members["source"]
+			a.BackendHash = ""
+			g.catalog.Members["source"] = a
+		}, reason: "configuration_changed", message: "This server's configuration changed. Give consent again to approve it.", comparisons: map[string]any{"configuration_hash_present": true, "approved_hash_recorded": false}},
+		{name: "upstream unavailable", change: func(_ *metaGateContext, m *metaMember) { m.upstreamUnavailable = upstreamError }},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			var logs bytes.Buffer
+			s := &Service{logger: slog.New(slog.NewJSONHandler(&logs, nil))}
+			member := metaMember{
+				serverID: uuid.New(), projectID: uuid.New(), slug: "source", name: "private server name",
+				backend: metaMemberBackendProxied, configurationHash: "private configuration hash",
+				chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, authClient: &authClientResolution{clientID: uuid.New()},
+			}
+			gate := &metaGateContext{
+				projectID: uuid.New(), metaServerID: uuid.New(), discoveryMode: metamcp.DiscoveryModeCode, execute: true, userID: "private user", sessionID: "private session",
+				catalogRef: &toolfilter.CatalogReference{Mode: toolfilter.CatalogModeCached},
+				catalog: &connectionCatalog{ID: uuid.New(), ClientID: "private OAuth client", Subject: urn.NewUserSubject("private subject"), Members: map[string]connectionCatalogMember{
+					"source": {ServerID: member.serverID, ProjectID: member.projectID, BackendHash: member.configurationHash, Auth: &connectionCatalogAuth{ClientID: member.authClient.clientID, RegistrationID: member.chosenClientID}},
+				}},
+			}
+			tt.change(gate, &member)
+			err := s.validateCatalogMember(t.Context(), gate, member)
+			if tt.reason == "" {
+				if member.upstreamUnavailable != nil {
+					require.ErrorIs(t, err, upstreamError)
+				} else {
+					require.NoError(t, err)
+				}
+				require.Empty(t, logs.String(), "success and unrelated failures must stay quiet")
+				return
+			}
+			var consent catalogConsentError
+			require.ErrorAs(t, err, &consent)
+			require.EqualError(t, err, tt.message)
+			entry := decodeLogEntry(t, &logs)
+			require.Equal(t, "INFO", entry["level"])
+			require.Equal(t, "gateway consent validation failed", entry["msg"])
+			require.Equal(t, tt.reason, entry[string(attr.ReasonKey)])
+			require.Equal(t, gate.metaServerID.String(), entry[string(attr.MetaMcpServerIDKey)])
+			require.Equal(t, member.serverID.String(), entry[string(attr.McpServerIDKey)])
+			require.Equal(t, gate.projectID.String(), entry[string(attr.ProjectIDKey)])
+			require.Equal(t, member.projectID.String(), entry[string(attr.McpConsentMemberProjectIDKey)])
+			require.Equal(t, gate.catalog.ID.String(), entry[string(attr.McpConsentCatalogIDKey)])
+			require.Equal(t, string(gate.catalogRef.Mode), entry[string(attr.McpConsentCatalogModeKey)])
+			require.Equal(t, string(gate.discoveryMode), entry[string(attr.McpConsentDiscoveryModeKey)])
+			require.Equal(t, gate.execute, entry[string(attr.McpConsentExecuteKey)])
+			require.Equal(t, tt.comparisons, entry[string(attr.McpConsentComparisonsKey)])
+			require.Len(t, entry, 13, "only bounded diagnostic fields may be logged")
+			require.NotContains(t, logs.String(), "private", "never log configuration, user/session data, or upstream errors")
+		})
+	}
+}
+
+func TestConnectionCatalogDiagnosticsDeduplicateConcurrentGateCopies(t *testing.T) {
+	t.Parallel()
+	var logs bytes.Buffer
+	s := &Service{logger: slog.New(slog.NewJSONHandler(&logs, nil))}
+	gate := metaGateContext{catalog: &connectionCatalog{ID: uuid.New(), Members: map[string]connectionCatalogMember{}}, consentDiagnostics: &consentDiagnostics{seen: sync.Map{}}}
+	member := metaMember{serverID: uuid.New()}
+	var calls sync.WaitGroup
+	results := make(chan error, 32)
+	for range cap(results) {
+		calls.Go(func() {
+			copiedGate := gate
+			results <- s.validateCatalogMember(t.Context(), &copiedGate, member)
+		})
+	}
+	calls.Wait()
+	close(results)
+	for err := range results {
+		require.EqualError(t, err, catalogMemberNotApproved)
+	}
+	require.Equal(t, 1, bytes.Count(logs.Bytes(), []byte("\n")))
+	// Different members and reasons remain distinguishable within an execution.
+	other := member
+	other.serverID = uuid.New()
+	require.Error(t, s.validateCatalogMember(t.Context(), &gate, other))
+	require.Error(t, s.rejectCatalogMember(t.Context(), &gate, member, "configuration_changed", "changed", nil))
+	require.Equal(t, 3, bytes.Count(logs.Bytes(), []byte("\n")))
+	// A fresh execution reports the still-stale member again.
+	gate.consentDiagnostics = &consentDiagnostics{seen: sync.Map{}}
+	require.Error(t, s.validateCatalogMember(t.Context(), &gate, member))
+	require.Equal(t, 4, bytes.Count(logs.Bytes(), []byte("\n")))
+}
+
+func TestConnectionCatalogLoadDiagnostics(t *testing.T) {
+	t.Parallel()
+	expiresAt := time.Date(2030, time.January, 2, 3, 4, 5, 0, time.UTC)
+	allMatch := map[string]any{"version_matches": true, "id_matches": true, "organization_matches": true, "issuer_matches": true, "resource_matches": true, "subject_matches": true, "client_matches": true}
+	mismatch := func(key string) map[string]any {
+		comparisons := make(map[string]any, len(allMatch))
+		maps.Copy(comparisons, allMatch)
+		comparisons[key] = false
+		return comparisons
+	}
+	type load struct {
+		endpoint  *ResolvedMcpEndpoint
+		subject   urn.SessionSubject
+		clientID  string
+		reference *toolfilter.CatalogReference
+		now       time.Time
+	}
+	tests := []struct {
+		name        string
+		stored      func(*connectionCatalog) []byte
+		change      func(*load)
+		reason      string
+		catalogID   bool
+		comparisons map[string]any
+		expiresAt   bool
+	}{
+		{name: "valid"},
+		{name: "missing reference", change: func(l *load) { l.reference = nil }, reason: "catalog_reference_missing"},
+		{name: "evicted or expired from store", change: func(l *load) {
+			l.reference = &toolfilter.CatalogReference{ID: uuid.New(), Mode: toolfilter.CatalogModeCached}
+		}, reason: "catalog_not_found", catalogID: true},
+		{name: "another organization's store key", change: func(l *load) {
+			other := *l.endpoint
+			other.OrganizationID = "org_other"
+			l.endpoint = &other
+		}, reason: "catalog_not_found", catalogID: true},
+		{name: "unreadable", stored: func(*connectionCatalog) []byte { return []byte("{private invalid") }, reason: "catalog_unreadable", catalogID: true},
+		{name: "version", stored: func(c *connectionCatalog) []byte {
+			c.Version = connectionCatalogVersion + 1
+			return nil
+		}, reason: "catalog_binding_mismatch", catalogID: true, comparisons: mismatch("version_matches"), expiresAt: true},
+		{name: "stored id", stored: func(c *connectionCatalog) []byte {
+			c.ID = uuid.New()
+			return nil
+		}, reason: "catalog_binding_mismatch", catalogID: true, comparisons: mismatch("id_matches"), expiresAt: true},
+		{name: "organization", stored: func(c *connectionCatalog) []byte {
+			c.OrganizationID = "org_other"
+			return nil
+		}, reason: "catalog_binding_mismatch", catalogID: true, comparisons: mismatch("organization_matches"), expiresAt: true},
+		{name: "issuer", change: func(l *load) {
+			other := *l.endpoint
+			other.UserSessionIssuerID = uuid.New()
+			l.endpoint = &other
+		}, reason: "catalog_binding_mismatch", catalogID: true, comparisons: mismatch("issuer_matches"), expiresAt: true},
+		{name: "resource", change: func(l *load) {
+			other := *l.endpoint
+			other.MetaMcpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+			l.endpoint = &other
+		}, reason: "catalog_binding_mismatch", catalogID: true, comparisons: mismatch("resource_matches"), expiresAt: true},
+		{name: "subject", change: func(l *load) { l.subject = urn.NewUserSubject("private other user") }, reason: "catalog_binding_mismatch", catalogID: true, comparisons: mismatch("subject_matches"), expiresAt: true},
+		{name: "client", change: func(l *load) { l.clientID = "private other client" }, reason: "catalog_binding_mismatch", catalogID: true, comparisons: mismatch("client_matches"), expiresAt: true},
+		{name: "expired", change: func(l *load) { l.now = expiresAt }, reason: "catalog_expired", catalogID: true, expiresAt: true},
+	}
+	for _, tt := range tests {
+		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
+			mr := miniredis.RunT(t)
+			client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
+			t.Cleanup(func() { require.NoError(t, client.Close()) })
+			var logs bytes.Buffer
+			service := &Service{logger: slog.New(slog.NewJSONHandler(&logs, nil)), connectionCatalogCache: cache.NewRedisCacheAdapter(client)}
+			endpoint := &ResolvedMcpEndpoint{OrganizationID: "org_test", ProjectID: uuid.New(), UserSessionIssuerID: uuid.New(), Slug: "gateway", RouteBase: mcproute.MCP, MetaMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
+			subject := urn.NewUserSubject("private user")
+			catalog := connectionCatalog{Version: connectionCatalogVersion, ID: uuid.New(), OrganizationID: endpoint.OrganizationID, IssuerID: endpoint.UserSessionIssuerID, Resource: endpointToolSelectionResource(endpoint), ClientID: "private client", Subject: subject, Members: map[string]connectionCatalogMember{}, Tools: []*toolListEntry{}, ExpiresAt: expiresAt}
+			id, key := catalog.ID, catalog.CacheKey()
+			var raw []byte
+			if tt.stored != nil {
+				raw = tt.stored(&catalog)
+			}
+			if raw == nil {
+				var err error
+				raw, err = json.Marshal(catalog)
+				require.NoError(t, err)
+			}
+			require.NoError(t, service.connectionCatalogCache.Set(t.Context(), key, raw, time.Hour))
+			l := load{endpoint: endpoint, subject: subject, clientID: "private client", reference: &toolfilter.CatalogReference{ID: id, Mode: toolfilter.CatalogModeCached}, now: expiresAt.Add(-time.Minute)}
+			if tt.change != nil {
+				tt.change(&l)
+			}
+
+			loaded, err := service.loadConnectionCatalog(contextvalues.SetOAuthClientID(t.Context(), l.clientID), l.endpoint, l.subject, l.reference, l.now)
+			if tt.reason == "" {
+				require.NoError(t, err)
+				require.NotNil(t, loaded)
+				require.Empty(t, logs.String(), "a usable approval logs nothing")
+				return
+			}
+			require.ErrorIs(t, err, errConnectionCatalogExpired)
+			require.Equal(t, errConnectionCatalogExpired.Error(), err.Error(), "the challenge text clients see is unchanged")
+			entry := decodeLogEntry(t, &logs)
+			require.Equal(t, "INFO", entry["level"])
+			require.Equal(t, "gateway connection catalog rejected", entry["msg"])
+			require.Equal(t, tt.reason, entry[string(attr.ReasonKey)])
+			require.Equal(t, l.endpoint.OrganizationID, entry[string(attr.OrganizationIDKey)])
+			require.Equal(t, endpoint.ProjectID.String(), entry[string(attr.ProjectIDKey)])
+			require.Equal(t, l.endpoint.MetaMcpServerID.UUID.String(), entry[string(attr.MetaMcpServerIDKey)])
+			// time, level, msg, reason, organization, project, gateway
+			fields := 7
+			if tt.catalogID {
+				require.Equal(t, l.reference.ID.String(), entry[string(attr.McpConsentCatalogIDKey)])
+				require.Equal(t, string(toolfilter.CatalogModeCached), entry[string(attr.McpConsentCatalogModeKey)])
+				fields += 2
+			}
+			if tt.comparisons != nil {
+				require.Equal(t, tt.comparisons, entry[string(attr.McpConsentComparisonsKey)])
+				fields++
+			}
+			if tt.expiresAt {
+				require.Equal(t, expiresAt.Format(time.RFC3339Nano), entry[string(attr.McpConsentExpiresAtKey)])
+				fields++
+			}
+			require.Len(t, entry, fields, "only bounded diagnostic fields may be logged")
+			require.NotContains(t, logs.String(), "private", "never log subjects, OAuth clients, or stored catalog content")
+		})
+	}
+}
 
 func TestConnectionCatalogExpiryAndIsolation(t *testing.T) {
 	t.Parallel()
@@ -25,7 +284,7 @@ func TestConnectionCatalogExpiryAndIsolation(t *testing.T) {
 	mr := miniredis.RunT(t)
 	client := redis.NewClient(&redis.Options{Addr: mr.Addr()})
 	t.Cleanup(func() { require.NoError(t, client.Close()) })
-	service := &Service{connectionCatalogCache: cache.NewRedisCacheAdapter(client)}
+	service := &Service{logger: testenv.NewLogger(t), connectionCatalogCache: cache.NewRedisCacheAdapter(client)}
 	endpoint := &ResolvedMcpEndpoint{OrganizationID: "org_test", UserSessionIssuerID: uuid.New(), Slug: "gateway", RouteBase: mcproute.MCP, MetaMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
 	subject := urn.NewUserSubject("test-user")
 	ctx := contextvalues.SetOAuthClientID(t.Context(), "test-client")

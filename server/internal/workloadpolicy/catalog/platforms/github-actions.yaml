@@ -1,0 +1,110 @@
+# GitHub Actions on github.com.
+#
+# Every github.com job's token comes from the same issuer, so the issuer and its
+# keys are constants and the repository in the subject is what pins an access
+# rule to one customer. GitHub Enterprise Server issues its own tokens, and an
+# enterprise that has switched to its own issuer URL
+# (token.actions.githubusercontent.com/<enterprise>) presents that one; neither
+# is covered here.
+#
+# The subject is repo:<owner>/<repo>:<context>, where the context names the
+# event: ref:refs/heads/<branch>, ref:refs/tags/<tag>, pull_request or
+# environment:<name>. A job that references an environment always gets the
+# environment context, whatever its event or branch. The default rule is a
+# wildcard over the whole repository, so one rule admits every branch, tag,
+# environment and pull request job of it.
+#
+# That is the trade-off the default makes on purpose. The context is chosen by
+# whoever starts the job, not by GitHub: anyone who can push a branch to the
+# repository, or open a pull request from a branch of it, can run a job that
+# receives a token and acts as the agent. On the pull_request event, pull
+# requests from forks get no OIDC token, so outside contributors cannot. That
+# does not hold for pull_request_target: such a workflow runs in the base
+# repository with its permissions, so one that grants id-token: write is
+# admitted by the default rule, and if it checks out the pull request's head,
+# code from a fork runs as the agent.
+#
+# The alternatives admit one exact context instead. One branch admits jobs on
+# that branch that reference no environment; one environment admits only jobs
+# that reference it, and GitHub runs such a job only once the environment's
+# protection rules (required reviewers, allowed branches) pass, so it is the
+# way to put a review in front of the agent's access. An environment a
+# workflow names before anyone configures it is created with no rules, so the
+# environment has to be set up first.
+#
+# Repositories created, renamed or transferred on github.com since 2026-07-15
+# put immutable IDs in the subject (repo:<owner>@<owner_id>/<repo>@<repo_id>:),
+# which also stops a deleted owner or repository name being re-registered by
+# someone else from matching. The owner and repository therefore accept an
+# optional @<digits> suffix; GitHub names never contain "@", so the suffix can
+# only be an ID. Owner and repository names are matched exactly, capital
+# letters included, as GitHub writes them into the subject.
+#
+# The owner and repository patterns refuse ":", "/" and "*", which would
+# otherwise let a value extend the stem into the context or a neighboring
+# repository. The stem ends on ":", so "repo:acme/app:" cannot admit
+# "repo:acme/app-evil:". A branch or environment is the last segment of an
+# exact rule, so a "/" in it cannot reach another segment: branch names
+# contain one often, and GitHub allows one in an environment name. Both refuse
+# ":" and "*". GitHub writes a ":" in a name as %3A, which the environment
+# pattern accepts as typed; git refuses ":" in a branch name, and the branch
+# pattern refuses the other characters git does too.
+key: github-actions
+display_name: GitHub Actions
+description: Let jobs in one GitHub repository fetch an agent's plugins, call its MCP servers and send hook events, with no Speakeasy secret stored in GitHub.
+icon: /access-hub/github-actions.svg
+# Off until a stable speakeasyd release supports GitHub Actions (device-agent
+# #296): the workflow installs the latest stable release, and every release
+# before that one stops the job at "did not pick up the GitHub identity".
+enabled: false
+
+issuer:
+  value: https://token.actions.githubusercontent.com
+  visibility: read-only
+jwks_uri:
+  value: https://token.actions.githubusercontent.com/.well-known/jwks
+  visibility: hidden
+
+variables:
+  - key: owner
+    tier: rule
+    label: Owner
+    help: The user or organization that owns the repository, with the same capital letters GitHub shows. Add @ and the owner ID if the repository uses immutable subjects.
+    placeholder: my-org
+    pattern: "[A-Za-z0-9][A-Za-z0-9-]{0,38}(?:@[0-9]+)?"
+    pattern_message: An owner is up to 39 letters, numbers and hyphens, starting with a letter or number, optionally followed by @ and its numeric ID.
+  - key: repo
+    tier: rule
+    label: Repository
+    help: The repository's name, with the same capital letters GitHub shows. Add @ and the repository ID if it uses immutable subjects.
+    placeholder: my-repo
+    pattern: "[A-Za-z0-9._-]{1,100}(?:@[0-9]+)?"
+    pattern_message: A repository name is up to 100 letters, numbers, dots, hyphens and underscores, optionally followed by @ and its numeric ID.
+  - key: branch
+    tier: rule
+    label: Branch
+    help: The branch's full name, such as main or release/v2, with the same capital letters GitHub shows.
+    placeholder: main
+    pattern: '[^\x00-\x20\x7f/:*?\[\\^~]+(?:/[^\x00-\x20\x7f/:*?\[\\^~]+)*'
+    pattern_message: 'A branch name is its full name, in parts separated by single slashes, without spaces or the characters git refuses in one, such as ":", "*", "?", "[", "^", "~" and "\".'
+  - key: environment
+    tier: rule
+    label: Environment
+    help: The environment's name as the repository's Settings > Environments shows it, with the same capital letters.
+    placeholder: production
+    pattern: '[^:*\x00-\x1f\x7f]{1,255}'
+    pattern_message: An environment name is up to 255 characters, without "*" or ":". GitHub writes a ":" in a name as %3A, so enter it that way.
+
+subject:
+  template: "repo:{owner}/{repo}:"
+  wildcard: true
+  label: Whole repository
+  alternatives:
+    - key: branch
+      label: One branch
+      template: "repo:{owner}/{repo}:ref:refs/heads/{branch}"
+      wildcard: false
+    - key: environment
+      label: One environment
+      template: "repo:{owner}/{repo}:environment:{environment}"
+      wildcard: false
