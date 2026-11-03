@@ -355,6 +355,9 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 				selectedModel = value
 				result = catalog()
 			case "session/prompt":
+				if strings.Contains(string(msg.Params["prompt"]), kitHistoryDroppedNotice) {
+					t.Error("history notice sent for a conversation without earlier assistant turns")
+				}
 				expected := "speakeasy:openai/gpt-4.1-mini"
 				if prompts > 0 {
 					expected = "speakeasy:openai/gpt-4.1"

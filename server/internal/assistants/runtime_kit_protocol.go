@@ -111,7 +111,7 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	if session.ChatID == uuid.Nil {
 		return ErrKitRuntimeBinding
 	}
-	prompt, err := kitProtocolPrompt(req, !found && session.HasPriorTranscript)
+	prompt, err := kitProtocolPrompt(req, false)
 	if err != nil {
 		return fmt.Errorf("kit protocol operation: %w", err)
 	}
@@ -172,6 +172,8 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	binding.UserEchoes = echoes
 	var echoMu sync.RWMutex
 	awaitingEcho := false
+	// Set when replay shows this session already received a prompt.
+	promptedBefore := false
 	var pendingEcho *kitacp.Notification
 	work, cancel := context.WithCancel(ctx)
 	defer cancel()
@@ -194,6 +196,9 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 			_ = json.Unmarshal(n.Params, &envelope)
 			echoMu.Lock()
 			defer echoMu.Unlock()
+			if envelope.Update.Kind == "user_message" && !awaitingEcho {
+				promptedBefore = true
+			}
 			if envelope.Update.Kind == "user_message" && awaitingEcho {
 				if _, known := binding.UserEchoes[envelope.Update.ID]; !known {
 					// One prompt produces one complete user echo. Retain only that
@@ -256,6 +261,16 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	// historical users must never wait for this turn's prompt acknowledgement.
 	if err := flushKitNotifications(work, flush); err != nil {
 		return err
+	}
+	// A session that never received a prompt is fresh even if its binding was
+	// persisted by an earlier attempt that failed before prompting.
+	echoMu.RLock()
+	historyDropped := session.HasPriorTranscript && !promptedBefore
+	echoMu.RUnlock()
+	if historyDropped {
+		if prompt, err = kitProtocolPrompt(req, true); err != nil {
+			return fmt.Errorf("kit protocol operation: %w", err)
+		}
 	}
 	// A processing event owns cancellation even before session/new returns.
 	// Startup replay is flushed, and no prompt has yet been submitted.
