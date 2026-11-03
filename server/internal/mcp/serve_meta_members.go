@@ -25,6 +25,7 @@ import (
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
@@ -277,10 +278,12 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 // dashboard stops appearing on the caller's very next request with nothing to
 // redistribute or re-install.
 //
-// userSessionIssuerID is the organization gateway's issuer, whose clients are
-// the only way a person connects a member that signs in upstream. uuid.Nil
-// (the agent gateway) skips that check. A nonzero scopeProjectID restricts
-// candidates before admission and credential association for project gateways.
+// userSessionIssuerID is the organization gateway's issuer. Legacy eligibility
+// requires its clients to connect members that sign in upstream. Enforced typed
+// offers instead determine proxied-member capability; pending setup retains the
+// legacy check. uuid.Nil (the agent gateway) skips issuer matching. A nonzero
+// scopeProjectID restricts candidates before admission and credential association
+// for project gateways.
 //
 // The organization gateway also drops servers backed by a toolset with
 // Platform tools, mirroring automatic plugin delivery: those toolsets serve
@@ -351,6 +354,44 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	if err != nil {
 		return ctx, nil, err
 	}
+	// Only the signed-in organization gateway uses typed capability here.
+	// Hosted members and issuerless agent gateways retain their legacy rules.
+	var offers map[uuid.UUID]configuredAuthOffer
+	var offerHeaders map[uuid.UUID][]proxy.ConfiguredHeader
+	if userSessionIssuerID != uuid.Nil {
+		enforced, err := s.consentAuthChoicesEnforced(ctx, organizationID)
+		if err != nil {
+			return ctx, nil, oops.E(oops.CodeUnexpected, err, "check gateway auth client mode").LogError(ctx, logger)
+		}
+		if enforced {
+			ids := make([]uuid.UUID, 0, len(members))
+			for _, member := range members {
+				if member.backend == metaMemberBackendProxied {
+					ids = append(ids, member.serverID)
+				}
+			}
+			offers, err = s.configuredAuthOffers(ctx, organizationID, ids)
+			if err != nil {
+				return ctx, nil, oops.E(oops.CodeUnexpected, err, "load gateway auth offers").LogError(ctx, logger)
+			}
+		}
+	}
+	if offers != nil {
+		var clientIDs []uuid.UUID
+		for _, member := range members {
+			if !member.remoteServerID.Valid {
+				continue
+			}
+			for _, client := range offers[member.serverID].clients {
+				clientIDs = append(clientIDs, client.AuthClientID.UUID)
+			}
+		}
+		offerHeaders, err = s.gatewayAuthHeaderMetadata(ctx, organizationID, clientIDs)
+		if err != nil {
+			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load gateway auth client headers").LogError(ctx, logger)
+		}
+	}
+
 	var clients []remotesessions.Client
 	if userSessionIssuerID != uuid.Nil {
 		// The agent gateway signs nobody in, so its callers never read
@@ -366,6 +407,24 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	shadow := s.newMandatoryShadow(ctx, organizationID)
 	eligible := make([]metaMember, 0, len(members))
 	for _, member := range members {
+		if offers != nil && member.backend == metaMemberBackendProxied {
+			offer, known := offers[member.serverID]
+			if !known {
+				continue
+			}
+			// Do not expand discovery for incomplete legacy setup. Without an
+			// offer, pending servers retain both transport and issuer matching.
+			if !offer.pending || len(offer.clients) > 0 {
+				supported, err := s.gatewayOfferCapability(ctx, organizationID, member, offer, offerHeaders)
+				if err != nil {
+					return ctx, nil, oops.E(oops.CodeUnexpected, err, "check gateway member transport").LogError(ctx, logger)
+				}
+				if supported {
+					eligible = append(eligible, member)
+				}
+				continue
+			}
+		}
 		supported, needsOAuth, err := s.derivedMemberAuth(ctx, shadow, authzSurface, member)
 		if err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "check gateway member authentication").LogError(ctx, logger)

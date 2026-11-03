@@ -24,25 +24,7 @@ import (
 func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow, shadowSurface string, member metaMember) (supported bool, needsOAuth bool, err error) {
 	oauth := memberNeedsSignIn(member)
 	if member.backend != metaMemberBackendHosted {
-		if !member.remoteServerID.Valid {
-			return true, oauth, nil
-		}
-		rows, err := remotemcp.NewHeaders(s.logger, s.db, s.enc).ListHeaders(ctx, member.remoteServerID.UUID, false)
-		if err != nil {
-			return false, false, fmt.Errorf("load member headers: %w", err)
-		}
-		headers := make([]proxy.ConfiguredHeader, 0, len(rows))
-		for _, row := range rows {
-			headers = append(headers, proxy.ConfiguredHeader{
-				Name:                   row.Name,
-				StaticValue:            row.Value.String,
-				ValueFromRequestHeader: row.ValueFromRequestHeader.String,
-				IsRequired:             row.IsRequired,
-				IsSecret:               row.IsSecret,
-			})
-		}
-		supported, needsOAuth := remoteMemberAuth(headers, oauth)
-		return supported, needsOAuth, nil
+		return s.proxiedMemberAuth(ctx, member, oauth)
 	}
 
 	toolset, err := toolsetsrepo.New(s.db).GetToolsetByIDAndProject(ctx, toolsetsrepo.GetToolsetByIDAndProjectParams{
@@ -135,4 +117,28 @@ func headerResolvesWithoutCaller(header proxy.ConfiguredHeader) bool {
 	req.Header = make(http.Header)
 	value, err := header.Resolve(&req)
 	return err == nil && value != "" && proxy.ValidateHeaderValue(value) == nil
+}
+
+// proxiedMemberAuth preserves the gateway transport constraint: its synthetic
+// request has no caller headers, even when a typed client supplies OAuth.
+func (s *Service) proxiedMemberAuth(ctx context.Context, member metaMember, oauth bool) (supported bool, needsOAuth bool, err error) {
+	if !member.remoteServerID.Valid {
+		return true, oauth, nil
+	}
+	rows, err := remotemcp.NewHeaders(s.logger, s.db, s.enc).ListHeaders(ctx, member.remoteServerID.UUID, false)
+	if err != nil {
+		return false, false, fmt.Errorf("load member headers: %w", err)
+	}
+	headers := make([]proxy.ConfiguredHeader, 0, len(rows))
+	for _, row := range rows {
+		headers = append(headers, proxy.ConfiguredHeader{
+			Name:                   row.Name,
+			StaticValue:            row.Value.String,
+			ValueFromRequestHeader: row.ValueFromRequestHeader.String,
+			IsRequired:             row.IsRequired,
+			IsSecret:               row.IsSecret,
+		})
+	}
+	supported, needsOAuth = remoteMemberAuth(headers, oauth)
+	return supported, needsOAuth, nil
 }

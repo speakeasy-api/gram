@@ -8,8 +8,6 @@ import (
 
 	"github.com/google/uuid"
 
-	"github.com/speakeasy-api/gram/server/internal/authz"
-	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -28,19 +26,15 @@ func (s *Service) typedOfferedRegistrations(ctx context.Context, organizationID 
 	if err != nil || !enforced {
 		return nil, err
 	}
-	rows, err := upstreamclientsrepo.New(s.db).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: organizationID, McpServerIds: serverIDs})
+	offers, err := s.configuredAuthOffers(ctx, organizationID, serverIDs)
 	if err != nil {
-		return nil, fmt.Errorf("list typed auth client registrations: %w", err)
+		return nil, err
 	}
 	offered := map[uuid.UUID][]uuid.UUID{}
-	for _, row := range rows {
-		if !row.RemoteSessionClientID.Valid {
-			continue
+	for id, offer := range offers {
+		if registrations := offer.personalRegistrations(); len(registrations) > 0 {
+			offered[id] = registrations
 		}
-		if row.ClientType.String != authz.AuthClientTypeRemoteSession && row.ClientType.String != authz.AuthClientTypeEMA {
-			continue
-		}
-		offered[row.McpServerID] = append(offered[row.McpServerID], row.RemoteSessionClientID.UUID)
 	}
 	return offered, nil
 }
