@@ -1,4 +1,4 @@
-import { useEffect, useReducer, type ReactNode } from "react";
+import { useEffect, useReducer, useRef, type ReactNode } from "react";
 import { useProviderConnection } from "./useProviderConnection";
 import { Link, Navigate, useNavigate } from "react-router";
 import { Check } from "lucide-react";
@@ -7,6 +7,7 @@ import { SetupGuideLink } from "@/components/setup-guide/SetupGuideLink";
 import { Page } from "@/components/page-layout";
 import { PageEyebrow } from "@/components/page-eyebrow";
 import { useIconDither } from "@/components/icon-dither";
+import { useConfettiBurst } from "@/components/icon-confetti";
 import { BrandMeshLayers } from "@/components/brand-mesh";
 import { Button } from "@/components/ui/Button";
 import { Heading } from "@/components/ui/Heading";
@@ -256,6 +257,21 @@ function SetupBody({
   const { s, dispatch, live } = useSetup();
   const name = names[s.provider];
   const complete = ready(s) && s.authorized && s.tested;
+  const canComplete = complete && !live.pending && !live.loading && !live.error;
+  const { canvasRef, burst } = useConfettiBurst();
+  // Initial validation is already complete when reopening; only celebrate a new pass.
+  const celebratedValidation = useRef(complete);
+  useEffect(() => {
+    if (!complete) celebratedValidation.current = false;
+    else if (
+      s.step === "test" &&
+      canComplete &&
+      !celebratedValidation.current
+    ) {
+      celebratedValidation.current = true;
+      burst({ particleCount: 45, ticks: 90 });
+    }
+  }, [complete, canComplete, s.step, burst]);
   let content = <ProviderTask serverName={serverName} />;
   if (s.step === "test") content = <ConnectionTask />;
   return (
@@ -294,8 +310,14 @@ function SetupBody({
           <div className="grid grid-cols-1 items-start gap-6 lg:grid-cols-[minmax(0,768px)_minmax(170px,1fr)] lg:gap-8 xl:gap-14">
             <section
               aria-label={`Current ${name} setup task`}
-              className="@container/task min-w-0 max-w-[768px] text-sm leading-[1.65] [&_summary]:cursor-pointer [&_strong]:font-semibold"
+              className="@container/task relative isolate min-w-0 max-w-[768px] text-sm leading-[1.65] [&_summary]:cursor-pointer [&_strong]:font-semibold"
             >
+              <canvas
+                ref={canvasRef}
+                hidden={s.step !== "test"}
+                aria-hidden="true"
+                className="pointer-events-none absolute inset-0 -z-10 size-full"
+              />
               {content}
               {live.error &&
                 (s.step !== "test" || live.errorStep === "save") && (
@@ -335,12 +357,7 @@ function SetupBody({
                   {s.step === "test" ? (
                     <Button
                       variant="primary"
-                      disabled={
-                        !complete ||
-                        !!live.pending ||
-                        !!live.loading ||
-                        !!live.error
-                      }
+                      disabled={!canComplete}
                       onClick={() => dispatch({ type: "complete" })}
                     >
                       <Button.Text>Complete setup</Button.Text>
