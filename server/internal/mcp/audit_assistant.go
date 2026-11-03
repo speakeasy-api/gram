@@ -53,6 +53,11 @@ func recordAssistantToolCallAudit(
 		if credential.Credential.AuthorizerUserID != "" {
 			authorizer = new(urn.NewPrincipal(urn.PrincipalTypeUser, credential.Credential.AuthorizerUserID))
 		}
+	} else if authenticated, ok := contextvalues.AuthenticatedActor(ctx); ok && (authenticated.Type == urn.PrincipalTypeWorkload || authenticated.Type == urn.PrincipalTypeAgent) {
+		actor = authenticated
+		if credential, ok := contextvalues.PrincipalCredentialAuthorization(ctx); ok && credential.AuthorizerUserID != "" {
+			authorizer = new(urn.NewPrincipal(urn.PrincipalTypeUser, credential.AuthorizerUserID))
+		}
 	} else {
 		authCtx, ok := contextvalues.GetAuthContext(ctx)
 		if !ok || authCtx == nil || authCtx.UserID == "" {

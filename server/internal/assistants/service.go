@@ -1774,6 +1774,27 @@ func (s *ServiceCore) UpdateAssistant(
 		return assistantRecord{}, fmt.Errorf("lock assistant update: %w", err)
 	}
 
+	// Compare canonical persisted attachments inside this transaction, after
+	// normal resolution. Full-form no-op saves are safe; actual Kit connection
+	// changes must roll back until the resident runtime has been retired.
+	var kitAttachmentsBefore []assistantrepo.LoadAssistantMcpServersRow
+	checkKitAttachments := false
+	if toolsets != nil || mcpServers != nil {
+		runtimes, err := queries.ListAssistantRuntimesForSwitch(ctx, assistantrepo.ListAssistantRuntimesForSwitchParams{ProjectID: projectID, AssistantID: assistantID})
+		if err != nil {
+			return assistantRecord{}, fmt.Errorf("check Kit attachment edit safety: %w", err)
+		}
+		for _, runtime := range runtimes {
+			checkKitAttachments = checkKitAttachments || runtime.RuntimeVersion == 3
+		}
+		if checkKitAttachments {
+			kitAttachmentsBefore, err = loadAssistantMcpServers(ctx, tx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
+			if err != nil {
+				return assistantRecord{}, fmt.Errorf("read Kit attachments before edit: %w", err)
+			}
+		}
+	}
+
 	resolved, err := s.resolveToolsetRefsForWrite(ctx, tx, projectID, toolsets, mcpServers)
 	if err != nil {
 		return assistantRecord{}, err
@@ -1829,6 +1850,16 @@ func (s *ServiceCore) UpdateAssistant(
 	if toolsets != nil || mcpServers != nil {
 		if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, toolsets != nil, resolvedMcpServers, mcpServers != nil); err != nil {
 			return assistantRecord{}, err
+		}
+	}
+
+	if checkKitAttachments {
+		after, err := loadAssistantMcpServers(ctx, tx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
+		if err != nil {
+			return assistantRecord{}, fmt.Errorf("read Kit attachments after edit: %w", err)
+		}
+		if !kitAttachmentSetsEqual(kitAttachmentsBefore, after) {
+			return assistantRecord{}, fmt.Errorf("%w: retire the Kit runtime before changing MCP attachments", errAssistantValidation)
 		}
 	}
 
@@ -3031,9 +3062,9 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 	}
 	ensureResult, err := s.runtime.Ensure(ensureCtx, runtimeRecord)
 	if err != nil {
-		if kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) {
-			// A failed restore must not retire the canonical Kit session owner
-			// or silently create a fresh conversation on the next admission.
+		if kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) && !errors.Is(err, errKitRuntimeUnrecoverable) {
+			// A retryable failure keeps the Kit session owner; only an
+			// unrecoverable runtime is retired and replaced below.
 			return ProcessThreadEventsResult{}, fmt.Errorf("ensure Kit runtime without retiring session authority: %w", err)
 		}
 		// Ensure failed: mark the runtime row failed so the coordinator's
@@ -3354,7 +3385,7 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 		notice = renderAssistantSkillSetChange(claimedSnapshot, currentSnapshot)
 	}
 
-	mcpServers := s.currentRuntimeMCPServers(ctx, assistant)
+	mcpServers := s.currentRuntimeMCPServers(ctx, assistant, kitProductionRuntime(runtime.RuntimeVersion, runtime.Backend))
 
 	identity, err := s.resolveTurnIdentity(ctx, assistant, thread, event)
 	if err != nil {
@@ -3440,12 +3471,12 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 // dispatch a turn with bogus URLs. Platform toolsets must be included so
 // the reconcile target matches what bootstrap granted — otherwise the
 // runner would treat them as removed and disconnect them mid-thread.
-func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant assistantRecord) []runtimeMCPServer {
+func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant assistantRecord, strictVariant bool) []runtimeMCPServer {
 	serverURL := s.runtime.ServerURL()
 	if serverURL == nil {
 		return nil
 	}
-	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
+	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant, strictVariant)
 	if err != nil {
 		s.logger.WarnContext(ctx, "resolve platform toolsets for mcp reconcile failed; skipping reconcile",
 			attr.SlogError(err),
@@ -3460,12 +3491,22 @@ func (s *ServiceCore) currentRuntimeMCPServers(ctx context.Context, assistant as
 // project's managed assistant additionally gets exactly one managed-only
 // toolset — legacy or Platform MCP, per the rollout variant — which must never
 // be reachable by any other assistant.
-func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assistantRecord) ([]string, error) {
+func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assistantRecord, strictVariant bool) ([]string, error) {
 	platformSlugs := []string{platformtools.AssistantsPlatformToolsetSlug}
 	switch managed, mErr := assistantrepo.New(s.db).GetManagedAssistantByProject(ctx, assistant.ProjectID); {
 	case mErr == nil:
 		if managed.ID == assistant.ID {
-			if s.assistantToolsVariant(ctx, assistant.ProjectID) == feature.VariantAssistantToolsPlatformMCP {
+			var variant feature.Variant
+			if strictVariant {
+				resolved, err := s.resolveAssistantToolsVariant(ctx, assistant.ProjectID)
+				if err != nil {
+					return nil, err
+				}
+				variant = resolved
+			} else {
+				variant = s.assistantToolsVariant(ctx, assistant.ProjectID)
+			}
+			if variant == feature.VariantAssistantToolsPlatformMCP {
 				platformSlugs = append(platformSlugs, platformtools.PlatformMCPReadToolsetSlug)
 			} else {
 				platformSlugs = append(platformSlugs, platformtools.ManagedAssistantPlatformToolsetSlug)
@@ -3486,20 +3527,30 @@ func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assi
 // turn — a flag-provider outage must not take down bootstrap or reconcile, nor
 // silently strip the managed assistant's tools.
 func (s *ServiceCore) assistantToolsVariant(ctx context.Context, projectID uuid.UUID) feature.Variant {
-	if s.featureFlags == nil {
-		return feature.VariantAssistantToolsLegacy
-	}
-	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, projectID)
-	if err != nil {
-		s.logger.WarnContext(ctx, "resolve organization for assistant tools variant", attr.SlogError(err))
-		return feature.VariantAssistantToolsLegacy
-	}
-	variant, err := feature.FlagVariant(ctx, s.featureFlags, feature.FlagAssistantPlatformMCP, project.ID, feature.OrgProjectGroups(project.Slug, ""))
+	variant, err := s.resolveAssistantToolsVariant(ctx, projectID)
 	if err != nil {
 		s.logger.WarnContext(ctx, "resolve assistant platform mcp variant", attr.SlogError(err))
 		return feature.VariantAssistantToolsLegacy
 	}
-	return feature.AssistantToolsVariant(variant)
+	return variant
+}
+
+// resolveAssistantToolsVariant reports lookup failures instead of falling back.
+// Kit fingerprints its tool set, so a fallback would read as a configuration
+// change rather than an outage.
+func (s *ServiceCore) resolveAssistantToolsVariant(ctx context.Context, projectID uuid.UUID) (feature.Variant, error) {
+	if s.featureFlags == nil {
+		return feature.VariantAssistantToolsLegacy, nil
+	}
+	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, projectID)
+	if err != nil {
+		return "", fmt.Errorf("resolve organization for assistant tools variant: %w", err)
+	}
+	variant, err := feature.FlagVariant(ctx, s.featureFlags, feature.FlagAssistantPlatformMCP, project.ID, feature.OrgProjectGroups(project.Slug, ""))
+	if err != nil {
+		return "", fmt.Errorf("resolve assistant platform mcp variant: %w", err)
+	}
+	return feature.AssistantToolsVariant(variant), nil
 }
 
 func (s *ServiceCore) startProcessingLeaseHeartbeat(
@@ -3653,7 +3704,7 @@ func (s *ServiceCore) BuildThreadBootstrap(ctx context.Context, projectID, threa
 	// The managed-assistant platform toolset is granted only to the project's
 	// managed assistant; tools in it must not be reachable by any other
 	// assistant.
-	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant)
+	platformSlugs, err := s.assistantPlatformSlugs(ctx, assistant, false)
 	if err != nil {
 		return threadBootstrap{}, oops.E(oops.CodeUnexpected, err, "resolve managed assistant").LogError(ctx, s.logger, logAttrs...)
 	}

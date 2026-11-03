@@ -45,16 +45,17 @@ func NewLoadTool(logger *slog.Logger, db *pgxpool.Pool, opts ...LoadOption) *Loa
 		logger:           logger,
 		efficacySignaler: nil,
 		descriptor: core.ToolDescriptor{
-			SourceSlug:  "skills",
-			HandlerName: "load",
-			Name:        platformtools.ToolNameSkillsLoad,
-			Description: "Load the exact SKILL.md content for a skill attached to the current assistant.",
-			InputSchema: core.BuildInputSchema[loadInput](),
-			Variables:   nil,
-			Annotations: core.ReadOnlyAnnotations(),
-			Managed:     true,
-			OwnerKind:   nil,
-			OwnerID:     nil,
+			SourceSlug:    "skills",
+			ThreadContext: core.ThreadContextRequired,
+			HandlerName:   "load",
+			Name:          platformtools.ToolNameSkillsLoad,
+			Description:   "Load the exact SKILL.md content for a skill attached to the current assistant.",
+			InputSchema:   core.BuildInputSchema[loadInput](),
+			Variables:     nil,
+			Annotations:   core.ReadOnlyAnnotations(),
+			Managed:       true,
+			OwnerKind:     nil,
+			OwnerID:       nil,
 		},
 	}
 
@@ -70,7 +71,7 @@ func (t *Load) Descriptor() core.ToolDescriptor {
 }
 
 func (t *Load) Call(ctx context.Context, env toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+	principal, ok := contextvalues.GetAssistantToolTarget(ctx)
 	if !ok {
 		return oops.E(oops.CodeUnauthorized, nil, "skills tools require an assistant principal")
 	}

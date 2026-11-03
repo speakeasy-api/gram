@@ -1,6 +1,8 @@
 package assistants
 
 import (
+	"context"
+	"errors"
 	"testing"
 
 	"github.com/google/uuid"
@@ -61,7 +63,7 @@ func TestAssistantPlatformSlugsManagedPlatformMCPVariantReplacesLegacy(t *testin
 	flags.SetFlagVariant(feature.FlagAssistantPlatformMCP, "org-test", feature.VariantAssistantToolsPlatformMCP)
 	svc.core.SetFeatureProvider(flags)
 
-	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord)
+	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord, false)
 	require.NoError(t, err)
 	require.Equal(t, []string{
 		platformtools.AssistantsPlatformToolsetSlug,
@@ -78,7 +80,7 @@ func TestAssistantPlatformSlugsManagedLegacyVariantUnchanged(t *testing.T) {
 	flags.SetFlagVariant(feature.FlagAssistantPlatformMCP, "org-test", feature.VariantAssistantToolsLegacy)
 	svc.core.SetFeatureProvider(flags)
 
-	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord)
+	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord, false)
 	require.NoError(t, err)
 	require.Equal(t, []string{
 		platformtools.AssistantsPlatformToolsetSlug,
@@ -97,7 +99,7 @@ func TestAssistantPlatformSlugsUnknownVariantFallsBackToLegacy(t *testing.T) {
 	flags.SetFlagVariant(feature.FlagAssistantPlatformMCP, "org-test", feature.Variant("control"))
 	svc.core.SetFeatureProvider(flags)
 
-	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord)
+	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord, false)
 	require.NoError(t, err)
 	require.Equal(t, []string{
 		platformtools.AssistantsPlatformToolsetSlug,
@@ -111,7 +113,7 @@ func TestAssistantPlatformSlugsNoVariantUnchanged(t *testing.T) {
 	svc, managedRecord, _ := platformSlugsFixture(t)
 	svc.core.SetFeatureProvider(&feature.InMemory{})
 
-	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord)
+	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord, false)
 	require.NoError(t, err)
 	require.Equal(t, []string{
 		platformtools.AssistantsPlatformToolsetSlug,
@@ -124,7 +126,7 @@ func TestAssistantPlatformSlugsNilProviderFallsBackToLegacy(t *testing.T) {
 
 	svc, managedRecord, _ := platformSlugsFixture(t)
 
-	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord)
+	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord, false)
 	require.NoError(t, err)
 	require.Equal(t, []string{
 		platformtools.AssistantsPlatformToolsetSlug,
@@ -141,7 +143,29 @@ func TestAssistantPlatformSlugsNonManagedNeverGetsPlatformToolset(t *testing.T) 
 	flags.SetFlagVariant(feature.FlagAssistantPlatformMCP, "org-test", feature.VariantAssistantToolsPlatformMCP)
 	svc.core.SetFeatureProvider(flags)
 
-	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), otherRecord)
+	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), otherRecord, false)
 	require.NoError(t, err)
 	require.Equal(t, []string{platformtools.AssistantsPlatformToolsetSlug}, slugs)
+}
+
+type failingVariantFlags struct{ *feature.InMemory }
+
+func (failingVariantFlags) FlagVariant(context.Context, feature.Flag, string, map[string]string) (feature.Variant, error) {
+	return "", errors.New("flag provider unavailable")
+}
+
+func TestAssistantPlatformSlugsStrictVariantSurfacesLookupFailure(t *testing.T) {
+	t.Parallel()
+
+	svc, managedRecord, _ := platformSlugsFixture(t)
+	svc.core.SetFeatureProvider(failingVariantFlags{&feature.InMemory{}})
+
+	_, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord, true)
+	require.ErrorContains(t, err, "flag provider unavailable", "a strict lookup must not fall back to a different tool set")
+	slugs, err := svc.core.assistantPlatformSlugs(t.Context(), managedRecord, false)
+	require.NoError(t, err)
+	require.Equal(t, []string{
+		platformtools.AssistantsPlatformToolsetSlug,
+		platformtools.ManagedAssistantPlatformToolsetSlug,
+	}, slugs)
 }

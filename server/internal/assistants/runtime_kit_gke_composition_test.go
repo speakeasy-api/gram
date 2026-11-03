@@ -230,5 +230,16 @@ func TestKitGKEEligibilityUsesPersistedAttachmentAndIssuer(t *testing.T) {
 	check(true)
 	err = assistantrepo.New(f.db).DisableAttachedMCPServerForTest(t.Context(), assistantrepo.DisableAttachedMCPServerForTestParams{ID: f.remote.ID, ProjectID: f.projectID})
 	require.NoError(t, err)
-	check(false)
+	check(true) // Existing shared issuer still permits inference without attached tools.
+	connections, selectedIssuer, err := f.core.kitPersistedMCPConnections(t.Context(), f.db, a)
+	require.NoError(t, err)
+	require.Empty(t, connections)
+	require.Equal(t, issuer.ID, selectedIssuer)
+	// Repeated selection is stable and remains project-scoped, even with no tools.
+	for range 3 {
+		_, repeated, err := f.core.kitPersistedMCPConnections(t.Context(), f.db, a)
+		require.NoError(t, err)
+		require.Equal(t, selectedIssuer, repeated)
+	}
+
 }

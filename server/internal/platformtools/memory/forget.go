@@ -46,16 +46,17 @@ func NewForgetTool(svc Service) *ForgetTool {
 	return &ForgetTool{
 		svc: svc,
 		descriptor: core.ToolDescriptor{
-			SourceSlug:  platformtools.SourceMemory,
-			HandlerName: handlerForget,
-			Name:        platformtools.ToolNameMemoryForget,
-			Description: "Forget a memory matching the given query for the current assistant. Returns no_match or ambiguous (with candidates) when the target cannot be uniquely identified.",
-			InputSchema: core.BuildInputSchema[forgetInput](),
-			Variables:   nil,
-			Annotations: memoryToolAnnotations(readOnly, destructive, idempotent, openWorld),
-			Managed:     true,
-			OwnerKind:   nil,
-			OwnerID:     nil,
+			SourceSlug:    platformtools.SourceMemory,
+			ThreadContext: core.ThreadContextRequired,
+			HandlerName:   handlerForget,
+			Name:          platformtools.ToolNameMemoryForget,
+			Description:   "Forget a memory matching the given query for the current assistant. Returns no_match or ambiguous (with candidates) when the target cannot be uniquely identified.",
+			InputSchema:   core.BuildInputSchema[forgetInput](),
+			Variables:     nil,
+			Annotations:   memoryToolAnnotations(readOnly, destructive, idempotent, openWorld),
+			Managed:       true,
+			OwnerKind:     nil,
+			OwnerID:       nil,
 		},
 	}
 }
@@ -65,7 +66,7 @@ func (t *ForgetTool) Descriptor() core.ToolDescriptor {
 }
 
 func (t *ForgetTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+	principal, ok := contextvalues.GetAssistantToolTarget(ctx)
 	if !ok {
 		return oops.E(oops.CodeUnauthorized, nil, "memory tools require an assistant principal")
 	}

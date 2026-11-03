@@ -6,6 +6,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	identityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"strings"
 
 	"encoding/json"
 	environmentsrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
@@ -73,6 +74,23 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 		r.LifecycleTx = nil
 		require.Equal(t, identity, b.Workload.Identity)
 		require.NotEmpty(t, b.Workload.ServiceAccount)
+		// Built-ins exchange for their own resource and request explicit thread
+		// targets when no automatic context is available.
+		var document struct {
+			Servers map[string]struct {
+				URL  string `json:"url"`
+				Auth struct {
+					Resource   string            `json:"resource"`
+					Extensions map[string]string `json:"extensions"`
+				} `json:"auth"`
+			} `json:"mcpServers"`
+		}
+		require.NoError(t, json.Unmarshal(b.MCPJSON, &document))
+		builtin, ok := document.Servers["builtin-assistants"]
+		require.True(t, ok)
+		require.Equal(t, "https://api.example/platform/mcp/assistants", builtin.URL)
+		require.Equal(t, builtin.URL, builtin.Auth.Resource)
+		require.Equal(t, map[string]string{"project_id": r.ProjectID.String()}, builtin.Auth.Extensions)
 		require.NotContains(t, string(b.AgentsMD), "human-delegated sign-in are unavailable")
 		return b
 	}
@@ -84,7 +102,14 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 			} `json:"mcpServers"`
 		}
 		require.NoError(t, json.Unmarshal(b.MCPJSON, &document))
-		require.Equal(t, expected, document.Servers["workload"].Headers["Gram-Environment"])
+		found := false
+		for name, server := range document.Servers {
+			if strings.HasPrefix(name, "attached-") {
+				require.Equal(t, expected, server.Headers["Gram-Environment"])
+				found = true
+			}
+		}
+		require.True(t, found)
 	}
 	first := bootstrap()
 	assertEnvironment(first, "selected-env")
