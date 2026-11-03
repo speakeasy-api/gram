@@ -45,9 +45,9 @@ func lastForwardedFor(r *http.Request) string {
 	return strings.Clone(line[max(0, len(line)-maxForwardedForBytes):])
 }
 
-// connectionIP returns the address that connected to our public ingress, or "" when unsure. The
-// ingress appends it as the last X-Forwarded-For hop, and anything before that came from the caller.
-// RemoteAddr is the ingress itself, so it never stands in.
+// connectionIP returns the address that connected to our public ingress, or "" when unsure. Our
+// ingress writes the last X-Forwarded-For hop, and any hop before it is caller text. RemoteAddr is
+// the ingress itself, so it never stands in.
 func connectionIP(forwardedFor string) string {
 	hop := strings.TrimSpace(forwardedFor[strings.LastIndexByte(forwardedFor, ',')+1:])
 	addr, err := netip.ParseAddr(hop)

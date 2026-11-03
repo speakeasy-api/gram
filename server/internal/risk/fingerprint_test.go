@@ -297,3 +297,15 @@ func TestDeriveCurrentKey_ZeroFingerprinterErrors(t *testing.T) {
 	_, err := ring.DeriveCurrentKey("gram/connection/device", "org-a")
 	require.Error(t, err)
 }
+
+// The fingerprint key must never come back through this path.
+func TestDeriveCurrentKey_RefusesTheFingerprintLabel(t *testing.T) {
+	t.Parallel()
+
+	ring, err := risk.ParsePepperKeyRing([]byte(`{"current":"v1","keys":{"v1":"` + base64.StdEncoding.EncodeToString([]byte("0123456789abcdef0123456789abcdef")) + `"}}`))
+	require.NoError(t, err)
+
+	key, err := ring.DeriveCurrentKey("gram/risk/fingerprint/tenant", "org-a")
+	require.ErrorIs(t, err, risk.ErrReservedKeyInfo)
+	require.Nil(t, key)
+}

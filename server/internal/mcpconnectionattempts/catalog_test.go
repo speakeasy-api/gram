@@ -7,6 +7,9 @@ import (
 	"testing"
 
 	"github.com/stretchr/testify/require"
+	sdkmetric "go.opentelemetry.io/otel/sdk/metric"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // frozenCodes is append-only: stored rows and dashboards use these names. A
@@ -110,6 +113,7 @@ var frozenCodes = []string{
 	"renewal_ambiguous",
 	"needs_sign_in",
 	"consent_not_approved",
+	"catalog_too_large",
 }
 
 // frozenResults pins each result's stored name, append-only like the codes.
@@ -246,6 +250,72 @@ func TestCatalog_SameMeaningHasOneCode(t *testing.T) {
 	for _, merged := range []string{"issuer_untrusted", "client_not_admitted", "client_blocked", "subject_not_authorized", "invalid_client", "rate_limited", "unreachable", "client_check_unavailable", "client_metadata_unavailable", "client_invalid", "tunnel_unreachable", "upstream_error", "idp_misconfigured"} {
 		_, ok := MeaningOf(merged)
 		require.False(t, ok, merged)
+	}
+}
+
+// Each message has to hold on every site that emits the code, so it can't name one cause.
+func TestCatalog_MessagesHoldOnEverySite(t *testing.T) {
+	t.Parallel()
+
+	cases := []struct {
+		code       Code
+		who        WhoFixes
+		mustSay    []string
+		mustNotSay []string
+	}{
+		{CodeSessionChanged, WhoPerson, []string{"account", "browser"}, []string{"finished"}},
+		{CodeConnectionChanged, WhoPerson, []string{"ask your admin"}, []string{"was changed", "still exists"}},
+		{CodeExpired, WhoPerson, []string{"expired"}, []string{"10", "minutes", "took"}},
+		{CodeProviderOAuthInvalidScope, WhoAdmin, []string{"access"}, []string{"permissions"}},
+		{CodeConsentNotApproved, WhoPerson, []string{"needs your approval"}, []string{"have not approved"}},
+		{CodeNeedsSignIn, WhoPerson, []string{"need to sign in"}, []string{"yet"}},
+		{CodeCIMDAdmissionDenied, WhoAdmin, []string{"this way", "allowed"}, []string{"allowed list"}},
+		{CodeCatalogTooLarge, WhoAdmin, []string{"too large", "if you can"}, []string{"gateway"}},
+	}
+	for _, tc := range cases {
+		t.Run(tc.code.String(), func(t *testing.T) {
+			t.Parallel()
+
+			meaning, ok := MeaningOf(tc.code.String())
+			require.True(t, ok)
+			require.Equal(t, tc.who, meaning.WhoFixes)
+			text := strings.ToLower(meaning.WhatHappened + " " + meaning.WhatToDo)
+			for _, want := range tc.mustSay {
+				require.Contains(t, text, want)
+			}
+			for _, unwanted := range tc.mustNotSay {
+				require.NotContains(t, text, unwanted)
+			}
+		})
+	}
+}
+
+// Through the real writer, a row stores the party and result the catalog sets.
+func TestRecorder_StoresWhoFixesFromTheCatalog(t *testing.T) {
+	t.Parallel()
+
+	conn := clickhouseConn(t)
+	recorder := NewRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, logsOn)
+	changed, tooLarge := Begin(testScope()), Begin(testScope())
+
+	recorder.End(t.Context(), changed, StepProviderSignIn, CodeConnectionChanged)
+	recorder.End(t.Context(), tooLarge, StepInboundConsent, CodeCatalogTooLarge)
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	for _, want := range []struct {
+		attempt Attempt
+		reason  string
+		who     WhoFixes
+	}{
+		{changed, "connection_changed", WhoPerson},
+		{tooLarge, "catalog_too_large", WhoAdmin},
+	} {
+		var reason, who, outcome, result string
+		require.NoError(t, conn.QueryRow(t.Context(), `SELECT reason, who_fixes, outcome, step_result FROM mcp_connection_events WHERE attempt_id = ?`, want.attempt.ID()).Scan(&reason, &who, &outcome, &result))
+		require.Equal(t, want.reason, reason)
+		require.Equal(t, string(want.who), who)
+		require.Equal(t, string(OutcomeFailed), outcome)
+		require.Equal(t, resultFailed.String(), result)
 	}
 }
 
