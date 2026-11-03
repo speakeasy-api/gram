@@ -457,3 +457,221 @@ func runPolicyCorpusCase(t *testing.T, reg *s.Registry, evaluator *RegistryEvalu
 		require.Equal(t, f.Want == "allow", allowed, "want %s", f.Want)
 	}
 }
+
+func TestFactsMustMatchTheirDeclaredKind(t *testing.T) {
+	t.Parallel()
+
+	evaluator := ownershipEvaluator(t)
+	role := "role:organization:role_1"
+	set := humanSet(grantOf(role, "chat:read", "chat", "*"))
+
+	cases := []struct {
+		name  string
+		facts map[string]Fact
+	}{
+		{"bare presence for a string", chatFacts(AbsentFact(), PresentFact(), liveAgent("user_1"))},
+		{"bool for a string", chatFacts(BoolFact(false), AbsentFact(), AbsentFact())},
+		{"string for a relationship", chatFacts(AbsentFact(), AbsentFact(), StringFact("agent_1"))},
+		{"bare presence for a related bool", chatFacts(AbsentFact(), AbsentFact(), RelatedFact(RelatedResource{ID: "agent_1", Dimensions: nil, Facts: map[string]Fact{
+			"owner":                          StringFact("user_1"),
+			"deleted":                        PresentFact(),
+			"owner_reassignment_required_at": AbsentFact(),
+		}}))},
+		{"string for a related timestamp", chatFacts(AbsentFact(), AbsentFact(), RelatedFact(RelatedResource{ID: "agent_1", Dimensions: nil, Facts: map[string]Fact{
+			"owner":                          StringFact("user_1"),
+			"deleted":                        BoolFact(false),
+			"owner_reassignment_required_at": StringFact(""),
+		}}))},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			_, err := evaluator.Decide(set, chatRequest("read", tc.facts))
+			require.Error(t, err)
+		})
+	}
+}
+
+func TestRelatedResourcesAreValidatedLikeRequests(t *testing.T) {
+	t.Parallel()
+
+	evaluator := ownershipEvaluator(t)
+	agentOnly := func(related RelatedResource) map[string]Fact {
+		return chatFacts(AbsentFact(), AbsentFact(), RelatedFact(related))
+	}
+	live := map[string]Fact{
+		"owner":                          StringFact(humanActor.ID),
+		"deleted":                        BoolFact(false),
+		"owner_reassignment_required_at": AbsentFact(),
+	}
+
+	t.Run("an unaccepted dimension errors", func(t *testing.T) {
+		t.Parallel()
+		_, err := evaluator.Decide(humanSet(), chatRequest("read", agentOnly(RelatedResource{ID: "agent_1", Dimensions: map[string]string{"tool": "x"}, Facts: live})))
+		require.Error(t, err)
+	})
+
+	t.Run("a wildcard target errors", func(t *testing.T) {
+		t.Parallel()
+		_, err := evaluator.Decide(humanSet(), chatRequest("read", agentOnly(RelatedResource{ID: WildcardResource, Dimensions: nil, Facts: live})))
+		require.ErrorIs(t, err, ErrFactUnresolved)
+	})
+
+	t.Run("a further relationship errors", func(t *testing.T) {
+		t.Parallel()
+		reg, err := s.Compile(s.Config{Roles: nil, WriteSurfaces: []string{"access"}, Conditions: nil, RetiredRuntimeScopes: nil},
+			s.NewType("folder", s.WrittenBy("access"),
+				s.Attr("parent", "folder"),
+				s.Attr("owner", s.FactUser),
+				s.Grant("reader", s.StoredAs("folder:read"), s.Describe("Read")),
+				s.Permission("owned", s.Is("owner")),
+				s.Permission("read_grant", s.Rel("reader"), s.Checks("folder:read")),
+				s.Permission("read", s.Union(s.Rel("reader"), s.Via("parent", "owned"))),
+			))
+		require.NoError(t, err)
+		folders, err := NewRegistryEvaluator(reg)
+		require.NoError(t, err)
+
+		parent := func(facts map[string]Fact) map[string]Fact {
+			return map[string]Fact{"parent": RelatedFact(RelatedResource{ID: "folder_0", Dimensions: nil, Facts: facts})}
+		}
+		req := PermissionRequest{
+			Permission:      s.PermissionRef{Type: "folder", Permission: "read"},
+			ResourceID:      "folder_1",
+			Dimensions:      nil,
+			StrictMatch:     false,
+			RepresentedUser: "",
+			Actor:           urn.Principal{},
+			Facts:           parent(map[string]Fact{"owner": StringFact(humanActor.ID)}),
+			RequiredFacts:   nil,
+		}
+		decision, err := folders.Decide(humanSet(), req)
+		require.NoError(t, err)
+		require.True(t, decision.Allowed, "one hop is followed")
+
+		req.Facts = parent(map[string]Fact{"owner": StringFact("user_2"), "parent": RelatedFact(RelatedResource{ID: "folder_x", Dimensions: nil, Facts: nil})})
+		_, err = folders.Decide(humanSet(), req)
+		require.Error(t, err)
+	})
+}
+
+func TestAuthClientPermissionsKeepTheRepresentedCeiling(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a bound represented user without policies errors", func(t *testing.T) {
+		t.Parallel()
+		evaluator, err := NewRegistryEvaluator(compileEvaluatorSlice(t))
+		require.NoError(t, err)
+		role := "role:organization:role_1"
+		set := PolicySet{
+			Actor:           agentActor,
+			Policies:        []Policy{{Principal: "agent", Grants: []Grant{grantOf(role, string(ScopeMCPAuth), ResourceKindMCPAuthClient, "client_a", SelectorKeyClientType, AuthClientTypeServiceAccount, SelectorKeyProjectID, "proj_1")}}},
+			Captured:        nil,
+			RepresentedUser: "user_1",
+			Represented:     nil,
+		}
+		req := PermissionRequest{
+			Permission:      s.PermissionRef{Type: "mcp_auth_client", Permission: "use"},
+			ResourceID:      "client_a",
+			Dimensions:      map[string]string{SelectorKeyClientType: AuthClientTypeServiceAccount, SelectorKeyProjectID: "proj_1"},
+			StrictMatch:     false,
+			RepresentedUser: "",
+			Actor:           urn.Principal{},
+			Facts:           nil,
+			RequiredFacts:   nil,
+		}
+		_, err = evaluator.Decide(set, req)
+		require.ErrorIs(t, err, ErrMissingRepresentedPolicy)
+
+		set.Represented = []Policy{{Principal: "user_1", Grants: nil}}
+		decision, err := evaluator.Decide(set, req)
+		require.NoError(t, err)
+		require.False(t, decision.Allowed)
+		require.Equal(t, "user_1", decision.Policy)
+
+		set.Represented[0].Grants = []Grant{grantOf(role, string(ScopeMCPAuth), ResourceKindMCPAuthClient, "client_a", SelectorKeyClientType, AuthClientTypeServiceAccount, SelectorKeyProjectID, "proj_1")}
+		decision, err = evaluator.Decide(set, req)
+		require.NoError(t, err)
+		require.True(t, decision.Allowed)
+	})
+
+	t.Run("no permission may reach an auth client through a relationship", func(t *testing.T) {
+		t.Parallel()
+		reg, err := s.Compile(s.Config{Roles: nil, WriteSurfaces: []string{"access"}, Conditions: nil, RetiredRuntimeScopes: nil},
+			s.NewType("client", s.StoredKind(ResourceKindMCPAuthClient), s.WrittenBy("access"),
+				s.Grant("user", s.StoredAs("client:use"), s.StrictMatching(), s.Describe("Use")),
+				s.Permission("use", s.Rel("user"), s.Checks("client:use")),
+			),
+			s.NewType("session", s.WrittenBy("access"),
+				s.Attr("client", "client"),
+				s.Grant("reader", s.StoredAs("session:read"), s.Describe("Read")),
+				s.Permission("read_grant", s.Rel("reader"), s.Checks("session:read")),
+				s.Permission("read", s.Union(s.Rel("reader"), s.Via("client", "use"))),
+			))
+		require.NoError(t, err)
+		_, err = NewRegistryEvaluator(reg)
+		require.Error(t, err)
+	})
+}
+
+func TestVetoDeniesDespiteAnUndecidedOption(t *testing.T) {
+	t.Parallel()
+
+	reg, err := s.Compile(s.Config{Roles: nil, WriteSurfaces: []string{"access"}, Conditions: nil, RetiredRuntimeScopes: nil},
+		s.NewType("doc", s.WrittenBy("access"),
+			s.Attr("archived", s.FactBool),
+			s.Guard("active", s.IsFalse("archived")),
+			s.Grant("reader", s.StoredAs("doc:read"), s.Describe("Read")),
+			s.Block("read_blocked", s.StoredAs("doc:blocked_read")),
+			s.Permission("read_grant", s.Rel("reader"), s.Checks("doc:read")),
+			s.Permission("read", s.When("active", s.Rel("reader")), s.ExcludedBy("read_blocked")),
+			s.Alternatives("open", s.Alternative("doc", "read"), s.Alternative("folder", "read"), s.VetoBlocks()),
+		),
+		s.NewType("folder", s.WrittenBy("access"),
+			s.Grant("reader", s.StoredAs("folder:read"), s.Describe("Read")),
+			s.Block("read_blocked", s.StoredAs("folder:blocked_read")),
+			s.Permission("read", s.Rel("reader"), s.Checks("folder:read"), s.ExcludedBy("read_blocked")),
+		))
+	require.NoError(t, err)
+	evaluator, err := NewRegistryEvaluator(reg)
+	require.NoError(t, err)
+
+	option := func(typeName, id string) PermissionRequest {
+		return PermissionRequest{
+			Permission:      s.PermissionRef{Type: typeName, Permission: "read"},
+			ResourceID:      id,
+			Dimensions:      nil,
+			StrictMatch:     false,
+			RepresentedUser: "",
+			Actor:           urn.Principal{},
+			Facts:           nil,
+			RequiredFacts:   nil,
+		}
+	}
+	options := []PermissionRequest{option("doc", "doc_1"), option("folder", "folder_1")}
+	// The doc block's exception can only be checked with the unloaded
+	// archived fact; the folder block stands outright.
+	undecided := []Grant{
+		grantOf(testRole, "doc:blocked_read", "doc", "doc_1"),
+		grantOf(testDirectUser, "doc:read", "doc", "doc_1"),
+	}
+	set := PolicySet{
+		Actor:           urn.NewPrincipal(urn.PrincipalTypeUser, fixtureUserID),
+		Policies:        []Policy{{Principal: "first", Grants: undecided}},
+		Captured:        nil,
+		RepresentedUser: "",
+		Represented:     nil,
+	}
+	ref := s.PermissionRef{Type: "doc", Permission: "open"}
+
+	_, err = evaluator.DecideAlternatives(set, ref, options)
+	require.ErrorIs(t, err, ErrFactUnresolved, "an undecided veto with no standing block errors")
+
+	set.Policies = append(set.Policies, Policy{Principal: "second", Grants: []Grant{grantOf(testRole, "folder:blocked_read", "folder", "folder_1")}})
+	decision, err := evaluator.DecideAlternatives(set, ref, options)
+	require.NoError(t, err)
+	require.False(t, decision.Allowed)
+	require.Equal(t, PermissionReasonExcluded, decision.Reason)
+	require.Equal(t, "second", decision.Policy)
+	require.Equal(t, 1, decision.Option)
+}

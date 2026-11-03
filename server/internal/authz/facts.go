@@ -65,11 +65,25 @@ func (s FactState) String() string {
 // constructors; the zero Fact is unloaded.
 type Fact struct {
 	state   FactState
+	kind    factKind
 	text    string
 	boolean bool
 	related *RelatedResource
 	err     error
 }
+
+// factKind records which constructor built a present fact, so a value of one
+// kind can never stand in for another, such as a bare PresentFact read as a
+// false bool.
+type factKind uint8
+
+const (
+	factKindNone factKind = iota
+	factKindText
+	factKindBool
+	factKindPresence
+	factKindRelated
+)
 
 // RelatedResource is the target of a relationship fact, loaded one hop away
 // with the facts its own permissions read.
@@ -81,46 +95,46 @@ type RelatedResource struct {
 	// PermissionRequest.Dimensions does.
 	Dimensions map[string]string
 
-	// Facts are the related resource's own loaded facts. They never include
-	// further relationships the evaluator would follow: traversal is one hop.
+	// Facts are the related resource's own loaded facts. Traversal is one hop,
+	// so they may not hold further relationships.
 	Facts map[string]Fact
 }
 
 // StringFact is a present string or user fact. An empty string is present.
 func StringFact(value string) Fact {
-	return Fact{state: FactPresent, text: value, boolean: false, related: nil, err: nil}
+	return Fact{state: FactPresent, kind: factKindText, text: value, boolean: false, related: nil, err: nil}
 }
 
 // BoolFact is a present bool fact.
 func BoolFact(value bool) Fact {
-	return Fact{state: FactPresent, text: "", boolean: value, related: nil, err: nil}
+	return Fact{state: FactPresent, kind: factKindBool, text: "", boolean: value, related: nil, err: nil}
 }
 
 // PresentFact is a present fact with no comparable value, such as a non-NULL
 // timestamp.
 func PresentFact() Fact {
-	return Fact{state: FactPresent, text: "", boolean: false, related: nil, err: nil}
+	return Fact{state: FactPresent, kind: factKindPresence, text: "", boolean: false, related: nil, err: nil}
 }
 
 // RelatedFact is a present relationship to a verified related resource.
 func RelatedFact(resource RelatedResource) Fact {
-	return Fact{state: FactPresent, text: "", boolean: false, related: &resource, err: nil}
+	return Fact{state: FactPresent, kind: factKindRelated, text: "", boolean: false, related: &resource, err: nil}
 }
 
 // AbsentFact is known absence: a NULL value, or a completed lookup that found
 // no qualifying related record.
 func AbsentFact() Fact {
-	return Fact{state: FactAbsent, text: "", boolean: false, related: nil, err: nil}
+	return Fact{state: FactAbsent, kind: factKindNone, text: "", boolean: false, related: nil, err: nil}
 }
 
 // InvalidFact is a loaded value that contradicts its claimed context.
 func InvalidFact(err error) Fact {
-	return Fact{state: FactInvalid, text: "", boolean: false, related: nil, err: err}
+	return Fact{state: FactInvalid, kind: factKindNone, text: "", boolean: false, related: nil, err: err}
 }
 
 // LoadFailedFact is a lookup that failed or was cancelled.
 func LoadFailedFact(err error) Fact {
-	return Fact{state: FactLoadFailed, text: "", boolean: false, related: nil, err: err}
+	return Fact{state: FactLoadFailed, kind: factKindNone, text: "", boolean: false, related: nil, err: err}
 }
 
 // State returns the fact's state.
@@ -135,6 +149,38 @@ func (f Fact) unresolved(name string) error {
 		return fmt.Errorf("%w: %s is %s: %w", ErrFactUnresolved, name, f.state, f.err)
 	}
 	return fmt.Errorf("%w: %s is %s", ErrFactUnresolved, name, f.state)
+}
+
+// kindFor is the kind a present fact of the declared fact type must have.
+// A declared type name is a relationship.
+func kindFor(factType string) factKind {
+	switch factType {
+	case schema.FactString, schema.FactNullableString, schema.FactUser:
+		return factKindText
+	case schema.FactBool:
+		return factKindBool
+	case schema.FactNullableTimestamp:
+		return factKindPresence
+	default:
+		return factKindRelated
+	}
+}
+
+func (k factKind) String() string {
+	switch k {
+	case factKindNone:
+		return "none"
+	case factKindText:
+		return "string"
+	case factKindBool:
+		return "bool"
+	case factKindPresence:
+		return "presence"
+	case factKindRelated:
+		return "relationship"
+	default:
+		return fmt.Sprintf("fact_kind(%d)", uint8(k))
+	}
 }
 
 func (f Fact) resolved() bool {

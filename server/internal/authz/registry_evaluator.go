@@ -63,6 +63,9 @@ type RegistryEvaluator struct {
 	scopes      map[string]evaluatorScope
 	permissions map[schema.PermissionRef]evaluatorPermission
 	alternates  map[schema.PermissionRef]schema.AlternativeSet
+
+	// typeDimensions are the dimensions any scope of a type accepts.
+	typeDimensions map[string]map[string]bool
 }
 
 type evaluatorScope struct {
@@ -178,6 +181,8 @@ func NewRegistryEvaluator(registry *schema.Registry) (*RegistryEvaluator, error)
 		scopes:      make(map[string]evaluatorScope),
 		permissions: make(map[schema.PermissionRef]evaluatorPermission),
 		alternates:  make(map[schema.PermissionRef]schema.AlternativeSet),
+
+		typeDimensions: make(map[string]map[string]bool),
 	}
 	for _, scope := range registry.Scopes() {
 		e.scopes[scope.Name] = evaluatorScope{
@@ -220,12 +225,26 @@ func NewRegistryEvaluator(registry *schema.Registry) (*RegistryEvaluator, error)
 		p.unsupported = e.firstUnsupported(ref.Type, p.def.Expr, []string{ref.Permission})
 		p.readsFacts = len(p.def.Facts) > 0 || len(p.def.Traverses) > 0
 		p.dimensions = make(map[string]bool)
+		if e.typeDimensions[ref.Type] == nil {
+			e.typeDimensions[ref.Type] = make(map[string]bool)
+		}
 		for _, scope := range p.def.Scopes {
 			for _, key := range e.scopes[scope].selectorKeys {
 				p.dimensions[key] = true
+				e.typeDimensions[ref.Type][key] = true
 			}
 		}
 		e.permissions[ref] = p
+	}
+	// An auth-client permission is limited by the represented user's
+	// policies, which composition applies by the requested permission's type.
+	// Reaching one through a relationship would skip that ceiling.
+	for ref, p := range e.permissions {
+		for _, target := range p.def.Traverses {
+			if e.kinds[target.Type] == ResourceKindMCPAuthClient {
+				return nil, fmt.Errorf("permission %s.%s traverses auth-client permission %s.%s, which only a direct request may evaluate", ref.Type, ref.Permission, target.Type, target.Permission)
+			}
+		}
 	}
 	return e, nil
 }
@@ -319,7 +338,7 @@ func (e *RegistryEvaluator) validate(p evaluatorPermission, req PermissionReques
 	if p.readsFacts && (req.Actor.IsZero() || req.Actor.ID == "") {
 		return fmt.Errorf("evaluate %s.%s: %w", req.Permission.Type, req.Permission.Permission, ErrMissingActor)
 	}
-	if err := e.validateFacts(req.Permission.Type, req.Facts); err != nil {
+	if err := e.validateFacts(req.Permission.Type, req.Facts, false); err != nil {
 		return err
 	}
 	for _, name := range req.RequiredFacts {
@@ -342,8 +361,11 @@ func (e *RegistryEvaluator) validate(p evaluatorPermission, req PermissionReques
 }
 
 // validateFacts rejects supplied facts the type does not declare as Attrs,
-// so a misspelt fact cannot read as unloaded.
-func (e *RegistryEvaluator) validateFacts(typeName string, facts map[string]Fact) error {
+// so a misspelt fact cannot read as unloaded, and present facts whose kind
+// differs from the declared fact type, so a value of one kind can never
+// satisfy a condition on another. A related resource's own facts may not hold
+// a further relationship, because traversal is one hop.
+func (e *RegistryEvaluator) validateFacts(typeName string, facts map[string]Fact, related bool) error {
 	for name, fact := range facts {
 		declared, ok := e.facts[typeName][name]
 		switch {
@@ -351,14 +373,35 @@ func (e *RegistryEvaluator) validateFacts(typeName string, facts map[string]Fact
 			return fmt.Errorf("fact %s is not declared on %s", name, typeName)
 		case declared.DerivedFrom != "":
 			return fmt.Errorf("fact %s on %s is derived; supply %s instead", name, typeName, declared.DerivedFrom)
-		case fact.related != nil:
-			if _, isType := e.kinds[declared.Type]; !isType {
-				return fmt.Errorf("fact %s on %s is not a relationship", name, typeName)
-			}
-			if err := e.validateFacts(declared.Type, fact.related.Facts); err != nil {
-				return fmt.Errorf("related %s: %w", name, err)
-			}
+		case fact.state != FactPresent:
+			continue
+		case fact.kind != kindFor(declared.Type):
+			return fmt.Errorf("fact %s on %s is a %s fact, got %s", name, typeName, kindFor(declared.Type), fact.kind)
+		case fact.related == nil:
+			continue
+		case related:
+			return fmt.Errorf("fact %s on related %s is a further relationship; traversal is one hop", name, typeName)
 		}
+		if err := e.validateRelated(name, declared.Type, *fact.related); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// validateRelated applies request validation to a related resource: a
+// concrete ID, dimensions some scope of the type accepts, and declared facts.
+func (e *RegistryEvaluator) validateRelated(name, typeName string, related RelatedResource) error {
+	if related.ID == "" || related.ID == WildcardResource {
+		return fmt.Errorf("%w: relationship %s has no concrete target", ErrFactUnresolved, name)
+	}
+	for key := range related.Dimensions {
+		if !e.typeDimensions[typeName][key] {
+			return fmt.Errorf("relationship %s: dimension %s is not accepted by %s", name, key, typeName)
+		}
+	}
+	if err := e.validateFacts(typeName, related.Facts, true); err != nil {
+		return fmt.Errorf("related %s: %w", name, err)
 	}
 	return nil
 }
@@ -622,6 +665,11 @@ func (r evaluation) via(expr schema.Expr, mode leafMode) outcome {
 	related := r.e.evaluation(r.policy, r.req, target.Type, resourceInstance{id: fact.related.ID, dimensions: fact.related.Dimensions, facts: fact.related.Facts})
 	if related.res.id == "" || related.res.id == WildcardResource {
 		return undecided(fmt.Errorf("%w: relationship %s has no concrete target", ErrFactUnresolved, expr.Name()))
+	}
+	for key := range related.res.dimensions {
+		if !p.dimensions[key] {
+			return undecided(fmt.Errorf("relationship %s: dimension %s is not accepted by %s.%s", expr.Name(), key, target.Type, target.Permission))
+		}
 	}
 	return related.permission(p.def, leafMode{evidence: mode.evidence, strict: mode.strict, root: mode.root, grantsOnly: mode.grantsOnly})
 }

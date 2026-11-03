@@ -81,12 +81,20 @@ type PolicyDecision struct {
 	Option int
 }
 
-func (e *RegistryEvaluator) policiesFor(set PolicySet, ref schema.PermissionRef) []Policy {
+// ErrMissingRepresentedPolicy reports an auth-client permission for a bound
+// represented user whose policies admission did not load. A missing ceiling
+// is an error, never a lifted one.
+var ErrMissingRepresentedPolicy = errors.New("authorization binds a represented user without their policies")
+
+func (e *RegistryEvaluator) policiesFor(set PolicySet, ref schema.PermissionRef) ([]Policy, error) {
 	policies := slices.Concat(set.Policies, set.Captured)
 	if e.kinds[ref.Type] == ResourceKindMCPAuthClient {
+		if set.RepresentedUser != "" && len(set.Represented) == 0 {
+			return nil, fmt.Errorf("evaluate %s.%s: %w", ref.Type, ref.Permission, ErrMissingRepresentedPolicy)
+		}
 		policies = append(policies, set.Represented...)
 	}
-	return policies
+	return policies, nil
 }
 
 // bind applies the set's actor and represented user to req, so a request
@@ -126,8 +134,12 @@ func (e *RegistryEvaluator) Decide(set PolicySet, req PermissionRequest) (Policy
 }
 
 func (e *RegistryEvaluator) decide(set PolicySet, req PermissionRequest, p evaluatorPermission) (PolicyDecision, error) {
+	policies, err := e.policiesFor(set, req.Permission)
+	if err != nil {
+		return PolicyDecision{}, err
+	}
 	var firstErr error
-	for _, policy := range e.policiesFor(set, req.Permission) {
+	for _, policy := range policies {
 		out := e.run(policy.Grants, req, p)
 		switch {
 		case out.err != nil:
@@ -179,18 +191,30 @@ func (e *RegistryEvaluator) DecideAlternatives(set PolicySet, ref schema.Permiss
 		prepared[i] = p
 	}
 
+	// A standing block in any option and policy vetoes, even when checking
+	// another option or policy could not be decided.
 	if alternatives.VetoBlocks {
+		var vetoErr error
 		for i, option := range options {
-			for _, policy := range e.policiesFor(set, option.Permission) {
+			policies, err := e.policiesFor(set, option.Permission)
+			if err != nil {
+				return PolicyDecision{}, err
+			}
+			for _, policy := range policies {
 				run := e.evaluation(policy.Grants, option, option.Permission.Type, resourceInstance{id: option.ResourceID, dimensions: option.Dimensions, facts: option.Facts})
 				stands, _, restored := run.blockStands(prepared[i].def, run.allowMode())
-				if restored.err != nil {
-					return PolicyDecision{}, fmt.Errorf("veto %s.%s: %w", option.Permission.Type, option.Permission.Permission, restored.err)
-				}
-				if stands {
+				switch {
+				case restored.err != nil:
+					if vetoErr == nil {
+						vetoErr = fmt.Errorf("veto %s.%s: %w", option.Permission.Type, option.Permission.Permission, restored.err)
+					}
+				case stands:
 					return PolicyDecision{Allowed: false, Reason: PermissionReasonExcluded, Policy: policy.Principal, Option: i}, nil
 				}
 			}
+		}
+		if vetoErr != nil {
+			return PolicyDecision{}, vetoErr
 		}
 	}
 
