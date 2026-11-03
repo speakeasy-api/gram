@@ -489,3 +489,22 @@ func TestRecorderWritesRowsToClickHouse(t *testing.T) {
 		assert.Contains(c, reasons, mcpconnectionattempts.CodeInvalidRemoteSession.String())
 	}, 30*time.Second, 200*time.Millisecond)
 }
+
+// Denied mcp:connect on a hosted toolset is the admin's to grant.
+func TestHostedConnectDeniedRecords(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	toolset, _ := createPrivateIssuerGatedToolset(t, ctx, ti, authCtx, "hosted-denied-"+uuid.NewString()[:8])
+	bearer := mintUserSessionBearerForSubject(t, ti, toolset, urn.NewUserSubject(mockidp.MockUserID))
+
+	_, err := servePublicHTTP(t, context.Background(), ti, toolset.McpSlug.String, makeInitializeBody(), bearer, nil)
+	require.Error(t, err)
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess)
+	require.Equal(t, authCtx.ActiveOrganizationID, row.OrganizationID)
+	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
+}

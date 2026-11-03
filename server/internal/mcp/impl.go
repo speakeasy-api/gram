@@ -1738,7 +1738,11 @@ func (s *Service) authorizeHostedRequest(ctx context.Context, toolset *toolsets_
 			if err := s.authz.Require(ctx, connect); err != nil {
 				denied := mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, cfg.rbacResourceID.String(), toolset.Name))
 				if mcpaccess.IsServerPermissionDenied(denied) {
-					s.connections.Once(ctx, mcpconnectionattempts.ToolsetScope(toolset.OrganizationID, toolset.ProjectID, toolset.ID, requestApp(ctx)), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess, callerSubject(ctx))
+					scope := mcpconnectionattempts.ToolsetScope(toolset.OrganizationID, toolset.ProjectID, toolset.ID, requestApp(ctx))
+					if cfg.mcpServerID != nil {
+						scope = mcpconnectionattempts.ServerScope(toolset.OrganizationID, toolset.ProjectID, *cfg.mcpServerID, requestApp(ctx))
+					}
+					s.connections.Once(ctx, scope, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess, callerSubject(ctx))
 				}
 				return ctx, false, fmt.Errorf("authorize MCP server access: %w", denied)
 			}
