@@ -181,7 +181,9 @@ func checkCustomDomainRouting(ctx context.Context, resolver dns.Resolver, domain
 			return mismatch, nil
 		}
 	}
-	if !cnameMatched {
+	// A failed CNAME lookup leaves the record type unobserved: addresses that
+	// arrive through a CNAME to a known target pass the same check.
+	if !cnameMatched && cnameErr == nil {
 		routed.Method = customdomains.DNSRoutingMethodARecord
 	}
 	return routed, nil

@@ -1079,6 +1079,7 @@ SET
     dns_routing_method = $1::text,
     updated_at = clock_timestamp()
 WHERE id = $2
+  AND organization_id = $3
   AND deleted IS FALSE
   AND dns_routing_method IS DISTINCT FROM $1::text
 `
@@ -1086,12 +1087,13 @@ WHERE id = $2
 type SetCustomDomainDNSRoutingMethodParams struct {
 	DnsRoutingMethod string
 	ID               uuid.UUID
+	OrganizationID   string
 }
 
 // Verification records the routing method on every pass. Unchanged values are
 // skipped so polling does not bump updated_at.
 func (q *Queries) SetCustomDomainDNSRoutingMethod(ctx context.Context, arg SetCustomDomainDNSRoutingMethodParams) error {
-	_, err := q.db.Exec(ctx, setCustomDomainDNSRoutingMethod, arg.DnsRoutingMethod, arg.ID)
+	_, err := q.db.Exec(ctx, setCustomDomainDNSRoutingMethod, arg.DnsRoutingMethod, arg.ID, arg.OrganizationID)
 	return err
 }
 

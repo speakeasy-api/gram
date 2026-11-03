@@ -427,6 +427,7 @@ SET
     dns_routing_method = @dns_routing_method::text,
     updated_at = clock_timestamp()
 WHERE id = @id
+  AND organization_id = @organization_id
   AND deleted IS FALSE
   AND dns_routing_method IS DISTINCT FROM @dns_routing_method::text;
 

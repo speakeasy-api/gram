@@ -103,7 +103,7 @@ func HealthIssueMessage(issue HealthIssue, remediation DNSRemediation) string {
 		return "DNS records for the domain could not be found."
 	case HealthIssueDNSTargetMismatch:
 		if remediation.OtherDNSTarget {
-			const otherTarget = "The domain's CNAME record points at a Speakeasy routing target that belongs to another domain or is no longer in use."
+			const otherTarget = "The domain's CNAME record points at a routing target that belongs to another domain or is no longer in use."
 			if record != "" {
 				return fmt.Sprintf("%s Create %s instead.", otherTarget, record)
 			}
