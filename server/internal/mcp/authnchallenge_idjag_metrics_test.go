@@ -30,7 +30,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
@@ -38,7 +37,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
@@ -207,8 +205,8 @@ func requireIDJAGOutage(t *testing.T, w *httptest.ResponseRecorder) {
 	require.NotContains(t, w.Body.String(), "invalid_grant")
 }
 
-// A key outage leaves the assertion unjudged and unspent, and the failed fetch
-// is held back for a new issuer too.
+// A key outage leaves the assertion unjudged and unspent, and a key set that never
+// loaded is tried again as soon as it recovers.
 func TestTokenIDJAGExchangeRetriesSameAssertionAfterKeyOutage(t *testing.T) {
 	t.Parallel()
 
@@ -222,13 +220,6 @@ func TestTokenIDJAGExchangeRetriesSameAssertionAfterKeyOutage(t *testing.T) {
 	require.EqualValues(t, 1, f.fetches.Load())
 
 	f.down.Store(false)
-	requireIDJAGOutage(t, f.post(t, ctx, assertion))
-	require.EqualValues(t, 1, f.fetches.Load(), "the failed fetch is held back")
-
-	rows, err := testrepo.New(f.ti.conn).ClearRemoteSessionIssuerJWKSConsultFailureFixture(ctx, conv.ToPGText(f.jwksURL))
-	require.NoError(t, err)
-	require.EqualValues(t, 1, rows)
-
 	retried := f.post(t, ctx, assertion)
 	require.Equal(t, http.StatusOK, retried.Code, "the retry is not refused as a replay: %s", retried.Body.String())
 

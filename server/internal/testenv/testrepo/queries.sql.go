@@ -216,21 +216,6 @@ func (q *Queries) ClearRemoteSessionClientKeySetFixture(ctx context.Context, jso
 	return result.RowsAffected(), nil
 }
 
-const clearRemoteSessionIssuerJWKSConsultFailureFixture = `-- name: ClearRemoteSessionIssuerJWKSConsultFailureFixture :execrows
-UPDATE remote_session_issuers
-SET jwks_last_error = NULL,
-    jwks_last_error_at = NULL
-WHERE jwks_uri = $1
-`
-
-func (q *Queries) ClearRemoteSessionIssuerJWKSConsultFailureFixture(ctx context.Context, jwksUri pgtype.Text) (int64, error) {
-	result, err := q.db.Exec(ctx, clearRemoteSessionIssuerJWKSConsultFailureFixture, jwksUri)
-	if err != nil {
-		return 0, err
-	}
-	return result.RowsAffected(), nil
-}
-
 const copyConsentEMACredentialToProjectFixture = `-- name: CopyConsentEMACredentialToProjectFixture :exec
 INSERT INTO remote_session_ema_credentials (
   organization_id, project_id, user_session_issuer_id, remote_session_issuer_id,

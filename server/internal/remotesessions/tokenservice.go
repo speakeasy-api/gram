@@ -300,7 +300,7 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, sess remo
 		m.logger.WarnContext(ctx, "remote session unusable: upstream token refresh failed", refreshFailureAttrs(sess, err)...)
 		// A broken query is ours to fix: neither an outage nor a reconnect.
 		if oops.IsStoreFailure(err) && !oops.IsInfrastructureFailure(err) {
-			return zero, fmt.Errorf("refresh store failure: %w", err)
+			return unavailableSessionCredential(selectedID, clientID, selectedResource, &SessionOutageError{err: err}), fmt.Errorf("%w: %w", errRefreshStoreFault, err)
 		}
 		switch {
 		case errors.Is(err, ErrRemoteSessionUnavailable):
@@ -680,6 +680,10 @@ func (m *ChallengeManager) resolveClientTokens(
 				return nil, ErrNoValidToken
 			}
 			return nil, err
+		case errors.Is(err, errRefreshStoreFault) && skipUnusable:
+			m.logger.ErrorContext(ctx, "gateway member refresh hit a store fault", attr.SlogRemoteSessionClientID(c.ClientID.String()), attr.SlogError(err))
+			tokens[c.RemoteSessionIssuerID] = resolved
+			continue
 		case err != nil:
 			return nil, fmt.Errorf("resolve access token: %w", err)
 		case resolved.Token == "":
@@ -780,6 +784,9 @@ func OutageKindOf(err error) RefreshOutageKind {
 	}
 	return RefreshOutageNone
 }
+
+// errRefreshStoreFault marks a broken query or write: a retry can't help, and it fails only this member on a gateway.
+var errRefreshStoreFault = errors.New("refresh store fault")
 
 // TokenEndpointCausedOutage reports a client credential outage the token endpoint caused, not signing or our own stores.
 func TokenEndpointCausedOutage(err error) bool {

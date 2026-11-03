@@ -432,6 +432,57 @@ func TestRefreshNow_UnusableProviderAnswerIsAProviderOutage(t *testing.T) {
 	}
 }
 
+// A broken write fails this member only on a gateway, and still fails a single credential.
+func TestResolveAccessTokens_StoreFaultFailsOnlyThatMember(t *testing.T) {
+	t.Parallel()
+
+	ctx, env := newExpiredRefreshEnv(t, "refresh-store-fault", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		// Postgres refuses a NUL in text, so storing this reply fails on every try.
+		_, _ = w.Write([]byte(`{"access_token":"refreshed","refresh_token":"rotated","expires_in":3600,"scope":"read\u0000write"}`))
+	})
+
+	tokens, err := env.mgr.ResolveAvailableAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	require.NoError(t, err, "a gateway keeps serving its other members")
+	require.Len(t, tokens, 1)
+	for _, entry := range tokens {
+		require.Empty(t, entry.Token)
+		require.True(t, entry.SessionUnavailable(), "never an anonymous dial")
+		require.Equal(t, remotesessions.RefreshOutageNone, remotesessions.OutageKindOf(entry.ClientCredentialErr))
+	}
+
+	_, err = env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+	require.Error(t, err)
+	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable, "a single credential stays a 500")
+}
+
+// A provider's invalid_grant after an outage means reconnect, so the outage record goes.
+func TestRefreshNow_InvalidGrantClearsTheOutageRecord(t *testing.T) {
+	t.Parallel()
+
+	var dead atomic.Bool
+	ctx, env := newExpiredRefreshEnv(t, "refresh-outage-then-dead", func(w http.ResponseWriter, _ *http.Request) {
+		if dead.Load() {
+			w.Header().Set("Content-Type", "application/json")
+			w.WriteHeader(http.StatusBadRequest)
+			_, _ = w.Write([]byte(`{"error":"invalid_grant"}`))
+			return
+		}
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+
+	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerManual)
+	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+	kind, _ := env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
+	require.Equal(t, remotesessions.RefreshOutageProvider, kind)
+
+	dead.Store(true)
+	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerManual)
+	require.Error(t, err)
+	kind, _ = env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
+	require.Equal(t, remotesessions.RefreshOutageNone, kind)
+}
+
 // A cooldown left by a real outage still says what stopped the refresh.
 func TestRefreshNow_CooldownKeepsTheOutageKind(t *testing.T) {
 	t.Parallel()

@@ -2511,12 +2511,6 @@ SET created_by_user_id = @created_by_user_id
 WHERE id = @id
   AND organization_id = @organization_id;
 
--- name: ClearRemoteSessionIssuerJWKSConsultFailureFixture :execrows
-UPDATE remote_session_issuers
-SET jwks_last_error = NULL,
-    jwks_last_error_at = NULL
-WHERE jwks_uri = @jwks_uri;
-
 -- name: ExpireAPIKeyAtStatementFixture :exec
 -- Test-only fixture: expires a key one second before the statement started.
 UPDATE api_keys SET expires_at = statement_timestamp() - INTERVAL '1 second' WHERE id = @id AND organization_id = @organization_id;

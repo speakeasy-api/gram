@@ -86,10 +86,21 @@ func TestIsInfrastructureFailure_RealNetworkErrors(t *testing.T) {
 	_, timedOut := timeoutConn.Read(make([]byte, 1))
 	require.True(t, oops.IsInfrastructureFailure(timedOut), "read timeout: %v", timedOut)
 
+	// Someone else's service failing isn't our outage, however it failed.
+	outboundRefused := httpGetError(http.DefaultClient, "http://"+closedAddr)
+	require.False(t, oops.IsInfrastructureFailure(outboundRefused), "outbound refused: %v", outboundRefused)
+	release := make(chan struct{})
+	hanging := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-release }))
+	t.Cleanup(hanging.Close)
+	t.Cleanup(func() { close(release) })
+	outboundTimeout := httpGetError(&http.Client{Timeout: 20 * time.Millisecond}, hanging.URL)
+	require.Error(t, outboundTimeout)
+	require.False(t, oops.IsInfrastructureFailure(outboundTimeout), "outbound timeout: %v", outboundTimeout)
+
 	// A bad certificate is a real answer: it needs a fix, not a retry.
 	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
 	t.Cleanup(server.Close)
-	_, x509Err := http.DefaultClient.Get(server.URL)
+	x509Err := httpGetError(http.DefaultClient, server.URL)
 	var unknownAuthority x509.UnknownAuthorityError
 	require.ErrorAs(t, x509Err, &unknownAuthority)
 	require.False(t, oops.IsInfrastructureFailure(x509Err), "x509: %v", x509Err)
@@ -101,7 +112,7 @@ func TestIsInfrastructureFailure_RealNetworkErrors(t *testing.T) {
 	require.ErrorIs(t, denied, guardian.ErrBlockedIP)
 	require.False(t, oops.IsInfrastructureFailure(denied), "policy denied: %v", denied)
 
-	for name, cause := range map[string]error{"x509": x509Err, "policy denied": denied} {
+	for name, cause := range map[string]error{"x509": x509Err, "policy denied": denied, "outbound refused": outboundRefused, "outbound timeout": outboundTimeout} {
 		w := httptest.NewRecorder()
 		oops.ErrHandle(testenv.NewLogger(t), func(http.ResponseWriter, *http.Request) error {
 			return oops.E(oops.CodeUnexpected, cause, "call upstream")
@@ -114,6 +125,14 @@ func TestIsInfrastructureFailure_RealNetworkErrors(t *testing.T) {
 		require.Equal(t, http.StatusInternalServerError, w.Code, name)
 		require.Empty(t, w.Header().Get("Retry-After"), name)
 	}
+}
+
+func httpGetError(client *http.Client, url string) error {
+	resp, err := client.Get(url)
+	if err == nil {
+		_ = resp.Body.Close()
+	}
+	return err //nolint:wrapcheck // the test inspects the client's own error
 }
 
 // droppedConnectionError reads from a connection its peer reset.
@@ -129,7 +148,9 @@ func droppedConnectionError(t *testing.T) error {
 		if aerr != nil {
 			return
 		}
-		_ = conn.(*net.TCPConn).SetLinger(0)
+		if tcp, ok := conn.(*net.TCPConn); ok {
+			_ = tcp.SetLinger(0)
+		}
 		_ = conn.Close()
 	}()
 	conn, err := net.Dial("tcp", listener.Addr().String())
@@ -138,7 +159,7 @@ func droppedConnectionError(t *testing.T) error {
 	<-accepted
 	_, err = conn.Read(make([]byte, 1))
 	require.ErrorIs(t, err, syscall.ECONNRESET)
-	return err
+	return fmt.Errorf("read: %w", err)
 }
 
 func TestIsStoreFailure(t *testing.T) {

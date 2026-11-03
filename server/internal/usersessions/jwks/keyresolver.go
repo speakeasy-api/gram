@@ -271,7 +271,7 @@ func (k *KeyResolver) resolveShared(ctx context.Context, source Source) (*Result
 		if err != nil {
 			return nil, err
 		}
-		if !state.ExpiresAt.After(time.Now()) && recentTransientFailure(state) {
+		if len(state.Document) > 0 && !state.ExpiresAt.After(time.Now()) && recentTransientFailure(state) {
 			return nil, ErrKeySetUnavailable
 		}
 		// The scope budget is charged by the resolver at the moment it

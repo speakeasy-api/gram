@@ -263,6 +263,12 @@ func TestServePublic_MetaEndpoint_RefreshFailureNotFromTheProvider(t *testing.T)
 	require.NoError(t, err)
 	require.True(t, held)
 
+	text, isError := metaToolResultText(t, executeMetaTool(t, ti, f.metaSlug, f.bearer, "member--ping"))
+	require.True(t, isError)
+	require.Contains(t, text, "can't renew its sign-in right now")
+	require.NotContains(t, text, "provider")
+	require.NotContains(t, text, "reconnect")
+
 	status := f.connectionStatus(t, ctx)
 	require.Equal(t, metamcp.SignInUnavailable, status.Servers[0].Status)
 	require.Contains(t, status.Servers[0].Detail, "can't renew its sign-in right now")
@@ -329,6 +335,12 @@ func TestServePublic_RevocationCheckOutageIsRetryableThenRecovers(t *testing.T) 
 	require.Empty(t, w.Header().Get("WWW-Authenticate"), "an outage never restarts sign-in")
 	require.Empty(t, w.Header().Get(constants.HeaderProxiedResponse), "our own dependency stays counted")
 	require.Equal(t, "Speakeasy can't check your access right now. Retry shortly.", shareable.Error(), "the check judged nothing, so it promises nothing")
+
+	// A token no check accepts stays a sign-in prompt, even with that store down: no fallback hides it.
+	_, err = servePublicHTTP(t, ctx, ti, f.metaSlug, body, f.bearer+"x", nil)
+	var refused *oops.ShareableError
+	require.ErrorAs(t, err, &refused)
+	require.Equal(t, oops.CodeUnauthorized, refused.Code, "error: %v", err)
 
 	ti.service.SetChatSessionsManager(ti.chatSessionsManager)
 	w, err = servePublicHTTP(t, ctx, ti, f.metaSlug, body, f.bearer, nil)

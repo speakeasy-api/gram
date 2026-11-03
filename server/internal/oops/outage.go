@@ -6,6 +6,7 @@ import (
 	"log/slog"
 	"net"
 	"net/http"
+	"net/url"
 	"slices"
 	"strconv"
 	"strings"
@@ -35,15 +36,19 @@ var transientSQLStates = map[string]struct{}{
 // transientSQLStateClasses are SQLSTATE classes a retry can clear: connection exceptions and exhausted resources.
 var transientSQLStateClasses = []string{"08", "53"}
 
-// connectionErrnos are dial or connection failures; a certificate or dial policy refusal never is one.
+// connectionErrnos are dial or connection failures; a dial policy refusal never is one.
 var connectionErrnos = []syscall.Errno{
 	syscall.ECONNREFUSED, syscall.ECONNRESET, syscall.ECONNABORTED, syscall.EPIPE, syscall.ETIMEDOUT,
 	syscall.EHOSTUNREACH, syscall.ENETUNREACH, syscall.ENETDOWN, syscall.EADDRNOTAVAIL,
 }
 
-// IsInfrastructureFailure reports a store or network that couldn't answer right now.
+// IsInfrastructureFailure reports our own store or the network to it that couldn't answer right now.
 func IsInfrastructureFailure(err error) bool {
 	if err == nil || errors.Is(err, pgx.ErrNoRows) {
+		return false
+	}
+	// An outbound HTTP call is someone else's service; whoever makes it classifies its failure.
+	if _, outbound := errors.AsType[*url.Error](err); outbound {
 		return false
 	}
 	if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok {

@@ -828,6 +828,8 @@ func (s *RefreshService) refresh(
 		})
 		switch {
 		case err == nil:
+			// A dead grant needs a reconnect, not a retry, so no outage stays on record.
+			s.clearRefreshOutage(ctx, sess)
 			return zero, &client, nil, refreshErr
 		case !errors.Is(err, pgx.ErrNoRows):
 			return zero, &client, nil, fmt.Errorf("clear remote session refresh token after %s: %w", tokenRefreshErr.UpstreamCode(), err)
