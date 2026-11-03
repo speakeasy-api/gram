@@ -10931,11 +10931,19 @@ func unmarshalDirectoryReviewItemResponseBodyToAccessDirectoryReviewItem(v *Dire
 func unmarshalScopeDefinitionResponseBodyToAccessScopeDefinition(v *ScopeDefinitionResponseBody) *access.ScopeDefinition {
 	res := &access.ScopeDefinition{
 		Slug:           *v.Slug,
+		Label:          *v.Label,
 		Description:    *v.Description,
 		ResourceType:   *v.ResourceType,
+		Category:       *v.Category,
+		Sensitive:      *v.Sensitive,
+		Sensitivity:    v.Sensitivity,
 		Visibility:     *v.Visibility,
 		AgentEligible:  *v.AgentEligible,
 		ExclusionScope: v.ExclusionScope,
+	}
+	res.SubScopes = make([]string, len(v.SubScopes))
+	for i, val := range v.SubScopes {
+		res.SubScopes[i] = val
 	}
 
 	return res

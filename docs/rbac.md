@@ -177,6 +177,18 @@ Read this map as "if a handler requires the key scope, any scope in the value li
 
 Expansion happens when the engine evaluates a check. If code asks for `project:read`, the engine checks for `root`, `project:read`, and `project:write` against the same resource selector. The API also exposes the inverse relationship as `sub_scopes` so role UIs can show what a broader grant implies; those sub-scopes are derived from code and are not additional database rows.
 
+#### Scope catalogue
+
+What a person reads about a scope lives in one place, `server/internal/authz/catalog.go`, beside the tables that define its semantics. `access.listScopes` projects the catalogue, so every entry carries:
+
+- `label`: the short name shown instead of the slug (`log:read` is "View tool logs").
+- `description`: what a holder can do and, where it matters, what the scope does not include.
+- `category`: how the dashboard groups the scope. It differs from `resource_type` where one resource kind carries several permission families: `plugin:write` and `log:read` are checked against a project, but a role editor lists them under plugins and tool logs, not under projects.
+- `sensitive` and `sensitivity`: whether granting the scope deserves a warning, and why. The set is a product decision: `chat:read` and `chat:write` (`conversations`, other members' transcripts), `log:read` (`tool_logs`, every member's tool arguments, results and prompt text), and `org:admin` (`destructive_admin`, removes members and rewrites every role). Secrets and credentials are deliberately not in it. A scope that includes a sensitive scope is itself sensitive, so a broader grant never loses the warning.
+- `sub_scopes`: the scopes a grant of this one also satisfies, from `scopeExpansions`.
+
+`TestScopeCatalog_CoversEveryRegisteredScope` fails when a scope is added without an entry, and `TestService_ListScopes_CategoriesAndSensitivitiesAreInTheDesignEnum` fails when the catalogue emits a category or reason the Goa design does not declare; generated clients would otherwise reject the whole `listScopes` response. Dashboard copy for a permission comes from these fields; the client keeps no list of its own.
+
 ### Grant
 
 A grant gives a principal a scope for some resource selector.
