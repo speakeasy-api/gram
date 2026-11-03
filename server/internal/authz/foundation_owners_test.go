@@ -179,8 +179,10 @@ var foundationFunctionOwners = map[string]string{
 // foundationOwner returns the ticket that migrates consumer. Scope metadata
 // projections and stored-grant seeding move with X1's catalogue, validation
 // and default projections (X2 for runtime-policy and key policies), wherever
-// they are called from; everything else follows its function, file or
-// package.
+// they are called from. Engine wiring (construction, cache invalidation,
+// challenge logging) belongs to F5's shared engine construction, except in
+// demoseed, which builds its own engine to seed data and stays with X4.
+// Everything else follows its function, file or package.
 func foundationOwner(c inventoryConsumer) string {
 	dir := path.Dir(c.File)
 	switch {

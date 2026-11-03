@@ -226,6 +226,7 @@ func runFoundationCase(t *testing.T, f foundationFixture) {
 		}
 		rows, err := flattenRoleGrants(writes)
 		if f.Want != "allow" {
+			require.Error(t, err, "role grant flattening should reject these writes")
 			requireFoundationOutcome(t, f.Want, false, err)
 			return
 		}

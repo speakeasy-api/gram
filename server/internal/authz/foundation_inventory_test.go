@@ -359,6 +359,21 @@ func scanFunction(fset *token.FileSet, rel, alias string, fn *ast.FuncDecl, byKe
 			if isAuthzSelector(x.Type, alias, "Check") {
 				record(categoryCheck, "Check", compositeScope(fset, x, alias), enclosingMethod(stack))
 			}
+			// Elements of []authz.Check{{...}} and map[K]authz.Check{k: {...}}
+			// elide their type, so record them through the outer literal.
+			if elidesCheck(x.Type, alias) {
+				for _, elt := range x.Elts {
+					if kv, ok := elt.(*ast.KeyValueExpr); ok {
+						elt = kv.Value
+					}
+					if u, ok := elt.(*ast.UnaryExpr); ok && u.Op == token.AND {
+						elt = u.X
+					}
+					if lit, ok := elt.(*ast.CompositeLit); ok && lit.Type == nil {
+						record(categoryCheck, "Check", compositeScope(fset, lit, alias), enclosingMethod(stack))
+					}
+				}
+			}
 		case *ast.CallExpr:
 			sel, ok := x.Fun.(*ast.SelectorExpr)
 			if !ok {
@@ -394,6 +409,24 @@ func isAuthzSelector(expr ast.Expr, alias, name string) bool {
 	}
 	ident, ok := sel.X.(*ast.Ident)
 	return ok && ident.Name == alias && sel.Sel.Name == name
+}
+
+// elidesCheck reports whether typ is a slice, array or map literal type whose
+// elements are authz.Check or *authz.Check.
+func elidesCheck(typ ast.Expr, alias string) bool {
+	var elem ast.Expr
+	switch t := typ.(type) {
+	case *ast.ArrayType:
+		elem = t.Elt
+	case *ast.MapType:
+		elem = t.Value
+	default:
+		return false
+	}
+	if star, ok := elem.(*ast.StarExpr); ok {
+		elem = star.X
+	}
+	return isAuthzSelector(elem, alias, "Check")
 }
 
 // enclosingMethod names the innermost enforcing call around the node on top of

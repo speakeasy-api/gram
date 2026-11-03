@@ -55,7 +55,9 @@ internal/access/impl.go,*Service.ListGrants,loader,ResolveUserPrincipals,,,1,O2 
 internal/access/impl.go,*Service.ListGrants,projection,GrantsFromOverrides,,,1,X1 AIS-873
 internal/access/impl.go,*Service.ListIdentityAccess,check,Check,ScopeOrgRead,Require,1,O2 AIS-838
 internal/access/impl.go,*Service.ListIdentityAccess,loader,ResolveUserPrincipals,,,1,O2 AIS-838
+internal/access/impl.go,*Service.ListMembers,check,Check,ScopeOrgRead,,1,O2 AIS-838
 internal/access/impl.go,*Service.ListMembers,check,Check,ScopeProjectRead,,1,O2 AIS-838
+internal/access/impl.go,*Service.ListRoles,check,Check,ScopeOrgRead,,1,O2 AIS-838
 internal/access/impl.go,*Service.ListRoles,check,Check,ScopeProjectRead,,1,O2 AIS-838
 internal/access/impl.go,*Service.ListScopes,check,Check,ScopeOrgRead,Require,1,O2 AIS-838
 internal/access/impl.go,*Service.ResolveChallenge,check,Check,ScopeOrgAdmin,Require,1,O2 AIS-838
@@ -489,6 +491,7 @@ internal/platformmcp/adapters.go,*PostgresReader.ListProjects,engine,FindMatched
 internal/platformmcp/adapters.go,*PostgresReader.ResolveReviewProject,check,Check,ScopeProjectRead,Require,1,X3 AIS-875
 internal/platformmcp/adapters.go,*PostgresReader.allowedMCPIDs,check,MCPCheck,ScopeMCPRead,,1,X3 AIS-875
 internal/platformmcp/adapters.go,*PostgresReader.allowedMCPIDs,engine,FindMatched,,,1,X3 AIS-875
+internal/platformmcp/adapters.go,*PostgresReader.pluginNamesVisible,check,Check,ScopeOrgAdmin,FindMatched,1,X3 AIS-875
 internal/platformmcp/adapters.go,*PostgresReader.pluginNamesVisible,engine,FindMatched,,,1,X3 AIS-875
 internal/platformmcp/adapters.go,*PostgresReader.resolveProjectWithScope,check,Check,scope,Require,1,X3 AIS-875
 internal/platformmcp/analytics.go,datasetReadable,evaluator,GrantsAuthorize,,,1,X3 AIS-875
@@ -538,7 +541,7 @@ internal/platformmcp/shadow_policy_summary.go,loadShadowPolicySnapshots,loader,L
 internal/platformmcp/signal_authoring.go,*SignalAuthoringService.scope,check,Check,ScopeProjectRead,Require,1,X3 AIS-875
 internal/platformmcp/signal_authoring.go,*SignalAuthoringService.scope,check,Check,ScopeProjectWrite,Require,1,X3 AIS-875
 internal/platformmcp/skills.go,*SkillsService.beginWith,engine,PrepareContext,,,1,X3 AIS-875
-internal/platformmcp/skills.go,*SkillsService.requireSkillRead,check,Check,ScopeSkillRead,,1,X3 AIS-875
+internal/platformmcp/skills.go,*SkillsService.requireSkillRead,check,Check,ScopeSkillRead,,2,X3 AIS-875
 internal/platformmcp/skills.go,*SkillsService.requireSkillRead,engine,RequireAnyUnblocked,,,1,X3 AIS-875
 internal/platformmcp/tool_gateway_sessions.go,listGatewaySessions,loader,GrantsFromContext,,,1,X3 AIS-875
 internal/platformmcp/tool_get_platform_context.go,registerGetPlatformContextTool,loader,GrantsFromContext,,,1,X3 AIS-875
@@ -782,7 +785,7 @@ internal/skills/impl.go,*Service.Distribute,check,Check,ScopeProjectWrite,Requir
 internal/skills/impl.go,*Service.Undistribute,check,Check,ScopeProjectWrite,Require,1,S1 AIS-853
 internal/skills/impl.go,*Service.accessibleSkillIDs,loader,ResolveUserPrincipals,,,1,S2 AIS-854
 internal/skills/impl.go,*Service.requireAccess,check,Check,scope,Require,1,S1 AIS-853
-internal/skills/impl.go,*Service.requireSkillGrant,check,Check,scope,,1,S1 AIS-853
+internal/skills/impl.go,*Service.requireSkillGrant,check,Check,scope,,2,S1 AIS-853
 internal/skills/impl.go,*Service.requireSkillGrant,engine,RequireAnyUnblocked,,,1,S1 AIS-853
 internal/skills/links.go,*Service.readableLinkTargets,check,Check,ScopeMCPRead,,1,S1 AIS-853
 internal/skills/links.go,*Service.readableLinkTargets,check,MCPCheck,ScopeMCPRead,,1,S1 AIS-853
