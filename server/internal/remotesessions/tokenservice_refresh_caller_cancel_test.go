@@ -150,39 +150,47 @@ func TestDrainRefreshes_WaitsForARefreshThatOutlivedItsCaller(t *testing.T) {
 	require.Equal(t, "refresh-rotated", stored, "a completed drain means the rotated token is stored")
 }
 
-// leaseSpyCache records the lock lease a refresh holds.
+// leaseSpyCache records the lease a refresh holds and can report it lost.
 type leaseSpyCache struct {
 	cache.Cache
-	mu      sync.Mutex
-	ttl     time.Duration
-	deleted bool
+	lost      bool
+	onRelease func()
+	mu        sync.Mutex
+	ttl       time.Duration
+	released  bool
 }
 
-func (c *leaseSpyCache) Add(_ context.Context, _ string, ttl time.Duration) (bool, error) {
+func (c *leaseSpyCache) AcquireLease(_ context.Context, _, _ string, ttl time.Duration) (bool, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.ttl = ttl
 	return true, nil
 }
 
-func (c *leaseSpyCache) Set(_ context.Context, _ string, _ any, ttl time.Duration) error {
+func (c *leaseSpyCache) RenewLease(_ context.Context, _, _ string, ttl time.Duration) (bool, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	if c.lost {
+		return false, nil
+	}
 	c.ttl = ttl
-	return nil
+	return true, nil
 }
 
-func (c *leaseSpyCache) Delete(context.Context, string) error {
+func (c *leaseSpyCache) ReleaseLeaseIfOwner(context.Context, string, string) (bool, error) {
 	c.mu.Lock()
-	defer c.mu.Unlock()
-	c.deleted = true
-	return nil
+	c.released = true
+	c.mu.Unlock()
+	if c.onRelease != nil {
+		c.onRelease()
+	}
+	return true, nil
 }
 
 func (c *leaseSpyCache) state() (time.Duration, bool) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	return c.ttl, c.deleted
+	return c.ttl, c.released
 }
 
 func TestRefreshNow_HoldsTheLeaseUntilTheOutcomeIsStored(t *testing.T) {
@@ -195,14 +203,25 @@ func TestRefreshNow_HoldsTheLeaseUntilTheOutcomeIsStored(t *testing.T) {
 	close(release)
 	spy := &leaseSpyCache{Cache: cache.NoopCache}
 	var ttlDuringPost atomic.Int64
-	var deletedDuringPost atomic.Bool
+	var releasedDuringPost atomic.Bool
 	provider := rotatingProvider(&refreshes, arrived, release)
 	ctx, env := newExpiredRefreshEnv(t, "refresh-lease", func(w http.ResponseWriter, r *http.Request) {
-		ttl, deleted := spy.state()
+		ttl, released := spy.state()
 		ttlDuringPost.Store(int64(ttl))
-		deletedDuringPost.Store(deleted)
+		releasedDuringPost.Store(released)
 		provider(w, r)
 	})
+	var storedAtRelease string
+	spy.onRelease = func() {
+		active, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+			SubjectUrn:            env.subject,
+			RemoteSessionClientID: env.clientID,
+		})
+		if err != nil {
+			return
+		}
+		storedAtRelease, _ = env.enc.Decrypt(active.RefreshTokenEncrypted.String)
+	}
 	refresher := env.newRefresher(testenv.NewMeterProvider(t), spy)
 	active, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
 		SubjectUrn:            env.subject,
@@ -214,9 +233,35 @@ func TestRefreshNow_HoldsTheLeaseUntilTheOutcomeIsStored(t *testing.T) {
 	require.NoError(t, err)
 
 	require.Greater(t, time.Duration(ttlDuringPost.Load()), lockTTL, "the lease must outlast the store, not only the POST")
-	require.False(t, deletedDuringPost.Load())
-	_, deleted := spy.state()
-	require.True(t, deleted, "a finished refresh releases its extended lease")
+	require.False(t, releasedDuringPost.Load())
+	require.Equal(t, "refresh-rotated", storedAtRelease, "the lease is released only after the new token is stored")
+}
+
+func TestRefreshNow_LostLeaseDoesNotPresentTheToken(t *testing.T) {
+	t.Parallel()
+
+	var refreshes atomic.Int32
+	arrived := make(chan struct{})
+	release := make(chan struct{})
+	close(release)
+	ctx, env := newExpiredRefreshEnv(t, "refresh-lease-lost", rotatingProvider(&refreshes, arrived, release))
+	refresher := env.newRefresher(testenv.NewMeterProvider(t), &leaseSpyCache{Cache: cache.NoopCache, lost: true})
+	active, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            env.subject,
+		RemoteSessionClientID: env.clientID,
+	})
+	require.NoError(t, err)
+
+	_, err = refresher.RefreshNow(ctx, active, "", remotesessionmetrics.RefreshTriggerManual)
+	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable, "the caller retries rather than reconnecting")
+	require.Zero(t, refreshes.Load(), "another caller may be presenting this token")
+
+	after, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            env.subject,
+		RemoteSessionClientID: env.clientID,
+	})
+	require.NoError(t, err)
+	require.True(t, after.RefreshTokenEncrypted.Valid, "the grant survives")
 }
 
 func TestRefreshNow_ManualTriggerWaitsForTheResult(t *testing.T) {

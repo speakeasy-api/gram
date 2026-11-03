@@ -299,6 +299,9 @@ func resourceAmongSiblings(attachments map[uuid.UUID][]remotesessions_repo.ListO
 
 var errRefreshNotApplied = errors.New("remotesessions: refreshed tokens matched no active session")
 
+// errRefreshLeaseLost marks a holder whose lease expired before its POST.
+var errRefreshLeaseLost = errors.New("remotesessions: refresh lease lost")
+
 // errRefreshOutcomeNotStored marks a provider answer that could not be written.
 var errRefreshOutcomeNotStored = errors.New("remotesessions: refresh outcome not stored")
 
@@ -525,8 +528,15 @@ func (s *RefreshService) refresh(
 
 	lockKey := refreshLockKey(sess.SubjectUrn, sess.RemoteSessionClientID)
 	lockAcquiredAt := time.Now()
-	held, lockErr := s.locks.Add(ctx, lockKey, refreshLockTTL)
-	leaseDeadline := lockAcquiredAt.Add(refreshLockTTL)
+	leases, renewable := s.locks.(cache.RenewableLeaseCache)
+	leaseOwner := uuid.NewString()
+	var held bool
+	var lockErr error
+	if renewable {
+		held, lockErr = leases.AcquireLease(ctx, lockKey, leaseOwner, refreshLockTTL)
+	} else {
+		held, lockErr = s.locks.Add(ctx, lockKey, refreshLockTTL)
+	}
 
 	switch {
 	case lockErr != nil:
@@ -548,19 +558,26 @@ func (s *RefreshService) refresh(
 		)
 	default:
 		defer o11y.LogDefer(ctx, s.logger, "failed to release remote session refresh lock", func() error {
+			// Detached: MCP clients disconnect mid-refresh routinely, and a
+			// skipped release strands the lease for its full TTL.
+			releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
+			defer cancel()
+
+			if renewable {
+				if _, err := leases.ReleaseLeaseIfOwner(releaseCtx, lockKey, leaseOwner); err != nil {
+					return fmt.Errorf("release refresh lease: %w", err)
+				}
+				return nil
+			}
+
 			// Past TTL the key may be a new holder's lock. Skip delete; TTL reaps.
-			if !time.Now().Before(leaseDeadline) {
+			if time.Since(lockAcquiredAt) >= refreshLockTTL {
 				s.logger.WarnContext(ctx, "remote session refresh outlived its lock lease; leaving release to TTL",
 					attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
 					attr.SlogCacheKey(lockKey),
 				)
 				return nil
 			}
-
-			// Detached: MCP clients disconnect mid-refresh routinely, and a
-			// skipped release strands the lease for its full TTL.
-			releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
-			defer cancel()
 
 			return s.locks.Delete(releaseCtx, lockKey)
 		})
@@ -635,15 +652,18 @@ func (s *RefreshService) refresh(
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshRotationTimeout)
 	defer cancel()
 
-	if lockErr == nil && held && time.Now().Before(leaseDeadline) {
-		if err := s.locks.Set(ctx, lockKey, "1", refreshRotationTimeout); err != nil {
+	if renewable && lockErr == nil && held {
+		renewed, err := leases.RenewLease(ctx, lockKey, leaseOwner, refreshRotationTimeout)
+		switch {
+		case err != nil:
 			s.logger.WarnContext(ctx, "failed to extend remote session refresh lease",
 				attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
 				attr.SlogCacheKey(lockKey),
 				attr.SlogError(err),
 			)
-		} else {
-			leaseDeadline = time.Now().Add(refreshRotationTimeout)
+		case !renewed:
+			// Another caller may be presenting this refresh token by now.
+			return zero, &client, nil, newTokenRefreshError("the refresh lease expired before the provider was asked; retry", errRefreshLeaseLost, refreshRemedyRetry)
 		}
 	}
 
