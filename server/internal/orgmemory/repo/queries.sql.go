@@ -19,8 +19,10 @@ LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
 WHERE c.project_id = $1
   AND c.organization_id = $2
   AND c.summary_redacted IS TRUE
+  AND c.summary IS NOT NULL
   AND c.deleted IS FALSE
-  AND (c.memory_excluded_at IS NOT NULL OR ua.account_type = 'personal')
+  AND (c.memory_excluded_at IS NOT NULL
+       OR (ua.id IS NOT NULL AND (ua.account_type IS NULL OR ua.account_type = 'personal')))
   AND c.summary_generated_at >= $3::timestamptz
 `
 
@@ -31,7 +33,7 @@ type CountLeftOutSessionsParams struct {
 }
 
 // Summarized sessions memory skips on purpose: excluded by a person, or from
-// a personal account.
+// a personal or unclassified account.
 func (q *Queries) CountLeftOutSessions(ctx context.Context, arg CountLeftOutSessionsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countLeftOutSessions, arg.ProjectID, arg.OrganizationID, arg.Since)
 	var column_1 int64
@@ -107,7 +109,7 @@ LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
 WHERE m.project_id = $1
   AND m.organization_id = $2
   AND m.deleted IS FALSE
-  AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+  AND (m.chat_id IS NULL OR (c.project_id = m.project_id AND c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
   AND m.created_at >= $3::timestamptz
 `
 
@@ -312,7 +314,7 @@ WHERE m.id = ANY($1::uuid[])
   AND m.project_id = $2
   AND m.organization_id = $3
   AND m.deleted IS FALSE
-  AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+  AND (m.chat_id IS NULL OR (c.project_id = m.project_id AND c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
 ORDER BY m.created_at
 `
 
@@ -371,7 +373,7 @@ LEFT JOIN agents a ON a.id = m.author_agent_id
 WHERE m.project_id = $1
   AND m.organization_id = $2
   AND m.deleted IS FALSE
-  AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+  AND (m.chat_id IS NULL OR (c.project_id = m.project_id AND c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
   AND m.created_at >= $3::timestamptz
   AND NOT EXISTS (
     SELECT 1 FROM memory_digests d

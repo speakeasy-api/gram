@@ -131,8 +131,9 @@ func (s *Service) authorize(ctx context.Context) (*contextvalues.AuthContext, er
 // recordRead audits a dashboard read with the sources it showed, mirroring
 // the Platform MCP tools so one trail covers every disclosure.
 func (s *Service) recordRead(ctx context.Context, authCtx *contextvalues.AuthContext, method string, sources []string) error {
+	// Every disclosure leaves an audit row: without a logger, refuse the read.
 	if s.audit == nil {
-		return nil
+		return oops.E(oops.CodeUnexpected, nil, "organizational memory audit logger is not configured").LogError(ctx, s.logger)
 	}
 	if err := s.audit.LogTeamMemoryRead(ctx, s.db, audit.LogTeamMemoryReadEvent{
 		OrganizationID:   authCtx.ActiveOrganizationID,
@@ -285,6 +286,11 @@ func (s *Service) GetOrgMemoryDigest(ctx context.Context, payload *gen.GetOrgMem
 			sources = append(sources, "memo:"+m.ID.String())
 		}
 	}
+
+	// Counts match what is shown: a source excluded or deleted since the
+	// digest was written is neither listed nor counted.
+	result.Digest.SessionCount = len(result.Sessions)
+	result.Digest.MemoCount = len(result.Memos)
 
 	if err := s.recordRead(ctx, authCtx, "getDigest", sources); err != nil {
 		return nil, err
