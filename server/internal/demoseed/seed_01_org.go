@@ -216,7 +216,6 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 			return s.q.OrgDeleteRemoteSessionIssuers(ctx, repo.OrgDeleteRemoteSessionIssuersParams{ProjectID: proj, OrgID: org})
 		}},
 		{"delete mcp servers", func() error { return s.q.OrgDeleteMCPServers(ctx, org) }},
-		{"delete custom domains", func() error { return s.q.OrgDeleteCustomDomains(ctx, org) }},
 		{"delete remote protected resources", func() error { return s.q.OrgDeleteRemoteProtectedResources(ctx, proj) }},
 		{"delete meta mcp servers", func() error { return s.q.OrgDeleteMetaMCPServers(ctx, org) }},
 		// meta_mcp_servers RESTRICTs its issuer, so issuers clear after it.
@@ -227,6 +226,9 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 			return s.q.OrgDeleteExternalOAuthServerMetadata(ctx, repo.OrgDeleteExternalOAuthServerMetadataParams{ProjectID: proj, OrgID: org})
 		}},
 		{"delete toolsets", func() error { return s.q.OrgDeleteToolsets(ctx, org) }},
+		// Domain SET NULL references must be gone before deleting their domain:
+		// root endpoints require it and toolset slugs can collide without it.
+		{"delete custom domains", func() error { return s.q.OrgDeleteCustomDomains(ctx, org) }},
 		// environments.project_id is NOT NULL but its FK is ON DELETE SET NULL,
 		// so the projects delete below fails outright on any environment row.
 		// The demo tenant seeds none, but the local development tenant does

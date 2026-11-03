@@ -26,3 +26,21 @@ func TestCustomDomainViewPreservesObservationFreshnessWithinOneSecond(t *testing
 	require.Equal(t, mixed.DNSCheckedAt, mixed.HealthCheckedAt)
 	require.Equal(t, new("unknown"), mixed.HealthStatus)
 }
+
+func TestCustomDomainViewDNSFindingsAreNotInfrastructureFailures(t *testing.T) {
+	t.Parallel()
+	for _, issue := range []string{"dns_not_found", "dns_target_mismatch"} {
+		t.Run(issue, func(t *testing.T) {
+			t.Parallel()
+			checkedAt := pgtype.Timestamptz{Time: time.Now(), Valid: true}
+			domain := customdomainsrepo.CustomDomain{
+				DnsCheckedAt: checkedAt, HealthCheckedAt: checkedAt,
+				HealthStatus: pgtype.Text{String: "unhealthy", Valid: true},
+				HealthIssue:  pgtype.Text{String: issue, Valid: true},
+			}
+			got := mv.BuildCustomDomainView(domain, false, uuid.Nil)
+			require.Equal(t, new("unknown"), got.HealthStatus)
+			require.Nil(t, got.HealthIssue)
+		})
+	}
+}

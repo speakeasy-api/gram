@@ -272,10 +272,6 @@ type Client struct {
 	// getHookClients endpoint.
 	GetHookClientsDoer goahttp.Doer
 
-	// ListCustomDomains Doer is the HTTP client used to make requests to the
-	// listCustomDomains endpoint.
-	ListCustomDomainsDoer goahttp.Doer
-
 	// ListRegistryPromotionCandidates Doer is the HTTP client used to make
 	// requests to the listRegistryPromotionCandidates endpoint.
 	ListRegistryPromotionCandidatesDoer goahttp.Doer
@@ -448,6 +444,10 @@ type Client struct {
 	// redeployProject endpoint.
 	RedeployProjectDoer goahttp.Doer
 
+	// ListCustomDomains Doer is the HTTP client used to make requests to the
+	// listCustomDomains endpoint.
+	ListCustomDomainsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -532,7 +532,6 @@ func NewClient(
 		SetMcpServerScopePinDoer:                    doer,
 		GetMcpServerToolCallsDoer:                   doer,
 		GetHookClientsDoer:                          doer,
-		ListCustomDomainsDoer:                       doer,
 		ListRegistryPromotionCandidatesDoer:         doer,
 		GetRegistryPromotionCandidateDoer:           doer,
 		PromoteRegistryCandidateDoer:                doer,
@@ -576,6 +575,7 @@ func NewClient(
 		BackfillMcpConnectGrantsDoer:                doer,
 		GetProjectRedeployPreviewDoer:               doer,
 		RedeployProjectDoer:                         doer,
+		ListCustomDomainsDoer:                       doer,
 		RestoreResponseBody:                         restoreBody,
 		scheme:                                      scheme,
 		host:                                        host,
@@ -2125,30 +2125,6 @@ func (c *Client) GetHookClients() goa.Endpoint {
 	}
 }
 
-// ListCustomDomains returns an endpoint that makes HTTP requests to the admin
-// service listCustomDomains server.
-func (c *Client) ListCustomDomains() goa.Endpoint {
-	var (
-		encodeRequest  = EncodeListCustomDomainsRequest(c.encoder)
-		decodeResponse = DecodeListCustomDomainsResponse(c.decoder, c.RestoreResponseBody)
-	)
-	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildListCustomDomainsRequest(ctx, v)
-		if err != nil {
-			return nil, err
-		}
-		err = encodeRequest(req, v)
-		if err != nil {
-			return nil, err
-		}
-		resp, err := c.ListCustomDomainsDoer.Do(req)
-		if err != nil {
-			return nil, goahttp.ErrRequestError("admin", "listCustomDomains", err)
-		}
-		return decodeResponse(resp)
-	}
-}
-
 // ListRegistryPromotionCandidates returns an endpoint that makes HTTP requests
 // to the admin service listRegistryPromotionCandidates server.
 func (c *Client) ListRegistryPromotionCandidates() goa.Endpoint {
@@ -3176,6 +3152,30 @@ func (c *Client) RedeployProject() goa.Endpoint {
 		resp, err := c.RedeployProjectDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "redeployProject", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListCustomDomains returns an endpoint that makes HTTP requests to the admin
+// service listCustomDomains server.
+func (c *Client) ListCustomDomains() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListCustomDomainsRequest(c.encoder)
+		decodeResponse = DecodeListCustomDomainsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListCustomDomainsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListCustomDomainsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listCustomDomains", err)
 		}
 		return decodeResponse(resp)
 	}

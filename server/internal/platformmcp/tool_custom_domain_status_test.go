@@ -15,13 +15,13 @@ import (
 func TestCustomDomainStatusContract(t *testing.T) {
 	t.Parallel()
 	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "test", Version: "1"}, nil))
-	registerCustomDomainStatusTool(reg, nil, nil)
+	registerCustomDomainStatusTool(reg, nil, nil, "")
 	descriptors := reg.Descriptors()
 	require.Len(t, descriptors, 1)
 	require.Equal(t, ExternalAuthorizationOrgAdmin, descriptors[0].Meta.Authorization)
 	require.Equal(t, ProjectScopeNone, descriptors[0].Meta.ProjectScope)
 	require.Equal(t, externalOnly, descriptors[0].Meta.Audiences)
-	_, err := readCustomDomainStatus(t.Context(), nil, "org-example")
+	_, err := readCustomDomainStatus(t.Context(), nil, "org-example", "")
 	require.ErrorIs(t, err, ErrUnavailable)
 }
 
@@ -31,7 +31,7 @@ func TestCustomDomainStatusAuthorizationAndUnavailable(t *testing.T) {
 	bindExternalTestPrincipal(server)
 	reg := newRegistrar(server)
 	reg.withExternalAuthorizer(allowExternalCallAuthorizer{})
-	registerCustomDomainStatusTool(reg, nil, nil)
+	registerCustomDomainStatusTool(reg, nil, nil, "")
 	clientTransport, serverTransport := mcp.NewInMemoryTransports()
 	serverSession, err := server.Connect(t.Context(), serverTransport, nil)
 	require.NoError(t, err)
@@ -78,16 +78,16 @@ func TestCustomDomainStatusTenantIsolation(t *testing.T) {
 		DnsCheckedAt:           checkedAt,
 	})
 	require.NoError(t, err)
-	got, err := readCustomDomainStatus(t.Context(), conn, "org-example")
+	got, err := readCustomDomainStatus(t.Context(), conn, "org-example", "")
 	require.NoError(t, err)
 	require.True(t, got.Configured)
 	require.Equal(t, "unconfirmed", got.DNSConfigurationStatus)
 	require.Equal(t, "healthy", got.InfrastructureStatus)
-	other, err := readCustomDomainStatus(t.Context(), conn, "org-other")
+	other, err := readCustomDomainStatus(t.Context(), conn, "org-other", "")
 	require.NoError(t, err)
 	require.Equal(t, CustomDomainStatus{}, other)
 	require.NoError(t, repo.DeleteCustomDomain(t.Context(), "org-example"))
-	deleted, err := readCustomDomainStatus(t.Context(), conn, "org-example")
+	deleted, err := readCustomDomainStatus(t.Context(), conn, "org-example", "")
 	require.NoError(t, err)
 	require.False(t, deleted.Configured)
 }
@@ -112,7 +112,7 @@ func TestCustomDomainStatusDNSFailureIsNotInfrastructureFailure(t *testing.T) {
 		DnsCheckedAt:           checkedAt,
 	})
 	require.NoError(t, err)
-	got, err := readCustomDomainStatus(t.Context(), conn, "org-example")
+	got, err := readCustomDomainStatus(t.Context(), conn, "org-example", "")
 	require.NoError(t, err)
 	require.Equal(t, "unknown", got.InfrastructureStatus)
 	require.Empty(t, got.InfrastructureIssue)
@@ -142,10 +142,40 @@ func TestCustomDomainStatusOlderWorkerCannotRefreshDNSObservation(t *testing.T) 
 		CheckedAt: pgtype.Timestamptz{Time: dnsTime.Add(time.Minute), Valid: true}, ID: domain.ID, OrganizationID: "org-example",
 	})
 	require.NoError(t, err)
-	got, err := readCustomDomainStatus(t.Context(), conn, "org-example")
+	got, err := readCustomDomainStatus(t.Context(), conn, "org-example", "")
 	require.NoError(t, err)
 	require.Equal(t, "matched", got.DNSConfigurationStatus)
 	require.Equal(t, dnsTime.UTC().Format(time.RFC3339), got.CheckedAt)
 	require.Equal(t, "unknown", got.InfrastructureStatus)
 	require.Empty(t, got.InfrastructureIssue)
+}
+
+func TestCustomDomainStatusBeforeFirstObservation(t *testing.T) {
+	t.Parallel()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "domain_without_observation")
+	require.NoError(t, err)
+	queries := customdomainsrepo.New(conn)
+	domain, err := queries.CreateCustomDomain(t.Context(), customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID: "org-example", Domain: "mcp.example.com", ProvisionerKind: "local", IpAllowlist: []string{},
+	})
+	require.NoError(t, err)
+	got, err := readCustomDomainStatus(t.Context(), conn, "org-example", "domains.example.net")
+	require.NoError(t, err)
+	require.True(t, got.Configured)
+	require.Empty(t, got.CheckedAt)
+	require.Empty(t, got.DNSConfigurationStatus)
+	require.Empty(t, got.DNSRoutingMethod)
+	require.Empty(t, got.DNSTarget)
+	require.Equal(t, "unknown", got.InfrastructureStatus)
+	require.Empty(t, got.InfrastructureIssue)
+	_, err = queries.AssignCustomDomainDNSTargetToken(t.Context(), customdomainsrepo.AssignCustomDomainDNSTargetTokenParams{
+		ID: domain.ID, OrganizationID: "org-example", DnsTargetToken: "abcdefgh23",
+	})
+	require.NoError(t, err)
+	got, err = readCustomDomainStatus(t.Context(), conn, "org-example", "domains.example.net")
+	require.NoError(t, err)
+	require.Equal(t, "abcdefgh23.domains.example.net", got.DNSTarget)
+	noSuffix, err := readCustomDomainStatus(t.Context(), conn, "org-example", "")
+	require.NoError(t, err)
+	require.Empty(t, noSuffix.DNSTarget)
 }

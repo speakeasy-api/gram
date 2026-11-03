@@ -1422,7 +1422,6 @@ var _ = Service("admin", func() {
 	mcpServerHealthMethods()
 	hookClientsMethods()
 	hookFleetMethods()
-	customDomainMethods()
 	registryDesign()
 	onboardingStackMethods()
 	onboardingPlaybookMethods()
@@ -1500,4 +1499,5 @@ var _ = Service("admin", func() {
 	mcpAuthBackfillMethods()
 	mcpConnectBackfillMethods()
 	projectRedeployMethods()
+	customDomainMethods()
 })

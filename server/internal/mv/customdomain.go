@@ -25,10 +25,17 @@ func BuildCustomDomainView(domain customdomainsrepo.CustomDomain, isUpdating boo
 		rootMcpEndpointIDString = &value
 	}
 	healthStatus := conv.FromPGText[string](domain.HealthStatus)
+	healthIssue := conv.FromPGText[string](domain.HealthIssue)
 	// Compare database timestamps before formatting drops subsecond precision.
 	// An older worker can overwrite health without refreshing DNS.
 	if domain.DnsCheckedAt.Valid && (!domain.HealthCheckedAt.Valid || !domain.DnsCheckedAt.Time.Equal(domain.HealthCheckedAt.Time)) {
 		healthStatus = new("unknown")
+	}
+	// These persisted routing findings do not establish infrastructure health.
+	switch domain.HealthIssue.String {
+	case "dns_not_found", "dns_target_mismatch":
+		healthStatus = new("unknown")
+		healthIssue = nil
 	}
 	return &domains.CustomDomain{
 		ID:                       domain.ID.String(),
@@ -41,7 +48,7 @@ func BuildCustomDomainView(domain customdomainsrepo.CustomDomain, isUpdating boo
 		IsUpdating:               isUpdating,
 		IPAllowlist:              ipAllowlist,
 		HealthStatus:             healthStatus,
-		HealthIssue:              conv.FromPGText[string](domain.HealthIssue),
+		HealthIssue:              healthIssue,
 		HealthCheckedAt:          conv.PtrEmpty(conv.FromPGTimestamptz(domain.HealthCheckedAt)),
 		UnhealthySince:           conv.PtrEmpty(conv.FromPGTimestamptz(domain.UnhealthySince)),
 		CertificateExpiresAt:     conv.PtrEmpty(conv.FromPGTimestamptz(domain.CertificateExpiresAt)),

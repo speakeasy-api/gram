@@ -438,15 +438,14 @@ agent-backed assistant conversation, alongside the legacy dashboard assistant
 conversation. Filter by Speakeasy Slackbot to verify separate attribution; the
 underlying inference messages still use the assistants billing source.
 
-### [x] Custom domain diagnostics
+### [~] Custom domain diagnostics
 
 Network Access settings show a tenant-specific reserved example hostname with a saved
 unconfirmed DNS observation alongside healthy infrastructure. This demonstrates
 that proxies or flattened DNS can hide a target without proving a service outage.
-The fixture is not activated and creates no public route or certificate. Verified
-in the local and demo organizations, including a narrow viewport: unconfirmed DNS
-and ready infrastructure render separately, with no outage warning or recheck
-action for the inactive fixture. Both seed runs and tenant-isolation checks pass.
+The fixture is not activated and creates no public route or certificate.
+The Custom domain diagnostics check in `verify.md` must pass before this entry
+is marked verified.
 
 ## Agent MCP sign-in tab servers
 
