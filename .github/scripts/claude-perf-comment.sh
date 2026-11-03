@@ -31,8 +31,11 @@ jq -e '
   and (.findings | type) == "array" and (.baselines | type) == "array"
 ' <<<"$REPORT" >/dev/null 2>&1 || no_verdict "The perf review is missing or incomplete."
 
-body=$(jq -r --arg marker "$MARKER" --arg head "$HEAD_SHA" --arg latest "$LATEST_SHA" --arg run "$RUN_URL" '
-  def line: tostring | gsub("[[:space:][:cntrl:]]+"; " ");
+# A value as the comment shows it, on one line. The comment and the redaction
+# check below both use it, so they read every value the same way.
+line_def='def line: tostring | gsub("[[:space:][:cntrl:]]+"; " ");'
+
+body=$(jq -r --arg marker "$MARKER" --arg head "$HEAD_SHA" --arg latest "$LATEST_SHA" --arg run "$RUN_URL" "$line_def"'
   # Every ASCII punctuation character is backslash-escaped, so no Markdown,
   # HTML, entity or autolink survives, and a zero-width space after @ and #
   # stops mentions and cross-references.
@@ -78,10 +81,10 @@ patterns=(
 )
 # Every value of the report as it reads in the comment, on one line and before
 # escaping, which would split an email address or a token; then the comment.
-values=$(jq -r '.. | scalars | tostring | gsub("[[:space:][:cntrl:]]+"; " ")' <<<"$REPORT")
-found=0
-grep -Eiq -f <(printf '%s\n' "${patterns[@]}") <<<"$values"$'\n'"$body" || found=$?
-case $found in
+values=$(jq -r "$line_def"' .. | scalars | line' <<<"$REPORT")
+grep_status=0
+grep -Eiq -f <(printf '%s\n' "${patterns[@]}") <<<"$values"$'\n'"$body" || grep_status=$?
+case $grep_status in
   1) ;;
   0) no_verdict "The perf review matched the redaction check." ;;
   *) no_verdict "The redaction check could not run." ;;
