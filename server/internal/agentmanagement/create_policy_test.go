@@ -104,13 +104,11 @@ func TestCreateAgentInitialPolicyFailureIsAtomic(t *testing.T) {
 			if test.otherOwner {
 				requireOopsCode(t, err, oops.CodeForbidden)
 			}
-			var agents, grants, audits int
-			//nolint:glint // notestingrawsql: directly verifies atomic rollback of agent, grants and audit rows
-			err = conn.QueryRow(ctx, `SELECT (SELECT count(*) FROM agents WHERE organization_id = $1), (SELECT count(*) FROM principal_grants WHERE organization_id = $1 AND principal_urn LIKE 'agent:%'), (SELECT count(*) FROM audit_logs WHERE organization_id = $1)`, "org-create-policy").Scan(&agents, &grants, &audits)
+			rows, err := testrepo.New(conn).CountAgentCreationRowsFixture(ctx, "org-create-policy")
 			require.NoError(t, err)
-			require.Zero(t, agents)
-			require.Zero(t, grants)
-			require.Zero(t, audits)
+			require.Zero(t, rows.Agents)
+			require.Zero(t, rows.Grants)
+			require.Zero(t, rows.Audits)
 			require.Empty(t, agentWebhookOutboxActions(t, conn, "org-create-policy"))
 		})
 	}
@@ -141,11 +139,9 @@ func TestCreateAgentInitialPolicyForOtherOwnerRequiresTenantMembership(t *testin
 	owner = "outside"
 	_, err = service.Create(ctx, &gen.CreatePayload{Name: "Cross tenant agent", OwnerUserID: &owner, PolicyGrants: []*gen.AgentPolicyGrantForm{initialMCPGrant()}})
 	requireOopsCode(t, err, oops.CodeForbidden)
-	var agents, policies int
-	//nolint:glint // notestingrawsql: verifies failed cross-tenant creation did not persist agent or policy
-	err = conn.QueryRow(ctx, `SELECT (SELECT count(*) FROM agents WHERE organization_id = $1), (SELECT count(*) FROM principal_grants WHERE organization_id = $1 AND principal_urn LIKE 'agent:%')`, "org-create-policy").Scan(&agents, &policies)
+	rows, err := testrepo.New(conn).CountAgentCreationRowsFixture(ctx, "org-create-policy")
 	require.NoError(t, err)
-	require.Equal(t, 1, agents)
-	require.Equal(t, 1, policies)
+	require.Equal(t, int64(1), rows.Agents)
+	require.Equal(t, int64(1), rows.Grants)
 	require.Equal(t, []string{"agent:create", "agent:policy_grant_create"}, agentWebhookOutboxActions(t, conn, "org-create-policy"))
 }

@@ -61,18 +61,14 @@ func (r PublicationRequests) projectWithOutcome(ctx context.Context, tx pgx.Tx, 
 	if organizationID == "" || projectID == uuid.Nil {
 		return "", fmt.Errorf("plugin publication requires an organization and project")
 	}
-	var connected bool
-	if err := tx.QueryRow(ctx, `SELECT EXISTS (
-		SELECT 1 FROM plugin_github_connections c
-		JOIN projects p ON p.id = c.project_id
-		WHERE c.project_id = $1 AND p.organization_id = $2 AND p.deleted IS FALSE
-	)`, projectID, organizationID).Scan(&connected); err != nil {
+	connected, err := repo.New(tx).ProjectHasMarketplaceConnection(ctx, repo.ProjectHasMarketplaceConnectionParams{ProjectID: projectID, OrganizationID: organizationID})
+	if err != nil {
 		return "", fmt.Errorf("check project marketplace connection: %w", err)
 	}
 	if !connected {
 		return ProjectPublicationNotConfigured, nil
 	}
-	_, err := outbox.Publish(ctx, tx, organizationID, outbox.Message{
+	_, err = outbox.Publish(ctx, tx, organizationID, outbox.Message{
 		PublicID:   uuid.Nil,
 		Attributes: nil,
 		Proto: publicationv1.PublicationRequested_builder{

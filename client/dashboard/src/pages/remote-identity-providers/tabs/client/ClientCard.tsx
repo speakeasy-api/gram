@@ -20,6 +20,7 @@ import type { RemoteSessionClient } from "@gram/client/models/components/remotes
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import {
   UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
+  type UpdateRemoteSessionClientForm,
   type UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat as AuthAudienceFormat,
 } from "@gram/client/models/components/updateremotesessionclientform.js";
 import { invalidateAllOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
@@ -183,7 +184,6 @@ export function ClientCard({
   const update = useUpdateOrganizationRemoteSessionClientMutation({
     onSuccess: async (saved) => {
       await invalidateClient();
-      // An emptied audience is omitted, so show what was actually kept.
       setAudience(saved.audience ?? "");
       setClientIdDraft(saved.clientId);
       setConfirmClientIdChange(false);
@@ -232,12 +232,15 @@ export function ClientCard({
     scope.length !== savedScope.length ||
     scope.some((s, i) => s !== savedScope[i]);
 
+  const savedAudience = client.audience ?? "";
+  const audienceChanged = audience !== savedAudience;
+
   const dirty =
     canEdit &&
     (clientIdChanged ||
       authMethod !== persistedAuthMethod ||
       scopeChanged ||
-      audience !== (client.audience ?? "") ||
+      audienceChanged ||
       clientSecret !== "" ||
       (privateKeyJwtSelected &&
         authAudienceFormat !== client.tokenEndpointAuthAudienceFormat) ||
@@ -249,26 +252,37 @@ export function ClientCard({
 
   const submit = () => {
     if (!canEdit || (privateKeyJwtSelected && !supportsAudience)) return;
+
+    const input: UpdateRemoteSessionClientForm = { id: client.id };
+    if (clientIdChanged) {
+      input.clientId = trimmedClientId;
+    }
+    if (authMethod) {
+      input.tokenEndpointAuthMethod = authMethod;
+    }
+    if (privateKeyJwtSelected && authAudienceFormat !== undefined) {
+      input.tokenEndpointAuthAudienceFormat = authAudienceFormat;
+    }
+    if (scopeChanged) {
+      input.scope = scope;
+    }
+    if (audienceChanged) {
+      input.audience = audience.trim();
+    }
+    const secretUpdate = clientSecretUpdateValue(authMethod, clientSecret);
+    if (secretUpdate !== undefined) {
+      input.clientSecret = secretUpdate;
+    }
+    if (
+      isPlatformAdmin &&
+      legacyCallbackMode !== undefined &&
+      legacyCallbackMode !== client.legacyCallbackUrl
+    ) {
+      input.legacyCallbackUrl = legacyCallbackMode;
+    }
+
     update.mutate({
-      request: {
-        updateRemoteSessionClientForm: {
-          id: client.id,
-          clientId: clientIdChanged ? trimmedClientId : undefined,
-          tokenEndpointAuthMethod: authMethod || undefined,
-          tokenEndpointAuthAudienceFormat: privateKeyJwtSelected
-            ? authAudienceFormat
-            : undefined,
-          scope: scopeChanged ? scope : undefined,
-          audience: audience.trim() || undefined,
-          clientSecret: clientSecretUpdateValue(authMethod, clientSecret),
-          legacyCallbackUrl:
-            isPlatformAdmin &&
-            legacyCallbackMode !== undefined &&
-            legacyCallbackMode !== client.legacyCallbackUrl
-              ? legacyCallbackMode
-              : undefined,
-        },
-      },
+      request: { updateRemoteSessionClientForm: input },
     });
   };
 

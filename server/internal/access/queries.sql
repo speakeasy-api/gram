@@ -1951,3 +1951,8 @@ SET deleted_at = clock_timestamp(),
 WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS FALSE;
+
+-- name: GetRemoteSessionRowDigestFixture :one
+-- Test fixture: a digest of the whole stored row, so a test can prove it was
+-- not touched without reading any credential value.
+SELECT md5(row_to_json(s)::text) AS row_digest FROM remote_sessions s WHERE s.id = @id;

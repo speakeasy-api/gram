@@ -1253,7 +1253,10 @@ SET
     token_endpoint_auth_method = COALESCE(sqlc.narg('token_endpoint_auth_method'), token_endpoint_auth_method),
     token_endpoint_auth_audience_format = COALESCE(sqlc.narg('token_endpoint_auth_audience_format'), token_endpoint_auth_audience_format),
     scope = COALESCE(sqlc.narg('scope')::text[], scope),
-    audience = COALESCE(sqlc.narg('audience'), audience),
+    audience = CASE
+        WHEN sqlc.narg('audience')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('audience'), audience)
+    END,
     legacy_callback_url = COALESCE(sqlc.narg('legacy_callback_url'), legacy_callback_url),
     updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE

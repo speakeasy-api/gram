@@ -579,6 +579,7 @@ func NewService(
 		telemSvc,
 		auditLogger,
 		platformtoolsruntime.WithTriggerTools(triggerApp),
+		platformtoolsruntime.WithThreadContextAuthorizer(authzEngine),
 		platformtoolsruntime.WithSlackHTTPClient(guardianPolicy.PooledClient()),
 		platformtoolsruntime.WithExternalTools(platformExtras),
 		platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),

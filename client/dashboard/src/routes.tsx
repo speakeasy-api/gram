@@ -1,5 +1,6 @@
 import { Icon, IconProps } from "@/components/ui/Icon";
 import { IconName } from "@/components/ui/Icon/names";
+import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import React, { useMemo } from "react";
 import { Link, useLocation, useNavigate } from "react-router";
 import { ReleaseStage } from "./components/release-stage-badge";
@@ -24,6 +25,11 @@ type AppRouteBasic = {
   // only for features that are genuinely pre-GA. Page-level badges live on
   // <Page.Section.Title stage="..." /> and must be set separately.
   stage?: ReleaseStage;
+  // Nested pages opt into the command palette with the scopes that may open
+  // them. Tabs leave this unset and stay out. Palette registration checks
+  // only these scopes; the page owns any further eligibility, such as
+  // billing state, and registration must not fetch it.
+  commandPalette?: Scope[];
 };
 
 type GoToFunction = (...params: string[]) => void;
@@ -67,6 +73,7 @@ type RouteEntry = {
       subPages?: Record<string, RouteEntry>;
       outsideMainLayout?: boolean;
       legacyRedirect?: boolean;
+      commandPalette?: Scope[];
     }
 );
 
@@ -1037,8 +1044,16 @@ const ORG_ROUTE_STRUCTURE = {
     url: "billing",
     icon: "credit-card",
     subPages: {
-      setup: { title: "Billing setup", url: "setup" },
-      paymentMethod: { title: "Payment method", url: "payment-method" },
+      setup: {
+        title: "Billing setup",
+        url: "setup",
+        commandPalette: ["org:read", "org:admin"],
+      },
+      paymentMethod: {
+        title: "Payment method",
+        url: "payment-method",
+        commandPalette: ["org:read", "org:admin"],
+      },
     },
   },
   team: {

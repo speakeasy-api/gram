@@ -15757,7 +15757,10 @@ SET
     token_endpoint_auth_method = COALESCE($5, token_endpoint_auth_method),
     token_endpoint_auth_audience_format = COALESCE($6, token_endpoint_auth_audience_format),
     scope = COALESCE($7::text[], scope),
-    audience = COALESCE($8, audience),
+    audience = CASE
+        WHEN $8::text = '' THEN NULL
+        ELSE COALESCE($8, audience)
+    END,
     legacy_callback_url = COALESCE($9, legacy_callback_url),
     updated_at = clock_timestamp()
 WHERE id = $10 AND project_id = $11 AND deleted IS FALSE

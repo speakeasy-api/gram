@@ -48,6 +48,17 @@ func (q *Queries) PointAssetAtUpload(ctx context.Context, arg PointAssetAtUpload
 	return err
 }
 
+const releaseSeedLock = `-- name: ReleaseSeedLock :one
+SELECT pg_advisory_unlock(hashtext($1::text)) AS unlocked
+`
+
+func (q *Queries) ReleaseSeedLock(ctx context.Context, lockName string) (bool, error) {
+	row := q.db.QueryRow(ctx, releaseSeedLock, lockName)
+	var unlocked bool
+	err := row.Scan(&unlocked)
+	return unlocked, err
+}
+
 const setSeedStatementTimeout = `-- name: SetSeedStatementTimeout :exec
 SELECT set_config('statement_timeout', '360s', true)
 `
@@ -57,4 +68,17 @@ SELECT set_config('statement_timeout', '360s', true)
 func (q *Queries) SetSeedStatementTimeout(ctx context.Context) error {
 	_, err := q.db.Exec(ctx, setSeedStatementTimeout)
 	return err
+}
+
+const tryAcquireSeedLock = `-- name: TryAcquireSeedLock :one
+SELECT pg_try_advisory_lock(hashtext($1::text)) AS locked
+`
+
+// Session-level, so it must run on the dedicated connection that later
+// releases it.
+func (q *Queries) TryAcquireSeedLock(ctx context.Context, lockName string) (bool, error) {
+	row := q.db.QueryRow(ctx, tryAcquireSeedLock, lockName)
+	var locked bool
+	err := row.Scan(&locked)
+	return locked, err
 }
