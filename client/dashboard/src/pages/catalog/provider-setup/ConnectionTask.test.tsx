@@ -102,30 +102,27 @@ it("allows a waiting sign-in to be cancelled", async () => {
   expect(cancelSignIn).toHaveBeenCalledTimes(1);
 });
 
-it.each([0, 1, 2])(
-  "announces discovery of %s tools with the correct singular form",
-  (count) => {
-    const dispatch = vi.fn<() => void>();
-    render(
-      <SetupContext
-        value={{
-          s: {
-            ...initialState("slack"),
-            saved: true,
-            authorized: true,
-            tested: true,
-          },
-          dispatch,
-          live: connectionFixture(dispatch, { toolCount: count }),
-        }}
-      >
-        <ConnectionTask />
-      </SetupContext>,
-    );
-    expect(
-      screen.getByText(
-        `Connected · ${count} ${count === 1 ? "tool" : "tools"} discovered. No tools were run.`,
-      ),
-    ).toBeDefined();
-  },
-);
+it.each([
+  [0, "Connected · 0 tools discovered. No tools were run."],
+  [1, "Connected · 1 tool discovered. No tools were run."],
+  [2, "Connected · 2 tools discovered. No tools were run."],
+] as const)("shows the discovery result for %s tools", (count, copy) => {
+  const dispatch = vi.fn<() => void>();
+  render(
+    <SetupContext
+      value={{
+        s: {
+          ...initialState("slack"),
+          saved: true,
+          authorized: true,
+          tested: true,
+        },
+        dispatch,
+        live: connectionFixture(dispatch, { toolCount: count }),
+      }}
+    >
+      <ConnectionTask />
+    </SetupContext>,
+  );
+  screen.getByText(copy);
+});

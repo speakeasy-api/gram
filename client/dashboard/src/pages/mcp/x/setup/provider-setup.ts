@@ -66,7 +66,7 @@ export function saveProviderProgress(key: string, state: State): void {
     sessionStorage.setItem(
       key,
       JSON.stringify({
-        revision: 1,
+        revision: 2,
         step: state.step,
         done: state.done.filter(
           (step) => !["credentials", "test"].includes(step),
@@ -92,7 +92,7 @@ export function loadProviderProgress(
       !value ||
       typeof value !== "object" ||
       !("revision" in value) ||
-      value.revision !== 1
+      (value.revision !== 1 && value.revision !== 2)
     )
       return initial;
     if (
@@ -109,7 +109,9 @@ export function loadProviderProgress(
       initial.values.appChoice = values.appChoice;
     if (
       "access" in values &&
-      (values.access === "all" || values.access === "read")
+      (values.access === "all" || values.access === "read") &&
+      // Legacy snapshots always wrote the default; retain only the narrower choice.
+      (value.revision === 2 || values.access === "read")
     ) {
       initial.values.access = values.access;
       initial.accessChosen = true;

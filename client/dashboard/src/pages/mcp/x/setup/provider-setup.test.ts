@@ -145,7 +145,7 @@ describe("Slack progress", () => {
     });
     expect(sessionStorage.getItem(key)).not.toContain("private-");
     expect(JSON.parse(sessionStorage.getItem(key)!)).toEqual({
-      revision: 1,
+      revision: 2,
       step: "test",
       done: ["begin", "app"],
       values: { appChoice: "existing", access: "read" },
@@ -226,3 +226,22 @@ it("does not restore an unconfirmed default as an explicit permission choice", (
   expect(loadProviderProgress("slack", key).accessChosen).toBe(false);
   sessionStorage.removeItem(key);
 });
+
+it.each(["all", "read"])(
+  "restores legacy %s access conservatively",
+  (access) => {
+    const key = "legacy-access";
+    sessionStorage.setItem(
+      key,
+      JSON.stringify({
+        revision: 1,
+        values: { appChoice: "existing", access },
+      }),
+    );
+    const restored = loadProviderProgress("slack", key);
+    expect(restored.values.appChoice).toBe("existing");
+    expect(restored.accessChosen).toBe(access === "read");
+    expect(restored.values.access).toBe(access);
+    sessionStorage.removeItem(key);
+  },
+);
