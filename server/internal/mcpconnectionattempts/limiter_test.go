@@ -240,7 +240,8 @@ func TestOnce_LeavesTheQueueReserveForRealAttempts(t *testing.T) {
 	for range 20 {
 		recorder.Once(t.Context(), testScope(), StepInboundAuthorize, CodeInvalidRequest)
 	}
-	require.Equal(t, int64(14), recorder.dropped(t, dropRateLimited), "6 of 8 slots go to Once rows")
+	require.Equal(t, int64(14), recorder.dropped(t, dropQueueReserve), "6 of 8 slots go to Once rows")
+	require.Zero(t, recorder.dropped(t, dropRateLimited), "a backed-up queue doesn't read as a noisy key")
 
 	recorder.Step(t.Context(), attempt, StepInboundAuthorize, ResultAccepted)
 	recorder.End(t.Context(), attempt, StepInboundConsent, CodeCanceled)
