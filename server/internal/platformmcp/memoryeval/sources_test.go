@@ -80,7 +80,7 @@ func TestMemorySourcesResolvesMemosAndDigestTrees(t *testing.T) {
 	_, err = sources(ctx, "chat", chatID("decision-pooler"))
 	require.Error(t, err, "chat citations need no lookup")
 
-	_, err = loaded.db.Exec(ctx, "UPDATE memory_memos SET deleted_at = clock_timestamp() WHERE id = $1", memo)
+	_, err = loaded.db.Exec(ctx, "UPDATE memory_memos SET deleted_at = clock_timestamp() WHERE id = $1", memo) //nolint:glint // notestingrawsql: test-only soft-delete of a memo to check citation sources skip deleted memos
 	require.NoError(t, err)
 
 	chats, err = sources(ctx, "memo", memo)
