@@ -2283,7 +2283,9 @@ ORDER BY tb.original_trigger_id;
 
 -- name: RecordUpstreamClientSelections :execrows
 -- Records, for one inbound credential, the upstream OAuth client it uses for
--- every MCP server it can reach, or an explicit no-auth choice. An existing
+-- every MCP server it can reach, or an explicit no-auth choice. A NULL
+-- scope_mcp_server_ids keeps issuance-wide reach; a supplied array restricts
+-- recording to those servers, and an empty array records nothing. An existing
 -- client choice is never replaced. An existing no-auth choice is replaced
 -- only once the server has an associated client and one is decided for the
 -- credential: the no-auth choice is unusable by then, and recording the
@@ -2341,6 +2343,8 @@ reachable AS (
     JOIN session_issuer AS si
       ON p.organization_id = si.organization_id
     WHERE s.deleted IS FALSE
+      AND (sqlc.narg('scope_mcp_server_ids')::uuid[] IS NULL
+           OR s.id = ANY(sqlc.narg('scope_mcp_server_ids')::uuid[]))
       AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
       AND (
         s.user_session_issuer_id = si.id
@@ -3005,12 +3009,15 @@ ORDER BY us.created_at DESC
 LIMIT 1
 FOR UPDATE OF us;
 
--- name: ClearReconnectUpstreamChoices :exec
-DELETE FROM upstream_client_selections
+-- name: SoftDeleteReconnectUpstreamChoices :exec
+-- Retire only active choices in the reviewed scope; preserve prior history.
+UPDATE upstream_client_selections
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
 WHERE credential_kind = 'user_session'
   AND credential_id = @credential_id::uuid
   AND organization_id = @organization_id::text
-  AND mcp_server_id = ANY(@mcp_server_ids::uuid[]);
+  AND mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND deleted IS FALSE;
 
 -- name: UpdateReconnectSessionPolicy :many
 UPDATE user_sessions AS us SET tool_selection = @tool_selection, updated_at = clock_timestamp()

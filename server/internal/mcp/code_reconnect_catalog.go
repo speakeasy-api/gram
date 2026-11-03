@@ -12,44 +12,43 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
-	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
-func (s *Service) reconnectPolicy(ctx context.Context, q *usersessionsrepo.Queries, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) (*toolfilter.SessionPolicy, error) {
+func (s *Service) loadReconnectConnection(ctx context.Context, q *usersessionsrepo.Queries, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, now time.Time) (*toolfilter.SessionPolicy, *connectionCatalog, error) {
 	b := state.CodeReconnect
 	raw, err := q.GetReconnectSessionPolicy(ctx, usersessionsrepo.GetReconnectSessionPolicyParams{CredentialID: b.CredentialID, UserSessionIssuerID: state.UserSessionIssuerID, SubjectUrn: *state.Subject, ClientID: b.ClientID, OrganizationID: endpoint.OrganizationID, ProjectID: uuid.NullUUID{UUID: endpoint.ProjectID, Valid: endpoint.ProjectID != uuid.Nil}})
 	if err != nil {
-		return nil, fmt.Errorf("reconnect connection is no longer active: %w", err)
+		return nil, nil, fmt.Errorf("reconnect connection is no longer active: %w", err)
 	}
 	policy, err := toolfilter.ParseSessionPolicy(raw)
 	if err != nil {
-		return nil, fmt.Errorf("parse reconnect policy: %w", err)
+		return nil, nil, fmt.Errorf("parse reconnect policy: %w", err)
 	}
 	if policy == nil || policy.Catalog == nil || !endpointAcceptsToolSelectionResource(endpoint, policy.Resource) {
-		return nil, fmt.Errorf("reconnect catalogue no longer matches the connection")
+		return nil, nil, fmt.Errorf("reconnect catalogue no longer matches the connection")
+	}
+	ctx = contextvalues.SetOAuthClientID(ctx, b.ClientID)
+	catalog, err := s.loadConnectionCatalog(ctx, endpoint, *state.Subject, policy.Catalog, now)
+	if err != nil {
+		return nil, nil, err
 	}
 	if policy.Catalog.ID != b.CatalogID {
-		catalog, err := s.loadConnectionCatalog(contextvalues.SetOAuthClientID(ctx, b.ClientID), endpoint, *state.Subject, policy.Catalog, time.Now())
-		if err != nil {
-			return nil, err
-		}
 		if state.ID == "" || catalog.ApprovalChallengeID != state.ID {
-			return nil, fmt.Errorf("reconnect catalogue belongs to another approval")
+			return nil, nil, fmt.Errorf("reconnect catalogue belongs to another approval")
 		}
 	} else if policy.Catalog.Mode != toolfilter.CatalogModeCached {
-		return nil, fmt.Errorf("reconnect catalogue is not frozen")
+		return nil, nil, fmt.Errorf("reconnect catalogue is not frozen")
 	}
-	return policy, nil
+	return policy, catalog, nil
 }
 
 // OAuth completion opens review; only the subsequent approval changes tools.
-func (s *Service) completeCodeReconnect(r *http.Request, grant remotesessions.RemoteGrant) error {
+func (s *Service) markReconnectReviewReady(r *http.Request, grant remotesessions.RemoteGrant) error {
 	state, err := s.authnChallengeCache.Get(r.Context(), "authnChallenge:"+grant.ParentChallengeID)
 	if errors.Is(err, redisCache.ErrCacheMiss) {
 		return nil
@@ -73,12 +72,7 @@ func (s *Service) completeCodeReconnect(r *http.Request, grant remotesessions.Re
 	if err := endpoint.ValidateGlobalChallenge(r.Context(), s.db, state.Endpoint, state.UserSessionIssuerID); err != nil {
 		return err
 	}
-	policy, err := s.reconnectPolicy(r.Context(), usersessionsrepo.New(s.db), endpoint, state)
-	if err != nil {
-		return err
-	}
-	ctx := contextvalues.SetOAuthClientID(r.Context(), state.CodeReconnect.ClientID)
-	if _, err := s.loadConnectionCatalog(ctx, endpoint, grant.Subject, policy.Catalog, time.Now()); err != nil {
+	if _, _, err := s.loadReconnectConnection(r.Context(), usersessionsrepo.New(s.db), endpoint, state, time.Now()); err != nil {
 		return err
 	}
 	binding := *state.CodeReconnect
@@ -98,7 +92,7 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, e
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 	q := usersessionsrepo.New(tx)
-	policy, err := s.reconnectPolicy(ctx, q, endpoint, state)
+	policy, previous, err := s.loadReconnectConnection(ctx, q, endpoint, state, time.Now())
 	if err != nil {
 		return err
 	}
@@ -110,10 +104,6 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, e
 		}
 		return s.finishCodeReconnectApproval(w, r, endpoint, state, jtis)
 	}
-	previous, err := s.loadConnectionCatalog(ctx, endpoint, *state.Subject, policy.Catalog, time.Now())
-	if err != nil {
-		return err
-	}
 	cards, err := s.buildRemoteSessionCards(ctx, endpoint, state, s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID))
 	if err != nil {
 		return err
@@ -122,53 +112,21 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, e
 	if err != nil {
 		return err
 	}
-	consent := state
-	consent.ClientID = state.CodeReconnect.ClientID
-	frozen, err := s.freezeConnectionCatalog(ctx, endpoint, consent, inventory, selection, mode, picks, previous.ExpiresAt)
+	frozen, err := s.freezeConnectionCatalog(ctx, endpoint, state, state.CodeReconnect.ClientID, inventory, selection, mode, picks, previous.ExpiresAt)
 	if err != nil {
 		return err
 	}
 	frozen.ApprovalChallengeID = state.ID
-	replacement, err := frozen.marshal()
-	if err != nil {
-		return err
-	}
 	b := state.CodeReconnect
-	if err := q.ClearReconnectUpstreamChoices(ctx, usersessionsrepo.ClearReconnectUpstreamChoicesParams{CredentialID: b.CredentialID, OrganizationID: endpoint.OrganizationID, McpServerIds: reconnectMemberIDs(previous, frozen)}); err != nil {
-		return fmt.Errorf("replace upstream choices: %w", err)
-	}
-	var servers, clients, authClients []uuid.UUID
-	for _, member := range frozen.Members {
-		if member.Auth != nil {
-			servers = append(servers, member.ServerID)
-			clients = append(clients, member.Auth.RegistrationID.UUID)
-			authClients = append(authClients, member.Auth.ClientID)
-		}
-	}
-	if _, err := q.RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{UserSessionIssuerID: endpoint.UserSessionIssuerID, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: b.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: servers, PickedClientIds: clients, PickedAuthClientIds: authClients}); err != nil {
-		return fmt.Errorf("record upstream choices: %w", err)
+	if err := replaceReconnectUpstreamChoices(ctx, q, b.CredentialID, previous, frozen); err != nil {
+		return err
 	}
 	policy.Selection = selection
 	policy.Catalog.ID = frozen.ID
 	policy.Catalog.AllTools = selection == nil
 	policy.Catalog.Mode = mode
-	conditional, ok := s.connectionCatalogCache.(cache.ConditionalCache)
-	if !ok {
-		return fmt.Errorf("catalogue store does not support reconnect")
-	}
-	ttl := time.Until(previous.ExpiresAt)
-	if ttl <= 0 {
-		return errConnectionCatalogExpired
-	}
-	// Publish an immutable snapshot before committing its reference. A failed or
-	// ambiguous commit leaves the old policy and catalogue consistent; an
-	// unreferenced snapshot expires naturally at the original deadline.
-	stored, err := conditional.SetIfAbsent(ctx, frozen.CacheKey(), replacement, ttl)
-	if err != nil {
-		return fmt.Errorf("replace catalogue: %w", err)
-	}
-	if !stored {
-		return fmt.Errorf("catalogue publication conflict; reload the review before approving")
+	if err := s.publishConnectionCatalog(ctx, frozen, time.Now()); err != nil {
+		return err
 	}
 	jtis, err := commitCodeReconnectPolicy(ctx, tx, endpoint, state, policy, b.CatalogID)
 	if err != nil {
@@ -216,7 +174,7 @@ func (s *Service) finishCodeReconnectApproval(w http.ResponseWriter, r *http.Req
 
 // Include removed members so their stale choices cannot survive approval.
 func reconnectMemberIDs(catalogs ...*connectionCatalog) []uuid.UUID {
-	var ids []uuid.UUID
+	ids := make([]uuid.UUID, 0)
 	for _, catalog := range catalogs {
 		for _, member := range catalog.Members {
 			if !slices.Contains(ids, member.ServerID) {
@@ -225,4 +183,19 @@ func reconnectMemberIDs(catalogs ...*connectionCatalog) []uuid.UUID {
 		}
 	}
 	return ids
+}
+
+// replaceReconnectUpstreamChoices runs inside the approval transaction, after
+// locking the connection. Removed members are retired; only the new catalogue's
+// members can receive choices. Other servers on the issuer are untouched.
+func replaceReconnectUpstreamChoices(ctx context.Context, q *usersessionsrepo.Queries, credentialID uuid.UUID, previous, next *connectionCatalog) error {
+	if err := q.SoftDeleteReconnectUpstreamChoices(ctx, usersessionsrepo.SoftDeleteReconnectUpstreamChoicesParams{
+		CredentialID: credentialID, OrganizationID: next.OrganizationID, McpServerIds: reconnectMemberIDs(previous, next),
+	}); err != nil {
+		return fmt.Errorf("retire reviewed upstream choices: %w", err)
+	}
+	if _, err := q.RecordUpstreamClientSelections(ctx, next.upstreamChoices(credentialID)); err != nil {
+		return fmt.Errorf("record reviewed upstream choices: %w", err)
+	}
+	return nil
 }

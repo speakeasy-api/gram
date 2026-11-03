@@ -941,7 +941,7 @@ func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Reque
 			s.logger.ErrorContext(r.Context(), "record committed popup grant", attr.SlogError(err))
 		}
 
-		if err := s.completeCodeReconnect(r, *result.Grant); err != nil {
+		if err := s.markReconnectReviewReady(r, *result.Grant); err != nil {
 			if !errors.Is(err, errConnectionCatalogExpired) {
 				return fmt.Errorf("complete code reconnect: %w", err)
 			}

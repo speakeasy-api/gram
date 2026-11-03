@@ -50,7 +50,7 @@ func TestFreezeConnectionCatalogRejectsInvalidDefinitions(t *testing.T) {
 				hash = consentEvidenceHash(definition)
 			}
 			inventory := &consentToolInventory{StateID: state.ID, Resource: endpointToolSelectionResource(endpoint), Complete: true, Tools: []consentInventoryTool{{Name: tc.tool, Definition: definition, DefinitionHash: hash}}}
-			_, err := service.freezeConnectionCatalog(t.Context(), endpoint, state, inventory, nil, toolfilter.CatalogModeCached, nil, time.Now().Add(time.Hour))
+			_, err := service.freezeConnectionCatalog(t.Context(), endpoint, state, state.ClientID, inventory, nil, toolfilter.CatalogModeCached, nil, time.Now().Add(time.Hour))
 			require.ErrorContains(t, err, tc.want)
 		})
 	}

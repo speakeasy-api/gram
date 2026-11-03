@@ -904,12 +904,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 	var changes *catalogChanges
 	if catalogReview && approvalError == nil {
-		policy, readErr := s.reconnectPolicy(ctx, usersessions_repo.New(s.db), endpoint, challengeState)
-		if readErr != nil {
-			return readErr
-		}
-		catalogCtx := contextvalues.SetOAuthClientID(ctx, challengeState.CodeReconnect.ClientID)
-		previous, readErr := s.loadConnectionCatalog(catalogCtx, endpoint, *challengeState.Subject, policy.Catalog, time.Now())
+		policy, previous, readErr := s.loadReconnectConnection(ctx, usersessions_repo.New(s.db), endpoint, challengeState, time.Now())
 		if readErr != nil {
 			return readErr
 		}
@@ -1348,7 +1343,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 
 	if materializeGateway {
-		reference, err := s.publishConnectionCatalog(ctx, endpoint, challengeState, boundInventory, toolSelection, catalogMode, r.PostForm.Get("tool_filtering") != "on", upstreamPicks, duration, time.Now())
+		reference, err := s.approveInitialConnectionCatalog(ctx, endpoint, challengeState, boundInventory, toolSelection, catalogMode, r.PostForm.Get("tool_filtering") != "on", upstreamPicks, duration, time.Now())
 		if err != nil {
 			if errors.Is(err, errConnectionCatalogTooLarge) {
 				return oops.E(oops.CodeInvalid, err, "Selected tool definitions are too large to approve. Choose fewer tools or contact an administrator.").LogWarn(ctx, logger)

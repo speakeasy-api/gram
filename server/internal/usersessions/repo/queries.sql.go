@@ -29,25 +29,6 @@ func (q *Queries) AdvanceOrganizationUserSessionIssuerVersionFixture(ctx context
 	return err
 }
 
-const clearReconnectUpstreamChoices = `-- name: ClearReconnectUpstreamChoices :exec
-DELETE FROM upstream_client_selections
-WHERE credential_kind = 'user_session'
-  AND credential_id = $1::uuid
-  AND organization_id = $2::text
-  AND mcp_server_id = ANY($3::uuid[])
-`
-
-type ClearReconnectUpstreamChoicesParams struct {
-	CredentialID   uuid.UUID
-	OrganizationID string
-	McpServerIds   []uuid.UUID
-}
-
-func (q *Queries) ClearReconnectUpstreamChoices(ctx context.Context, arg ClearReconnectUpstreamChoicesParams) error {
-	_, err := q.db.Exec(ctx, clearReconnectUpstreamChoices, arg.CredentialID, arg.OrganizationID, arg.McpServerIds)
-	return err
-}
-
 const clearUserSessionClientAuthMethod = `-- name: ClearUserSessionClientAuthMethod :one
 UPDATE user_session_clients
 SET token_endpoint_auth_method = NULL
@@ -4990,6 +4971,8 @@ reachable AS (
     JOIN session_issuer AS si
       ON p.organization_id = si.organization_id
     WHERE s.deleted IS FALSE
+      AND ($5::uuid[] IS NULL
+           OR s.id = ANY($5::uuid[]))
       AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
       AND (
         s.user_session_issuer_id = si.id
@@ -5008,9 +4991,9 @@ reachable AS (
 ),
 picked AS (
     -- The consent page's pick for each server, as parallel arrays.
-    SELECT unnest($5::uuid[]) AS mcp_server_id,
-           unnest($6::uuid[]) AS remote_session_client_id,
-           NULLIF(unnest($7::uuid[]), '00000000-0000-0000-0000-000000000000'::uuid) AS auth_client_id
+    SELECT unnest($6::uuid[]) AS mcp_server_id,
+           unnest($7::uuid[]) AS remote_session_client_id,
+           NULLIF(unnest($8::uuid[]), '00000000-0000-0000-0000-000000000000'::uuid) AS auth_client_id
 ),
 eligible AS (
     SELECT a.mcp_server_id,
@@ -5239,13 +5222,16 @@ type RecordUpstreamClientSelectionsParams struct {
 	CredentialID        uuid.UUID
 	Source              string
 	UserSessionIssuerID uuid.UUID
+	ScopeMcpServerIds   []uuid.UUID
 	PickedMcpServerIds  []uuid.UUID
 	PickedClientIds     []uuid.UUID
 	PickedAuthClientIds []uuid.UUID
 }
 
 // Records, for one inbound credential, the upstream OAuth client it uses for
-// every MCP server it can reach, or an explicit no-auth choice. An existing
+// every MCP server it can reach, or an explicit no-auth choice. A NULL
+// scope_mcp_server_ids keeps issuance-wide reach; a supplied array restricts
+// recording to those servers, and an empty array records nothing. An existing
 // client choice is never replaced. An existing no-auth choice is replaced
 // only once the server has an associated client and one is decided for the
 // credential: the no-auth choice is unusable by then, and recording the
@@ -5305,6 +5291,7 @@ func (q *Queries) RecordUpstreamClientSelections(ctx context.Context, arg Record
 		arg.CredentialID,
 		arg.Source,
 		arg.UserSessionIssuerID,
+		arg.ScopeMcpServerIds,
 		arg.PickedMcpServerIds,
 		arg.PickedClientIds,
 		arg.PickedAuthClientIds,
@@ -5986,6 +5973,28 @@ func (q *Queries) SoftDeleteMigratedUserSessionIssuer(ctx context.Context, arg S
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const softDeleteReconnectUpstreamChoices = `-- name: SoftDeleteReconnectUpstreamChoices :exec
+UPDATE upstream_client_selections
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE credential_kind = 'user_session'
+  AND credential_id = $1::uuid
+  AND organization_id = $2::text
+  AND mcp_server_id = ANY($3::uuid[])
+  AND deleted IS FALSE
+`
+
+type SoftDeleteReconnectUpstreamChoicesParams struct {
+	CredentialID   uuid.UUID
+	OrganizationID string
+	McpServerIds   []uuid.UUID
+}
+
+// Retire only active choices in the reviewed scope; preserve prior history.
+func (q *Queries) SoftDeleteReconnectUpstreamChoices(ctx context.Context, arg SoftDeleteReconnectUpstreamChoicesParams) error {
+	_, err := q.db.Exec(ctx, softDeleteReconnectUpstreamChoices, arg.CredentialID, arg.OrganizationID, arg.McpServerIds)
+	return err
 }
 
 const softDeleteUserSessionConsentsByIssuerID = `-- name: SoftDeleteUserSessionConsentsByIssuerID :many
