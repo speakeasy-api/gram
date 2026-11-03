@@ -44,7 +44,7 @@ body=$(jq -r --arg marker "$MARKER" --arg head "$HEAD_SHA" --arg latest "$LATEST
   "\($marker)\n### Performance review: \(.verdict | code)\n\n\(.summary | text)\n"
   + (if .findings != [] then
       "\n#### Findings\n" + ([.findings[] |
-        "- **\(.severity | text)** \("\(.file)\(if (.line | type) == "number" then ":\(.line)" else "" end)" | code): \(.title | text). \(.detail | text)"
+        "- **\(.severity | text)** \(if (.line | type) == "number" then "\(.file):\(.line)" else .file end | code): \(.title | text). \(.detail | text)"
         + (if .evidence then " _Evidence:_ \(.evidence | text)" else "" end)
       ] | join("\n"))
     else "" end)

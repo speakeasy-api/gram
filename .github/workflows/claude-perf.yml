@@ -52,6 +52,7 @@ jobs:
       pull-requests: read # reads the pull request
       id-token: write # Speakeasy and the Claude API each exchange the job's OIDC token
     outputs:
+      approved: ${{ steps.gate.outcome == 'success' }}
       head: ${{ steps.gate.outputs.head }}
       report: ${{ steps.claude.outputs.structured_output }}
     steps:
@@ -71,9 +72,7 @@ jobs:
           # rather than interpolated into this script.
           command_re=$'^@claude perf( |\r|\n|$)'
           body=$(jq -r .comment.body "$GITHUB_EVENT_PATH")
-          shopt -s nocasematch
-          [[ $body =~ $command_re ]] || { echo "::error::The comment is not an \"@claude perf\" command."; exit 1; }
-          shopt -u nocasematch
+          [[ ${body,,} =~ $command_re ]] || { echo "::error::The comment is not an \"@claude perf\" command."; exit 1; }
           perm=$(gh api "repos/$REPO/collaborators/$ACTOR/permission" --jq .permission)
           case "$perm" in
             admin | write) ;;
@@ -95,7 +94,6 @@ jobs:
           # so a push in between would pair a newer diff with this SHA.
           gh api -H "Accept: application/vnd.github.diff" "repos/$REPO/compare/$base...$head" \
             >"$RUNNER_TEMP/pr/diff.patch"
-          # Last: the post job takes a head output as the gate's approval.
           echo "head=$head" >>"$GITHUB_OUTPUT"
 
       - name: Check out main
@@ -187,9 +185,9 @@ jobs:
     name: post
     needs: analyse
     # Also after a failed review, so that a "no verdict" notice replaces an
-    # earlier verdict. The gate sets head last, so a request it refused, or one
-    # that never ran, posts nothing.
-    if: always() && needs.analyse.outputs.head != ''
+    # earlier verdict. A request the gate refused, or one that never reached
+    # it, posts nothing.
+    if: always() && needs.analyse.outputs.approved == 'true'
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 5
     permissions:
@@ -216,8 +214,7 @@ jobs:
           # The head now: the comment says when it has moved past HEAD_SHA.
           LATEST_SHA=$(gh api "repos/$REPO/pulls/$PR" --jq .head.sha) || LATEST_SHA=
           export LATEST_SHA
-          # The review, or a "no verdict" notice and exit 1 when the report is
-          # missing, incomplete or fails the redaction check.
+          # The review, or a "no verdict" notice and exit 1: see the script.
           status=0
           body=$(.github/scripts/claude-perf-comment.sh) || status=$?
           [ -n "$body" ] || exit 1
