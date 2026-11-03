@@ -3,6 +3,7 @@ package remotesessions
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
 	"strings"
 	"time"
@@ -16,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -1313,8 +1315,20 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 		return oops.E(oops.CodeUnexpected, err, "soft-delete dependent remote sessions").LogError(ctx, logger)
 	}
 
+	// A platform-global client is reachable from several organizations, so the
+	// servers losing it are collected per organization before the removal and
+	// their typed clients and links are decided again for each.
+	affected, err := serversLosingGlobalClient(ctx, dbtx, deleted.ID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list servers losing the global client").LogError(ctx, logger)
+	}
 	if _, err := upstreamclientsrepo.New(dbtx).RemoveGlobalClientAssociations(ctx, deleted.ID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "remove deleted client's mcp server associations").LogError(ctx, logger)
+	}
+	for organizationID, servers := range affected {
+		if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, organizationID, servers...); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "sync auth clients of the global client's servers").LogError(ctx, logger)
+		}
 	}
 
 	if err := dbtx.Commit(ctx); err != nil {
@@ -1329,4 +1343,34 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 	logGlobalMutation(ctx, logger, authCtx, "delete", "client", deleted.ID.String())
 
 	return nil
+}
+
+// serversLosingGlobalClient is every live MCP server associated with a
+// platform-global client, grouped by the organization that owns it. The
+// removal spans organizations and reports only a count, so the ids are read
+// first and each organization's typed records are decided again on its own.
+func serversLosingGlobalClient(ctx context.Context, dbtx pgx.Tx, clientID uuid.UUID) (map[string][]uuid.UUID, error) {
+	rows, err := dbtx.Query(ctx, `
+SELECT DISTINCT a.organization_id, a.mcp_server_id
+FROM mcp_server_remote_session_clients AS a
+JOIN mcp_servers AS s ON s.id = a.mcp_server_id AND s.deleted IS FALSE
+WHERE a.remote_session_client_id = $1
+  AND a.deleted IS FALSE`, clientID)
+	if err != nil {
+		return nil, fmt.Errorf("list servers losing global client: %w", err)
+	}
+	defer rows.Close()
+	affected := map[string][]uuid.UUID{}
+	for rows.Next() {
+		var organizationID string
+		var serverID uuid.UUID
+		if err := rows.Scan(&organizationID, &serverID); err != nil {
+			return nil, fmt.Errorf("scan server losing global client: %w", err)
+		}
+		affected[organizationID] = append(affected[organizationID], serverID)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, fmt.Errorf("read servers losing global client: %w", err)
+	}
+	return affected, nil
 }
