@@ -29,6 +29,7 @@ type delegationMemoryStore struct {
 	attemptedAt     time.Time
 	trustRemoved    bool
 	claims          int
+	clock           func() time.Time
 }
 
 func (s *delegationMemoryStore) load(_ context.Context, b Binding) (delegationCredential, error) {
@@ -65,6 +66,7 @@ func (s *delegationMemoryStore) claim(_ context.Context, b Binding, g int64, id 
 	}
 	c.claim = id
 	c.generation++
+	c.updatedAt = s.clock()
 	s.rows[b] = c
 	return true, nil
 }
@@ -79,6 +81,8 @@ func (s *delegationMemoryStore) markRefreshAttempt(_ context.Context, b Binding,
 		return false, nil
 	}
 	s.attemptedAt = now
+	c.updatedAt = now
+	s.rows[b] = c
 	return true, nil
 }
 func (s *delegationMemoryStore) revoke(_ context.Context, b Binding) error {
@@ -117,6 +121,7 @@ func (s *delegationMemoryStore) finish(_ context.Context, b Binding, g int64, id
 		return false, nil
 	}
 	next.generation = g + 1
+	next.updatedAt = s.clock()
 	s.rows[b] = next
 	return true, nil
 }
@@ -152,6 +157,7 @@ func newDelegationUnitFixture(t *testing.T) (*Service, *delegationMemoryStore, *
 	store := &delegationMemoryStore{rows: make(map[Binding]delegationCredential)}
 	now := time.Unix(1700000000, 0)
 	service := &Service{store: store, enc: enc, now: func() time.Time { return now }}
+	store.clock = func() time.Time { return service.now() }
 	service.loadProvider = func(_ context.Context, org string, issuer, client uuid.UUID) (Provider, error) {
 		if org != p.organizationID || issuer != p.issuer.ID || client != p.client.ID {
 			return nil, ErrConfiguration
@@ -283,10 +289,13 @@ func TestDelegationServiceAmbiguousNeverReplays(t *testing.T) {
 			}
 			_, err := s.Resolve(t.Context(), b, allow)
 			require.ErrorIs(t, err, ErrTemporary)
+			_, err = s.Resolve(t.Context(), b, allow)
+			require.ErrorIs(t, err, ErrTemporary, "the renewal may still be running")
 			later := s.now().Add(24 * time.Hour)
 			s.now = func() time.Time { return later }
 			_, err = s.Resolve(t.Context(), b, allow)
-			require.ErrorIs(t, err, ErrTemporary)
+			require.ErrorIs(t, err, ErrReauthentication, "nothing is running and only a sign-in clears the claim")
+			require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication)
 			require.Equal(t, 1, posts)
 			c, err := store.load(t.Context(), b)
 			require.NoError(t, err)
@@ -980,11 +989,12 @@ func TestDelegationConfigurationFailureRetryKeepsStatus(t *testing.T) {
 	for _, tc := range []struct {
 		name      string
 		kind      RefreshFailure
+		want      error
 		holdClaim bool
 	}{
-		{name: "retryable", kind: RefreshRetryable},
-		{name: "rate limited", kind: RefreshRateLimited},
-		{name: "ambiguous", kind: RefreshAmbiguous, holdClaim: true},
+		{name: "retryable", kind: RefreshRetryable, want: ErrConfiguration},
+		{name: "rate limited", kind: RefreshRateLimited, want: ErrConfiguration},
+		{name: "ambiguous", kind: RefreshAmbiguous, want: ErrTemporary, holdClaim: true},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -994,12 +1004,22 @@ func TestDelegationConfigurationFailureRetryKeepsStatus(t *testing.T) {
 			}
 			delegationMoveClock(s, configurationRetryDelay)
 			_, err := s.Resolve(t.Context(), b, allow)
-			require.ErrorIs(t, err, ErrTemporary)
+			require.ErrorIs(t, err, tc.want)
 			c, err := store.load(t.Context(), b)
 			require.NoError(t, err)
 			require.Equal(t, "configuration_failure", c.status, "stored downstream tokens must stay closed")
-			require.Equal(t, s.now().Add(time.Minute), c.retryAfter)
 			require.Equal(t, tc.holdClaim, c.claim != uuid.Nil)
+			if tc.holdClaim {
+				_, err = s.Resolve(t.Context(), b, allow)
+				require.ErrorIs(t, err, ErrTemporary, "no administrator message between the retry and the sign-in")
+				delegationMoveClock(s, refreshClaimLimit)
+				_, err = s.Resolve(t.Context(), b, allow)
+				require.ErrorIs(t, err, ErrReauthentication)
+				return
+			}
+			require.Equal(t, s.now().Add(time.Minute), c.retryAfter)
+			_, err = s.Resolve(t.Context(), b, allow)
+			require.ErrorIs(t, err, ErrConfiguration, "the retry and the pause give the same answer")
 		})
 	}
 }
@@ -1012,7 +1032,7 @@ func TestDelegationConfigurationFailureRecoversAfterRateLimitedRetry(t *testing.
 	}
 	delegationMoveClock(s, configurationRetryDelay)
 	_, err := s.Resolve(t.Context(), b, allow)
-	require.ErrorIs(t, err, ErrTemporary)
+	require.ErrorIs(t, err, ErrConfiguration)
 
 	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
 		return delegationRenewal(p, s.now(), "new-id", "rotated-refresh"), nil
@@ -1031,7 +1051,7 @@ func TestDelegationConfigurationFailureInvalidGrantAfterRateLimitedRetry(t *test
 	}
 	delegationMoveClock(s, configurationRetryDelay)
 	_, err := s.Resolve(t.Context(), b, allow)
-	require.ErrorIs(t, err, ErrTemporary)
+	require.ErrorIs(t, err, ErrConfiguration)
 
 	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
 		return nil, &RefreshError{Kind: RefreshInvalidGrant}
@@ -1747,10 +1767,25 @@ func TestDelegationServiceCheckResolvable(t *testing.T) {
 	})
 	t.Run("renewal in flight with a live assertion", func(t *testing.T) {
 		t.Parallel()
-		s, b, allow := retained(t, "", time.Hour, func(c *delegationCredential) { c.claim = uuid.New() })
+		tenMinutesIn := time.Unix(1700000000, 0).Add(10 * time.Minute)
+		s, b, allow := retained(t, "", time.Hour, func(c *delegationCredential) {
+			c.claim = uuid.New()
+			c.updatedAt = tenMinutesIn
+		})
 		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrTemporary)
 		_, err := s.Resolve(t.Context(), b, allow)
 		require.ErrorIs(t, err, ErrTemporary)
+	})
+	t.Run("claim with nothing running behind it and a live assertion", func(t *testing.T) {
+		t.Parallel()
+		tenMinutesIn := time.Unix(1700000000, 0).Add(10 * time.Minute)
+		s, b, allow := retained(t, "", time.Hour, func(c *delegationCredential) {
+			c.claim = uuid.New()
+			c.updatedAt = tenMinutesIn.Add(-refreshClaimLimit)
+		})
+		require.ErrorIs(t, s.CheckResolvable(t.Context(), b, allow), ErrReauthentication)
+		_, err := s.Resolve(t.Context(), b, allow)
+		require.ErrorIs(t, err, ErrReauthentication)
 	})
 	t.Run("live assertion that does not decrypt", func(t *testing.T) {
 		t.Parallel()

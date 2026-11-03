@@ -219,9 +219,6 @@ func (g *Governor) refreshFrom(ctx context.Context, logger *slog.Logger, req Req
 		}
 		err = g.delegation.CheckResolvable(ctx, binding, auth)
 	}
-	if errors.Is(err, remotesessions.ErrDelegationStaleRegistration) {
-		return newOutcome(StageDelegation, ReasonReauthenticationRequired, ConfidenceVerified, false)
-	}
 	if outcome := delegationOutcome(err); !outcome.Succeeded() {
 		return outcome
 	}

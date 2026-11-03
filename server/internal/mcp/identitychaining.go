@@ -249,12 +249,12 @@ func upstreamTokenPresent(tokens map[uuid.UUID]remotesessions.UpstreamToken, ups
 }
 
 // identityChainingError is the client-facing failure for an applicable
-// attempt. It names the normalized reason only, never provider detail.
+// attempt. It names no reason code or provider detail.
 func identityChainingError(outcome identitychaining.Outcome) error {
 	if outcome.Retryable {
-		return oops.E(oops.CodeUnavailable, nil, "enterprise-managed authorization for this MCP server is temporarily unavailable (%s); retry shortly", outcome.Reason)
+		return oops.E(oops.CodeUnavailable, nil, "Company sign-in for this server is temporarily unavailable. Try again in a moment.")
 	}
-	return oops.E(oops.CodeForbidden, nil, "enterprise-managed authorization for this MCP server failed (%s); contact your administrator", outcome.Reason)
+	return oops.E(oops.CodeForbidden, nil, "Company sign-in for this server isn't working. Contact your administrator.")
 }
 
 // metaMemberChainer returns the runtime chaining hook for member,
@@ -287,11 +287,11 @@ func (s *Service) metaMemberChainer(gate *metaGateContext, member metaMember, ki
 		case !outcome.Applicable():
 			return "", nil
 		case outcome.Reason == identitychaining.ReasonReauthenticationRequired:
-			return "", memberCredentialError{&metaMemberError{message: fmt.Sprintf("server %q needs a fresh sign-in to renew enterprise-managed access; sign in to this gateway again", member.slug)}}
+			return "", memberCredentialError{&metaMemberError{message: fmt.Sprintf("Server %q needs a new company sign-in. Sign in to this gateway again.", member.slug)}}
 		case outcome.Retryable:
-			return "", &metaMemberError{message: fmt.Sprintf("server %q enterprise-managed authorization is temporarily unavailable (%s); retry shortly", member.slug, outcome.Reason)}
+			return "", &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q is temporarily unavailable. Try again in a moment.", member.slug)}
 		}
-		return "", &metaMemberError{message: fmt.Sprintf("server %q enterprise-managed authorization failed (%s); contact your administrator", member.slug, outcome.Reason)}
+		return "", &metaMemberError{message: fmt.Sprintf("Company sign-in for server %q isn't working. Contact your administrator.", member.slug)}
 	}
 }
 

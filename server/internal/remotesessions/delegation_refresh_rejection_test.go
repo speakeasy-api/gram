@@ -263,7 +263,7 @@ func TestDelegationRetainedTokenSurvivesRateLimitedRetry(t *testing.T) {
 	endpoint.answer(http.StatusTooManyRequests, `slow down`)
 	moveDelegationClock(s)
 	_, err = s.Resolve(t.Context(), b, allow)
-	require.ErrorIs(t, err, ErrDelegationTemporary)
+	require.ErrorIs(t, err, ErrDelegationConfiguration, "the retry and the pause give the same answer")
 	row, err := store.load(t.Context(), b)
 	require.NoError(t, err)
 	require.False(t, row.RefreshClaimID.Valid, "a rate limit must not hold the claim")
@@ -302,6 +302,52 @@ func TestDelegationInvalidGrantClearsSavedToken(t *testing.T) {
 			require.ErrorIs(t, err, ErrDelegationReauthentication)
 			require.Len(t, endpoint.received(), 1)
 			require.NotContains(t, logs.String(), "secret-")
+		})
+	}
+}
+
+func TestDelegationHeldClaimAnswersTemporaryThenSignIn(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name     string
+		kept     bool
+		status   int
+		wantHeld string
+	}{
+		{name: "healthy row", status: http.StatusBadGateway, wantHeld: "temporary_failure"},
+		{name: "kept row", kept: true, status: http.StatusBadGateway, wantHeld: "configuration_failure"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			s, store, b, allow, endpoint, _ := rejectionFixture(t, nil)
+			posts := 0
+			if tc.kept {
+				endpoint.answer(http.StatusForbidden, `<html>blocked</html>`)
+				_, err := s.Resolve(t.Context(), b, allow)
+				require.ErrorIs(t, err, ErrDelegationConfiguration)
+				posts++
+				moveDelegationClock(s)
+			}
+			endpoint.answer(tc.status, `upstream hiccup`)
+			_, err := s.Resolve(t.Context(), b, allow)
+			require.ErrorIs(t, err, ErrDelegationTemporary)
+			posts++
+			row, err := store.load(t.Context(), b)
+			require.NoError(t, err)
+			require.True(t, row.RefreshClaimID.Valid)
+			require.Equal(t, tc.wantHeld, row.ObservationStatus.String)
+
+			inFlight := row.UpdatedAt.Time.Add(-time.Second)
+			s.now = func() time.Time { return inFlight }
+			_, err = s.Resolve(t.Context(), b, allow)
+			require.ErrorIs(t, err, ErrDelegationTemporary, "the row changed moments ago, so a renewal may be running")
+
+			abandoned := row.UpdatedAt.Time.Add(time.Minute)
+			s.now = func() time.Time { return abandoned }
+			_, err = s.Resolve(t.Context(), b, allow)
+			require.ErrorIs(t, err, ErrDelegationReauthentication)
+			require.ErrorIs(t, s.service().CheckResolvable(t.Context(), b, allow), ErrDelegationReauthentication)
+			require.Len(t, endpoint.received(), posts, "a held claim never replays the token")
 		})
 	}
 }

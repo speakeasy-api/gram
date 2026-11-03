@@ -124,7 +124,7 @@ func TestFederatedRefreshVerificationDependencies(t *testing.T) {
 				later := s.now().Add(24 * time.Hour)
 				s.now = func() time.Time { return later }
 				_, err = s.Resolve(t.Context(), b, allow)
-				require.ErrorIs(t, err, ErrDelegationTemporary)
+				require.ErrorIs(t, err, ErrDelegationReauthentication)
 			} else {
 				require.ErrorIs(t, err, ErrDelegationConfiguration)
 				require.Empty(t, after.RefreshTokenEncrypted.String)

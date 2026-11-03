@@ -50,7 +50,7 @@ func TestDelegationAmbiguousResponseAfterRotationNeverResubmits(t *testing.T) {
 			s.now = func() time.Time { return later }
 			for range 3 {
 				assertion, err = s.Resolve(t.Context(), b, allow)
-				require.ErrorIs(t, err, ErrDelegationTemporary)
+				require.ErrorIs(t, err, ErrDelegationReauthentication)
 				require.Empty(t, assertion.Value())
 			}
 			require.Equal(t, 1, posts)

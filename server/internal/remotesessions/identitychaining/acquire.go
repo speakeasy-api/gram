@@ -91,13 +91,8 @@ func (c *Chainer) exchangeGrant(ctx context.Context, logger *slog.Logger, req Re
 	var none issuedGrant
 	binding := remotesessions.DelegationBinding{OrganizationID: req.OrganizationID, IssuerID: sel.trustedIssuerID, ClientID: sel.trustedClientID, HumanID: req.UserID}
 	assertion, err := c.delegation.Resolve(ctx, binding, authority{db: c.db, req: req})
-	switch {
-	case errors.Is(err, remotesessions.ErrDelegationReauthentication):
-		return none, newOutcome(StageDelegation, ReasonReauthenticationRequired, ConfidenceVerified, false)
-	case errors.Is(err, remotesessions.ErrDelegationConfiguration):
-		return none, newOutcome(StageDelegation, ReasonConfigurationRequired, ConfidenceVerified, false)
-	case err != nil:
-		return none, newOutcome(StageDelegation, ReasonTransientFailure, ConfidenceVerified, true)
+	if outcome := delegationOutcome(err); !outcome.Succeeded() {
+		return none, outcome
 	}
 	// Subject continuity needs the verified upstream subject the assertion
 	// was retained with; a retained row without one predates that record.

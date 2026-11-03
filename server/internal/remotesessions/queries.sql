@@ -5096,6 +5096,18 @@ INSERT INTO trusted_issuer_sessions (
     'must-not-decrypt'
 );
 
+-- name: SetTrustedDelegationStateFixture :execrows
+-- Test-only fixture for delegation states that take real time to reach.
+UPDATE trusted_issuer_sessions SET
+  observation_status = COALESCE(sqlc.narg(observation_status), observation_status),
+  refresh_claim_id = COALESCE(sqlc.narg(refresh_claim_id)::uuid, refresh_claim_id),
+  retry_after = COALESCE(sqlc.narg(retry_after)::timestamptz, retry_after),
+  observed_at = COALESCE(sqlc.narg(observed_at)::timestamptz, observed_at),
+  updated_at = COALESCE(sqlc.narg(updated_at)::timestamptz, updated_at)
+WHERE organization_id = @organization_id::text
+  AND remote_session_client_id = @client_id::uuid
+  AND deleted IS FALSE;
+
 -- name: ListTrustedDelegationCleanupOrganizations :many
 -- Read-only enumeration for the privileged maintenance activity.
 SELECT DISTINCT organization_id FROM trusted_issuer_sessions

@@ -194,7 +194,7 @@ func (m *ChallengeManager) pauseFederatedClient(ctx context.Context, logger *slo
 	}
 }
 
-// Only a dead-grant or sign-in code deletes the token (RFC 6749 section 5.2); the rest keep it.
+// Only invalid_grant (RFC 6749 section 5.2) or a sign-in code (OIDC Core section 3.1.2.6) deletes the token.
 func classifyFederatedRefreshResponse(status int, body []byte) (FederatedRefreshFailure, string) {
 	parsed, _ := oautherr.ParseTokenError(body)
 	code := oautherr.CanonicalTokenErrorCode(parsed.Code)
