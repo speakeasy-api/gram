@@ -1313,23 +1313,30 @@ func (s *Service) recordRemoteSessionRejection(ctx context.Context, authenticati
 }
 
 // writeRemoteSessionReconnectChallenge answers a request whose required
-// upstream remote session is missing or its grant is gone, which only the user
-// reconnecting it at {routeBase}/{slug}/connect repairs. RFC 6750 reads a 401
-// without an error code as "no credentials presented", so clients replay the
+// upstream remote session is missing or its grant is gone, which only the
+// person reconnecting it at {routeBase}/{slug}/connect repairs. RFC 6750 reads a
+// 401 without an error code as "no credentials presented", so clients replay the
 // token they hold indefinitely; invalid_token makes them refresh, which the
 // token endpoint refuses for the same reason, and then reauthorize through the
-// consent page that reconnects the upstream. Only a user session from a
+// consent page that reconnects the upstream. Only a person's session from a
 // refreshable grant can follow that path. Every other caller keeps the bare
 // challenge, since telling it to discard a credential it cannot replace, or an
 // agent session whose attached credential belongs to someone else, would
 // strand it.
 func writeRemoteSessionReconnectChallenge(w http.ResponseWriter, authentication *issuerGateAuthentication) error {
 	errorCode := ""
-	if authentication.refreshableUserSession && authentication.subject.Kind == urn.SessionSubjectKindUser {
+	if authentication.refreshableUserSession && subjectReauthorizesToReconnect(authentication.subject) {
 		errorCode = oautherr.CodeInvalidToken
 	}
 	header := bearerErrorChallengeHeader(authentication.protectedResourceURL, errorCode, remoteSessionReconnectDescription)
 	return writeChallenge(w, header, remoteSessionReconnectDescription)
+}
+
+// subjectReauthorizesToReconnect reports a subject whose session belongs to a
+// person at the client. An anonymous subject is one too: reauthorizing mints a
+// new one, which connects the upstream on the consent page.
+func subjectReauthorizesToReconnect(subject urn.SessionSubject) bool {
+	return subject.Kind == urn.SessionSubjectKindUser || subject.Kind == urn.SessionSubjectKindAnonymous
 }
 
 // ApplyIssuerGate authenticates and immediately resolves upstream credentials.

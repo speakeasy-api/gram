@@ -1497,9 +1497,9 @@ func (s *Service) rotateRefreshToken(
 // A direct proxied server is served through the credential's choice, so
 // refresh judges that choice for every session the runtime holds to its
 // choices: a missing or unusable one is refused, as the runtime would refuse
-// it, and a no-auth one needs no upstream. For a user, a chosen client needs
+// it, and a no-auth one needs no upstream. For a person, a chosen client needs
 // reconnecting only when its own stored grant does; sibling clients on the
-// user session issuer never decide. Other endpoints keep the user's
+// user session issuer never decide. Other endpoints keep the person's
 // issuer-wide check.
 //
 // When identity chaining owns the upstream, refresh follows the runtime, which
@@ -1529,14 +1529,14 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 	} else if decided {
 		return reconnect
 	}
-	user := subject.Kind == urn.SessionSubjectKindUser
+	reauthorizes := subjectReauthorizesToReconnect(subject)
 	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
 	tunneled, proxied, err := s.consentDirectBackend(ctx, endpoint, routing)
 	if err != nil {
 		return false
 	}
 	if !proxied {
-		if !user {
+		if !reauthorizes {
 			return false
 		}
 		reconnect, err := s.remoteChallengeMgr.RemoteSessionsNeedReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
@@ -1554,7 +1554,7 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 	case err != nil:
 		logger.WarnContext(ctx, "load upstream client choice before refresh", attr.SlogError(err))
 		return false
-	case choice.noAuth(), !user:
+	case choice.noAuth(), !reauthorizes:
 		return false
 	}
 	routing.backend = consentBackendRemote
@@ -1566,7 +1566,8 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 		logger.WarnContext(ctx, "check chosen upstream remote session before refresh", attr.SlogError(err))
 		return false
 	}
-	if !reconnect || s.identityChainer == nil || subject.ID == "" {
+	// Identity chaining vouches for a known user, which an anonymous subject is not.
+	if !reconnect || s.identityChainer == nil || subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" {
 		return reconnect
 	}
 	req, ok, err := s.directChainingRequest(ctx, endpoint, subject.ID, routing, choice)
