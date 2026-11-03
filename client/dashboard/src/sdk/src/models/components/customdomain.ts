@@ -42,7 +42,7 @@ export type CustomDomain = {
   /**
    * When DNS configuration was observed. Infrastructure health belongs to the same observation only when this matches health_checked_at.
    */
-  dnsCheckedAt?: string | undefined;
+  dnsCheckedAt?: Date | undefined;
   /**
    * Advisory public DNS configuration: matched, wrong_target, unconfirmed, not_found, check_failed, or not_configured. Does not establish ownership or public availability.
    */
@@ -136,7 +136,9 @@ export const CustomDomain$inboundSchema: z.ZodMiniType<CustomDomain, unknown> =
         z.iso.datetime({ offset: true }),
         z.transform(v => new Date(v)),
       ),
-      dns_checked_at: z.optional(z.string()),
+      dns_checked_at: z.optional(
+        z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
+      ),
       dns_configuration_status: z.optional(z.string()),
       dns_routing_method: z.optional(z.string()),
       dns_target: z.optional(z.string()),

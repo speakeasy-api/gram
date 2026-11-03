@@ -3838,6 +3838,9 @@ func ValidateGetDomainResponseBody(body *GetDomainResponseBody) (err error) {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.suggested_record_type", *body.SuggestedRecordType, []any{"cname", "a"}))
 		}
 	}
+	if body.DNSCheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.dns_checked_at", *body.DNSCheckedAt, goa.FormatDateTime))
+	}
 	return
 }
 
@@ -3921,6 +3924,9 @@ func ValidateCreateDomainResponseBody(body *CreateDomainResponseBody) (err error
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.suggested_record_type", *body.SuggestedRecordType, []any{"cname", "a"}))
 		}
 	}
+	if body.DNSCheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.dns_checked_at", *body.DNSCheckedAt, goa.FormatDateTime))
+	}
 	return
 }
 
@@ -3980,6 +3986,9 @@ func ValidateUpdateDomainResponseBody(body *UpdateDomainResponseBody) (err error
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.suggested_record_type", *body.SuggestedRecordType, []any{"cname", "a"}))
 		}
 	}
+	if body.DNSCheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.dns_checked_at", *body.DNSCheckedAt, goa.FormatDateTime))
+	}
 	return
 }
 
@@ -4038,6 +4047,9 @@ func ValidateSetRootMcpEndpointResponseBody(body *SetRootMcpEndpointResponseBody
 		if !(*body.SuggestedRecordType == "cname" || *body.SuggestedRecordType == "a") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.suggested_record_type", *body.SuggestedRecordType, []any{"cname", "a"}))
 		}
+	}
+	if body.DNSCheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.dns_checked_at", *body.DNSCheckedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -4113,6 +4125,9 @@ func ValidateCheckHealthResponseBody(body *CheckHealthResponseBody) (err error) 
 		if !(*body.SuggestedRecordType == "cname" || *body.SuggestedRecordType == "a") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.suggested_record_type", *body.SuggestedRecordType, []any{"cname", "a"}))
 		}
+	}
+	if body.DNSCheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.dns_checked_at", *body.DNSCheckedAt, goa.FormatDateTime))
 	}
 	return
 }
@@ -6348,6 +6363,9 @@ func ValidateCustomDomainResponseBody(body *CustomDomainResponseBody) (err error
 		if !(*body.SuggestedRecordType == "cname" || *body.SuggestedRecordType == "a") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.suggested_record_type", *body.SuggestedRecordType, []any{"cname", "a"}))
 		}
+	}
+	if body.DNSCheckedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.dns_checked_at", *body.DNSCheckedAt, goa.FormatDateTime))
 	}
 	return
 }
