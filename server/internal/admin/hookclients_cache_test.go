@@ -81,7 +81,8 @@ func TestHookClientsCacheRefreshPreservesSnapshotOnDeviceReadFailure(t *testing.
 	rc := redis.NewClient(&redis.Options{Addr: server.Addr()})
 	t.Cleanup(func() { require.NoError(t, rc.Close()) })
 	devices := deviceagentversions.NewStore(rc)
-	require.NoError(t, devices.Record(t.Context(), "example", "machine", "1.0.0", time.Now()))
+	recordedAt := time.Now()
+	require.NoError(t, devices.Record(t.Context(), "example", "machine", "1.0.0", recordedAt))
 	warmer := NewHookClientsCache(testenv.NewLogger(t), cache.NewRedisCacheAdapter(rc), stubHookClientsReader{}, devices)
 	require.NoError(t, warmer.Refresh(t.Context()))
 	before, err := warmer.hookClientsCache.Get(t.Context(), hookClientsCacheKey(hookClientsDefaultWindowDays))
@@ -99,11 +100,13 @@ func TestHookClientsCacheRefreshPreservesSnapshotOnDeviceReadFailure(t *testing.
 	require.Equal(t, before, after)
 	// The same activity can recover on retry without clearing the saved snapshot.
 	warmer.deviceAgentVersions = devices
-	require.NoError(t, devices.Record(t.Context(), "example", "machine-2", "2.0.0", time.Now()))
+	require.NoError(t, devices.Record(t.Context(), "example", "machine-2", "2.0.0", recordedAt))
 	require.NoError(t, warmer.Refresh(t.Context()))
 	recovered, err := warmer.hookClientsCache.Get(t.Context(), hookClientsCacheKey(hookClientsDefaultWindowDays))
 	require.NoError(t, err)
-	require.Len(t, recovered.DeviceAgents, len(before.DeviceAgents)+1)
+	require.Contains(t, recovered.DeviceAgents, deviceagentversions.Row{
+		OrganizationID: "example", Day: recordedAt.UTC().Format(time.DateOnly), Version: "2.0.0", Machines: 1,
+	})
 	require.False(t, recovered.QueriedAt.IsZero())
 }
 
@@ -113,7 +116,8 @@ func TestHookClientsCachePageRefreshPreservesSnapshotOnDeviceReadFailure(t *test
 	rc := redis.NewClient(&redis.Options{Addr: server.Addr()})
 	t.Cleanup(func() { require.NoError(t, rc.Close()) })
 	devices := deviceagentversions.NewStore(rc)
-	require.NoError(t, devices.Record(t.Context(), "example", "machine", "1.0.0", time.Now()))
+	recordedAt := time.Now()
+	require.NoError(t, devices.Record(t.Context(), "example", "machine", "1.0.0", recordedAt))
 	reader := stubHookClientsReader{
 		sessions:  []telemetry.HookClientSessionRow{{OrganizationID: "example", Day: "2026-11-03", Machines: 2}},
 		inference: []telemetry.InferenceHookTrafficRow{{OrganizationID: "example", Day: "2026-11-03", Users: 1}},
@@ -138,7 +142,7 @@ func TestHookClientsCachePageRefreshPreservesSnapshotOnDeviceReadFailure(t *test
 	require.NoError(t, err)
 	require.Equal(t, before, after)
 	warmer.deviceAgentVersions = devices
-	require.NoError(t, devices.Record(t.Context(), "example", "machine-2", "2.0.0", time.Now()))
+	require.NoError(t, devices.Record(t.Context(), "example", "machine-2", "2.0.0", recordedAt))
 	recovered, _, err := warmer.hookClientsSnapshot(t.Context(), hookClientsDefaultWindowDays, true)
 	require.NoError(t, err)
 	after, err = warmer.hookClientsCache.Get(t.Context(), hookClientsCacheKey(hookClientsDefaultWindowDays))
@@ -148,6 +152,8 @@ func TestHookClientsCachePageRefreshPreservesSnapshotOnDeviceReadFailure(t *test
 	require.Equal(t, recovered.Sessions, after.Sessions)
 	require.Equal(t, recovered.Inference, after.Inference)
 	require.Equal(t, recovered.DeviceAgents, after.DeviceAgents)
-	require.Len(t, after.DeviceAgents, len(before.DeviceAgents)+1)
+	require.Contains(t, after.DeviceAgents, deviceagentversions.Row{
+		OrganizationID: "example", Day: recordedAt.UTC().Format(time.DateOnly), Version: "2.0.0", Machines: 1,
+	})
 	require.False(t, after.QueriedAt.IsZero())
 }
