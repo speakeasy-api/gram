@@ -1319,9 +1319,9 @@ func (s *Service) recordRemoteSessionRejection(ctx context.Context, authenticati
 // code, clients tend to replay the token they hold indefinitely; RFC 6750 section
 // 3.1 lets invalid_token prompt a refresh, which the token endpoint refuses for
 // the same reason, and clients then reauthorize through the consent page that
-// reconnects the upstream. Only a person's session from a
-// refreshable grant can follow that path. Every other caller keeps the bare
-// challenge, since telling it to discard a credential it cannot replace, or an
+// reconnects the upstream. Only a refreshable user or anonymous session whose
+// subject can reauthorize can follow that path. Every other caller keeps the
+// challenge with no error code, since telling it to discard a credential it cannot replace, or an
 // agent session whose attached credential belongs to someone else, would
 // strand it.
 func (s *Service) writeRemoteSessionReconnectChallenge(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication) error {
