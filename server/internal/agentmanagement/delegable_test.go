@@ -205,6 +205,27 @@ func TestListDelegableGrantsConservativelyOmitsOverlappingExclusions(t *testing.
 	}
 }
 
+// An "All servers" key needs the project wildcard itself, or it reaches only
+// the servers that existed when it was issued. With carry_exclusions the
+// owner's blocked server comes back beside the wildcard rather than removing it.
+func TestListDelegableGrantsCarriesExclusionsBesideWildcard(t *testing.T) {
+	t.Parallel()
+	f := newDelegableFixture(t)
+	projectWildcard := authz.NewSelector(authz.ScopeMCPConnect, "*")
+	projectWildcard[authz.SelectorKeyProjectID] = "project-one"
+	f.grant(t, "agent", authz.ScopeMCPConnect, projectWildcard)
+	f.grant(t, "owner", authz.ScopeMCPConnect, authz.NewSelector(authz.ScopeMCPConnect, "*"))
+	f.grant(t, "owner", authz.ScopeMCPBlockedConnect, authz.NewSelector(authz.ScopeMCPBlockedConnect, "blocked-server"))
+
+	require.Empty(t, f.list(t, "owner"), "without carrying, the overlapped wildcard is omitted")
+
+	result, err := f.service.ListDelegableGrants(validatedHumanContext(t, "org-delegable", "owner"), &gen.ListDelegableGrantsPayload{AgentID: f.agentID.String(), CarryExclusions: true})
+	require.NoError(t, err)
+	projectOne := "project-one"
+	require.Contains(t, result, &gen.AgentPolicyGrantForm{Scope: string(authz.ScopeMCPConnect), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: "*", ProjectID: &projectOne}})
+	require.Contains(t, result, &gen.AgentPolicyGrantForm{Scope: string(authz.ScopeMCPBlockedConnect), Effect: "allow", Selector: &gen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: "blocked-server", ProjectID: &projectOne}})
+}
+
 func TestListDelegableGrantsRejectsInactiveAgentOrOwner(t *testing.T) {
 	t.Parallel()
 	for _, state := range []string{"suspended", "revoked", "deleted", "owner deleted", "owner membership removed"} {

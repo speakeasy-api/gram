@@ -521,3 +521,8 @@ func EnableUpstreamAuthEnforcementAdminPath() string {
 func DisableUpstreamAuthEnforcementAdminPath() string {
 	return "/admin/upstreamOAuthMigration.disableEnforcement"
 }
+
+// BackfillMcpAuthGrantsAdminPath returns the URL path to the admin service backfillMcpAuthGrants HTTP endpoint.
+func BackfillMcpAuthGrantsAdminPath() string {
+	return "/admin/mcpAuthGrants.backfill"
+}

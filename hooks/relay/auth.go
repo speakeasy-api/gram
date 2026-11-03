@@ -7,6 +7,7 @@ import (
 	"os"
 	"path/filepath"
 	"strings"
+	"time"
 )
 
 // credSource records where the effective hooks key came from, which governs
@@ -21,6 +22,9 @@ const (
 	// credOrg is the key baked into the plugin: the shared org key, or an
 	// agent's own key when Config.AgentKey is set.
 	credOrg
+	// credToken is a short-lived device-agent bearer from the token command
+	// (tokencommand.go). It authenticates with Authorization, never Gram-Key.
+	credToken
 )
 
 // creds is the resolved credential used to authenticate an ingest request.
@@ -31,6 +35,9 @@ type creds struct {
 	Email     string
 	Org       string
 	Source    credSource
+	// Bearer and ExpiresAt are set only for credToken.
+	Bearer    string
+	ExpiresAt time.Time
 }
 
 // authFilePath returns the hooks credential cache location: the
@@ -140,7 +147,15 @@ func sameDeployment(gotURL, gotOrg, wantURL, wantOrg string) bool {
 // a different product surface (MCP access) and must not silently authenticate
 // hook telemetry. The second return is false when the machine holds no
 // credential.
+//
+// A configured token command is exclusive: no key of any kind is consulted,
+// because each would bypass the server's per-project check: a token box sends
+// only to its configured hooks project, and only if the agent's
+// org:hooks_ingest RBAC allows it.
 func resolveAuth(cfg Config) (creds, bool) {
+	if argv, ok := tokenCommandArgv(); ok {
+		return resolveTokenAuth(cfg, argv, false)
+	}
 	apiKey := Env("HOOKS_API_KEY")
 	if apiKey != "" {
 		project := cfg.ProjectSlug

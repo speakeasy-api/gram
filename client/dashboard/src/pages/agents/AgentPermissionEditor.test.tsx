@@ -213,6 +213,26 @@ describe("Agent permission editor", () => {
     expect(mocks.remove).not.toHaveBeenCalled();
     expect(mocks.close).not.toHaveBeenCalled();
   });
+  it("saves against a ceiling holding a credential restriction without showing or removing it", async () => {
+    const restriction: AgentPolicyGrant = {
+      createdAt: new Date(),
+      updatedAt: new Date(),
+      id: "credential_restriction",
+      scope: "mcp:blocked_auth",
+      effect: "allow",
+      selector: { resourceKind: "mcp_auth_client", resourceId: "client_one" },
+    };
+    setup([inferenceGrant("project_one"), restriction]);
+    expect(screen.queryByText(/mcp:blocked_auth/)).toBeNull();
+    openPlatform();
+    fireEvent.click(screen.getByRole("button", { name: /Choose resources/ }));
+    fireEvent.click(screen.getByText("Project two"));
+    fireEvent.click(screen.getByRole("button", { name: "Done" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    await waitFor(() => expect(mocks.close).toHaveBeenCalledOnce());
+    expect(mocks.create).toHaveBeenCalledOnce();
+    expect(mocks.remove).not.toHaveBeenCalled();
+  });
   it("does not normalize redundant grants on a no-op save", async () => {
     setup([
       inferenceGrant("project_one"),

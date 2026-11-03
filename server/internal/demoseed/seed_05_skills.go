@@ -139,6 +139,30 @@ func (s *seeder) seedSkills(ctx context.Context) error {
 		return fmt.Errorf("insert demo skill distributions: %w", err)
 	}
 
+	// Skills served over MCP, for the MCP server and gateway Skills tabs and
+	// the skill page's "Served over MCP" section.
+	n, err := s.q.SkillsInsertMCPSkillLinks(ctx, repo.SkillsInsertMCPSkillLinksParams{
+		ServerRefundsID:     s.det("skilllink-server-refunds"),
+		OrgID:               s.orgID(),
+		ProjectID:           proj,
+		RefundsSkillID:      s.skillID(1),
+		SupportServerID:     s.toolset1(),
+		CreatedByUserID:     lucas,
+		ServerTriageID:      s.det("skilllink-server-triage"),
+		TriageSkillID:       s.skillID(2),
+		GatewayTriageID:     s.det("skilllink-gateway-triage"),
+		GatewayID:           s.det("metamcp-1"),
+		GatewayRunbookID:    s.det("skilllink-gateway-runbook"),
+		RunbookSkillID:      s.skillID(3),
+		OrgGatewayRunbookID: s.det("skilllink-orggateway-runbook"),
+	})
+	if err != nil {
+		return fmt.Errorf("insert demo mcp skill links: %w", err)
+	}
+	if n != 5 {
+		return fmt.Errorf("demo seed: expected 5 mcp skill links, found %d", n)
+	}
+
 	for i := 1; i <= bulkChats; i++ {
 		if i%2 == 0 {
 			continue

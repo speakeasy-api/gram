@@ -464,6 +464,17 @@ func (s *seeder) chToolCallRows() []chTelemetryRow {
 				if hash64("authz", i)%3 != 0 {
 					attrs += `,"gram.authorization.authorizer_user_id":"` + s.userID(u.handle) + `"`
 				}
+				// How the gateway signed the call in upstream: the person's
+				// own Linear connection, the shared engineering token, or
+				// nothing for calls recorded before the gateway named it, so
+				// the Tool Logs row shows all three renderings. The ids are
+				// seeded auth clients, so the id a row names resolves to one.
+				switch hash64("upstreamcred", i) % 3 {
+				case 1:
+					attrs += `,"gram.auth_client.type":"remote_session","gram.auth_client.id":"` + s.det("auth-client-linear").String() + `","gram.auth_client.connection_owner_user_id":"` + s.userID(u.handle) + `"`
+				case 2:
+					attrs += `,"gram.auth_client.type":"static_credential","gram.auth_client.id":"` + s.det("auth-client-github-token").String() + `"`
+				}
 			}
 			attrs += `,"gram.toolset.slug":"` + chIf(i%5 == 0, "acme-ops", "acme-support-tools") + `"`
 			// The serving wrapper's id; every seventh chat models calls recorded before stamping.

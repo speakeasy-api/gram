@@ -110,6 +110,10 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock association writer scope").LogError(ctx, logger)
+	}
+
 	// The server lock serializes this with identity commits and server
 	// updates, which change the bindings the sole-consumer check reads.
 	server, err := mcpserversrepo.New(dbtx).LockMCPServerByIDAndProjectID(ctx, mcpserversrepo.LockMCPServerByIDAndProjectIDParams{

@@ -435,7 +435,7 @@ func TestSkillReportsLastLoadOverMCPWithoutDistribution(t *testing.T) {
 	seenAt := time.Date(2026, 3, 1, 9, 0, 0, 0, time.UTC)
 	written, err := mcpskills.NewResolver(testenv.NewLogger(t), ti.conn).RecordRead(ctx, mcpskills.Read{
 		Entry: mcpskills.Entry{
-			SkillID: skillID, ProjectID: ti.projectID, ProjectSlug: "", VersionID: versionID,
+			SkillID: skillID, ProjectID: ti.projectID, ProjectSlug: *ti.authContext.ProjectSlug, VersionID: versionID,
 			Name: created.Skill.Name, Content: created.Version.Content, RawSHA256: created.Version.RawSha256,
 			Frontmatter: nil,
 		},
@@ -519,7 +519,7 @@ func TestSkillDistributionReportsLastLoadOverMCP(t *testing.T) {
 	// Two hosted MCP reads in different sessions: the newest one is reported.
 	resolver := mcpskills.NewResolver(testenv.NewLogger(t), ti.conn)
 	entry := mcpskills.Entry{
-		SkillID: skillID, ProjectID: ti.projectID, ProjectSlug: "", VersionID: versionID,
+		SkillID: skillID, ProjectID: ti.projectID, ProjectSlug: *ti.authContext.ProjectSlug, VersionID: versionID,
 		Name: created.Skill.Name, Content: created.Version.Content, RawSHA256: created.Version.RawSha256,
 		Frontmatter: nil,
 	}

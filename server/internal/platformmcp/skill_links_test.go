@@ -306,6 +306,28 @@ func TestSkillLinkToolsRequireConfirmationAndMapTheRollout(t *testing.T) {
 	}
 }
 
+// Re-linking a target replaces its pin, so linking can change or clear the
+// version a target serves; both tools are marked destructive whether or not
+// the rollout is on.
+func TestSkillLinkToolsAreDestructive(t *testing.T) {
+	t.Parallel()
+
+	live := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "skill-links", Version: "0.0.1"}, nil))
+	registerSkillsTools(live, testLinkSkillsService(t, &recordingSkillsManagement{skill: testSkill()}))
+	unavailable := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "skill-links", Version: "0.0.1"}, nil))
+	registerUnavailableSkillsTools(unavailable)
+
+	for _, reg := range []*Registrar{live, unavailable} {
+		for _, name := range []string{"link_skill_to_mcp", "unlink_skill_from_mcp"} {
+			descriptor := descriptorByName(t, reg, name)
+			require.NotNil(t, descriptor.Annotations)
+			require.NotNil(t, descriptor.Annotations.DestructiveHint)
+			require.True(t, *descriptor.Annotations.DestructiveHint, name)
+			require.True(t, descriptor.Annotations.IdempotentHint, name)
+		}
+	}
+}
+
 func TestBuildSkillMCPLinkSummaryNamesTheTarget(t *testing.T) {
 	t.Parallel()
 

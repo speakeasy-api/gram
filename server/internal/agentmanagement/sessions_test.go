@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	remoterepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
@@ -148,6 +149,50 @@ func seedManagedUpstreamWith(t *testing.T, db *pgxpool.Pool, orgID string, issue
 	session, err := q.UpsertRemoteSession(t.Context(), params)
 	require.NoError(t, err)
 	return session
+}
+
+// A workload signs in under its own subject, so its sessions belong to the
+// agent only through its assignment. A workload pinned to another agent, or
+// assigned to none, stays off this agent's list.
+func TestAgentSessionsIncludeAssignedWorkloads(t *testing.T) {
+	t.Parallel()
+	db := newTestDB(t)
+	seedOrganization(t, db, "org-a")
+	seedOrganizationUser(t, db, "org-a", "owner")
+	agent := createAgent(t, db, "org-a", "owner", "Workload agent")
+	other := createAgent(t, db, "org-a", "owner", "Other agent")
+	fixtures := testrepo.New(db)
+	issuerID, err := fixtures.CreateWorkloadIssuerFixture(t.Context(), testrepo.CreateWorkloadIssuerFixtureParams{
+		OrganizationID: "org-a",
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Name:           "Runners",
+		Issuer:         "https://runners.example.test",
+		JwksUri:        "https://runners.example.test/jwks",
+	})
+	require.NoError(t, err)
+	for subject, agentID := range map[string]uuid.UUID{"runner-1": agent.ID, "runner-2": other.ID} {
+		require.NoError(t, fixtures.CreateWorkloadAgentAssignmentFixture(t.Context(), testrepo.CreateWorkloadAgentAssignmentFixtureParams{
+			OrganizationID: "org-a", WorkloadIssuerID: issuerID, Subject: subject, MatchKind: "exact", AgentID: agentID,
+		}))
+	}
+	workload := func(subject string) string { return urn.NewWorkloadSubject(issuerID, subject).String() }
+	own, _ := seedManagedSession(t, db, "org-a", "agent:"+agent.ID.String())
+	assigned, _ := seedManagedSession(t, db, "org-a", workload("runner-1"))
+	seedManagedSession(t, db, "org-a", workload("runner-2"))
+	seedManagedSession(t, db, "org-a", workload("unassigned"))
+
+	service := newTestService(db, &fakeAuthorizationEngine{allowed: map[string]bool{}})
+	listed, err := service.ListSessions(validatedHumanContext(t, "org-a", "owner"), &gen.ListSessionsPayload{AgentID: agent.ID.String()})
+	require.NoError(t, err)
+	require.Len(t, listed.Items, 2)
+	byID := map[string]*gen.AgentSession{}
+	for _, item := range listed.Items {
+		byID[item.ID] = item
+	}
+	require.Equal(t, "agent", byID[own.String()].SubjectKind)
+	require.Nil(t, byID[own.String()].WorkloadSubject)
+	require.Equal(t, "workload", byID[assigned.String()].SubjectKind)
+	require.Equal(t, "runner-1", *byID[assigned.String()].WorkloadSubject)
 }
 
 func TestAgentSessionsScopeAndRevocationCascade(t *testing.T) {

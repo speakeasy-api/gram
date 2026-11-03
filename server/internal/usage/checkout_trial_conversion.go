@@ -89,13 +89,26 @@ func stripeCheckoutIntentsEqual(left, right stripeCheckoutIntent) bool {
 // confirms Checkout completion, including delivery after expiry or demotion.
 // The caller holds trial, key, and organization locks; provider reconciliation follows commit.
 func (s *Service) convertEnterpriseTrialForCheckoutTx(ctx context.Context, tx pgx.Tx, organizationID string, trial trialsrepo.Trial) (bool, error) {
-	now := s.checkoutNow()
 	if trial.ConvertedAt.Valid || trial.Tier != "enterprise" {
 		return false, nil
 	}
 	provisioner, ok := s.openRouter.(checkoutTrialProvisioner)
 	if !ok {
 		return false, errors.New("model provider key lifecycle is unavailable")
+	}
+	label := "System"
+	return ConvertEnterpriseTrialToPaygTx(ctx, tx, organizationID, trial, provisioner, s.auditLogger, s.checkoutNow(), BillingActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, "system"), DisplayName: &label}, "stripe_checkout")
+}
+
+// ConvertEnterpriseTrialToPaygTx shares the local conversion policy between
+// verified Checkout and staff linking an existing subscription. The caller must
+// hold trial lifecycle and key billing locks before locking organization rows,
+// and commit subscription identity and PAYG activation in the same transaction.
+func ConvertEnterpriseTrialToPaygTx(ctx context.Context, tx pgx.Tx, organizationID string, trial trialsrepo.Trial, provisioner interface {
+	PrepareEnterpriseTrialConversionKeyWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, int64) (openrouter.EnterpriseTrialConversionKeyChange, error)
+}, auditLogger *audit.Logger, now time.Time, actor BillingActor, source string) (bool, error) {
+	if trial.ConvertedAt.Valid || trial.Tier != "enterprise" {
+		return false, nil
 	}
 
 	queries := adminrepo.New(tx)
@@ -128,7 +141,7 @@ func (s *Service) convertEnterpriseTrialForCheckoutTx(ctx context.Context, tx pg
 	if err != nil || rows != 1 {
 		return false, fmt.Errorf("mark enterprise trial converted: rows=%d: %w", rows, err)
 	}
-	// Self-serve Checkout is the PAYG conversion path. Admin conversion keeps enterprise.
+	// Verified subscription activation converts to PAYG, unlike an enterprise contract.
 	if _, err := trialsrepo.New(tx).RestoreOrganizationFromTrial(ctx, trialsrepo.RestoreOrganizationFromTrialParams{OrganizationID: organizationID, AccountType: string(billing.TierPayg)}); err != nil {
 		return false, fmt.Errorf("restore organization after checkout conversion: %w", err)
 	}
@@ -159,13 +172,12 @@ func (s *Service) convertEnterpriseTrialForCheckoutTx(ctx context.Context, tx pg
 		Trial:        checkoutConversionTrialSnapshot(convertedTrial.Tier, convertedTrial.EndsAt, convertedTrial.ConvertedAt, convertedTrial.DemotedAt, now),
 		Keys:         afterKeys,
 	}
-	if s.auditLogger == nil {
+	if auditLogger == nil {
 		return false, errors.New("audit logger is unavailable")
 	}
-	actorLabel := "System"
-	if err := s.auditLogger.LogOrganizationEnterpriseTrialConverted(ctx, tx, audit.LogOrganizationEnterpriseTrialConvertedEvent{
-		OrganizationID: organizationID, ConversionSource: "stripe_checkout", KeyAccessChanged: &keyAccessChanged,
-		Actor: urn.NewPrincipal(urn.PrincipalTypeUser, "system"), ActorDisplayName: &actorLabel, ActorSlug: nil,
+	if err := auditLogger.LogOrganizationEnterpriseTrialConverted(ctx, tx, audit.LogOrganizationEnterpriseTrialConvertedEvent{
+		OrganizationID: organizationID, ConversionSource: source, KeyAccessChanged: &keyAccessChanged,
+		Actor: actor.Principal, ActorDisplayName: actor.DisplayName, ActorSlug: nil,
 		Before: before, After: after,
 	}); err != nil {
 		return false, fmt.Errorf("log enterprise trial checkout conversion: %w", err)

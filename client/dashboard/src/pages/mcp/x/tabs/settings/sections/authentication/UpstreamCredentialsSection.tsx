@@ -1,8 +1,8 @@
 import { SettingsSection } from "@/components/detail/settings-section";
 import { Badge } from "@/components/ui/Badge";
+import { Button } from "@/components/ui/Button";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
 import { FieldError } from "@/components/ui/Field";
-import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { Switch } from "@/components/ui/Switch";
 import { Text } from "@/components/ui/Text";
 import { useRBAC } from "@/hooks/useRBAC";
@@ -10,28 +10,31 @@ import {
   clientTypeLabel,
   otherServers,
   serverLabel,
-  UNDECIDED_STATUS,
+  SIGN_IN_DETECTED_STATUS,
+  UNKNOWN_STATUS,
   UPSTREAM_AUTH_STATUS,
 } from "@/lib/auth-clients";
 import { enumPresentation } from "@/lib/enum";
+import { useUpstreamProbe } from "@/lib/remote-identity";
 import type { AuthClient } from "@gram/client/models/components/authclient.js";
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { useMcpServerAuthentication } from "@gram/client/react-query/mcpServerAuthentication.js";
-import { useSetMcpServerUpstreamAuthRequirementMutation } from "@gram/client/react-query/setMcpServerUpstreamAuthRequirement.js";
 import { useUpdateAuthClientMutation } from "@gram/client/react-query/updateAuthClient.js";
 import { useQueryClient } from "@tanstack/react-query";
-import { ChevronRight, Globe } from "lucide-react";
+import { ChevronRight, Globe, Plus } from "lucide-react";
 import { useState } from "react";
 import { toast } from "sonner";
+import { AddCredentialSheet } from "./AddCredentialSheet";
 import { AuthClientSheet } from "./AuthClientSheet";
 import { invalidateAuthClientQueries } from "./authClientQueries";
 import { AuthRow } from "./AuthRow";
+import { HeadlessCallersSection } from "./HeadlessCallersSection";
 
 export const UPSTREAM_CREDENTIALS_SECTION_ID = "upstream-credentials";
 
 /**
  * The credentials Speakeasy uses to reach this server's upstream, and whether
- * the upstream needs any. Who may use each credential is decided on the
+ * the upstream needs any, which follows from the credentials turned on. Who may use each credential is decided on the
  * credential, so the list leads to it rather than repeating it.
  */
 export function UpstreamCredentialsSection({
@@ -43,13 +46,14 @@ export function UpstreamCredentialsSection({
   const canManage = hasScope("org:admin");
   const query = useMcpServerAuthentication({ mcpServerId: mcpServer.id });
   const [openClientId, setOpenClientId] = useState<string | null>(null);
+  const [adding, setAdding] = useState(false);
   const openClient =
     query.data?.clients.find((client) => client.id === openClientId) ?? null;
 
   return (
     <SettingsSection id={UPSTREAM_CREDENTIALS_SECTION_ID}>
       <SettingsSection.Header>
-        <SettingsSection.Title>Upstream credentials</SettingsSection.Title>
+        <SettingsSection.Title>Identity</SettingsSection.Title>
         <SettingsSection.Description>
           How Speakeasy signs in to the upstream on a caller&apos;s behalf.
           {canManage ? "" : " Only organization admins can change these."}
@@ -73,42 +77,69 @@ export function UpstreamCredentialsSection({
           ) : (
             <>
               <RequirementRow
-                mcpServerId={mcpServer.id}
+                remoteMcpServerId={mcpServer.remoteMcpServerId}
                 status={query.data.status}
-                requiresUpstreamAuth={query.data.requiresUpstreamAuth}
-                hasEnabledClient={query.data.clients.some((c) => c.enabled)}
                 canManage={canManage}
               />
-              {query.data.requiresUpstreamAuth === false &&
-              query.data.clients.length === 0 ? null : (
-                <AuthRow
-                  label="Credentials"
-                  hint="Turning one off or changing who can use it applies on every server that uses it."
-                >
-                  {query.data.clients.length === 0 ? (
-                    <Text muted small>
-                      No credentials yet. They appear here once this
-                      server&apos;s identity is set up above.
-                    </Text>
-                  ) : (
-                    <ul className="border-border divide-y border">
-                      {query.data.clients.map((client) => (
-                        <CredentialRow
-                          key={client.id}
-                          client={client}
-                          mcpServerId={mcpServer.id}
-                          canManage={canManage}
-                          onOpen={() => setOpenClientId(client.id)}
-                        />
-                      ))}
-                    </ul>
-                  )}
-                </AuthRow>
-              )}
+              <AuthRow
+                label="Credentials"
+                hint="Turning one off or changing who can use it applies on every server that uses it."
+              >
+                {query.data.clients.length === 0 ? (
+                  <Text muted small className="block">
+                    {canManage
+                      ? "No credentials. Add one if the upstream needs sign-in."
+                      : "No credentials."}
+                  </Text>
+                ) : (
+                  <ul className="border-border divide-y border">
+                    {query.data.clients.map((client) => (
+                      <CredentialRow
+                        key={client.id}
+                        client={client}
+                        mcpServerId={mcpServer.id}
+                        canManage={canManage}
+                        onOpen={() => setOpenClientId(client.id)}
+                      />
+                    ))}
+                  </ul>
+                )}
+                {canManage ? (
+                  <div className="mt-3">
+                    <Button
+                      variant="secondary"
+                      size="sm"
+                      onClick={() => setAdding(true)}
+                    >
+                      <Button.LeftIcon>
+                        <Plus className="h-4 w-4" />
+                      </Button.LeftIcon>
+                      <Button.Text>Add credential</Button.Text>
+                    </Button>
+                  </div>
+                ) : null}
+              </AuthRow>
+              {mcpServer.userSessionIssuerId &&
+              query.data.requiresUpstreamAuth ? (
+                <HeadlessCallersSection
+                  mcpServerId={mcpServer.id}
+                  userSessionIssuerId={mcpServer.userSessionIssuerId}
+                  credentials={query.data.clients}
+                  canManage={canManage}
+                />
+              ) : null}
             </>
           )}
         </div>
       </SettingsSection.Panel>
+      {adding ? (
+        <AddCredentialSheet
+          mcpServerId={mcpServer.id}
+          projectId={mcpServer.projectId}
+          tunneled={!!mcpServer.tunneledMcpServerId}
+          onOpenChange={setAdding}
+        />
+      ) : null}
       {openClient ? (
         <AuthClientSheet
           client={openClient}
@@ -123,44 +154,38 @@ export function UpstreamCredentialsSection({
   );
 }
 
+/** What probing the upstream found, phrased for the requirement row. */
+const DETECTED_REQUIREMENT: Partial<Record<string, string>> = {
+  "authentication-required":
+    "Speakeasy checked the upstream: it asks for sign-in.",
+  available:
+    "Speakeasy checked the upstream: it answers without sign-in. It can still need a header credential for its tools.",
+};
+
+/**
+ * Whether the upstream needs sign-in, as Speakeasy derives it from the
+ * credentials the server offers. Nothing here changes it: adding, turning on,
+ * turning off or removing a credential does. For admins, a probe of the
+ * upstream also flags one that asks for sign-in while no credential is set up.
+ */
 function RequirementRow({
-  mcpServerId,
+  remoteMcpServerId,
   status,
-  requiresUpstreamAuth,
-  hasEnabledClient,
   canManage,
 }: {
-  mcpServerId: string;
+  remoteMcpServerId: string | undefined;
   status: string;
-  requiresUpstreamAuth: boolean | undefined;
-  hasEnabledClient: boolean;
   canManage: boolean;
 }): JSX.Element {
-  const queryClient = useQueryClient();
-  const presentation = enumPresentation(
-    UPSTREAM_AUTH_STATUS,
-    status,
-    UNDECIDED_STATUS,
+  const probe = useUpstreamProbe(
+    remoteMcpServerId ?? "",
+    canManage && !!remoteMcpServerId,
   );
-  const setRequirement = useSetMcpServerUpstreamAuthRequirementMutation({
-    onSuccess: () => {
-      void invalidateAuthClientQueries(queryClient);
-    },
-    onError: (error) => {
-      toast.error(
-        error.message.includes("enabled auth clients")
-          ? "Turn off this server's credentials before saying it needs none."
-          : "The change could not be saved. Try again.",
-      );
-    },
-  });
-
-  const value =
-    requiresUpstreamAuth === undefined
-      ? null
-      : requiresUpstreamAuth
-        ? "required"
-        : "none";
+  const detected = DETECTED_REQUIREMENT[probe];
+  const presentation =
+    status === "no_auth_required" && probe === "authentication-required"
+      ? SIGN_IN_DETECTED_STATUS
+      : enumPresentation(UPSTREAM_AUTH_STATUS, status, UNKNOWN_STATUS);
 
   return (
     <AuthRow label="Upstream sign-in" hint={presentation.hint}>
@@ -173,34 +198,10 @@ function RequirementRow({
           {presentation.label}
         </Badge>
       </div>
-      {canManage ? (
-        <SegmentedControl
-          ariaLabel="Does the upstream need credentials?"
-          value={value}
-          busy={setRequirement.isPending}
-          disabled={setRequirement.isPending}
-          onChange={(next) =>
-            setRequirement.mutate({
-              request: {
-                setMcpServerUpstreamAuthRequirementRequestBody: {
-                  mcpServerId,
-                  requiresUpstreamAuth: next === "required",
-                },
-              },
-            })
-          }
-          options={[
-            { value: "required", label: "Needs credentials" },
-            {
-              value: "none",
-              label: "Needs none",
-              disabled: hasEnabledClient && value !== "none",
-              tooltip: hasEnabledClient
-                ? "Turn off this server's credentials first."
-                : undefined,
-            },
-          ]}
-        />
+      {detected ? (
+        <Text muted small className="mt-2 block">
+          {detected}
+        </Text>
       ) : null}
     </AuthRow>
   );

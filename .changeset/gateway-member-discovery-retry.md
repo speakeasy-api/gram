@@ -1,0 +1,5 @@
+---
+"server": patch
+---
+
+Gateway tool discovery now serves the members that answer. Direct `tools/list` returns the whole tool inventory in one response instead of 100-tool pages, so a member whose tools change between pages can no longer invalidate a listing partway through. A member that is rate limited, briefly unreachable, or returns a server error is retried within the listing's three seconds, honoring `Retry-After`, and a member that still cannot be listed is left out so the other members' tools are returned. Each member a failure left out of a Direct listing is recorded as a gateway discovery log row. Code Mode `tools.search` and `tools.describe` retry the same transient failures, and search keeps reporting a member that still fails under `failed_members`. Members the caller cannot see or has not connected are still omitted without a record. The consent screen's tool inventory uses the same three-second budget and retries, so a member slower than that shows as unavailable there.

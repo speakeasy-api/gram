@@ -26,6 +26,7 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
@@ -190,6 +191,12 @@ func (s *MCPConnectionMutationService) SetAddress(ctx context.Context, principal
 	}
 	normalized := connectionMutationInput{ProjectID: project.ID.String(), TargetKind: kind, TargetID: targetID.String(), ExpectedVersion: input.ExpectedVersion, EndpointID: input.EndpointID, Slug: input.Slug, CustomDomainID: input.CustomDomainID}
 	mutate := func(ctx context.Context, tx pgx.Tx) (connectionMutationReceipt, error) {
+		// Endpoint mutations also lock their backing server after ingress.
+		// Match source/reach writers before lockAndCheck takes ingress.
+		if err := authclientbackfill.LockEMAWriterScope(ctx, tx, principal.OrganizationID, []uuid.UUID{project.ID}); err != nil {
+			return connectionMutationReceipt{}, fmt.Errorf("lock address mutation writer scope: %w", err)
+		}
+
 		settings, err := s.lockAndCheck(ctx, tx, principal, project, kind, targetID, input.ExpectedVersion)
 		if err != nil {
 			return connectionMutationReceipt{}, err
@@ -265,6 +272,13 @@ func (s *MCPConnectionMutationService) SetNetworkAccess(ctx context.Context, pri
 	}
 	normalized := connectionMutationInput{ProjectID: project.ID.String(), TargetKind: kind, TargetID: targetID.String(), ExpectedVersion: input.ExpectedVersion, Mode: string(mode)}
 	mutate := func(ctx context.Context, tx pgx.Tx) (connectionMutationReceipt, error) {
+		// Both preview and apply use this closure. Scope must precede ingress:
+		// ordinary source/reach writers already hold server rows when they
+		// request ingress, even if this mutation changes no issuer binding.
+		if err := authclientbackfill.LockEMAWriterScope(ctx, tx, principal.OrganizationID, []uuid.UUID{project.ID}); err != nil {
+			return connectionMutationReceipt{}, fmt.Errorf("lock network mutation writer scope: %w", err)
+		}
+
 		var clearedRootDomainIDs []uuid.UUID
 		prepared, err := s.eligibility.PrepareNetworkAccess(ctx, networkaccess.EligibilityInput{OrganizationID: principal.OrganizationID, Mode: mode})
 		if err != nil {

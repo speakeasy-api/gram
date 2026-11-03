@@ -70,10 +70,24 @@ const (
 // Every read is uncached, so turning the gateway off takes effect on the next
 // request.
 func Availability(ctx context.Context, db usersessionsrepo.DBTX, organization orgrepo.OrganizationMetadatum) (uuid.UUID, Unavailability, error) {
+	return availability(ctx, db, organization, featuresrepo.New(db).IsFeatureEnabled)
+}
+
+// PlatformAvailability is Availability for Platform MCP, which uses the
+// gateway on its caller's behalf: there the gateway is on unless an
+// administrator turned it off explicitly, rather than off until one turns it
+// on. Every other unavailability applies unchanged.
+func PlatformAvailability(ctx context.Context, db usersessionsrepo.DBTX, organization orgrepo.OrganizationMetadatum) (uuid.UUID, Unavailability, error) {
+	return availability(ctx, db, organization, func(ctx context.Context, arg featuresrepo.IsFeatureEnabledParams) (bool, error) {
+		return featuresrepo.New(db).IsFeatureExplicitlyEnabled(ctx, featuresrepo.IsFeatureExplicitlyEnabledParams(arg))
+	})
+}
+
+func availability(ctx context.Context, db usersessionsrepo.DBTX, organization orgrepo.OrganizationMetadatum, isTurnedOff func(context.Context, featuresrepo.IsFeatureEnabledParams) (bool, error)) (uuid.UUID, Unavailability, error) {
 	if organization.DisabledAt.Valid {
 		return uuid.Nil, UnavailabilityOrganizationDisabled, nil
 	}
-	turnedOff, err := featuresrepo.New(db).IsFeatureEnabled(ctx, featuresrepo.IsFeatureEnabledParams{
+	turnedOff, err := isTurnedOff(ctx, featuresrepo.IsFeatureEnabledParams{
 		OrganizationID: organization.ID,
 		FeatureName:    string(productfeatures.FeatureOrganizationGatewayDisabled),
 	})

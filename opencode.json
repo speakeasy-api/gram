@@ -7,7 +7,7 @@
     },
     "pitchfork": {
       "type": "local",
-      "command": ["pitchfork", "mcp"]
+      "command": ["pitchfork", "mcp", "--local"]
     },
     "mise": {
       "type": "local",
@@ -20,7 +20,8 @@
         "npx",
         "-y",
         "@playwright/mcp@latest",
-        "--browser=chromium",
+        "--browser=chrome",
+        "--sandbox",
         "--viewport-size",
         "1920x1080",
         "--config",

@@ -18,6 +18,14 @@ import (
 // or by request validation.
 const InstrumentMCPRequestRejected = "mcp.request.rejected"
 
+// InstrumentOAuthIDJAGExchange is the OTel instrument name for the counter of
+// ID-JAG token exchanges by outcome and rejection reason. Only exchanges that
+// reach the jwt-bearer grant handler are counted, plus a shared token
+// endpoint's refusal of one naming no resource. Refusals during client
+// authentication, client admission, AI tool blocking, or another shared
+// resource check happen earlier and are not counted.
+const InstrumentOAuthIDJAGExchange = "oauth.id_jag.exchange"
+
 // RequestRejectionReason is the closed set of reasons [Metrics] records on
 // mcp.request.rejected under gram.mcp.rejection_reason. It stays coarse so
 // the counter's per-server URL dimension does not multiply into many series.
@@ -188,6 +196,10 @@ type Metrics struct {
 	// shared authorization server refused, by issuer, reason, and stage.
 	oauthResourceRejectedCounter metric.Int64Counter
 
+	// oauthIDJAGExchangeCounter counts ID-JAG token exchanges by issuer,
+	// outcome, and rejection reason.
+	oauthIDJAGExchangeCounter metric.Int64Counter
+
 	// tunnelPublicRejectedCounter counts anonymous public tunnel requests the
 	// admission gate rejected with 429 before they reached the tunnel gateway.
 	tunnelPublicRejectedCounter metric.Int64Counter
@@ -298,6 +310,15 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(context.Background(), "failed to create oauth resource rejected counter", attr.SlogError(err))
 	}
 
+	oauthIDJAGExchangeCounter, err := meter.Int64Counter(
+		InstrumentOAuthIDJAGExchange,
+		metric.WithDescription("ID-JAG token exchanges reaching Speakeasy's jwt-bearer grant handler, by user session issuer, outcome, and rejection reason; refusals during client authentication, client admission, AI tool blocking, or a shared token endpoint's resource check happen earlier and are not counted, except a request naming no resource"),
+		metric.WithUnit("{exchange}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(InstrumentOAuthIDJAGExchange), attr.SlogError(err))
+	}
+
 	mcpRequestRejectedCounter, err := meter.Int64Counter(
 		InstrumentMCPRequestRejected,
 		metric.WithDescription("MCP requests rejected before dispatch by the Session OAuth authentication gate or by request validation, by rejection reason, OAuth failure reason, server URL, serving surface, and public/private network surface"),
@@ -372,6 +393,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		oauthRefreshTokenReplayServedCounter: oauthRefreshTokenReplayServedCounter,
 		oauthAuthorityUnavailableCounter:     oauthAuthorityUnavailableCounter,
 		oauthResourceRejectedCounter:         oauthResourceRejectedCounter,
+		oauthIDJAGExchangeCounter:            oauthIDJAGExchangeCounter,
 		tunnelPublicRejectedCounter:          tunnelPublicRejectedCounter,
 	}
 }

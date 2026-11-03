@@ -25,7 +25,7 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({ agents: { listPolicyGrants: mocks.list } }),
-  useSlugs: () => ({ orgSlug: "org" }),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "example" }),
 }));
 vi.mock("@/pages/access/useResourceLinkMaps", () => ({
   useResourceLinkMaps: () => ({
@@ -43,11 +43,6 @@ vi.mock("@/pages/access/useResourceLinkMaps", () => ({
       ],
     ]),
     mcpServerMap: new Map(),
-  }),
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    agents: { href: () => "/org/projects/example/agent-management" },
   }),
 }));
 const agent: ManagedAgent = {
@@ -197,6 +192,35 @@ describe("Agent profile permissions", () => {
     ).toBeTruthy();
     expect(
       screen.queryByText("No permissions configured for this agent."),
+    ).toBeNull();
+  });
+  it("saves permissions for an agent with a credential restriction", async () => {
+    mocks.list.mockResolvedValue([
+      {
+        id: "project_grant",
+        scope: "project:read",
+        effect: "allow",
+        selector: { resourceKind: "project", resourceId: "*" },
+      },
+      {
+        id: "credential_restriction",
+        scope: "mcp:blocked_auth",
+        effect: "allow",
+        selector: { resourceKind: "mcp_auth_client", resourceId: "client_one" },
+      },
+    ]);
+    setup();
+    await screen.findByText("project:read");
+    expect(screen.queryByText("mcp:blocked_auth")).toBeNull();
+    fireEvent.click(screen.getByRole("button", { name: "Edit permissions" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save permissions" }));
+    await waitFor(() =>
+      expect(
+        screen.queryByRole("dialog", { name: "Edit permissions" }),
+      ).toBeNull(),
+    );
+    expect(
+      screen.queryByText(/Permissions changed while you were editing/),
     ).toBeNull();
   });
   it("does not claim the agent has no permissions when loading fails", async () => {

@@ -19,6 +19,7 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "project",
+  useSlugs: () => ({ orgSlug: "acme", projectSlug: "project" }),
 }));
 // Answers only for project:read — the roster's own gate. A redirect that
 // checked some other scope reads as unauthorized here rather than silently
@@ -44,9 +45,6 @@ vi.mock("@/hooks/useKillswitchAccess", () => ({
     reason: "allowed",
   }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({ identities: { href: () => "/acme/p/identities" } }),
-}));
 // Mirrors the real builder, which applies withIdentityWindow to every href —
 // so the record forward is exercised against an href that already carries a
 // query string rather than a bare path.
@@ -59,7 +57,7 @@ vi.mock("@/lib/useIdentityHref", async () => {
       return (ref: { userId?: string } | null) =>
         mocks.canOpenIdentity && ref?.userId
           ? withIdentityWindow(
-              `/acme/p/identities/user%3A${ref.userId}/access`,
+              `/acme/projects/project/identities/user%3A${ref.userId}/access`,
               search,
             )
           : null;
@@ -102,7 +100,7 @@ describe("retired killswitch addresses", () => {
   it("opens a killswitch on the access tab of the person it restricts", () => {
     renderAt(<KillswitchRecordRedirect />);
     expect(screen.getByTestId("landed").textContent).toBe(
-      "/acme/p/identities/user%3Auser-1/access?killswitch=ks-1",
+      "/acme/projects/project/identities/user%3Auser-1/access?killswitch=ks-1",
     );
   });
 
@@ -115,18 +113,24 @@ describe("retired killswitch addresses", () => {
   it("falls back to the directory when the subject cannot be resolved", () => {
     mocks.detail = undefined;
     renderAt(<KillswitchRecordRedirect />);
-    expect(screen.getByTestId("landed").textContent).toBe("/acme/p/identities");
+    expect(screen.getByTestId("landed").textContent).toBe(
+      "/acme/projects/project/identities",
+    );
   });
 
   it("falls back to the directory for a reader who cannot open that person", () => {
     mocks.canOpenIdentity = false;
     renderAt(<KillswitchRecordRedirect />);
-    expect(screen.getByTestId("landed").textContent).toBe("/acme/p/identities");
+    expect(screen.getByTestId("landed").textContent).toBe(
+      "/acme/projects/project/identities",
+    );
   });
 
   it("sends the retired roster to the people it would have listed", () => {
     renderAt(<KillswitchIndexRedirect />);
-    expect(screen.getByTestId("landed").textContent).toBe("/acme/p/identities");
+    expect(screen.getByTestId("landed").textContent).toBe(
+      "/acme/projects/project/identities",
+    );
   });
 
   it("keeps the reader's window alongside the record it opens", () => {
@@ -135,7 +139,7 @@ describe("retired killswitch addresses", () => {
       "/acme/killswitch/ks-1?range=custom&from=a&to=b&label=Last+quarter",
     );
     expect(screen.getByTestId("landed").textContent).toBe(
-      "/acme/p/identities/user%3Auser-1/access?range=custom&from=a&to=b&label=Last+quarter&killswitch=ks-1",
+      "/acme/projects/project/identities/user%3Auser-1/access?range=custom&from=a&to=b&label=Last+quarter&killswitch=ks-1",
     );
   });
 
@@ -143,7 +147,7 @@ describe("retired killswitch addresses", () => {
     mocks.detail = undefined;
     renderAt(<KillswitchRecordRedirect />, "/acme/killswitch/ks-1?range=7d");
     expect(screen.getByTestId("landed").textContent).toBe(
-      "/acme/p/identities?range=7d",
+      "/acme/projects/project/identities?range=7d",
     );
   });
 

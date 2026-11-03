@@ -101,6 +101,25 @@ func AuditLogCountByAction(ctx context.Context, dbtx repo.DBTX, action audit.Act
 	return count, nil
 }
 
+// LatestSecurityAuditLogByAction reads the newest security_audit_logs entry for
+// an action, recorded through the securityevent package.
+func LatestSecurityAuditLogByAction(ctx context.Context, dbtx repo.DBTX, action audit.Action) (LogRecord, error) {
+	row, err := repo.New(dbtx).GetLatestSecurityAuditLogByAction(ctx, string(action))
+	if err != nil {
+		return LogRecord{}, fmt.Errorf("get latest security audit log by action: %w", err)
+	}
+	return toLogRecord(repo.GetLatestAuditLogByActionRow(row)), nil
+}
+
+// SecurityAuditLogCountByAction counts security_audit_logs entries for an action.
+func SecurityAuditLogCountByAction(ctx context.Context, dbtx repo.DBTX, action audit.Action) (int64, error) {
+	count, err := repo.New(dbtx).CountSecurityAuditLogsByAction(ctx, string(action))
+	if err != nil {
+		return 0, fmt.Errorf("count security audit logs by action: %w", err)
+	}
+	return count, nil
+}
+
 func DecodeAuditData(payload []byte) (map[string]any, error) {
 	var snapshot map[string]any
 	if err := json.Unmarshal(payload, &snapshot); err != nil {

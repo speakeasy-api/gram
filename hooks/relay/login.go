@@ -45,7 +45,9 @@ func newLoginFlow(cfg Config) *loginFlow {
 // tryInteractive runs a best-effort sign-in for the SessionStart preflight:
 // guards and cooldown suppress it silently, and any failure is non-fatal.
 func (l *loginFlow) tryInteractive(ctx context.Context) {
-	if !l.cfg.BrowserLogin || l.cfg.ConfigError != "" || insecureServerURL(l.cfg.ServerURL) {
+	// A token-command box authenticates as itself; a personal key minted by
+	// sign-in would never be used, so don't prompt for one.
+	if !l.cfg.BrowserLogin || l.cfg.ConfigError != "" || insecureServerURL(l.cfg.ServerURL) || tokenCommandConfigured() {
 		return
 	}
 	if ok, _ := loginViable(); !ok {
@@ -65,6 +67,9 @@ func (l *loginFlow) Run(ctx context.Context, force bool) error {
 	// cache minted that way must not read as already signed in.
 	if l.cfg.ConfigError != "" {
 		return fmt.Errorf("cannot read plugin config at %q (%s); reinstall the Speakeasy hooks plugin", l.cfg.ConfigPath, l.cfg.ConfigError)
+	}
+	if tokenCommandConfigured() {
+		return errors.New("this machine authenticates through the device agent's hooks token; sign-in is not used")
 	}
 	// Only an env key or a cached sign-in counts as signed in. The baked key,
 	// even an agent's key that outranks the cache, is not this person's.

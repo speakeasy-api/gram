@@ -1814,6 +1814,50 @@ func (q *Queries) GetProjectUserSessionIssuerByID(ctx context.Context, arg GetPr
 	return i, err
 }
 
+const getReconnectSessionPolicy = `-- name: GetReconnectSessionPolicy :one
+SELECT us.tool_selection
+FROM user_sessions AS us
+JOIN user_session_clients AS c ON c.id = us.user_session_client_id
+WHERE COALESCE(us.credential_id, us.id) = $1::uuid
+  AND us.user_session_issuer_id = $2::uuid
+  AND us.organization_id = $3::text
+  AND us.project_id IS NOT DISTINCT FROM $4::uuid
+  AND c.user_session_issuer_id = us.user_session_issuer_id
+  AND us.subject_urn = $5
+  AND c.client_id = $6::text
+  AND c.deleted IS FALSE
+  AND us.deleted IS FALSE
+  AND (us.expires_at > clock_timestamp() OR us.refresh_expires_at > clock_timestamp())
+ORDER BY us.created_at DESC
+LIMIT 1
+FOR UPDATE OF us
+`
+
+type GetReconnectSessionPolicyParams struct {
+	CredentialID        uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+	ProjectID           uuid.NullUUID
+	SubjectUrn          urn.SessionSubject
+	ClientID            string
+}
+
+// Resolve the original credential across refresh rotation, without reviving
+// revoked/expired connections or borrowing another client's catalogue.
+func (q *Queries) GetReconnectSessionPolicy(ctx context.Context, arg GetReconnectSessionPolicyParams) ([]byte, error) {
+	row := q.db.QueryRow(ctx, getReconnectSessionPolicy,
+		arg.CredentialID,
+		arg.UserSessionIssuerID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.SubjectUrn,
+		arg.ClientID,
+	)
+	var tool_selection []byte
+	err := row.Scan(&tool_selection)
+	return tool_selection, err
+}
+
 const getSharedUserSessionIssuerByID = `-- name: GetSharedUserSessionIssuerByID :one
 SELECT
     issuer.id, issuer.project_id, issuer.organization_id, issuer.attachment_scope, issuer.slug, issuer.authn_challenge_mode, issuer.session_duration, issuer.classification, issuer.client_id_metadata_admission_mode, issuer.trusted_remote_session_issuer_id, issuer.trusted_remote_session_client_id, issuer.use_authentication_host, issuer.authorization_server_mode, issuer.pinned_issuer_url, issuer.created_at, issuer.updated_at, issuer.deleted_at, issuer.deleted,
@@ -4927,6 +4971,8 @@ reachable AS (
     JOIN session_issuer AS si
       ON p.organization_id = si.organization_id
     WHERE s.deleted IS FALSE
+      AND ($5::uuid[] IS NULL
+           OR s.id = ANY($5::uuid[]))
       AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
       AND (
         s.user_session_issuer_id = si.id
@@ -4945,9 +4991,9 @@ reachable AS (
 ),
 picked AS (
     -- The consent page's pick for each server, as parallel arrays.
-    SELECT unnest($5::uuid[]) AS mcp_server_id,
-           unnest($6::uuid[]) AS remote_session_client_id,
-           NULLIF(unnest($7::uuid[]), '00000000-0000-0000-0000-000000000000'::uuid) AS auth_client_id
+    SELECT unnest($6::uuid[]) AS mcp_server_id,
+           unnest($7::uuid[]) AS remote_session_client_id,
+           NULLIF(unnest($8::uuid[]), '00000000-0000-0000-0000-000000000000'::uuid) AS auth_client_id
 ),
 eligible AS (
     SELECT a.mcp_server_id,
@@ -4969,6 +5015,22 @@ decided AS (
            CASE WHEN pick.auth_client_id IS NOT NULL
                      AND pick.remote_session_client_id = '00000000-0000-0000-0000-000000000000'::uuid
                 THEN NULL
+                -- A picked typed client names its own registration, whether
+                -- or not the issuer binds it for the server.
+                WHEN pick.auth_client_id IS NOT NULL THEN (
+                  SELECT ac.remote_session_client_id
+                  FROM mcp_auth_clients AS ac
+                  JOIN mcp_server_auth_clients AS link
+                    ON link.auth_client_id = ac.id
+                   AND link.mcp_server_id = r.id
+                   AND link.organization_id = ac.organization_id
+                   AND link.deleted IS FALSE
+                  WHERE ac.id = pick.auth_client_id
+                    AND ac.remote_session_client_id = pick.remote_session_client_id
+                    AND ac.organization_id = (SELECT organization_id FROM session_issuer)
+                    AND ac.deleted IS FALSE
+                    AND ac.enabled
+                )
                 ELSE COALESCE(
              (
                SELECT CASE WHEN count(*) = 1 THEN (array_agg(e.remote_session_client_id))[1] END
@@ -5017,36 +5079,57 @@ mapped AS (
            -- compared as stored. authclientbackfill.ListSelectionMappings
            -- repeats this comparison; the two must stay identical.
            AND (
-             SELECT string_agg(format('%L|%L|%L', lower(h.name), h.value, h.value_from_request_header), ',' ORDER BY lower(h.name), h.value, h.value_from_request_header)
-             FROM mcp_auth_client_headers AS h
-             WHERE h.auth_client_id = ac.id
-               AND h.deleted IS FALSE
-           ) = (
-             SELECT string_agg(format('%L|%L|%L', lower(src.name), src.value, src.value_from_request_header), ',' ORDER BY lower(src.name), src.value, src.value_from_request_header)
+             SELECT COALESCE(
+                      cmp.client_headers = cmp.source_headers,
+                      -- A source with no credential headers has none to carry. A
+                      -- client or association an administrator created there is
+                      -- the server's own configuration and mirrors nothing, as
+                      -- GetAuthClientSelection reads it.
+                      cmp.source_headers IS NULL
+                      AND NOT (ac.source = 'backfill' AND NOT EXISTS (
+                        SELECT 1
+                        FROM mcp_server_auth_clients AS admin_link
+                        WHERE admin_link.mcp_server_id = d.mcp_server_id
+                          AND admin_link.auth_client_id = ac.id
+                          AND admin_link.organization_id = ac.organization_id
+                          AND admin_link.deleted IS FALSE
+                          AND admin_link.source <> 'backfill'
+                      ))
+                    )
              FROM (
-               SELECT rh.name, rh.value, rh.value_from_request_header, rh.is_secret
-               FROM mcp_servers AS s
-               JOIN remote_mcp_servers AS r
-                 ON r.id = s.remote_mcp_server_id
-                AND r.project_id = s.project_id
-                AND r.deleted IS FALSE
-               JOIN remote_mcp_server_headers AS rh
-                 ON rh.remote_mcp_server_id = r.id
-                AND rh.deleted IS FALSE
-               WHERE s.id = d.mcp_server_id
-               UNION ALL
-               SELECT th.name, th.value, th.value_from_request_header, th.is_secret
-               FROM mcp_servers AS s
-               JOIN tunneled_mcp_servers AS t
-                 ON t.id = s.tunneled_mcp_server_id
-                AND t.project_id = s.project_id
-                AND t.deleted IS FALSE
-               JOIN tunneled_mcp_server_headers AS th
-                 ON th.tunneled_mcp_server_id = t.id
-                AND th.deleted IS FALSE
-               WHERE s.id = d.mcp_server_id
-             ) AS src
-             WHERE lower(src.name) = 'authorization' OR src.value_from_request_header IS NOT NULL OR src.is_secret
+               SELECT (
+                 SELECT string_agg(format('%L|%L|%L', lower(h.name), h.value, h.value_from_request_header), ',' ORDER BY lower(h.name), h.value, h.value_from_request_header)
+                 FROM mcp_auth_client_headers AS h
+                 WHERE h.auth_client_id = ac.id
+                   AND h.deleted IS FALSE
+               ) AS client_headers, (
+                 SELECT string_agg(format('%L|%L|%L', lower(src.name), src.value, src.value_from_request_header), ',' ORDER BY lower(src.name), src.value, src.value_from_request_header)
+                 FROM (
+                   SELECT rh.name, rh.value, rh.value_from_request_header, rh.is_secret
+                   FROM mcp_servers AS s
+                   JOIN remote_mcp_servers AS r
+                     ON r.id = s.remote_mcp_server_id
+                    AND r.project_id = s.project_id
+                    AND r.deleted IS FALSE
+                   JOIN remote_mcp_server_headers AS rh
+                     ON rh.remote_mcp_server_id = r.id
+                    AND rh.deleted IS FALSE
+                   WHERE s.id = d.mcp_server_id
+                   UNION ALL
+                   SELECT th.name, th.value, th.value_from_request_header, th.is_secret
+                   FROM mcp_servers AS s
+                   JOIN tunneled_mcp_servers AS t
+                     ON t.id = s.tunneled_mcp_server_id
+                    AND t.project_id = s.project_id
+                    AND t.deleted IS FALSE
+                   JOIN tunneled_mcp_server_headers AS th
+                     ON th.tunneled_mcp_server_id = t.id
+                    AND th.deleted IS FALSE
+                   WHERE s.id = d.mcp_server_id
+                 ) AS src
+                 WHERE lower(src.name) = 'authorization' OR src.value_from_request_header IS NOT NULL OR src.is_secret
+               ) AS source_headers
+             ) AS cmp
            )
            AND NOT EXISTS (
              SELECT 1
@@ -5139,13 +5222,16 @@ type RecordUpstreamClientSelectionsParams struct {
 	CredentialID        uuid.UUID
 	Source              string
 	UserSessionIssuerID uuid.UUID
+	ScopeMcpServerIds   []uuid.UUID
 	PickedMcpServerIds  []uuid.UUID
 	PickedClientIds     []uuid.UUID
 	PickedAuthClientIds []uuid.UUID
 }
 
 // Records, for one inbound credential, the upstream OAuth client it uses for
-// every MCP server it can reach, or an explicit no-auth choice. An existing
+// every MCP server it can reach, or an explicit no-auth choice. A NULL
+// scope_mcp_server_ids keeps issuance-wide reach; a supplied array restricts
+// recording to those servers, and an empty array records nothing. An existing
 // client choice is never replaced. An existing no-auth choice is replaced
 // only once the server has an associated client and one is decided for the
 // credential: the no-auth choice is unusable by then, and recording the
@@ -5165,7 +5251,10 @@ type RecordUpstreamClientSelectionsParams struct {
 // serves today. When the issuer binds several of the server's clients, the
 // one picked on the consent page (picked_mcp_server_ids and picked_client_ids,
 // parallel arrays) is chosen if it is still one of them; without a pick the
-// choice is left to a reconnection. No-auth is chosen when the server has no
+// choice is left to a reconnection. A pick naming a typed auth client
+// (picked_auth_client_ids) records that client and its own registration when
+// the client is still enabled and offered by the server, whether or not the
+// issuer binds the registration: the consent page validated it. No-auth is chosen when the server has no
 // associated client: a server uses exactly the clients associated with it.
 // A server given a client later makes the no-auth choice unusable, so the
 // credential reconnects and records the client. A server whose associated
@@ -5188,7 +5277,8 @@ type RecordUpstreamClientSelectionsParams struct {
 // remote_session or service_account auth client of its registration linked
 // to the server, and a no-auth choice the server's linked, enabled
 // static_credential or pass_through client that carries exactly the server
-// source's current credential headers, while the server links no enabled
+// source's current credential headers or, when the source has none, that an
+// administrator created or linked, while the server links no enabled
 // OAuth-backed client. A header client whose headers no longer match was
 // derived from a configuration since changed, so it is not the server's
 // headers: the choice is recorded unmapped, and the backfill maps it once it
@@ -5201,6 +5291,7 @@ func (q *Queries) RecordUpstreamClientSelections(ctx context.Context, arg Record
 		arg.CredentialID,
 		arg.Source,
 		arg.UserSessionIssuerID,
+		arg.ScopeMcpServerIds,
 		arg.PickedMcpServerIds,
 		arg.PickedClientIds,
 		arg.PickedAuthClientIds,
@@ -5884,6 +5975,28 @@ func (q *Queries) SoftDeleteMigratedUserSessionIssuer(ctx context.Context, arg S
 	return i, err
 }
 
+const softDeleteReconnectUpstreamChoices = `-- name: SoftDeleteReconnectUpstreamChoices :exec
+UPDATE upstream_client_selections
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE credential_kind = 'user_session'
+  AND credential_id = $1::uuid
+  AND organization_id = $2::text
+  AND mcp_server_id = ANY($3::uuid[])
+  AND deleted IS FALSE
+`
+
+type SoftDeleteReconnectUpstreamChoicesParams struct {
+	CredentialID   uuid.UUID
+	OrganizationID string
+	McpServerIds   []uuid.UUID
+}
+
+// Retire only active choices in the reviewed scope; preserve prior history.
+func (q *Queries) SoftDeleteReconnectUpstreamChoices(ctx context.Context, arg SoftDeleteReconnectUpstreamChoicesParams) error {
+	_, err := q.db.Exec(ctx, softDeleteReconnectUpstreamChoices, arg.CredentialID, arg.OrganizationID, arg.McpServerIds)
+	return err
+}
+
 const softDeleteUserSessionConsentsByIssuerID = `-- name: SoftDeleteUserSessionConsentsByIssuerID :many
 WITH revoked AS (
 UPDATE user_session_consents AS c
@@ -6324,6 +6437,62 @@ func (q *Queries) UpdatePlatformMCPRegistrationsToUserSessionIssuer(ctx context.
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const updateReconnectSessionPolicy = `-- name: UpdateReconnectSessionPolicy :many
+UPDATE user_sessions AS us SET tool_selection = $1, updated_at = clock_timestamp()
+WHERE COALESCE(us.credential_id, us.id) = $2::uuid
+  AND us.user_session_issuer_id = $3::uuid
+  AND us.organization_id = $4::text
+  AND us.project_id IS NOT DISTINCT FROM $5::uuid
+  AND us.subject_urn = $6
+  AND us.tool_selection -> 'catalog' ->> 'id' = $7::text
+  AND EXISTS (SELECT 1 FROM user_session_clients AS c
+    WHERE c.id = us.user_session_client_id AND c.client_id = $8::text
+      AND c.user_session_issuer_id = us.user_session_issuer_id AND c.deleted IS FALSE)
+  AND us.deleted IS FALSE
+  AND (us.expires_at > clock_timestamp() OR us.refresh_expires_at > clock_timestamp())
+RETURNING us.jti
+`
+
+type UpdateReconnectSessionPolicyParams struct {
+	ToolSelection       []byte
+	CredentialID        uuid.UUID
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+	ProjectID           uuid.NullUUID
+	SubjectUrn          urn.SessionSubject
+	CatalogID           string
+	ClientID            string
+}
+
+func (q *Queries) UpdateReconnectSessionPolicy(ctx context.Context, arg UpdateReconnectSessionPolicyParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, updateReconnectSessionPolicy,
+		arg.ToolSelection,
+		arg.CredentialID,
+		arg.UserSessionIssuerID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.SubjectUrn,
+		arg.CatalogID,
+		arg.ClientID,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var jti string
+		if err := rows.Scan(&jti); err != nil {
+			return nil, err
+		}
+		items = append(items, jti)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
 const updateRemoteSessionEMABindingsToUserSessionIssuer = `-- name: UpdateRemoteSessionEMABindingsToUserSessionIssuer :execrows

@@ -1,4 +1,4 @@
-// Package agentinstall renders the single-use shell script behind an agent's
+// Package agentinstall renders the shell script behind an agent's
 // install command. The script connects the MCP clients it finds on a machine
 // to the agent's gateway and, for OpenClaw, also installs the Speakeasy
 // observability plugin so the agent's sessions are recorded under its name.
@@ -183,7 +183,7 @@ const scriptHeader = `#!/bin/sh
 # Connects this machine's MCP clients to a Speakeasy agent gateway. On
 # OpenClaw it also installs Speakeasy observability hooks, so the agent's
 # sessions are recorded under its name.
-# Generated for one use. The key below is live: treat this file as a secret.
+# Generated for this agent. The key below is live: treat this file as a secret.
 #
 # Every step is a function and the last line runs them, so a download cut
 # short defines a few functions and runs nothing.
@@ -196,6 +196,9 @@ umask 077
 const scriptBody = `
 configured=0
 found=0
+# Configured clients that read the key from SPEAKEASY_AGENT_KEY when they
+# start. OpenClaw keeps the key in its own config, so it does not count.
+env_key_clients=""
 configure_claude_code() {
   # Keep the bearer out of argv and let Claude expand it when launched.
   if ! claude mcp add --transport http gram "$GRAM_AGENT_URL" \
@@ -205,6 +208,7 @@ configure_claude_code() {
   fi
   echo "Configured Claude Code. Launch it with SPEAKEASY_AGENT_KEY set."
   configured=$((configured + 1))
+  env_key_clients="Claude Code"
 }
 
 configure_codex() {
@@ -215,18 +219,19 @@ configure_codex() {
   fi
   echo "Configured Codex."
   configured=$((configured + 1))
+  env_key_clients="${env_key_clients:+$env_key_clients and }Codex"
 }
 
 configure_openclaw() {
-  openclaw_changed=0
+  openclaw_needs_restart=0
   add_openclaw_gateway
   # Hooks are independent of the gateway entry, so install them either way.
   install_openclaw_hooks
-  if [ "$openclaw_changed" -eq 1 ]; then
+  if [ "$openclaw_needs_restart" -eq 1 ]; then
     # Restart is explicit so installing hooks does not interrupt a running
     # Gateway or another active session.
-    echo "Next: restart the OpenClaw Gateway. It does not hot-load plugins, so"
-    echo "these changes take effect after the restart."
+    echo "Next: restart the OpenClaw Gateway. This OpenClaw release loads the"
+    echo "plugin only when the Gateway starts."
   fi
 }
 
@@ -245,7 +250,6 @@ add_openclaw_gateway() {
   openclaw mcp unset gram >/dev/null 2>&1 || true
   echo "Configured OpenClaw."
   configured=$((configured + 1))
-  openclaw_changed=1
 }
 
 # The agent that runs this script reports this line back, so it always
@@ -279,11 +283,20 @@ install_openclaw_hooks() {
   if printf '%s' "$install_help" | grep -q -e --accept-capabilities; then
     set -- "$@" --accept-capabilities
   fi
-  if ! openclaw plugins install "$@" "$plugin"; then
+  # Output goes to a file, not a pipe: a process the install leaves behind
+  # could hold a pipe open and stall this script.
+  install_status=0
+  openclaw plugins install "$@" "$plugin" >"$workdir/plugin-install.log" 2>&1 || install_status=$?
+  cat "$workdir/plugin-install.log"
+  if [ "$install_status" -ne 0 ]; then
     hooks_fail "openclaw plugins install did not succeed (see its output above)."
     return 0
   fi
-  openclaw_changed=1
+  # Releases that apply the plugin to the running Gateway say so; older ones
+  # load it only when the Gateway starts.
+  if ! grep -q "Applied in Gateway generation" "$workdir/plugin-install.log"; then
+    openclaw_needs_restart=1
+  fi
   # The installer may not keep the archive's owner-only mode on the file that
   # carries the key.
   installed_config="$(openclaw_plugin_dir)/speakeasy.json"
@@ -395,8 +408,7 @@ check_openclaw_hooks() {
   case "$reason" in
     *"permission denied"* | *[Ff]orbidden* | *"HTTP 403"*)
       echo "This agent's key may not send hooks yet. It needs org:hooks_ingest on the"
-      echo "agent's project, and project:read. Ask an admin to grant both, then run a"
-      echo "new install command."
+      echo "agent's project. Ask an admin to grant it, then run a new install command."
       ;;
     *"unauthorized"* | *"HTTP 401"*)
       echo "Speakeasy did not accept this agent's key. It may be revoked or expired:"
@@ -449,7 +461,10 @@ main() {
   fi
 
   echo
-  echo "Done. SPEAKEASY_AGENT_KEY was exported for this run only. Store it if a"
-  echo "client you use reads it from the environment."
+  echo "Done."
+  if [ -n "$env_key_clients" ]; then
+    echo "SPEAKEASY_AGENT_KEY was exported for this run only. Store it where"
+    echo "$env_key_clients can read it when started."
+  fi
 }
 `

@@ -296,7 +296,7 @@ func (f *fakeStripeAPI) updateCustomer(_ context.Context, id string, params *str
 func (f *fakeStripeAPI) createCheckoutSession(_ context.Context, params *stripesdk.CheckoutSessionCreateParams) (*stripesdk.CheckoutSession, error) {
 	f.calls++
 	f.checkoutSessionParams = params
-	return &stripesdk.CheckoutSession{ID: "cs_test", URL: "https://checkout.stripe.test/session"}, f.err
+	return &stripesdk.CheckoutSession{ID: "cs_test", URL: "https://checkout.stripe.test/session", ClientSecret: "cs_test_secret"}, f.err
 }
 
 func (f *fakeStripeAPI) expireCheckoutSession(_ context.Context, id string, _ *stripesdk.CheckoutSessionExpireParams) (*stripesdk.CheckoutSession, error) {
@@ -482,7 +482,9 @@ func TestGetSubscriptionNotFound(t *testing.T) {
 func TestGetSubscriptionRequiresConfiguredTUMItem(t *testing.T) {
 	t.Parallel()
 
-	api := &fakeStripeAPI{subscription: testSubscription()}
+	subscription := testSubscription()
+	subscription.Items.Data[0].Price.ID = "price_mcp_egress"
+	api := &fakeStripeAPI{subscription: subscription}
 	c := &client{api: api, catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "price_other", PortalConfigurationID: "bpc_test"}}
 
 	_, err := c.GetSubscription(t.Context(), "sub_test")
@@ -649,6 +651,31 @@ func TestCreateCheckoutSessionAppliesPromotionCode(t *testing.T) {
 	require.Nil(t, params.SubscriptionData.TrialEnd)
 }
 
+func TestCreateCheckoutSessionEmbeddedPage(t *testing.T) {
+	t.Parallel()
+
+	api := &fakeStripeAPI{}
+	c := &client{api: api, catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "price_tum", PortalConfigurationID: "bpc_test"}}
+	returnURL := "https://app.example.test/the-customer/billing?session_id={CHECKOUT_SESSION_ID}"
+
+	session, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{
+		CustomerID:         "cus_test",
+		OrganizationID:     "<ORG_ID>",
+		OrganizationSlug:   "the-customer",
+		ReturnURL:          returnURL,
+		BillingCycleAnchor: time.Date(2026, time.August, 21, 0, 0, 0, 0, time.UTC),
+		ExpiresAt:          time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC),
+		IdempotencyKey:     "checkout",
+	})
+	require.NoError(t, err)
+	require.Equal(t, "cs_test_secret", session.ClientSecret)
+	require.Equal(t, string(stripesdk.CheckoutSessionUIModeEmbeddedPage), stripesdk.StringValue(api.checkoutSessionParams.UIMode))
+	require.Equal(t, returnURL, stripesdk.StringValue(api.checkoutSessionParams.ReturnURL))
+	require.Equal(t, string(stripesdk.CheckoutSessionRedirectOnCompletionIfRequired), stripesdk.StringValue(api.checkoutSessionParams.RedirectOnCompletion))
+	require.Nil(t, api.checkoutSessionParams.SuccessURL)
+	require.Nil(t, api.checkoutSessionParams.CancelURL)
+}
+
 func TestCreateCheckoutSessionWithoutTrialStartsImmediately(t *testing.T) {
 	t.Parallel()
 
@@ -723,14 +750,17 @@ func TestGetCheckoutSessionExpandsSubscription(t *testing.T) {
 
 	anchor := time.Date(2026, time.August, 21, 9, 30, 0, 0, time.UTC)
 	api := &fakeStripeAPI{checkoutSession: &stripesdk.CheckoutSession{
-		ID:       "cs_test",
-		Status:   stripesdk.CheckoutSessionStatusComplete,
-		Customer: &stripesdk.Customer{ID: "cus_test"},
+		ID:            "cs_test",
+		Status:        stripesdk.CheckoutSessionStatusComplete,
+		PaymentStatus: stripesdk.CheckoutSessionPaymentStatusUnpaid,
+		Metadata:      map[string]string{organizationIDMetadataKey: "<ORG_ID>"},
+		Customer:      &stripesdk.Customer{ID: "cus_test"},
 		Subscription: &stripesdk.Subscription{
-			ID:                 "sub_test",
-			Customer:           &stripesdk.Customer{ID: "cus_test"},
-			Status:             stripesdk.SubscriptionStatusTrialing,
-			BillingCycleAnchor: anchor.Unix(),
+			ID:                   "sub_test",
+			Customer:             &stripesdk.Customer{ID: "cus_test"},
+			Status:               stripesdk.SubscriptionStatusTrialing,
+			BillingCycleAnchor:   anchor.Unix(),
+			DefaultPaymentMethod: &stripesdk.PaymentMethod{ID: "pm_test"},
 		},
 	}}
 
@@ -738,6 +768,9 @@ func TestGetCheckoutSessionExpandsSubscription(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "cs_test", state.ID)
 	require.Equal(t, "complete", state.Status)
+	require.Equal(t, "unpaid", state.PaymentStatus)
+	require.True(t, state.PaymentReady())
+	require.Equal(t, "<ORG_ID>", state.OrganizationID)
 	require.Equal(t, "cus_test", state.CustomerID)
 	require.Equal(t, "sub_test", state.SubscriptionID)
 	require.Equal(t, "cus_test", state.SubscriptionCustomerID)
@@ -1032,6 +1065,8 @@ func TestVerifyWebhookExtractsCustomersForAcceptedEventTypes(t *testing.T) {
 			customer:   "cus_checkout",
 			customerID: "cus_checkout",
 		},
+		{name: "async success", eventType: "checkout.session.async_payment_succeeded", customer: "cus_checkout", customerID: "cus_checkout"},
+		{name: "async failure", eventType: "checkout.session.async_payment_failed", customer: "cus_checkout", customerID: "cus_checkout"},
 		{
 			name:      "invoice created with expanded customer",
 			eventType: "invoice.created",
@@ -1611,4 +1646,229 @@ func TestGatewayPromotionStripeHTTPContract(t *testing.T) {
 	require.NotContains(t, checkout.form, "allow_promotion_codes")
 	require.NotContains(t, checkout.form, "subscription_data[trial_end]")
 	require.Equal(t, "always", checkout.form.Get("payment_method_collection"))
+}
+
+func TestCreateCheckoutSessionFormOmitsPageOnlyOptions(t *testing.T) {
+	t.Parallel()
+	api := &fakeStripeAPI{}
+	c := &client{api: api, catalog: Catalog{PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans", PriceIDTUM: "price_tum", PortalConfigurationID: "bpc_test"}}
+	returnURL := "https://app.example.test/the-customer/billing?session_id={CHECKOUT_SESSION_ID}"
+	_, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{
+		CustomerID: "cus_test", OrganizationID: "<ORG_ID>", OrganizationSlug: "the-customer",
+		ReturnURL:          returnURL,
+		BillingCycleAnchor: time.Date(2026, time.August, 21, 0, 0, 0, 0, time.UTC),
+		ExpiresAt:          time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC),
+		IdempotencyKey:     "checkout", EmbeddedForm: true,
+		EmbeddedBrandingV1: true, EmbeddedBrandingDarkV1: true,
+	})
+	require.NoError(t, err)
+	params := api.checkoutSessionParams
+	require.Equal(t, "form", stripesdk.StringValue(params.UIMode))
+	require.Equal(t, returnURL, stripesdk.StringValue(params.ReturnURL))
+	require.Nil(t, params.BrandingSettings)
+	require.Nil(t, params.RedirectOnCompletion)
+	require.Nil(t, params.SuccessURL)
+	require.Nil(t, params.CancelURL)
+}
+
+func TestCreateCheckoutSessionFormPreservesPromotionCodesWithoutPreset(t *testing.T) {
+	t.Parallel()
+	promotionCodeID := ""
+	api := &fakeStripeAPI{}
+	c := &client{api: api}
+	_, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{
+		CustomerID: "cus_test", PromotionCodeID: promotionCodeID,
+		ReturnURL:          "https://app.example.test/the-customer/billing?session_id={CHECKOUT_SESSION_ID}",
+		EmbeddedForm:       true,
+		BillingCycleAnchor: time.Date(2026, time.August, 21, 0, 0, 0, 0, time.UTC),
+		ExpiresAt:          time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC),
+		IdempotencyKey:     "checkout",
+	})
+	require.NoError(t, err)
+	params := api.checkoutSessionParams
+	require.Equal(t, "form", stripesdk.StringValue(params.UIMode))
+	require.True(t, stripesdk.BoolValue(params.AllowPromotionCodes))
+	require.Empty(t, params.Discounts)
+}
+
+func TestCreateCheckoutSessionFormPreservesPromotionCodesWithPreset(t *testing.T) {
+	t.Parallel()
+	promotionCodeID := "promo_test"
+	api := &fakeStripeAPI{}
+	c := &client{api: api}
+	_, err := c.CreateCheckoutSession(t.Context(), CreateCheckoutSessionInput{
+		CustomerID: "cus_test", PromotionCodeID: promotionCodeID,
+		ReturnURL:          "https://app.example.test/the-customer/billing?session_id={CHECKOUT_SESSION_ID}",
+		EmbeddedForm:       true,
+		BillingCycleAnchor: time.Date(2026, time.August, 21, 0, 0, 0, 0, time.UTC),
+		ExpiresAt:          time.Date(2026, time.August, 15, 12, 0, 0, 0, time.UTC),
+		IdempotencyKey:     "checkout",
+	})
+	require.NoError(t, err)
+	params := api.checkoutSessionParams
+	require.Equal(t, "form", stripesdk.StringValue(params.UIMode))
+	require.Nil(t, params.AllowPromotionCodes)
+	require.Len(t, params.Discounts, 1)
+	require.Equal(t, promotionCodeID, stripesdk.StringValue(params.Discounts[0].PromotionCode))
+	require.Nil(t, params.Discounts[0].Coupon)
+}
+
+func TestGetCheckoutSessionClassifiesMissing(t *testing.T) {
+	t.Parallel()
+	testGetCheckoutSessionClassifiesError(t, &stripesdk.Error{Code: stripesdk.ErrorCodeResourceMissing}, true)
+}
+
+func TestGetCheckoutSessionClassifiesRateLimit(t *testing.T) {
+	t.Parallel()
+	testGetCheckoutSessionClassifiesError(t, &stripesdk.Error{HTTPStatusCode: 429}, false)
+}
+
+func TestGetCheckoutSessionClassifiesServerError(t *testing.T) {
+	t.Parallel()
+	testGetCheckoutSessionClassifiesError(t, &stripesdk.Error{HTTPStatusCode: 503}, false)
+}
+
+func TestGetCheckoutSessionClassifiesNetworkError(t *testing.T) {
+	t.Parallel()
+	testGetCheckoutSessionClassifiesError(t, errors.New("network unavailable"), false)
+}
+
+func testGetCheckoutSessionClassifiesError(t *testing.T, upstreamErr error, missing bool) {
+	t.Helper()
+	state, err := (&client{api: &fakeStripeAPI{err: upstreamErr}}).GetCheckoutSession(t.Context(), "cs_test")
+	require.Nil(t, state)
+	require.ErrorIs(t, err, upstreamErr)
+	require.Equal(t, missing, errors.Is(err, ErrCheckoutSessionNotFound))
+}
+
+func TestGetSubscriptionValidatesCatalogTUMOnly(t *testing.T) {
+	t.Parallel()
+	testGetSubscriptionValidatesCatalog(t, subscriptionCatalogCase{prices: []string{"price_tum"}})
+}
+
+func TestGetSubscriptionValidatesCatalogFullAICPCatalog(t *testing.T) {
+	t.Parallel()
+	testGetSubscriptionValidatesCatalog(t, subscriptionCatalogCase{prices: []string{"price_tum", "price_mcp_egress", "price_risk_scans"}})
+}
+
+func TestGetSubscriptionValidatesCatalogOptionalEgress(t *testing.T) {
+	t.Parallel()
+	testGetSubscriptionValidatesCatalog(t, subscriptionCatalogCase{prices: []string{"price_tum", "price_mcp_egress"}})
+}
+
+func TestGetSubscriptionValidatesCatalogOptionalRiskScans(t *testing.T) {
+	t.Parallel()
+	testGetSubscriptionValidatesCatalog(t, subscriptionCatalogCase{prices: []string{"price_tum", "price_risk_scans"}})
+}
+
+func TestGetSubscriptionValidatesCatalogSDKOnly(t *testing.T) {
+	t.Parallel()
+	testGetSubscriptionValidatesCatalog(t, subscriptionCatalogCase{prices: []string{"price_sdk"}, wantErr: "outside the configured AICP catalog"})
+}
+
+func TestGetSubscriptionValidatesCatalogMixedSDKAfterTUM(t *testing.T) {
+	t.Parallel()
+	c := testGetSubscriptionValidatesCatalog(t, subscriptionCatalogCase{prices: []string{"price_tum", "price_sdk"}, wantErr: "outside the configured AICP catalog"})
+
+	// Linked subscriptions tolerate a mixed catalog; adoption rejects it above.
+	state, err := c.GetSubscription(t.Context(), "sub_test")
+	require.NoError(t, err)
+	require.Equal(t, "sub_test", state.ID)
+	require.Equal(t, "cus_test", state.CustomerID)
+	require.Equal(t, "past_due", state.Status)
+	require.Equal(t, time.Date(2026, time.August, 15, 0, 0, 0, 0, time.UTC), state.CurrentPeriodStart)
+	require.Equal(t, time.Date(2026, time.September, 15, 0, 0, 0, 0, time.UTC), state.CurrentPeriodEnd)
+}
+
+func TestGetSubscriptionValidatesCatalogMixedSDKBeforeTUM(t *testing.T) {
+	t.Parallel()
+	testGetSubscriptionValidatesCatalog(t, subscriptionCatalogCase{prices: []string{"price_sdk", "price_tum"}, wantErr: "outside the configured AICP catalog"})
+}
+
+func TestGetSubscriptionValidatesCatalogUnknownPrice(t *testing.T) {
+	t.Parallel()
+	testGetSubscriptionValidatesCatalog(t, subscriptionCatalogCase{prices: []string{"price_tum", "price_unknown"}, wantErr: "outside the configured AICP catalog"})
+}
+
+func TestGetSubscriptionValidatesCatalogMissingPriceID(t *testing.T) {
+	t.Parallel()
+	testGetSubscriptionValidatesCatalog(t, subscriptionCatalogCase{prices: []string{"price_tum", ""}, wantErr: "missing a price"})
+}
+
+func TestGetSubscriptionValidatesCatalogUnsetPrice(t *testing.T) {
+	t.Parallel()
+	testGetSubscriptionValidatesCatalog(t, subscriptionCatalogCase{prices: []string{"price_tum", "unset"}, wantErr: "missing a price"})
+}
+
+func TestGetSubscriptionValidatesCatalogPartialPage(t *testing.T) {
+	t.Parallel()
+	testGetSubscriptionValidatesCatalog(t, subscriptionCatalogCase{prices: []string{"price_tum"}, hasMore: true, wantErr: "item coverage is incomplete"})
+}
+
+func TestGetSubscriptionValidatesCatalogNoItems(t *testing.T) {
+	t.Parallel()
+	testGetSubscriptionValidatesCatalog(t, subscriptionCatalogCase{wantErr: "missing the configured TUM service period"})
+}
+
+func testGetSubscriptionValidatesCatalog(t *testing.T, tt subscriptionCatalogCase) *client {
+	t.Helper()
+	subscription := testSubscription()
+	template := *subscription.Items.Data[0]
+	subscription.Items.Data = nil
+	subscription.Items.HasMore = tt.hasMore
+	for _, price := range tt.prices {
+		item := template
+		item.Price = &stripesdk.Price{ID: price}
+		subscription.Items.Data = append(subscription.Items.Data, &item)
+	}
+	c := &client{api: &fakeStripeAPI{subscription: subscription}, catalog: Catalog{
+		PriceIDTUM: "price_tum", PriceIDMCPEgress: "price_mcp_egress", PriceIDRiskScans: "price_risk_scans",
+	}}
+	state, err := c.GetSubscription(t.Context(), "sub_test", RequireAdoptionEligibility)
+	if tt.wantErr != "" {
+		require.ErrorAs(t, err, new(*SubscriptionEligibilityError))
+		require.ErrorContains(t, err, tt.wantErr)
+		require.Nil(t, state)
+	} else {
+		require.NoError(t, err)
+		require.Equal(t, "sub_test", state.ID)
+	}
+	return c
+}
+
+func TestGetSubscriptionAdoptionRejectsInvalidFirstTUMPeriod(t *testing.T) {
+	t.Parallel()
+	subscription := testSubscription()
+	validItem := *subscription.Items.Data[0]
+	subscription.Items.Data[0].CurrentPeriodStart = 0
+	subscription.Items.Data = append(subscription.Items.Data, &validItem)
+	c := &client{api: &fakeStripeAPI{subscription: subscription}, catalog: Catalog{PriceIDTUM: "price_tum"}}
+
+	state, err := c.GetSubscription(t.Context(), "sub_test", RequireAdoptionEligibility)
+	require.Nil(t, state)
+	var eligibilityError *SubscriptionEligibilityError
+	require.ErrorAs(t, err, &eligibilityError)
+	require.Equal(t, "stripe subscription is missing the configured TUM service period", eligibilityError.Reason)
+}
+
+func TestGetSubscriptionRejectsIncompleteItems(t *testing.T) {
+	t.Parallel()
+	for _, items := range []*stripesdk.SubscriptionItemList{
+		nil,
+		{Data: []*stripesdk.SubscriptionItem{nil}},
+		{Data: []*stripesdk.SubscriptionItem{{}}},
+	} {
+		subscription := testSubscription()
+		subscription.Items = items
+		c := &client{api: &fakeStripeAPI{subscription: subscription}, catalog: Catalog{PriceIDTUM: "price_tum"}}
+		state, err := c.GetSubscription(t.Context(), "sub_test", RequireAdoptionEligibility)
+		require.ErrorAs(t, err, new(*SubscriptionEligibilityError))
+		require.Nil(t, state)
+	}
+}
+
+type subscriptionCatalogCase struct {
+	prices  []string
+	hasMore bool
+	wantErr string
 }

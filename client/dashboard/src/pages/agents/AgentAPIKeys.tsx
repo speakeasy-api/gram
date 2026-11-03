@@ -44,6 +44,7 @@ import { useCreateAPIKeyMutation } from "@gram/client/react-query/createAPIKey";
 import { useRevokeAPIKeyMutation } from "@gram/client/react-query/revokeAPIKey";
 
 import { AgentKeyServers, type KeyServer } from "./AgentKeyServers";
+import { keyCredentialChoices } from "./credentials/keyCredentialChoices";
 
 import { narrowGrantsToServers } from "./agent-key-server-grants";
 import { discoverKeyServerGrants } from "./agent-key-discovery";
@@ -152,6 +153,7 @@ function AgentAPIKeysContent({
   const [servers, setServers] = useState<KeyServer[]>([]);
   const [accountsReady, setAccountsReady] = useState(false);
   const [serversBusy, setServersBusy] = useState(false);
+  const [checkingChoices, setCheckingChoices] = useState(false);
   const [name, setName] = useState("");
   const [narrowings, setNarrowings] = useState<GrantNarrowings>({});
   const [expiryDays, setExpiryDays] = useState("90");
@@ -228,7 +230,8 @@ function AgentAPIKeysContent({
   const create = useCreateAPIKeyMutation({ gcTime: 0, retry: false });
   // Resetting mutation state after issuance must not unlock header navigation
   // while the post-issue inventory refresh is still in flight.
-  const navigationBusy = create.isPending || (issued && keys.isFetching);
+  const navigationBusy =
+    checkingChoices || create.isPending || (issued && keys.isFetching);
   useEffect(() => {
     onBusy?.(navigationBusy);
   }, [navigationBusy, onBusy]);
@@ -336,6 +339,7 @@ function AgentAPIKeysContent({
   const issue = (review = false) => {
     if (
       !canIssue ||
+      checkingChoices ||
       create.isPending ||
       issued ||
       !accountsReady ||
@@ -475,50 +479,69 @@ function AgentAPIKeysContent({
       setStep(2);
       return;
     }
-    create.mutate(
-      {
-        security,
-        request: {
-          createKeyForm: {
-            agentId: agent.id,
-            name: validatedName,
-            expiresAt,
-            delegatedGrantsVersion: 3,
-            requestedGrants,
-            scopes: [],
+    // The credentials each server offers are read again at issue: one may
+    // have changed since the servers step.
+    setCheckingChoices(true);
+    void keyCredentialChoices(sdk, servers).then(
+      (authClientChoices) => {
+        if (!mounted.current) return;
+        create.mutate(
+          {
+            security,
+            request: {
+              createKeyForm: {
+                agentId: agent.id,
+                name: validatedName,
+                expiresAt,
+                delegatedGrantsVersion: 3,
+                requestedGrants,
+                scopes: [],
+                authClientChoices,
+              },
+            },
           },
-        },
+          {
+            onSuccess: (key) => {
+              if (mounted.current) {
+                setIssued(true);
+                setSecret(key.key ?? null);
+              }
+              create.reset();
+              refresh();
+            },
+            onError: (failure) => {
+              // A failed issuance may reflect a live policy change. Withdraw the
+              // reviewed ceiling even when the error does not identify its cause.
+              setNarrowings({});
+              setReviewGrants([]);
+              setReviewAccounts([]);
+              setStep(2);
+              if (mounted.current) void delegable.refetch();
+              // A name already in use is the one failure the caller can fix from
+              // this screen, and the server names it. Everything else keeps the
+              // policy explanation, which is what the other causes have in common.
+              const conflict =
+                failure instanceof GramError &&
+                failure.statusCode === 409 &&
+                failure.message;
+              setError(
+                conflict ||
+                  "Could not create API key. Check that the requested grants are allowed by the agent policy, the owner's live permissions and your own, and that the agent is active with a valid owner.",
+              );
+              create.reset();
+            },
+            onSettled: () => setCheckingChoices(false),
+          },
+        );
       },
-      {
-        onSuccess: (key) => {
-          if (mounted.current) {
-            setIssued(true);
-            setSecret(key.key ?? null);
-          }
-          create.reset();
-          refresh();
-        },
-        onError: (failure) => {
-          // A failed issuance may reflect a live policy change. Withdraw the
-          // reviewed ceiling even when the error does not identify its cause.
-          setNarrowings({});
-          setReviewGrants([]);
-          setReviewAccounts([]);
-          setStep(2);
-          if (mounted.current) void delegable.refetch();
-          // A name already in use is the one failure the caller can fix from
-          // this screen, and the server names it. Everything else keeps the
-          // policy explanation, which is what the other causes have in common.
-          const conflict =
-            failure instanceof GramError &&
-            failure.statusCode === 409 &&
-            failure.message;
-          setError(
-            conflict ||
-              "Could not create API key. Check that the requested grants are allowed by the agent policy, the owner's live permissions and your own, and that the agent is active with a valid owner.",
-          );
-          create.reset();
-        },
+      (failure: unknown) => {
+        setCheckingChoices(false);
+        setStep(0);
+        setError(
+          failure instanceof Error
+            ? failure.message
+            : "Choose which credential the key uses on each server.",
+        );
       },
     );
   };
@@ -644,7 +667,9 @@ function AgentAPIKeysContent({
                     <button
                       type="button"
                       aria-current={step === index ? "step" : undefined}
-                      disabled={index >= step || create.isPending}
+                      disabled={
+                        index >= step || create.isPending || checkingChoices
+                      }
                       onClick={() => {
                         returnToStep(index);
                         setError(null);
@@ -737,7 +762,7 @@ function AgentAPIKeysContent({
                     <Select
                       value={expiryDays}
                       onValueChange={setExpiryDays}
-                      disabled={create.isPending}
+                      disabled={create.isPending || checkingChoices}
                     >
                       <SelectTrigger id="agent-key-expiry">
                         <SelectValue />
@@ -758,7 +783,7 @@ function AgentAPIKeysContent({
                           type="date"
                           value={customExpiry}
                           onChange={setCustomExpiry}
-                          disabled={create.isPending}
+                          disabled={create.isPending || checkingChoices}
                         />
                       </label>
                     )}
@@ -773,7 +798,7 @@ function AgentAPIKeysContent({
                     grants={scopedGrants}
                     narrowings={narrowings}
                     onChangeNarrowings={setNarrowings}
-                    disabled={create.isPending}
+                    disabled={create.isPending || checkingChoices}
                     onRetry={() => void delegable.refetch()}
                   />
                 </>
@@ -786,7 +811,7 @@ function AgentAPIKeysContent({
                   onEditServers={() => returnToStep(0)}
                   onEditAccounts={() => returnToStep(1)}
                   onEditAccess={() => returnToStep(2)}
-                  disabled={create.isPending}
+                  disabled={create.isPending || checkingChoices}
                 />
               )}
             </form>
@@ -797,7 +822,7 @@ function AgentAPIKeysContent({
                 {step > 0 && (
                   <Button
                     variant="secondary"
-                    disabled={create.isPending}
+                    disabled={create.isPending || checkingChoices}
                     onClick={() => {
                       returnToStep(step - 1);
                       setError(null);
@@ -808,7 +833,7 @@ function AgentAPIKeysContent({
                 )}
                 <Button
                   variant="tertiary"
-                  disabled={create.isPending}
+                  disabled={create.isPending || checkingChoices}
                   onClick={close}
                 >
                   Cancel
@@ -825,18 +850,44 @@ function AgentAPIKeysContent({
                 )}
                 <Button
                   title={blockedReason ?? undefined}
-                  disabled={!!blockedReason || create.isPending}
-                  onClick={() =>
-                    step < 2 ? setStep(step + 1) : issue(step === 2)
+                  disabled={
+                    !!blockedReason || create.isPending || checkingChoices
                   }
+                  onClick={() => {
+                    if (step === 0) {
+                      // A server offering several shared credentials needs
+                      // one picked before the key's accounts are checked.
+                      setCheckingChoices(true);
+                      void keyCredentialChoices(sdk, servers).then(
+                        () => {
+                          setCheckingChoices(false);
+                          setError(null);
+                          setStep(1);
+                        },
+                        (failure: unknown) => {
+                          setCheckingChoices(false);
+                          setError(
+                            failure instanceof Error
+                              ? failure.message
+                              : "Choose which credential the key uses on each server.",
+                          );
+                        },
+                      );
+                      return;
+                    }
+                    if (step < 2) setStep(step + 1);
+                    else issue(step === 2);
+                  }}
                 >
-                  {create.isPending
-                    ? "Creating…"
-                    : step < 2
-                      ? "Continue"
-                      : step === 2
-                        ? "Review key"
-                        : "Create key"}
+                  {checkingChoices && step === 0
+                    ? "Checking…"
+                    : create.isPending || checkingChoices
+                      ? "Creating…"
+                      : step < 2
+                        ? "Continue"
+                        : step === 2
+                          ? "Review key"
+                          : "Create key"}
                 </Button>
               </div>
             </div>

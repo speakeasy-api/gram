@@ -82,12 +82,22 @@ type capturePublishSignaler struct {
 type capturedPublishSignal struct {
 	projectID       uuid.UUID
 	createdByUserID string
+	// sync marks a manual sync, which also publishes the pending changes of
+	// plugins whose auto sync is off.
+	sync bool
 }
 
 func (c *capturePublishSignaler) SignalPluginPublish(ctx context.Context, projectID uuid.UUID, createdByUserID string) error {
 	c.mu.Lock()
 	defer c.mu.Unlock()
 	c.signals = append(c.signals, capturedPublishSignal{projectID: projectID, createdByUserID: createdByUserID})
+	return nil
+}
+
+func (c *capturePublishSignaler) SignalPluginSync(ctx context.Context, projectID uuid.UUID, createdByUserID string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.signals = append(c.signals, capturedPublishSignal{projectID: projectID, createdByUserID: createdByUserID, sync: true})
 	return nil
 }
 

@@ -353,6 +353,17 @@ DELETE FROM principal_grants
 WHERE organization_id = @org_id::text
   AND principal_urn LIKE 'agent:%';
 
+-- name: OrgDeleteAuthPermissionProvisions :exec
+-- The default auth permission ledger keeps every grant the backfill ever
+-- provisioned, so it never re-grants one an admin removed. The seed deletes
+-- and recreates agent and custom role grants, so it resets their ledger rows
+-- with them; otherwise a reseed would leave the recreated principals without
+-- their default mcp:auth grants. Human grants survive a reseed, and so do
+-- their ledger rows.
+DELETE FROM auth_permission_provisions
+WHERE organization_id = @org_id::text
+  AND (principal_urn LIKE 'agent:%' OR principal_urn LIKE 'role:organization:%');
+
 -- name: OrgDeleteAgents :exec
 -- Agents RESTRICT owner membership deletion and are not project children.
 DELETE FROM agents WHERE organization_id = @org_id::text;
@@ -385,7 +396,7 @@ VALUES
    'Support triage', now() - interval '2 days', NULL),
   (@agent3::uuid, @org_id::text, @owner3::text,
    'Retired documentation bot', NULL, now() - interval '5 days'),
-  (@agent4::uuid, @org_id::text, @owner1::text,
+  (@agent4::uuid, @org_id::text, @owner2::text,
    'Release notes assistant', NULL, NULL);
 
 -- name: OrgGlobalRoleURN :one

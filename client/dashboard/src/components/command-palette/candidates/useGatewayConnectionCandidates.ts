@@ -83,7 +83,7 @@ export function useGatewayConnectionCandidates({
   return useMemo(() => {
     if (!enabled) return [];
     const result: LauncherCandidate[] = [];
-    if (canReadOrg)
+    if (canReadOrg) {
       result.push({
         id: `gateway-connections:organization:${organization.id}`,
         kind: "page",
@@ -99,6 +99,22 @@ export function useGatewayConnectionCandidates({
           );
         },
       });
+      result.push({
+        id: `gateway-activity:organization:${organization.id}`,
+        kind: "page",
+        title: "Organization Gateway Activity",
+        detail: "Calls across projects",
+        keywords: ["gateway", "activity", "usage", "calls", "organization"],
+        verbs: ["open"],
+        icon: "network",
+        group: "Pages",
+        run: () => {
+          void navigate(
+            `${routes.mcp.organizationGateway.href()}?tab=activity`,
+          );
+        },
+      });
+    }
     if (!canReadGateways || gateways.isError) return result;
     for (const gateway of gateways.data?.metaMcpServers ?? []) {
       const href = routes.mcp.gateway.sessions.href(gateway.id);

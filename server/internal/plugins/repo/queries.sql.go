@@ -189,7 +189,7 @@ func (q *Queries) CountLivePluginServersByMCPServerIDFixture(ctx context.Context
 const createDefaultPlugin = `-- name: CreateDefaultPlugin :one
 INSERT INTO plugins (organization_id, project_id, name, slug, is_default)
 VALUES ($1, $2, 'Default', 'default', TRUE)
-RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type CreateDefaultPluginParams struct {
@@ -212,6 +212,7 @@ func (q *Queries) CreateDefaultPlugin(ctx context.Context, arg CreateDefaultPlug
 		&i.Description,
 		&i.IsDefault,
 		&i.AutoCreated,
+		&i.AutoSyncEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -222,21 +223,23 @@ func (q *Queries) CreateDefaultPlugin(ctx context.Context, arg CreateDefaultPlug
 
 const createPlugin = `-- name: CreatePlugin :one
 
-INSERT INTO plugins (organization_id, project_id, name, slug, description)
-VALUES ($1, $2, $3, $4, $5)
-RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+INSERT INTO plugins (organization_id, project_id, name, slug, description, auto_sync_enabled)
+VALUES ($1, $2, $3, $4, $5, $6)
+RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type CreatePluginParams struct {
-	OrganizationID string
-	ProjectID      uuid.UUID
-	Name           string
-	Slug           string
-	Description    pgtype.Text
+	OrganizationID  string
+	ProjectID       uuid.UUID
+	Name            string
+	Slug            string
+	Description     pgtype.Text
+	AutoSyncEnabled pgtype.Bool
 }
 
 // Queries for managing plugins (project-scoped distributable MCP server bundles).
 // plugins is project-scoped; every query is scoped to project_id (and organization_id where needed).
+// A NULL auto_sync_enabled means the plugin's changes publish automatically.
 func (q *Queries) CreatePlugin(ctx context.Context, arg CreatePluginParams) (Plugin, error) {
 	row := q.db.QueryRow(ctx, createPlugin,
 		arg.OrganizationID,
@@ -244,6 +247,7 @@ func (q *Queries) CreatePlugin(ctx context.Context, arg CreatePluginParams) (Plu
 		arg.Name,
 		arg.Slug,
 		arg.Description,
+		arg.AutoSyncEnabled,
 	)
 	var i Plugin
 	err := row.Scan(
@@ -255,6 +259,7 @@ func (q *Queries) CreatePlugin(ctx context.Context, arg CreatePluginParams) (Plu
 		&i.Description,
 		&i.IsDefault,
 		&i.AutoCreated,
+		&i.AutoSyncEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -469,7 +474,7 @@ func (q *Queries) ForgetPublishedMarketplaceName(ctx context.Context, arg Forget
 }
 
 const getDefaultPlugin = `-- name: GetDefaultPlugin :one
-SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE organization_id = $1
   AND project_id = $2
@@ -497,6 +502,7 @@ func (q *Queries) GetDefaultPlugin(ctx context.Context, arg GetDefaultPluginPara
 		&i.Description,
 		&i.IsDefault,
 		&i.AutoCreated,
+		&i.AutoSyncEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -506,7 +512,7 @@ func (q *Queries) GetDefaultPlugin(ctx context.Context, arg GetDefaultPluginPara
 }
 
 const getDefaultPluginForUpdate = `-- name: GetDefaultPluginForUpdate :one
-SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE organization_id = $1
   AND project_id = $2
@@ -535,6 +541,7 @@ func (q *Queries) GetDefaultPluginForUpdate(ctx context.Context, arg GetDefaultP
 		&i.Description,
 		&i.IsDefault,
 		&i.AutoCreated,
+		&i.AutoSyncEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -752,7 +759,7 @@ func (q *Queries) GetOrganizationName(ctx context.Context, id string) (string, e
 }
 
 const getPlugin = `-- name: GetPlugin :one
-SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE id = $1
   AND organization_id = $2
@@ -778,6 +785,45 @@ func (q *Queries) GetPlugin(ctx context.Context, arg GetPluginParams) (Plugin, e
 		&i.Description,
 		&i.IsDefault,
 		&i.AutoCreated,
+		&i.AutoSyncEnabled,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
+const getPluginForUpdate = `-- name: GetPluginForUpdate :one
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
+FROM plugins
+WHERE id = $1
+  AND organization_id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type GetPluginForUpdateParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+// GetPlugin that also locks the row for the rest of the transaction.
+func (q *Queries) GetPluginForUpdate(ctx context.Context, arg GetPluginForUpdateParams) (Plugin, error) {
+	row := q.db.QueryRow(ctx, getPluginForUpdate, arg.ID, arg.OrganizationID, arg.ProjectID)
+	var i Plugin
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsDefault,
+		&i.AutoCreated,
+		&i.AutoSyncEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -840,7 +886,7 @@ func (q *Queries) GetPluginServerByBackend(ctx context.Context, arg GetPluginSer
 
 const getPluginWithCounts = `-- name: GetPluginWithCounts :one
 SELECT
-  p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.created_at, p.updated_at, p.deleted_at, p.deleted,
+  p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.auto_sync_enabled, p.created_at, p.updated_at, p.deleted_at, p.deleted,
   (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
   (
     SELECT count(*)
@@ -895,6 +941,7 @@ func (q *Queries) GetPluginWithCounts(ctx context.Context, arg GetPluginWithCoun
 		&i.Plugin.Description,
 		&i.Plugin.IsDefault,
 		&i.Plugin.AutoCreated,
+		&i.Plugin.AutoSyncEnabled,
 		&i.Plugin.CreatedAt,
 		&i.Plugin.UpdatedAt,
 		&i.Plugin.DeletedAt,
@@ -939,7 +986,7 @@ func (q *Queries) GetProjectMarketplaceNameContext(ctx context.Context, projectI
 }
 
 const getProspectiveDefaultPlugin = `-- name: GetProspectiveDefaultPlugin :one
-SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE organization_id = $1
   AND project_id = $2
@@ -966,6 +1013,7 @@ func (q *Queries) GetProspectiveDefaultPlugin(ctx context.Context, arg GetProspe
 		&i.Description,
 		&i.IsDefault,
 		&i.AutoCreated,
+		&i.AutoSyncEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -1185,7 +1233,7 @@ func (q *Queries) IsOrganizationFeatureEnabled(ctx context.Context, arg IsOrgani
 }
 
 const listActivePluginsForProject = `-- name: ListActivePluginsForProject :many
-SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
 FROM plugins
 WHERE project_id = $1
   AND deleted IS FALSE
@@ -1218,6 +1266,7 @@ func (q *Queries) ListActivePluginsForProject(ctx context.Context, arg ListActiv
 			&i.Description,
 			&i.IsDefault,
 			&i.AutoCreated,
+			&i.AutoSyncEnabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -1396,6 +1445,38 @@ func (q *Queries) ListAgentPluginCompatibilityIssuesForProject(ctx context.Conte
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listAutoSyncPausedPluginSlugs = `-- name: ListAutoSyncPausedPluginSlugs :many
+SELECT slug
+FROM plugins
+WHERE project_id = $1
+  AND deleted IS FALSE
+  AND auto_sync_enabled IS FALSE
+ORDER BY slug ASC
+`
+
+// Slugs of the project's plugins whose auto sync is off. An automatic publish
+// keeps each of them as it was last published; only a manual sync publishes
+// their pending changes.
+func (q *Queries) ListAutoSyncPausedPluginSlugs(ctx context.Context, projectID uuid.UUID) ([]string, error) {
+	rows, err := q.db.Query(ctx, listAutoSyncPausedPluginSlugs, projectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var slug string
+		if err := rows.Scan(&slug); err != nil {
+			return nil, err
+		}
+		items = append(items, slug)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1999,7 +2080,7 @@ func (q *Queries) ListPluginSkillsForProject(ctx context.Context, arg ListPlugin
 
 const listPlugins = `-- name: ListPlugins :many
 SELECT
-  p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.created_at, p.updated_at, p.deleted_at, p.deleted,
+  p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.auto_sync_enabled, p.created_at, p.updated_at, p.deleted_at, p.deleted,
   (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
   (
     SELECT count(*)
@@ -2043,6 +2124,7 @@ type ListPluginsRow struct {
 	Description     pgtype.Text
 	IsDefault       pgtype.Bool
 	AutoCreated     bool
+	AutoSyncEnabled pgtype.Bool
 	CreatedAt       pgtype.Timestamptz
 	UpdatedAt       pgtype.Timestamptz
 	DeletedAt       pgtype.Timestamptz
@@ -2070,6 +2152,7 @@ func (q *Queries) ListPlugins(ctx context.Context, arg ListPluginsParams) ([]Lis
 			&i.Description,
 			&i.IsDefault,
 			&i.AutoCreated,
+			&i.AutoSyncEnabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -2089,7 +2172,7 @@ func (q *Queries) ListPlugins(ctx context.Context, arg ListPluginsParams) ([]Lis
 }
 
 const listPluginsForGlobalRoleDeletion = `-- name: ListPluginsForGlobalRoleDeletion :many
-SELECT p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.created_at, p.updated_at, p.deleted_at, p.deleted
+SELECT p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.auto_sync_enabled, p.created_at, p.updated_at, p.deleted_at, p.deleted
 FROM plugins p
 JOIN plugin_assignments pa ON pa.plugin_id = p.id AND pa.organization_id = p.organization_id
 WHERE pa.principal_urn = $1
@@ -2116,6 +2199,7 @@ func (q *Queries) ListPluginsForGlobalRoleDeletion(ctx context.Context, principa
 			&i.Description,
 			&i.IsDefault,
 			&i.AutoCreated,
+			&i.AutoSyncEnabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -2132,7 +2216,7 @@ func (q *Queries) ListPluginsForGlobalRoleDeletion(ctx context.Context, principa
 }
 
 const listPluginsForRoleDeletion = `-- name: ListPluginsForRoleDeletion :many
-SELECT p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.created_at, p.updated_at, p.deleted_at, p.deleted
+SELECT p.id, p.organization_id, p.project_id, p.name, p.slug, p.description, p.is_default, p.auto_created, p.auto_sync_enabled, p.created_at, p.updated_at, p.deleted_at, p.deleted
 FROM plugins p
 JOIN plugin_assignments pa ON pa.plugin_id = p.id AND pa.organization_id = p.organization_id
 WHERE pa.organization_id = $1
@@ -2165,6 +2249,7 @@ func (q *Queries) ListPluginsForRoleDeletion(ctx context.Context, arg ListPlugin
 			&i.Description,
 			&i.IsDefault,
 			&i.AutoCreated,
+			&i.AutoSyncEnabled,
 			&i.CreatedAt,
 			&i.UpdatedAt,
 			&i.DeletedAt,
@@ -2751,6 +2836,28 @@ func (q *Queries) LockPlatformCleanupMemberships(ctx context.Context, arg LockPl
 	return items, nil
 }
 
+const lockPluginPackageContent = `-- name: LockPluginPackageContent :exec
+SELECT pg_advisory_xact_lock(hashtextextended('plugin-package-content:' || $1::text, 0))
+`
+
+// Waits out every in-flight package-affecting change in the project and holds
+// off new ones until the transaction ends.
+func (q *Queries) LockPluginPackageContent(ctx context.Context, projectID string) error {
+	_, err := q.db.Exec(ctx, lockPluginPackageContent, projectID)
+	return err
+}
+
+const lockPluginPackageContentShared = `-- name: LockPluginPackageContentShared :exec
+SELECT pg_advisory_xact_lock_shared(hashtextextended('plugin-package-content:' || $1::text, 0))
+`
+
+// Taken by every change that requests a publication of the project's plugin
+// packages; shared, so those changes only ever wait on LockPluginPackageContent.
+func (q *Queries) LockPluginPackageContentShared(ctx context.Context, projectID string) error {
+	_, err := q.db.Exec(ctx, lockPluginPackageContentShared, projectID)
+	return err
+}
+
 const lockRoleDeliveryPlugin = `-- name: LockRoleDeliveryPlugin :one
 SELECT id FROM plugins
 WHERE id = $1 AND organization_id = $2 AND project_id = $3 AND deleted IS FALSE
@@ -2834,7 +2941,7 @@ WHERE organization_id = $1
   AND project_id = $2
   AND slug = 'default'
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type PromoteToDefaultPluginParams struct {
@@ -2859,6 +2966,7 @@ func (q *Queries) PromoteToDefaultPlugin(ctx context.Context, arg PromoteToDefau
 		&i.Description,
 		&i.IsDefault,
 		&i.AutoCreated,
+		&i.AutoSyncEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,
@@ -3422,28 +3530,32 @@ UPDATE plugins
 SET name = $1,
     slug = $2,
     description = $3,
+    auto_sync_enabled = COALESCE($4::boolean, auto_sync_enabled),
     updated_at = clock_timestamp()
-WHERE id = $4
-  AND organization_id = $5
-  AND project_id = $6
+WHERE id = $5
+  AND organization_id = $6
+  AND project_id = $7
   AND deleted IS FALSE
-RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+RETURNING id, organization_id, project_id, name, slug, description, is_default, auto_created, auto_sync_enabled, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdatePluginParams struct {
-	Name           string
-	Slug           string
-	Description    pgtype.Text
-	ID             uuid.UUID
-	OrganizationID string
-	ProjectID      uuid.UUID
+	Name            string
+	Slug            string
+	Description     pgtype.Text
+	AutoSyncEnabled pgtype.Bool
+	ID              uuid.UUID
+	OrganizationID  string
+	ProjectID       uuid.UUID
 }
 
+// A NULL auto_sync_enabled argument keeps the plugin's current setting.
 func (q *Queries) UpdatePlugin(ctx context.Context, arg UpdatePluginParams) (Plugin, error) {
 	row := q.db.QueryRow(ctx, updatePlugin,
 		arg.Name,
 		arg.Slug,
 		arg.Description,
+		arg.AutoSyncEnabled,
 		arg.ID,
 		arg.OrganizationID,
 		arg.ProjectID,
@@ -3458,6 +3570,7 @@ func (q *Queries) UpdatePlugin(ctx context.Context, arg UpdatePluginParams) (Plu
 		&i.Description,
 		&i.IsDefault,
 		&i.AutoCreated,
+		&i.AutoSyncEnabled,
 		&i.CreatedAt,
 		&i.UpdatedAt,
 		&i.DeletedAt,

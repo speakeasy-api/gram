@@ -3,16 +3,22 @@
 package demoseed
 
 import (
+	"bytes"
 	"context"
+	"net/url"
 	"testing"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel"
 
 	"github.com/speakeasy-api/gram/dev-idp/pkg/devidentity"
+	"github.com/speakeasy-api/gram/server/internal/assets"
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
 	"github.com/speakeasy-api/gram/server/internal/demoseed/demoseedtest"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/users"
@@ -27,8 +33,10 @@ const testDeveloperEmail = "dev@example.com"
 func seedLocalPostgres(ctx context.Context, t *testing.T, db *pgxpool.Pool, spec Spec) {
 	t.Helper()
 
-	_, err := seedPostgres(ctx, testenv.NewLogger(t), db, assetstest.NewTestBlobStore(t), spec)
+	logger := testenv.NewLogger(t)
+	_, err := seedPostgres(ctx, logger, db, assetstest.NewTestBlobStore(t), spec)
 	require.NoError(t, err)
+	require.NoError(t, migrateUpstreamAuth(ctx, logger, db, spec.OrgID))
 }
 
 // TestLocalFixturesAfterLogin covers the database a developer actually has
@@ -96,7 +104,14 @@ func TestLocalFixturesReseed(t *testing.T) {
 	require.NoError(t, err)
 	blob := assetstest.NewTestBlobStore(t)
 
-	opts := LocalFixturesOptions{DeveloperEmail: testDeveloperEmail, Environment: "local"}
+	siteURL, err := url.Parse("https://public.example.test")
+	require.NoError(t, err)
+	opts := LocalFixturesOptions{DeveloperEmail: testDeveloperEmail, Environment: "local", SiteURL: siteURL}
+	validator, err := mcpregistry.LoadValidator()
+	require.NoError(t, err)
+	registry := mcpregistry.New(db, validator).WithAssetBaseURL(siteURL)
+	var firstID uuid.UUID
+	var firstIcons mcpregistry.CatalogIcons
 	codeGatewayMode := func() string {
 		servers, err := metamcprepo.New(db).ListMetaMCPServers(ctx, metamcprepo.ListMetaMCPServersParams{OrganizationID: spec.OrgID, ProjectID: uuid.MustParse(spec.ProjectID())})
 		require.NoError(t, err)
@@ -113,6 +128,33 @@ func TestLocalFixturesReseed(t *testing.T) {
 		require.Equal(t, "progressive", codeGatewayMode(), "the shared seed has no code runtime to serve Code Mode")
 		require.NoError(t, RunLocalFixtures(ctx, logger, db, blob, nil, opts))
 		require.Equal(t, "code_mode", codeGatewayMode())
+		entry, err := registry.GetByName(ctx, localCatalogName)
+		require.NoError(t, err)
+		icons, err := mcpregistry.ParseCatalogIcons(entry.Data)
+		require.NoError(t, err)
+		require.NotNil(t, icons.Default)
+		require.Contains(t, icons.Default.Src, siteURL.String()+"/rpc/assets.serveImage?id=")
+		if firstID == uuid.Nil {
+			require.Equal(t, icons.Default, icons.Dark)
+			icons.Dark = nil
+			updated, err := mcpregistry.WithCatalogIcons(entry.Data, icons)
+			require.NoError(t, err)
+			_, err = registry.Save(ctx, entry.ID, mcpregistry.Token(entry), updated)
+			require.NoError(t, err)
+			firstID, firstIcons = entry.ID, icons
+		} else {
+			require.Equal(t, firstID, entry.ID)
+			require.Equal(t, firstIcons, icons)
+		}
+		tp := otel.GetTracerProvider()
+		images := assets.NewPlatformService(logger, tp, guardian.NewDefaultPolicy(tp), db, blob)
+		duplicate, err := images.StorePlatformImage(ctx, logger, "local-fixture@example.test", bytes.NewReader(localCatalogLogo), int64(len(localCatalogLogo)), "image/svg+xml")
+		require.NoError(t, err)
+		require.Equal(t, assets.ServeImageURL(siteURL, uuid.MustParse(duplicate.Asset.ID)), icons.Default.Src)
+		page, err := registry.List(ctx, mcpregistry.ListOptions{Query: localCatalogName})
+		require.NoError(t, err)
+		require.Len(t, page.Entries, 1)
+
 	}
 
 	seedUserID := devidentity.DeterministicUserID(testDeveloperEmail)

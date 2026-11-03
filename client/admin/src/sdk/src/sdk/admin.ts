@@ -3,6 +3,7 @@
  */
 
 import { adminAssignOrganizationOnboardingPlaybook } from "../funcs/adminAssignOrganizationOnboardingPlaybook.js";
+import { adminBackfillMcpAuthGrants } from "../funcs/adminBackfillMcpAuthGrants.js";
 import { adminBulkUpdateAccountType } from "../funcs/adminBulkUpdateAccountType.js";
 import { adminCancelStripeSubscription } from "../funcs/adminCancelStripeSubscription.js";
 import { adminChangeTrialEndDate } from "../funcs/adminChangeTrialEndDate.js";
@@ -103,6 +104,7 @@ import { adminUpdateSignupOffer } from "../funcs/adminUpdateSignupOffer.js";
 import { adminUpdateSupportMatrix } from "../funcs/adminUpdateSupportMatrix.js";
 import { adminUploadPlatformImage } from "../funcs/adminUploadPlatformImage.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { AdminBackfillMCPAuthGrantsResult } from "../models/components/adminbackfillmcpauthgrantsresult.js";
 import { AdminBulkUpdateAccountTypeResult } from "../models/components/adminbulkupdateaccounttyperesult.js";
 import { AdminChatAnalysisSettings } from "../models/components/adminchatanalysissettings.js";
 import { AdminChatAnalysisTriggerResult } from "../models/components/adminchatanalysistriggerresult.js";
@@ -146,6 +148,7 @@ import { AdminSpendBreakdownResponse } from "../models/components/adminspendbrea
 import { AdminStripeCustomer } from "../models/components/adminstripecustomer.js";
 import { AdminStripeSubscription } from "../models/components/adminstripesubscription.js";
 import { AdminStripeSubscriptionCandidate } from "../models/components/adminstripesubscriptioncandidate.js";
+import { AdminUploadImageResult } from "../models/components/adminuploadimageresult.js";
 import { AdminUpstreamOAuthMigrationOrganizations } from "../models/components/adminupstreamoauthmigrationorganizations.js";
 import { AdminUpstreamOAuthMigrationRun } from "../models/components/adminupstreamoauthmigrationrun.js";
 import { AdminUpstreamOAuthMigrationStatus } from "../models/components/adminupstreamoauthmigrationstatus.js";
@@ -210,7 +213,6 @@ import { UpdateOrganizationRequestBody } from "../models/components/updateorgani
 import { UpdateRemoteSessionIssuerForm } from "../models/components/updateremotesessionissuerform.js";
 import { UpdateSignupOfferRequestBody } from "../models/components/updatesignupofferrequestbody.js";
 import { UpdateSupportMatrixRequestBody } from "../models/components/updatesupportmatrixrequestbody.js";
-import { UploadImageResult } from "../models/components/uploadimageresult.js";
 import { AdminDeleteGlobalIssuerRequest } from "../models/operations/admindeleteglobalissuer.js";
 import { AdminDescribeMcpServerHealthRequest } from "../models/operations/admindescribemcpserverhealth.js";
 import { AdminGetGlobalIssuerRequest } from "../models/operations/admingetglobalissuer.js";
@@ -290,12 +292,12 @@ export class Admin extends ClientSDK {
    * uploadPlatformImage admin
    *
    * @remarks
-   * Upload a global issuer logo, limited to 4 MiB and PNG, JPEG, GIF or WebP.
+   * Upload a platform logo, limited to 4 MiB and PNG, JPEG, GIF, WebP or static SVG with local clip paths. This is a direct upload, not a staged proposal: successful uploads are publicly served immediately and remain stored.
    */
   async uploadPlatformImage(
     request: ReadableStream<Uint8Array> | Blob | ArrayBuffer | Uint8Array,
     options?: RequestOptions,
-  ): Promise<UploadImageResult> {
+  ): Promise<AdminUploadImageResult> {
     return unwrapAsync(adminUploadPlatformImage(
       this,
       request,
@@ -377,6 +379,21 @@ export class Admin extends ClientSDK {
     return unwrapAsync(adminGetHookClients(
       this,
       request,
+      options,
+    ));
+  }
+
+  /**
+   * backfillMcpAuthGrants admin
+   *
+   * @remarks
+   * Grants unrestricted mcp:auth to every principal that holds any mcp:connect grant, in every organization. The connect grant's selectors are ignored. Safe to run more than once.
+   */
+  async backfillMcpAuthGrants(
+    options?: RequestOptions,
+  ): Promise<AdminBackfillMCPAuthGrantsResult> {
+    return unwrapAsync(adminBackfillMcpAuthGrants(
+      this,
       options,
     ));
   }
@@ -978,7 +995,7 @@ export class Admin extends ClientSDK {
    * setStripeSubscription admin
    *
    * @remarks
-   * Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.
+   * Links an eligible existing Stripe subscription and atomically activates PAYG for free organizations or unconverted enterprise trials. Existing PAYG organizations retain their access policy. Verifies customer ownership, preserves existing subscription links and redeemed partner anchors, and accepts same-subscription retries.
    */
   async setStripeSubscription(
     request: SetStripeSubscriptionRequestBody,
@@ -1046,7 +1063,7 @@ export class Admin extends ClientSDK {
    * getStripeSubscriptionCandidate admin
    *
    * @remarks
-   * Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.
+   * Returns eligible live Stripe subscription details before linking it to a free, PAYG, or unconverted enterprise trial organization with a matching Stripe customer.
    */
   async getStripeSubscriptionCandidate(
     request: AdminGetStripeSubscriptionCandidateRequest,

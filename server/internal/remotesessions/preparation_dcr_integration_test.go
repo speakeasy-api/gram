@@ -13,6 +13,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
@@ -28,7 +29,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
@@ -204,6 +204,7 @@ func TestPreparationDCRIntegration_EffectiveGrantsAndNarrowedScopePersist(t *tes
 			}))
 			t.Cleanup(server.Close)
 			ctx, ti, in, interactive := preparationDCRFixture(t, server.URL)
+			seedRemoteMCPServerForIssuer(t, ctx, ti, in.UserSessionIssuerID, "dcr-ema", in.Resource)
 			beforeAudit, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientCreate)
 			require.NoError(t, err)
 			result, err := ti.service.PrepareIdentityChaining(ctx, in)
@@ -234,11 +235,28 @@ func TestPreparationDCRIntegration_EffectiveGrantsAndNarrowedScopePersist(t *tes
 			require.Equal(t, result.GrantTypes, grants)
 			require.NotEmpty(t, ciphertext)
 			require.NotEqual(t, "downstream-secret", ciphertext)
+			if tc.state == "ready" {
+				id := assertPreparationTypedClient(t, ctx, ti, result.ClientID, in.Resource)
+				// Emulate a ready binding written before normal typed publication.
+				err = repo.New(ti.conn).DeletePreparationTypedClientFixture(ctx, repo.DeletePreparationTypedClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ClientID: id, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
+				require.NoError(t, err)
+				//nolint:glint // notestingrawsql: inject or remove a test-only constraint failure in an isolated database; SQLc cannot model DDL.
+				_, err = ti.conn.Exec(ctx, `ALTER TABLE mcp_auth_clients ADD CONSTRAINT reject_test_ema_retry CHECK (client_type <> 'ema')`)
+				require.NoError(t, err)
+				_, err = ti.service.PrepareIdentityChaining(ctx, in)
+				require.Error(t, err, "already-ready DCR retries must propagate typed publication errors")
+				//nolint:glint // notestingrawsql: inject or remove a test-only constraint failure in an isolated database; SQLc cannot model DDL.
+				_, err = ti.conn.Exec(ctx, `ALTER TABLE mcp_auth_clients DROP CONSTRAINT reject_test_ema_retry`)
+				require.NoError(t, err)
+			}
 			restarted := restartPreparationService(t, ti)
 			for range 2 {
 				again, err := restarted.PrepareIdentityChaining(ctx, in)
 				require.NoError(t, err)
 				require.Equal(t, result, again)
+				if tc.state == "ready" {
+					assertPreparationTypedClient(t, ctx, ti, result.ClientID, in.Resource)
+				}
 			}
 			require.Equal(t, int32(1), posts.Load())
 			afterAudit, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionRemoteSessionClientCreate)
@@ -424,6 +442,21 @@ func TestPreparationDCRIntegration_CompletionRevalidatesReadiness(t *testing.T) 
 			require.NoError(t, err)
 			require.Equal(t, tc.want, retry.State)
 			require.Equal(t, out.result.ClientID, retry.ClientID)
+			if tc.name == "discovery failed" {
+				seedRemoteMCPServerForIssuer(t, ctx, ti, in.UserSessionIssuerID, "dcr-recovered-ema", in.Resource)
+				err = repo.New(ti.conn).ClearPreparationIssuerMetadataErrorFixture(ctx, repo.ClearPreparationIssuerMetadataErrorFixtureParams{IssuerID: in.RemoteSessionIssuerID, ProjectID: conv.ToNullUUID(*auth.ProjectID)})
+				require.NoError(t, err)
+				recovered, err := restarted.PrepareIdentityChaining(ctx, in)
+				require.NoError(t, err)
+				require.Equal(t, "ready", recovered.State)
+				require.Equal(t, out.result.Generation, recovered.Generation, "readiness recovery retains the binding incarnation")
+				assertPreparationTypedClient(t, ctx, ti, recovered.ClientID, in.Resource)
+				var persisted string
+				fixture1, fixtureErr := repo.New(ti.conn).GetPreparationBindingStateFixture(ctx, repo.GetPreparationBindingStateFixtureParams{BindingID: recovered.BindingID, ProjectID: *auth.ProjectID})
+				require.NoError(t, fixtureErr)
+				persisted = fixture1.String
+				require.Equal(t, "ready", persisted)
+			}
 			require.Equal(t, int32(1), posts.Load(), "recorded registrations must never be replayed")
 			assertPreparationInteractiveUntouched(t, ctx, ti, interactive, in.UserSessionIssuerID)
 		})
@@ -537,4 +570,41 @@ func TestPreparationDCRIntegration_UnlinkWaitsForDurableSubmission(t *testing.T)
 	count, err := testrepo.New(ti.conn).CountPreparationFixtureIssuerClients(ctx, testrepo.CountPreparationFixtureIssuerClientsParams{ProjectID: conv.ToNullUUID(*auth.ProjectID), IssuerID: in.RemoteSessionIssuerID})
 	require.NoError(t, err)
 	require.EqualValues(t, 2, count)
+}
+
+func TestPreparationDCRIntegration_TypedCatalogFailureRollsBack(t *testing.T) {
+	t.Parallel()
+	var posts atomic.Int32
+	server := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		posts.Add(1)
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(http.StatusCreated)
+		_, _ = w.Write([]byte(`{"client_id":"rollback-client","client_secret":"downstream-secret","token_endpoint_auth_method":"client_secret_basic","scope":"read","grant_types":["urn:ietf:params:oauth:grant-type:jwt-bearer"]}`))
+	}))
+	t.Cleanup(server.Close)
+	ctx, ti, in, _ := preparationDCRFixture(t, server.URL)
+	seedRemoteMCPServerForIssuer(t, ctx, ti, in.UserSessionIssuerID, "dcr-rollback-ema", in.Resource)
+	auth, _ := contextvalues.GetAuthContext(ctx)
+	//nolint:glint // notestingrawsql: inject or remove a test-only constraint failure in an isolated database; SQLc cannot model DDL.
+	_, err := ti.conn.Exec(ctx, `ALTER TABLE mcp_auth_clients ADD CONSTRAINT reject_test_ema CHECK (client_type <> 'ema')`)
+	require.NoError(t, err)
+	result, err := ti.service.PrepareIdentityChaining(ctx, in)
+	require.Error(t, err, "typed publication failure cannot be swallowed by DCR recovery")
+	require.NotNil(t, result)
+	require.Equal(t, "indeterminate", result.State)
+	var state string
+	var client uuid.NullUUID
+	fixture2, fixtureErr := repo.New(ti.conn).GetPreparationBindingCompletionFixture(ctx, repo.GetPreparationBindingCompletionFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: *auth.ProjectID, UserIssuerID: in.UserSessionIssuerID})
+	require.NoError(t, fixtureErr)
+	state, client = fixture2.State.String, fixture2.RemoteSessionClientID
+	require.Equal(t, "indeterminate", state, "the durable claim survives but ready completion rolls back")
+	require.False(t, client.Valid)
+	var clients int
+	fixture3, fixtureErr := repo.New(ti.conn).CountPreparationRollbackClientsFixture(ctx, conv.ToNullUUID(*auth.ProjectID))
+	require.NoError(t, fixtureErr)
+	clients = int(fixture3)
+	require.Zero(t, clients, "DCR credentials and typed publication are atomic")
+	_, err = ti.service.PrepareIdentityChaining(ctx, in)
+	require.NoError(t, err)
+	require.Equal(t, int32(1), posts.Load(), "an externally completed registration must never be replayed")
 }

@@ -29,14 +29,18 @@ const remoteLoginBindPath = "/mcp/remote_login_bind"
 // callback-host cookie only once a confirmed marker exists for it. Every stop
 // is single-use.
 type remoteLoginHop struct {
-	ID                string    `json:"id"`
-	Phase             string    `json:"phase"`
-	ParentChallengeID string    `json:"parent_challenge_id"`
-	CookieID          string    `json:"cookie_id"`
-	Browser           string    `json:"browser,omitempty"`
-	ConfirmURL        string    `json:"confirm_url"`
-	AuthorizationURL  string    `json:"authorization_url"`
-	CreatedAt         time.Time `json:"created_at"`
+	ID                string `json:"id"`
+	Phase             string `json:"phase"`
+	ParentChallengeID string `json:"parent_challenge_id"`
+	CookieID          string `json:"cookie_id"`
+	Browser           string `json:"browser,omitempty"`
+	ConfirmURL        string `json:"confirm_url"`
+	AuthorizationURL  string `json:"authorization_url"`
+	// ConnectionRecovery marks a connection link's login, whose confirm stop
+	// checks its person's Speakeasy session instead of a parent challenge's
+	// callback cookie.
+	ConnectionRecovery bool      `json:"connection_recovery,omitempty"`
+	CreatedAt          time.Time `json:"created_at"`
 }
 
 var _ cache.CacheableObject[remoteLoginHop] = (*remoteLoginHop)(nil)
@@ -87,14 +91,15 @@ func (s *Service) startRemoteLogin(ctx context.Context, challengeState AuthnChal
 		return "", false, fmt.Errorf("build remote login confirm URL: %w", err)
 	}
 	state := remoteLoginHop{
-		ID:                uuid.NewString(),
-		Phase:             remoteLoginHopBind,
-		ParentChallengeID: challengeState.ID,
-		CookieID:          parent.BrowserCookieID,
-		Browser:           browser,
-		ConfirmURL:        confirmURL,
-		AuthorizationURL:  authorizationURL,
-		CreatedAt:         time.Now(),
+		ConnectionRecovery: false,
+		ID:                 uuid.NewString(),
+		Phase:              remoteLoginHopBind,
+		ParentChallengeID:  challengeState.ID,
+		CookieID:           parent.BrowserCookieID,
+		Browser:            browser,
+		ConfirmURL:         confirmURL,
+		AuthorizationURL:   authorizationURL,
+		CreatedAt:          time.Now(),
 	}
 	if err := s.remoteLoginHopCache.Store(ctx, state); err != nil {
 		return "", false, fmt.Errorf("store remote login browser hop: %w", err)
@@ -137,7 +142,11 @@ func (s *Service) HandleRemoteLoginBind(w http.ResponseWriter, r *http.Request) 
 		}
 		target = state.ConfirmURL + "?" + url.Values{"state": {state.ID}}.Encode()
 	case remoteLoginHopConfirm:
-		if err := s.validateRemoteLoginHopOwner(r, state); err != nil {
+		validateOwner := s.validateRemoteLoginHopOwner
+		if state.ConnectionRecovery {
+			validateOwner = s.validateConnectionRecoveryHopOwner
+		}
+		if err := validateOwner(r, state); err != nil {
 			return fmt.Errorf("validate login handoff: %w", err)
 		}
 		target = state.AuthorizationURL

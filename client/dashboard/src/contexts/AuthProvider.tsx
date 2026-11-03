@@ -1,3 +1,4 @@
+import { isBillingRecoveryPath } from "@/lib/billing-recovery-path";
 import { FullPageError } from "@/components/full-page-error";
 import { GramLogo } from "@/components/gram-logo";
 import { HatchRule } from "@/components/hatch-rule";
@@ -285,6 +286,11 @@ const AuthHandler = ({ children }: { children: React.ReactNode }) => {
   if (
     session.activeOrganizationId &&
     !session.whitelisted &&
+    !isBillingRecoveryPath(
+      location.pathname,
+      location.search,
+      session.organization?.slug,
+    ) &&
     !isPath(location.pathname, "/explore-demo")
   ) {
     // The switcher wins even on the upgrade gate's own route. Someone with a

@@ -78,6 +78,31 @@ VALUES
   (@id3::uuid, @project_id::uuid, @skill_id3::uuid,
    'plugin', @created_by_user_id::text, now() - interval '9 days');
 
+-- Skills served over MCP: the refunds and triage skills on Acme Support
+-- Tools' own server (its id is the toolset id), triage and the runbook on the
+-- Acme Agent Gateway, and the runbook on the organization gateway. Links
+-- cascade with the project and with the gateway, which both clear every run.
+-- name: SkillsInsertMCPSkillLinks :execrows
+INSERT INTO mcp_skill_links (id, organization_id, project_id, skill_id,
+                             target_kind, mcp_server_id, meta_mcp_server_id,
+                             created_by_user_id, created_at, updated_at)
+VALUES
+  (@server_refunds_id::uuid, @org_id::text, @project_id::uuid, @refunds_skill_id::uuid,
+   'mcp_server', @support_server_id::uuid, NULL,
+   @created_by_user_id::text, now() - interval '6 days', now() - interval '6 days'),
+  (@server_triage_id::uuid, @org_id::text, @project_id::uuid, @triage_skill_id::uuid,
+   'mcp_server', @support_server_id::uuid, NULL,
+   @created_by_user_id::text, now() - interval '6 days', now() - interval '6 days'),
+  (@gateway_triage_id::uuid, @org_id::text, @project_id::uuid, @triage_skill_id::uuid,
+   'meta_mcp_server', NULL, @gateway_id::uuid,
+   @created_by_user_id::text, now() - interval '4 days', now() - interval '4 days'),
+  (@gateway_runbook_id::uuid, @org_id::text, @project_id::uuid, @runbook_skill_id::uuid,
+   'meta_mcp_server', NULL, @gateway_id::uuid,
+   @created_by_user_id::text, now() - interval '4 days', now() - interval '4 days'),
+  (@org_gateway_runbook_id::uuid, @org_id::text, @project_id::uuid, @runbook_skill_id::uuid,
+   'organization_gateway', NULL, NULL,
+   @created_by_user_id::text, now() - interval '2 days', now() - interval '2 days');
+
 -- A reconciled activation on a bulk chat. raw_sha256 is the resolved
 -- version's canonical sha.
 -- name: SkillsInsertActivation :exec

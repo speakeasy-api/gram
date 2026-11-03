@@ -124,9 +124,9 @@ func TestAgentPluginMarketplaceKeepsNativeSources(t *testing.T) {
 	require.Equal(t, "./agent-plugins/tools", sharedCopilot.Plugins[0].Source)
 	require.Empty(t, legacyCopilot.Plugins)
 
-	sharedFingerprint, err := MCPFingerprints([]PluginInfo{compatible}, cfg, true)
+	sharedFingerprint, err := publishMCPFingerprints([]PluginInfo{compatible}, nil, cfg, true)
 	require.NoError(t, err)
-	legacyFingerprint, err := MCPFingerprints([]PluginInfo{incompatible}, cfg, true)
+	legacyFingerprint, err := publishMCPFingerprints([]PluginInfo{incompatible}, nil, cfg, true)
 	require.NoError(t, err)
 	require.NotEqual(t, sharedFingerprint["tools"], legacyFingerprint["tools"])
 	// The shared fingerprint follows the Copilot manifest, so flipping a plugin's

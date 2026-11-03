@@ -819,17 +819,22 @@ func TestRecord_AnExchangeStartedBeforeABroadRevocationIsFencedOut(t *testing.T)
 	t.Parallel()
 
 	ctx, f := newSignInFixture(t)
-	startedBefore := time.Now()
-	_, err := signins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, signins.RevokeReasonSignOutEverywhere)
+	revoked, err := signins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, signins.RevokeReasonSignOutEverywhere)
 	require.NoError(t, err)
 
+	// Anchor fixture times to the database cutoff, not the host clock.
+	startedBefore := revoked.CutoffAt.Add(-time.Microsecond)
 	late, err := signins.Record(ctx, f.ti.conn, f.signInParams("session_"+uuid.NewString(), startedBefore))
 	require.NoError(t, err)
 	require.True(t, late.Revoked, "a sign-in in flight during the revocation is recorded revoked")
 	_, err = createLinkedSession(ctx, f, urn.NewUserSubject(f.userID), late.ID.UUID)
 	require.ErrorIs(t, err, pgx.ErrNoRows)
 
-	fresh, err := signins.Record(ctx, f.ti.conn, f.signInParams("session_"+uuid.NewString(), time.Now()))
+	atCutoff, err := signins.Record(ctx, f.ti.conn, f.signInParams("session_"+uuid.NewString(), revoked.CutoffAt))
+	require.NoError(t, err)
+	require.True(t, atCutoff.Revoked, "the cutoff itself remains fenced")
+
+	fresh, err := signins.Record(ctx, f.ti.conn, f.signInParams("session_"+uuid.NewString(), revoked.CutoffAt.Add(time.Microsecond)))
 	require.NoError(t, err)
 	require.False(t, fresh.Revoked, "a later sign-in works")
 	_, err = createLinkedSession(ctx, f, urn.NewUserSubject(f.userID), fresh.ID.UUID)
@@ -1113,18 +1118,20 @@ func TestRecord_ALaterExchangeRevealingAnEarlierAuthenticationFencesTheRow(t *te
 	t.Parallel()
 
 	ctx, f := newSignInFixture(t)
-	_, err := signins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, signins.RevokeReasonSignOutEverywhere)
+	revoked, err := signins.RevokeUser(ctx, f.ti.conn, []string{f.orgID}, f.userID, signins.RevokeReasonSignOutEverywhere)
 	require.NoError(t, err)
 
 	workosSessionID := "session_" + uuid.NewString()
-	unknown := f.signInParams(workosSessionID, time.Now())
+	// Anchor fixture times to the database cutoff, not the host clock.
+	afterCutoff := revoked.CutoffAt.Add(time.Microsecond)
+	unknown := f.signInParams(workosSessionID, afterCutoff)
 	unknown.Evidence.IDPAuthenticatedAt = time.Time{}
 	first, err := signins.Record(ctx, f.ti.conn, unknown)
 	require.NoError(t, err)
 	require.False(t, first.Revoked, "without the real authentication time the exchange alone is after the cutoff")
 
-	revealed := f.signInParams(workosSessionID, time.Now())
-	revealed.Evidence.IDPAuthenticatedAt = time.Now().Add(-time.Hour)
+	revealed := f.signInParams(workosSessionID, afterCutoff)
+	revealed.Evidence.IDPAuthenticatedAt = revoked.CutoffAt.Add(-time.Hour)
 	again, err := signins.Record(ctx, f.ti.conn, revealed)
 	require.NoError(t, err)
 	require.Equal(t, first.ID, again.ID)

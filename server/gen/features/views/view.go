@@ -78,6 +78,10 @@ type ProductFeaturesView struct {
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent *bool
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool
 }
 
 var (
@@ -107,6 +111,7 @@ var (
 			"organization_gateway_disabled",
 			"code_mode_enabled",
 			"device_agent",
+			"upstream_auth_enforced",
 		},
 	}
 )

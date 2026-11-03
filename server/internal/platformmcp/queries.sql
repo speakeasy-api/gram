@@ -842,6 +842,15 @@ WHERE id = @id
   AND project_id = @project_id
   AND deleted IS FALSE;
 
+-- name: GetPlatformMCPCatalogRegistrationProject :one
+-- The project a live registration belongs to, so a caller can name the
+-- server it added by registration ID alone.
+SELECT project_id
+FROM platform_mcp_catalog_registrations
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE;
+
 -- name: ListPlatformMCPCatalogRegistrationsByRemoteMcpServer :many
 SELECT id, user_session_issuer_id
 FROM platform_mcp_catalog_registrations
@@ -2220,7 +2229,8 @@ SELECT
     project.id AS project_id,
     project.name AS project_name,
     project.slug AS project_slug,
-    registration.mcp_server_id
+    registration.mcp_server_id,
+    COALESCE(mcp_server.name, mcp_server.slug, '')::text AS mcp_server_name
 FROM platform_mcp_onboarding_workflows AS workflow
 JOIN projects AS project
   ON project.id = workflow.selected_project_id
@@ -2231,12 +2241,44 @@ JOIN platform_mcp_catalog_registrations AS registration
  AND registration.organization_id = workflow.organization_id
  AND registration.project_id = project.id
  AND registration.deleted IS FALSE
+LEFT JOIN mcp_servers AS mcp_server
+  ON mcp_server.id = registration.mcp_server_id
+ AND mcp_server.project_id = registration.project_id
 WHERE workflow.organization_id = @organization_id
   AND workflow.initiating_subject_urn = @initiating_subject_urn
   AND workflow.status = 'active'
   AND workflow.expires_at > clock_timestamp()
   AND registration.status = 'registered'
   AND registration.mcp_server_id IS NOT NULL;
+
+-- name: GetPlatformMCPDistributionTargetByServer :one
+-- Resolves the MCP server a distribution names, by its ID as find_mcp reports
+-- it, rather than the one the onboarding workflow last selected. Only a server
+-- added through Platform MCP setup has a registration, and so readiness evidence
+-- that distribution can require.
+SELECT
+    registration.id AS registration_id,
+    project.id AS project_id,
+    project.name AS project_name,
+    project.slug AS project_slug,
+    registration.mcp_server_id,
+    COALESCE(mcp_server.name, mcp_server.slug, '')::text AS mcp_server_name
+FROM platform_mcp_catalog_registrations AS registration
+JOIN projects AS project
+  ON project.id = registration.project_id
+ AND project.organization_id = registration.organization_id
+ AND project.deleted IS FALSE
+JOIN mcp_servers AS mcp_server
+  ON mcp_server.id = registration.mcp_server_id
+ AND mcp_server.project_id = registration.project_id
+ AND mcp_server.deleted IS FALSE
+WHERE registration.organization_id = @organization_id
+  AND project.slug = @project_slug
+  AND registration.mcp_server_id = @mcp_server_id
+  AND registration.status = 'registered'
+  AND registration.deleted IS FALSE
+ORDER BY registration.created_at DESC, registration.id DESC
+LIMIT 1;
 
 -- name: HasPlatformMCPOrganizationSetupComplete :one
 -- Setup completion counts an attached distribution to any live plugin. A
@@ -2815,7 +2857,7 @@ FROM (
       AND projects.deleted IS FALSE
       AND meta_mcp_servers.deleted IS FALSE
 ) AS candidates
-WHERE candidates.id::text = @wanted::text
+WHERE candidates.id::text = lower(@wanted::text)
    OR (candidates.slug <> '' AND lower(candidates.slug) = lower(@wanted::text))
    OR lower(candidates.name) = lower(@wanted::text)
 ORDER BY candidates.name ASC, candidates.id ASC
@@ -3008,6 +3050,7 @@ SELECT
     p.slug,
     p.description,
     p.auto_created,
+    p.auto_sync_enabled,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -3320,6 +3363,7 @@ SELECT
     p.slug,
     p.description,
     p.auto_created,
+    p.auto_sync_enabled,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -4087,3 +4131,42 @@ SELECT n.id, n.seq, n.created_at, n.role, n.generation,
                ORDER BY cp.provider, cp.provider_user_id, cp.id LIMIT 5) cp
        ), '[]')::jsonb AS participants
 FROM neighbors n ORDER BY n.seq;
+
+-- name: TryAcquireInboundEMAProviderLock :one
+-- Serialize finding or creating an organization's identity provider record
+-- for one issuer URL, so concurrent trusts never create two. Non-blocking: a
+-- waiter would hold a pooled connection the holder's nested calls need.
+SELECT pg_try_advisory_lock(hashtextextended('inbound-ema-provider:' || @organization_id::text || ':' || @issuer::text, 0));
+
+-- name: ReleaseInboundEMAProviderLock :one
+SELECT pg_advisory_unlock(hashtextextended('inbound-ema-provider:' || @organization_id::text || ':' || @issuer::text, 0)) AS unlocked;
+
+-- name: ListHeadlessCallerClients :many
+-- The live OAuth clients that sign in through one sign-in, in the
+-- organization: its own, or one of a live project's.
+SELECT c.id, c.client_name
+FROM user_session_clients AS c
+LEFT JOIN projects AS p
+  ON p.id = c.project_id
+WHERE c.user_session_issuer_id = @user_session_issuer_id
+  AND c.deleted IS FALSE
+  AND (
+    (c.project_id IS NULL AND c.organization_id = @organization_id::text)
+    OR (p.organization_id = @organization_id::text AND p.deleted IS FALSE)
+  )
+ORDER BY c.client_name, c.id
+LIMIT 500;
+
+-- name: GetPlatformMCPRegistrationLogo :one
+-- The stored logo of a registration's MCP server, for its result card. Every
+-- join is pinned to the registration's organization and project.
+SELECT a.url, a.content_type, a.content_length
+FROM platform_mcp_catalog_registrations r
+JOIN mcp_metadata m ON m.mcp_server_id = r.mcp_server_id AND m.project_id = r.project_id
+JOIN assets a ON a.id = m.logo_id AND a.project_id = r.project_id
+WHERE r.id = @registration_id
+  AND r.organization_id = @organization_id
+  AND r.project_id = @project_id
+  AND r.deleted IS FALSE
+  AND a.kind = 'image'
+  AND a.deleted IS FALSE;

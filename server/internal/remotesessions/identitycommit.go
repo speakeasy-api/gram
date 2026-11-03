@@ -69,9 +69,10 @@ var (
 	ErrIdentityInvariant = errors.New("identity: invariant violation")
 
 	// ErrIdentityOrgWideBinding marks a binding write that would reach beyond
-	// the scope's project: linking or unlinking an organization-owned client on
-	// an organization-level user session issuer, whose binding every project's
-	// MCP servers on that issuer share.
+	// the scope's project by an actor without organization admin: linking or
+	// unlinking an organization-owned client on an organization-level user
+	// session issuer, whose binding every project's MCP servers on that issuer
+	// share.
 	ErrIdentityOrgWideBinding = errors.New("identity: organization-wide binding change")
 
 	// ErrIdentityStepOrder marks a commit step run out of order, which is a
@@ -81,7 +82,7 @@ var (
 
 // OrgWideBindingMessage is the caller-facing message for
 // ErrIdentityOrgWideBinding.
-const OrgWideBindingMessage = "this MCP server shares an organization identity binding; change it from the organization's identity provider settings"
+const OrgWideBindingMessage = "this MCP server shares its sign-in client with MCP servers in other projects; changing it needs organization admin access"
 
 const (
 	agentBindingsOnReplacedClientMessage = "agents are still bound to this MCP server through its current client; unlink them before changing its Remote Identity Provider"
@@ -175,6 +176,11 @@ type IdentityScope struct {
 	// ActorIsPlatformAdmin gates the registration paths that reach a private
 	// network. mcp:write on one server is not enough to borrow a tunnel.
 	ActorIsPlatformAdmin bool
+
+	// ActorIsOrganizationAdmin gates linking and unlinking organization-owned
+	// clients on an organization-level user session issuer, which every
+	// project's servers on that issuer share.
+	ActorIsOrganizationAdmin bool
 }
 
 // IdentityPlan is what a caller wants configured. It holds only the choices
@@ -751,13 +757,18 @@ func (c *IdentityCommit) capabilities() providerCapabilities {
 	}
 }
 
-// Begin opens the commit's transaction. The caller may take its own locks on
-// tx.DB() before Lock; defer tx.Rollback, a no-op after Commit.
+// Begin opens the transaction and locks the complete source/server scope before
+// callers can lock an issuer or mutate OAuth associations. Defer tx.Rollback.
 func (c *IdentityCommit) Begin(ctx context.Context) (*IdentityTx, error) {
 	tx, err := c.committer.db.Begin(ctx)
 	if err != nil {
 		c.recordOrphanedRegistration(ctx)
 		return nil, fmt.Errorf("begin identity transaction: %w", err)
+	}
+	if err := authclientbackfill.LockEMAWriterScope(ctx, tx, c.plan.Scope.OrganizationID, []uuid.UUID{c.plan.Scope.ProjectID}); err != nil {
+		_ = tx.Rollback(context.WithoutCancel(ctx))
+		c.recordOrphanedRegistration(ctx)
+		return nil, fmt.Errorf("lock identity writer scope: %w", err)
 	}
 	return &IdentityTx{commit: c, tx: tx, q: repo.New(tx), committed: false}, nil
 }
@@ -956,14 +967,11 @@ func (c *IdentityCommit) Bind(ctx context.Context, tx *IdentityTx, reg Registrat
 		if associated == 0 {
 			return identityRefusal(ErrIdentityConflict, nil, "the MCP server or its client changed while saving; retry")
 		}
-		// This server may put the client on a second source, which makes the
-		// credential headers it copied from the first no longer its to send.
-		// Last in this transaction and copies only, so the only rows it locks
-		// are the copies themselves: the remote session client rows written
-		// above are locked by MCP server deletion before it reaches the same
-		// copies, and taking a source lock here would invert that order.
-		if err := authclientbackfill.SyncServerDerivedCopies(ctx, tx.tx, c.plan.Scope.OrganizationID, c.plan.MCPServerID); err != nil {
-			return fmt.Errorf("sync mcp server auth client headers: %w", err)
+		// Begin acquired the full writer scope before the binding/association
+		// mutations. Synchronize typed clients and both OAuth and EMA copies
+		// under those locks; taking that scope here would be too late.
+		if err := authclientbackfill.SyncServerAssociations(ctx, tx.tx, c.plan.Scope.OrganizationID, c.plan.MCPServerID); err != nil {
+			return fmt.Errorf("sync mcp server auth clients: %w", err)
 		}
 	}
 	c.result = IdentityResult{
@@ -1070,14 +1078,15 @@ func listUserSessionIssuerClients(ctx context.Context, q *repo.Queries, projectI
 }
 
 // refuseOrgWideBinding refuses to link or unlink client when that binding is
-// shared across projects. A project-owned client is invisible to other
-// projects, so its binding only ever changes the scope's own project.
+// shared across projects and the actor is not an organization admin. A
+// project-owned client is invisible to other projects, so its binding only
+// ever changes the scope's own project.
 func (c *IdentityCommit) refuseOrgWideBinding(client repo.RemoteSessionClient) error {
-	return refuseOrgWideBinding(c.userIssuerOrgLevel, client.ProjectID)
+	return refuseOrgWideBinding(c.userIssuerOrgLevel, c.plan.Scope.ActorIsOrganizationAdmin, client.ProjectID)
 }
 
-func refuseOrgWideBinding(userIssuerOrgLevel bool, clientProjectID uuid.NullUUID) error {
-	if userIssuerOrgLevel && !clientProjectID.Valid {
+func refuseOrgWideBinding(userIssuerOrgLevel, actorIsOrganizationAdmin bool, clientProjectID uuid.NullUUID) error {
+	if userIssuerOrgLevel && !clientProjectID.Valid && !actorIsOrganizationAdmin {
 		return identityRefusal(ErrIdentityOrgWideBinding, nil, OrgWideBindingMessage)
 	}
 	return nil
@@ -1088,7 +1097,6 @@ func refuseOrgWideBinding(userIssuerOrgLevel bool, clientProjectID uuid.NullUUID
 // unaudited.
 func refuseLiveAgentBindings(ctx context.Context, q *repo.Queries, scope IdentityScope, clientID, userIssuerID uuid.UUID) error {
 	live, err := q.HasLivePrincipalRemoteSessionBindingsForClientBinding(ctx, repo.HasLivePrincipalRemoteSessionBindingsForClientBindingParams{
-		ProjectID:             scope.ProjectID,
 		OrganizationID:        scope.OrganizationID,
 		RemoteSessionClientID: clientID,
 		UserSessionIssuerID:   userIssuerID,

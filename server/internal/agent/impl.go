@@ -52,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/plugins/installmode"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
+	"github.com/speakeasy-api/gram/server/internal/sessionhandoff"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -100,6 +101,9 @@ type Service struct {
 	// stateReportLimiter bounds reportState writes per device. Nil leaves it
 	// unlimited.
 	stateReportLimiter *ratelimit.Limiter
+	// newStateReportLimiter bounds, per organization, the reports that add a
+	// row. Nil leaves it unlimited.
+	newStateReportLimiter *ratelimit.Limiter
 
 	// crashReportLimiter bounds reportCrash batches per device. Nil leaves it
 	// unlimited.
@@ -163,6 +167,7 @@ func NewService(
 		crashReports:                 nil,
 		crashReportCredentialLimiter: nil,
 		stateReportLimiter:           nil,
+		newStateReportLimiter:        nil,
 	}
 }
 
@@ -185,7 +190,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	srv.Mount(mux, server)
 	// Public capability-URL route for minted session handoffs (see
 	// handoffs.go): unauthenticated by design, the token is the credential.
-	o11y.AttachHandler(mux, http.MethodGet, "/shared/handoffs/{token}", oops.ErrHandle(service.logger, service.ServeSessionHandoff).ServeHTTP)
+	o11y.AttachHandler(mux, http.MethodGet, sessionhandoff.PublicRoutePattern, oops.ErrHandle(service.logger, service.ServeSessionHandoff).ServeHTTP)
 }
 
 // agentPrincipalMethods are the only methods agent-principal keys and

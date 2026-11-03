@@ -8,6 +8,7 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"net/url"
+	"strings"
 	"sync"
 	"testing"
 	"time"
@@ -173,7 +174,8 @@ func TestPlatformMCPSkillsToolsAuthorAndDistributeEndToEnd(t *testing.T) {
 	written, err := mcpskills.NewResolver(testenv.NewLogger(t), fixture.conn).RecordRead(ctx, mcpskills.Read{
 		Entry: mcpskills.Entry{
 			SkillID: uuid.MustParse(created.Skill.ID), ProjectID: fixture.project.ID, ProjectSlug: fixture.project.Slug,
-			VersionID: uuid.MustParse(revised.Version.ID), Name: "add-mcp", Content: "", RawSHA256: "", Frontmatter: nil,
+			VersionID: uuid.MustParse(revised.Version.ID),
+			Name:      "add-mcp", Content: "", RawSHA256: "", Frontmatter: nil,
 		},
 		UserID: "", SessionID: "mcp-session", SeenAt: readAt,
 	})
@@ -970,6 +972,10 @@ func TestPostgresSkillMCPTargetsResolvesPastTheLookupCap(t *testing.T) {
 	byID, err := targets.SkillMCPTargets(ctx, principal.OrganizationID, project.ID, SkillMCPTargetServer, last[0].ID)
 	require.NoError(t, err)
 	require.Equal(t, last, byID)
+
+	byUpperID, err := targets.SkillMCPTargets(ctx, principal.OrganizationID, project.ID, SkillMCPTargetGateway, strings.ToUpper(gatewayID.String()))
+	require.NoError(t, err)
+	require.Equal(t, gateways, byUpperID, "an id matches whatever its letter case")
 
 	wrongKind, err := targets.SkillMCPTargets(ctx, principal.OrganizationID, project.ID, SkillMCPTargetServer, "Team Gateway")
 	require.NoError(t, err)

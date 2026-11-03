@@ -3658,18 +3658,19 @@ FOR UPDATE;
 -- name: HasLivePrincipalRemoteSessionBindingsForClientBinding :one
 -- Report whether any unrevoked agent attachment goes through a client's binding
 -- to a user session issuer, which deleting that binding would cascade-delete.
--- Only the caller's project can hold them: the caller refuses an
--- organization-wide binding, and any other binding has a project-owned client
--- or user session issuer, which pins every attachment through it to that
--- project.
+-- Organization-wide: an organization admin can change an organization-owned
+-- client's binding to an organization-level issuer, and attachments through it
+-- can live in any project.
 SELECT EXISTS (
   SELECT 1
-  FROM principal_remote_session_bindings
-  WHERE project_id = @project_id
-    AND organization_id = @organization_id
-    AND remote_session_client_id = @remote_session_client_id
-    AND user_session_issuer_id = @user_session_issuer_id
-    AND revoked_at IS NULL
+  FROM principal_remote_session_bindings AS b
+  JOIN projects AS bp ON bp.id = b.project_id AND bp.organization_id = b.organization_id AND bp.deleted IS FALSE
+  JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
+    AND a.deleted IS FALSE AND a.revoked_at IS NULL
+  WHERE b.organization_id = @organization_id
+    AND b.remote_session_client_id = @remote_session_client_id
+    AND b.user_session_issuer_id = @user_session_issuer_id
+    AND b.revoked_at IS NULL
 );
 
 -- name: ListOrganizationRemoteSessionsByClientID :many
@@ -5110,9 +5111,8 @@ WHERE id = @id AND project_id = @project_id AND organization_id = @organization_
   AND state = 'in_progress';
 
 -- name: ListEMAChainingBindings :many
--- Ready bindings whose canonical resource names an endpoint's upstream.
--- Endpoint upstreams are recorded without a trailing slash while a binding
--- keeps the exact RFC 9728 identifier, so both compare under the routing trim.
+-- Ready bindings whose exact resource names the resolved authorization resource.
+-- RFC 8707 resource identity preserves trailing slashes; callers must not trim.
 -- Unlinked tombstones and unfinished preparations never select or conflict.
 -- A tunneled upstream passes its own derived issuer: its resource identifier is
 -- operator supplied, so only a binding for that issuer may serve it. A caller
@@ -5121,7 +5121,7 @@ WHERE id = @id AND project_id = @project_id AND organization_id = @organization_
 SELECT * FROM remote_session_ema_bindings
 WHERE project_id = @project_id AND organization_id = @organization_id
   AND user_session_issuer_id = @user_session_issuer_id
-  AND rtrim(resource, '/') = @upstream_resource::text
+  AND resource = @upstream_resource::text
   AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
   AND (sqlc.narg('remote_session_client_id')::uuid IS NULL OR remote_session_client_id = sqlc.narg('remote_session_client_id')::uuid)
   AND state = 'ready' AND remote_session_client_id IS NOT NULL
@@ -5136,7 +5136,7 @@ SELECT * FROM remote_session_ema_bindings
 WHERE project_id = @project_id AND organization_id = @organization_id
   AND user_session_issuer_id = @user_session_issuer_id
   AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
-  AND rtrim(resource, '/') = @upstream_resource::text
+  AND resource = @upstream_resource::text
   AND state IS DISTINCT FROM 'unlinked'
 ORDER BY id;
 
