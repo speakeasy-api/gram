@@ -15,7 +15,7 @@ import {
 } from "./chatparticipant.js";
 
 /**
- * Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it.
+ * Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it, and only while Business Memory Extraction is on for the organization.
  */
 export const MemoryState = {
   Remembered: "remembered",
@@ -24,7 +24,7 @@ export const MemoryState = {
   Personal: "personal",
 } as const;
 /**
- * Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it.
+ * Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it, and only while Business Memory Extraction is on for the organization.
  */
 export type MemoryState = OpenEnum<typeof MemoryState>;
 
@@ -78,7 +78,7 @@ export type ChatOverview = {
    */
   litellmProxied?: boolean | undefined;
   /**
-   * Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it.
+   * Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it, and only while Business Memory Extraction is on for the organization.
    */
   memoryState?: MemoryState | undefined;
   /**
