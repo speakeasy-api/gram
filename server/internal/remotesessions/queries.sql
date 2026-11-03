@@ -1923,11 +1923,11 @@ SELECT
       )
     )::boolean                             AS metadata_needs_reprojection,
     i.registration_endpoint                AS issuer_registration_endpoint,
-    COALESCE(c.organization_id, i.organization_id, p.organization_id, '')::text AS owner_organization_id,
-    COALESCE(c.project_id, i.project_id)   AS owner_project_id
+    c.client_id_metadata_uri               AS client_id_metadata_uri,
+    c.identity_provider_connection_id      AS identity_provider_connection_id,
+    c.credential_owner                     AS credential_owner
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
-LEFT JOIN projects AS p ON p.id = COALESCE(c.project_id, i.project_id)
 WHERE c.id = @id
   AND c.deleted IS FALSE
   AND i.deleted IS FALSE;

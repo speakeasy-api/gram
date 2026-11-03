@@ -108,7 +108,7 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 		organizationGateway: true,
 		organizationID:      organization.ID,
 		tokens:              nil,
-		projectTokens:       s.newOrganizationGatewayTokens(resolved, urn.NewUserSubject(userID)),
+		projectTokens:       s.newOrganizationGatewayTokens(resolved, urn.NewUserSubject(userID), nil),
 		// Credential choices belong to one gateway connection; Platform MCP
 		// holds none, so each member routes through its project's clients.
 		memberChoices:       nil,

@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -177,7 +178,7 @@ func (p *RemoteMCPReadinessProber) ProbeCatalogReadiness(ctx context.Context, pr
 	if len(clients) != 1 {
 		return p.result(principal, registrationID, ReadinessNeedsConfiguration, "multiple_upstream_identity_providers", remotesessions.ResolvedAuthorization{}, "no_client"), nil
 	}
-	authorization, err := p.sessions.ResolveAuthorization(ctx, projectID, principal.OrganizationID, userSessionIssuerID, clients[0].RemoteSessionIssuerID, urn.NewUserSubject(principal.UserID), remote.Url)
+	authorization, err := p.sessions.ResolveAuthorization(ctx, remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(principal.OrganizationID, projectID, mcpconnectionattempts.AppFirstParty)), projectID, principal.OrganizationID, userSessionIssuerID, clients[0].RemoteSessionIssuerID, urn.NewUserSubject(principal.UserID), remote.Url)
 	if errors.Is(err, remotesessions.ErrNoRemoteSessionClientBinding) {
 		return p.result(principal, registrationID, ReadinessNeedsConfiguration, "upstream_identity_provider_not_configured", remotesessions.ResolvedAuthorization{RemoteSessionIssuerID: clients[0].RemoteSessionIssuerID}, "no_client"), nil
 	}

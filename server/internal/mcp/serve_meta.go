@@ -727,7 +727,8 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 			return ctx, nil, fmt.Errorf("authenticate organization gateway: %w", err)
 		}
 		ctx = newCtx
-		gateProjectTokens = s.newOrganizationGatewayTokens(authentication.endpoint, authentication.subject)
+		authentication.skippedUpstreams = new(remotesessions.SkippedClients)
+		gateProjectTokens = s.newOrganizationGatewayTokens(authentication.endpoint, authentication.subject, authentication.skippedUpstreams)
 		gateMemberChoices, err = s.newMemberChoices(ctx, authentication)
 		if err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load upstream client choices").LogError(ctx, logger)
@@ -764,7 +765,8 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 			// Proxied members resolve only their chosen clients, so the
 			// issuer's other clients resolve lazily, for hosted members that
 			// need them, and an unrelated broken one blocks nothing else.
-			gateProjectTokens = s.newOrganizationGatewayTokens(authentication.endpoint, authentication.subject)
+			authentication.skippedUpstreams = new(remotesessions.SkippedClients)
+		gateProjectTokens = s.newOrganizationGatewayTokens(authentication.endpoint, authentication.subject, authentication.skippedUpstreams)
 		} else {
 			tokens, err := s.resolveIssuerGateAccessTokens(ctx, w, authentication)
 			if err != nil {

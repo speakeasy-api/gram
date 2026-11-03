@@ -304,6 +304,9 @@ func resourceAmongSiblings(attachments map[uuid.UUID][]remotesessions_repo.ListO
 	return resource
 }
 
+// errRefreshTunnelTransport marks a refresh with no transport to its identity provider's tunnel.
+var errRefreshTunnelTransport = errors.New("remotesessions: no tunnel transport for refresh")
+
 var errRefreshNotApplied = errors.New("remotesessions: refreshed tokens matched no active session")
 
 // Ordering is the invariant, guarded by TestRefreshTimingInvariant. Invert it
@@ -337,8 +340,8 @@ func refreshLockKey(subject urn.SessionSubject, clientID uuid.UUID) string {
 // binding when one was captured at code exchange. Rows minted before the
 // resource column existed fall back to callerResource, and then to the
 // client's own derivation — one derivation rule for every refresh path.
-// trigger names the caller on the upstream-refresh metric. scope is what the
-// connection row is filed under; a zero scope files it under the client's owner.
+// trigger names the caller on the upstream-refresh metric; attribution says
+// where its connection row goes.
 //
 // Every call records exactly one upstream-refresh metric sample. A non-nil
 // error is always a *RefreshError wrapping either an operator-actionable
@@ -346,7 +349,7 @@ func refreshLockKey(subject urn.SessionSubject, clientID uuid.UUID) string {
 // A definitive invalid_grant clears only the refresh grant: the existing
 // access token remains usable until its own known expiry. This keeps
 // proactive refresh failure from forcing a reconnect.
-func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_repo.RemoteSession, callerResource string, trigger remotesessionmetrics.RefreshTrigger, scope mcpconnectionattempts.Scope) (RefreshResult, error) {
+func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_repo.RemoteSession, callerResource string, trigger remotesessionmetrics.RefreshTrigger, attribution RefreshAttribution) (RefreshResult, error) {
 	var zero RefreshResult
 	q := remotesessions_repo.New(s.db)
 
@@ -362,7 +365,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 		err = refreshClientLoadError(err)
 		outcome := refreshOutcomeForError(ctx, err)
 		s.metrics.Record(ctx, "", trigger, outcome)
-		s.recordRefresh(ctx, scope, sess, client, trigger, outcome, err)
+		s.recordRefresh(ctx, attribution, sess, client, trigger, outcome, err)
 		return zero, &RefreshError{IssuerURL: "", Outcome: outcome, err: err}
 	}
 	s.issuerMetadata.NoteUse(ctx, issuerUseFromClientRow(client))
@@ -376,7 +379,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 	if err != nil {
 		outcome := refreshOutcomeForError(ctx, err)
 		s.metrics.Record(ctx, issuerURL, trigger, outcome)
-		s.recordRefresh(ctx, scope, sess, client, trigger, outcome, err)
+		s.recordRefresh(ctx, attribution, sess, client, trigger, outcome, err)
 		var tokenErr *TokenRefreshError
 		if postLockClient != nil && errors.As(err, &tokenErr) {
 			noteTokenEndpointMissing(ctx, s.issuerMetadata, *postLockClient, tokenErr.statusCode, tokenErr.code != "")
@@ -397,7 +400,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 	}
 	result.IssuerURL = issuerURL
 	s.metrics.Record(ctx, issuerURL, trigger, result.Outcome)
-	s.recordRefresh(ctx, scope, sess, client, trigger, result.Outcome, nil)
+	s.recordRefresh(ctx, attribution, sess, client, trigger, result.Outcome, nil)
 	return result, nil
 }
 

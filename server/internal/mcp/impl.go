@@ -1510,7 +1510,9 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	hostedCoverageRecorded := false
 	if isHostedToolsCall {
 		if err := s.enforceHostedToolsCall(ctx, toolset.OrganizationID, cfg.mcpServerID); err != nil {
-			s.connections.Once(ctx, mcpconnectionattempts.ServerScope(toolset.OrganizationID, toolset.ProjectID, *cfg.mcpServerID, requestApp(ctx)), mcpconnectionattempts.StepMCPRequest, killswitchHappened(err), callerSubject(ctx))
+			if !errors.Is(ctx.Err(), context.Canceled) {
+				s.connections.Once(ctx, mcpconnectionattempts.ServerScope(toolset.OrganizationID, toolset.ProjectID, *cfg.mcpServerID, requestApp(ctx)), mcpconnectionattempts.StepMCPRequest, killswitchHappened(err), callerSubject(ctx))
+			}
 			return writeMCPError(ctx, s.logger, w, req.ID, protocolVersion.InEffect, err)
 		}
 		hostedCoverageRecorded = true
@@ -1735,7 +1737,7 @@ func (s *Service) authorizeHostedRequest(ctx context.Context, toolset *toolsets_
 			ctx = prepared
 			if err := s.authz.Require(ctx, connect); err != nil {
 				denied := mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, cfg.rbacResourceID.String(), toolset.Name))
-				if serverAccessDenied(denied) {
+				if mcpaccess.IsServerPermissionDenied(denied) {
 					s.connections.Once(ctx, mcpconnectionattempts.ToolsetScope(toolset.OrganizationID, toolset.ProjectID, toolset.ID, requestApp(ctx)), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess, callerSubject(ctx))
 				}
 				return ctx, false, fmt.Errorf("authorize MCP server access: %w", denied)

@@ -137,7 +137,7 @@ func (s *Service) connectionRecoveryError(ctx context.Context, authentication *i
 		"Send this link privately to that person only; it works only for them, signed in to Speakeasy, and expires in 15 minutes. "+
 		"If you cannot reach them privately, do not post the link: ask them to open Speakeasy and %s %s instead.\n\n%s",
 		heading, action, name, action, name, link)
-	s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: represented user's connection "+action+" required", issuerGateReasonInvalidRemoteSession)
+	s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: represented user's connection "+action+" required", issuerGateReasonInvalidRemoteSession, mcpconnectionattempts.CodeInvalidRemoteSession)
 	// Not logged: the message carries the link, and the rejection above is
 	// already recorded without it.
 	return oops.E(oops.CodeFailedPrecondition, nil, "%s", message), true

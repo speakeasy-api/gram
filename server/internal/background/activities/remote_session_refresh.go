@@ -127,7 +127,7 @@ func (r *RemoteSessionRefresh) Do(ctx context.Context, input RefreshRemoteSessio
 	sess := candidate.RemoteSession
 
 	scope := mcpconnectionattempts.ProviderSessionScope(input.OrganizationID, candidate.ClientProjectID.UUID, mcpconnectionattempts.AppBackground)
-	result, err := r.refresher.RefreshNow(ctx, sess, "", remotesessionmetrics.RefreshTriggerScheduled, scope)
+	result, err := r.refresher.RefreshNow(ctx, sess, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshIn(scope))
 	if err != nil {
 		// The issuer URL and outcome are the ones the upstream-refresh metric
 		// recorded, so these lines join to its series; the error code is the

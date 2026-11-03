@@ -241,6 +241,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		}
 		result, refreshErr := s.remoteChallengeMgr.RefreshRemoteSession(
 			ctx,
+			consentRefreshAttribution(endpoint, challengeState),
 			subject,
 			endpoint.clientProjectID(*client),
 			endpoint.OrganizationID,

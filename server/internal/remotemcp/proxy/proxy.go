@@ -373,6 +373,10 @@ type Proxy struct {
 	// [ToolsCallFailureInterceptor].
 	ToolsCallFailureInterceptors []ToolsCallFailureInterceptor
 
+	// ToolsCallRefusalInterceptors run once for a "tools/call" a request or
+	// response interceptor refused. See [ToolsCallRefusalInterceptor].
+	ToolsCallRefusalInterceptors []ToolsCallRefusalInterceptor
+
 	// ToolsListRequestInterceptors run for inbound "tools/list" JSON-RPC
 	// requests only, after the generic UserRequestInterceptors chain has
 	// completed. Non-tools/list requests skip this loop entirely.
@@ -1799,6 +1803,7 @@ func (p *Proxy) runToolsCallRequestInterceptorChain(ctx context.Context, call *T
 			span.SetStatus(codes.Error, err.Error())
 			span.RecordError(err, trace.WithStackTrace(true))
 			span.End()
+			p.runToolsCallRefusalInterceptors(ctx, err)
 			return p.wrapInterceptorRejection(iterCtx, "tools/call request", interceptor.Name(), err)
 		}
 		span.End()
@@ -1818,11 +1823,20 @@ func (p *Proxy) runToolsCallResponseInterceptors(ctx context.Context, call *Tool
 			span.SetStatus(codes.Error, err.Error())
 			span.RecordError(err, trace.WithStackTrace(true))
 			span.End()
+			p.runToolsCallRefusalInterceptors(ctx, err)
 			return p.wrapInterceptorRejection(iterCtx, "tools/call response", interceptor.Name(), err)
 		}
 		span.End()
 	}
 	return nil
+}
+
+// runToolsCallRefusalInterceptors invokes each configured
+// ToolsCallRefusalInterceptor in order. They observe only.
+func (p *Proxy) runToolsCallRefusalInterceptors(ctx context.Context, refusal error) {
+	for _, interceptor := range p.ToolsCallRefusalInterceptors {
+		interceptor.InterceptToolsCallRefusal(ctx, refusal)
+	}
 }
 
 // runToolsCallFailureInterceptors invokes each configured

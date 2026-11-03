@@ -217,7 +217,7 @@ func (s *Service) resolveMemberTokens(ctx context.Context, gate *metaGateContext
 	// inputs. Proxied members must never turn a missing attachment into an
 	// anonymous upstream request.
 	if member.backend != metaMemberBackendProxied {
-		tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, member.projectID, gate.organizationID, server.UserSessionIssuerID.UUID, urn.NewAgentSubject(gate.agentID))
+		tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshIn(gate.connectionScope(ctx)), member.projectID, gate.organizationID, server.UserSessionIssuerID.UUID, urn.NewAgentSubject(gate.agentID))
 		if err != nil {
 			return nil, fmt.Errorf("resolve hosted member credentials: %w", err)
 		}
@@ -272,7 +272,7 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 	if connection.authorizer {
 		subject = urn.NewUserSubject(connection.owner)
 	}
-	resolved, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, member.projectID, gate.organizationID, issuer, subject, clientID, false)
+	resolved, err := s.upstreamTokenSource().ResolveClientAccessTokens(ctx, remotesessions.RefreshIn(gate.connectionScope(ctx)), member.projectID, gate.organizationID, issuer, subject, clientID, false)
 	if err != nil {
 		return nil, agentMemberCredentialError(member)
 	}

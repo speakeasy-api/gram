@@ -19,9 +19,9 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
-	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -217,6 +217,7 @@ func (a *Adapter) ProbeReadiness(ctx context.Context, request platformmcp.Provid
 
 	authorization, err := a.sessions.ResolveAuthorization(
 		ctx,
+		remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(request.OrganizationID, request.ProjectID, mcpconnectionattempts.AppFirstParty)),
 		request.ProjectID,
 		request.OrganizationID,
 		request.UserSessionIssuerID,

@@ -1110,7 +1110,7 @@ func (s *Service) prepareProxyBackendContext(
 	ctx = withMandatoryAdmission(ctx)
 	authorized, err := s.authorizeProxyBackendAccess(ctx, logger, mandatorySurfaceProxiedConnect, organizationID, endpoint.ProjectID, mcpServer)
 	if err != nil {
-		if serverAccessDenied(err) {
+		if mcpaccess.IsServerPermissionDenied(err) {
 			s.connections.Once(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx)), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess, callerSubject(ctx))
 		}
 		return nil, "", err

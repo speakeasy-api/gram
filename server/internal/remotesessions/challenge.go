@@ -1168,6 +1168,7 @@ var ErrRemoteSessionNotRefreshable = errors.New("remote session has no usable re
 // refresh, and an unbound one fails closed with ErrRemoteSessionNotRefreshable.
 func (m *ChallengeManager) RefreshRemoteSession(
 	ctx context.Context,
+	attribution RefreshAttribution,
 	subject urn.SessionSubject,
 	projectID uuid.UUID,
 	organizationID string,
@@ -1203,7 +1204,7 @@ func (m *ChallengeManager) RefreshRemoteSession(
 		return zero, ErrRemoteSessionNotRefreshable
 	}
 
-	return m.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerManual, connectionScopeFrom(ctx))
+	return m.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerManual, attribution)
 }
 
 // FallbackResourceForClient derives one client's RFC 8707 resource from its

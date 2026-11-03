@@ -884,7 +884,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		}
 		// Attachments may be revoked between consent and code exchange.
 		// Recheck before persisting an agent session or issuing its tokens.
-		if cerr := s.remoteChallengeMgr.CheckAccessTokens(remotesessions.WithConnectionAttempt(authorizationCtx, grant.Attempt), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject); cerr != nil {
+		if cerr := s.remoteChallengeMgr.CheckAccessTokens(authorizationCtx, remotesessions.RefreshIn(connectionScope(endpoint, mcpconnectionattempts.AppOf(grant.ClientID))).InAttempt(grant.Attempt), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject); cerr != nil {
 			if errors.Is(cerr, remotesessions.ErrRemoteSessionUnavailable) {
 				return remoteSessionUnavailableError(w, cerr).LogWarn(ctx, logger)
 			}
@@ -1273,7 +1273,11 @@ func (s *Service) rotateRefreshToken(
 		ID: endpoint.UserSessionIssuerID, ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
-			tracker.Refuse(ctx, mcpconnectionattempts.CodeRefreshTokenRevoked, mcpconnectionattempts.Detail("issuer_retired"))
+			if lookupErr == nil {
+				tracker.Refuse(ctx, mcpconnectionattempts.CodeRefreshTokenRevoked, mcpconnectionattempts.Detail("issuer_retired"), mcpconnectionattempts.Subject(&refreshSession.SubjectUrn))
+			} else {
+				tracker.Continue()
+			}
 			return true, oops.NewOAuthError(http.StatusBadRequest, oautherr.CodeInvalidGrant, "authorization issuer is no longer available", err)
 		}
 		var pgErr *pgconn.PgError
@@ -1516,9 +1520,12 @@ func (s *Service) rotateRefreshToken(
 		logger.WarnContext(postCommitCtx, "failed to revoke old access token jti on refresh", attr.SlogError(revokeErr))
 	}
 
-	if upstreamCheck == upstreamRefreshUnverified {
+	switch upstreamCheck {
+	case upstreamRefreshUnverified:
 		tracker.Refuse(ctx, mcpconnectionattempts.CodeRefreshedUnverified, mcpconnectionattempts.Subject(&minted.Subject))
-	} else {
+	case upstreamRefreshCheckFailed:
+		tracker.Succeed(ctx, mcpconnectionattempts.ResultRefreshed, mcpconnectionattempts.Subject(&minted.Subject), mcpconnectionattempts.Detail(string(upstreamRefreshCheckFailed)))
+	case upstreamRefreshServed, upstreamRefreshReconnect, upstreamRefreshEMARefused:
 		tracker.Succeed(ctx, mcpconnectionattempts.ResultRefreshed, mcpconnectionattempts.Subject(&minted.Subject))
 	}
 	return published, writeTokenSuccess(ctx, w, logger, minted.Body)
@@ -1570,7 +1577,7 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
 	tunneled, proxied, err := s.consentDirectBackend(ctx, endpoint, routing)
 	if err != nil {
-		return upstreamRefreshUnverified
+		return upstreamRefreshCheckFailed
 	}
 	if !proxied {
 		if !user {
@@ -1579,7 +1586,7 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 		reconnect, err := s.remoteChallengeMgr.RemoteSessionsNeedReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 		if err != nil {
 			logger.WarnContext(ctx, "check upstream remote sessions before refresh", attr.SlogError(err))
-			return upstreamRefreshUnverified
+			return upstreamRefreshCheckFailed
 		}
 		return upstreamRefreshOf(reconnect)
 	}
@@ -1590,7 +1597,7 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 		return upstreamRefreshReconnect
 	case err != nil:
 		logger.WarnContext(ctx, "load upstream client choice before refresh", attr.SlogError(err))
-		return upstreamRefreshUnverified
+		return upstreamRefreshCheckFailed
 	case choice.noAuth(), !user:
 		return upstreamRefreshServed
 	}
@@ -1601,7 +1608,7 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 	reconnect, err := s.remoteChallengeMgr.ClientNeedsReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, choice.clientID.UUID)
 	if err != nil {
 		logger.WarnContext(ctx, "check chosen upstream remote session before refresh", attr.SlogError(err))
-		return upstreamRefreshUnverified
+		return upstreamRefreshCheckFailed
 	}
 	if !reconnect || s.identityChainer == nil || subject.ID == "" {
 		return upstreamRefreshOf(reconnect)
@@ -1609,7 +1616,7 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 	req, ok, err := s.directChainingRequest(ctx, endpoint, subject.ID, routing, choice)
 	switch {
 	case err != nil:
-		return upstreamRefreshUnverified
+		return upstreamRefreshCheckFailed
 	case !ok:
 		return upstreamRefreshReconnect
 	}

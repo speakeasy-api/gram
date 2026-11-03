@@ -465,11 +465,13 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	p, err := s.loadBinding(ctx, b.OrganizationID, b.IssuerID, b.ClientID)
 	if err != nil {
 		if definitiveDelegationFailure(err) {
+			s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 			return Assertion{}, ErrConfiguration
 		}
 		return Assertion{}, ErrTemporary
 	}
 	if p == nil || p.DelegationConfigurationHash() == "" {
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 		return Assertion{}, ErrConfiguration
 	}
 	now := s.now()
@@ -484,9 +486,11 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		return Assertion{}, ErrTemporary
 	}
 	if c.config != p.DelegationConfigurationHash() {
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 		return Assertion{}, ErrConfiguration
 	}
 	if c.status == "configuration_failure" {
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 		return Assertion{}, ErrConfiguration
 	}
 	if c.claim != uuid.Nil {
@@ -653,7 +657,7 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		return Assertion{}, ErrTemporary
 	}
 	if quarantined {
-		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeRenewalRetryable)
+		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeInternalError)
 		return Assertion{}, ErrTemporary
 	}
 	if next.status == "configuration_failure" {
@@ -764,8 +768,7 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 	return outcome
 }
 
-// recordRenewal runs only where a renewal changed state. A tool call served from
-// the held assertion, or refused from a state already recorded, writes nothing.
+// recordRenewal records a renewal's outcome, or a setup that stops one. A tool call served from the held assertion writes nothing.
 func (s *Service) recordRenewal(ctx context.Context, b Binding, what mcpconnectionattempts.Happened) {
 	human := urn.NewUserSubject(b.HumanID)
 	s.connections.Once(ctx, mcpconnectionattempts.IdentityProviderScope(b.OrganizationID, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepSignInRenewal, what,

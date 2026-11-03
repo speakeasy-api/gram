@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 )
 
@@ -319,13 +320,13 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		}
 		return memberConnectionError{metaMemberClientCredentialError(member, exchangeErr), code}
 	}
-	if _, rejected := rt.rejection(); rejected {
-		code := mcpconnectionattempts.CodeProviderRejected
+	if status, rejected := rt.rejection(); rejected {
+		code, ok := remotemcp.UpstreamFailureHappened(status, remotemcp.UpstreamCredential{Attached: !dial.anonymous, Self: dial.clientCredential}, dial.tunneled)
 		switch {
-		case dial.anonymous:
-			code = mcpconnectionattempts.CodeInvalidRemoteSession
-		case dial.clientCredential:
+		case dial.anonymous && dial.configuredHeaders:
 			code = mcpconnectionattempts.CodeCredentialMisconfigured
+		case !ok:
+			code = mcpconnectionattempts.CodeInvalidRemoteSession
 		}
 		return memberConnectionError{memberAuthFailure(member, dial), code}
 	}
@@ -334,7 +335,8 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		// The caller went away, so this says nothing about the member.
 		return &metaMemberError{message: fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug)}
 	case ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded):
-		return memberConnectionError{&metaMemberError{message: fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug)}, mcpconnectionattempts.CodeProviderUnreachable}
+		code, _ := remotemcp.UpstreamFailureHappened(0, remotemcp.UpstreamCredential{Attached: !dial.anonymous, Self: dial.clientCredential}, dial.tunneled)
+		return memberConnectionError{&metaMemberError{message: fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug)}, code}
 	case errors.Is(err, errMemberResponseTooLarge) || errors.Is(exchangeErr, errMemberResponseTooLarge):
 		return &metaMemberError{message: fmt.Sprintf("server %q returned a response too large for the meta MCP", member.slug)}
 	case errors.Is(err, errMemberUnroutable) || errors.Is(exchangeErr, errMemberUnroutable):
@@ -345,18 +347,16 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		}
 		return memberConnectionError{&metaMemberError{message: fmt.Sprintf("server %q is not reachable right now", member.slug)}, code}
 	case exchangeErr != nil:
-		return memberConnectionError{&metaMemberError{message: fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug)}, mcpconnectionattempts.CodeProviderUnreachable}
+		code, _ := remotemcp.UpstreamFailureHappened(0, remotemcp.UpstreamCredential{Attached: !dial.anonymous, Self: dial.clientCredential}, dial.tunneled)
+		return memberConnectionError{&metaMemberError{message: fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug)}, code}
 	}
 	if rpcErr, ok := errors.AsType[*jsonrpc.Error](err); ok {
 		return &metaMemberError{message: fmt.Sprintf("server %q rejected the call: %s", member.slug, rpcErr.Message)}
 	}
 	if status := rt.status(); status != 0 && !upstreamStatusOK(status) {
 		failure := &metaMemberError{message: fmt.Sprintf("server %q upstream call failed with status %d", member.slug, status)}
-		switch {
-		case status == http.StatusTooManyRequests:
-			return memberConnectionError{failure, mcpconnectionattempts.CodeProviderRateLimited}
-		case status >= http.StatusInternalServerError:
-			return memberConnectionError{failure, mcpconnectionattempts.CodeProviderServerError}
+		if code, ok := remotemcp.UpstreamFailureHappened(status, remotemcp.UpstreamCredential{Attached: !dial.anonymous, Self: dial.clientCredential}, dial.tunneled); ok {
+			return memberConnectionError{failure, code}
 		}
 		return failure
 	}

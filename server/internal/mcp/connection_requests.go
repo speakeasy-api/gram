@@ -3,7 +3,6 @@ package mcp
 import (
 	"context"
 	"errors"
-	"strings"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -21,9 +20,6 @@ import (
 // writes nothing: at tool-call rates, success rows would fill the recorder's
 // write budget and leave the failures to drop.
 
-// errToolUsageLimitReached marks a tools/call refused by the free-tier cap.
-var errToolUsageLimitReached = errors.New("tool usage limit reached")
-
 // errRiskPolicyDenied marks a tools/call a risk policy stopped.
 var errRiskPolicyDenied = errors.New("risk policy denied the call")
 
@@ -40,66 +36,52 @@ func requestApp(ctx context.Context) mcpconnectionattempts.App {
 
 // recordGateRejection records a bearer the gate refused, once it proves a real
 // flow on this server. No bearer and an expired one are how a healthy client
-// learns to sign in or refresh, and a failed refresh has its own row. A bearer
-// that is not ours, or was minted for another server, could come from anyone,
-// and would let them write rows into this organization.
+// learns to sign in or refresh. A bearer that is not ours, or was minted for
+// another server, could come from anyone. A caller going away says nothing.
 func (s *Service) recordGateRejection(ctx context.Context, endpoint *ResolvedMcpEndpoint, token, reason string, valErr error) {
-	if valErr == nil || errors.Is(valErr, jwt.ErrTokenExpired) || errors.Is(valErr, jwt.ErrTokenInvalidAudience) {
+	if valErr == nil || errors.Is(valErr, jwt.ErrTokenExpired) || errors.Is(valErr, jwt.ErrTokenInvalidAudience) || errors.Is(ctx.Err(), context.Canceled) {
 		return
 	}
-	code := gateHappened(reason)
+	code := gateHappened(valErr)
+	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Detail(reason)}
 	subject, verifyErr := s.userSessionSigner.VerifiedSubject(token)
-	if verifyErr != nil {
-		if code == mcpconnectionattempts.CodeInvalidBearerToken {
-			return
-		}
-		s.connections.Once(ctx, connectionScope(endpoint, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepMCPRequest, code, mcpconnectionattempts.Detail(reason))
+	switch {
+	case verifyErr == nil:
+		opts = append(opts, mcpconnectionattempts.Subject(&subject))
+	case code == mcpconnectionattempts.CodeInvalidBearerToken:
 		return
 	}
-	s.connections.Once(ctx, connectionScope(endpoint, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepMCPRequest, code, mcpconnectionattempts.Detail(reason), mcpconnectionattempts.Subject(&subject))
+	s.connections.Once(ctx, connectionScope(endpoint, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepMCPRequest, code, opts...)
 }
 
 // gateHappened keeps an outage on our side from reading as a person's bad token.
-func gateHappened(reason string) mcpconnectionattempts.Code {
-	switch reason {
-	case issuerGateReasonRevocationUnavailable,
-		"org_lookup_failed",
-		"issuer_lookup_failed",
-		"caller_profile_unavailable",
-		"tool_selection_load_failed",
-		"agent_session_load_failed",
-		"workload_session_load_failed",
-		"workload_admission_load_failed":
-		return mcpconnectionattempts.CodeAuthCheckUnavailable
-	case issuerGateReasonWorkloadSessionOutOfReach:
+func gateHappened(valErr error) mcpconnectionattempts.Code {
+	if errors.Is(valErr, errWorkloadSessionOutOfReach) {
 		return mcpconnectionattempts.CodeNoServerAccess
-	case issuerGateReasonInvalidBearerToken, issuerGateReasonIssuerMismatch, "tool_selection_resource_mismatch":
+	}
+	if shareable, ok := errors.AsType[*oops.ShareableError](valErr); ok && shareable.Code == oops.CodeForbidden {
+		return mcpconnectionattempts.CodeNoServerAccess
+	}
+	if errors.Is(valErr, errSessionPolicyGone) || errors.Is(valErr, errCredentialRejected) || errors.Is(valErr, errToolSelectionResourceMismatch) ||
+		errors.Is(valErr, errTokenHostMismatch) || errors.Is(valErr, errSharedTokenIssuerMismatch) || isCredentialDenial(valErr) {
 		return mcpconnectionattempts.CodeInvalidBearerToken
-	default:
-		return mcpconnectionattempts.CodeAuthCheckUnavailable
 	}
+	return mcpconnectionattempts.CodeAuthCheckUnavailable
 }
 
-// remoteSessionHappened maps a rejection whose bearer was accepted.
-func remoteSessionHappened(reason string) mcpconnectionattempts.Code {
-	switch reason {
-	case issuerGateReasonRemoteSessionUnavailable:
-		return mcpconnectionattempts.CodeRemoteSessionUnavailable
-	case issuerGateReasonRemoteSessionMisconfigured, issuerGateReasonClientCredentialMisconfigured:
-		return mcpconnectionattempts.CodeCredentialMisconfigured
-	case issuerGateReasonInvalidRemoteSession, issuerGateReasonUpstreamSelectionUnavailable:
-		return mcpconnectionattempts.CodeInvalidRemoteSession
-	default:
-		return mcpconnectionattempts.CodeInternalError
-	}
-}
-
-// directConnectionOptions files a directly served proxy's refused and failed tool calls under its server.
+// directConnectionOptions records a directly served proxy's tool calls under its
+// server, for a caller who presented a credential. An anonymous caller on a public
+// server proves no flow, so those calls stay in the proxy's metrics.
 func directConnectionOptions(ctx context.Context, organizationID string, projectID, serverID uuid.UUID, upstream remotesessions.UpstreamToken) []remotemcp.BuildOption {
-	return []remotemcp.BuildOption{
-		remotemcp.WithConnectionScope(mcpconnectionattempts.ServerScope(organizationID, projectID, serverID, requestApp(ctx)), callerSubject(ctx)),
-		remotemcp.WithConnectionUpstreamFailures(upstream.CredentialOwner == remotesessions.CredentialOwnerSelf),
+	if authCtx, ok := contextvalues.GetAuthContext(ctx); !ok || authCtx == nil {
+		return nil
 	}
+	return []remotemcp.BuildOption{remotemcp.WithConnectionAttribution(remotemcp.ConnectionAttribution{
+		Scope:            mcpconnectionattempts.ServerScope(organizationID, projectID, serverID, requestApp(ctx)),
+		Details:          []mcpconnectionattempts.Option{callerSubject(ctx)},
+		UpstreamFailures: true,
+		SelfCredential:   upstream.CredentialOwner == remotesessions.CredentialOwnerSelf,
+	})}
 }
 
 // callerSubject is the signed-in user of an authenticated request, when there is one.
@@ -112,9 +94,19 @@ func callerSubject(ctx context.Context) mcpconnectionattempts.Option {
 	return mcpconnectionattempts.Subject(&subject)
 }
 
+// refreshAttribution files a request's refreshes under the server it reached.
+func (a *issuerGateAuthentication) refreshAttribution(ctx context.Context) remotesessions.RefreshAttribution {
+	return remotesessions.RefreshIn(connectionScope(a.endpoint, requestApp(ctx))).NotingSkips(a.skippedUpstreams)
+}
+
+// consentRefreshAttribution makes a refresh during sign-in a step of that sign-in.
+func consentRefreshAttribution(endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) remotesessions.RefreshAttribution {
+	return remotesessions.RefreshIn(connectionScope(endpoint, mcpconnectionattempts.AppOf(state.ClientID))).InAttempt(state.connectionAttempt(endpoint))
+}
+
 // connectionScope files a gateway's rows under the gateway, with the member as a detail.
 func (g *metaGateContext) connectionScope(ctx context.Context) mcpconnectionattempts.Scope {
-	if g.organizationGateway {
+	if g.projectID == uuid.Nil {
 		return mcpconnectionattempts.OrganizationGatewayScope(g.organizationID, g.metaServerID, requestApp(ctx))
 	}
 	return mcpconnectionattempts.GatewayScope(g.organizationID, g.projectID, g.metaServerID, requestApp(ctx))
@@ -127,14 +119,50 @@ func (g *metaGateContext) connectionSubject(ctx context.Context) mcpconnectionat
 	return callerSubject(ctx)
 }
 
-// memberConnectionOption files a member proxy's refused tool calls under its gateway.
-func memberConnectionOption(ctx context.Context, gate *metaGateContext, member metaMember) remotemcp.BuildOption {
-	return remotemcp.WithConnectionScope(gate.connectionScope(ctx), mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx))
+// authClientGapHappened separates a setup an admin has to finish from a choice the person can redo.
+func authClientGapHappened(reason string) mcpconnectionattempts.Code {
+	if reason == authClientReasonSetup {
+		return mcpconnectionattempts.CodeCredentialMisconfigured
+	}
+	return mcpconnectionattempts.CodeInvalidRemoteSession
 }
 
-// recordMemberFailure records a gateway member's failed tool call. A failure with no code writes nothing.
+// memberConnectionOption records a member proxy's refused tool calls under its gateway.
+func memberConnectionOption(ctx context.Context, gate *metaGateContext, member metaMember) remotemcp.BuildOption {
+	return remotemcp.WithConnectionAttribution(remotemcp.ConnectionAttribution{
+		Scope:            gate.connectionScope(ctx),
+		Details:          []mcpconnectionattempts.Option{mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx)},
+		UpstreamFailures: false,
+		SelfCredential:   false,
+	})
+}
+
+// recordMemberFailure records one gateway member's failed tool call.
 func (s *Service) recordMemberFailure(ctx context.Context, gate *metaGateContext, member metaMember, what mcpconnectionattempts.Code) {
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return
+	}
 	s.connections.Once(ctx, gate.connectionScope(ctx), mcpconnectionattempts.StepMCPRequest, what, mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx))
+}
+
+// memberNoCredentialHappened says why a member had no credential to send: its
+// setup, or why partial resolution left its client out. Otherwise the person has to connect it.
+func (g *metaGateContext) memberNoCredentialHappened(member metaMember) mcpconnectionattempts.Code {
+	if member.authClient != nil && member.authClient.outcome == authClientGap {
+		return authClientGapHappened(member.authClient.reason)
+	}
+	var skipped *remotesessions.SkippedClients
+	if g.authentication != nil {
+		skipped = g.authentication.skippedUpstreams
+	}
+	reason := skipped.Reason(member.remoteSessionIssuerID.UUID)
+	switch {
+	case errors.Is(reason, remotesessions.ErrRemoteSessionUnavailable):
+		return mcpconnectionattempts.CodeRemoteSessionUnavailable
+	case errors.Is(reason, remotesessions.ErrRemoteSessionMisconfigured):
+		return mcpconnectionattempts.CodeCredentialMisconfigured
+	}
+	return mcpconnectionattempts.CodeInvalidRemoteSession
 }
 
 // memberConnectionError carries what a member's failure means, without changing its text or type.
@@ -149,7 +177,7 @@ func (f memberConnectionError) Unwrap() error { return f.error }
 // recordHostedToolsCallRefusal records a refused hosted tools/call. Any other error writes nothing.
 func (s *Service) recordHostedToolsCallRefusal(ctx context.Context, payload *mcpInputs, err error) {
 	code, ok := toolsCallRefusal(err)
-	if !ok || payload.mcpServerID == nil {
+	if !ok || payload.mcpServerID == nil || errors.Is(ctx.Err(), context.Canceled) {
 		return
 	}
 	scope := mcpconnectionattempts.ServerScope(payload.organizationID, payload.projectID, *payload.mcpServerID, requestApp(ctx))
@@ -162,12 +190,12 @@ func toolsCallRefusal(err error) (mcpconnectionattempts.Code, bool) {
 		return none, false
 	}
 	switch {
-	case errors.Is(err, errToolUsageLimitReached):
+	case errors.Is(err, remotemcp.ErrToolUsageLimitReached):
 		return mcpconnectionattempts.CodeUsageLimitReached, true
 	case errors.Is(err, errRiskPolicyDenied):
 		return mcpconnectionattempts.CodePolicyBlocked, true
 	}
-	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Error() == mcpaccess.ToolPermissionDeniedMessage {
+	if mcpaccess.IsToolPermissionDenied(err) {
 		return mcpconnectionattempts.CodeToolPermissionDenied, true
 	}
 	return none, false
@@ -188,12 +216,6 @@ func killswitchHappened(err error) mcpconnectionattempts.Code {
 	return mcpconnectionattempts.CodeKillswitchCheckUnavailable
 }
 
-// serverAccessDenied reports a forbidden mcp:connect, as opposed to a failed check.
-func serverAccessDenied(err error) bool {
-	shareable, ok := errors.AsType[*oops.ShareableError](err)
-	return ok && shareable.Code == oops.CodeForbidden && strings.HasPrefix(shareable.Error(), mcpaccess.ServerPermissionDeniedMessage)
-}
-
 // upstreamRefreshCheck is what refresh learned about the upstream behind a
 // session. Its values name the reason the refresh row records.
 type upstreamRefreshCheck string
@@ -202,8 +224,11 @@ const (
 	// upstreamRefreshServed: the upstream is usable, or the session needs none.
 	upstreamRefreshServed upstreamRefreshCheck = ""
 
-	// upstreamRefreshUnverified: the check could not answer, so the refresh proceeds.
+	// upstreamRefreshUnverified: identity chaining could not confirm the upstream.
 	upstreamRefreshUnverified upstreamRefreshCheck = "refreshed_unverified"
+
+	// upstreamRefreshCheckFailed: our own read failed, so the refresh proceeds unjudged.
+	upstreamRefreshCheckFailed upstreamRefreshCheck = "upstream_check_failed"
 
 	// upstreamRefreshReconnect: the person has to reconnect the upstream.
 	upstreamRefreshReconnect upstreamRefreshCheck = "upstream_reconnect_required"
@@ -234,8 +259,7 @@ func refuseInboundRefresh(ctx context.Context, tracker *mcpconnectionattempts.Tr
 }
 
 // inboundRefreshHappened leaves out what proves no real session: a malformed
-// request, one naming another server, and a token no live session holds, which
-// looks the same whether it is spent or made up.
+// request, one naming another server, and a token no live session holds. An unknown reason is ours.
 func inboundRefreshHappened(reason string) (mcpconnectionattempts.Code, bool) {
 	switch reason {
 	case "refresh_token_resource_mismatch":
@@ -256,9 +280,10 @@ func inboundRefreshHappened(reason string) (mcpconnectionattempts.Code, bool) {
 		return mcpconnectionattempts.CodeUpstreamReconnectRequired, true
 	case string(upstreamRefreshEMARefused):
 		return mcpconnectionattempts.CodeUpstreamEMARefused, true
-	case "sign_in_lookup_failed":
+	case "invalid_request", "resource_mismatch", "refresh_token_unknown_or_already_used":
+		var none mcpconnectionattempts.Code
+		return none, false
+	default:
 		return mcpconnectionattempts.CodeInternalError, true
 	}
-	var none mcpconnectionattempts.Code
-	return none, false
 }

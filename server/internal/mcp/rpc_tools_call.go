@@ -43,6 +43,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/jwtclaims"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/otel/dialect"
 	"github.com/speakeasy-api/gram/server/internal/otelpub"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
@@ -768,7 +769,7 @@ func checkToolUsageLimits(ctx context.Context, logger *slog.Logger, orgID string
 	}
 
 	if periodUsage.ToolCalls >= hardToolCallsLimit {
-		return oops.E(oops.CodeForbidden, errToolUsageLimitReached, "tool usage limit reached").LogError(ctx, logger)
+		return oops.E(oops.CodeForbidden, remotemcp.ErrToolUsageLimitReached, "tool usage limit reached").LogError(ctx, logger)
 	}
 
 	return nil

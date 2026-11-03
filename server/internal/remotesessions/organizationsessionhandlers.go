@@ -307,7 +307,7 @@ func (s *Service) RefreshSession(ctx context.Context, payload *orgsessionsgen.Re
 	// are adopted instead of double-POSTing, and a definitive upstream
 	// invalid_grant clears only the dead refresh grant so a still-working
 	// access token remains connected.
-	result, err := s.refresher.RefreshNow(ctx, row.RemoteSession, "", remotesessionmetrics.RefreshTriggerManual, mcpconnectionattempts.ProviderSessionScope(authCtx.ActiveOrganizationID, row.ClientProjectID.UUID, mcpconnectionattempts.AppFirstParty))
+	result, err := s.refresher.RefreshNow(ctx, row.RemoteSession, "", remotesessionmetrics.RefreshTriggerManual, RefreshIn(mcpconnectionattempts.ProviderSessionScope(authCtx.ActiveOrganizationID, row.ClientProjectID.UUID, mcpconnectionattempts.AppFirstParty)))
 	if err != nil {
 		// Operator-actionable failures carry a public-safe reason; surface it so
 		// the admin sees why the refresh failed instead of a generic error.
