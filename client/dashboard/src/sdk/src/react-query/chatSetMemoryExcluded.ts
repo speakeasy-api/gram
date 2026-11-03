@@ -54,7 +54,7 @@ export type ChatSetMemoryExcludedMutationError =
  * setMemoryExcluded chat
  *
  * @remarks
- * Exclude a session from Organizational Memory, or return it. Anyone who can read the session may exclude it; returning someone else's session needs chat:write. Digests that folded an excluded session are rebuilt without it on the next rollup. Requires the org-memory rollout.
+ * Exclude a session from Organizational Memory, or return it. Anyone who can read the session may exclude it; returning someone else's session needs chat:write. Digests that folded an excluded session are rebuilt without it on the next rollup. Requires Business Memory Extraction turned on for the organization.
  */
 export function useChatSetMemoryExcludedMutation(
   options?: MutationHookOptions<

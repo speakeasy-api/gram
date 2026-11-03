@@ -18109,7 +18109,7 @@ paths:
         type: query
   /rpc/chat.getMemory:
     get:
-      description: Show whether Organizational Memory reads this session, the masked summary it reads, memos saved from it and the day digest that folded it. Requires the org-memory rollout.
+      description: Show whether Organizational Memory reads this session, the masked summary it reads, memos saved from it and the day digest that folded it. Requires Business Memory Extraction turned on for the organization.
       operationId: getChatMemory
       parameters:
         - allowEmptyValue: true
@@ -19078,7 +19078,7 @@ paths:
         type: query
   /rpc/chat.setMemoryExcluded:
     post:
-      description: Exclude a session from Organizational Memory, or return it. Anyone who can read the session may exclude it; returning someone else's session needs chat:write. Digests that folded an excluded session are rebuilt without it on the next rollup. Requires the org-memory rollout.
+      description: Exclude a session from Organizational Memory, or return it. Anyone who can read the session may exclude it; returning someone else's session needs chat:write. Digests that folded an excluded session are rebuilt without it on the next rollup. Requires Business Memory Extraction turned on for the organization.
       operationId: setChatMemoryExcluded
       parameters:
         - allowEmptyValue: true
@@ -123946,7 +123946,7 @@ tags:
   - name: organizations
     description: Organization membership, invitations, and directory.
   - name: orgMemory
-    description: 'Browse a project''s Organizational Memory: digests, the sessions and memos they fold, and recent activity. Requires memory:read on the project and the org-memory rollout.'
+    description: 'Browse a project''s Organizational Memory: digests, the sessions and memos they fold, and recent activity. Requires memory:read on the project and Business Memory Extraction turned on for the organization.'
   - name: otel
     description: Receives OpenTelemetry signals from LLM providers and harnesses.
   - name: packages

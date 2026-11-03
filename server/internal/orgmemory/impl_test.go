@@ -21,7 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/memorygate"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orgmemory"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -47,7 +47,6 @@ func TestMain(m *testing.M) {
 type fixture struct {
 	db        *pgxpool.Pool
 	service   *orgmemory.Service
-	flags     *feature.InMemory
 	ctx       context.Context //nolint:containedctx // the authenticated session each test derives grants from
 	orgID     string
 	projectID uuid.UUID
@@ -68,13 +67,11 @@ func newFixture(t *testing.T) fixture {
 	require.True(t, ok)
 	require.NotNil(t, authCtx.ProjectID)
 
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagOrgMemory, authCtx.ActiveOrganizationID, true)
+	require.NoError(t, memorygate.Set(ctx, db, authCtx.ActiveOrganizationID, true))
 
 	return fixture{
 		db:        db,
-		service:   orgmemory.NewService(logger, tp, db, mgr, engine, audit.NewLogger(), flags),
-		flags:     flags,
+		service:   orgmemory.NewService(logger, tp, db, mgr, engine, audit.NewLogger()),
 		ctx:       ctx,
 		orgID:     authCtx.ActiveOrganizationID,
 		projectID: *authCtx.ProjectID,
@@ -153,7 +150,7 @@ func TestOrgMemoryRequiresMemoryReadAndRollout(t *testing.T) {
 		require.Error(t, err, "grants %v", grants)
 	}
 
-	f.flags.SetFlag(feature.FlagOrgMemory, f.orgID, false)
+	require.NoError(t, memorygate.Set(f.ctx, f.db, f.orgID, false))
 	_, err := f.service.GetOrgMemoryOverview(f.reader(t), &gen.GetOrgMemoryOverviewPayload{Days: 30})
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)

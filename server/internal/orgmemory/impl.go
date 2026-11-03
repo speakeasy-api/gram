@@ -31,10 +31,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/memorygate"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/orgmemory/repo"
@@ -56,7 +55,6 @@ type Service struct {
 	auth   *auth.Auth
 	authz  *authz.Engine
 	audit  *audit.Logger
-	flags  feature.Provider
 	now    func() time.Time
 }
 
@@ -72,7 +70,6 @@ func NewService(
 	sessionManager *sessions.Manager,
 	authzEngine *authz.Engine,
 	auditLogger *audit.Logger,
-	flags feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("org-memory-api"))
 	return &Service{
@@ -82,7 +79,6 @@ func NewService(
 		auth:   auth.New(logger, db, sessionManager, authzEngine),
 		authz:  authzEngine,
 		audit:  auditLogger,
-		flags:  flags,
 		now:    time.Now,
 	}
 }
@@ -98,9 +94,9 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-// authorize requires memory:read on the active project and the org-memory
-// rollout. A disabled rollout reads as not found, so the
-// dashboard hides the tab rather than showing an error.
+// authorize requires memory:read on the active project and Business Memory
+// Extraction turned on for the organization. A disabled setting reads as not
+// found, so the dashboard hides the tab rather than showing an error.
 func (s *Service) authorize(ctx context.Context) (*contextvalues.AuthContext, error) {
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -119,9 +115,9 @@ func (s *Service) authorize(ctx context.Context) (*contextvalues.AuthContext, er
 	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMemoryRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
 		return nil, err
 	}
-	enabled, err := chat.OrgMemoryFlag(ctx, s.db, s.flags, authCtx.ActiveOrganizationID)
+	enabled, err := memorygate.Enabled(ctx, s.db, authCtx.ActiveOrganizationID)
 	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "check organizational memory rollout").LogError(ctx, s.logger)
+		return nil, oops.E(oops.CodeUnexpected, err, "check business memory extraction setting").LogError(ctx, s.logger)
 	}
 	if !enabled {
 		return nil, oops.E(oops.CodeNotFound, nil, "organizational memory is not enabled")

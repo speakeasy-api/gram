@@ -42,7 +42,7 @@ var Memo = Type("OrgMemoryMemo", func() {
 })
 
 var _ = Service("orgMemory", func() {
-	Description("Browse a project's Organizational Memory: digests, the sessions and memos they fold, and recent activity. Requires memory:read on the project and the org-memory rollout.")
+	Description("Browse a project's Organizational Memory: digests, the sessions and memos they fold, and recent activity. Requires memory:read on the project and Business Memory Extraction turned on for the organization.")
 	Security(security.Session, security.ProjectSlug)
 	shared.DeclareErrorResponses()
 

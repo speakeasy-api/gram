@@ -59,7 +59,7 @@ export type ChatMemoryQueryError =
  * getMemory chat
  *
  * @remarks
- * Show whether Organizational Memory reads this session, the masked summary it reads, memos saved from it and the day digest that folded it. Requires the org-memory rollout.
+ * Show whether Organizational Memory reads this session, the masked summary it reads, memos saved from it and the day digest that folded it. Requires Business Memory Extraction turned on for the organization.
  */
 export function useChatMemory(
   request: GetChatMemoryRequest,
@@ -82,7 +82,7 @@ export function useChatMemory(
  * getMemory chat
  *
  * @remarks
- * Show whether Organizational Memory reads this session, the masked summary it reads, memos saved from it and the day digest that folded it. Requires the org-memory rollout.
+ * Show whether Organizational Memory reads this session, the masked summary it reads, memos saved from it and the day digest that folded it. Requires Business Memory Extraction turned on for the organization.
  */
 export function useChatMemorySuspense(
   request: GetChatMemoryRequest,
