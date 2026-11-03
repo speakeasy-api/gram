@@ -83,6 +83,14 @@ func NewRunner(cfg Config) *agenthooks.Runner {
 		Timeout:         0,
 	}))
 
+	// The Claude Cowork distribution only ships transcripts: every other
+	// event has no handler, so nothing reaches ingest, the sign-in preflight,
+	// or MCP inventory.
+	if cfg.TranscriptOnly {
+		runner.OnStop(r.onTranscriptStop)
+		return runner
+	}
+
 	runner.OnPromptSubmitted(r.onPrompt)
 	runner.OnToolPre(r.onToolPre)
 	runner.OnPermission(r.onPermission)
