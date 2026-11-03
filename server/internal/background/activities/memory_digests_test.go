@@ -16,9 +16,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	memorydigesttest "github.com/speakeasy-api/gram/server/internal/memorydigest/memorydigesttest/repo"
 	"github.com/speakeasy-api/gram/server/internal/memorydigest/repo"
+	"github.com/speakeasy-api/gram/server/internal/memorygate"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -172,8 +172,7 @@ func TestMemoryDigests_DayDigestFoldsOnlyEligibleSources(t *testing.T) {
 
 	enabled := newDigestProject(t, conn)
 	disabled := newDigestProject(t, conn)
-	flags := new(feature.InMemory)
-	flags.SetFlag(feature.FlagOrgMemory, enabled.orgID, true)
+	require.NoError(t, memorygate.Set(ctx, conn, enabled.orgID, true))
 
 	day := digestDay(2026, 10, 27)
 	at := day.Add(10 * time.Hour)
@@ -200,7 +199,7 @@ func TestMemoryDigests_DayDigestFoldsOnlyEligibleSources(t *testing.T) {
 	require.NoError(t, err)
 
 	stub := &digestCompletionStub{}
-	job := activities.NewMemoryDigests(testenv.NewLogger(t), conn, stub, flags)
+	job := activities.NewMemoryDigests(testenv.NewLogger(t), conn, stub)
 	now := day.AddDate(0, 0, 2).Add(time.Hour)
 
 	result, err := job.Build(ctx, activities.BuildMemoryDigestsArgs{Level: "day", Now: now})
@@ -259,8 +258,7 @@ func TestMemoryDigests_RollupsWaitForClosedPeriods(t *testing.T) {
 	ctx := t.Context()
 
 	p := newDigestProject(t, conn)
-	flags := new(feature.InMemory)
-	flags.SetFlag(feature.FlagOrgMemory, p.orgID, true)
+	require.NoError(t, memorygate.Set(ctx, conn, p.orgID, true))
 	// The org needs memory activity in the lookback to be considered.
 	p.addChat(t, conn, "recent", digestDay(2026, 10, 27), true)
 
@@ -277,7 +275,7 @@ func TestMemoryDigests_RollupsWaitForClosedPeriods(t *testing.T) {
 	}
 
 	stub := &digestCompletionStub{}
-	job := activities.NewMemoryDigests(testenv.NewLogger(t), conn, stub, flags)
+	job := activities.NewMemoryDigests(testenv.NewLogger(t), conn, stub)
 
 	// Sunday 1 November: the week of 26 October is still open.
 	result, err := job.Build(ctx, activities.BuildMemoryDigestsArgs{Level: "week", Now: time.Date(2026, 11, 1, 23, 0, 0, 0, time.UTC)})
