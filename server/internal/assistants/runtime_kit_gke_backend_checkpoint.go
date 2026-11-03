@@ -299,7 +299,10 @@ func (k *KitGKERuntimeBackend) Stop(ctx context.Context, r assistantRuntimeRecor
 		if e != nil {
 			return e
 		}
-		if e = k.checkPod(ctx, r, pod, state.Metadata); e != nil {
+		if e = k.checkPod(r, pod, state.Metadata); e != nil {
+			return e
+		}
+		if e = k.checkPodClaim(ctx, r, nil, pod, state.Metadata); e != nil {
 			return e
 		}
 		settlement, ok := p.(interface {
@@ -699,7 +702,10 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	if err != nil {
 		return empty, err
 	}
-	if err = k.checkPod(ctx, r, pod, state.Metadata); err != nil {
+	if err = k.checkPod(r, pod, state.Metadata); err != nil {
+		return empty, err
+	}
+	if err = k.checkPodClaim(ctx, r, nil, pod, state.Metadata); err != nil {
 		return empty, err
 	}
 	digest, _, e := kitGKEProcessIdentity(pod)

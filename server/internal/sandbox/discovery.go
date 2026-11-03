@@ -87,15 +87,24 @@ func RunningPods(ctx context.Context, client dynamic.Interface, namespace, claim
 	return result, nil
 }
 
-// RunningPodsForClaim lists the live, addressed pods that PodsForClaim
-// attributes to a claim.
+// RunningPodsForClaim supports both managed controller layouts. Older
+// controllers label Pods with the claim UID; newer controllers label the
+// Sandbox and expose its pod selector instead. A selector alone is not proof
+// of ownership: the fallback verifies both controller owner references.
 func RunningPodsForClaim(ctx context.Context, client dynamic.Interface, namespace string, claim *unstructured.Unstructured, sandboxes schema.GroupVersionResource) ([]unstructured.Unstructured, error) {
-	pods, err := PodsForClaim(ctx, client, namespace, claim, sandboxes)
+	if !liveClaim(namespace, claim) {
+		return nil, fmt.Errorf("live sandbox claim identity is required")
+	}
+	pods, err := RunningPods(ctx, client, namespace, string(claim.GetUID()))
+	if err != nil || len(pods) != 0 {
+		return pods, err
+	}
+	assigned, err := assignedSandboxPods(ctx, client, namespace, claim, sandboxes)
 	if err != nil {
 		return nil, err
 	}
-	result := make([]unstructured.Unstructured, 0, len(pods))
-	for _, pod := range pods {
+	result := make([]unstructured.Unstructured, 0, len(assigned))
+	for _, pod := range assigned {
 		phase, _, _ := unstructured.NestedString(pod.Object, "status", "phase")
 		ip, _, _ := unstructured.NestedString(pod.Object, "status", "podIP")
 		if phase == "Running" && ip != "" {
@@ -106,12 +115,9 @@ func RunningPodsForClaim(ctx context.Context, client dynamic.Interface, namespac
 }
 
 // PodsForClaim lists the non-terminating pods belonging to a claim in any
-// phase. It supports both managed controller layouts. Older controllers label
-// Pods with the claim UID; newer controllers label the Sandbox and expose its
-// pod selector instead. A selector alone is not proof of ownership: the
-// fallback verifies both controller owner references.
+// phase, across the same controller layouts as RunningPodsForClaim.
 func PodsForClaim(ctx context.Context, client dynamic.Interface, namespace string, claim *unstructured.Unstructured, sandboxes schema.GroupVersionResource) ([]unstructured.Unstructured, error) {
-	if claim == nil || claim.GetUID() == "" || claim.GetName() == "" || claim.GetNamespace() != namespace || claim.GetDeletionTimestamp() != nil {
+	if !liveClaim(namespace, claim) {
 		return nil, fmt.Errorf("live sandbox claim identity is required")
 	}
 	claimUID := string(claim.GetUID())
@@ -128,6 +134,16 @@ func PodsForClaim(ctx context.Context, client dynamic.Interface, namespace strin
 	if len(result) != 0 {
 		return result, nil
 	}
+	return assignedSandboxPods(ctx, client, namespace, claim, sandboxes)
+}
+
+func liveClaim(namespace string, claim *unstructured.Unstructured) bool {
+	return claim != nil && claim.GetUID() != "" && claim.GetName() != "" && claim.GetNamespace() == namespace && claim.GetDeletionTimestamp() == nil
+}
+
+// assignedSandboxPods lists the non-terminating pods controlled by the
+// claim's assigned Sandbox, verifying both controller owner references.
+func assignedSandboxPods(ctx context.Context, client dynamic.Interface, namespace string, claim *unstructured.Unstructured, sandboxes schema.GroupVersionResource) ([]unstructured.Unstructured, error) {
 	name := AssignedName(claim)
 	if name == "" {
 		return nil, nil
@@ -155,6 +171,7 @@ func PodsForClaim(ctx context.Context, client dynamic.Interface, namespace strin
 	if resource.GetUID() == "" || !controlledBy(resource, Claims.Group, "SandboxClaim", claim) {
 		return nil, fmt.Errorf("assigned sandbox claim ownership mismatch")
 	}
+	claimUID := string(claim.GetUID())
 	if uid := resource.GetLabels()[ClaimUIDLabel]; uid != "" && uid != claimUID {
 		return nil, fmt.Errorf("assigned sandbox claim label mismatch")
 	}
@@ -162,6 +179,7 @@ func PodsForClaim(ctx context.Context, client dynamic.Interface, namespace strin
 	if err != nil {
 		return nil, fmt.Errorf("list assigned sandbox pods: %w", err)
 	}
+	result := make([]unstructured.Unstructured, 0, len(candidates.Items))
 	for _, pod := range candidates.Items {
 		if !controlledBy(&pod, Sandboxes.Group, "Sandbox", resource) {
 			continue
