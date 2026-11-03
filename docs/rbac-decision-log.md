@@ -1,6 +1,6 @@
 # RBAC foundation decision log
 
-This log records every design decision taken while implementing the Backend Revamp milestone (parent AIS-830) against the RFC "Practical RBAC: authorization foundation". Each entry names the ticket, the choice, the reasoning and who made it.
+This log records every design decision taken while implementing the Backend Revamp milestone (parent AIS-830) against the RFC "Practical RBAC: authorization foundation". Each section names its ticket and who decided its entries: approved by the reviewer, or decided without reviewer input. Each entry gives the choice and the reasoning.
 
 Entries marked **Decided without reviewer input** were made by the implementing agent while the reviewer was away. They are open for review: each one names what would change if it is reversed. The PR that introduced a decision lists it again under "Decisions made without reviewer input".
 
