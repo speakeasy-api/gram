@@ -1780,7 +1780,8 @@ CREATE TABLE IF NOT EXISTS mcp_connection_events (
     app_key String COMMENT 'Host of the client metadata URL of the app, or the client kind for apps without one. A host can name the customer.\n@access: restricted',
     client_family LowCardinality(String) COMMENT 'Kind of client from the User-Agent, from a fixed list, otherwise other. Empty when no client made the request.\n@access: confidential',
     client_version LowCardinality(String) COMMENT 'Client version from the User-Agent when it looks like a version, otherwise empty.\n@access: confidential',
-    repeats UInt32 COMMENT 'Rows like this one that the limiter held back, which this row stands for. Failures for a key are attempts plus repeats.\n@access: confidential'
+    repeats UInt32 COMMENT 'Rows like this one that the limiter held back, which this row stands for. Failures for a key are attempts plus repeats.\n@access: confidential',
+    device_key String COMMENT 'Keyed hash of the client IP, unique per organization. Cannot be reversed without the key. Identifies a device or network, not a person. Kept 30 days.\n@access: confidential-pii' CODEC(ZSTD)
 ) ENGINE = MergeTree
 PARTITION BY toDate(attempt_started_at)
 ORDER BY (organization_id, project_id, server_kind, server_id, attempt_started_at, attempt_id, event_time)
@@ -1790,6 +1791,7 @@ COMMENT 'One row per step of an MCP connection attempt, successes included. Used
 
 CREATE INDEX IF NOT EXISTS idx_mcp_connection_events_attempt_id ON mcp_connection_events (attempt_id) TYPE bloom_filter(0.01) GRANULARITY 1;
 CREATE INDEX IF NOT EXISTS idx_mcp_connection_events_subject_urn ON mcp_connection_events (subject_urn) TYPE bloom_filter(0.01) GRANULARITY 1;
+CREATE INDEX IF NOT EXISTS idx_mcp_connection_events_device_key ON mcp_connection_events (device_key) TYPE bloom_filter(0.01) GRANULARITY 1;
 
 CREATE TABLE IF NOT EXISTS mcp_connection_attempt_summaries (
     organization_id String COMMENT 'Organization the attempt belongs to. Readers always filter on it.\n@access: confidential',
