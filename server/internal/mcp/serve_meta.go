@@ -817,6 +817,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *h
 	}
 	gate := &metaGateContext{
 		skippedUpstreams: skipped,
+		request:          r,
 		projectID:        mcpEndpoint.ProjectID,
 		metaServerID:     metaServer.ID,
 		// Both unset for a stored gateway, whose members come from

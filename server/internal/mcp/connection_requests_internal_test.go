@@ -5,6 +5,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/http/httptest"
 	"testing"
 	"time"
 
@@ -262,4 +263,9 @@ func TestRecordMemberFailure(t *testing.T) {
 	cancel()
 	service.recordMemberFailure(ctx, gate, first, mcpconnectionattempts.CodeProviderServerError)
 	require.Len(t, rec.Rows(), 2, "a caller that went away says nothing")
+
+	gate.request = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/gateway", nil)
+	gate.request.Header.Set("User-Agent", "claude-code/2.1.0")
+	service.recordMemberFailure(t.Context(), gate, first, mcpconnectionattempts.CodeProviderServerError)
+	require.Equal(t, mcpconnectionattempts.FamilyClaudeCode, rec.Rows()[2].ClientFamily)
 }

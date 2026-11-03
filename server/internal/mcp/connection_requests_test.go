@@ -339,10 +339,11 @@ func TestProxiedUpstreamFailureRecords(t *testing.T) {
 
 	call, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": map[string]any{"name": "ping", "arguments": map[string]any{}}})
 	require.NoError(t, err)
-	_, _ = servePublicHTTP(t, context.Background(), ti, slug, call, token, nil)
+	_, _ = servePublicHTTP(t, context.Background(), ti, slug, call, token, map[string]string{"User-Agent": "claude-code/2.1.0"})
 
 	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderServerError)
 	require.Equal(t, mcpServer.ID.String(), row.ServerID)
+	require.Equal(t, mcpconnectionattempts.FamilyClaudeCode, row.ClientFamily)
 	require.Equal(t, string(mcpconnectionattempts.WhoProvider), row.WhoFixes)
 }
 
