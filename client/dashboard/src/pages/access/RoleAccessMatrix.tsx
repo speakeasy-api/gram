@@ -62,7 +62,8 @@ import {
   unblockPlatformScope,
   clearMcp,
   clearPlatform,
-  extraCopy,
+  mcpLevelIncludes,
+  setPlatformScopeBlocked,
 } from "./roleMatrixModel";
 import { ToolAccessSheet, type ToolAccessTarget } from "./ToolAccessSheet";
 import type { RoleGrant } from "./types";
@@ -129,6 +130,7 @@ export function RoleAccessMatrix({
             <McpMatrix
               grants={grants}
               onChange={onChange}
+              scopes={scopes}
               projects={projects}
               inventory={inventory}
             />
@@ -433,14 +435,26 @@ function toolLimitText(limit: ToolLimit): string {
 function McpMatrix({
   grants,
   onChange,
+  scopes,
   projects,
   inventory,
 }: {
   grants: Grants;
   onChange: (change: (prev: Grants) => Grants) => void;
+  scopes: ScopeDefinition[];
   projects: ProjectRef[];
   inventory: OrgMcpServers;
 }): JSX.Element {
+  // What each level includes is the server's to say (sub_scopes), so the
+  // column hints follow the catalogue rather than restate it.
+  const columnHint = (level: Level, base: string) => {
+    const included = mcpLevelIncludes(scopes, level)
+      .map((other) => LEVEL_LABEL[other])
+      .reverse();
+    return included.length > 0
+      ? `${base} Includes ${included.join(" and ")}.`
+      : base;
+  };
   const [query, setQuery] = useState("");
   const [sheet, setSheet] = useState<{
     target: ToolAccessTarget;
@@ -754,15 +768,24 @@ function McpMatrix({
         columns={[
           {
             label: "Connect",
-            hint: "Connect to the server and call its tools.",
+            hint: columnHint(
+              "use",
+              "Connect to the server and call its tools.",
+            ),
           },
           {
             label: "View",
-            hint: "See the server's settings and tool list. Includes Connect.",
+            hint: columnHint(
+              "view",
+              "See the server's settings and tool list.",
+            ),
           },
           {
             label: "Manage",
-            hint: "Change, publish and delete the server. Includes View and Connect.",
+            hint: columnHint(
+              "manage",
+              "Change, publish and delete the server.",
+            ),
           },
           {
             label: "Blocked",
@@ -1076,6 +1099,23 @@ function PlatformMatrix({
 
   const ineligible = (defs: (ScopeDefinition | undefined)[]) =>
     markAgentIneligible && defs.some((d) => d?.agentEligible === false);
+  const sensitive = (defs: (ScopeDefinition | undefined)[]) =>
+    defs.some((d) => d?.sensitive);
+
+  const rowBadges = (defs: (ScopeDefinition | undefined)[]) => (
+    <>
+      {sensitive(defs) && (
+        <Badge variant="warning" size="sm">
+          Sensitive
+        </Badge>
+      )}
+      {ineligible(defs) && (
+        <Badge variant="neutral" size="sm">
+          Not available to agents
+        </Badge>
+      )}
+    </>
+  );
 
   return (
     <section className="flex flex-col">
@@ -1088,10 +1128,13 @@ function PlatformMatrix({
             hint: "Create, change and delete it. Includes View.",
           },
           {
+            label: "Allowed",
+            hint: "Grant a permission that has no levels.",
+          },
+          {
             label: "Blocked",
             hint: "Take away every level, even if another role allows it.",
           },
-          null,
         ]}
         trailing="Applies to"
         onReset={
@@ -1112,18 +1155,14 @@ function PlatformMatrix({
             );
             const blocked = platformBlock(grants, area.view?.slug) === "all";
             return (
-              <tr key={area.resourceType}>
+              <tr key={area.category}>
                 <th
                   scope="row"
                   className="py-2 pr-2 pl-4 text-left font-normal"
                 >
                   <div className="flex flex-wrap items-center gap-2">
                     <span>{area.label}</span>
-                    {ineligible([area.view, area.manage]) && (
-                      <Badge variant="neutral" size="sm">
-                        Not available to agents
-                      </Badge>
-                    )}
+                    {rowBadges([area.view, area.manage])}
                   </div>
                   <div className="text-muted-foreground truncate text-xs">
                     {area.description}
@@ -1157,6 +1196,8 @@ function PlatformMatrix({
                     </td>
                   );
                 })}
+                {/* Allowed is for permissions without levels. */}
+                <td aria-hidden="true" />
                 <td className={TD}>
                   {blockable ? (
                     <Cell
@@ -1176,8 +1217,6 @@ function PlatformMatrix({
                     </SimpleTooltip>
                   )}
                 </td>
-                {/* Level columns start under Use above; this slot is spare. */}
-                <td aria-hidden="true" />
                 <td className="py-2 pr-4 pl-2 text-left">
                   <AppliesTo
                     grants={grants}
@@ -1191,29 +1230,32 @@ function PlatformMatrix({
               </tr>
             );
           })}
-        {extras.map(({ area, scope }) => {
+        {extras.map(({ scope }) => {
           const checked = platformAllows(grants, scope.slug);
           const blockedEverywhere = platformBlock(grants, scope.slug) === "all";
-          const copy = extraCopy(scope);
           return (
             <tr key={scope.slug}>
               <th scope="row" className="py-2 pr-2 pl-4 text-left font-normal">
                 <div className="flex flex-wrap items-center gap-2">
-                  <span>{copy.label}</span>
-                  {ineligible([scope]) && (
-                    <Badge variant="neutral" size="sm">
-                      Not available to agents
-                    </Badge>
-                  )}
+                  <span>{scope.label}</span>
+                  {rowBadges([scope])}
                 </div>
                 <div className="text-muted-foreground truncate text-xs">
-                  {copy.description}
+                  {scope.description}
                 </div>
               </th>
+              {/* A permission without levels has nothing under View or
+                  Manage; its one cell sits under Allowed. */}
+              <td className={TD}>
+                <span className="text-muted-foreground">—</span>
+              </td>
+              <td className={TD}>
+                <span className="text-muted-foreground">—</span>
+              </td>
               <td className={TD}>
                 <Cell
                   state={blockedEverywhere ? "blocked" : checked ? "on" : "off"}
-                  label={copy.label}
+                  label={scope.label}
                   onToggle={() =>
                     onChange((prev) =>
                       blockedEverywhere
@@ -1223,13 +1265,35 @@ function PlatformMatrix({
                   }
                 />
               </td>
-              <td colSpan={3} aria-hidden="true" />
+              <td className={TD}>
+                {scope.exclusionScope ? (
+                  <Cell
+                    state={blockedEverywhere ? "row-blocked" : "off"}
+                    label={`Block ${scope.label.toLowerCase()}`}
+                    onToggle={() =>
+                      onChange((prev) =>
+                        setPlatformScopeBlocked(
+                          prev,
+                          scope.slug as Scope,
+                          !blockedEverywhere,
+                        ),
+                      )
+                    }
+                  />
+                ) : (
+                  <SimpleTooltip tooltip={`${scope.label} cannot be blocked`}>
+                    <span className="text-muted-foreground cursor-default">
+                      —
+                    </span>
+                  </SimpleTooltip>
+                )}
+              </td>
               <td className="py-2 pr-4 pl-2 text-left">
                 <AppliesTo
                   grants={grants}
                   defs={[scope]}
-                  permissionLabel={copy.label}
-                  resourceType={area.resourceType}
+                  permissionLabel={scope.label}
+                  resourceType={scope.resourceType}
                   projects={projects}
                   onEditRule={onEditRule}
                   onRemoveRule={onRemoveRule}

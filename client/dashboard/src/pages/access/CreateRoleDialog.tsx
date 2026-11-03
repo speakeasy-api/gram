@@ -31,6 +31,9 @@ import type { ListRolesResult } from "@gram/client/models/components/listrolesre
 import { useListScopes } from "@gram/client/react-query/listScopes.js";
 import { useUpdateRoleMutation } from "@gram/client/react-query/updateRole.js";
 import { RoleAuthClientTypesField } from "./RoleAuthClientTypesField";
+import { ReviewGrantsStep } from "./ReviewGrantsStep";
+import { addedPermissions, type AddedPermission } from "./reviewGrants";
+import { scopeCatalogue } from "./scopeCatalogue";
 import {
   clientTypeGrantChanges,
   clientTypeRulesFromRole,
@@ -267,8 +270,13 @@ export function CreateRoleDialog({
   const [initialized, setInitialized] = useState(false);
 
   // ─── Rule editor state ────────────────────────────────────────
-  type DialogStep = "form" | "rule-editor";
+  type DialogStep = "form" | "rule-editor" | "review";
   const [dialogStep, setDialogStep] = useState<DialogStep>("form");
+  // What the pending save adds, shown for review before it goes through.
+  const [review, setReview] = useState<{
+    added: AddedPermission[];
+    confirmed: boolean;
+  } | null>(null);
   const [editingScopeSlug, setEditingScopeSlug] = useState<Scope | null>(null);
   const [editingRuleIndex, setEditingRuleIndex] = useState<number>(-1);
   const [draftRule, setDraftRule] = useState<ScopeRule | null>(null);
@@ -303,6 +311,10 @@ export function CreateRoleDialog({
     .sort((a, b) => a.name.localeCompare(b.name));
   const { data: scopesData } = useListScopes();
   const scopeDefinitions = scopesData?.scopes;
+  const catalogue = useMemo(
+    () => scopeCatalogue(scopeDefinitions),
+    [scopeDefinitions],
+  );
   const userVisibleScopeDefinitions = useMemo(
     () =>
       (scopeDefinitions ?? []).filter(
@@ -435,6 +447,10 @@ export function CreateRoleDialog({
         invalidateAllResourceAudience(queryClient),
         invalidateAllMembers(queryClient),
       ]);
+      // The review step is done with once the save lands, whether the
+      // editor closes or stays open on its page.
+      setReview(null);
+      setDialogStep("form");
       const saved = submitted.current;
       // A save the server accepted can still leave a permission as it was, so
       // check what it stored before saying it saved. The form keeps the
@@ -657,10 +673,44 @@ export function CreateRoleDialog({
 
   // ─── Submit ───────────────────────────────────────────────────
 
+  // A save that adds a permission goes through the review step first; the
+  // confirmation there is required only when a sensitive one is among them.
   const handleSubmit = () => {
     if (!scopeDefinitions) return;
 
     const sdkGrants = sdkGrantsFromForm(grants, scopeDefinitions);
+    if (dialogStep !== "review") {
+      const addGrants = isEditing
+        ? diffGrants(
+            sdkGrantsFromForm(storedGrants ?? {}, scopeDefinitions),
+            sdkGrants,
+          ).addGrants
+        : sdkGrants;
+      const added = addedPermissions(addGrants, catalogue);
+      if (added.length > 0) {
+        setReview({ added, confirmed: false });
+        setDialogStep("review");
+        return;
+      }
+    }
+    commitSave(sdkGrants);
+  };
+
+  const reviewNeedsConfirmation =
+    !!review && review.added.some((p) => p.sensitiveVia.length > 0);
+  const holdersNote = editingRole
+    ? `${editingRole.memberCount} ${editingRole.memberCount === 1 ? "member holds" : "members hold"} this role today.`
+    : selectedMembers.size > 0
+      ? `It will be assigned to ${selectedMembers.size} ${selectedMembers.size === 1 ? "member" : "members"}.`
+      : undefined;
+
+  const closeReview = () => {
+    setReview(null);
+    setDialogStep("form");
+  };
+
+  const commitSave = (sdkGrants: SdkRoleGrant[]) => {
+    if (!scopeDefinitions) return;
 
     if (isEditing) {
       const scopeChanges = diffGrants(
@@ -747,6 +797,7 @@ export function CreateRoleDialog({
     setAssignmentConfirmed(false);
     setInitialized(false);
     setDialogStep("form");
+    setReview(null);
     setEditingScopeSlug(null);
     setEditingRuleIndex(-1);
     setDraftRule(null);
@@ -769,7 +820,7 @@ export function CreateRoleDialog({
     editingScopeDef?.resourceType,
   );
   const stepOffset =
-    dialogStep === "form" ? "translate-x-0" : "-translate-x-full";
+    dialogStep === "rule-editor" ? "-translate-x-full" : "translate-x-0";
 
   // ─── Render ───────────────────────────────────────────────────
 
@@ -1169,7 +1220,65 @@ export function CreateRoleDialog({
         </Footer>
       )}
 
-      {(dialogStep === "form" || isPage) && (
+      {/* The review step is a modal over the form in both presentations, so
+          the form's footer stays where it is underneath. */}
+      <Dialog
+        open={dialogStep === "review"}
+        onOpenChange={(open) => {
+          if (!open) closeReview();
+        }}
+      >
+        <Dialog.Content className="sm:max-w-lg">
+          <Dialog.Header>
+            <Dialog.Title>
+              Review changes to &ldquo;{name.trim() || "this role"}&rdquo;
+            </Dialog.Title>
+            <Dialog.Description>
+              These permissions are added when the role is saved.
+            </Dialog.Description>
+          </Dialog.Header>
+          {review && (
+            <ReviewGrantsStep
+              added={review.added}
+              holdersNote={holdersNote}
+              confirmed={review.confirmed}
+              onConfirmedChange={(confirmed) =>
+                setReview({ ...review, confirmed })
+              }
+            />
+          )}
+          <Dialog.Footer>
+            <Button variant="secondary" onClick={closeReview}>
+              Back
+            </Button>
+            <Button
+              onClick={handleSubmit}
+              disabled={
+                isMutating ||
+                !review ||
+                (reviewNeedsConfirmation && !review.confirmed)
+              }
+            >
+              {isMutating && (
+                <Button.LeftIcon>
+                  <Loader2 className="h-4 w-4 animate-spin" />
+                </Button.LeftIcon>
+              )}
+              <Button.Text>
+                {isMutating
+                  ? isEditing
+                    ? "Saving…"
+                    : "Creating…"
+                  : isEditing
+                    ? "Save role"
+                    : "Create role"}
+              </Button.Text>
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+
+      {(dialogStep !== "rule-editor" || isPage) && (
         <Footer
           // On a page the permissions table right above already draws a
           // border; a second one would read as a double line.

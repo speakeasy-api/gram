@@ -19,6 +19,7 @@ import type {
 } from "@gram/client/models/components/selector.js";
 
 import type { ToolLimit } from "./mcpAccessModel";
+import { scopeCatalogue, scopeClosure } from "./scopeCatalogue";
 import type { ResourceType, RoleGrant, ScopeRule } from "./types";
 
 export type Level = "use" | "view" | "manage";
@@ -491,144 +492,145 @@ export function removeOtherMcpRule(
 
 // ─── Platform areas ─────────────────────────────────────────────────────────
 
-/** One platform row: what View and Manage store as for one kind of resource. */
+/**
+ * One platform row group: the View and Manage levels of one catalogue
+ * category, plus the permissions in it that have no level.
+ */
 export interface PlatformArea {
+  category: string;
+  /** The resource kind the level rules select, for the "Applies to" column. */
   resourceType: ResourceType;
   label: string;
-  /** What the area covers, in a few words. */
+  /** What the category covers, in a few words. */
   description: string;
   view?: ScopeDefinition;
   manage?: ScopeDefinition;
-  /** Permissions in this area that are not a level, e.g. authorizing agents. */
+  /** Permissions in this category that are not a level, e.g. authorizing agents. */
   extras: ScopeDefinition[];
 }
 
-const PLATFORM_AREAS: {
-  resourceType: ResourceType;
-  label: string;
-  description: string;
-}[] = [
-  {
-    resourceType: "org",
+/**
+ * What a category is called when its View and Manage share a row. Permission
+ * names and descriptions come from the catalogue; only the category heading
+ * is the dashboard's.
+ */
+const CATEGORY_COPY: Record<string, { label: string; description: string }> = {
+  org: {
     label: "Organization",
     description: "Organization settings and members",
   },
-  {
-    resourceType: "project",
+  project: {
     label: "Projects",
     description: "Projects and what they contain",
   },
-  {
-    resourceType: "environment",
+  environment: {
     label: "Environments",
     description: "Variables and secrets that servers use",
   },
-  {
-    resourceType: "skill",
-    label: "Skills",
-    description: "Skills shared in a project",
+  skill: { label: "Skills", description: "Skills shared in a project" },
+  plugin: { label: "Plugins", description: "Plugins published in a project" },
+  assistant: { label: "Assistants", description: "Assistants in a project" },
+  risk_policy: {
+    label: "Risk policies",
+    description: "Policies that gate risky tool calls",
   },
-  {
-    resourceType: "inference",
-    label: "Inference",
-    description: "Run inference in selected projects",
-  },
-  {
-    resourceType: "assistant",
-    label: "Assistants",
-    description: "Assistants in a project",
-  },
-  {
-    resourceType: "agent",
-    label: "Agents",
-    description: "Agents and their settings",
-  },
-  {
-    resourceType: "chat",
+  session: {
     label: "Agent sessions",
     description: "Other members' session transcripts",
   },
-  {
-    resourceType: "workload",
+  inference: {
+    label: "Inference",
+    description: "Run inference in selected projects",
+  },
+  log: {
+    label: "Tool logs",
+    description: "Tool arguments, results and prompt text",
+  },
+  agent: { label: "Agents", description: "Agents and their settings" },
+  workload: {
     label: "Workload identities",
     description: "Which workloads can act as which agents",
   },
-];
-
-/**
- * Names for the single permissions listed after the areas, in the same
- * name-plus-summary shape as the area rows. Unknown ones fall back to the
- * server's description.
- */
-const EXTRA_COPY: Record<string, { label: string; description: string }> = {
-  "inference:execute": {
-    label: "Run inference",
-    description: "Call the inference API in the selected projects",
-  },
-  "org:device_agent_sync": {
-    label: "Device agent sync",
-    description: "Agents fetch the plugins assigned to them",
-  },
-  "org:hooks_ingest": {
-    label: "Hook events",
-    description: "Agents send AI-tool hook events and telemetry",
-  },
-  "plugin:write": {
-    label: "Plugins",
-    description: "Edit and publish plugins in a project",
-  },
-  "agent:authorize": {
-    label: "Agent credentials",
-    description: "Authorize agents and manage their credentials",
-  },
-  "agent:transfer": {
-    label: "Agent ownership",
-    description: "Hand an agent to another owner",
-  },
 };
 
-export function extraCopy(scope: ScopeDefinition): {
+export function categoryCopy(category: string): {
   label: string;
   description: string;
 } {
-  return (
-    EXTRA_COPY[scope.slug] ?? {
-      label: scope.description ?? scope.slug,
-      description: "",
-    }
-  );
+  const copy = CATEGORY_COPY[category];
+  if (copy) return copy;
+  const words = category.replace(/_/g, " ");
+  return {
+    label: words.charAt(0).toUpperCase() + words.slice(1),
+    description: "",
+  };
 }
 
-const VIEW_ACTIONS = new Set(["read"]);
-const MANAGE_ACTIONS = new Set(["write", "admin"]);
+/** MCP servers have their own table; auth clients are provisioned, not edited. */
+const OWN_TABLE_CATEGORIES = new Set(["mcp", "mcp_auth_client"]);
 
 function scopeAction(slug: string): string {
   return slug.slice(slug.indexOf(":") + 1);
 }
 
-/** Group the permissions a role can hold into platform rows. MCP is its own table. */
+/**
+ * Group the permissions a role can hold into platform rows, one per catalogue
+ * category in catalogue order. View is the category's read permission and
+ * Manage is whichever permission the server says includes it; a category
+ * whose only permission is a write (plugins) is an extra, not a row with an
+ * empty View column. MCP is its own table.
+ */
 export function platformAreas(scopes: ScopeDefinition[]): PlatformArea[] {
-  return PLATFORM_AREAS.map(({ resourceType, label, description }) => {
-    const inArea = scopes.filter(
-      (s) =>
-        s.resourceType === resourceType &&
-        s.visibility === "user_visible" &&
-        !s.slug.includes(":blocked_"),
-    );
-    const view = inArea.find((s) => VIEW_ACTIONS.has(scopeAction(s.slug)));
-    const manage = inArea.find((s) => MANAGE_ACTIONS.has(scopeAction(s.slug)));
-    // A family whose only level is a write (plugins) is an extra, not a row
-    // with an empty View column.
-    const levels = view ? [view, manage] : [];
+  const byCategory = new Map<string, ScopeDefinition[]>();
+  for (const scope of scopes) {
+    // A server that predates the catalogue sends no category; the resource
+    // type is the next best grouping.
+    const category: string = scope.category ?? scope.resourceType;
+    if (
+      scope.visibility !== "user_visible" ||
+      scope.slug.includes(":blocked_") ||
+      OWN_TABLE_CATEGORIES.has(category)
+    ) {
+      continue;
+    }
+    const inCategory = byCategory.get(category) ?? [];
+    inCategory.push(scope);
+    byCategory.set(category, inCategory);
+  }
+  return [...byCategory].map(([category, inCategory]) => {
+    const view = inCategory.find((s) => scopeAction(s.slug) === "read");
+    const manage = view
+      ? inCategory.find(
+          (s) => s !== view && (s.subScopes ?? []).includes(view.slug),
+        )
+      : undefined;
+    const levels = [view, manage].filter((s) => s !== undefined);
+    const copy = categoryCopy(category);
     return {
-      resourceType,
-      label,
-      description,
+      category,
+      resourceType: (view ?? inCategory[0]!).resourceType as ResourceType,
+      label: copy.label,
+      description: copy.description,
       view,
-      manage: view ? manage : undefined,
-      extras: inArea.filter((s) => !levels.includes(s)),
+      manage,
+      extras: inCategory.filter((s) => !levels.includes(s)),
     };
-  }).filter((area) => area.view || area.extras.length > 0);
+  });
+}
+
+/**
+ * The levels of the MCP table that a level's permission includes, as the
+ * server describes it: Manage includes View and Connect.
+ */
+export function mcpLevelIncludes(
+  scopes: ScopeDefinition[],
+  level: Level,
+): Level[] {
+  const catalogue = scopeCatalogue(scopes);
+  const closure = new Set(scopeClosure(catalogue, MCP_LEVEL_SCOPE[level]));
+  return LEVELS.filter(
+    (other) => other !== level && closure.has(MCP_LEVEL_SCOPE[other]),
+  );
 }
 
 export function platformAllows(
@@ -716,15 +718,43 @@ export function setPlatformBlocked(
   }
   const target = (area.view ?? area.manage)?.slug as Scope | undefined;
   if (on && target) {
-    next = withGrant(next, target, {
-      scope: target,
-      rules: [
-        ...(next[target]?.rules ?? []),
-        { id: crypto.randomUUID(), effect: "deny", selectors: null },
-      ],
-    });
+    next = blockEverywhere(next, target);
   }
   return next;
+}
+
+/**
+ * The Blocked column for a single permission that has no levels. Blocking
+ * takes back what the row grants and stores a block everywhere; unblocking
+ * takes the block back. Blocks on some projects stay either way.
+ */
+export function setPlatformScopeBlocked(
+  grants: Record<string, RoleGrant>,
+  scope: Scope,
+  on: boolean,
+): Record<string, RoleGrant> {
+  let next = unblockPlatformScope(grants, scope);
+  if (!on) return next;
+  const rules = (next[scope]?.rules ?? []).filter((r) => r.effect === "deny");
+  next = withGrant(
+    next,
+    scope,
+    rules.length > 0 ? { scope, rules } : undefined,
+  );
+  return blockEverywhere(next, scope);
+}
+
+function blockEverywhere(
+  grants: Record<string, RoleGrant>,
+  scope: Scope,
+): Record<string, RoleGrant> {
+  return withGrant(grants, scope, {
+    scope,
+    rules: [
+      ...(grants[scope]?.rules ?? []),
+      { id: crypto.randomUUID(), effect: "deny", selectors: null },
+    ],
+  });
 }
 
 /** Take back every platform grant and block, extras included. */

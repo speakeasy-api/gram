@@ -10,6 +10,7 @@ import { Skeleton } from "@/components/ui/Skeleton";
 import { Spinner } from "@/components/ui/Spinner";
 import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
+import type { Role } from "@gram/client/models/components/role.js";
 import type { Scope } from "@gram/client/models/components/rolegrant.js";
 import {
   invalidateAllMembers,
@@ -23,6 +24,8 @@ import { useUpdateMemberRolesMutation } from "@gram/client/react-query/updateMem
 import { useQueryClient } from "@tanstack/react-query";
 import { useMemo, useState } from "react";
 import { CreateRoleDialog } from "./CreateRoleDialog";
+import { rolePermissionSummary } from "./reviewGrants";
+import { RolePermissionPreview } from "./RolePermissionPreview";
 import {
   breadthLabel,
   suggestRolesForScope,
@@ -69,6 +72,8 @@ export function GrantAccessDialog({
 }: GrantAccessDialogProps): JSX.Element {
   const [assignedRoleId, setAssignedRoleId] = useState<string | null>(null);
   const [creatingRole, setCreatingRole] = useState(false);
+  // A role that gives sensitive access is previewed before it is assigned.
+  const [confirming, setConfirming] = useState<Role | null>(null);
   const queryClient = useQueryClient();
   const {
     data: membersData,
@@ -133,6 +138,14 @@ export function GrantAccessDialog({
     );
   };
 
+  const requestAssign = (role: Role) => {
+    if (rolePermissionSummary(role, catalogue).sensitive.length > 0) {
+      setConfirming(role);
+      return;
+    }
+    assignRole(role.id);
+  };
+
   const isLoading = membersLoading || rolesLoading || scopesLoading;
   // Suggestions and sensitivity warnings are read off the catalogue, so a
   // failed catalogue fetch is a failed dialog, not an empty one.
@@ -141,6 +154,7 @@ export function GrantAccessDialog({
   const label = scopeLabel(catalogue, scope);
   const entry = catalogue.get(scope);
   const partOf = tasksNeeding(catalogue, tasks, scope);
+  const labelFor = (slug: string) => scopeLabel(catalogue, slug);
 
   return (
     <Dialog
@@ -260,11 +274,11 @@ export function GrantAccessDialog({
                 scope={scope}
                 label={label}
                 suggestions={suggestions}
-                labelFor={(slug) => scopeLabel(catalogue, slug)}
+                labelFor={labelFor}
                 pendingRoleId={
                   updateMemberRoles.isPending ? assignedRoleId : null
                 }
-                onAssign={assignRole}
+                onAssign={requestAssign}
                 onCreateRole={() => setCreatingRole(true)}
               />
             )}
@@ -297,6 +311,44 @@ export function GrantAccessDialog({
           onRoleCreated={(role) => assignRole(role.id)}
         />
       )}
+
+      {confirming && member && (
+        <Dialog
+          open
+          onOpenChange={(open) => {
+            if (!open) setConfirming(null);
+          }}
+        >
+          <Dialog.Content className="sm:max-w-md">
+            <Dialog.Header>
+              <Dialog.Title>
+                Assign &ldquo;{confirming.name}&rdquo; to {member.name}
+              </Dialog.Title>
+              <Dialog.Description>
+                Check what the role gives before it is assigned.
+              </Dialog.Description>
+            </Dialog.Header>
+            <RolePermissionPreview
+              lead="This role gives"
+              summary={rolePermissionSummary(confirming, catalogue)}
+              labelFor={labelFor}
+            />
+            <Dialog.Footer>
+              <Button variant="secondary" onClick={() => setConfirming(null)}>
+                Cancel
+              </Button>
+              <Button
+                onClick={() => {
+                  assignRole(confirming.id);
+                  setConfirming(null);
+                }}
+              >
+                Assign role
+              </Button>
+            </Dialog.Footer>
+          </Dialog.Content>
+        </Dialog>
+      )}
     </Dialog>
   );
 }
@@ -317,7 +369,7 @@ function RoleSuggestionList({
   suggestions: RoleSuggestions;
   labelFor: (slug: string) => string;
   pendingRoleId: string | null;
-  onAssign: (roleId: string) => void;
+  onAssign: (role: Role) => void;
   onCreateRole: () => void;
 }): JSX.Element {
   const { exact, broader } = suggestions;
@@ -327,21 +379,20 @@ function RoleSuggestionList({
     { role, breadth }: SuggestedRole,
     extra?: { count: number; sensitive: string[] },
   ) => {
-    const { id: roleId, name, description } = role;
-    const alreadyAssigned = member.roleIds.includes(roleId);
+    const alreadyAssigned = member.roleIds.includes(role.id);
     const reach = breadthLabel(scope, breadth);
     return (
       <li
-        key={roleId}
+        key={role.id}
         className="border-border flex items-center justify-between gap-3 border px-3 py-2"
       >
         <div className="min-w-0 space-y-0.5">
           <Text variant="body" className="text-sm font-medium">
-            <RoleLink roleId={roleId}>{name}</RoleLink>
+            <RoleLink roleId={role.id}>{role.name}</RoleLink>
           </Text>
-          {description && (
+          {role.description && (
             <Text muted small className="truncate">
-              {description}
+              {role.description}
             </Text>
           )}
           {reach && (
@@ -370,10 +421,10 @@ function RoleSuggestionList({
           <Button
             variant={extra ? "secondary" : "primary"}
             size="sm"
-            onClick={() => onAssign(roleId)}
+            onClick={() => onAssign(role)}
             disabled={pendingRoleId !== null}
           >
-            {pendingRoleId === roleId && (
+            {pendingRoleId === role.id && (
               <Button.LeftIcon>
                 <Spinner className="mr-0" />
               </Button.LeftIcon>

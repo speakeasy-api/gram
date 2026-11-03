@@ -438,6 +438,9 @@ func (r *RoleManager) CreateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 		RoleID:           createdRole.ID,
 		RoleName:         createdRole.Name,
 		RoleSlug:         createdRole.Slug,
+		// A new role had nothing before, so everything sensitive it grants
+		// is added.
+		SensitiveScopesAdded: authz.SensitiveScopesAdded(nil, grantScopes(roleGrants)),
 	}); err != nil {
 		return RoleCreateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "log access role creation").LogError(ctx, r.logger)
 	}
@@ -687,6 +690,10 @@ func (r *RoleManager) UpdateRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID, wo
 		RoleSlug:           updatedRole.Slug,
 		RoleSnapshotBefore: existingRole,
 		RoleSnapshotAfter:  updatedRoleView,
+		SensitiveScopesAdded: authz.SensitiveScopesAdded(
+			grantScopes(existingGrants),
+			grantScopes(updatedGrants),
+		),
 	}); err != nil {
 		return RoleUpdateResult{}, RoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "log access role update").LogError(ctx, r.logger)
 	}
@@ -1051,6 +1058,19 @@ func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID s
 		},
 	}
 
+	beforePrincipals := make([]string, 0, len(existingRolePrincipals))
+	for _, rp := range existingRolePrincipals {
+		beforePrincipals = append(beforePrincipals, rp.PrincipalUrn)
+	}
+	afterPrincipals := make([]string, 0, len(roles))
+	for _, role := range roles {
+		afterPrincipals = append(afterPrincipals, role.PrincipalURN)
+	}
+	sensitiveAdded, err := r.sensitiveScopesAddedTx(ctx, tx, gramOrgID, beforePrincipals, afterPrincipals)
+	if err != nil {
+		return memberRoleUpdateContext{}, err
+	}
+
 	if err := r.audit.LogAccessMemberRoleUpdate(ctx, tx, audit.LogAccessMemberRoleUpdateEvent{
 		OrganizationID:       gramOrgID,
 		Actor:                actor.Principal,
@@ -1061,6 +1081,7 @@ func (r *RoleManager) UpdateMemberRoles(ctx context.Context, gramOrgID, userID s
 		MemberEmail:          result.After.Email,
 		MemberSnapshotBefore: result.Before,
 		MemberSnapshotAfter:  result.After,
+		SensitiveScopesAdded: sensitiveAdded,
 	}); err != nil {
 		return memberRoleUpdateContext{}, oops.E(oops.CodeUnexpected, err, "log access member role update").LogError(ctx, r.logger)
 	}
@@ -1145,6 +1166,13 @@ func (r *RoleManager) AddMemberRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID,
 		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "list existing member roles").LogError(ctx, r.logger)
 	}
 	slices.Sort(roleIDs)
+	existingRolePrincipals, err := repo.New(tx).ListMemberRolePrincipalsByWorkosUser(ctx, repo.ListMemberRolePrincipalsByWorkosUserParams{
+		OrganizationID: gramOrgID,
+		WorkosUserID:   connected.WorkosID.String,
+	})
+	if err != nil {
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "list existing member role principals").LogError(ctx, r.logger)
+	}
 	if validate != nil {
 		state := MemberRoleState{
 			MemberID:         connected.ID,
@@ -1222,6 +1250,18 @@ func (r *RoleManager) AddMemberRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID,
 
 	before := *after
 	before.RoleIds = slices.Clone(roleIDs)
+	beforePrincipals := make([]string, 0, len(existingRolePrincipals))
+	for _, rp := range existingRolePrincipals {
+		beforePrincipals = append(beforePrincipals, rp.PrincipalUrn)
+	}
+	afterPrincipals := beforePrincipals
+	if !alreadyAssigned {
+		afterPrincipals = append(slices.Clone(beforePrincipals), role.PrincipalURN)
+	}
+	sensitiveAdded, err := r.sensitiveScopesAddedTx(ctx, tx, gramOrgID, beforePrincipals, afterPrincipals)
+	if err != nil {
+		return MemberRoleAddResult{}, MemberRoleReconciliation{}, err
+	}
 	if err := r.audit.LogAccessMemberRoleUpdate(ctx, tx, audit.LogAccessMemberRoleUpdateEvent{
 		OrganizationID:       gramOrgID,
 		Actor:                actor.Principal,
@@ -1232,6 +1272,7 @@ func (r *RoleManager) AddMemberRoleTx(ctx context.Context, tx pgx.Tx, gramOrgID,
 		MemberEmail:          connected.Email,
 		MemberSnapshotBefore: &before,
 		MemberSnapshotAfter:  after,
+		SensitiveScopesAdded: sensitiveAdded,
 	}); err != nil {
 		return MemberRoleAddResult{}, MemberRoleReconciliation{}, oops.E(oops.CodeUnexpected, err, "log access member role update").LogError(ctx, r.logger)
 	}
@@ -1861,6 +1902,33 @@ func (r *RoleManager) roleViewFromLocalRole(ctx context.Context, organizationID 
 	}
 
 	return roleViewFromLocalRoleAndGrants(role, genGrants), nil
+}
+
+// grantScopes lists the scopes a set of grants names, for comparing what a
+// role gave before and after an edit.
+func grantScopes(grants []*gen.RoleGrant) []authz.Scope {
+	scopes := make([]authz.Scope, 0, len(grants))
+	for _, grant := range grants {
+		if grant == nil {
+			continue
+		}
+		scopes = append(scopes, authz.Scope(grant.Scope))
+	}
+	return scopes
+}
+
+// sensitiveScopesAddedTx names the sensitive scopes the roles in after grant
+// that the roles in before did not, read inside the membership transaction.
+func (r *RoleManager) sensitiveScopesAddedTx(ctx context.Context, tx pgx.Tx, orgID string, before, after []string) ([]string, error) {
+	beforeScopes, err := authz.ScopesGrantedTx(ctx, tx, orgID, before)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list grants before role change").LogError(ctx, r.logger)
+	}
+	afterScopes, err := authz.ScopesGrantedTx(ctx, tx, orgID, after)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "list grants after role change").LogError(ctx, r.logger)
+	}
+	return authz.SensitiveScopesAdded(beforeScopes, afterScopes), nil
 }
 
 func roleViewFromLocalRoleAndGrants(role localRole, grants []*gen.RoleGrant) *gen.Role {

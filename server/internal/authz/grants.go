@@ -336,6 +336,33 @@ func GrantsForRole(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, o
 	return scoped, nil
 }
 
+// ScopesGrantedTx lists, without duplicates, the scopes the principals hold
+// grants for. It reads inside the caller's transaction so a membership change
+// can be compared with the state it replaces.
+func ScopesGrantedTx(ctx context.Context, dbtx repo.DBTX, orgID string, principalURNs []string) ([]Scope, error) {
+	if len(principalURNs) == 0 {
+		return nil, nil
+	}
+	rows, err := repo.New(dbtx).GetPrincipalGrants(ctx, repo.GetPrincipalGrantsParams{
+		OrganizationID: orgID,
+		PrincipalUrns:  principalURNs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list grants for principals: %w", err)
+	}
+	seen := make(map[Scope]struct{}, len(rows))
+	scopes := make([]Scope, 0, len(rows))
+	for _, row := range rows {
+		scope := Scope(row.Scope)
+		if _, ok := seen[scope]; ok {
+			continue
+		}
+		seen[scope] = struct{}{}
+		scopes = append(scopes, scope)
+	}
+	return scopes, nil
+}
+
 func scopedGrantsFromGrantRows(rows []repo.GetPrincipalGrantsRow) ([]*ScopedGrant, error) {
 	grantRows := make([]Grant, 0, len(rows))
 	for _, row := range rows {

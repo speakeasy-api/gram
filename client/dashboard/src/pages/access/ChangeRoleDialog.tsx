@@ -5,6 +5,7 @@ import { invalidateAllResourceAudience } from "@gram/client/react-query/resource
 import { Avatar, AvatarFallback, AvatarImage } from "@/components/ui/Avatar";
 import { RoleLink } from "@/components/role-link";
 import { Badge } from "@/components/ui/Badge";
+import { Checkbox } from "@/components/ui/Checkbox";
 import {
   Command,
   CommandEmpty,
@@ -15,6 +16,7 @@ import {
 } from "@/components/ui/Command";
 import { Dialog } from "@/components/ui/Dialog";
 import { Text } from "@/components/ui/Text";
+import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
 import type { AccessMember } from "@gram/client/models/components/accessmember.js";
 import { invalidateAllMembers } from "@gram/client/react-query/members.js";
 import {
@@ -33,6 +35,9 @@ import {
   getUnselectedRoles,
   isUpdateDisabled,
 } from "./changeRoleState";
+import { permissionsAddedByRoles } from "./reviewGrants";
+import { RolePermissionPreview } from "./RolePermissionPreview";
+import { scopeLabel } from "./scopeCatalogue";
 
 interface ChangeRoleDialogProps {
   member: AccessMember | null;
@@ -45,8 +50,12 @@ export function ChangeRoleDialog({
 }: ChangeRoleDialogProps): JSX.Element {
   const [selectedRoleIds, setSelectedRoleIds] = useState<string[]>([]);
   const [search, setSearch] = useState("");
+  // Sensitive permissions the new roles add must be acknowledged before the
+  // update goes through; any change to the selection asks again.
+  const [confirmed, setConfirmed] = useState(false);
   const queryClient = useQueryClient();
   const { data: rolesData } = useRoles();
+  const { catalogue } = useScopeCatalogue();
   const roles = useMemo(() => rolesData?.roles ?? [], [rolesData?.roles]);
   const roleById = useMemo(() => new Map(roles.map((r) => [r.id, r])), [roles]);
 
@@ -67,15 +76,18 @@ export function ChangeRoleDialog({
   useEffect(() => {
     setSelectedRoleIds(member?.roleIds ?? []);
     setSearch("");
+    setConfirmed(false);
   }, [member]);
 
   const addRole = (roleId: string) => {
     setSelectedRoleIds((prev) => addRoleToSelection(prev, roleId));
     setSearch("");
+    setConfirmed(false);
   };
 
   const removeRole = (roleId: string) => {
     setSelectedRoleIds((prev) => removeRoleFromSelection(prev, roleId));
+    setConfirmed(false);
   };
 
   const unselectedRoles = getUnselectedRoles(roles, selectedRoleIds);
@@ -84,11 +96,28 @@ export function ChangeRoleDialog({
     return role ? [role] : [];
   });
 
-  const updateDisabled = isUpdateDisabled({
-    isPending: updateMemberRoles.isPending,
-    selectedIds: selectedRoleIds,
-    originalIds: member?.roleIds ?? [],
-  });
+  const originalRoleIds = member?.roleIds;
+  const added = useMemo(() => {
+    const toRoles = (ids: readonly string[]) =>
+      ids.flatMap((id) => {
+        const role = roleById.get(id);
+        return role ? [role] : [];
+      });
+    return permissionsAddedByRoles(
+      toRoles(originalRoleIds ?? []),
+      toRoles(selectedRoleIds),
+      catalogue,
+    );
+  }, [originalRoleIds, selectedRoleIds, roleById, catalogue]);
+  const needsConfirmation = added.sensitive.length > 0;
+
+  const updateDisabled =
+    isUpdateDisabled({
+      isPending: updateMemberRoles.isPending,
+      selectedIds: selectedRoleIds,
+      originalIds: member?.roleIds ?? [],
+    }) ||
+    (needsConfirmation && !confirmed);
 
   const handleUpdate = () => {
     if (!member || selectedRoleIds.length === 0) return;
@@ -207,6 +236,27 @@ export function ChangeRoleDialog({
                 </span>
               )}
             </div>
+
+            {/* What the new selection gives that the member did not have. */}
+            <RolePermissionPreview
+              lead="These roles add"
+              summary={added}
+              labelFor={(scope) => scopeLabel(catalogue, scope)}
+            />
+            {needsConfirmation && (
+              <label className="flex cursor-pointer items-start gap-3 text-left">
+                <Checkbox
+                  checked={confirmed}
+                  onCheckedChange={(checked) => setConfirmed(checked === true)}
+                  aria-label="Confirm sensitive permissions"
+                  className="mt-0.5"
+                />
+                <Text variant="body" className="text-sm">
+                  I reviewed the sensitive permissions above and want{" "}
+                  {member.name} to have them.
+                </Text>
+              </label>
+            )}
 
             {directoryRoles.length > 0 && (
               <Text variant="body" className="text-muted-foreground text-xs">

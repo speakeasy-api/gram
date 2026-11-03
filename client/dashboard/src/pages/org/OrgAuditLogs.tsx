@@ -31,6 +31,8 @@ import {
   formatActingSurfaceLabel,
   isNotableActingSurface,
 } from "@/lib/audit-surfaces";
+import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
+import { scopeLabel } from "@/pages/access/scopeCatalogue";
 import type { AuditLog } from "@gram/client/models/components/auditlog.js";
 import { chatSessionsCreate } from "@gram/client/funcs/chatSessionsCreate";
 import { useGramContext } from "@gram/client/react-query/_context.js";
@@ -55,6 +57,7 @@ import {
   formatSubjectLabel,
   getActorLabel,
   renderVerb,
+  sensitiveScopesAdded,
 } from "@/lib/audit-log-format";
 import { StructuredDiff } from "@/components/auditlogs/structured-diff";
 import {
@@ -252,9 +255,13 @@ function AuditLogRow({
 }) {
   const [diffExpanded, setDiffExpanded] = useState(false);
   const showDiff = hasDiff(log);
+  const { catalogue } = useScopeCatalogue();
 
   const actorLabel = getActorLabel(log);
   const verbText = renderVerb(log);
+  // A role or membership change that gave sensitive access says so on the
+  // row, named from the catalogue, so it can be found without opening the diff.
+  const sensitiveAdded = sensitiveScopesAdded(log);
 
   const rowContent = (
     <div className="group flex items-center gap-3 px-4 py-2.5">
@@ -284,6 +291,14 @@ function AuditLogRow({
               }
             >
               via {formatActingSurfaceLabel(log.actingSurface)}
+            </span>
+          )}
+          {sensitiveAdded.length > 0 && (
+            <span className="border-warning-softest text-default-warning ml-2 border px-1.5 py-0.5 align-middle text-xs">
+              Added sensitive access:{" "}
+              {sensitiveAdded
+                .map((scope) => scopeLabel(catalogue, scope))
+                .join(", ")}
             </span>
           )}
         </span>

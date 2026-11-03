@@ -83,7 +83,18 @@ vi.mock("@gram/client/react-query/listScopes.js", () => ({
           slug: "inference:execute",
           resourceType: "inference",
           visibility: "user_visible",
-          description: "Run inference",
+          label: "Run inference",
+          description: "Call the inference API in the selected projects.",
+        },
+        {
+          slug: "log:read",
+          resourceType: "project",
+          category: "log",
+          visibility: "user_visible",
+          label: "View tool logs",
+          description: "Read tool arguments and results.",
+          sensitive: true,
+          subScopes: [],
         },
         ...(["connect", "read", "write"] as const).map((action) => ({
           slug: `mcp:${action}`,
@@ -185,6 +196,14 @@ function renderEditor(
 // Radix tabs switch on mouse down, not click.
 function openPlatformTab() {
   fireEvent.mouseDown(screen.getByRole("tab", { name: "Platform access" }));
+}
+/** Save or create. A save that adds a permission is reviewed first. */
+function submit(label: "Save Changes" | "Create Role") {
+  fireEvent.click(screen.getByRole("button", { name: label }));
+  const review = screen.queryByRole("button", {
+    name: label === "Save Changes" ? "Save role" : "Create role",
+  });
+  if (review) fireEvent.click(review);
 }
 afterEach(cleanup);
 beforeEach(() => {
@@ -301,7 +320,7 @@ describe("agent assignment", () => {
     });
     openPlatformTab();
     fireEvent.click(screen.getByRole("button", { name: "View organization" }));
-    fireEvent.click(screen.getByRole("button", { name: "Create Role" }));
+    submit("Create Role");
     expect(mocks.create).toHaveBeenCalledOnce();
     expect(
       mocks.create.mock.calls[0]![0].request.createRoleForm,
@@ -399,6 +418,73 @@ describe("who holds the role under directory sync", () => {
   });
 });
 
+describe("the review step", () => {
+  it("lists what a save adds and requires confirmation for sensitive access", () => {
+    renderEditor(role);
+    openPlatformTab();
+    fireEvent.click(screen.getByRole("button", { name: "View tool logs" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(mocks.update).not.toHaveBeenCalled();
+
+    const review = within(
+      screen.getByRole("dialog", { name: "Review changes to “Test role”" }),
+    );
+    expect(review.getByText("View tool logs")).toBeTruthy();
+    expect(review.getByText("Sensitive")).toBeTruthy();
+    expect(review.getByText("Everywhere")).toBeTruthy();
+    expect(
+      review.getByText("0 members hold this role today.", { exact: false }),
+    ).toBeTruthy();
+    const save = review.getByRole("button", { name: "Save role" });
+    expect(save.getAttribute("disabled")).not.toBeNull();
+
+    fireEvent.click(
+      review.getByRole("checkbox", { name: "Confirm sensitive permissions" }),
+    );
+    fireEvent.click(save);
+    expect(mocks.update).toHaveBeenCalledOnce();
+    expect(
+      mocks.update.mock.calls[0]![0].request.updateRoleForm.addGrants,
+    ).toEqual([{ scope: "log:read", selectors: undefined }]);
+  });
+
+  it("needs no confirmation when nothing added is sensitive", () => {
+    renderEditor(role);
+    openPlatformTab();
+    fireEvent.click(screen.getByRole("button", { name: "View organization" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    const review = within(
+      screen.getByRole("dialog", { name: "Review changes to “Test role”" }),
+    );
+    expect(review.queryByRole("checkbox")).toBeNull();
+    const save = review.getByRole("button", { name: "Save role" });
+    expect(save.getAttribute("disabled")).toBeNull();
+    fireEvent.click(save);
+    expect(mocks.update).toHaveBeenCalledOnce();
+  });
+
+  it("goes back to the form without saving", () => {
+    renderEditor(role);
+    openPlatformTab();
+    fireEvent.click(screen.getByRole("button", { name: "View organization" }));
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    fireEvent.click(screen.getByRole("button", { name: "Back" }));
+    expect(screen.queryByRole("button", { name: "Save role" })).toBeNull();
+    expect(mocks.update).not.toHaveBeenCalled();
+  });
+
+  it("skips the step when the save adds no permission", () => {
+    renderEditor(role);
+    fireEvent.change(
+      screen.getByPlaceholderText("Describe what this role can do..."),
+      { target: { value: "Updated description" } },
+    );
+    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    expect(screen.queryByRole("button", { name: "Save role" })).toBeNull();
+    expect(mocks.update).toHaveBeenCalledOnce();
+  });
+});
+
 describe("the access grid", () => {
   /** The default project, which the servers sit in, starts open. */
   function show(editingRole: Parameters<typeof renderEditor>[0]) {
@@ -406,7 +492,7 @@ describe("the access grid", () => {
   }
 
   function savedForm() {
-    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    submit("Save Changes");
     expect(mocks.update).toHaveBeenCalledOnce();
     return mocks.update.mock.calls[0]![0].request.updateRoleForm;
   }
@@ -624,7 +710,7 @@ describe("a role read again while the editor is open", () => {
     });
   }
   function savedForm() {
-    fireEvent.click(screen.getByRole("button", { name: "Save Changes" }));
+    submit("Save Changes");
     expect(mocks.update).toHaveBeenCalledOnce();
     return mocks.update.mock.calls[0]![0].request.updateRoleForm;
   }
