@@ -154,8 +154,8 @@ func (s *Service) SetExecutionProfileChoice(ctx context.Context, payload *gen.Se
 		return nil, oops.E(oops.CodeBadRequest, err, "%s", upstreamclients.ErrChoiceNeedsCredential.Error()).LogWarn(ctx, s.logger)
 	case errors.Is(err, upstreamclients.ErrChoiceNeedsNoCredential):
 		return nil, oops.E(oops.CodeBadRequest, err, "%s", upstreamclients.ErrChoiceNeedsNoCredential.Error()).LogWarn(ctx, s.logger)
-	case errors.Is(err, upstreamclients.ErrChoiceUpstreamAuthUndecided):
-		return nil, oops.E(oops.CodeBadRequest, err, "%s", upstreamclients.ErrChoiceUpstreamAuthUndecided.Error()).LogWarn(ctx, s.logger)
+	case errors.Is(err, upstreamclients.ErrChoiceUpstreamAuthPending):
+		return nil, oops.E(oops.CodeBadRequest, err, "%s", upstreamclients.ErrChoiceUpstreamAuthPending.Error()).LogWarn(ctx, s.logger)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "change execution profile").LogError(ctx, s.logger)
 	}

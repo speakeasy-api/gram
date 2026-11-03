@@ -12,14 +12,19 @@ import (
 func TestAuditCursor(t *testing.T) {
 	t.Parallel()
 
-	cursor := audit.EncodeCursor(42, "row-id")
-	require.Equal(t, base64.RawURLEncoding.EncodeToString([]byte("42:row-id")), cursor)
+	cursor := audit.EncodeCursor(audit.CategoryConfiguration, 42, "row-id")
+	require.Equal(t, base64.RawURLEncoding.EncodeToString([]byte("42:row-id")), cursor, "configuration cursors keep the original format")
 
-	seq, err := audit.DecodeCursor(cursor)
+	decoded, err := audit.DecodeCursor(cursor)
 	require.NoError(t, err)
-	require.Equal(t, int64(42), seq)
+	require.Equal(t, audit.Cursor{Seq: 42, Category: audit.CategoryConfiguration}, decoded)
 
-	for _, cursor := range []string{"%%%", base64.RawURLEncoding.EncodeToString([]byte("42")), base64.RawURLEncoding.EncodeToString([]byte("nope:row-id"))} {
+	security := audit.EncodeCursor(audit.CategorySecurity, 1_000_000_000_042, "row-id")
+	decoded, err = audit.DecodeCursor(security)
+	require.NoError(t, err)
+	require.Equal(t, audit.Cursor{Seq: 1_000_000_000_042, Category: audit.CategorySecurity}, decoded)
+
+	for _, cursor := range []string{"%%%", base64.RawURLEncoding.EncodeToString([]byte("42")), base64.RawURLEncoding.EncodeToString([]byte("nope:row-id")), base64.RawURLEncoding.EncodeToString([]byte("security:42"))} {
 		_, err := audit.DecodeCursor(cursor)
 		require.Error(t, err)
 	}

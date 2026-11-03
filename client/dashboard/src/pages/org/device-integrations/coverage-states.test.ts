@@ -1,4 +1,4 @@
-import type { ManagedDevice } from "@gram/client/models/components/manageddevice.js";
+import type { FleetDevice } from "@gram/client/models/components/fleetdevice.js";
 import { describe, expect, it } from "vitest";
 import {
   coverageDisplay,
@@ -7,14 +7,15 @@ import {
   toolLabel,
 } from "./coverage-states";
 
-function device(overrides: Partial<ManagedDevice>): ManagedDevice {
+function device(overrides: Partial<FleetDevice>): FleetDevice {
   return {
-    id: "d1",
+    id: "mdm:d1",
+    inInventory: true,
     provider: "jamf",
     externalId: "ext-1",
     coverageBucket: "agent_active",
     ...overrides,
-  } as ManagedDevice;
+  } as FleetDevice;
 }
 
 describe("deviceCoverageKey", () => {

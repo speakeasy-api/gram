@@ -153,8 +153,11 @@ function WidgetsInner(): JSX.Element {
 ```
 
 That's the entire page. Title styling, breadcrumbs, the loading skeleton, the
-empty state, spacing — all owned by the template. Wire the page into
-`src/routes.tsx` (copy an existing entry) and it appears in the nav.
+empty state, spacing — all owned by the template. Add its path to
+`src/routes.tsx` and its component to `src/route-pages.tsx` (copy an existing
+entry in each) and the page is routable. To list it in the sidebar and the
+command palette, also add it to `src/hooks/useProjectNavRoutes.ts` and
+`src/components/app-sidebar.tsx`.
 
 ## Step 5 — verify
 

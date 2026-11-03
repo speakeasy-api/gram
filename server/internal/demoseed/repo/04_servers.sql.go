@@ -199,8 +199,7 @@ type ServersInsertAuthClientParams struct {
 // Typed auth clients, as the upstream OAuth migration records them: Linear's
 // personal client over its OAuth registration, and one static credential
 // shared by GitHub and Linear, so the server settings show a shared client
-// and a server offering two. Slack is left undecided about upstream
-// authentication.
+// and a server offering two. Slack offers none.
 // The projects delete cascades the clients, their headers and associations.
 func (q *Queries) ServersInsertAuthClient(ctx context.Context, arg ServersInsertAuthClientParams) error {
 	_, err := q.db.Exec(ctx, serversInsertAuthClient,
@@ -480,9 +479,9 @@ type ServersInsertEMAIdentityProviderClientParams struct {
 	RemoteSessionIssuerID uuid.UUID
 }
 
-// The workforce sign-in is left as it is: pointing it at this fictional
-// provider would send interactive sign-in for every server on it to a
-// provider that doesn't exist. The Services pages still show these vendors.
+// The workforce sign-in client is left unset: pointing interactive sign-in at
+// this fictional provider would send every server on it to a provider that
+// doesn't exist. The Services pages still show these vendors.
 func (q *Queries) ServersInsertEMAIdentityProviderClient(ctx context.Context, arg ServersInsertEMAIdentityProviderClientParams) error {
 	_, err := q.db.Exec(ctx, serversInsertEMAIdentityProviderClient, arg.ID, arg.OrgID, arg.RemoteSessionIssuerID)
 	return err
@@ -686,8 +685,8 @@ func (q *Queries) ServersInsertEngineeringEssentialsAssignment(ctx context.Conte
 }
 
 const serversInsertEngineeringEssentialsPlugin = `-- name: ServersInsertEngineeringEssentialsPlugin :one
-INSERT INTO plugins (organization_id, project_id, name, slug)
-VALUES ($1::text, $2::uuid, 'Engineering Essentials', 'engineering-essentials')
+INSERT INTO plugins (organization_id, project_id, name, slug, auto_sync_enabled)
+VALUES ($1::text, $2::uuid, 'Engineering Essentials', 'engineering-essentials', false)
 RETURNING id
 `
 
@@ -2132,21 +2131,45 @@ func (q *Queries) ServersInsertValidatedSession(ctx context.Context, arg Servers
 	return err
 }
 
-const serversMarkRequiresUpstreamAuth = `-- name: ServersMarkRequiresUpstreamAuth :exec
-UPDATE mcp_servers
-SET requires_upstream_auth = TRUE
-WHERE project_id = $1::uuid
-  AND id = ANY($2::uuid[])
+const serversPickGatewayGitHubCredential = `-- name: ServersPickGatewayGitHubCredential :execrows
+UPDATE upstream_client_selections AS sel
+SET auth_client_id = ac.id,
+    auth_client_attachment_scope = ac.attachment_scope,
+    no_auth = FALSE
+FROM mcp_auth_clients AS ac
+WHERE ac.id = $1::uuid
+  AND ac.organization_id = $2::text
+  AND sel.project_id = $3::uuid
+  AND sel.organization_id = $2::text
+  AND sel.credential_kind = 'user_session'
+  AND sel.credential_id = ANY($4::uuid[])
+  AND sel.mcp_server_id = $5::uuid
+  AND sel.deleted IS FALSE
 `
 
-type ServersMarkRequiresUpstreamAuthParams struct {
-	ProjectID uuid.UUID
-	Ids       []uuid.UUID
+type ServersPickGatewayGitHubCredentialParams struct {
+	AuthClientID  uuid.UUID
+	OrgID         string
+	ProjectID     uuid.UUID
+	CredentialIds []uuid.UUID
+	McpServerID   uuid.UUID
 }
 
-func (q *Queries) ServersMarkRequiresUpstreamAuth(ctx context.Context, arg ServersMarkRequiresUpstreamAuthParams) error {
-	_, err := q.db.Exec(ctx, serversMarkRequiresUpstreamAuth, arg.ProjectID, arg.Ids)
-	return err
+// Sets the organization gateway's seeded GitHub choices to the caller's own
+// GitHub token. The server offers two credentials, so a choice that names
+// neither resolves to no credential under enforcement.
+func (q *Queries) ServersPickGatewayGitHubCredential(ctx context.Context, arg ServersPickGatewayGitHubCredentialParams) (int64, error) {
+	result, err := q.db.Exec(ctx, serversPickGatewayGitHubCredential,
+		arg.AuthClientID,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.CredentialIds,
+		arg.McpServerID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const serversStampLinearRemoteSessionIssuer = `-- name: ServersStampLinearRemoteSessionIssuer :exec
@@ -2172,6 +2195,32 @@ type ServersStampLinearRemoteSessionIssuerParams struct {
 func (q *Queries) ServersStampLinearRemoteSessionIssuer(ctx context.Context, arg ServersStampLinearRemoteSessionIssuerParams) error {
 	_, err := q.db.Exec(ctx, serversStampLinearRemoteSessionIssuer, arg.RemoteSessionIssuerID, arg.McpServerID, arg.ProjectID)
 	return err
+}
+
+const serversTrustEMAIdentityProviderForInboundEMA = `-- name: ServersTrustEMAIdentityProviderForInboundEMA :execrows
+UPDATE user_session_issuers
+SET trusted_remote_session_issuer_id = $1::uuid
+WHERE id = $2::uuid
+  AND organization_id = $3::text
+  AND project_id IS NULL
+  AND deleted IS FALSE
+`
+
+type ServersTrustEMAIdentityProviderForInboundEMAParams struct {
+	EmaProvider     uuid.UUID
+	WorkforceIssuer uuid.UUID
+	OrgID           string
+}
+
+// Inbound EMA: the workforce issuer accepts ID-JAGs from Acme Identity. Only
+// the issuer is linked, never the sign-in client, so interactive sign-in stays
+// on the organization's own login.
+func (q *Queries) ServersTrustEMAIdentityProviderForInboundEMA(ctx context.Context, arg ServersTrustEMAIdentityProviderForInboundEMAParams) (int64, error) {
+	result, err := q.db.Exec(ctx, serversTrustEMAIdentityProviderForInboundEMA, arg.EmaProvider, arg.WorkforceIssuer, arg.OrgID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const serversUpsertLinearProtectedResource = `-- name: ServersUpsertLinearProtectedResource :exec

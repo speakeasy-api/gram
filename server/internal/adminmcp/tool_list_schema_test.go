@@ -144,7 +144,7 @@ func TestToolListSatisfiesMCPToolSchema(t *testing.T) {
 		names[tool.Name] = true
 	}
 	// Every write tool is present, including those past the first page.
-	for _, name := range []string{"execute_admin_proposal", "get_admin_proposal_status", "prepare_set_organization_feature", "prepare_create_registry_entry", "prepare_update_support_matrix", "create_image_upload_url"} {
+	for _, name := range []string{"execute_admin_proposal", "get_admin_proposal_status", "prepare_set_organization_feature", "prepare_create_registry_entry", "prepare_set_registry_icons", "prepare_update_support_matrix", "create_image_upload_url"} {
 		require.True(t, names[name], "%s missing from tools/list", name)
 	}
 }
@@ -195,8 +195,8 @@ func TestAuditLogEntriesListedSchema(t *testing.T) {
 		require.True(t, ok)
 		fields, ok := item["properties"].(map[string]any)
 		require.True(t, ok)
-		require.Len(t, fields, 18)
-		for _, name := range []string{"id", "project_id", "project_slug", "actor_id", "actor_type", "actor_display_name", "actor_slug", "action", "acting_surface", "acting_client_id", "subject_id", "subject_type", "subject_display_name", "subject_slug", "before_snapshot", "after_snapshot", "metadata", "created_at"} {
+		require.Len(t, fields, 19)
+		for _, name := range []string{"id", "project_id", "project_slug", "actor_id", "actor_type", "actor_display_name", "actor_slug", "action", "acting_surface", "acting_client_id", "category", "subject_id", "subject_type", "subject_display_name", "subject_slug", "before_snapshot", "after_snapshot", "metadata", "created_at"} {
 			require.Contains(t, fields, name)
 		}
 		for _, name := range []string{"before_snapshot", "after_snapshot"} {

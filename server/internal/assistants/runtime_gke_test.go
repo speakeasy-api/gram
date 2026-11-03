@@ -455,3 +455,74 @@ func TestGKEReapDeletesClaimIdempotently(t *testing.T) {
 	// Idempotent: reaping an already-gone claim succeeds.
 	require.NoError(t, backend.Reap(t.Context(), record))
 }
+
+func TestGKEResolveRunnerPodAssignedSandbox(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name      string
+		conflict  string
+		count     int
+		wantError bool
+		wantIP    string
+	}{
+		{name: "selector discovers runner", count: 1, wantIP: "10.52.0.10"},
+		{name: "sandbox belongs to another claim", conflict: "claim", count: 1, wantError: true},
+		{name: "pod belongs to another sandbox", conflict: "sandbox", count: 1},
+		{name: "pod carries another claim label", conflict: "label", count: 1},
+		{name: "multiple matching pods", count: 2, wantError: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			dyn := newGKEFakeDynamic()
+			claim := &unstructured.Unstructured{Object: map[string]any{
+				"apiVersion": "extensions.agents.x-k8s.io/v1alpha1", "kind": "SandboxClaim",
+				"metadata": map[string]any{"name": "claim", "namespace": "gram-test", "uid": "claim-uid"},
+				"status":   map[string]any{"sandbox": map[string]any{"name": "assigned"}},
+			}}
+			owner := func(api, kind, name, uid string) []any {
+				return []any{map[string]any{"apiVersion": api, "kind": kind, "name": name, "uid": uid, "controller": true}}
+			}
+			claimUID := "claim-uid"
+			if tc.conflict == "claim" {
+				claimUID = "other-claim"
+			}
+			sb := &unstructured.Unstructured{Object: map[string]any{
+				"apiVersion": "agents.x-k8s.io/v1alpha1", "kind": "Sandbox",
+				"metadata": map[string]any{"name": "assigned", "namespace": "gram-test", "uid": "sandbox-uid", "ownerReferences": owner(claim.GetAPIVersion(), "SandboxClaim", "claim", claimUID)},
+				"status":   map[string]any{"selector": "runner=assigned"},
+			}}
+			seedUnstructured(t, dyn, sandbox.Sandboxes, sb)
+			for i := range tc.count {
+				sandboxUID := "sandbox-uid"
+				if tc.conflict == "sandbox" {
+					sandboxUID = "other-sandbox"
+				}
+				labels := map[string]any{"runner": "assigned"}
+				if tc.conflict == "label" {
+					labels[sandbox.ClaimUIDLabel] = "other-claim"
+				}
+				pod := &unstructured.Unstructured{Object: map[string]any{
+					"apiVersion": "v1", "kind": "Pod",
+					"metadata": map[string]any{"name": "runner-" + strconv.Itoa(i), "namespace": "gram-test", "uid": "pod-" + strconv.Itoa(i), "labels": labels, "ownerReferences": owner(sb.GetAPIVersion(), "Sandbox", "assigned", sandboxUID)},
+					"spec":     map[string]any{"containers": []any{map[string]any{"name": "runner", "image": "runner:test"}}},
+					"status":   map[string]any{"phase": "Running", "podIP": "10.52.0.10"},
+				}}
+				seedUnstructured(t, dyn, sandbox.Pods, pod)
+			}
+			backend := newTestGKEBackend(t, dyn, http.DefaultClient, 8080)
+			ip, image, err := backend.resolveRunnerPod(t.Context(), claim)
+			if tc.wantError {
+				require.Error(t, err)
+				require.Empty(t, ip)
+				return
+			}
+			require.NoError(t, err)
+			require.Equal(t, tc.wantIP, ip)
+			if tc.wantIP != "" {
+				require.Equal(t, "runner:test", image)
+			} else {
+				require.Empty(t, image)
+			}
+		})
+	}
+}

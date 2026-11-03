@@ -3050,6 +3050,7 @@ SELECT
     p.slug,
     p.description,
     p.auto_created,
+    p.auto_sync_enabled,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -3362,6 +3363,7 @@ SELECT
     p.slug,
     p.description,
     p.auto_created,
+    p.auto_sync_enabled,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -4129,6 +4131,15 @@ SELECT n.id, n.seq, n.created_at, n.role, n.generation,
                ORDER BY cp.provider, cp.provider_user_id, cp.id LIMIT 5) cp
        ), '[]')::jsonb AS participants
 FROM neighbors n ORDER BY n.seq;
+
+-- name: TryAcquireInboundEMAProviderLock :one
+-- Serialize finding or creating an organization's identity provider record
+-- for one issuer URL, so concurrent trusts never create two. Non-blocking: a
+-- waiter would hold a pooled connection the holder's nested calls need.
+SELECT pg_try_advisory_lock(hashtextextended('inbound-ema-provider:' || @organization_id::text || ':' || @issuer::text, 0));
+
+-- name: ReleaseInboundEMAProviderLock :one
+SELECT pg_advisory_unlock(hashtextextended('inbound-ema-provider:' || @organization_id::text || ':' || @issuer::text, 0)) AS unlocked;
 
 -- name: ListHeadlessCallerClients :many
 -- The live OAuth clients that sign in through one sign-in, in the

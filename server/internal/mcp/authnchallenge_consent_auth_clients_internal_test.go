@@ -154,16 +154,20 @@ func TestConsentAuthChoices(t *testing.T) {
 	t.Run("no authentication and incomplete setup are told apart", func(t *testing.T) {
 		t.Parallel()
 		f := newAuthClientFixture(t, pool)
-		require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(t.Context(), authclientbackfill.SetRequiresUpstreamAuthFixtureParams{ID: f.serverID, RequiresUpstreamAuth: pgtype.Bool{Bool: true, Valid: true}}))
 		auth := choices(t, f, user, nil, uuid.Nil)
+		require.Equal(t, consentAuthNoAuth, auth.Status, "nothing offered and nothing to record")
+		require.True(t, auth.Approvable())
+		require.Nil(t, auth.Selected())
+
+		// An upstream OAuth client no auth client records yet.
+		f.attach()
+		auth = choices(t, f, user, nil, uuid.Nil)
 		require.Equal(t, consentAuthSetupIncomplete, auth.Status)
 		require.False(t, auth.Approvable())
 
 		require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(t.Context(), authclientbackfill.SetRequiresUpstreamAuthFixtureParams{ID: f.serverID, RequiresUpstreamAuth: pgtype.Bool{Bool: false, Valid: true}}))
 		auth = choices(t, f, user, nil, uuid.Nil)
-		require.Equal(t, consentAuthNoAuth, auth.Status)
-		require.True(t, auth.Approvable())
-		require.Nil(t, auth.Selected())
+		require.Equal(t, consentAuthSetupIncomplete, auth.Status, "a stored requirement is ignored")
 	})
 }
 

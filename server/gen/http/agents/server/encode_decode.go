@@ -1370,11 +1370,12 @@ func DecodeListDelegableGrantsRequest(mux goahttp.Muxer, decoder func(*http.Requ
 	return func(r *http.Request) (*agents.ListDelegableGrantsPayload, error) {
 		var payload *agents.ListDelegableGrantsPayload
 		var (
-			agentID      string
-			toolsetID    *string
-			toolsetIds   []string
-			sessionToken *string
-			err          error
+			agentID         string
+			toolsetID       *string
+			toolsetIds      []string
+			carryExclusions bool
+			sessionToken    *string
+			err             error
 		)
 		qp := r.URL.Query()
 		agentID = qp.Get("agent_id")
@@ -1396,6 +1397,16 @@ func DecodeListDelegableGrantsRequest(mux goahttp.Muxer, decoder func(*http.Requ
 		for _, e := range toolsetIds {
 			err = goa.MergeErrors(err, goa.ValidateFormat("toolset_ids[*]", e, goa.FormatUUID))
 		}
+		{
+			carryExclusionsRaw := qp.Get("carry_exclusions")
+			if carryExclusionsRaw != "" {
+				v, err2 := strconv.ParseBool(carryExclusionsRaw)
+				if err2 != nil {
+					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("carry_exclusions", carryExclusionsRaw, "boolean"))
+				}
+				carryExclusions = v
+			}
+		}
 		sessionTokenRaw := r.Header.Get("Gram-Session")
 		if sessionTokenRaw != "" {
 			sessionToken = &sessionTokenRaw
@@ -1403,7 +1414,7 @@ func DecodeListDelegableGrantsRequest(mux goahttp.Muxer, decoder func(*http.Requ
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListDelegableGrantsPayload(agentID, toolsetID, toolsetIds, sessionToken)
+		payload = NewListDelegableGrantsPayload(agentID, toolsetID, toolsetIds, carryExclusions, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")

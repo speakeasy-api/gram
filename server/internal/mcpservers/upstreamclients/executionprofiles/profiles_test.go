@@ -55,8 +55,9 @@ func newFixture(t *testing.T) *fixture {
 	return f
 }
 
-// server seeds a remote server the assistant reaches.
-func (f *fixture) server(requiresAuth pgtype.Bool) uuid.UUID {
+// server seeds a remote server the assistant reaches. stored is the
+// server's stored requires_upstream_auth, which nothing reads.
+func (f *fixture) server(stored pgtype.Bool) uuid.UUID {
 	f.t.Helper()
 	ctx := f.t.Context()
 	id, remoteID := uuid.New(), uuid.New()
@@ -66,7 +67,7 @@ func (f *fixture) server(requiresAuth pgtype.Bool) uuid.UUID {
 		ProjectID:            f.projectID,
 		Slug:                 pgtype.Text{String: "s-" + id.String()[:8], Valid: true},
 		RemoteMcpServerID:    uuid.NullUUID{UUID: remoteID, Valid: true},
-		RequiresUpstreamAuth: requiresAuth,
+		RequiresUpstreamAuth: stored,
 	}))
 	require.NoError(f.t, f.q.SeedAssistantServerFixture(ctx, SeedAssistantServerFixtureParams{AssistantID: f.assistant, McpServerID: id, ProjectID: f.projectID}))
 	return id
@@ -136,47 +137,57 @@ func (f *fixture) choices(versionID uuid.UUID) map[uuid.UUID]uuid.UUID {
 	return out
 }
 
-var undecided = pgtype.Bool{Bool: false, Valid: false}
+var unstored = pgtype.Bool{Bool: false, Valid: false}
 
 func TestBindDecidesOnlyWhatConfigurationDecides(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	personal := f.server(undecided)
+	personal := f.server(unstored)
 	personalClient := f.authClient(personal, typeRemoteSession, f.registration(personal))
-	shared := f.server(undecided)
+	shared := f.server(unstored)
 	sharedClient := f.authClient(shared, typeServiceAccount, f.registration(shared))
-	headers := f.server(undecided)
+	headers := f.server(unstored)
 	headerClient := f.authClient(headers, typeStaticCredential, uuid.Nil)
-	open := f.server(pgtype.Bool{Bool: false, Valid: true})
-	openWithHeaders := f.server(pgtype.Bool{Bool: false, Valid: true})
-	f.authClient(openWithHeaders, typeStaticCredential, uuid.Nil)
-	incomplete := f.server(pgtype.Bool{Bool: true, Valid: true})
-	several := f.server(undecided)
-	f.registration(several)
-	f.registration(several)
-	unset := f.server(undecided)
+	open := f.server(unstored)
+	// A stored requirement is never read: a server with no auth client needs
+	// none.
+	storedRequired := f.server(pgtype.Bool{Bool: true, Valid: true})
+	// A stored no-auth requirement never overrides an enabled client.
+	storedNone := f.server(pgtype.Bool{Bool: false, Valid: true})
+	storedNoneClient := f.authClient(storedNone, typeStaticCredential, uuid.Nil)
+	disabled := f.server(unstored)
+	require.NoError(t, f.q.DisableAuthClientFixture(t.Context(), DisableAuthClientFixtureParams{ID: f.authClient(disabled, typeStaticCredential, uuid.Nil), OrganizationID: f.orgID}))
+	detached := f.server(unstored)
+	require.NoError(t, f.q.DetachAuthClientFixture(t.Context(), DetachAuthClientFixtureParams{McpServerID: detached, AuthClientID: f.authClient(detached, typeServiceAccount, f.registration(detached)), OrganizationID: f.orgID}))
+	// An upstream OAuth client no auth client records yet.
+	pending := f.server(unstored)
+	f.registration(pending)
+	several := f.server(unstored)
+	f.authClient(several, typeStaticCredential, uuid.Nil)
+	f.authClient(several, typePassThrough, uuid.Nil)
 
 	binding := f.bind(ContextUserBacked)
 	require.Equal(t, int64(1), binding.Version)
 	require.Equal(t, map[uuid.UUID]uuid.UUID{
-		personal: personalClient,
-		shared:   sharedClient,
-		headers:  headerClient,
-		open:     uuid.Nil,
-		// A server that needs no sign-in takes no credential even if one is linked.
-		openWithHeaders: uuid.Nil,
+		personal:       personalClient,
+		shared:         sharedClient,
+		headers:        headerClient,
+		open:           uuid.Nil,
+		storedRequired: uuid.Nil,
+		storedNone:     storedNoneClient,
+		disabled:       uuid.Nil,
+		detached:       uuid.Nil,
 	}, f.choices(binding.VersionID))
 	require.ElementsMatch(t, []Gap{
-		{MCPServerID: incomplete, Reason: GapSetupIncomplete},
+		{MCPServerID: pending, Reason: GapSetupIncomplete},
 		{MCPServerID: several, Reason: GapSelectionRequired},
-		{MCPServerID: unset, Reason: GapUpstreamAuthUndecided},
 	}, binding.Gaps)
 }
 
 func TestBindTreatsEMAAsPersonal(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	server := f.server(undecided)
+	server := f.server(unstored)
 	registration := f.registration(server)
 	emaClient := f.authClient(server, typeEMA, registration)
 
@@ -192,7 +203,7 @@ func TestBindTreatsEMAAsPersonal(t *testing.T) {
 func TestBindTreatsAnEMAAndAPersonalClientAsAmbiguous(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	server := f.server(undecided)
+	server := f.server(unstored)
 	registration := f.registration(server)
 	f.authClient(server, typeRemoteSession, registration)
 	f.authClient(server, typeEMA, registration)
@@ -208,10 +219,10 @@ func TestBindTreatsAnEMAAndAPersonalClientAsAmbiguous(t *testing.T) {
 func TestBindConcurrentTurnsDecideOneVersion(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	first := f.server(undecided)
+	first := f.server(unstored)
 	f.authClient(first, typeServiceAccount, f.registration(first))
 	v1 := f.bind(ContextUserBacked)
-	second := f.server(undecided)
+	second := f.server(unstored)
 	f.authClient(second, typeServiceAccount, f.registration(second))
 
 	const turns = 4
@@ -242,7 +253,7 @@ func TestBindConcurrentTurnsDecideOneVersion(t *testing.T) {
 func TestBackfillDryRunWritesNothing(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	server := f.server(undecided)
+	server := f.server(unstored)
 	f.authClient(server, typeServiceAccount, f.registration(server))
 	f.workloadBinding()
 
@@ -270,9 +281,9 @@ func TestBackfillDryRunWritesNothing(t *testing.T) {
 func TestBindNeverGivesAUserlessTurnAPersonalClient(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	personal := f.server(undecided)
+	personal := f.server(unstored)
 	f.authClient(personal, typeRemoteSession, f.registration(personal))
-	shared := f.server(undecided)
+	shared := f.server(unstored)
 	registration := f.registration(shared)
 	f.authClient(shared, typeRemoteSession, registration)
 	sharedClient := f.authClient(shared, typeServiceAccount, registration)
@@ -289,7 +300,7 @@ func TestBindNeverGivesAUserlessTurnAPersonalClient(t *testing.T) {
 func TestBindKeepsEveryChoiceAndVersionsOnlyNewOnes(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	first := f.server(undecided)
+	first := f.server(unstored)
 	firstClient := f.authClient(first, typeServiceAccount, f.registration(first))
 
 	v1 := f.bind(ContextUserBacked)
@@ -299,7 +310,7 @@ func TestBindKeepsEveryChoiceAndVersionsOnlyNewOnes(t *testing.T) {
 	// A second client on the first server would make it ambiguous now, but
 	// its choice is kept.
 	f.authClient(first, typeServiceAccount, f.registration(first))
-	second := f.server(undecided)
+	second := f.server(unstored)
 	secondClient := f.authClient(second, typeServiceAccount, f.registration(second))
 
 	v2 := f.bind(ContextUserBacked)

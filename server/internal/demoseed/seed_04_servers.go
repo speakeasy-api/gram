@@ -675,11 +675,16 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 			return fmt.Errorf("associate demo auth client %s: %w", a.key, err)
 		}
 	}
-	if err := s.q.ServersMarkRequiresUpstreamAuth(ctx, repo.ServersMarkRequiresUpstreamAuthParams{
-		ProjectID: proj,
-		Ids:       []uuid.UUID{s.det("mcpserver-linear"), s.det("mcpserver-github")},
-	}); err != nil {
-		return fmt.Errorf("mark demo servers as requiring upstream auth: %w", err)
+	picked, err := s.q.ServersPickGatewayGitHubCredential(ctx, repo.ServersPickGatewayGitHubCredentialParams{
+		AuthClientID: s.det("auth-client-github-forwarded"), OrgID: org, ProjectID: proj,
+		CredentialIds: []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
+		McpServerID:   s.det("mcpserver-github"),
+	})
+	if err != nil {
+		return fmt.Errorf("pick demo gateway GitHub credential: %w", err)
+	}
+	if picked != 3 {
+		return fmt.Errorf("pick demo gateway GitHub credential: expected 3 choices, updated %d", picked)
 	}
 	if err := s.q.ServersInsertAuthClientRoleGrants(ctx, repo.ServersInsertAuthClientRoleGrantsParams{
 		OrgID: org, AuthClientID: s.det("auth-client-github-token"),
@@ -780,11 +785,10 @@ func (s *seeder) tunnelServerID() uuid.UUID { return s.det("mcpserver-private-in
 
 // seedServersEMA: Enterprise Managed Authorization. Acme Identity is a
 // fictional identity provider for two fictional services behind workforce
-// servers; the workforce sign-in deliberately does not trust it, so demo
-// sign-in is unaffected. Neither service has accepted a provider yet: a
-// seeded acceptance needs a trusted issuer session, which the hourly
-// delegation cleanup erases unless an organization sign-in trusts the
-// issuer. Runs after role distribution, so plugins skip these servers.
+// servers. The workforce issuer trusts it for inbound EMA (ID-JAGs) only;
+// interactive sign-in is not federated through it, so demo sign-in is
+// unaffected. Neither service has accepted a provider yet. Runs after role
+// distribution, so plugins skip these servers.
 func (s *seeder) seedServersEMA(ctx context.Context) error {
 	org := s.orgID()
 	proj := s.projectID()
@@ -802,6 +806,17 @@ func (s *seeder) seedServersEMA(ctx context.Context) error {
 		RemoteSessionIssuerID: s.det("ema-idp"),
 	}); err != nil {
 		return fmt.Errorf("insert demo ema identity provider client: %w", err)
+	}
+	linked, err := s.q.ServersTrustEMAIdentityProviderForInboundEMA(ctx, repo.ServersTrustEMAIdentityProviderForInboundEMAParams{
+		EmaProvider:     s.det("ema-idp"),
+		WorkforceIssuer: workforce,
+		OrgID:           org,
+	})
+	if err != nil {
+		return fmt.Errorf("trust demo ema identity provider for inbound ema: %w", err)
+	}
+	if linked != 1 {
+		return fmt.Errorf("trust demo ema identity provider for inbound ema: updated %d workforce issuers", linked)
 	}
 	if err := s.q.ServersInsertEMARemoteMCPServers(ctx, repo.ServersInsertEMARemoteMCPServersParams{
 		TrackerID: s.det("remotemcp-ema-tracker"),

@@ -7,6 +7,7 @@ import {
   waitFor,
 } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { MemoryRouter, useLocation } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
@@ -16,7 +17,6 @@ const proxyRegister = vi.fn();
 const createClient = vi.fn();
 const onOpenChange = vi.fn<(open: boolean) => void>();
 const customerManagedKeys = vi.fn();
-const goToClient = vi.fn();
 
 vi.mock("@/contexts/Auth", () => ({
   useIsPlatformAdmin: () => isPlatformAdmin(),
@@ -50,11 +50,6 @@ vi.mock("@gram/client/react-query/listExternalKeys", () => ({
 vi.mock("@/pages/org/encryption-keys/jwks/CreateJsonWebKeySetSheet", () => ({
   CreateJsonWebKeySetSheet: () => null,
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    remoteIdentityProviders: { clientDetail: { goTo: goToClient } },
-  }),
-}));
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
 }));
@@ -63,6 +58,7 @@ vi.mock("@/contexts/Fetcher", () => ({
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
   useSdkClient: () => ({
     organizationRemoteSessionClients: {
       create: createClient,
@@ -224,19 +220,30 @@ describe("CreateRemoteSessionClientSheet", () => {
       expect(onOpenChange).toHaveBeenCalledExactlyOnceWith(false),
     );
     expect(toast.success).toHaveBeenCalledExactlyOnceWith("Client created");
-    expect(goToClient).toHaveBeenCalledExactlyOnceWith("issuer-1", "client-1");
+    await waitFor(() =>
+      expect(screen.getByTestId("location").textContent).toBe(
+        "/org/projects/project/remote-identity-providers/issuer-1/clients/client-1",
+      ),
+    );
     expect(screen.queryByRole("alert")).toBeNull();
   });
 });
 
+function LocationProbe() {
+  return <output data-testid="location">{useLocation().pathname}</output>;
+}
+
 function renderSheet(issuer: RemoteSessionIssuer): void {
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <CreateRemoteSessionClientSheet
-        open
-        onOpenChange={onOpenChange}
-        issuer={issuer}
-      />
+      <MemoryRouter>
+        <CreateRemoteSessionClientSheet
+          open
+          onOpenChange={onOpenChange}
+          issuer={issuer}
+        />
+        <LocationProbe />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
 }

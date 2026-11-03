@@ -2,7 +2,7 @@ import {
   act,
   cleanup,
   fireEvent,
-  render,
+  render as renderView,
   screen,
   waitFor,
 } from "@testing-library/react";
@@ -12,7 +12,8 @@ import {
   QueryClient,
   QueryClientProvider,
 } from "@tanstack/react-query";
-import { useEffect, useState } from "react";
+import { type ReactElement, useEffect, useState } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ServiceError } from "@gram/client/models/errors/serviceerror.js";
 import { queryKeyGetMcpServer } from "@gram/client/react-query/getMcpServer.js";
@@ -73,7 +74,9 @@ vi.mock("@gram/client/react-query/listEnvironments.js", () => ({
 vi.mock("@gram/client/react-query/getMcpMetadata.js", () => ({
   useGetMcpMetadata: () => ({}),
 }));
-vi.mock("@/routes", () => ({ useRoutes: vi.fn() }));
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+}));
 vi.mock("./PlaygroundChat", () => ({
   PlaygroundChat: function Chat({
     mcpUrl,
@@ -139,6 +142,7 @@ function Observer({
 function readTarget(label: string) {
   return JSON.parse(screen.getByTestId(label).textContent ?? "{}");
 }
+const render = (ui: ReactElement) => renderView(ui, { wrapper: MemoryRouter });
 function mount() {
   const client = new QueryClient({
     defaultOptions: { queries: { retry: false, throwOnError: true } },

@@ -12,7 +12,7 @@ import {
   RedirectToSources,
 } from "@/pages/mcp/add/LegacyRedirects";
 import { Route } from "react-router";
-import type { AppRoute } from "./routes";
+import { childRoutes, type PagedRoute } from "./route-pages";
 
 // S-853 moved Sources and the catalog under /mcp. These keep the old URLs
 // resolving. They live here rather than in the route structure so they stay
@@ -50,7 +50,7 @@ export const legacyMcpRedirects = (
   </>
 );
 
-export const routesWithSubroutes = (routes: AppRoute[]): JSX.Element[] => {
+export const routesWithSubroutes = (routes: PagedRoute[]): JSX.Element[] => {
   return routes
     .filter((item) => !item.external)
     .map((item) => (
@@ -80,15 +80,7 @@ export const routesWithSubroutes = (routes: AppRoute[]): JSX.Element[] => {
           />
         )}
         {/* Check for any children routes stored on this item */}
-        {routesWithSubroutes(
-          Object.values(item).filter(
-            (value) =>
-              value &&
-              typeof value === "object" &&
-              "title" in value &&
-              "url" in value,
-          ) as unknown as AppRoute[],
-        )}
+        {routesWithSubroutes(childRoutes(item))}
       </Route>
     ));
 };

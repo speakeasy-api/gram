@@ -5,8 +5,21 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import { ClosedEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
+
+/**
+ * What kind of event the entry records: 'configuration' for a change to the platform's configuration, 'security' for machine access and other security-relevant activity that is not a configuration decision. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.
+ */
+export const Category = {
+  Configuration: "configuration",
+  Security: "security",
+} as const;
+/**
+ * What kind of event the entry records: 'configuration' for a change to the platform's configuration, 'security' for machine access and other security-relevant activity that is not a configuration decision. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.
+ */
+export type Category = ClosedEnum<typeof Category>;
 
 export type AuditLog = {
   /**
@@ -25,6 +38,10 @@ export type AuditLog = {
   afterSnapshot?: any | undefined;
   beforeSnapshot?: any | undefined;
   /**
+   * What kind of event the entry records: 'configuration' for a change to the platform's configuration, 'security' for machine access and other security-relevant activity that is not a configuration decision. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.
+   */
+  category?: Category | undefined;
+  /**
    * The creation date of the audit log.
    */
   createdAt: Date;
@@ -39,6 +56,11 @@ export type AuditLog = {
 };
 
 /** @internal */
+export const Category$inboundSchema: z.ZodMiniEnum<typeof Category> = z.enum(
+  Category,
+);
+
+/** @internal */
 export const AuditLog$inboundSchema: z.ZodMiniType<AuditLog, unknown> = z.pipe(
   z.object({
     acting_client_id: z.optional(z.string()),
@@ -50,6 +72,7 @@ export const AuditLog$inboundSchema: z.ZodMiniType<AuditLog, unknown> = z.pipe(
     actor_type: z.string(),
     after_snapshot: z.optional(z.any()),
     before_snapshot: z.optional(z.any()),
+    category: z.optional(Category$inboundSchema),
     created_at: z.pipe(
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),

@@ -15,13 +15,9 @@ import { ReviewChangesStep } from "./review-changes-step";
 const state = vi.hoisted(() => ({ evaluate: vi.fn() }));
 
 vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
   useSdkClient: () => ({
     deployments: { evaluateOpenAPIv3: state.evaluate },
-  }),
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    toolset: { href: (slug: string) => `/toolsets/${slug}` },
   }),
 }));
 
