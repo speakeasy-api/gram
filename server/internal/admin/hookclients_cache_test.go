@@ -87,6 +87,10 @@ func TestHookClientsCacheRefreshPreservesSnapshotOnDeviceReadFailure(t *testing.
 	before, err := warmer.hookClientsCache.Get(t.Context(), hookClientsCacheKey(hookClientsDefaultWindowDays))
 	require.NoError(t, err)
 	require.NotEmpty(t, before.DeviceAgents)
+	before.QueriedAt = time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC)
+	require.NoError(t, warmer.hookClientsCache.Store(t.Context(), before))
+	before, err = warmer.hookClientsCache.Get(t.Context(), hookClientsCacheKey(hookClientsDefaultWindowDays))
+	require.NoError(t, err)
 	readErr := errors.New("device versions unavailable")
 	warmer.deviceAgentVersions = stubDeviceAgentVersions{err: readErr}
 	require.ErrorIs(t, warmer.Refresh(t.Context()), readErr)
@@ -95,11 +99,12 @@ func TestHookClientsCacheRefreshPreservesSnapshotOnDeviceReadFailure(t *testing.
 	require.Equal(t, before, after)
 	// The same activity can recover on retry without clearing the saved snapshot.
 	warmer.deviceAgentVersions = devices
+	require.NoError(t, devices.Record(t.Context(), "example", "machine-2", "2.0.0", time.Now()))
 	require.NoError(t, warmer.Refresh(t.Context()))
 	recovered, err := warmer.hookClientsCache.Get(t.Context(), hookClientsCacheKey(hookClientsDefaultWindowDays))
 	require.NoError(t, err)
-	require.Equal(t, before.DeviceAgents, recovered.DeviceAgents)
-	require.True(t, recovered.QueriedAt.After(before.QueriedAt))
+	require.Len(t, recovered.DeviceAgents, len(before.DeviceAgents)+1)
+	require.False(t, recovered.QueriedAt.IsZero())
 }
 
 func TestHookClientsCachePageRefreshPreservesSnapshotOnDeviceReadFailure(t *testing.T) {
@@ -118,6 +123,10 @@ func TestHookClientsCachePageRefreshPreservesSnapshotOnDeviceReadFailure(t *test
 	before, err := warmer.hookClientsCache.Get(t.Context(), hookClientsCacheKey(hookClientsDefaultWindowDays))
 	require.NoError(t, err)
 	require.NotEmpty(t, before.DeviceAgents)
+	before.QueriedAt = time.Date(2020, time.January, 1, 0, 0, 0, 0, time.UTC)
+	require.NoError(t, warmer.hookClientsCache.Store(t.Context(), before))
+	before, err = warmer.hookClientsCache.Get(t.Context(), hookClientsCacheKey(hookClientsDefaultWindowDays))
+	require.NoError(t, err)
 	warmer.deviceAgentVersions = stubDeviceAgentVersions{err: errors.New("device versions unavailable")}
 	response, cached, err := warmer.hookClientsSnapshot(t.Context(), hookClientsDefaultWindowDays, true)
 	require.NoError(t, err)
@@ -129,6 +138,7 @@ func TestHookClientsCachePageRefreshPreservesSnapshotOnDeviceReadFailure(t *test
 	require.NoError(t, err)
 	require.Equal(t, before, after)
 	warmer.deviceAgentVersions = devices
+	require.NoError(t, devices.Record(t.Context(), "example", "machine-2", "2.0.0", time.Now()))
 	recovered, _, err := warmer.hookClientsSnapshot(t.Context(), hookClientsDefaultWindowDays, true)
 	require.NoError(t, err)
 	after, err = warmer.hookClientsCache.Get(t.Context(), hookClientsCacheKey(hookClientsDefaultWindowDays))
@@ -138,6 +148,6 @@ func TestHookClientsCachePageRefreshPreservesSnapshotOnDeviceReadFailure(t *test
 	require.Equal(t, recovered.Sessions, after.Sessions)
 	require.Equal(t, recovered.Inference, after.Inference)
 	require.Equal(t, recovered.DeviceAgents, after.DeviceAgents)
-	require.NotEmpty(t, after.DeviceAgents)
-	require.True(t, after.QueriedAt.After(before.QueriedAt))
+	require.Len(t, after.DeviceAgents, len(before.DeviceAgents)+1)
+	require.False(t, after.QueriedAt.IsZero())
 }
