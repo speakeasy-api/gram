@@ -383,3 +383,40 @@ func TestDeleteDomain_RetryCompletesPendingCleanup(t *testing.T) {
 	require.Equal(t, oops.CodeNotFound, oopsErr.Code)
 	require.Equal(t, 2, ti.temporal.reconcileCalls)
 }
+
+func TestDeleteDomain_AuditSnapshotKeepsDNSTargetToken(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestCustomDomainsService(t)
+	authCtx := testAuthContext(t, ctx)
+	domain, err := ti.repo.CreateCustomDomain(ctx, cdrepo.CreateCustomDomainParams{
+		OrganizationID:  authCtx.ActiveOrganizationID,
+		Domain:          "delete-token.example.com",
+		IngressName:     pgTextValid("ingress-token"),
+		CertSecretName:  pgTextValid("cert-token"),
+		ProvisionerKind: "ingress",
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+	_, err = ti.repo.AssignCustomDomainDNSTargetToken(ctx, cdrepo.AssignCustomDomainDNSTargetTokenParams{
+		DnsTargetToken: "abcdefgh23",
+		ID:             domain.ID,
+		OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	require.NoError(t, err)
+	ctx = authztest.WithExactGrants(t, ctx, authz.Grant{
+		Scope:    authz.ScopeOrgAdmin,
+		Selector: authz.NewSelector(authz.ScopeOrgAdmin, authCtx.ActiveOrganizationID),
+	})
+
+	require.NoError(t, ti.service.DeleteDomain(ctx, &gen.DeleteDomainPayload{SessionToken: nil}))
+
+	record, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionCustomDomainsDelete, domain.ID.String())
+	require.NoError(t, err)
+	require.Nil(t, record.AfterSnapshot)
+	beforeSnapshot, err := audittest.DecodeAuditData(record.BeforeSnapshot)
+	require.NoError(t, err)
+	require.Equal(t, "delete-token.example.com", beforeSnapshot["Domain"])
+	require.Equal(t, "abcdefgh23", beforeSnapshot["DNSTargetToken"])
+	require.Equal(t, "abcdefgh23."+testDNSTargetSuffix, beforeSnapshot["DNSTarget"])
+}
