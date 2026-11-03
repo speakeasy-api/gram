@@ -96,6 +96,9 @@ type metaGateContext struct {
 
 	// skippedUpstreams says why partial resolution left a member's client out.
 	skippedUpstreams *remotesessions.SkippedClients
+
+	// request is the caller's request, read only if a row is written.
+	request *http.Request
 	// unapprovedMembers are current members the catalog did not approve. They
 	// are reported by connection_status only, never discovered or executed.
 	unapprovedMembers []metaMember
@@ -214,7 +217,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	}
 
 	admission := metaGateAdmission{bearer: httpheaders.AuthorizationBearerToken(r), baseURL: s.BaseURLForRequest(r), sessionID: parseMcpSessionID(r.Header), clientSessionID: r.Header.Get("Mcp-Session-Id"), chatID: r.Header.Get("Gram-Chat-ID"), resolution: resolution}
-	ctx, gate, err := s.admitMetaGate(ctx, w, logger, mcpEndpoint, metaServer, membership, resolvedEndpoint, admission)
+	ctx, gate, err := s.admitMetaGate(ctx, w, r, logger, mcpEndpoint, metaServer, membership, resolvedEndpoint, admission)
 	if err != nil {
 		return err
 	}
@@ -246,7 +249,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 	if gate.discoveryMode == metamcp.DiscoveryModeCode {
 		endpoint := *mcpEndpoint
 		refresh := metaCodeGateRefresher(func(callbackCtx context.Context, current *metamcprepo.MetaMcpServer) (context.Context, *metaGateContext, error) {
-			return s.admitMetaGate(callbackCtx, &metaCodeSilentResponse{header: make(http.Header)}, logger, &endpoint, current, metaMembership{agentID: uuid.Nil, organization: false}, nil, admission)
+			return s.admitMetaGate(callbackCtx, &metaCodeSilentResponse{header: make(http.Header)}, r, logger, &endpoint, current, metaMembership{agentID: uuid.Nil, organization: false}, nil, admission)
 		})
 		if membership.organization {
 			// The organization gateway has no stored rows to re-read: reloading
@@ -260,7 +263,7 @@ func (s *Service) serveResolvedMetaMCPEndpoint(
 				if fresh.metaServer.UserSessionIssuerID != admittedIssuer {
 					return callbackCtx, nil, nil
 				}
-				return s.admitMetaGate(callbackCtx, &metaCodeSilentResponse{header: make(http.Header)}, logger, fresh.endpoint, fresh.metaServer, membership, fresh.resolved, admission)
+				return s.admitMetaGate(callbackCtx, &metaCodeSilentResponse{header: make(http.Header)}, r, logger, fresh.endpoint, fresh.metaServer, membership, fresh.resolved, admission)
 			}
 		}
 		ctx = context.WithValue(ctx, metaCodeRefreshKey{}, refresh)
@@ -719,7 +722,7 @@ type metaGateAdmission struct {
 // membership says where the members come from. resolvedEndpoint is the
 // issuer-gate endpoint for a gateway that has no mcp_endpoints row behind it,
 // and nil for one that does.
-func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logger *slog.Logger, mcpEndpoint *mcpendpointsrepo.McpEndpoint, metaServer *metamcprepo.MetaMcpServer, membership metaMembership, resolvedEndpoint *ResolvedMcpEndpoint, request metaGateAdmission) (context.Context, *metaGateContext, error) {
+func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, r *http.Request, logger *slog.Logger, mcpEndpoint *mcpendpointsrepo.McpEndpoint, metaServer *metamcprepo.MetaMcpServer, membership metaMembership, resolvedEndpoint *ResolvedMcpEndpoint, request metaGateAdmission) (context.Context, *metaGateContext, error) {
 	var gateTokens map[uuid.UUID]remotesessions.UpstreamToken
 	var gateProjectTokens *projectTokenCache
 	var gateMemberChoices *memberChoices
@@ -731,13 +734,13 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 	case membership.organization:
 		// Members span projects, so credentials resolve per member project
 		// when a member first needs them rather than once for the gateway.
-		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, request.bearer, request.baseURL, resolvedEndpoint)
+		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, r, request.bearer, request.baseURL, resolvedEndpoint)
 		if err != nil {
 			return ctx, nil, fmt.Errorf("authenticate organization gateway: %w", err)
 		}
 		ctx = newCtx
 		authentication.skippedUpstreams = new(remotesessions.SkippedClients)
-		gateProjectTokens = s.newOrganizationGatewayTokens(authentication.endpoint, authentication.subject, authentication.skippedUpstreams)
+		gateProjectTokens = s.newOrganizationGatewayTokens(r, authentication.endpoint, authentication.subject, authentication.skippedUpstreams)
 		gateMemberChoices, err = s.newMemberChoices(ctx, authentication)
 		if err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load upstream client choices").LogError(ctx, logger)
@@ -752,7 +755,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 			}
 			resolvedEndpoint = built
 		}
-		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, request.bearer, request.baseURL, resolvedEndpoint)
+		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, r, request.bearer, request.baseURL, resolvedEndpoint)
 		if err != nil {
 			return ctx, nil, fmt.Errorf("apply issuer gate: %w", err)
 		}
@@ -775,7 +778,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 			// issuer's other clients resolve lazily, for hosted members that
 			// need them, and an unrelated broken one blocks nothing else.
 			authentication.skippedUpstreams = new(remotesessions.SkippedClients)
-			gateProjectTokens = s.newOrganizationGatewayTokens(authentication.endpoint, authentication.subject, authentication.skippedUpstreams)
+			gateProjectTokens = s.newOrganizationGatewayTokens(r, authentication.endpoint, authentication.subject, authentication.skippedUpstreams)
 		} else {
 			tokens, err := s.resolveIssuerGateAccessTokens(ctx, w, authentication)
 			if err != nil {

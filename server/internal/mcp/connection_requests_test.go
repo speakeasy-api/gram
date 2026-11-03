@@ -7,9 +7,11 @@ import (
 	"net/http/httptest"
 	"net/http/httputil"
 	"net/url"
+	"strings"
 	"testing"
 	"time"
 
+	"github.com/go-chi/chi/v5"
 	"github.com/google/uuid"
 	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
 	"github.com/stretchr/testify/assert"
@@ -185,10 +187,11 @@ func TestRemoteSessionRejections(t *testing.T) {
 			}
 			bearer := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, subject)
 
-			_, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), bearer, nil)
+			_, err := servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), bearer, map[string]string{"User-Agent": "claude-code/2.1.0"})
 			require.Error(t, err)
 
 			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.want)
+			require.Equal(t, mcpconnectionattempts.FamilyClaudeCode, row.ClientFamily)
 			require.Equal(t, string(tc.who), row.WhoFixes)
 			require.Equal(t, tc.detail, row.SubReason)
 			require.Equal(t, subject.String(), row.SubjectURN)
@@ -239,11 +242,21 @@ func TestInboundRefresh_UnknownTokenRecords(t *testing.T) {
 	ti.service.SetConnectionRecorder(rec.Recorder)
 	toolset, _, client, _, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
 
-	refused := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, "refresh-"+uuid.NewString())
-	require.NoError(t, refused.err)
-	require.Equal(t, http.StatusBadRequest, refused.code, refused.body)
+	form := url.Values{"grant_type": {"refresh_token"}, "refresh_token": {"refresh-" + uuid.NewString()}, "client_id": {client.ClientID}}
+	req := httptest.NewRequest(http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/token", strings.NewReader(form.Encode()))
+	req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+	req.Header.Set("User-Agent", "claude-code/2.1.0")
+	routeCtx := chi.NewRouteContext()
+	routeCtx.URLParams.Add("mcpSlug", toolset.McpSlug.String)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, routeCtx))
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleToken(w, req))
+	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+
 	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed)
 	require.Equal(t, client.ID.String(), row.UserSessionClientID)
+	require.Equal(t, mcpconnectionattempts.FamilyClaudeCode, row.ClientFamily)
+	require.Equal(t, "2.1.0", row.ClientVersion)
 	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
 }
 

@@ -105,13 +105,14 @@ func (s *Service) CallPlatformGatewayTool(ctx context.Context, organizationID, u
 	skipped := new(remotesessions.SkippedClients)
 	gate := &metaGateContext{
 		skippedUpstreams:    skipped,
+		request:             nil,
 		projectID:           uuid.Nil,
 		metaServerID:        metaServer.ID,
 		agentID:             uuid.Nil,
 		organizationGateway: true,
 		organizationID:      organization.ID,
 		tokens:              nil,
-		projectTokens:       s.newOrganizationGatewayTokens(resolved, urn.NewUserSubject(userID), skipped),
+		projectTokens:       s.newOrganizationGatewayTokens(nil, resolved, urn.NewUserSubject(userID), skipped),
 		// Credential choices belong to one gateway connection; Platform MCP
 		// holds none, so each member routes through its project's clients.
 		memberChoices:       nil,

@@ -229,7 +229,7 @@ func (s *Service) serveResolvedMCPEndpoint(
 			return err
 		}
 		upstreamResource = resolvedEndpoint.UpstreamResource
-		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
+		newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, r, httpheaders.AuthorizationBearerToken(r), s.BaseURLForRequest(r), resolvedEndpoint)
 		if err != nil {
 			return fmt.Errorf("apply issuer gate: %w", err)
 		}
@@ -758,11 +758,11 @@ func (s *Service) serveRemoteBackend(
 	if err != nil {
 		return err
 	}
-	if upstream, buildOptions, err = s.agentKeyUngatedUpstream(ctx, w, logger, s.BaseURLForRequest(r), endpoint, mcpServer, organizationID, upstream, buildOptions); err != nil {
+	if upstream, buildOptions, err = s.agentKeyUngatedUpstream(ctx, w, r, logger, s.BaseURLForRequest(r), endpoint, mcpServer, organizationID, upstream, buildOptions); err != nil {
 		return err
 	}
 
-	buildOptions = append(buildOptions, directConnectionOptions(ctx, organizationID, endpoint.ProjectID, mcpServer.ID, upstream)...)
+	buildOptions = append(buildOptions, directConnectionOptions(ctx, r, organizationID, endpoint.ProjectID, mcpServer.ID, upstream)...)
 
 	// Identity auth above stamps an AuthContext for every caller that
 	// presented a Speakeasy credential, so its absence marks an anonymous caller.
@@ -791,6 +791,7 @@ func (s *Service) serveRemoteBackend(
 func (s *Service) agentKeyUngatedUpstream(
 	ctx context.Context,
 	w http.ResponseWriter,
+	r *http.Request,
 	logger *slog.Logger,
 	baseURL string,
 	endpoint *mcpendpointsrepo.McpEndpoint,
@@ -852,6 +853,7 @@ func (s *Service) agentKeyUngatedUpstream(
 		attachedSession:        uuid.Nil,
 		authorizerOwner:        "",
 		skippedUpstreams:       nil,
+		request:                r,
 		agentKeyClients:        nil,
 	}
 	token, err := s.resolveDirectUpstreamToken(ctx, w, logger, authentication, upstreamResource, mcpServer.TunneledMcpServerID.Valid, mcpServer.RemoteSessionIssuerID)
@@ -973,7 +975,7 @@ func (s *Service) serveTunneledBackend(
 	if err != nil {
 		return err
 	}
-	if upstream, buildOptions, err = s.agentKeyUngatedUpstream(ctx, w, logger, s.BaseURLForRequest(r), endpoint, mcpServer, organizationID, upstream, buildOptions); err != nil {
+	if upstream, buildOptions, err = s.agentKeyUngatedUpstream(ctx, w, r, logger, s.BaseURLForRequest(r), endpoint, mcpServer, organizationID, upstream, buildOptions); err != nil {
 		return err
 	}
 
@@ -984,7 +986,7 @@ func (s *Service) serveTunneledBackend(
 		}
 	}
 
-	buildOptions = append(buildOptions, directConnectionOptions(ctx, organizationID, endpoint.ProjectID, mcpServer.ID, upstream)...)
+	buildOptions = append(buildOptions, directConnectionOptions(ctx, r, organizationID, endpoint.ProjectID, mcpServer.ID, upstream)...)
 	p, err := s.tunnelManager.buildProxy(ctx, logger, buildProxyParams{
 		ClientAffinityKey:  tunnelrouting.ClientAffinityKeyFromRequest(r),
 		ProjectID:          endpoint.ProjectID,
@@ -998,7 +1000,7 @@ func (s *Service) serveTunneledBackend(
 	}, buildOptions...)
 	if err != nil {
 		if errors.Is(err, errTunnelNoLiveRoute) {
-			s.connections.Once(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx)), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeTunnelUnavailable, callerSubject(ctx))
+			s.connections.Once(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx)), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeTunnelUnavailable, callerSubject(ctx), mcpconnectionattempts.FromRequest(r))
 		}
 		return err
 	}
@@ -1113,7 +1115,7 @@ func (s *Service) prepareProxyBackendContext(
 	authorized, err := s.authorizeProxyBackendAccess(ctx, logger, mandatorySurfaceProxiedConnect, organizationID, endpoint.ProjectID, mcpServer)
 	if err != nil {
 		if mcpaccess.IsServerPermissionDenied(err) {
-			s.connections.Once(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx)), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess, callerSubject(ctx))
+			s.connections.Once(ctx, mcpconnectionattempts.ServerScope(organizationID, endpoint.ProjectID, mcpServer.ID, requestApp(ctx)), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess, callerSubject(ctx), mcpconnectionattempts.FromRequest(r))
 		}
 		return nil, "", err
 	}

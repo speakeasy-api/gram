@@ -2,6 +2,7 @@ package remotesessions_test
 
 import (
 	"net/http"
+	"net/http/httptest"
 	"testing"
 
 	"github.com/google/uuid"
@@ -112,6 +113,28 @@ func TestRefreshNow_JoinsACarriedAttempt(t *testing.T) {
 	row := rec.RequireStep(mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeProviderServerError)
 	require.Equal(t, attempt.ID(), row.AttemptID)
 	rec.RequireNotEnded()
+}
+
+// An inline refresh names the caller's client; a sweep has no request to read.
+func TestRefreshNow_CarriesTheRequestsClient(t *testing.T) {
+	t.Parallel()
+
+	ctx, env := newSyntheticExpiryEnv(t, "refresh-client", tokenAnswer(http.StatusServiceUnavailable, `{}`))
+	rec := mcpconnectionattemptstest.New(t)
+	refresher := env.newRefresher(testenv.NewMeterProvider(t), cache.NoopCache)
+	remotesessions.WithRefreshConnectionRecorder(rec.Recorder)(refresher)
+
+	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+
+	scope := mcpconnectionattempts.ProviderSessionScope(env.organizationID, env.projectID, mcpconnectionattempts.AppDCR)
+	req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/mcp/server", nil)
+	req.Header.Set("User-Agent", "claude-code/2.1.0")
+	_, _ = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshIn(scope).FromRequest(req))
+	require.Equal(t, mcpconnectionattempts.FamilyClaudeCode, rec.Rows()[0].ClientFamily)
+
+	_, _ = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshIn(scope))
+	require.Empty(t, rec.Rows()[1].ClientFamily)
 }
 
 // A session revoked mid-refresh and a caller that went away are neither success nor failure.

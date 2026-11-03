@@ -403,6 +403,8 @@ func (m *mcpInputs) mcpConnectResourceID(toolsetID string) string {
 }
 
 type mcpInputs struct {
+	// request is the caller's request, read only if a row is written.
+	request          *http.Request
 	projectID        uuid.UUID
 	organizationID   string
 	toolset          string
@@ -1439,7 +1441,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 		// The WWW-Authenticate URL, issuer URL, and consent action follow
 		// the surface the request arrived under.
 		endpoint := newResolvedMcpEndpointFromToolset(toolset, *cfg.toolsetHosting, cfg.toolsetAlias, mcpRouteBase)
-		newCtx, authentication, gateToolSelection, err := s.authenticateIssuerGate(ctx, w, authToken, baseURL, endpoint)
+		newCtx, authentication, gateToolSelection, err := s.authenticateIssuerGate(ctx, w, r, authToken, baseURL, endpoint)
 		if err != nil {
 			s.newMandatoryShadow(ctx, toolset.OrganizationID).shadowRequire(ctx, mandatorySurfaceHostedConnect, err, connect)
 			return err
@@ -1510,7 +1512,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 
 	var selectedEnvironment string
 	ctx = withMandatoryAdmission(ctx)
-	authorizedCtx, authenticated, err := s.admitHostedRequest(ctx, toolset, cfg, connect)
+	authorizedCtx, authenticated, err := s.admitHostedRequest(ctx, r, toolset, cfg, connect)
 	if err != nil {
 		return err
 	}
@@ -1526,7 +1528,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	if isHostedToolsCall {
 		if err := s.enforceHostedToolsCall(ctx, toolset.OrganizationID, cfg.mcpServerID); err != nil {
 			if !errors.Is(ctx.Err(), context.Canceled) {
-				s.connections.Once(ctx, mcpconnectionattempts.ServerScope(toolset.OrganizationID, toolset.ProjectID, *cfg.mcpServerID, requestApp(ctx)), mcpconnectionattempts.StepMCPRequest, killswitchHappened(err), callerSubject(ctx))
+				s.connections.Once(ctx, mcpconnectionattempts.ServerScope(toolset.OrganizationID, toolset.ProjectID, *cfg.mcpServerID, requestApp(ctx)), mcpconnectionattempts.StepMCPRequest, killswitchHappened(err), callerSubject(ctx), mcpconnectionattempts.FromRequest(r))
 			}
 			return writeMCPError(ctx, s.logger, w, req.ID, protocolVersion.InEffect, err)
 		}
@@ -1584,6 +1586,7 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 	}
 
 	mcpInputs := &mcpInputs{
+		request:                  r,
 		projectID:                toolset.ProjectID,
 		organizationID:           toolset.OrganizationID,
 		toolset:                  toolset.Slug,
@@ -1690,8 +1693,8 @@ func (s *Service) serveToolsetResolved(w http.ResponseWriter, r *http.Request, t
 
 // admitHostedRequest applies today's access decision for a hosted server and
 // shadows it as server admission under the server's visibility.
-func (s *Service) admitHostedRequest(ctx context.Context, toolset *toolsets_repo.Toolset, cfg *hostedServing, connect authz.Check) (context.Context, bool, error) {
-	authorizedCtx, authenticated, err := s.authorizeHostedRequest(ctx, toolset, cfg, connect)
+func (s *Service) admitHostedRequest(ctx context.Context, r *http.Request, toolset *toolsets_repo.Toolset, cfg *hostedServing, connect authz.Check) (context.Context, bool, error) {
+	authorizedCtx, authenticated, err := s.authorizeHostedRequest(ctx, r, toolset, cfg, connect)
 	s.newMandatoryShadow(authorizedCtx, toolset.OrganizationID).shadowRequireServer(authorizedCtx, mandatorySurfaceHostedConnect, err, mandatoryVisibility(cfg.isPublic), connect)
 	return authorizedCtx, authenticated, err
 }
@@ -1700,7 +1703,7 @@ func (s *Service) admitHostedRequest(ctx context.Context, toolset *toolsets_repo
 // server: organization membership, mcp:connect on private servers, and the
 // caller's project binding. It reports whether the caller is in the server's
 // organization.
-func (s *Service) authorizeHostedRequest(ctx context.Context, toolset *toolsets_repo.Toolset, cfg *hostedServing, connect authz.Check) (context.Context, bool, error) {
+func (s *Service) authorizeHostedRequest(ctx context.Context, r *http.Request, toolset *toolsets_repo.Toolset, cfg *hostedServing, connect authz.Check) (context.Context, bool, error) {
 	var authenticated bool
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); ok && authCtx != nil && authCtx.ActiveOrganizationID != "" {
 		projects, err := s.authRepo.ListProjectsByOrganization(ctx, authCtx.ActiveOrganizationID)
@@ -1757,7 +1760,7 @@ func (s *Service) authorizeHostedRequest(ctx context.Context, toolset *toolsets_
 					if cfg.mcpServerID != nil {
 						scope = mcpconnectionattempts.ServerScope(toolset.OrganizationID, toolset.ProjectID, *cfg.mcpServerID, requestApp(ctx))
 					}
-					s.connections.Once(ctx, scope, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess, callerSubject(ctx))
+					s.connections.Once(ctx, scope, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess, callerSubject(ctx), mcpconnectionattempts.FromRequest(r))
 				}
 				return ctx, false, fmt.Errorf("authorize MCP server access: %w", denied)
 			}

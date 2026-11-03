@@ -3,6 +3,7 @@ package mcp
 import (
 	"context"
 	"errors"
+	"net/http"
 
 	"github.com/golang-jwt/jwt/v5"
 	"github.com/google/uuid"
@@ -34,12 +35,12 @@ func requestApp(ctx context.Context) mcpconnectionattempts.App {
 }
 
 // recordGateRejection records only a bearer that proves a real flow on this server.
-func (s *Service) recordGateRejection(ctx context.Context, endpoint *ResolvedMcpEndpoint, token, reason string, valErr error) {
+func (s *Service) recordGateRejection(ctx context.Context, r *http.Request, endpoint *ResolvedMcpEndpoint, token, reason string, valErr error) {
 	if valErr == nil || errors.Is(valErr, jwt.ErrTokenExpired) || errors.Is(valErr, jwt.ErrTokenInvalidAudience) || errors.Is(ctx.Err(), context.Canceled) {
 		return
 	}
 	code := gateHappened(valErr)
-	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Detail(reason)}
+	opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Detail(reason), mcpconnectionattempts.FromRequest(r)}
 	subject, verifyErr := s.userSessionSigner.VerifiedSubject(token)
 	switch {
 	case verifyErr == nil:
@@ -66,7 +67,7 @@ func gateHappened(valErr error) mcpconnectionattempts.Code {
 }
 
 // directConnectionOptions records a caller who presented a credential; anonymous calls stay in metrics.
-func directConnectionOptions(ctx context.Context, organizationID string, projectID, serverID uuid.UUID, upstream remotesessions.UpstreamToken) []remotemcp.BuildOption {
+func directConnectionOptions(ctx context.Context, r *http.Request, organizationID string, projectID, serverID uuid.UUID, upstream remotesessions.UpstreamToken) []remotemcp.BuildOption {
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); !ok || authCtx == nil {
 		return nil
 	}
@@ -75,6 +76,7 @@ func directConnectionOptions(ctx context.Context, organizationID string, project
 		Details:          []mcpconnectionattempts.Option{callerSubject(ctx)},
 		UpstreamFailures: true,
 		SelfCredential:   upstream.CredentialOwner == remotesessions.CredentialOwnerSelf,
+		Request:          r,
 	})}
 }
 
@@ -90,12 +92,12 @@ func callerSubject(ctx context.Context) mcpconnectionattempts.Option {
 
 // refreshAttribution files a request's refreshes under the server it reached.
 func (a *issuerGateAuthentication) refreshAttribution(ctx context.Context) remotesessions.RefreshAttribution {
-	return remotesessions.RefreshIn(connectionScope(a.endpoint, requestApp(ctx))).NotingSkips(a.skippedUpstreams)
+	return remotesessions.RefreshIn(connectionScope(a.endpoint, requestApp(ctx))).NotingSkips(a.skippedUpstreams).FromRequest(a.request)
 }
 
 // consentRefreshAttribution makes a refresh during sign-in a step of that sign-in.
-func consentRefreshAttribution(endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) remotesessions.RefreshAttribution {
-	return remotesessions.RefreshIn(connectionScope(endpoint, mcpconnectionattempts.AppOf(state.ClientID))).InAttempt(state.connectionAttempt(endpoint))
+func consentRefreshAttribution(r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) remotesessions.RefreshAttribution {
+	return remotesessions.RefreshIn(connectionScope(endpoint, mcpconnectionattempts.AppOf(state.ClientID))).InAttempt(state.connectionAttempt(endpoint)).FromRequest(r)
 }
 
 // connectionScope files a gateway's rows under the gateway, with the member as a detail.
@@ -128,6 +130,7 @@ func memberConnectionOption(ctx context.Context, gate *metaGateContext, member m
 		Details:          []mcpconnectionattempts.Option{mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx)},
 		UpstreamFailures: false,
 		SelfCredential:   false,
+		Request:          gate.request,
 	})
 }
 
@@ -136,7 +139,7 @@ func (s *Service) recordMemberFailure(ctx context.Context, gate *metaGateContext
 	if errors.Is(ctx.Err(), context.Canceled) {
 		return
 	}
-	s.connections.Once(ctx, gate.connectionScope(ctx), mcpconnectionattempts.StepMCPRequest, what, mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx))
+	s.connections.Once(ctx, gate.connectionScope(ctx), mcpconnectionattempts.StepMCPRequest, what, mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx), mcpconnectionattempts.FromRequest(gate.request))
 }
 
 // resolveFailureHappened says who fixes a member credential that could not be resolved.
@@ -179,7 +182,7 @@ func (s *Service) recordHostedToolsCallRefusal(ctx context.Context, payload *mcp
 		return
 	}
 	scope := mcpconnectionattempts.ServerScope(payload.organizationID, payload.projectID, *payload.mcpServerID, requestApp(ctx))
-	s.connections.Once(ctx, scope, mcpconnectionattempts.StepMCPRequest, code, callerSubject(ctx))
+	s.connections.Once(ctx, scope, mcpconnectionattempts.StepMCPRequest, code, callerSubject(ctx), mcpconnectionattempts.FromRequest(payload.request))
 }
 
 func toolsCallRefusal(err error) (mcpconnectionattempts.Code, bool) {
@@ -258,13 +261,13 @@ func (c upstreamRefreshCheck) reconnect() bool {
 }
 
 // refuseInboundRefresh gives a refused refresh its verdict from the reason its log line carries.
-func refuseInboundRefresh(ctx context.Context, tracker *mcpconnectionattempts.Tracker, reason string, opts ...mcpconnectionattempts.Option) {
+func refuseInboundRefresh(ctx context.Context, tracker *mcpconnectionattempts.Tracker, r *http.Request, reason string, opts ...mcpconnectionattempts.Option) {
 	code, ok := inboundRefreshHappened(reason)
 	if !ok {
 		tracker.Continue()
 		return
 	}
-	tracker.Refuse(ctx, code, append(opts, mcpconnectionattempts.Detail(reason))...)
+	tracker.Refuse(ctx, code, append(opts, mcpconnectionattempts.Detail(reason), mcpconnectionattempts.FromRequest(r))...)
 }
 
 // inboundRefreshHappened leaves out a request with no token to judge; an unknown reason is ours.

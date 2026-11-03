@@ -240,7 +240,7 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 			}
 		}
 		if !found {
-			s.connections.Once(ctx, gate.connectionScope(ctx), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeToolNotApproved, gate.connectionSubject(ctx))
+			s.connections.Once(ctx, gate.connectionScope(ctx), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeToolNotApproved, gate.connectionSubject(ctx), mcpconnectionattempts.FromRequest(gate.request))
 			return marshalMetaToolError(ctx, logger, req.ID, remotemcp.ToolNotApprovedMessage)
 		}
 	}
@@ -493,6 +493,7 @@ func (s *Service) buildMemberDispatch(
 
 	serverID := member.serverID
 	inputs := &mcpInputs{
+		request:               gate.request,
 		projectID:             projectID,
 		organizationID:        toolset.OrganizationID,
 		toolset:               toolset.Slug,

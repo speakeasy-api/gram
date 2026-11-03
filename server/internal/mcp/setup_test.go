@@ -209,7 +209,7 @@ func (s *migratedService) HandleConsent(w http.ResponseWriter, r *http.Request) 
 
 func (s *migratedService) ApplyIssuerGate(ctx context.Context, w http.ResponseWriter, authToken, baseURL string, endpoint *mcp.ResolvedMcpEndpoint) (context.Context, map[uuid.UUID]remotesessions.UpstreamToken, *toolfilter.SessionPolicy, error) {
 	s.migrate(ctx)
-	return s.Service.ApplyIssuerGate(ctx, w, authToken, baseURL, endpoint) //nolint:wrapcheck // a transparent wrapper returns the service's own error
+	return s.Service.ApplyIssuerGate(ctx, w, nil, authToken, baseURL, endpoint) //nolint:wrapcheck // a transparent wrapper returns the service's own error
 }
 
 func (s *migratedService) HandleToolsCall(ctx context.Context, inputs *mcp.McpInputs, toolName string, arguments json.RawMessage) (*mcp.ToolCallResult, error) {

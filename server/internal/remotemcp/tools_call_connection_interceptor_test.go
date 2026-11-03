@@ -45,6 +45,7 @@ func recordingConnections(rec *mcpconnectionattemptstest.Recording, upstreamAuth
 		Details:          nil,
 		UpstreamFailures: true,
 		SelfCredential:   false,
+		Request:          nil,
 	}, rec.Recorder, proxy.ServerIdentity{}, "https://provider.example.com/mcp", upstreamAuth, nil)
 }
 
@@ -164,6 +165,7 @@ func TestToolsCallConnections_ConfiguredCredentialRejected(t *testing.T) {
 			Details:          nil,
 			UpstreamFailures: true,
 			SelfCredential:   false,
+			Request:          nil,
 		}
 	}
 
@@ -188,6 +190,18 @@ func TestToolsCallConnections_CanceledCallerRecordsNothing(t *testing.T) {
 	cancel()
 	recordingConnections(rec, "token").record(ctx, mcpconnectionattempts.CodeProviderServerError)
 	rec.RequireNothing()
+}
+
+// The row names the caller's own client, not the proxy's.
+func TestToolsCallConnections_RowCarriesTheCallersClient(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	connections := recordingConnections(rec, "token")
+	connections.Request = httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/server", nil)
+	connections.Request.Header.Set("User-Agent", "claude-code/2.1.0")
+	connections.record(t.Context(), mcpconnectionattempts.CodeProviderServerError)
+	require.Equal(t, mcpconnectionattempts.FamilyClaudeCode, rec.Rows()[0].ClientFamily)
 }
 
 func TestRefusalHappened(t *testing.T) {

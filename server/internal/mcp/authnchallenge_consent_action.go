@@ -241,7 +241,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		}
 		result, refreshErr := s.remoteChallengeMgr.RefreshRemoteSession(
 			ctx,
-			consentRefreshAttribution(endpoint, challengeState),
+			consentRefreshAttribution(r, endpoint, challengeState),
 			subject,
 			endpoint.clientProjectID(*client),
 			endpoint.OrganizationID,
@@ -270,7 +270,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if cerr != nil {
 			return cerr
 		}
-		err := s.validateRemoteSession(ctx, logger, endpoint, challengeState, *client)
+		err := s.validateRemoteSession(ctx, r, logger, endpoint, challengeState, *client)
 		switch {
 		case errors.Is(err, errValidationRateLimited):
 			http.Redirect(w, r, backURL+"&validate_limited="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)

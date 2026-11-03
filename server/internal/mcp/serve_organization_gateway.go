@@ -404,10 +404,10 @@ func (c *projectTokenCache) get(ctx context.Context, projectID uuid.UUID) (map[u
 // so a member whose provider is not connected degrades on its own. A stored
 // gateway uses it too, for its hosted members, so the issuer's clients
 // resolve only when one needs them.
-func (s *Service) newOrganizationGatewayTokens(endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, skipped *remotesessions.SkippedClients) *projectTokenCache {
+func (s *Service) newOrganizationGatewayTokens(r *http.Request, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, skipped *remotesessions.SkippedClients) *projectTokenCache {
 	return &projectTokenCache{
 		resolve: func(ctx context.Context, projectID uuid.UUID) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-			tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshIn(connectionScope(endpoint, requestApp(ctx))).NotingSkips(skipped), projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+			tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, remotesessions.RefreshIn(connectionScope(endpoint, requestApp(ctx))).NotingSkips(skipped).FromRequest(r), projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 			if err != nil {
 				return nil, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
 			}

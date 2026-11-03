@@ -26,6 +26,9 @@ type ConnectionAttribution struct {
 	// SelfCredential marks a credential the server holds for itself, which the
 	// person connected did not supply and cannot replace.
 	SelfCredential bool
+
+	// Request is the caller's request, read only if a row is written.
+	Request *http.Request
 }
 
 // toolsCallConnections records refused and failed tool calls; nil adds no interceptor.
@@ -66,7 +69,7 @@ func (c *toolsCallConnections) record(ctx context.Context, code mcpconnectionatt
 	if errors.Is(ctx.Err(), context.Canceled) {
 		return
 	}
-	opts := append([]mcpconnectionattempts.Option{mcpconnectionattempts.Provider(c.provider)}, c.Details...)
+	opts := append([]mcpconnectionattempts.Option{mcpconnectionattempts.Provider(c.provider), mcpconnectionattempts.FromRequest(c.Request)}, c.Details...)
 	c.recorder.Once(ctx, c.Scope, mcpconnectionattempts.StepMCPRequest, code, opts...)
 }
 

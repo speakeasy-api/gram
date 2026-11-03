@@ -1058,6 +1058,9 @@ type issuerGateAuthentication struct {
 	// skippedUpstreams says why partial resolution left a client out; nil off a gateway.
 	skippedUpstreams *remotesessions.SkippedClients
 
+	// request is the caller's request, read only if a row is written.
+	request *http.Request
+
 	// agentKeyClients, when not nil, are the only clients an agent key
 	// without a credential choice is served by on a direct endpoint: the
 	// server's own clients, each with the connection its permit was decided
@@ -1083,6 +1086,7 @@ type issuerGateAuthentication struct {
 func (s *Service) authenticateIssuerGate(
 	ctx context.Context,
 	w http.ResponseWriter,
+	r *http.Request,
 	authToken, baseURL string,
 	endpoint *ResolvedMcpEndpoint,
 ) (context.Context, *issuerGateAuthentication, *toolfilter.SessionPolicy, error) {
@@ -1172,7 +1176,7 @@ func (s *Service) authenticateIssuerGate(
 			)
 		}
 		s.metrics.RecordMCPRequestRejected(ctx, reason, mcpURL, surface)
-		s.recordGateRejection(ctx, endpoint, authToken, reason, valErr)
+		s.recordGateRejection(ctx, r, endpoint, authToken, reason, valErr)
 		if errors.Is(valErr, errWorkloadSessionOutOfReach) {
 			return ctx, nil, nil, writeInsufficientScopeChallenge(w, protectedResourceURL, "access token does not grant access to this MCP server")
 		}
@@ -1186,7 +1190,7 @@ func (s *Service) authenticateIssuerGate(
 		s.metrics.RecordMCPRequestRejected(ctx, issuerGateReasonOrganizationMismatch, mcpURL, surface)
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && shareable.Code == oops.CodeForbidden {
 			s.connections.Once(ctx, connectionScope(endpoint, requestApp(newCtx)), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess,
-				mcpconnectionattempts.Detail(issuerGateReasonOrganizationMismatch))
+				mcpconnectionattempts.Detail(issuerGateReasonOrganizationMismatch), mcpconnectionattempts.FromRequest(r))
 		}
 		return ctx, nil, nil, err
 	}
@@ -1207,6 +1211,7 @@ func (s *Service) authenticateIssuerGate(
 		attachedSession:        uuid.Nil,
 		authorizerOwner:        "",
 		skippedUpstreams:       nil,
+		request:                r,
 		agentKeyClients:        nil,
 	}, toolSelection, nil
 }
@@ -1324,7 +1329,7 @@ func (s *Service) recordRemoteSessionRejection(ctx context.Context, authenticati
 	)
 	s.metrics.RecordMCPRequestRejected(ctx, reason, authentication.mcpURL, authentication.surface)
 	s.connections.Once(ctx, connectionScope(endpoint, requestApp(ctx)), mcpconnectionattempts.StepMCPRequest, code,
-		mcpconnectionattempts.Detail(reason), mcpconnectionattempts.Subject(&authentication.subject))
+		mcpconnectionattempts.Detail(reason), mcpconnectionattempts.Subject(&authentication.subject), mcpconnectionattempts.FromRequest(authentication.request))
 }
 
 // writeRemoteSessionReconnectChallenge answers a request whose required
@@ -1353,10 +1358,11 @@ func writeRemoteSessionReconnectChallenge(w http.ResponseWriter, authentication 
 func (s *Service) ApplyIssuerGate(
 	ctx context.Context,
 	w http.ResponseWriter,
+	r *http.Request,
 	authToken, baseURL string,
 	endpoint *ResolvedMcpEndpoint,
 ) (context.Context, map[uuid.UUID]remotesessions.UpstreamToken, *toolfilter.SessionPolicy, error) {
-	newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, authToken, baseURL, endpoint)
+	newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, r, authToken, baseURL, endpoint)
 	if err != nil {
 		return ctx, nil, nil, err
 	}
