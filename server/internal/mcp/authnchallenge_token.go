@@ -1529,7 +1529,7 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 	} else if decided {
 		return reconnect
 	}
-	reauthorizes := subjectReauthorizesToReconnect(subject)
+	reauthorizes := s.subjectReauthorizesToReconnect(ctx, endpoint.OrganizationID, subject)
 	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
 	tunneled, proxied, err := s.consentDirectBackend(ctx, endpoint, routing)
 	if err != nil {

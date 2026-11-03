@@ -2,4 +2,4 @@
 "server": patch
 ---
 
-People using public MCP servers are now prompted to reconnect when their provider connection stops working. Previously their MCP client kept refreshing successfully and every request failed with a 401 until they removed and re-added the connection themselves.
+People using a public MCP server without signing in are now asked to reconnect when their provider connection can no longer be renewed. Before, every request failed until they removed and re-added the connection.

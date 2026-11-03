@@ -333,7 +333,7 @@ func (s *Service) directUpstreamChoice(ctx context.Context, w http.ResponseWrite
 	switch {
 	case errors.Is(err, errUpstreamSelectionMissing), errors.Is(err, errUpstreamSelectionUnusable):
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: "+err.Error(), issuerGateReasonUpstreamSelectionUnavailable)
-		return none, true, writeRemoteSessionReconnectChallenge(w, authentication)
+		return none, true, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	case err != nil:
 		return none, true, oops.E(oops.CodeUnexpected, err, "load upstream client choice").LogError(ctx, s.logger)
 	}
@@ -363,7 +363,7 @@ func (s *Service) directPrincipalChoice(ctx context.Context, w http.ResponseWrit
 		// A key's choice is served only through the typed resolver, never by
 		// the issuer's credentials.
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: agent key choice unusable", issuerGateReasonUpstreamSelectionUnavailable)
-		return none, true, writeRemoteSessionReconnectChallenge(w, authentication)
+		return none, true, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	}
 	if agentID, ok := directAgentKeyActor(ctx, authentication.endpoint); ok {
 		// A key without a choice for the server keeps the issuer-derived path,
@@ -386,7 +386,7 @@ func (s *Service) directPrincipalChoice(ctx context.Context, w http.ResponseWrit
 		}
 	}
 	s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: no execution profile choice", issuerGateReasonUpstreamSelectionUnavailable)
-	return none, true, writeRemoteSessionReconnectChallenge(w, authentication)
+	return none, true, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 }
 
 // directAgentKeyActor returns the agent a principal agent key in ctx

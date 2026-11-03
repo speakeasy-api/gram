@@ -42,6 +42,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/customdomains"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
@@ -1246,7 +1247,7 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 			return recoveryErr
 		}
 		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: "+err.Error(), issuerGateReasonUpstreamSelectionUnavailable)
-		return writeRemoteSessionReconnectChallenge(w, authentication)
+		return s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	case errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
 		// The upstream token endpoint failed in a way that clears on its own.
 		// A 401 would send the user through reauthorization over an outage, so
@@ -1276,7 +1277,7 @@ func (s *Service) rejectRemoteSession(ctx context.Context, w http.ResponseWriter
 		if authentication.directWorkloadHandoff && authentication.subject.Kind == urn.SessionSubjectKindWorkload {
 			return errWorkloadReconnectRequired
 		}
-		return writeRemoteSessionReconnectChallenge(w, authentication)
+		return s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	default:
 		return oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
 	}
@@ -1323,20 +1324,28 @@ func (s *Service) recordRemoteSessionRejection(ctx context.Context, authenticati
 // challenge, since telling it to discard a credential it cannot replace, or an
 // agent session whose attached credential belongs to someone else, would
 // strand it.
-func writeRemoteSessionReconnectChallenge(w http.ResponseWriter, authentication *issuerGateAuthentication) error {
+func (s *Service) writeRemoteSessionReconnectChallenge(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication) error {
 	errorCode := ""
-	if authentication.refreshableUserSession && subjectReauthorizesToReconnect(authentication.subject) {
+	if authentication.refreshableUserSession && s.subjectReauthorizesToReconnect(ctx, authentication.endpoint.OrganizationID, authentication.subject) {
 		errorCode = oautherr.CodeInvalidToken
 	}
 	header := bearerErrorChallengeHeader(authentication.protectedResourceURL, errorCode, remoteSessionReconnectDescription)
 	return writeChallenge(w, header, remoteSessionReconnectDescription)
 }
 
-// subjectReauthorizesToReconnect reports a subject whose session belongs to a
-// person at the client. An anonymous subject is one too: reauthorizing mints a
-// new one, which connects the upstream on the consent page.
-func subjectReauthorizesToReconnect(subject urn.SessionSubject) bool {
-	return subject.Kind == urn.SessionSubjectKindUser || subject.Kind == urn.SessionSubjectKindAnonymous
+// subjectReauthorizesToReconnect reports a person at the client who can repair
+// a connection on the consent page. Enforced auth clients offer an anonymous
+// subject no personal connection, so reauthorizing would strand it.
+func (s *Service) subjectReauthorizesToReconnect(ctx context.Context, organizationID string, subject urn.SessionSubject) bool {
+	switch subject.Kind {
+	case urn.SessionSubjectKindUser:
+		return true
+	case urn.SessionSubjectKindAnonymous:
+		mode, err := s.authClientMode(ctx, organizationID)
+		return err == nil && mode != feature.AuthClientResolverEnforced
+	default:
+		return false
+	}
 }
 
 // ApplyIssuerGate authenticates and immediately resolves upstream credentials.
