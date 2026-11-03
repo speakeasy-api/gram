@@ -58,34 +58,64 @@ describe("getAgentPlatforms", () => {
     });
   });
 
-  it("separates Cowork hook networking from native telemetry export", () => {
+  it("has Cowork admins allow Speakeasy through network egress before telemetry export", () => {
     const steps = AGENT_PLATFORMS.find(
       ({ id }) => id === "claude-cowork",
     )!.setupSteps;
-    const index = steps.findIndex(
-      ({ title }) => title === "Verify hook and bootstrap network access",
+    const titles = steps.map(({ title }) => title);
+    const index = titles.indexOf(
+      "Allow Speakeasy in Claude's network egress settings",
     );
-    expect(index).toBeGreaterThanOrEqual(0);
-    expect(index).toBeGreaterThan(
-      steps.findIndex(({ title }) => title === "Enable OTEL export"),
+    expect(index).toBe(
+      titles.indexOf("Mark the observability plugin as Required") + 1,
     );
-    expect(index).toBe(steps.length - 1);
+    expect(index).toBe(titles.indexOf("Enable OTEL export") - 1);
+    expect(titles.at(-1)).toBe("Verify in a new Cowork session");
+
     const step = steps[index]!;
     expect(step.description).toContain(
-      "Admin settings → Capabilities → Network egress",
+      "Organization settings → Capabilities and turn on Code execution and file creation if it is off",
     );
-    expect(step.description).toContain("Native OTEL automatically allowlists");
-    expect(step.description).toContain(
-      "bootstrap binary downloads are separate",
+    expect(step.description).toContain("turn on Allow network egress");
+    expect(step.description).toContain("Package managers only");
+    expect(step.description).toContain("no other domain is needed");
+    expect(step.description).toContain("plugin hooks do not");
+    expect(step.helpLink?.url).toBe(
+      "https://claude.ai/admin-settings/capabilities",
     );
     expect(step.fields).toEqual([
       { label: "Additional allowed domains", value: "app.getgram.ai" },
       { label: "Additional allowed domains", value: "ai.speakeasy.com" },
     ]);
-    expect(step.afterFields).toContain("Start a new Cowork session");
-    expect(step.afterFields).toContain(
+    expect(step.afterFields).toContain("new Cowork sessions only");
+
+    expect(JSON.stringify(steps.at(-1))).toContain(
       "confirm hook events and native monitoring separately",
     );
+  });
+
+  it("has personal Cowork users allow Speakeasy through network egress before verifying", () => {
+    const platform = AGENT_PLATFORMS.find(({ id }) => id === "claude-cowork")!;
+    const personal = platformSteps(platform, false);
+    const titles = personal.map(({ title }) => title);
+    const index = titles.indexOf(
+      "Allow Speakeasy in Claude's network egress settings",
+    );
+    expect(index).toBe(titles.indexOf("Upload it in Claude") + 1);
+    expect(index).toBe(
+      titles.indexOf("Verify Cowork hooks in a new session") - 1,
+    );
+
+    const step = personal[index]!;
+    expect(step.description).toContain(
+      "Settings → Capabilities in Claude and turns on Code execution and file creation if it is off",
+    );
+    expect(step.description).toContain("turn on Allow network egress");
+    expect(step.description).not.toContain("Organization settings");
+    expect(step.fields).toEqual([
+      { label: "Additional allowed domains", value: "app.getgram.ai" },
+      { label: "Additional allowed domains", value: "ai.speakeasy.com" },
+    ]);
   });
 
   it("includes authenticated OTEL export instructions", () => {
@@ -281,7 +311,9 @@ describe("getAgentPlatforms", () => {
     expect(
       cowork.setupSteps
         .find(
-          (step) => step.title === "Verify hook and bootstrap network access",
+          (step) =>
+            step.title ===
+            "Allow Speakeasy in Claude's network egress settings",
         )
         ?.fields?.map((field) => field.value),
     ).toEqual(["ai.speakeasy.com", "app.getgram.ai"]);

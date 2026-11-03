@@ -45,6 +45,14 @@ const claudeCodeSettingsJSON = (origin: string) => `{
 // marketplace keys must stay the marketplace.json name shown in the snippet.
 const claudeCodeMarketplaceNameNote = [` ${CLAUDE_CODE_EXACT_NAME_NOTE}`];
 
+// Cowork's sandbox needs only Speakeasy's hosts: the hooks bootstrap downloads
+// its binary from the Speakeasy server, not GitHub, and hooks send there too.
+const coworkEgressFields = (egressHosts: string[]) =>
+  egressHosts.map((host) => ({
+    label: "Additional allowed domains",
+    value: host,
+  }));
+
 // Setup copy names the host the reader is on (app.getgram.ai or
 // ai.speakeasy.com): every platform host serves the OTLP and hooks endpoints.
 const setupAgentPlatforms = (
@@ -184,6 +192,14 @@ const setupAgentPlatforms = (
               },
             },
             {
+              title: "Allow Speakeasy in Claude's network egress settings",
+              description:
+                "Cowork runs plugin hooks in a sandbox that reaches only allowed hosts, so hooks cannot report to Speakeasy until its domains are allowed. Each person opens Settings → Capabilities in Claude and turns on Code execution and file creation if it is off (the network egress controls stay hidden until it is on). Then they turn on Allow network egress, keep Domain allowlist on Package managers only, and add each domain below under Additional allowed domains. Hook events and the first-run hooks binary download both go to these hosts; no other domain is needed. All domains also works but opens the sandbox to the whole internet.",
+              fields: coworkEgressFields(egressHosts),
+              afterFields:
+                "Egress changes apply to new Cowork sessions only; a session that is already running keeps its old rules.",
+            },
+            {
               title: "Verify Cowork hooks in a new session",
               description:
                 "Run a tool in a Cowork session, not ordinary chat, where hooks are ignored. Confirm real events arrive in Speakeasy: successful upload does not prove hook execution, bootstrap binary downloads, credentials, or network access. The ZIP embeds hooks authentication, not connector sign-in. Native Cowork OTEL monitoring is a separate Team/Enterprise feature, not included on Pro/Max. Verify hook behavior on the surface and version you use.",
@@ -252,6 +268,19 @@ const setupAgentPlatforms = (
         },
       },
       {
+        title: "Allow Speakeasy in Claude's network egress settings",
+        description:
+          "Cowork runs plugin hooks in a sandbox that reaches only the hosts your organization allows, so hooks cannot report to Speakeasy until its domains are allowed. As an Owner or Primary Owner, open Organization settings → Capabilities and turn on Code execution and file creation if it is off (the network egress controls stay hidden until it is on). Then turn on Allow network egress, keep Domain allowlist on Package managers only, and add each domain below under Additional allowed domains. Hook events and the first-run hooks binary download both go to these hosts; no other domain is needed. All domains also works but opens the sandbox to the whole internet. Native OTEL monitoring, set up next, allowlists its own collector; plugin hooks do not.",
+        helpLink: {
+          url: "https://claude.ai/admin-settings/capabilities",
+          linkLabel: "Capabilities settings",
+          sentence: "Open {LINK} on Claude.ai",
+        },
+        fields: coworkEgressFields(egressHosts),
+        afterFields:
+          "Egress changes apply to new Cowork sessions only; a session that is already running keeps its old rules. With Allow network egress turned off, the sandbox reaches only Anthropic hosts and the native OTEL collector, so no hook events arrive.",
+      },
+      {
         title: "Enable OTEL export",
         description:
           "Native monitoring requires Team or Enterprise and Claude Desktop 1.1.4173 or later. Open Admin settings → Cowork → Monitoring and enter the values below. This is separate from plugin hooks; verify the endpoint, project, and headers against actual received events.",
@@ -278,15 +307,9 @@ const setupAgentPlatforms = (
         requiresApiKey: true,
       },
       {
-        title: "Verify hook and bootstrap network access",
+        title: "Verify in a new Cowork session",
         description:
-          "Native OTEL automatically allowlists its collector hostname; it does not require a manual egress exception. Hook scripts and bootstrap binary downloads are separate traffic. If they are blocked, review Admin settings → Capabilities → Network egress and allow only the destinations they need, including the hook endpoints below.",
-        fields: egressHosts.map((host) => ({
-          label: "Additional allowed domains",
-          value: host,
-        })),
-        afterFields:
-          "Start a new Cowork session, run a tool, and confirm hook events and native monitoring separately in Speakeasy. A successful plugin install or a single allowlisted domain does not prove bootstrap downloads and hooks can run.",
+          "Start a new Cowork session, run a tool, and confirm hook events and native monitoring separately in Speakeasy. If monitoring arrives but hook events do not, the sandbox is still blocking Speakeasy: recheck that every domain from the network egress step is listed under Additional allowed domains as a bare hostname. A successful plugin install does not prove hooks can run.",
       },
     ],
   },

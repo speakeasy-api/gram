@@ -74,7 +74,7 @@ export function AnthropicAdminControlsStep({
           index={3}
           slug="connect-cowork"
           title="Connect Claude Cowork"
-          description="On Team or Enterprise, an Owner or Primary Owner syncs the marketplace through Claude's GitHub App and marks the plugin Required. On Pro or Max, each person can add a personal marketplace (including private GitHub) or upload a ZIP. Required installation and successful upload do not prove hook execution."
+          description="On Team or Enterprise, an Owner or Primary Owner syncs the marketplace through Claude's GitHub App, marks the plugin Required, and allows Speakeasy's domains in Claude's network egress settings. On Pro or Max, each person can add a personal marketplace (including private GitHub) or upload a ZIP, then allows the same domains. Required installation and successful upload do not prove hook execution."
           complete={statusOf("claude-cowork") === "complete"}
           aside={platformStatusBadge(statusOf("claude-cowork"))}
         >
