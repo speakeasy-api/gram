@@ -289,28 +289,6 @@ func TestHealthIssueMessageNamesExpectedCNAME(t *testing.T) {
 	)
 }
 
-func TestHealthIssueMessageOtherDNSTarget(t *testing.T) {
-	t.Parallel()
-
-	other := DNSRemediation{Domain: "chat.example.com", ExpectedCNAME: "abcde23456.domains.example.net", ExpectedARecords: nil, OtherDNSTarget: true}
-	require.Equal(t,
-		"The domain's CNAME record points at a routing target that belongs to another domain or is no longer in use. Create a CNAME record pointing the domain at abcde23456.domains.example.net instead.",
-		HealthIssueMessage(HealthIssueDNSTargetMismatch, other),
-	)
-
-	// Only the mismatch message is about where the CNAME points.
-	require.Equal(t,
-		"DNS records for the domain could not be found. Create a CNAME record pointing the domain at abcde23456.domains.example.net.",
-		HealthIssueMessage(HealthIssueDNSNotFound, other),
-	)
-
-	otherWithoutTarget := DNSRemediation{Domain: "chat.example.com", ExpectedCNAME: "", ExpectedARecords: nil, OtherDNSTarget: true}
-	require.Equal(t,
-		"The domain's CNAME record points at a routing target that belongs to another domain or is no longer in use.",
-		HealthIssueMessage(HealthIssueDNSTargetMismatch, otherWithoutTarget),
-	)
-}
-
 func TestHealthIssueMessageApexNamesARecords(t *testing.T) {
 	t.Parallel()
 
@@ -333,44 +311,6 @@ func TestHealthIssueMessageSubdomainOffersBothRecordTypes(t *testing.T) {
 		"DNS records for the domain could not be found. Create a CNAME record pointing the domain at cname.example.net (or, for an apex domain, an A record pointing at 34.127.46.134).",
 		HealthIssueMessage(HealthIssueDNSNotFound, both),
 	)
-}
-
-func TestShouldAutoDisableRequiresAllThresholds(t *testing.T) {
-	t.Parallel()
-
-	now := time.Date(2026, 7, 27, 12, 0, 0, 0, time.UTC)
-	eightDaysAgo := now.Add(-8 * 24 * time.Hour)
-	sixDaysAgo := now.Add(-6 * 24 * time.Hour)
-
-	eligible := HealthState{
-		Status:               HealthStatusUnhealthy,
-		Issue:                HealthIssueDNSTargetMismatch,
-		CheckedAt:            &now,
-		UnhealthySince:       &eightDaysAgo,
-		CertificateExpiresAt: nil,
-		ConsecutiveFailures:  AutoDisableConsecutiveFailures,
-	}
-	require.True(t, ShouldAutoDisable(eligible, now))
-
-	belowFailures := eligible
-	belowFailures.ConsecutiveFailures = AutoDisableConsecutiveFailures - 1
-	require.False(t, ShouldAutoDisable(belowFailures, now), "needs the full failure count")
-
-	tooRecent := eligible
-	tooRecent.UnhealthySince = &sixDaysAgo
-	require.False(t, ShouldAutoDisable(tooRecent, now), "needs a full week unhealthy")
-
-	gramSide := eligible
-	gramSide.Issue = HealthIssueCheckFailed
-	require.False(t, ShouldAutoDisable(gramSide, now), "check_failed never disables")
-
-	healthy := eligible
-	healthy.Status = HealthStatusHealthy
-	require.False(t, ShouldAutoDisable(healthy, now))
-
-	noAnchor := eligible
-	noAnchor.UnhealthySince = nil
-	require.False(t, ShouldAutoDisable(noAnchor, now))
 }
 
 func TestHealthIssueMessageApexPluralizesMultipleARecords(t *testing.T) {

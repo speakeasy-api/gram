@@ -41,7 +41,7 @@ const (
 )
 
 // DNSRoutingMethod is how a custom domain's DNS was last observed routing
-// traffic to Speakeasy. Verification and health checks persist it in
+// traffic to Speakeasy. Health checks persist it in
 // custom_domains.dns_routing_method.
 type DNSRoutingMethod string
 
@@ -60,7 +60,7 @@ const (
 
 	// DNSRoutingMethodUnknown means no supported routing method was observed:
 	// DNS was missing or pointed elsewhere, the check failed, or a proxied
-	// domain passed only the HTTPS probe.
+	// domain hides its origin behind a proxy.
 	DNSRoutingMethodUnknown DNSRoutingMethod = "unknown"
 )
 
