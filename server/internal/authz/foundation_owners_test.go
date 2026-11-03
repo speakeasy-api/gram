@@ -109,7 +109,6 @@ var foundationPackageOwners = map[string]string{
 	"internal/networkingress":                                ownerO5,
 	"internal/oktaresourceconnections":                       ownerM2,
 	"internal/oktaserversuggestions":                         ownerM2,
-	"internal/organizations":                                 ownerO1,
 	"internal/otel":                                          ownerO7,
 	"internal/packages":                                      ownerP2,
 	"internal/platformmcp":                                   ownerX3,

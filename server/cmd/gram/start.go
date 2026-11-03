@@ -1038,10 +1038,11 @@ func newStartCommand() *cli.Command {
 					AdmitWorkloadSessionInTx:         runtimepolicy.AdmitWorkloadSessionInTx,
 					DevMode:                          c.String("environment") == "local",
 				})
-			// The typed client must compile its registry and migration units at
+			// The typed client compiles its registry and migration units at
 			// startup; a broken declaration stops the server instead of failing
 			// checks later. Each unit's flag routes it, and every unit starts
-			// with the engine deciding.
+			// with the engine deciding. Services that have moved to typed
+			// operations receive this client.
 			authzRegistry, err := authz.DefaultRegistry()
 			if err != nil {
 				return fmt.Errorf("compile authorization registry: %w", err)
@@ -1050,11 +1051,12 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create authorization migration router: %w", err)
 			}
-			if _, err := authz.NewClient(authzEngine, authzRegistry,
+			authzClient, err := authz.NewClient(authzEngine, authzRegistry,
 				authz.WithMigrationRouter(authzRouter),
 				authz.WithShadowRecorder(authz.NewShadowRecorder(logger, meterProvider)),
 				authz.WithBuildVersion(shortGitSHA()),
-			); err != nil {
+			)
+			if err != nil {
 				return fmt.Errorf("create authorization client: %w", err)
 			}
 
@@ -1649,7 +1651,7 @@ func newStartCommand() *cli.Command {
 			if err := organizations.SyncOnboardingSteps(ctx, db); err != nil {
 				return fmt.Errorf("sync onboarding steps: %w", err)
 			}
-			organizationsService := organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, emailService, trialEmailNotifier, productfeatures.SeedEnterpriseTrialBundleTx, posthogClient, growthEmitter, siteURL.String(), orgHosts, auditLogger, svixClient)
+			organizationsService := organizations.NewService(logger, tracerProvider, db, sessionManager, workosClient, identityResolver, productFeatures, telemetryrepo.New(chDB), authzEngine, authzClient, emailService, trialEmailNotifier, productfeatures.SeedEnterpriseTrialBundleTx, posthogClient, growthEmitter, siteURL.String(), orgHosts, auditLogger, svixClient)
 			organizationsService.SetTokenRevoker(chatSessionsManager, meterProvider)
 			organizations.Attach(mux, organizationsService)
 			shutdownFuncs = append(shutdownFuncs, func(ctx context.Context) error {
@@ -1736,7 +1738,7 @@ func newStartCommand() *cli.Command {
 				WithDistributionAdmission(distributionAdmission).WithPublicationRequests(publicationEmit).WithOrganizationHosts(orgHosts)
 			plugins.Attach(mux, pluginsSvc)
 			launcher.Attach(mux, launcher.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, openRouter, typesafe.NewClient(guardianPolicy.PooledClient(), logger, typesafe.WithTracerProvider(tracerProvider))))
-			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, authzEngine, auditLogger))
+			productfeatures.Attach(mux, productfeatures.NewService(logger, tracerProvider, db, sessionManager, redisClient, authzEngine, authzClient, auditLogger))
 			sigintSvc := sigint.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, productFeatures)
 			sigint.Attach(mux, sigintSvc)
 			skillefficacy.Attach(mux, skillefficacy.NewService(logger, tracerProvider, db, sessionManager, authzEngine, productFeatures, auditLogger, telemetryrepo.New(chDB)))

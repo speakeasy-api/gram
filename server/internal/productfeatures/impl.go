@@ -37,6 +37,7 @@ type Service struct {
 	repo          *repo.Queries
 	auth          *auth.Auth
 	authz         *authz.Engine
+	authzClient   *authz.Client
 	featureClient *Client
 	mutator       *Mutator
 }
@@ -50,6 +51,7 @@ func NewService(
 	sessions *sessions.Manager,
 	redisClient *redis.Client,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	auditLogger *audit.Logger,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("product_features"))
@@ -62,6 +64,7 @@ func NewService(
 		repo:          repo.New(db),
 		auth:          auth.New(logger, db, sessions, authzEngine),
 		authz:         authzEngine,
+		authzClient:   authzClient,
 		featureClient: featureClient,
 		mutator:       NewMutator(featureClient, auditLogger),
 	}
@@ -91,8 +94,7 @@ func (s *Service) authorizeOrganization(ctx context.Context, organizationID stri
 	}
 
 	if organizationID == authCtx.ActiveOrganizationID {
-		check := authz.Check{Scope: scope, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}
-		if err := s.authz.Require(ctx, check); err != nil {
+		if err := s.authzClient.Require(ctx, organizationOperation(organizationID, scope)); err != nil {
 			return nil, "", nil, fmt.Errorf("require %s: %w", scope, err)
 		}
 		return authCtx, organizationID, nil, nil
@@ -274,4 +276,19 @@ func (s *Service) GetProductFeatures(ctx context.Context, payload *gen.GetProduc
 
 func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.APIKeyScheme) (context.Context, error) {
 	return s.auth.Authorize(ctx, key, schema)
+}
+
+// organizationOperation names the typed organization operation that answers
+// scope. A requested organization other than the active one is still checked
+// by scope against its live grants, so callers name the scope once for both
+// paths. Any other scope gives the zero operation, which the client rejects.
+func organizationOperation(organizationID string, scope authz.Scope) authz.Operation {
+	switch scope {
+	case authz.ScopeOrgAdmin:
+		return authz.Organization(organizationID).Administer()
+	case authz.ScopeOrgRead:
+		return authz.Organization(organizationID).Read()
+	default:
+		return authz.Operation{}
+	}
 }

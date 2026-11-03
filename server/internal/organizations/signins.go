@@ -38,7 +38,7 @@ func (s *Service) RevokeMemberSignIns(ctx context.Context, payload *gen.RevokeMe
 	if ac.UserID == "" || ac.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(ac.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 	if !s.sessions.SignInEnforced(ctx, ac.ActiveOrganizationID) {

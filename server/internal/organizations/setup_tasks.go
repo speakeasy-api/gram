@@ -126,7 +126,7 @@ func (s *Service) ListSetupTasks(ctx context.Context, payload *gen.ListSetupTask
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(ac.ActiveOrganizationID).Read()); err != nil {
 		return nil, err
 	}
 
@@ -148,7 +148,7 @@ func (s *Service) UpdateSetupTask(ctx context.Context, payload *gen.UpdateSetupT
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(ac.ActiveOrganizationID).Read()); err != nil {
 		return nil, err
 	}
 	if setupTaskDefinitionForKey(payload.TaskKey) == nil {
@@ -165,7 +165,7 @@ func (s *Service) UpdateSetupTask(ctx context.Context, payload *gen.UpdateSetupT
 		return nil, oops.E(oops.CodeBadRequest, nil, "assignee and clear_assignee cannot both be set").LogError(ctx, s.logger)
 	}
 
-	adminErr := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil})
+	adminErr := s.authzClient.Require(ctx, authz.Organization(ac.ActiveOrganizationID).Administer())
 	if (payload.Assignee != nil || clearAssignee) && adminErr != nil {
 		return nil, adminErr
 	}
@@ -622,7 +622,7 @@ func (s *Service) SubmitOnboardingSurvey(ctx context.Context, payload *gen.Submi
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(ac.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 	queries := orgrepo.New(s.db)

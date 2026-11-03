@@ -18,7 +18,7 @@ func (s *Service) GetGateway(ctx context.Context, _ *gen.GetGatewayPayload) (*ge
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(ac.ActiveOrganizationID).Read()); err != nil {
 		return nil, err
 	}
 
