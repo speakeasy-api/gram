@@ -9,10 +9,11 @@
   body { margin: 0; padding: 12px 16px; font: 14px/1.4 system-ui, sans-serif; color: var(--fg); background: transparent; }
   h1 { font-size: 14px; font-weight: 600; margin: 0 0 8px; }
   ul { list-style: none; margin: 0; padding: 0; }
-  li { display: flex; align-items: center; gap: 12px; padding: 8px 0; border-top: 1px solid var(--line); }
+  li { display: flex; flex-wrap: wrap; align-items: center; gap: 4px 12px; padding: 8px 0; border-top: 1px solid var(--line); }
   .name { flex: 1; min-width: 0; }
   .detail { color: var(--muted); font-size: 12px; }
   .ok { color: var(--ok); } .warn { color: var(--warn); }
+  .note { flex-basis: 100%; min-width: 0; overflow-wrap: anywhere; }
   button { font: inherit; padding: 4px 12px; border-radius: 6px; border: 0; background: var(--btn); color: var(--btn-fg); cursor: pointer; }
   .hint { color: var(--muted); font-size: 12px; margin-top: 8px; }
 </style>
@@ -83,8 +84,14 @@
       } else if (s.status === "unavailable") {
         unavailable++;
         state.className = "warn";
-        state.textContent = s.detail || "Temporarily unavailable. Retry shortly.";
+        state.textContent = "Temporarily unavailable";
         li.append(state);
+        if (s.detail) {
+          const note = document.createElement("div");
+          note.className = "detail note";
+          note.textContent = s.detail;
+          li.append(note);
+        }
       } else {
         needs++;
         state.className = "warn";
