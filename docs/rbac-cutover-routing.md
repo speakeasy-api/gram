@@ -18,12 +18,12 @@ Each unit has a mode: `old` (the engine decides), `shadow` (the engine decides a
 
 Each unit is routed by its own multivariate PostHog flag, `rbac-migration-<unit>`, evaluated locally with the organization ID as the distinct ID (like `auth-client-resolver`, the flag must be person-aggregated and match `distinct_id` in a list of organization IDs).
 
-| Variant          | Mode     | Who decides         |
-| ---------------- | -------- | ------------------- |
-| none (flag off)  | `old`    | engine              |
-| `shadow`         | `shadow` | engine, compared    |
-| `new`            | `new`    | registry evaluator  |
-| anything else    | `old`    | engine              |
+| Variant         | Mode     | Who decides        |
+| --------------- | -------- | ------------------ |
+| none (flag off) | `old`    | engine             |
+| `shadow`        | `shadow` | engine, compared   |
+| `new`           | `new`    | registry evaluator |
+| anything else   | `old`    | engine             |
 
 The default is `old` for every unit: a flag that is off, unknown, unavailable or failing keeps the engine deciding. Merging a migration therefore changes no decision. The authorization platform owns these keys; a unit's flag is deleted once its engine path is removed (X1 to X4).
 
@@ -68,11 +68,11 @@ The engine always answers first and its answer is the response; nothing in the c
 
 Outcomes:
 
-| Outcome        | Meaning                                                                                         | Parity?  |
-| -------------- | ----------------------------------------------------------------------------------------------- | -------- |
-| `match`        | Same answer, or the same error category                                                         | yes      |
-| `new_allow`    | The registry evaluator allows what the engine denied or could not decide                        | mismatch |
-| `new_deny`     | The registry evaluator denies what the engine allowed                                           | mismatch |
+| Outcome        | Meaning                                                                                          | Parity?  |
+| -------------- | ------------------------------------------------------------------------------------------------ | -------- |
+| `match`        | Same answer, or the same error category                                                          | yes      |
+| `new_allow`    | The registry evaluator allows what the engine denied or could not decide                         | mismatch |
+| `new_deny`     | The registry evaluator denies what the engine allowed                                            | mismatch |
 | `new_error`    | The error category changed: the evaluator failed where the engine decided, or failed differently | mismatch |
 | `incomparable` | The evaluator lacked facts equivalent to what the engine read                                    | no       |
 | `skipped`      | The concurrency budget was exhausted; the evaluator did not run                                  | no       |
