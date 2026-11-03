@@ -40,6 +40,30 @@ const (
 	dnsTargetTokenIndex = "custom_domains_dns_target_token_key"
 )
 
+// DNSRoutingMethod is how a custom domain's DNS was last observed routing
+// traffic to Speakeasy. Verification and health checks persist it in
+// custom_domains.dns_routing_method.
+type DNSRoutingMethod string
+
+const (
+	// DNSRoutingMethodPerDomainCNAME is a CNAME to the domain's own per-domain
+	// target (<token>.<suffix>).
+	DNSRoutingMethodPerDomainCNAME DNSRoutingMethod = "per_domain_cname"
+
+	// DNSRoutingMethodSharedCNAME is a CNAME to the shared target that every
+	// custom domain may use.
+	DNSRoutingMethodSharedCNAME DNSRoutingMethod = "shared_cname"
+
+	// DNSRoutingMethodARecord is address records (an apex A record or a
+	// flattened CNAME) that all point at Speakeasy.
+	DNSRoutingMethodARecord DNSRoutingMethod = "a_record"
+
+	// DNSRoutingMethodUnknown means no supported routing method was observed:
+	// DNS was missing or pointed elsewhere, the check failed, or a proxied
+	// domain passed only the HTTPS probe.
+	DNSRoutingMethodUnknown DNSRoutingMethod = "unknown"
+)
+
 // TxBeginner starts a transaction. On a pool this is a real transaction; on a
 // pgx.Tx it is a savepoint, which lets callers retry a statement that failed
 // inside their own transaction without aborting it.
@@ -78,6 +102,37 @@ func DNSTarget(suffix string, token pgtype.Text) (string, bool) {
 		return "", false
 	}
 	return token.String + "." + suffix, true
+}
+
+// ParseDNSTarget returns the token of a per-domain target name. name must be
+// normalized (lowercase, no trailing dot). It reports false when per-domain
+// targets are disabled (empty suffix) or name is not exactly one label under
+// suffix shaped like a token (DNSTargetTokenLength lowercase base32
+// characters), so infrastructure names under the suffix are not mistaken for
+// another domain's target.
+func ParseDNSTarget(suffix, name string) (string, bool) {
+	if suffix == "" {
+		return "", false
+	}
+	token, ok := strings.CutSuffix(name, "."+suffix)
+	if !ok || !isDNSTargetToken(token) {
+		return "", false
+	}
+	return token, true
+}
+
+// isDNSTargetToken reports whether label has the shape NewDNSTargetToken
+// produces.
+func isDNSTargetToken(label string) bool {
+	if len(label) != DNSTargetTokenLength {
+		return false
+	}
+	for _, r := range label {
+		if (r < 'a' || r > 'z') && (r < '2' || r > '7') {
+			return false
+		}
+	}
+	return true
 }
 
 // EnsureDNSTargetToken assigns a DNS target token to the organization's live

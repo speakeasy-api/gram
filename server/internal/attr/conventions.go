@@ -451,6 +451,7 @@ const (
 
 	CustomDomainHealthStatusKey         = attribute.Key("gram.custom_domain.health.status")
 	CustomDomainHealthIssueKey          = attribute.Key("gram.custom_domain.health.issue")
+	CustomDomainDNSRoutingMethodKey     = attribute.Key("gram.custom_domain.dns.routing_method")
 	CustomDomainNotifyRecipientCountKey = attribute.Key("gram.custom_domain.notify.recipient_count")
 	AccessRequestScopeKey               = attribute.Key("gram.access_request.scope")
 	AccessRequestAdminCountKey          = attribute.Key("gram.access_request.admin_count")
@@ -2319,6 +2320,14 @@ func CustomDomainHealthIssue(v string) attribute.KeyValue {
 
 func SlogCustomDomainHealthIssue(v string) slog.Attr {
 	return slog.String(string(CustomDomainHealthIssueKey), v)
+}
+
+func CustomDomainDNSRoutingMethod(v string) attribute.KeyValue {
+	return CustomDomainDNSRoutingMethodKey.String(v)
+}
+
+func SlogCustomDomainDNSRoutingMethod(v string) slog.Attr {
+	return slog.String(string(CustomDomainDNSRoutingMethodKey), v)
 }
 
 func CustomDomainNotifyRecipientCount(v int) attribute.KeyValue {

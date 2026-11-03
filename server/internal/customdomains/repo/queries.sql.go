@@ -1073,6 +1073,28 @@ func (q *Queries) LockRootMcpEndpointSelection(ctx context.Context, arg LockRoot
 	return items, nil
 }
 
+const setCustomDomainDNSRoutingMethod = `-- name: SetCustomDomainDNSRoutingMethod :exec
+UPDATE custom_domains
+SET
+    dns_routing_method = $1::text,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND deleted IS FALSE
+  AND dns_routing_method IS DISTINCT FROM $1::text
+`
+
+type SetCustomDomainDNSRoutingMethodParams struct {
+	DnsRoutingMethod string
+	ID               uuid.UUID
+}
+
+// Verification records the routing method on every pass. Unchanged values are
+// skipped so polling does not bump updated_at.
+func (q *Queries) SetCustomDomainDNSRoutingMethod(ctx context.Context, arg SetCustomDomainDNSRoutingMethodParams) error {
+	_, err := q.db.Exec(ctx, setCustomDomainDNSRoutingMethod, arg.DnsRoutingMethod, arg.ID)
+	return err
+}
+
 const setCustomDomainVerified = `-- name: SetCustomDomainVerified :one
 UPDATE custom_domains
 SET
@@ -1208,9 +1230,10 @@ SET
     unhealthy_since = $4,
     certificate_expires_at = $5,
     consecutive_failures = $6,
+    dns_routing_method = $7,
     updated_at = clock_timestamp()
-WHERE id = $7
-  AND organization_id = $8
+WHERE id = $8
+  AND organization_id = $9
   AND deleted IS FALSE
 RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, created_at, updated_at, deleted_at, deleted
 `
@@ -1222,6 +1245,7 @@ type UpdateCustomDomainHealthParams struct {
 	UnhealthySince       pgtype.Timestamptz
 	CertificateExpiresAt pgtype.Timestamptz
 	ConsecutiveFailures  pgtype.Int4
+	DnsRoutingMethod     pgtype.Text
 	ID                   uuid.UUID
 	OrganizationID       string
 }
@@ -1234,6 +1258,7 @@ func (q *Queries) UpdateCustomDomainHealth(ctx context.Context, arg UpdateCustom
 		arg.UnhealthySince,
 		arg.CertificateExpiresAt,
 		arg.ConsecutiveFailures,
+		arg.DnsRoutingMethod,
 		arg.ID,
 		arg.OrganizationID,
 	)

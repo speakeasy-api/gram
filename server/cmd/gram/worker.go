@@ -378,6 +378,10 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return err
 			}
+			customDomainTargetSuffix, err := customDomainTargetSuffixFromCLI(c)
+			if err != nil {
+				return err
+			}
 
 			serviceName := "gram-worker"
 			serviceEnv := c.String("environment")
@@ -885,6 +889,7 @@ func newWorkerCommand() *cli.Command {
 				K8sClient:                      k8sClient,
 				ExpectedTargetCNAME:            c.String("custom-domain-cname"),
 				ExpectedARecords:               customDomainARecords,
+				CustomDomainTargetSuffix:       customDomainTargetSuffix,
 				GitHubEvidenceToken:            c.String("github-evidence-token"),
 				SiteURL:                        siteURL,
 				ServerURL:                      serverURL,
