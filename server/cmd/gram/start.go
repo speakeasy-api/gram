@@ -1917,7 +1917,7 @@ func newStartCommand() *cli.Command {
 			riskFindings := riskchrepo.New(chDB)
 			widgetsSvc := widgets.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger)
 			dashboardsSvc := dashboards.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger)
-			workloadPolicySvc := workloadpolicy.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, sharedAuthorizationServerHosts, ratelimit.NewRedisStore(redisClient))
+			workloadPolicySvc := workloadpolicy.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, sharedAuthorizationServerHosts, ratelimit.NewRedisStore(redisClient), featureFlags)
 			platformMCPCfg := platformMCPConfig{
 				DeploymentRedeploy:        deploymentsService,
 				AssistantIdentity:         assistantsSvc,
@@ -2209,6 +2209,7 @@ func newStartCommand() *cli.Command {
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
 						Connections:                    connectionRecorder,
+						FleetHealthCache:               admin.NewHookClientsCache(logger, cache.NewRedisCacheAdapter(redisClient), tm.NewHookClients(chDB), deviceagentversions.NewStore(redisClient)),
 						CatalogPromotions:              catalogpromotion.New(db, mcpregistry.New(db, registryValidator).WithAssetBaseURL(siteURL), productFeatures, tm.NewMCPServerHealth(db, chDB), catalogPromotionDelivery(c, guardianPolicy), guardianPolicy),
 						CatalogPromotionDeliveryPaused: c.Bool("catalog-promotion-delivery-paused"),
 						GuardianPolicy:                 guardianPolicy,

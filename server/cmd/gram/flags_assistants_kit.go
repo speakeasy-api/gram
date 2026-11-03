@@ -21,10 +21,14 @@ import (
 
 func assistantKitRuntimeFlags() []cli.Flag {
 	return []cli.Flag{
-		&cli.StringFlag{Name: "assistant-kit-workload-jwks-url", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_JWKS_URL"}, Usage: "Explicit external issuer JWKS URL; required for both local and GKE workload assertions."},
-		&cli.StringFlag{Name: "assistant-kit-workload-issuer", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_ISSUER"}, Usage: "External projected workload JWT issuer URL (cluster issuer, not the shared token endpoint)."},
+		&cli.StringFlag{Name: "assistant-kit-workload-jwks-url", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_JWKS_URL"}, Usage: "External issuer JWKS URL for local assertions; ignored by GKE Kit, which derives its JWKS from the cluster identity."},
+		&cli.StringFlag{Name: "assistant-kit-workload-issuer", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_ISSUER"}, Usage: "External issuer for local assertions; ignored by GKE Kit, which derives its issuer from the cluster identity."},
 		&cli.StringFlag{Name: "assistant-kit-workload-subject", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_SUBJECT"}, Usage: "Local operator-projected subject, unique to one cold bootstrap. Supply a fresh external subject and assertion before restarting; subjects cannot be reused or shared between assistants."},
 		&cli.StringFlag{Name: "assistant-kit-workload-assertion-file", EnvVars: []string{"GRAM_ASSISTANT_KIT_WORKLOAD_ASSERTION_FILE"}, Usage: "Absolute operator-projected file named assertion in a dedicated directory. Its parent is mounted read-only outside persistent HOME to support atomic rotation."},
+		&cli.StringFlag{Name: "assistant-kit-gke-project-number", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_PROJECT_NUMBER"}, Usage: "Required numeric Google Cloud project number owning the GKE cluster."},
+		&cli.StringFlag{Name: "assistant-kit-gke-organization-id", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_ORGANIZATION_ID"}, Usage: "Required numeric Google Cloud organization ID owning the GKE cluster."},
+		&cli.StringFlag{Name: "assistant-kit-gke-cluster-location", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_CLUSTER_LOCATION"}, Usage: "Required GKE cluster region or zone."},
+		&cli.StringFlag{Name: "assistant-kit-gke-cluster-name", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_CLUSTER_NAME"}, Usage: "Required GKE cluster name."},
 		&cli.StringFlag{Name: "assistant-kit-gke-ingress-cidr", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_INGRESS_CIDR"}, Value: "", Usage: "Server source CIDR permitted to connect to Kit gateway pods."},
 		&cli.StringFlag{Name: "assistant-kit-gke-cpu-request", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_CPU_REQUEST"}, Value: "100m", Usage: "Kit pod CPU request."},
 		&cli.StringFlag{Name: "assistant-kit-gke-cpu-limit", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_CPU_LIMIT"}, Value: "1", Usage: "Kit pod CPU limit."},
@@ -53,11 +57,16 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 		return fmt.Errorf("local Kit requires the local environment")
 	}
 	var provision assistants.KitGKEProvisionInput
+	var identity assistants.KitGKEIdentityConfig
 	if base.Provider == assistants.RuntimeProviderGKE {
 		for _, name := range []string{"assistant-kit-workload-subject", "assistant-kit-workload-assertion-file"} {
 			if c.String(name) != "" {
 				return fmt.Errorf("%s is local-only", name)
 			}
+		}
+		identity, err = kitGKEIdentityFromCLI(c)
+		if err != nil {
+			return err
 		}
 		provision, err = kitGKEProvisionFromCLI(c)
 		if err != nil {
@@ -114,7 +123,7 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 		if err != nil {
 			return fmt.Errorf("build Kit assistant cluster client: %w", err)
 		}
-		err = core.InstallKitGKERuntime(assistants.KitGKECompositionConfig{KitLocalCompositionConfig: config, GKE: base.GKE, Provision: provision, Snapshots: nil})
+		err = core.InstallKitGKERuntime(assistants.KitGKECompositionConfig{KitLocalCompositionConfig: config, GKE: base.GKE, Provision: provision, Snapshots: nil, KitGKEIdentityConfig: identity})
 	}
 	if err != nil {
 		return fmt.Errorf("install Kit runtime: %w", err)
@@ -156,4 +165,17 @@ func kitGKEProvisionFromCLI(c *cli.Context) (assistants.KitGKEProvisionInput, er
 	out.TmpSizeLimit = c.String("assistant-kit-gke-tmp-size-limit")
 	out.SnapshotsEnabled = c.Bool("assistant-kit-gke-snapshots-enabled")
 	return out, nil
+}
+
+func kitGKEIdentityFromCLI(c *cli.Context) (assistants.KitGKEIdentityConfig, error) {
+	identity := assistants.KitGKEIdentityConfig{
+		ProjectNumber:   c.String("assistant-kit-gke-project-number"),
+		OrganizationID:  c.String("assistant-kit-gke-organization-id"),
+		ClusterLocation: c.String("assistant-kit-gke-cluster-location"),
+		ClusterName:     c.String("assistant-kit-gke-cluster-name"),
+	}
+	if err := identity.Validate(); err != nil {
+		return identity, fmt.Errorf("invalid assistant-kit-gke identity flags: %w", err)
+	}
+	return identity, nil
 }

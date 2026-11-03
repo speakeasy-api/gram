@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
+	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testmcp"
@@ -479,7 +480,7 @@ func TestRecorderWritesRowsToClickHouse(t *testing.T) {
 		if !assert.NoError(c, qerr) {
 			return
 		}
-		defer rows.Close()
+		defer o11y.NoLogDefer(rows.Close)
 		var reasons []string
 		for rows.Next() {
 			var reason string

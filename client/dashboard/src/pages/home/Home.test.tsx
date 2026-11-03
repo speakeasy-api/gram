@@ -1,5 +1,6 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 vi.mock("@/components/project/ProjectDashboard", () => ({
   ProjectDashboard: () => <div data-testid="project-dashboard" />,
@@ -7,8 +8,8 @@ vi.mock("@/components/project/ProjectDashboard", () => ({
 vi.mock("@/pages/chat/Chat", () => ({
   ChatLanding: () => <div data-testid="chat-landing" />,
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({ mcp: { href: () => "/org/projects/project/mcp" } }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@/components/insights-context", () => ({
   useHideInsightsDock: () => undefined,
@@ -44,7 +45,11 @@ afterEach(() => {
 
 describe("Home", () => {
   it("always renders the normal project overview", () => {
-    render(<Home />);
+    render(
+      <MemoryRouter>
+        <Home />
+      </MemoryRouter>,
+    );
     expect(screen.getByTestId("chat-landing")).toBeTruthy();
     expect(screen.getByTestId("project-dashboard")).toBeTruthy();
   });

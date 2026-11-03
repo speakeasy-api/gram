@@ -76,6 +76,9 @@ import (
 )
 
 type WorkerOptions struct {
+	// FleetHealthCache refreshes the staff dashboard snapshot; nil disables its schedule.
+	FleetHealthCache FleetHealthCacheRefresher
+
 	// CatalogPromotions runs staff catalogue discovery and durable delivery.
 	CatalogPromotions CatalogPromotionJobs
 
@@ -207,6 +210,7 @@ func ForDeploymentProcessing(
 	}
 	return &WorkerOptions{
 		PublicationRequests:            plugins.PublicationRequests{Enabled: false},
+		FleetHealthCache:               nil,
 		CatalogPromotions:              nil,
 		CatalogPromotionDeliveryPaused: false,
 		DB:                             db,
@@ -308,6 +312,7 @@ func NewTemporalWorker(
 ) *Workers {
 	opts := &WorkerOptions{
 		PublicationRequests:            plugins.PublicationRequests{Enabled: false},
+		FleetHealthCache:               nil,
 		CatalogPromotions:              nil,
 		CatalogPromotionDeliveryPaused: false,
 		MCPCatalog:                     nil,
@@ -368,6 +373,7 @@ func NewTemporalWorker(
 
 	for _, o := range options {
 		opts = &WorkerOptions{
+			FleetHealthCache:               conv.Default(o.FleetHealthCache, opts.FleetHealthCache),
 			CatalogPromotions:              conv.Default(o.CatalogPromotions, opts.CatalogPromotions),
 			CatalogPromotionDeliveryPaused: o.CatalogPromotionDeliveryPaused || opts.CatalogPromotionDeliveryPaused,
 			GuardianPolicy:                 conv.Default(o.GuardianPolicy, opts.GuardianPolicy),
@@ -542,6 +548,11 @@ func NewTemporalWorker(
 		opts.StartupSeeds,
 		signInEpochs(opts.RedisClient),
 	)
+
+	if opts.FleetHealthCache != nil {
+		temporalWorker.RegisterActivityWithOptions(opts.FleetHealthCache.Refresh, activity.RegisterOptions{Name: fleetHealthCacheActivity})
+		temporalWorker.RegisterWorkflow(FleetHealthCacheWorkflow)
+	}
 
 	temporalWorker.RegisterActivity(activities.ProcessDeployment)
 	temporalWorker.RegisterActivity(activities.TransitionDeployment)
@@ -893,6 +904,12 @@ func (w *Workers) registerSchedules(ctx context.Context) {
 	if env.Queue() != sharedTaskQueue {
 		logger.InfoContext(ctx, "skipping fleet-wide schedules on non-shared task queue")
 		return
+	}
+
+	if opts.FleetHealthCache != nil {
+		if err := addFleetHealthCacheSchedule(ctx, env); err != nil {
+			logger.ErrorContext(ctx, "register fleet health cache schedule", attr.SlogError(err))
+		}
 	}
 
 	if opts.CatalogPromotions != nil {

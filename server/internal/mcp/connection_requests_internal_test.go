@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"net/http"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -174,6 +175,8 @@ func (o stubMemberOutcome) failure() error { return o.err }
 func (o stubMemberOutcome) rejection() (int, bool) { return o.rejected, o.rejected != 0 }
 
 func (o stubMemberOutcome) status() int { return o.code }
+
+func (o stubMemberOutcome) retryAfter(time.Time) time.Duration { return 0 }
 
 func TestMemberClientFailure_CarriesWhatHappened(t *testing.T) {
 	t.Parallel()

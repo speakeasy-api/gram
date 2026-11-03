@@ -762,6 +762,7 @@ func (s *Service) refreshNeedsAuthClientReconnect(ctx context.Context, endpoint 
 			Subject:             subject,
 			RegistrationID:      res.choice.clientID.UUID,
 			SkipUnusable:        false,
+			Attribution:         remotesessions.RefreshAttribution{},
 		})
 		if err != nil {
 			return false, false, fmt.Errorf("check auth client reconnect: %w", err)

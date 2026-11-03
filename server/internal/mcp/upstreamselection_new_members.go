@@ -139,7 +139,7 @@ func (s *Service) newMemberChoice(ctx context.Context, organizationID string, us
 		case clientType == authz.AuthClientTypeRemoteSession:
 			reconnect, err := s.remoteChallengeMgr.AuthClientNeedsReconnect(ctx, remotesessions.AuthClientTokenRequest{
 				ProjectID: member.projectID, OrganizationID: organizationID, UserSessionIssuerID: userSessionIssuerID,
-				Subject: subject, RegistrationID: row.RemoteSessionClientID.UUID, SkipUnusable: false,
+				Subject: subject, RegistrationID: row.RemoteSessionClientID.UUID, SkipUnusable: false, Attribution: remotesessions.RefreshAttribution{},
 			})
 			if err != nil {
 				return none, false, fmt.Errorf("check member connection: %w", err)

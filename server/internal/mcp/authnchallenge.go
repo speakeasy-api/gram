@@ -1057,6 +1057,12 @@ type issuerGateAuthentication struct {
 
 	// skippedUpstreams says why partial resolution left a client out; nil off a gateway.
 	skippedUpstreams *remotesessions.SkippedClients
+
+	// agentKeyClients, when not nil, are the only clients an agent key
+	// without a credential choice is served by on a direct endpoint: the
+	// server's own clients, each with the connection its permit was decided
+	// for.
+	agentKeyClients []agentKeyClient
 }
 
 // authenticateIssuerGate runs the issuer-gated authentication branch shared by
@@ -1201,6 +1207,7 @@ func (s *Service) authenticateIssuerGate(
 		attachedSession:        uuid.Nil,
 		authorizerOwner:        "",
 		skippedUpstreams:       nil,
+		agentKeyClients:        nil,
 	}, toolSelection, nil
 }
 

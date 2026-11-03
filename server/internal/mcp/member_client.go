@@ -4,19 +4,24 @@ package mcp
 import (
 	"bytes"
 	"context"
+	"crypto/tls"
 	"encoding/json"
 	"errors"
 	"fmt"
 	"io"
 	"log/slog"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"strconv"
+	"strings"
 	"sync"
 	"time"
 
 	"github.com/modelcontextprotocol/go-sdk/jsonrpc"
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -43,6 +48,8 @@ type memberAttempt struct {
 	mu         sync.Mutex
 	rejected   int
 	lastStatus int
+	// lastRetryAfter is the latest recorded exchange's Retry-After header.
+	lastRetryAfter string
 	// lastErr is the transport failure of the latest recorded exchange, if any.
 	lastErr error
 	// refused marks a tools/call the member itself answered with a JSON-RPC error.
@@ -55,7 +62,7 @@ type memberAttempt struct {
 type memberAttemptKey struct{}
 
 func newMemberAttempt(build memberProxyBuilder) *memberAttempt {
-	return &memberAttempt{build: build, mu: sync.Mutex{}, rejected: 0, lastStatus: 0, lastErr: nil, refused: false, sentCall: false}
+	return &memberAttempt{build: build, mu: sync.Mutex{}, rejected: 0, lastStatus: 0, lastRetryAfter: "", lastErr: nil, refused: false, sentCall: false}
 }
 
 func (a *memberAttempt) memberRefused() bool {
@@ -69,6 +76,7 @@ type memberOutcome interface {
 	failure() error
 	rejection() (int, bool)
 	status() int
+	retryAfter(now time.Time) time.Duration
 }
 
 // memberRoundTripper runs every SDK request through the member's proxy builder,
@@ -185,6 +193,7 @@ func (rt *memberRoundTripper) RoundTrip(req *http.Request) (*http.Response, erro
 	attempt.mu.Lock()
 	if record {
 		attempt.lastStatus = rec.status
+		attempt.lastRetryAfter = rec.header.Get("Retry-After")
 		attempt.lastErr = nil
 		if rec.status == http.StatusUnauthorized || rec.status == http.StatusForbidden {
 			attempt.rejected = rec.status
@@ -218,6 +227,7 @@ func (a *memberAttempt) recordFailure(record bool, err error) {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	a.lastStatus = 0
+	a.lastRetryAfter = ""
 	a.lastErr = err
 }
 
@@ -237,6 +247,26 @@ func (a *memberAttempt) status() int {
 	a.mu.Lock()
 	defer a.mu.Unlock()
 	return a.lastStatus
+}
+
+// retryAfter is the latest exchange's Retry-After delay, as seconds or an HTTP
+// date, or 0 when it sent none or an unreadable one. Delays past a whole
+// listing's time are capped there, since no retry could wait that long.
+func (a *memberAttempt) retryAfter(now time.Time) time.Duration {
+	a.mu.Lock()
+	value := strings.TrimSpace(a.lastRetryAfter)
+	a.mu.Unlock()
+	seconds, err := strconv.ParseUint(value, 10, 64)
+	switch {
+	case errors.Is(err, strconv.ErrRange):
+		return maxGatewayListingTime
+	case err == nil && seconds > 0:
+		return time.Duration(min(seconds, uint64(maxGatewayListingTime/time.Second))) * time.Second
+	}
+	if at, err := http.ParseTime(value); err == nil && at.After(now) {
+		return min(at.Sub(now), maxGatewayListingTime)
+	}
+	return 0
 }
 
 // closeUnobservedMemberSession best-effort terminates a session on a detached context
@@ -306,6 +336,29 @@ func upstreamStatusOK(status int) bool {
 	return status >= http.StatusOK && status < http.StatusMultipleChoices
 }
 
+// memberDiscoveryError is a member failure that leaves its tools unknown: its
+// tool source did not answer successfully, or the gateway could not load what
+// reaching it needs. Gateway discovery records it, and retries it briefly when
+// retryable. Exclusions are not discovery errors and are left out unrecorded:
+// visibility, consent, a member that is not servable, and a credential that is
+// missing, rejected, misconfigured, or needs a new sign-in, all of which are
+// fixed where the member or its sign-in is configured.
+type memberDiscoveryError struct {
+	*metaMemberError
+
+	// status is the upstream HTTP status, or 0 when the upstream did not answer.
+	status int
+
+	// retryable marks a failure a short retry may clear: a transport failure,
+	// rate limit, or server error. A timeout already spent the attempt's time.
+	retryable bool
+
+	// retryAfter is the delay the upstream asked for before a retry, or 0.
+	retryAfter time.Duration
+}
+
+func (e memberDiscoveryError) Unwrap() error { return e.metaMemberError }
+
 // memberClientFailure keeps transport failures scoped to a member and preserves
 // the distinction between an absent credential and a rejected routed credential.
 // Failures it cannot attribute to the member are logged, since they may be ours.
@@ -318,7 +371,19 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		if errors.Is(exchangeErr, remotesessions.ErrRemoteSessionUnavailable) {
 			code = mcpconnectionattempts.CodeRemoteSessionUnavailable
 		}
-		return memberConnectionError{metaMemberClientCredentialError(member, exchangeErr), code}
+		failure := metaMemberClientCredentialError(member, exchangeErr)
+		// This attempt's own exchange failed to renew the credential, and the
+		// next attempt renews it again, so an outage is retryable unless the
+		// attempt's time ran out or the token endpoint rate limited the
+		// client, which the credential source remembers longer than a
+		// listing lasts.
+		if outage, ok := errors.AsType[memberDiscoveryError](failure); ok {
+			tokenEndpoint, answered := errors.AsType[*remotesessions.TokenEndpointError](exchangeErr)
+			rateLimited := answered && tokenEndpoint.StatusCode == http.StatusTooManyRequests
+			outage.retryable = ctx.Err() == nil && !rateLimited && !errors.Is(exchangeErr, context.DeadlineExceeded) && !errors.Is(exchangeErr, context.Canceled)
+			return memberConnectionError{outage, code}
+		}
+		return memberConnectionError{failure, code}
 	}
 	if status, rejected := rt.rejection(); rejected {
 		code, ok := remotemcp.UpstreamFailureHappened(status, remotemcp.UpstreamCredential{Attached: !dial.anonymous, Self: dial.clientCredential}, dial.tunneled)
@@ -330,38 +395,54 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		}
 		return memberConnectionError{memberAuthFailure(member, dial), code}
 	}
+	status := rt.status()
+	if upstreamStatusOK(status) {
+		status = 0
+	}
+	// Rate limits and server errors retry whatever JSON-RPC body they carry.
+	retryableStatus := status == http.StatusTooManyRequests || status >= http.StatusInternalServerError
+	upstreamFailure := func(message string, retryable bool) error {
+		return memberDiscoveryError{metaMemberError: &metaMemberError{message: message}, status: status, retryable: retryable, retryAfter: rt.retryAfter(time.Now())}
+	}
 	switch {
 	case errors.Is(ctx.Err(), context.Canceled):
 		// The caller went away, so this says nothing about the member.
-		return &metaMemberError{message: fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug)}
+		return upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), false)
 	case ctx.Err() != nil || errors.Is(err, context.DeadlineExceeded):
 		code, _ := remotemcp.UpstreamFailureHappened(0, remotemcp.UpstreamCredential{Attached: !dial.anonymous, Self: dial.clientCredential}, dial.tunneled)
-		return memberConnectionError{&metaMemberError{message: fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug)}, code}
+		return memberConnectionError{upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), false), code}
 	case errors.Is(err, errMemberResponseTooLarge) || errors.Is(exchangeErr, errMemberResponseTooLarge):
-		return &metaMemberError{message: fmt.Sprintf("server %q returned a response too large for the meta MCP", member.slug)}
+		return upstreamFailure(fmt.Sprintf("server %q returned a response too large for the meta MCP", member.slug), false)
 	case errors.Is(err, errMemberUnroutable) || errors.Is(exchangeErr, errMemberUnroutable):
 		// A tunnel with no live route is a member outage, not a meta MCP bug.
 		code := mcpconnectionattempts.CodeInternalError
 		if errors.Is(err, errTunnelNoLiveRoute) || errors.Is(exchangeErr, errTunnelNoLiveRoute) {
 			code = mcpconnectionattempts.CodeTunnelUnavailable
 		}
-		return memberConnectionError{&metaMemberError{message: fmt.Sprintf("server %q is not reachable right now", member.slug)}, code}
+		return memberConnectionError{upstreamFailure(fmt.Sprintf("server %q is not reachable right now", member.slug), false), code}
 	case exchangeErr != nil:
+		// A transport failure may clear on a retry, unless it timed out, which
+		// already spent the attempt's time, or no retry can change it: egress
+		// policy refused the address, or the certificate failed verification.
+		netErr, isNetErr := errors.AsType[net.Error](exchangeErr)
+		spent := (isNetErr && netErr.Timeout()) || errors.Is(exchangeErr, context.DeadlineExceeded) || errors.Is(exchangeErr, context.Canceled)
+		_, untrusted := errors.AsType[*tls.CertificateVerificationError](exchangeErr)
+		refused := untrusted || errors.Is(exchangeErr, guardian.ErrBlockedIP) || errors.Is(exchangeErr, guardian.ErrBadHost)
 		code, _ := remotemcp.UpstreamFailureHappened(0, remotemcp.UpstreamCredential{Attached: !dial.anonymous, Self: dial.clientCredential}, dial.tunneled)
-		return memberConnectionError{&metaMemberError{message: fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug)}, code}
+		return memberConnectionError{upstreamFailure(fmt.Sprintf("server %q did not answer: upstream unreachable or timed out", member.slug), !spent && !refused), code}
 	}
 	if rpcErr, ok := errors.AsType[*jsonrpc.Error](err); ok {
-		return &metaMemberError{message: fmt.Sprintf("server %q rejected the call: %s", member.slug, rpcErr.Message)}
+		return upstreamFailure(fmt.Sprintf("server %q rejected the call: %s", member.slug, rpcErr.Message), retryableStatus)
 	}
-	if status := rt.status(); status != 0 && !upstreamStatusOK(status) {
-		failure := &metaMemberError{message: fmt.Sprintf("server %q upstream call failed with status %d", member.slug, status)}
+	if status != 0 {
+		failure := upstreamFailure(fmt.Sprintf("server %q upstream call failed with status %d", member.slug, status), retryableStatus)
 		if code, ok := remotemcp.UpstreamFailureHappened(status, remotemcp.UpstreamCredential{Attached: !dial.anonymous, Self: dial.clientCredential}, dial.tunneled); ok {
 			return memberConnectionError{failure, code}
 		}
 		return failure
 	}
 	logger.WarnContext(ctx, "unclassified meta MCP member failure", attr.SlogError(err), attr.SlogMcpServerID(member.serverID.String()))
-	return &metaMemberError{message: fmt.Sprintf("server %q returned a response the meta MCP could not read", member.slug)}
+	return upstreamFailure(fmt.Sprintf("server %q returned a response the meta MCP could not read", member.slug), false)
 }
 
 // memberClientTransport retains the original connection so failed negotiation

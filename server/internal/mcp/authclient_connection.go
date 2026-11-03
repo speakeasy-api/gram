@@ -70,6 +70,7 @@ func (s *Service) authClientConnection(ctx context.Context, permit authClientPer
 		Subject:             permit.Subject,
 		RegistrationID:      permit.RegistrationID.UUID,
 		SkipUnusable:        false,
+		Attribution:         remotesessions.RefreshAttribution{},
 	})
 	switch {
 	case errors.Is(err, remotesessions.ErrInvalidAuthorizationRequest):

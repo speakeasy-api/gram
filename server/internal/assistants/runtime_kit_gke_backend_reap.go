@@ -27,6 +27,30 @@ func (k *KitGKERuntimeBackend) ReapStoppedMachine(ctx context.Context, r assista
 	return k.reap(ctx, r, true)
 }
 func (k *KitGKERuntimeBackend) reap(ctx context.Context, r assistantRuntimeRecord, stoppedOnly bool) error {
+	if r.Retired {
+		if err := k.validate(r); err != nil {
+			return err
+		}
+		raw, err := k.config.AuthorityStore.Load(ctx, r.LifecycleTx, r)
+		if err != nil {
+			return fmt.Errorf("load retired Kit authority: %w", err)
+		}
+		// Empty authority can mean completed legacy cleanup or a bootstrap that
+		// crashed before publishing metadata. Always finish credential fencing
+		// before the caller marks the row reaped.
+		if len(raw) != 0 && kitLocalUnprovisionedMetadata(raw) {
+			r.BackendMetadataJSON = raw
+			if err := k.config.Fence(ctx, r); err != nil {
+				return fmt.Errorf("fence unprovisioned retired Kit authority: %w", err)
+			}
+			return nil
+		}
+		var prior kitGKEBackendMetadata
+		if json.Unmarshal(raw, &prior) == nil && kitGKEFailedProjectedWorkload(prior, r, k.config.GKE.Namespace) {
+			r.BackendMetadataJSON = raw
+			return k.invalidateLegacy(ctx, r, prior)
+		}
+	}
 	state, authority, err := k.loadAuthority(ctx, r)
 	if err != nil {
 		return err
@@ -40,8 +64,9 @@ func (k *KitGKERuntimeBackend) reap(ctx context.Context, r assistantRuntimeRecor
 		name string
 		uid  types.UID
 	}{
-		{gkeSandboxClaimGVR, kitGKEName(r), m.ClaimUID},
+		{kitClaimGVR, kitGKEName(r), m.ClaimUID},
 		{gkePodGVR, m.PodName, m.PodUID},
+		{kitWarmPoolGVR, m.WarmPoolName, m.WarmPoolUID},
 		{kitTemplateGVR, m.templateName(r), m.TemplateUID},
 		{kitSecretGVR, m.SecretName, m.SecretUID},
 		{kitServiceAccountGVR, m.Workload.ServiceAccount, m.ServiceAccountUID},
@@ -168,7 +193,7 @@ func (k *KitGKERuntimeBackend) RuntimeExists(ctx context.Context, r assistantRun
 	if err != nil {
 		return false, err
 	}
-	_, err = k.get(ctx, r, gkeSandboxClaimGVR, kitGKEName(r), m.ClaimUID)
+	_, err = k.get(ctx, r, kitClaimGVR, kitGKEName(r), m.ClaimUID)
 	if apierrors.IsNotFound(err) {
 		return false, nil
 	}
@@ -193,7 +218,7 @@ func (k *KitGKERuntimeBackend) verifyStoppedSwitchSource(ctx context.Context, r 
 		gvr  schema.GroupVersionResource
 		name string
 	}{
-		{gkeSandboxClaimGVR, kitGKEName(r)},
+		{kitClaimGVR, kitGKEName(r)},
 		{gkePodGVR, state.Metadata.PodName},
 	} {
 		if resource.name == "" {
