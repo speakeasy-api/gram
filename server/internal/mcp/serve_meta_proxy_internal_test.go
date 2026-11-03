@@ -334,6 +334,7 @@ func TestMemberTokens_StoreOutageReadsAsUnavailable(t *testing.T) {
 	require.True(t, unavailable, "error: %v", err)
 
 	_, err = brokenGate.memberTokens(t.Context(), metaMember{slug: "m"})
+	require.Error(t, err)
 	_, unavailable = errors.AsType[memberUnavailableError](err)
 	require.False(t, unavailable, "a broken query is not an outage: %v", err)
 }
