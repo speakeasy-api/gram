@@ -9124,6 +9124,94 @@ paths:
             x-speakeasy-name-override: createRole
             x-speakeasy-react-hook:
                 name: CreateRole
+    /rpc/access.createTemporaryGrant:
+        post:
+            description: 'Give one organization member a scope on a resource or activity boundary until a deadline, without changing their roles. Once the deadline passes the grant stops authorizing new requests, with no role change or sign-out. Fails with a conflict when the member already holds the same grant permanently, or temporarily (renew that one instead). An expired grant for the same boundary is restarted. Requires org:admin. An administrator may give themselves temporary access; the audit event records that it was self-granted. Session only: the grant is attributed to the person who gave it.'
+            operationId: createTemporaryGrant
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/CreateTemporaryGrantForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TemporaryGrant'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: createTemporaryGrant access
+            tags:
+                - access
+            x-speakeasy-name-override: createTemporaryGrant
+            x-speakeasy-react-hook:
+                name: CreateTemporaryGrant
+                type: mutation
     /rpc/access.deleteDirectoryRoleMapping:
         delete:
             description: Remove a directory role mapping.
@@ -11572,6 +11660,102 @@ paths:
             x-speakeasy-name-override: listShadowMCPInventoryUsers
             x-speakeasy-react-hook:
                 name: ShadowMCPInventoryUsers
+    /rpc/access.listTemporaryGrants:
+        get:
+            description: List temporary grants with their boundary, deadline and remaining time, soonest deadline first. Organization administrators see every member's grants; anyone else sees only their own. Each active grant says which other grants the member holds that would still give the same access once it ends. Revoked grants are removed and appear only in the audit log.
+            operationId: listTemporaryGrants
+            parameters:
+                - allowEmptyValue: true
+                  description: Only list grants given to this member. Members who are not organization administrators may only pass their own ID.
+                  in: query
+                  name: user_id
+                  schema:
+                    description: Only list grants given to this member. Members who are not organization administrators may only pass their own ID.
+                    type: string
+                - allowEmptyValue: true
+                  description: Include grants whose deadline has passed.
+                  in: query
+                  name: include_expired
+                  schema:
+                    default: false
+                    description: Include grants whose deadline has passed.
+                    type: boolean
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ListTemporaryGrantsResult'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: listTemporaryGrants access
+            tags:
+                - access
+            x-speakeasy-name-override: listTemporaryGrants
+            x-speakeasy-react-hook:
+                name: TemporaryGrants
     /rpc/access.previewDirectoryRoleSetup:
         get:
             description: 'Propose roles for every live directory group and mappable attribute value, for bulk setup. An unmapped source is proposed one role: the live role whose slug matches the source name, or a new role named after the source. A mapped source is listed with its current roles. Nothing is written. Each item carries a version that applyDirectoryRoleSetup checks to detect changes since the preview; the version authorizes nothing.'
@@ -11661,6 +11845,94 @@ paths:
             x-speakeasy-name-override: previewDirectoryRoleSetup
             x-speakeasy-react-hook:
                 name: DirectoryRoleSetupPreview
+    /rpc/access.renewTemporaryGrant:
+        post:
+            description: 'Move an active temporary grant''s deadline, earlier or later. The boundary cannot change: to widen access, give a new grant. An expired grant cannot be renewed; give it again instead. Requires org:admin.'
+            operationId: renewTemporaryGrant
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RenewTemporaryGrantForm'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TemporaryGrant'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: renewTemporaryGrant access
+            tags:
+                - access
+            x-speakeasy-name-override: renewTemporaryGrant
+            x-speakeasy-react-hook:
+                name: RenewTemporaryGrant
+                type: mutation
     /rpc/access.requestAccess:
         post:
             description: Request access to a scope by sending an email notification to organization administrators.
@@ -12035,6 +12307,94 @@ paths:
             x-speakeasy-name-override: resolveShadowMCPInventoryRequest
             x-speakeasy-react-hook:
                 name: ResolveShadowMCPInventoryRequest
+                type: mutation
+    /rpc/access.revokeTemporaryGrant:
+        post:
+            description: 'End an active temporary grant before its deadline. Only this grant ends: a permanent grant is never removed this way, and the member''s roles and other grants giving the same access are left alone. Requires org:admin, except that a member may end a grant given to themselves.'
+            operationId: revokeTemporaryGrant
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/RiskIDRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/TemporaryGrant'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - session_header_Gram-Session: []
+            summary: revokeTemporaryGrant access
+            tags:
+                - access
+            x-speakeasy-name-override: revokeTemporaryGrant
+            x-speakeasy-react-hook:
+                name: RevokeTemporaryGrant
                 type: mutation
     /rpc/access.setAIToolDecision:
         post:
@@ -104635,6 +104995,29 @@ components:
                 - target
                 - limit_usd
                 - window_kind
+        CreateTemporaryGrantForm:
+            type: object
+            properties:
+                expires_at:
+                    type: string
+                    description: When the grant stops authorizing new requests. At least five minutes and at most 30 days from now.
+                    format: date-time
+                reason:
+                    type: string
+                    description: Why the access is needed, recorded in the audit log.
+                    maxLength: 1000
+                scope:
+                    type: string
+                    description: The scope to give, e.g. chat:read or log:read. Only scopes that grant access to read, use or manage resources can be given temporarily; blocklist, auth client, risk policy and machine scopes cannot.
+                selector:
+                    $ref: '#/components/schemas/Selector'
+                user_id:
+                    type: string
+                    description: The organization member receiving the access.
+            required:
+                - user_id
+                - scope
+                - expires_at
         CreateToolsetForm:
             type: object
             properties:
@@ -114731,6 +115114,16 @@ components:
                     description: Emails seen syncing the device agent, most recently active first.
             required:
                 - users
+        ListTemporaryGrantsResult:
+            type: object
+            properties:
+                grants:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/TemporaryGrant'
+                    description: Temporary grants, soonest deadline first. At most 500 are returned.
+            required:
+                - grants
         ListToolFiltersResult:
             type: object
             properties:
@@ -121512,6 +121905,20 @@ components:
                     description: The rendered prompt
             required:
                 - prompt
+        RenewTemporaryGrantForm:
+            type: object
+            properties:
+                expires_at:
+                    type: string
+                    description: The new deadline. At least five minutes and at most 30 days from now.
+                    format: date-time
+                id:
+                    type: string
+                    description: The temporary grant to renew.
+                    format: uuid
+            required:
+                - id
+                - expires_at
         RepairInferenceKeyRequestBody:
             type: object
             properties:
@@ -129644,6 +130051,63 @@ components:
             required:
                 - from
                 - to
+        TemporaryGrant:
+            type: object
+            properties:
+                created_at:
+                    type: string
+                    description: When the grant was given, or restarted after expiring.
+                    format: date-time
+                expires_at:
+                    type: string
+                    description: When the grant stops, or stopped, authorizing new requests.
+                    format: date-time
+                id:
+                    type: string
+                    description: Temporary grant ID.
+                    format: uuid
+                other_access:
+                    type: array
+                    items:
+                        type: string
+                    description: 'For an active grant, the principal URNs of the member''s other grants that already give the same access: a role, everyone (user:all), or the member themselves for a grant made to them directly. Access through these remains when this grant ends. Empty for ended grants and when this grant is the only route.'
+                principal_urn:
+                    type: string
+                    description: Canonical principal URN of the member holding the access.
+                remaining_seconds:
+                    type: integer
+                    description: Seconds until the deadline while active; 0 once ended.
+                    format: int64
+                scope:
+                    type: string
+                    description: The scope given.
+                selector:
+                    $ref: '#/components/schemas/Selector'
+                status:
+                    type: string
+                    description: 'active: authorizing requests. expired: its deadline passed. revoked: ended early by this request.'
+                    enum:
+                        - active
+                        - expired
+                        - revoked
+                updated_at:
+                    type: string
+                    format: date-time
+                user_id:
+                    type: string
+                    description: The member holding the access.
+            required:
+                - id
+                - user_id
+                - principal_urn
+                - scope
+                - selector
+                - expires_at
+                - status
+                - remaining_seconds
+                - other_access
+                - created_at
+                - updated_at
         TestDetectionRuleMatch:
             type: object
             properties:

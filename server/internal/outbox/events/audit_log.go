@@ -22,6 +22,7 @@ var (
 	AIIntegrationV1                        = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.ai_integration_event_v1", "Emitted when changes to AI integration configs are made")
 	AccessMemberV1                         = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.access_member_event_v1", "Emitted when changes to org members are made")
 	AccessRoleV1                           = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.access_role_event_v1", "Emitted when changes to roles are made")
+	AccessTemporaryGrantV1                 = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.access_temporary_grant_event_v1", "Emitted when temporary grants are given, renewed or revoked")
 	AgentV1                                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.agent_event_v1", "Emitted when changes to agents are made")
 	APIKeyV1                               = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.api_key_event_v1", "Emitted when changes to API keys are made")
 	AssetV1                                = outbox.NewEventDef[AuditLogCreatedPayloadV1]("audit_log.asset_event_v1", "Emitted when changes to assets are made")

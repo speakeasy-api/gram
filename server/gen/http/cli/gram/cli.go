@@ -123,7 +123,7 @@ func UsageCommands() []string {
 		"external receive-work-os-webhook",
 		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"about openapi",
-		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|list-directory-people|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|preview-directory-role-setup|apply-directory-role-setup|list-directory-review-items|resolve-directory-review-item|get-directory-review-settings|update-directory-review-settings|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
+		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|list-directory-people|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|preview-directory-role-setup|apply-directory-role-setup|list-directory-review-items|resolve-directory-review-item|get-directory-review-settings|update-directory-review-settings|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access|create-temporary-grant|list-temporary-grants|renew-temporary-grant|revoke-temporary-grant)",
 		"agent (get-plugins|get-my-connections|hide-mcp-server|unhide-mcp-server|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|report-state|create-session-handoff)",
 		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|check-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|list-connection-blocks|block-agent-on-connection|remove-connection-block|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
@@ -500,6 +500,23 @@ func ParseEndpoint(
 		accessListIdentityAccessFlags            = flag.NewFlagSet("list-identity-access", flag.ExitOnError)
 		accessListIdentityAccessUserIDFlag       = accessListIdentityAccessFlags.String("user-id", "REQUIRED", "")
 		accessListIdentityAccessSessionTokenFlag = accessListIdentityAccessFlags.String("session-token", "", "")
+
+		accessCreateTemporaryGrantFlags            = flag.NewFlagSet("create-temporary-grant", flag.ExitOnError)
+		accessCreateTemporaryGrantBodyFlag         = accessCreateTemporaryGrantFlags.String("body", "REQUIRED", "")
+		accessCreateTemporaryGrantSessionTokenFlag = accessCreateTemporaryGrantFlags.String("session-token", "", "")
+
+		accessListTemporaryGrantsFlags              = flag.NewFlagSet("list-temporary-grants", flag.ExitOnError)
+		accessListTemporaryGrantsUserIDFlag         = accessListTemporaryGrantsFlags.String("user-id", "", "")
+		accessListTemporaryGrantsIncludeExpiredFlag = accessListTemporaryGrantsFlags.String("include-expired", "", "")
+		accessListTemporaryGrantsSessionTokenFlag   = accessListTemporaryGrantsFlags.String("session-token", "", "")
+
+		accessRenewTemporaryGrantFlags            = flag.NewFlagSet("renew-temporary-grant", flag.ExitOnError)
+		accessRenewTemporaryGrantBodyFlag         = accessRenewTemporaryGrantFlags.String("body", "REQUIRED", "")
+		accessRenewTemporaryGrantSessionTokenFlag = accessRenewTemporaryGrantFlags.String("session-token", "", "")
+
+		accessRevokeTemporaryGrantFlags            = flag.NewFlagSet("revoke-temporary-grant", flag.ExitOnError)
+		accessRevokeTemporaryGrantBodyFlag         = accessRevokeTemporaryGrantFlags.String("body", "REQUIRED", "")
+		accessRevokeTemporaryGrantSessionTokenFlag = accessRevokeTemporaryGrantFlags.String("session-token", "", "")
 
 		agentFlags = flag.NewFlagSet("agent", flag.ContinueOnError)
 
@@ -5541,6 +5558,10 @@ func ParseEndpoint(
 	accessListChallengeBucketsFlags.Usage = accessListChallengeBucketsUsage
 	accessResolveChallengeFlags.Usage = accessResolveChallengeUsage
 	accessListIdentityAccessFlags.Usage = accessListIdentityAccessUsage
+	accessCreateTemporaryGrantFlags.Usage = accessCreateTemporaryGrantUsage
+	accessListTemporaryGrantsFlags.Usage = accessListTemporaryGrantsUsage
+	accessRenewTemporaryGrantFlags.Usage = accessRenewTemporaryGrantUsage
+	accessRevokeTemporaryGrantFlags.Usage = accessRevokeTemporaryGrantUsage
 
 	agentFlags.Usage = agentUsage
 	agentGetPluginsFlags.Usage = agentGetPluginsUsage
@@ -7032,6 +7053,18 @@ func ParseEndpoint(
 
 			case "list-identity-access":
 				epf = accessListIdentityAccessFlags
+
+			case "create-temporary-grant":
+				epf = accessCreateTemporaryGrantFlags
+
+			case "list-temporary-grants":
+				epf = accessListTemporaryGrantsFlags
+
+			case "renew-temporary-grant":
+				epf = accessRenewTemporaryGrantFlags
+
+			case "revoke-temporary-grant":
+				epf = accessRevokeTemporaryGrantFlags
 
 			}
 
@@ -10331,6 +10364,18 @@ func ParseEndpoint(
 			case "list-identity-access":
 				endpoint = c.ListIdentityAccess()
 				data, err = accessc.BuildListIdentityAccessPayload(*accessListIdentityAccessUserIDFlag, *accessListIdentityAccessSessionTokenFlag)
+			case "create-temporary-grant":
+				endpoint = c.CreateTemporaryGrant()
+				data, err = accessc.BuildCreateTemporaryGrantPayload(*accessCreateTemporaryGrantBodyFlag, *accessCreateTemporaryGrantSessionTokenFlag)
+			case "list-temporary-grants":
+				endpoint = c.ListTemporaryGrants()
+				data, err = accessc.BuildListTemporaryGrantsPayload(*accessListTemporaryGrantsUserIDFlag, *accessListTemporaryGrantsIncludeExpiredFlag, *accessListTemporaryGrantsSessionTokenFlag)
+			case "renew-temporary-grant":
+				endpoint = c.RenewTemporaryGrant()
+				data, err = accessc.BuildRenewTemporaryGrantPayload(*accessRenewTemporaryGrantBodyFlag, *accessRenewTemporaryGrantSessionTokenFlag)
+			case "revoke-temporary-grant":
+				endpoint = c.RevokeTemporaryGrant()
+				data, err = accessc.BuildRevokeTemporaryGrantPayload(*accessRevokeTemporaryGrantBodyFlag, *accessRevokeTemporaryGrantSessionTokenFlag)
 			}
 		case "agent":
 			c := agentc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -13780,6 +13825,10 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    list-challenge-buckets: List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.`)
 	fmt.Fprintln(os.Stderr, `    resolve-challenge: Dismiss one or more denied authz challenges, or atomically add one custom role to the denied user before recording the challenges as resolved.`)
 	fmt.Fprintln(os.Stderr, `    list-identity-access: List the MCP servers and skills an identity is authorized to reach, through grants on the user or on any role they hold, less any blocking grant that withdraws the same scope. Authorization only: plugin membership decides what a resource is distributed through, not who may use it, so it does not widen this list.`)
+	fmt.Fprintln(os.Stderr, `    create-temporary-grant: Give one organization member a scope on a resource or activity boundary until a deadline, without changing their roles. Once the deadline passes the grant stops authorizing new requests, with no role change or sign-out. Fails with a conflict when the member already holds the same grant permanently, or temporarily (renew that one instead). An expired grant for the same boundary is restarted. Requires org:admin. An administrator may give themselves temporary access; the audit event records that it was self-granted. Session only: the grant is attributed to the person who gave it.`)
+	fmt.Fprintln(os.Stderr, `    list-temporary-grants: List temporary grants with their boundary, deadline and remaining time, soonest deadline first. Organization administrators see every member's grants; anyone else sees only their own. Each active grant says which other grants the member holds that would still give the same access once it ends. Revoked grants are removed and appear only in the audit log.`)
+	fmt.Fprintln(os.Stderr, `    renew-temporary-grant: Move an active temporary grant's deadline, earlier or later. The boundary cannot change: to widen access, give a new grant. An expired grant cannot be renewed; give it again instead. Requires org:admin.`)
+	fmt.Fprintln(os.Stderr, `    revoke-temporary-grant: End an active temporary grant before its deadline. Only this grant ends: a permanent grant is never removed this way, and the member's roles and other grants giving the same access are left alone. Requires org:admin, except that a member may end a grant given to themselves.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s access COMMAND --help\n", os.Args[0])
@@ -14678,6 +14727,88 @@ func accessListIdentityAccessUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-identity-access --user-id \"abc123\" --session-token \"abc123\"")
+}
+
+func accessCreateTemporaryGrantUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access create-temporary-grant", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Give one organization member a scope on a resource or activity boundary until a deadline, without changing their roles. Once the deadline passes the grant stops authorizing new requests, with no role change or sign-out. Fails with a conflict when the member already holds the same grant permanently, or temporarily (renew that one instead). An expired grant for the same boundary is restarted. Requires org:admin. An administrator may give themselves temporary access; the audit event records that it was self-granted. Session only: the grant is attributed to the person who gave it.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access create-temporary-grant --body '{\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"reason\": \"aaa\",\n      \"scope\": \"abc123\",\n      \"selector\": {\n         \"client_type\": \"service_account\",\n         \"connection_owner\": \"abc123\",\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\",\n         \"upstream_client\": \"abc123\"\n      },\n      \"user_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+}
+
+func accessListTemporaryGrantsUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access list-temporary-grants", os.Args[0])
+	fmt.Fprint(os.Stderr, " -user-id STRING")
+	fmt.Fprint(os.Stderr, " -include-expired BOOL")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `List temporary grants with their boundary, deadline and remaining time, soonest deadline first. Organization administrators see every member's grants; anyone else sees only their own. Each active grant says which other grants the member holds that would still give the same access once it ends. Revoked grants are removed and appear only in the audit log.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -include-expired BOOL: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-temporary-grants --user-id \"abc123\" --include-expired false --session-token \"abc123\"")
+}
+
+func accessRenewTemporaryGrantUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access renew-temporary-grant", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Move an active temporary grant's deadline, earlier or later. The boundary cannot change: to widen access, give a new grant. An expired grant cannot be renewed; give it again instead. Requires org:admin.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access renew-temporary-grant --body '{\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
+}
+
+func accessRevokeTemporaryGrantUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] access revoke-temporary-grant", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `End an active temporary grant before its deadline. Only this grant ends: a permanent grant is never removed this way, and the member's roles and other grants giving the same access are left alone. Requires org:admin, except that a member may end a grant given to themselves.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access revoke-temporary-grant --body '{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\"")
 }
 
 // agentUsage displays the usage of the agent command and its subcommands.

@@ -13,6 +13,7 @@ const (
 	subjectTypeAccessChallenge             subjectType = "access_challenge"
 	subjectTypeAccessMember                subjectType = "access_member"
 	subjectTypeAccessRole                  subjectType = "access_role"
+	subjectTypeAccessTemporaryGrant        subjectType = "access_temporary_grant"
 	subjectTypeAIIntegration               subjectType = "ai_integration_config"
 	subjectTypeAgent                       subjectType = "agent"
 	subjectTypeAssistant                   subjectType = "assistant"

@@ -14,6 +14,7 @@ var All = []outbox.EventRegistration{
 	AccessRequestV1,
 	AccessRoleV1,
 	AccessRuleV1,
+	AccessTemporaryGrantV1,
 	AgentV1,
 	AiScanTargetV1,
 	AssetV1,

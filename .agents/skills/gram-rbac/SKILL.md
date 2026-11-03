@@ -69,6 +69,8 @@ Scope vocabulary, grant types, and enforcement logic are defined here. `authz`'s
 
 **Grant loading.** `LoadGrants(ctx, db, orgID, principals)` reads the principal URN set and returns the flattened `[]Grant`. Called by both `Engine.PrepareContext` (middleware path) and `access.ListGrants` (user-facing). Each row's `selectors` JSONB is parsed via `SelectorFromRow`. It also supplies unrestricted `assistant:read`/`assistant:write` defaults for the built-in Admin and Member role principals (`role:global:<id>`), because organizations seeded before the assistant scopes have no stored rows for them and system-role grants are immutable.
 
+**Temporary grants.** A `principal_grants` row with `expires_at` set is a temporary grant, given to one `user:<id>` through `access.createTemporaryGrant` and ended by its deadline or `access.revokeTemporaryGrant` (`server/internal/access/temporary_grants.go`). Any new SQL that reads `principal_grants` for authorization or display must add `(expires_at IS NULL OR expires_at > clock_timestamp())`; audience reads and anything that derives permanent configuration from grants (backfills, provisioning) must read `expires_at IS NULL` only. Permanent writes clear `expires_at` on conflict, and nothing but the temporary grant endpoints may delete a row by `expires_at`. See "Temporary grants" in docs/rbac.md.
+
 **Sync semantics.** `SyncGrants` distinguishes nil from empty: `RoleGrant{Selectors: nil}` writes a single wildcard row; `RoleGrant{Selectors: []Selector{}}` writes nothing (no access). Each non-nil selector is validated by `ValidateSelector` before insert.
 
 ### `access` package — the management API

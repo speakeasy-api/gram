@@ -1184,6 +1184,102 @@ var _ = Service("access", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "IdentityAccess"}`)
 	})
 
+	Method("createTemporaryGrant", func() {
+		Description("Give one organization member a scope on a resource or activity boundary until a deadline, without changing their roles. Once the deadline passes the grant stops authorizing new requests, with no role change or sign-out. Fails with a conflict when the member already holds the same grant permanently, or temporarily (renew that one instead). An expired grant for the same boundary is restarted. Requires org:admin. An administrator may give themselves temporary access; the audit event records that it was self-granted. Session only: the grant is attributed to the person who gave it.")
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(CreateTemporaryGrantForm)
+			security.SessionPayload()
+		})
+
+		Result(TemporaryGrantModel)
+
+		HTTP(func() {
+			POST("/rpc/access.createTemporaryGrant")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "createTemporaryGrant")
+		Meta("openapi:extension:x-speakeasy-name-override", "createTemporaryGrant")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "CreateTemporaryGrant", "type": "mutation"}`)
+	})
+
+	Method("listTemporaryGrants", func() {
+		Description("List temporary grants with their boundary, deadline and remaining time, soonest deadline first. Organization administrators see every member's grants; anyone else sees only their own. Each active grant says which other grants the member holds that would still give the same access once it ends. Revoked grants are removed and appear only in the audit log.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("user_id", String, "Only list grants given to this member. Members who are not organization administrators may only pass their own ID.")
+			Attribute("include_expired", Boolean, "Include grants whose deadline has passed.", func() {
+				Default(false)
+			})
+			security.SessionPayload()
+		})
+
+		Result(ListTemporaryGrantsResult)
+
+		HTTP(func() {
+			GET("/rpc/access.listTemporaryGrants")
+			Param("user_id")
+			Param("include_expired")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "listTemporaryGrants")
+		Meta("openapi:extension:x-speakeasy-name-override", "listTemporaryGrants")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "TemporaryGrants"}`)
+	})
+
+	Method("renewTemporaryGrant", func() {
+		Description("Move an active temporary grant's deadline, earlier or later. The boundary cannot change: to widen access, give a new grant. An expired grant cannot be renewed; give it again instead. Requires org:admin.")
+		Security(security.Session)
+
+		Payload(func() {
+			Extend(RenewTemporaryGrantForm)
+			security.SessionPayload()
+		})
+
+		Result(TemporaryGrantModel)
+
+		HTTP(func() {
+			POST("/rpc/access.renewTemporaryGrant")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "renewTemporaryGrant")
+		Meta("openapi:extension:x-speakeasy-name-override", "renewTemporaryGrant")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RenewTemporaryGrant", "type": "mutation"}`)
+	})
+
+	Method("revokeTemporaryGrant", func() {
+		Description("End an active temporary grant before its deadline. Only this grant ends: a permanent grant is never removed this way, and the member's roles and other grants giving the same access are left alone. Requires org:admin, except that a member may end a grant given to themselves.")
+		Security(security.Session)
+
+		Payload(func() {
+			Attribute("id", String, "The temporary grant to end.", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+		})
+
+		Result(TemporaryGrantModel)
+
+		HTTP(func() {
+			POST("/rpc/access.revokeTemporaryGrant")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "revokeTemporaryGrant")
+		Meta("openapi:extension:x-speakeasy-name-override", "revokeTemporaryGrant")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "RevokeTemporaryGrant", "type": "mutation"}`)
+	})
+
 })
 
 var SelectorModel = Type("Selector", func() {
@@ -2336,4 +2432,60 @@ var DirectoryReviewSettingsModel = Type("DirectoryReviewSettings", func() {
 	Required("emails_enabled")
 
 	Attribute("emails_enabled", Boolean, "Whether organization admins are emailed when directory changes are waiting for a decision. On by default.")
+})
+
+var CreateTemporaryGrantForm = Type("CreateTemporaryGrantForm", func() {
+	Required("user_id", "scope", "expires_at")
+
+	Attribute("user_id", String, "The organization member receiving the access.")
+	Attribute("scope", String, "The scope to give, e.g. chat:read or log:read. Only scopes that grant access to read, use or manage resources can be given temporarily; blocklist, auth client, risk policy and machine scopes cannot.")
+	Attribute("selector", SelectorModel, "The resource or activity boundary. Omit to cover every resource of the scope's kind.")
+	Attribute("expires_at", String, "When the grant stops authorizing new requests. At least five minutes and at most 30 days from now.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("reason", String, "Why the access is needed, recorded in the audit log.", func() {
+		MaxLength(1000)
+	})
+})
+
+var RenewTemporaryGrantForm = Type("RenewTemporaryGrantForm", func() {
+	Required("id", "expires_at")
+
+	Attribute("id", String, "The temporary grant to renew.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("expires_at", String, "The new deadline. At least five minutes and at most 30 days from now.", func() {
+		Format(FormatDateTime)
+	})
+})
+
+var TemporaryGrantModel = Type("TemporaryGrant", func() {
+	Required("id", "user_id", "principal_urn", "scope", "selector", "expires_at", "status", "remaining_seconds", "other_access", "created_at", "updated_at")
+
+	Attribute("id", String, "Temporary grant ID.", func() {
+		Format(FormatUUID)
+	})
+	Attribute("user_id", String, "The member holding the access.")
+	Attribute("principal_urn", String, "Canonical principal URN of the member holding the access.")
+	Attribute("scope", String, "The scope given.")
+	Attribute("selector", SelectorModel, "The resource or activity boundary.")
+	Attribute("expires_at", String, "When the grant stops, or stopped, authorizing new requests.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("status", String, "active: authorizing requests. expired: its deadline passed. revoked: ended early by this request.", func() {
+		Enum("active", "expired", "revoked")
+	})
+	Attribute("remaining_seconds", Int64, "Seconds until the deadline while active; 0 once ended.")
+	Attribute("other_access", ArrayOf(String), "For an active grant, the principal URNs of the member's other grants that already give the same access: a role, everyone (user:all), or the member themselves for a grant made to them directly. Access through these remains when this grant ends. Empty for ended grants and when this grant is the only route.")
+	Attribute("created_at", String, "When the grant was given, or restarted after expiring.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("updated_at", String, func() {
+		Format(FormatDateTime)
+	})
+})
+
+var ListTemporaryGrantsResult = Type("ListTemporaryGrantsResult", func() {
+	Required("grants")
+	Attribute("grants", ArrayOf(TemporaryGrantModel), "Temporary grants, soonest deadline first. At most 500 are returned.")
 })

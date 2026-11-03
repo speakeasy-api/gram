@@ -1845,3 +1845,141 @@ func BuildListIdentityAccessPayload(accessListIdentityAccessUserID string, acces
 
 	return v, nil
 }
+
+// BuildCreateTemporaryGrantPayload builds the payload for the access
+// createTemporaryGrant endpoint from CLI flags.
+func BuildCreateTemporaryGrantPayload(accessCreateTemporaryGrantBody string, accessCreateTemporaryGrantSessionToken string) (*access.CreateTemporaryGrantPayload, error) {
+	var err error
+	var body CreateTemporaryGrantRequestBody
+	{
+		err = json.Unmarshal([]byte(accessCreateTemporaryGrantBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"reason\": \"aaa\",\n      \"scope\": \"abc123\",\n      \"selector\": {\n         \"client_type\": \"service_account\",\n         \"connection_owner\": \"abc123\",\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\",\n         \"upstream_client\": \"abc123\"\n      },\n      \"user_id\": \"abc123\"\n   }'")
+		}
+		if body.Selector != nil {
+			if err2 := ValidateSelectorRequestBody(body.Selector); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", body.ExpiresAt, goa.FormatDateTime))
+		if body.Reason != nil {
+			if utf8.RuneCountInString(*body.Reason) > 1000 {
+				err = goa.MergeErrors(err, goa.InvalidLengthError("body.reason", *body.Reason, utf8.RuneCountInString(*body.Reason), 1000, false))
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessCreateTemporaryGrantSessionToken != "" {
+			sessionToken = &accessCreateTemporaryGrantSessionToken
+		}
+	}
+	v := &access.CreateTemporaryGrantPayload{
+		UserID:    body.UserID,
+		Scope:     body.Scope,
+		ExpiresAt: body.ExpiresAt,
+		Reason:    body.Reason,
+	}
+	if body.Selector != nil {
+		v.Selector = marshalSelectorRequestBodyToAccessSelector(body.Selector)
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildListTemporaryGrantsPayload builds the payload for the access
+// listTemporaryGrants endpoint from CLI flags.
+func BuildListTemporaryGrantsPayload(accessListTemporaryGrantsUserID string, accessListTemporaryGrantsIncludeExpired string, accessListTemporaryGrantsSessionToken string) (*access.ListTemporaryGrantsPayload, error) {
+	var err error
+	var userID *string
+	{
+		if accessListTemporaryGrantsUserID != "" {
+			userID = &accessListTemporaryGrantsUserID
+		}
+	}
+	var includeExpired bool
+	{
+		if accessListTemporaryGrantsIncludeExpired != "" {
+			includeExpired, err = strconv.ParseBool(accessListTemporaryGrantsIncludeExpired)
+			if err != nil {
+				return nil, fmt.Errorf("invalid value for includeExpired, must be BOOL")
+			}
+		}
+	}
+	var sessionToken *string
+	{
+		if accessListTemporaryGrantsSessionToken != "" {
+			sessionToken = &accessListTemporaryGrantsSessionToken
+		}
+	}
+	v := &access.ListTemporaryGrantsPayload{}
+	v.UserID = userID
+	v.IncludeExpired = includeExpired
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildRenewTemporaryGrantPayload builds the payload for the access
+// renewTemporaryGrant endpoint from CLI flags.
+func BuildRenewTemporaryGrantPayload(accessRenewTemporaryGrantBody string, accessRenewTemporaryGrantSessionToken string) (*access.RenewTemporaryGrantPayload, error) {
+	var err error
+	var body RenewTemporaryGrantRequestBody
+	{
+		err = json.Unmarshal([]byte(accessRenewTemporaryGrantBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.expires_at", body.ExpiresAt, goa.FormatDateTime))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessRenewTemporaryGrantSessionToken != "" {
+			sessionToken = &accessRenewTemporaryGrantSessionToken
+		}
+	}
+	v := &access.RenewTemporaryGrantPayload{
+		ID:        body.ID,
+		ExpiresAt: body.ExpiresAt,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}
+
+// BuildRevokeTemporaryGrantPayload builds the payload for the access
+// revokeTemporaryGrant endpoint from CLI flags.
+func BuildRevokeTemporaryGrantPayload(accessRevokeTemporaryGrantBody string, accessRevokeTemporaryGrantSessionToken string) (*access.RevokeTemporaryGrantPayload, error) {
+	var err error
+	var body RevokeTemporaryGrantRequestBody
+	{
+		err = json.Unmarshal([]byte(accessRevokeTemporaryGrantBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if accessRevokeTemporaryGrantSessionToken != "" {
+			sessionToken = &accessRevokeTemporaryGrantSessionToken
+		}
+	}
+	v := &access.RevokeTemporaryGrantPayload{
+		ID: body.ID,
+	}
+	v.SessionToken = sessionToken
+
+	return v, nil
+}

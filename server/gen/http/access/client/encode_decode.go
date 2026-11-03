@@ -9508,6 +9508,948 @@ func DecodeListIdentityAccessResponse(decoder func(*http.Response) goahttp.Decod
 	}
 }
 
+// BuildCreateTemporaryGrantRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "createTemporaryGrant"
+// endpoint
+func (c *Client) BuildCreateTemporaryGrantRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: CreateTemporaryGrantAccessPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "createTemporaryGrant", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeCreateTemporaryGrantRequest returns an encoder for requests sent to
+// the access createTemporaryGrant server.
+func EncodeCreateTemporaryGrantRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.CreateTemporaryGrantPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "createTemporaryGrant", "*access.CreateTemporaryGrantPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewCreateTemporaryGrantRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "createTemporaryGrant", err)
+		}
+		return nil
+	}
+}
+
+// DecodeCreateTemporaryGrantResponse returns a decoder for responses returned
+// by the access createTemporaryGrant endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeCreateTemporaryGrantResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeCreateTemporaryGrantResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body CreateTemporaryGrantResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createTemporaryGrant", err)
+			}
+			err = ValidateCreateTemporaryGrantResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createTemporaryGrant", err)
+			}
+			res := NewCreateTemporaryGrantTemporaryGrantOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body CreateTemporaryGrantUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createTemporaryGrant", err)
+			}
+			err = ValidateCreateTemporaryGrantUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createTemporaryGrant", err)
+			}
+			return nil, NewCreateTemporaryGrantUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body CreateTemporaryGrantForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createTemporaryGrant", err)
+			}
+			err = ValidateCreateTemporaryGrantForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createTemporaryGrant", err)
+			}
+			return nil, NewCreateTemporaryGrantForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body CreateTemporaryGrantBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createTemporaryGrant", err)
+			}
+			err = ValidateCreateTemporaryGrantBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createTemporaryGrant", err)
+			}
+			return nil, NewCreateTemporaryGrantBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body CreateTemporaryGrantNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createTemporaryGrant", err)
+			}
+			err = ValidateCreateTemporaryGrantNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createTemporaryGrant", err)
+			}
+			return nil, NewCreateTemporaryGrantNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body CreateTemporaryGrantConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createTemporaryGrant", err)
+			}
+			err = ValidateCreateTemporaryGrantConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createTemporaryGrant", err)
+			}
+			return nil, NewCreateTemporaryGrantConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body CreateTemporaryGrantUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createTemporaryGrant", err)
+			}
+			err = ValidateCreateTemporaryGrantUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createTemporaryGrant", err)
+			}
+			return nil, NewCreateTemporaryGrantUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body CreateTemporaryGrantInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createTemporaryGrant", err)
+			}
+			err = ValidateCreateTemporaryGrantInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createTemporaryGrant", err)
+			}
+			return nil, NewCreateTemporaryGrantInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body CreateTemporaryGrantInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "createTemporaryGrant", err)
+				}
+				err = ValidateCreateTemporaryGrantInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "createTemporaryGrant", err)
+				}
+				return nil, NewCreateTemporaryGrantInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body CreateTemporaryGrantUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "createTemporaryGrant", err)
+				}
+				err = ValidateCreateTemporaryGrantUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "createTemporaryGrant", err)
+				}
+				return nil, NewCreateTemporaryGrantUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "createTemporaryGrant", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body CreateTemporaryGrantGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "createTemporaryGrant", err)
+			}
+			err = ValidateCreateTemporaryGrantGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "createTemporaryGrant", err)
+			}
+			return nil, NewCreateTemporaryGrantGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "createTemporaryGrant", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListTemporaryGrantsRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "listTemporaryGrants"
+// endpoint
+func (c *Client) BuildListTemporaryGrantsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListTemporaryGrantsAccessPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "listTemporaryGrants", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListTemporaryGrantsRequest returns an encoder for requests sent to the
+// access listTemporaryGrants server.
+func EncodeListTemporaryGrantsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.ListTemporaryGrantsPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "listTemporaryGrants", "*access.ListTemporaryGrantsPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		if p.UserID != nil {
+			values.Add("user_id", *p.UserID)
+		}
+		values.Add("include_expired", fmt.Sprintf("%v", p.IncludeExpired))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListTemporaryGrantsResponse returns a decoder for responses returned
+// by the access listTemporaryGrants endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListTemporaryGrantsResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListTemporaryGrantsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListTemporaryGrantsResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listTemporaryGrants", err)
+			}
+			err = ValidateListTemporaryGrantsResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listTemporaryGrants", err)
+			}
+			res := NewListTemporaryGrantsResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListTemporaryGrantsUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listTemporaryGrants", err)
+			}
+			err = ValidateListTemporaryGrantsUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listTemporaryGrants", err)
+			}
+			return nil, NewListTemporaryGrantsUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListTemporaryGrantsForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listTemporaryGrants", err)
+			}
+			err = ValidateListTemporaryGrantsForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listTemporaryGrants", err)
+			}
+			return nil, NewListTemporaryGrantsForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListTemporaryGrantsBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listTemporaryGrants", err)
+			}
+			err = ValidateListTemporaryGrantsBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listTemporaryGrants", err)
+			}
+			return nil, NewListTemporaryGrantsBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListTemporaryGrantsNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listTemporaryGrants", err)
+			}
+			err = ValidateListTemporaryGrantsNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listTemporaryGrants", err)
+			}
+			return nil, NewListTemporaryGrantsNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListTemporaryGrantsConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listTemporaryGrants", err)
+			}
+			err = ValidateListTemporaryGrantsConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listTemporaryGrants", err)
+			}
+			return nil, NewListTemporaryGrantsConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListTemporaryGrantsUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listTemporaryGrants", err)
+			}
+			err = ValidateListTemporaryGrantsUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listTemporaryGrants", err)
+			}
+			return nil, NewListTemporaryGrantsUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListTemporaryGrantsInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listTemporaryGrants", err)
+			}
+			err = ValidateListTemporaryGrantsInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listTemporaryGrants", err)
+			}
+			return nil, NewListTemporaryGrantsInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListTemporaryGrantsInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listTemporaryGrants", err)
+				}
+				err = ValidateListTemporaryGrantsInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listTemporaryGrants", err)
+				}
+				return nil, NewListTemporaryGrantsInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListTemporaryGrantsUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "listTemporaryGrants", err)
+				}
+				err = ValidateListTemporaryGrantsUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "listTemporaryGrants", err)
+				}
+				return nil, NewListTemporaryGrantsUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "listTemporaryGrants", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListTemporaryGrantsGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "listTemporaryGrants", err)
+			}
+			err = ValidateListTemporaryGrantsGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "listTemporaryGrants", err)
+			}
+			return nil, NewListTemporaryGrantsGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "listTemporaryGrants", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRenewTemporaryGrantRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "renewTemporaryGrant"
+// endpoint
+func (c *Client) BuildRenewTemporaryGrantRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RenewTemporaryGrantAccessPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "renewTemporaryGrant", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRenewTemporaryGrantRequest returns an encoder for requests sent to the
+// access renewTemporaryGrant server.
+func EncodeRenewTemporaryGrantRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.RenewTemporaryGrantPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "renewTemporaryGrant", "*access.RenewTemporaryGrantPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewRenewTemporaryGrantRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "renewTemporaryGrant", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRenewTemporaryGrantResponse returns a decoder for responses returned
+// by the access renewTemporaryGrant endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeRenewTemporaryGrantResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRenewTemporaryGrantResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RenewTemporaryGrantResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "renewTemporaryGrant", err)
+			}
+			err = ValidateRenewTemporaryGrantResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "renewTemporaryGrant", err)
+			}
+			res := NewRenewTemporaryGrantTemporaryGrantOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RenewTemporaryGrantUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "renewTemporaryGrant", err)
+			}
+			err = ValidateRenewTemporaryGrantUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "renewTemporaryGrant", err)
+			}
+			return nil, NewRenewTemporaryGrantUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RenewTemporaryGrantForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "renewTemporaryGrant", err)
+			}
+			err = ValidateRenewTemporaryGrantForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "renewTemporaryGrant", err)
+			}
+			return nil, NewRenewTemporaryGrantForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RenewTemporaryGrantBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "renewTemporaryGrant", err)
+			}
+			err = ValidateRenewTemporaryGrantBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "renewTemporaryGrant", err)
+			}
+			return nil, NewRenewTemporaryGrantBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RenewTemporaryGrantNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "renewTemporaryGrant", err)
+			}
+			err = ValidateRenewTemporaryGrantNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "renewTemporaryGrant", err)
+			}
+			return nil, NewRenewTemporaryGrantNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RenewTemporaryGrantConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "renewTemporaryGrant", err)
+			}
+			err = ValidateRenewTemporaryGrantConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "renewTemporaryGrant", err)
+			}
+			return nil, NewRenewTemporaryGrantConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RenewTemporaryGrantUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "renewTemporaryGrant", err)
+			}
+			err = ValidateRenewTemporaryGrantUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "renewTemporaryGrant", err)
+			}
+			return nil, NewRenewTemporaryGrantUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RenewTemporaryGrantInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "renewTemporaryGrant", err)
+			}
+			err = ValidateRenewTemporaryGrantInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "renewTemporaryGrant", err)
+			}
+			return nil, NewRenewTemporaryGrantInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RenewTemporaryGrantInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "renewTemporaryGrant", err)
+				}
+				err = ValidateRenewTemporaryGrantInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "renewTemporaryGrant", err)
+				}
+				return nil, NewRenewTemporaryGrantInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RenewTemporaryGrantUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "renewTemporaryGrant", err)
+				}
+				err = ValidateRenewTemporaryGrantUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "renewTemporaryGrant", err)
+				}
+				return nil, NewRenewTemporaryGrantUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "renewTemporaryGrant", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RenewTemporaryGrantGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "renewTemporaryGrant", err)
+			}
+			err = ValidateRenewTemporaryGrantGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "renewTemporaryGrant", err)
+			}
+			return nil, NewRenewTemporaryGrantGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "renewTemporaryGrant", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildRevokeTemporaryGrantRequest instantiates a HTTP request object with
+// method and path set to call the "access" service "revokeTemporaryGrant"
+// endpoint
+func (c *Client) BuildRevokeTemporaryGrantRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: RevokeTemporaryGrantAccessPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("access", "revokeTemporaryGrant", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeRevokeTemporaryGrantRequest returns an encoder for requests sent to
+// the access revokeTemporaryGrant server.
+func EncodeRevokeTemporaryGrantRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*access.RevokeTemporaryGrantPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("access", "revokeTemporaryGrant", "*access.RevokeTemporaryGrantPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewRevokeTemporaryGrantRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("access", "revokeTemporaryGrant", err)
+		}
+		return nil
+	}
+}
+
+// DecodeRevokeTemporaryGrantResponse returns a decoder for responses returned
+// by the access revokeTemporaryGrant endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeRevokeTemporaryGrantResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeRevokeTemporaryGrantResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body RevokeTemporaryGrantResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "revokeTemporaryGrant", err)
+			}
+			err = ValidateRevokeTemporaryGrantResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "revokeTemporaryGrant", err)
+			}
+			res := NewRevokeTemporaryGrantTemporaryGrantOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body RevokeTemporaryGrantUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "revokeTemporaryGrant", err)
+			}
+			err = ValidateRevokeTemporaryGrantUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "revokeTemporaryGrant", err)
+			}
+			return nil, NewRevokeTemporaryGrantUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body RevokeTemporaryGrantForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "revokeTemporaryGrant", err)
+			}
+			err = ValidateRevokeTemporaryGrantForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "revokeTemporaryGrant", err)
+			}
+			return nil, NewRevokeTemporaryGrantForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body RevokeTemporaryGrantBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "revokeTemporaryGrant", err)
+			}
+			err = ValidateRevokeTemporaryGrantBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "revokeTemporaryGrant", err)
+			}
+			return nil, NewRevokeTemporaryGrantBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body RevokeTemporaryGrantNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "revokeTemporaryGrant", err)
+			}
+			err = ValidateRevokeTemporaryGrantNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "revokeTemporaryGrant", err)
+			}
+			return nil, NewRevokeTemporaryGrantNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body RevokeTemporaryGrantConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "revokeTemporaryGrant", err)
+			}
+			err = ValidateRevokeTemporaryGrantConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "revokeTemporaryGrant", err)
+			}
+			return nil, NewRevokeTemporaryGrantConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body RevokeTemporaryGrantUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "revokeTemporaryGrant", err)
+			}
+			err = ValidateRevokeTemporaryGrantUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "revokeTemporaryGrant", err)
+			}
+			return nil, NewRevokeTemporaryGrantUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body RevokeTemporaryGrantInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "revokeTemporaryGrant", err)
+			}
+			err = ValidateRevokeTemporaryGrantInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "revokeTemporaryGrant", err)
+			}
+			return nil, NewRevokeTemporaryGrantInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body RevokeTemporaryGrantInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "revokeTemporaryGrant", err)
+				}
+				err = ValidateRevokeTemporaryGrantInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "revokeTemporaryGrant", err)
+				}
+				return nil, NewRevokeTemporaryGrantInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body RevokeTemporaryGrantUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("access", "revokeTemporaryGrant", err)
+				}
+				err = ValidateRevokeTemporaryGrantUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("access", "revokeTemporaryGrant", err)
+				}
+				return nil, NewRevokeTemporaryGrantUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("access", "revokeTemporaryGrant", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body RevokeTemporaryGrantGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("access", "revokeTemporaryGrant", err)
+			}
+			err = ValidateRevokeTemporaryGrantGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("access", "revokeTemporaryGrant", err)
+			}
+			return nil, NewRevokeTemporaryGrantGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("access", "revokeTemporaryGrant", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalRoleResponseBodyToAccessRole builds a value of type *access.Role
 // from a value of type *RoleResponseBody.
 func unmarshalRoleResponseBodyToAccessRole(v *RoleResponseBody) *access.Role {
@@ -10649,6 +11591,29 @@ func unmarshalAccessibleSkillResponseBodyToAccessAccessibleSkill(v *AccessibleSk
 		DisplayName: v.DisplayName,
 		ProjectID:   *v.ProjectID,
 		ProjectSlug: *v.ProjectSlug,
+	}
+
+	return res
+}
+
+// unmarshalTemporaryGrantResponseBodyToAccessTemporaryGrant builds a value of
+// type *access.TemporaryGrant from a value of type *TemporaryGrantResponseBody.
+func unmarshalTemporaryGrantResponseBodyToAccessTemporaryGrant(v *TemporaryGrantResponseBody) *access.TemporaryGrant {
+	res := &access.TemporaryGrant{
+		ID:               *v.ID,
+		UserID:           *v.UserID,
+		PrincipalUrn:     *v.PrincipalUrn,
+		Scope:            *v.Scope,
+		ExpiresAt:        *v.ExpiresAt,
+		Status:           *v.Status,
+		RemainingSeconds: *v.RemainingSeconds,
+		CreatedAt:        *v.CreatedAt,
+		UpdatedAt:        *v.UpdatedAt,
+	}
+	res.Selector = unmarshalSelectorResponseBodyToAccessSelector(v.Selector)
+	res.OtherAccess = make([]string, len(v.OtherAccess))
+	for i, val := range v.OtherAccess {
+		res.OtherAccess[i] = val
 	}
 
 	return res

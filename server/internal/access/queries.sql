@@ -1,13 +1,22 @@
 -- Queries for managing principal grants (RBAC).
 -- principal_grants is org-scoped (no project_id); every query is scoped to organization_id.
 -- Audience reads and replacements skip api_key rows: a key's policy is owned by the keys service.
+--
+-- A row with a non-NULL expires_at is a temporary grant. Once expires_at has
+-- passed it grants nothing: every read used for authorization or display
+-- filters it out, and a permanent write of the same grant takes the row over
+-- by clearing expires_at. Audience reads and replacements see permanent rows
+-- only, so saving an audience never turns a temporary grant permanent or
+-- removes one.
 
 -- name: ListPrincipalGrantsByOrg :many
--- Returns all grant rows for an organization, optionally filtered by principal URN.
+-- Returns all live grant rows for an organization, optionally filtered by
+-- principal URN.
 SELECT id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at
 FROM principal_grants
 WHERE organization_id = @organization_id
   AND (@principal_urn::text = '' OR principal_urn = @principal_urn)
+  AND (expires_at IS NULL OR expires_at > clock_timestamp())
 ORDER BY principal_urn, scope;
 
 -- name: GetPrincipalGrants :many
@@ -27,7 +36,10 @@ SELECT g.principal_urn, g.scope, g.selectors,
   )::boolean AS inferred
 FROM principal_grants g
 WHERE g.organization_id = @organization_id
-  AND g.principal_urn = ANY(@principal_urns::text[]);
+  AND g.principal_urn = ANY(@principal_urns::text[])
+  -- Grants are loaded per request, so an expired temporary grant stops
+  -- authorizing the next request without a sign-out or role change.
+  AND (g.expires_at IS NULL OR g.expires_at > clock_timestamp());
 
 -- name: ListPrincipalGrantsByResource :many
 -- Returns grant rows for a single resource selector.
@@ -40,6 +52,7 @@ WHERE organization_id = @organization_id
     'resource_id', sqlc.arg(resource_id)::text
   )
   AND principal_type <> 'api_key'
+  AND expires_at IS NULL
 ORDER BY principal_urn;
 
 -- name: ListPrincipalGrantsByResourceIDs :many
@@ -56,15 +69,19 @@ WHERE organization_id = @organization_id
   )
   AND selectors->>'resource_id' = ANY(@resource_ids::text[])
   AND principal_type <> 'api_key'
+  AND expires_at IS NULL
 ORDER BY principal_urn;
 
 -- name: UpsertPrincipalGrant :one
--- Creates or updates a single grant row. On conflict (same org/principal/scope/selectors),
--- the existing row is kept and its updated_at is bumped.
+-- Creates or updates a single permanent grant row. On conflict (same
+-- org/principal/scope/selectors), the existing row is kept and its updated_at
+-- is bumped; a temporary row becomes permanent, since this write asks for
+-- access with no deadline.
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES (@organization_id, @principal_urn, @scope, @selectors)
 ON CONFLICT (organization_id, principal_urn, scope, selectors)
 DO UPDATE SET
+  expires_at = NULL,
   updated_at = clock_timestamp()
 RETURNING id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at;
 
@@ -111,11 +128,14 @@ VALUES (@organization_id, @principal_urn, @scope, @selectors, @kind)
 ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING;
 
 -- name: InsertPrincipalGrantIfAbsent :execrows
--- Creates a single grant row and leaves an existing identical row untouched.
+-- Creates a single permanent grant row and leaves an existing identical
+-- permanent row untouched. An identical temporary row, live or expired, is
+-- made permanent and counts as written: the permanent grant did not exist.
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES (@organization_id, @principal_urn, @scope, @selectors)
 ON CONFLICT (organization_id, principal_urn, scope, selectors)
-DO NOTHING;
+DO UPDATE SET expires_at = NULL, updated_at = clock_timestamp()
+WHERE principal_grants.expires_at IS NOT NULL;
 
 -- name: DeletePrincipalGrant :execrows
 -- Removes a specific grant row by ID, scoped to the organization for safety.
@@ -145,13 +165,15 @@ WHERE organization_id = @organization_id
   AND (selectors - 'resource_kind' - 'resource_id') = '{}'::jsonb;
 
 -- name: DeletePrincipalGrantsByTarget :execrows
--- Removes every principal row for one exact grant target. Used by audience
--- replacement writes where the caller supplies the full desired principal set.
+-- Removes every permanent principal row for one exact grant target. Used by
+-- audience replacement writes where the caller supplies the full desired
+-- principal set. Temporary grants are not part of an audience and survive.
 DELETE FROM principal_grants
 WHERE organization_id = @organization_id
   AND scope = @scope
   AND selectors = @selectors
-  AND principal_type <> 'api_key';
+  AND principal_type <> 'api_key'
+  AND expires_at IS NULL;
 
 -- name: DeletePrincipalGrantsByResource :execrows
 -- Removes grant rows for a single resource selector.
@@ -170,6 +192,75 @@ WHERE organization_id = @organization_id
 DELETE FROM principal_grants
 WHERE organization_id = @organization_id
   AND principal_urn = @principal_urn;
+
+-- Queries for temporary grants: principal_grants rows with a non-NULL
+-- expires_at. One row per org/principal/scope/selectors still holds, so a
+-- temporary grant and a permanent grant for the same target never coexist.
+
+-- name: InsertTemporaryGrant :one
+-- Creates a temporary grant, or restarts an expired one for the same target.
+-- Returns no row when the target is already held permanently or by a live
+-- temporary grant; the caller reports which with GetPrincipalGrantByIdentity.
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors, expires_at)
+VALUES (@organization_id, @principal_urn, @scope, @selectors, @expires_at)
+ON CONFLICT (organization_id, principal_urn, scope, selectors)
+DO UPDATE SET
+  expires_at = EXCLUDED.expires_at,
+  created_at = clock_timestamp(),
+  updated_at = clock_timestamp()
+WHERE principal_grants.expires_at IS NOT NULL
+  AND principal_grants.expires_at <= clock_timestamp()
+RETURNING id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at;
+
+-- name: GetPrincipalGrantByIdentity :one
+SELECT id, expires_at, clock_timestamp()::timestamptz AS observed_at
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND principal_urn = @principal_urn
+  AND scope = @scope
+  AND selectors = @selectors;
+
+-- name: GetTemporaryGrantForUpdate :one
+-- Locks one temporary grant so a renewal or revocation sees the state it
+-- changes. Permanent rows are never returned.
+SELECT id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at
+FROM principal_grants
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND expires_at IS NOT NULL
+FOR UPDATE;
+
+-- name: ListTemporaryGrants :many
+-- Lists an organization's temporary grants, soonest deadline first, optionally
+-- for one principal. Expired grants are included only on request; revoked
+-- grants are deleted and live on in the audit log.
+SELECT id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at
+FROM principal_grants
+WHERE organization_id = @organization_id
+  AND expires_at IS NOT NULL
+  AND (@principal_urn::text = '' OR principal_urn = @principal_urn)
+  AND (@include_expired::boolean OR expires_at > clock_timestamp())
+ORDER BY expires_at, id
+LIMIT 500;
+
+-- name: RenewTemporaryGrant :one
+-- Moves a live temporary grant's deadline. The caller has locked it.
+UPDATE principal_grants
+SET expires_at = @expires_at, updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND expires_at > clock_timestamp()
+RETURNING id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at;
+
+-- name: RevokeTemporaryGrant :one
+-- Ends a live temporary grant early by deleting it. The expires_at condition
+-- means a permanent grant is never removed this way.
+DELETE FROM principal_grants
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND expires_at IS NOT NULL
+  AND expires_at > clock_timestamp()
+RETURNING id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at;
 
 -- Queries for authz challenge resolutions.
 -- authz_challenge_resolutions is org-scoped (no project_id).
@@ -1244,6 +1335,7 @@ WITH user_grants AS (
   FROM principal_grants pg
   WHERE pg.organization_id = @organization_id
     AND pg.principal_urn = ANY(@principal_urns::text[])
+    AND (pg.expires_at IS NULL OR pg.expires_at > clock_timestamp())
     AND pg.scope IN (
       'mcp:connect', 'mcp:read', 'mcp:write',
       'mcp:blocked_connect', 'mcp:blocked_read', 'mcp:blocked_write'
@@ -1322,6 +1414,7 @@ WITH user_grants AS (
   FROM principal_grants pg
   WHERE pg.organization_id = @organization_id
     AND pg.principal_urn = ANY(@principal_urns::text[])
+    AND (pg.expires_at IS NULL OR pg.expires_at > clock_timestamp())
     AND pg.scope IN (
       'skill:read', 'skill:write',
       'skill:blocked_read', 'skill:blocked_write'

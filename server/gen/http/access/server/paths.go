@@ -206,3 +206,23 @@ func ResolveChallengeAccessPath() string {
 func ListIdentityAccessAccessPath() string {
 	return "/rpc/access.listIdentityAccess"
 }
+
+// CreateTemporaryGrantAccessPath returns the URL path to the access service createTemporaryGrant HTTP endpoint.
+func CreateTemporaryGrantAccessPath() string {
+	return "/rpc/access.createTemporaryGrant"
+}
+
+// ListTemporaryGrantsAccessPath returns the URL path to the access service listTemporaryGrants HTTP endpoint.
+func ListTemporaryGrantsAccessPath() string {
+	return "/rpc/access.listTemporaryGrants"
+}
+
+// RenewTemporaryGrantAccessPath returns the URL path to the access service renewTemporaryGrant HTTP endpoint.
+func RenewTemporaryGrantAccessPath() string {
+	return "/rpc/access.renewTemporaryGrant"
+}
+
+// RevokeTemporaryGrantAccessPath returns the URL path to the access service revokeTemporaryGrant HTTP endpoint.
+func RevokeTemporaryGrantAccessPath() string {
+	return "/rpc/access.revokeTemporaryGrant"
+}

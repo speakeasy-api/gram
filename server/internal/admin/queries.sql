@@ -1204,9 +1204,11 @@ WHERE id = ANY(@ids::text[]);
 
 -- name: AdminBackfillMCPAuthFromConnect :execrows
 -- Grants unrestricted mcp:auth to every principal holding any mcp:connect
--- grant, whatever its selectors.
+-- grant, whatever its selectors. Temporary grants are skipped: a permanent
+-- grant must not be derived from access that ends.
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 SELECT DISTINCT g.organization_id, g.principal_urn, 'mcp:auth', '{"resource_kind":"mcp_auth_client","resource_id":"*"}'::jsonb
 FROM principal_grants AS g
 WHERE g.scope = 'mcp:connect'
+  AND g.expires_at IS NULL
 ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING;

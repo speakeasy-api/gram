@@ -510,6 +510,7 @@ CREATE TABLE IF NOT EXISTS principal_grants (
   scope TEXT NOT NULL,
   drop_resource TEXT,
   selectors JSONB NOT NULL,
+  expires_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -520,7 +521,7 @@ CREATE TABLE IF NOT EXISTS principal_grants (
 );
 ```
 
-The important columns mirror the authorization model. `organization_id` keeps every grant inside one organization. `principal_urn` identifies the user, role, or agent receiving the grant, and `principal_type` is generated from that URN prefix. `scope` stores the permission being granted, while `selectors` stores the JSONB constraints that describe where the grant applies. `drop_resource` is deprecated and scheduled for removal.
+The important columns mirror the authorization model. `organization_id` keeps every grant inside one organization. `principal_urn` identifies the user, role, or agent receiving the grant, and `principal_type` is generated from that URN prefix. `scope` stores the permission being granted, while `selectors` stores the JSONB constraints that describe where the grant applies. `drop_resource` is deprecated and scheduled for removal. `expires_at` is `NULL` for a permanent grant and set for a temporary one (see [Temporary grants](#temporary-grants)).
 
 There are two important indexes:
 
@@ -573,7 +574,8 @@ Grant loading is intentionally simple. For a request, the engine builds the list
 SELECT scope, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
-  AND principal_urn = ANY(@principal_urns::text[]);
+  AND principal_urn = ANY(@principal_urns::text[])
+  AND (expires_at IS NULL OR expires_at > clock_timestamp());
 ```
 
 The principal list usually contains the user and their role:
@@ -584,6 +586,20 @@ role:global:00000000-0000-0000-0000-000000000002
 ```
 
 The engine then evaluates checks in memory against the loaded grants.
+
+### Temporary grants
+
+A temporary grant is an ordinary `principal_grants` row given to one member (`user:<id>`) with `expires_at` set. Administrators with `org:admin` give, renew and revoke them through `access.createTemporaryGrant`, `access.renewTemporaryGrant` and `access.revokeTemporaryGrant`; `access.listTemporaryGrants` shows each grant's boundary and remaining time to administrators, and members see their own. A window is between five minutes and 30 days; longer access is a role assignment. Only the read, use and manage scopes in `access.temporaryGrantScopes` can be given temporarily. Blocklist scopes, `mcp:auth`, risk policy, plugin, inference, agent credential and machine scopes cannot, because other subsystems derive standing configuration from who holds them.
+
+The rules that keep a temporary grant from changing other access:
+
+- **Expiry is enforced at load time.** Grants are loaded for each request, so once `expires_at` passes the next request is not authorized by that row. No sign-out, role change or cleanup job is involved. Every read used for authorization or display filters out expired rows, including `ListAccessibleMCPServersForUser` and `ListAccessibleSkillsForUser`.
+- **One operation is one request.** Authorization is prepared once per HTTP request, so an already-authorized request may finish, including a streamed response or download, but nothing renews it. A long-lived MCP session is not one operation: each JSON-RPC message arrives as its own HTTP request and is authorized afresh, so an open session cannot keep expired access alive.
+- **One row per target.** The unique index still holds, so a temporary and a permanent grant for the same principal, scope and selector never coexist. Giving a temporary grant over a permanent one, or over a live temporary one, is a conflict. A permanent write of the same grant (`UpsertPrincipalGrant`, `InsertPrincipalGrantIfAbsent`) takes the row over by clearing `expires_at`; an expired row never blocks one.
+- **Ending a grant removes only that grant.** Revocation deletes the row only while `expires_at` is set and in the future, so it can never remove a permanent grant. Role grants and other routes to the same access are untouched; `other_access` on each listed grant names them.
+- **Audiences ignore temporary grants.** Resource audience reads and replacements (`ListPrincipalGrantsByResource*`, `DeletePrincipalGrantsByTarget`) see permanent rows only, so saving an audience neither removes a temporary grant nor makes it permanent. Default auth permission backfills never derive a permanent `mcp:auth` from a temporary `mcp:connect`.
+- **Temporary grants evaluate as direct grants.** The row belongs to the member's own user principal, so [principal precedence](#principal-precedence) applies to it as to any grant made to them directly.
+- **The audit log is the record.** `access_temporary_grant:create`, `:renew` and `:revoke` events carry the recipient, scope, deadline, optional reason, and `self_granted` when the actor is the recipient. Administrators may give themselves temporary access; the event makes that visible.
 
 ## System Roles
 
