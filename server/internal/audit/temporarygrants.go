@@ -156,10 +156,13 @@ func temporaryGrantAuditParams(
 ) repo.InsertAuditLogParams {
 	displayName := ""
 	if grant != nil {
-		displayName = grant.Scope
-		if recipientEmail != "" {
-			displayName += " for " + recipientEmail
+		// A member is named by email; any other principal (a role, an agent,
+		// everyone) by its URN.
+		recipient := recipientEmail
+		if recipient == "" {
+			recipient = grant.PrincipalUrn
 		}
+		displayName = grant.Scope + " for " + recipient
 	}
 
 	return repo.InsertAuditLogParams{

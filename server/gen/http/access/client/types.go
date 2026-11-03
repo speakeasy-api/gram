@@ -214,8 +214,10 @@ type ResolveChallengeRequestBody struct {
 // CreateTemporaryGrantRequestBody is the type of the "access" service
 // "createTemporaryGrant" endpoint HTTP request body.
 type CreateTemporaryGrantRequestBody struct {
-	// The organization member receiving the access.
-	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
+	// The principal receiving the access: an organization member (user:<id>),
+	// everyone (user:all), a role (role:organization:<id> or role:global:<id>) or
+	// an active agent (agent:<id>).
+	PrincipalUrn string `form:"principal_urn" json:"principal_urn" xml:"principal_urn"`
 	// The scope to give, e.g. chat:read or log:read. Only scopes that grant access
 	// to read, use or manage resources can be given temporarily; org:admin,
 	// blocklist, auth client, risk policy and machine scopes cannot.
@@ -710,9 +712,7 @@ type ListIdentityAccessResponseBody struct {
 type CreateTemporaryGrantResponseBody struct {
 	// Temporary grant ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The member holding the access.
-	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
-	// Canonical principal URN of the member holding the access.
+	// Canonical principal URN holding the access.
 	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// The scope given.
 	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -725,11 +725,12 @@ type CreateTemporaryGrantResponseBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Seconds until the deadline while active; 0 once ended.
 	RemainingSeconds *int64 `form:"remaining_seconds,omitempty" json:"remaining_seconds,omitempty" xml:"remaining_seconds,omitempty"`
-	// For an active grant, the principal URNs of the member's other grants that
-	// already give the same access: a role, everyone (user:all), or the member
-	// themselves for a grant made to them directly. Access through these remains
-	// when this grant ends. Empty for ended grants and when this grant is the only
-	// route.
+	// For an active grant, the principal URNs of the holder's other grants that
+	// already give the same access: for a member or agent, a role, everyone
+	// (user:all), or the holder itself for a grant made to it directly; for a role
+	// or everyone, only that principal's own other grants. Access through these
+	// remains when this grant ends. Empty for ended grants and when this grant is
+	// the only route.
 	OtherAccess []string `form:"other_access,omitempty" json:"other_access,omitempty" xml:"other_access,omitempty"`
 	// When the grant was given, or restarted after expiring.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -748,9 +749,7 @@ type ListTemporaryGrantsResponseBody struct {
 type RenewTemporaryGrantResponseBody struct {
 	// Temporary grant ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The member holding the access.
-	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
-	// Canonical principal URN of the member holding the access.
+	// Canonical principal URN holding the access.
 	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// The scope given.
 	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -763,11 +762,12 @@ type RenewTemporaryGrantResponseBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Seconds until the deadline while active; 0 once ended.
 	RemainingSeconds *int64 `form:"remaining_seconds,omitempty" json:"remaining_seconds,omitempty" xml:"remaining_seconds,omitempty"`
-	// For an active grant, the principal URNs of the member's other grants that
-	// already give the same access: a role, everyone (user:all), or the member
-	// themselves for a grant made to them directly. Access through these remains
-	// when this grant ends. Empty for ended grants and when this grant is the only
-	// route.
+	// For an active grant, the principal URNs of the holder's other grants that
+	// already give the same access: for a member or agent, a role, everyone
+	// (user:all), or the holder itself for a grant made to it directly; for a role
+	// or everyone, only that principal's own other grants. Access through these
+	// remains when this grant ends. Empty for ended grants and when this grant is
+	// the only route.
 	OtherAccess []string `form:"other_access,omitempty" json:"other_access,omitempty" xml:"other_access,omitempty"`
 	// When the grant was given, or restarted after expiring.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -779,9 +779,7 @@ type RenewTemporaryGrantResponseBody struct {
 type RevokeTemporaryGrantResponseBody struct {
 	// Temporary grant ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The member holding the access.
-	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
-	// Canonical principal URN of the member holding the access.
+	// Canonical principal URN holding the access.
 	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// The scope given.
 	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -794,11 +792,12 @@ type RevokeTemporaryGrantResponseBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Seconds until the deadline while active; 0 once ended.
 	RemainingSeconds *int64 `form:"remaining_seconds,omitempty" json:"remaining_seconds,omitempty" xml:"remaining_seconds,omitempty"`
-	// For an active grant, the principal URNs of the member's other grants that
-	// already give the same access: a role, everyone (user:all), or the member
-	// themselves for a grant made to them directly. Access through these remains
-	// when this grant ends. Empty for ended grants and when this grant is the only
-	// route.
+	// For an active grant, the principal URNs of the holder's other grants that
+	// already give the same access: for a member or agent, a role, everyone
+	// (user:all), or the holder itself for a grant made to it directly; for a role
+	// or everyone, only that principal's own other grants. Access through these
+	// remains when this grant ends. Empty for ended grants and when this grant is
+	// the only route.
 	OtherAccess []string `form:"other_access,omitempty" json:"other_access,omitempty" xml:"other_access,omitempty"`
 	// When the grant was given, or restarted after expiring.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -9917,9 +9916,7 @@ type AccessibleSkillResponseBody struct {
 type TemporaryGrantResponseBody struct {
 	// Temporary grant ID.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The member holding the access.
-	UserID *string `form:"user_id,omitempty" json:"user_id,omitempty" xml:"user_id,omitempty"`
-	// Canonical principal URN of the member holding the access.
+	// Canonical principal URN holding the access.
 	PrincipalUrn *string `form:"principal_urn,omitempty" json:"principal_urn,omitempty" xml:"principal_urn,omitempty"`
 	// The scope given.
 	Scope *string `form:"scope,omitempty" json:"scope,omitempty" xml:"scope,omitempty"`
@@ -9932,11 +9929,12 @@ type TemporaryGrantResponseBody struct {
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
 	// Seconds until the deadline while active; 0 once ended.
 	RemainingSeconds *int64 `form:"remaining_seconds,omitempty" json:"remaining_seconds,omitempty" xml:"remaining_seconds,omitempty"`
-	// For an active grant, the principal URNs of the member's other grants that
-	// already give the same access: a role, everyone (user:all), or the member
-	// themselves for a grant made to them directly. Access through these remains
-	// when this grant ends. Empty for ended grants and when this grant is the only
-	// route.
+	// For an active grant, the principal URNs of the holder's other grants that
+	// already give the same access: for a member or agent, a role, everyone
+	// (user:all), or the holder itself for a grant made to it directly; for a role
+	// or everyone, only that principal's own other grants. Access through these
+	// remains when this grant ends. Empty for ended grants and when this grant is
+	// the only route.
 	OtherAccess []string `form:"other_access,omitempty" json:"other_access,omitempty" xml:"other_access,omitempty"`
 	// When the grant was given, or restarted after expiring.
 	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
@@ -10250,10 +10248,10 @@ func NewResolveChallengeRequestBody(p *access.ResolveChallengePayload) *ResolveC
 // payload of the "createTemporaryGrant" endpoint of the "access" service.
 func NewCreateTemporaryGrantRequestBody(p *access.CreateTemporaryGrantPayload) *CreateTemporaryGrantRequestBody {
 	body := &CreateTemporaryGrantRequestBody{
-		UserID:    p.UserID,
-		Scope:     p.Scope,
-		ExpiresAt: p.ExpiresAt,
-		Reason:    p.Reason,
+		PrincipalUrn: p.PrincipalUrn,
+		Scope:        p.Scope,
+		ExpiresAt:    p.ExpiresAt,
+		Reason:       p.Reason,
 	}
 	if p.Selector != nil {
 		body.Selector = marshalAccessSelectorToSelectorRequestBody(p.Selector)
@@ -17083,7 +17081,6 @@ func NewListIdentityAccessGatewayError(body *ListIdentityAccessGatewayErrorRespo
 func NewCreateTemporaryGrantTemporaryGrantOK(body *CreateTemporaryGrantResponseBody) *access.TemporaryGrant {
 	v := &access.TemporaryGrant{
 		ID:               *body.ID,
-		UserID:           *body.UserID,
 		PrincipalUrn:     *body.PrincipalUrn,
 		Scope:            *body.Scope,
 		ExpiresAt:        *body.ExpiresAt,
@@ -17422,7 +17419,6 @@ func NewListTemporaryGrantsGatewayError(body *ListTemporaryGrantsGatewayErrorRes
 func NewRenewTemporaryGrantTemporaryGrantOK(body *RenewTemporaryGrantResponseBody) *access.TemporaryGrant {
 	v := &access.TemporaryGrant{
 		ID:               *body.ID,
-		UserID:           *body.UserID,
 		PrincipalUrn:     *body.PrincipalUrn,
 		Scope:            *body.Scope,
 		ExpiresAt:        *body.ExpiresAt,
@@ -17595,7 +17591,6 @@ func NewRenewTemporaryGrantGatewayError(body *RenewTemporaryGrantGatewayErrorRes
 func NewRevokeTemporaryGrantTemporaryGrantOK(body *RevokeTemporaryGrantResponseBody) *access.TemporaryGrant {
 	v := &access.TemporaryGrant{
 		ID:               *body.ID,
-		UserID:           *body.UserID,
 		PrincipalUrn:     *body.PrincipalUrn,
 		Scope:            *body.Scope,
 		ExpiresAt:        *body.ExpiresAt,
@@ -18698,9 +18693,6 @@ func ValidateCreateTemporaryGrantResponseBody(body *CreateTemporaryGrantResponse
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	if body.UserID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
-	}
 	if body.PrincipalUrn == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
 	}
@@ -18775,9 +18767,6 @@ func ValidateRenewTemporaryGrantResponseBody(body *RenewTemporaryGrantResponseBo
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
 	}
-	if body.UserID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
-	}
 	if body.PrincipalUrn == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
 	}
@@ -18835,9 +18824,6 @@ func ValidateRenewTemporaryGrantResponseBody(body *RenewTemporaryGrantResponseBo
 func ValidateRevokeTemporaryGrantResponseBody(body *RevokeTemporaryGrantResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.UserID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
 	}
 	if body.PrincipalUrn == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))
@@ -31018,9 +31004,6 @@ func ValidateAccessibleSkillResponseBody(body *AccessibleSkillResponseBody) (err
 func ValidateTemporaryGrantResponseBody(body *TemporaryGrantResponseBody) (err error) {
 	if body.ID == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
-	}
-	if body.UserID == nil {
-		err = goa.MergeErrors(err, goa.MissingFieldError("user_id", "body"))
 	}
 	if body.PrincipalUrn == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "body"))

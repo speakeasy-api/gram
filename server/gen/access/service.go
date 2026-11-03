@@ -183,29 +183,31 @@ type Service interface {
 	// a resource is distributed through, not who may use it, so it does not widen
 	// this list.
 	ListIdentityAccess(context.Context, *ListIdentityAccessPayload) (res *ListIdentityAccessResult, err error)
-	// Give one organization member a scope on a resource or activity boundary
-	// until a deadline, without changing their roles. Once the deadline passes the
-	// grant stops authorizing new requests, with no role change or sign-out. Fails
-	// with a conflict when the member already holds the same grant permanently, or
-	// temporarily (renew that one instead). An expired grant for the same boundary
-	// is restarted. Requires org:admin. An administrator may give themselves
-	// temporary access; the audit event records that it was self-granted. Session
-	// only: the grant is attributed to the person who gave it.
+	// Give one principal (a member, role, agent, or everyone) a scope on a
+	// resource or activity boundary until a deadline, without changing role
+	// assignments. Once the deadline passes the grant stops authorizing new
+	// requests, with no role change or sign-out. Fails with a conflict when the
+	// principal already holds the same grant permanently, or temporarily (renew
+	// that one instead). An expired grant for the same boundary is restarted.
+	// Requires org:admin. An administrator may give themselves temporary access;
+	// the audit event records that it was self-granted. Session only: the grant is
+	// attributed to the person who gave it.
 	CreateTemporaryGrant(context.Context, *CreateTemporaryGrantPayload) (res *TemporaryGrant, err error)
-	// List temporary grants with their boundary, deadline and remaining time,
-	// soonest deadline first. Organization administrators see every member's
-	// grants; anyone else sees only their own. Each active grant says which other
-	// grants the member holds that would still give the same access once it ends.
-	// Revoked grants are removed and appear only in the audit log.
+	// List the temporary grants given to one principal, with their boundary,
+	// deadline and remaining time, soonest deadline first. Organization
+	// administrators may list any principal's grants; anyone else may list only
+	// grants given to themselves (their own user:<id>). Each active grant says
+	// which other grants would still give the principal the same access once it
+	// ends. Revoked grants are removed and appear only in the audit log.
 	ListTemporaryGrants(context.Context, *ListTemporaryGrantsPayload) (res *ListTemporaryGrantsResult, err error)
 	// Move an active temporary grant's deadline, earlier or later. The boundary
 	// cannot change: to widen access, give a new grant. An expired grant cannot be
 	// renewed; give it again instead. Requires org:admin.
 	RenewTemporaryGrant(context.Context, *RenewTemporaryGrantPayload) (res *TemporaryGrant, err error)
 	// End an active temporary grant before its deadline. Only this grant ends: a
-	// permanent grant is never removed this way, and the member's roles and other
-	// grants giving the same access are left alone. Requires org:admin, except
-	// that a member may end a grant given to themselves.
+	// permanent grant is never removed this way, and the principal's roles and
+	// other grants giving the same access are left alone. Requires org:admin,
+	// except that a member may end a grant given directly to themselves.
 	RevokeTemporaryGrant(context.Context, *RevokeTemporaryGrantPayload) (res *TemporaryGrant, err error)
 }
 
@@ -564,8 +566,10 @@ type CreateRolePayload struct {
 // createTemporaryGrant method.
 type CreateTemporaryGrantPayload struct {
 	SessionToken *string
-	// The organization member receiving the access.
-	UserID string
+	// The principal receiving the access: an organization member (user:<id>),
+	// everyone (user:all), a role (role:organization:<id> or role:global:<id>) or
+	// an active agent (agent:<id>).
+	PrincipalUrn string
 	// The scope to give, e.g. chat:read or log:read. Only scopes that grant access
 	// to read, use or manage resources can be given temporarily; org:admin,
 	// blocklist, auth client, risk policy and machine scopes cannot.
@@ -1217,9 +1221,10 @@ type ListShadowMCPInventoryUsersResult struct {
 // ListTemporaryGrantsPayload is the payload type of the access service
 // listTemporaryGrants method.
 type ListTemporaryGrantsPayload struct {
-	// Only list grants given to this member. Members who are not organization
-	// administrators may only pass their own ID.
-	UserID *string
+	// The principal whose grants to list, e.g. user:<id>, role:organization:<id>
+	// or agent:<id>. Members who are not organization administrators may only pass
+	// their own user URN.
+	PrincipalUrn string
 	// Include grants whose deadline has passed.
 	IncludeExpired bool
 	SessionToken   *string
@@ -1746,9 +1751,7 @@ type SyncDirectoryGroupsResult struct {
 type TemporaryGrant struct {
 	// Temporary grant ID.
 	ID string
-	// The member holding the access.
-	UserID string
-	// Canonical principal URN of the member holding the access.
+	// Canonical principal URN holding the access.
 	PrincipalUrn string
 	// The scope given.
 	Scope string
@@ -1761,11 +1764,12 @@ type TemporaryGrant struct {
 	Status string
 	// Seconds until the deadline while active; 0 once ended.
 	RemainingSeconds int64
-	// For an active grant, the principal URNs of the member's other grants that
-	// already give the same access: a role, everyone (user:all), or the member
-	// themselves for a grant made to them directly. Access through these remains
-	// when this grant ends. Empty for ended grants and when this grant is the only
-	// route.
+	// For an active grant, the principal URNs of the holder's other grants that
+	// already give the same access: for a member or agent, a role, everyone
+	// (user:all), or the holder itself for a grant made to it directly; for a role
+	// or everyone, only that principal's own other grants. Access through these
+	// remains when this grant ends. Empty for ended grants and when this grant is
+	// the only route.
 	OtherAccess []string
 	// When the grant was given, or restarted after expiring.
 	CreatedAt string

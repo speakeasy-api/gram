@@ -9054,15 +9054,15 @@ func DecodeListTemporaryGrantsRequest(mux goahttp.Muxer, decoder func(*http.Requ
 	return func(r *http.Request) (*access.ListTemporaryGrantsPayload, error) {
 		var payload *access.ListTemporaryGrantsPayload
 		var (
-			userID         *string
+			principalUrn   string
 			includeExpired bool
 			sessionToken   *string
 			err            error
 		)
 		qp := r.URL.Query()
-		userIDRaw := qp.Get("user_id")
-		if userIDRaw != "" {
-			userID = &userIDRaw
+		principalUrn = qp.Get("principal_urn")
+		if principalUrn == "" {
+			err = goa.MergeErrors(err, goa.MissingFieldError("principal_urn", "query string"))
 		}
 		{
 			includeExpiredRaw := qp.Get("include_expired")
@@ -9081,7 +9081,7 @@ func DecodeListTemporaryGrantsRequest(mux goahttp.Muxer, decoder func(*http.Requ
 		if err != nil {
 			return payload, err
 		}
-		payload = NewListTemporaryGrantsPayload(userID, includeExpired, sessionToken)
+		payload = NewListTemporaryGrantsPayload(principalUrn, includeExpired, sessionToken)
 		if payload.SessionToken != nil {
 			if strings.Contains(*payload.SessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -10780,7 +10780,6 @@ func marshalAccessAccessibleSkillToAccessibleSkillResponseBody(v *access.Accessi
 func marshalAccessTemporaryGrantToTemporaryGrantResponseBody(v *access.TemporaryGrant) *TemporaryGrantResponseBody {
 	res := &TemporaryGrantResponseBody{
 		ID:               v.ID,
-		UserID:           v.UserID,
 		PrincipalUrn:     v.PrincipalUrn,
 		Scope:            v.Scope,
 		ExpiresAt:        v.ExpiresAt,

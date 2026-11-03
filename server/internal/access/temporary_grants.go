@@ -17,6 +17,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/agents"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -99,6 +100,40 @@ func validateTemporaryGrantDeadline(expiresAt string, now time.Time) (time.Time,
 	return deadline, nil
 }
 
+// temporaryGrantRecipient parses and checks the principal a temporary grant is
+// given to: an active organization member, everyone (user:all), an active role,
+// or an agent that may be given new access. API keys, workloads and system
+// principals cannot hold one.
+func (s *Service) temporaryGrantRecipient(ctx context.Context, organizationID string, raw string) (urn.Principal, error) {
+	principal, err := urn.ParsePrincipal(raw)
+	if err != nil {
+		return urn.Principal{}, oops.E(oops.CodeBadRequest, err, "invalid principal urn").LogError(ctx, s.logger)
+	}
+	err = authz.ValidatePrincipal(ctx, s.db, organizationID, principal)
+	switch {
+	case errors.Is(err, authz.ErrPrincipalInvalid):
+		return urn.Principal{}, oops.E(oops.CodeBadRequest, err, "principal %q cannot hold a temporary grant", principal.String()).LogError(ctx, s.logger)
+	case errors.Is(err, authz.ErrPrincipalNotFound):
+		return urn.Principal{}, oops.E(oops.CodeNotFound, err, "principal not found").LogError(ctx, s.logger)
+	case err != nil:
+		return urn.Principal{}, oops.E(oops.CodeUnexpected, err, "validate principal").LogError(ctx, s.logger)
+	}
+
+	if principal.Type == urn.PrincipalTypeAgent {
+		// A suspended or revoked agent keeps the access it has but cannot be
+		// given more, the same rule audiences follow.
+		assignable, err := s.assignableAgentPrincipals(ctx, organizationID)
+		if err != nil {
+			return urn.Principal{}, err
+		}
+		if _, ok := assignable[principal.String()]; !ok {
+			return urn.Principal{}, oops.E(oops.CodeBadRequest, nil, "agent %q is suspended or revoked and cannot be given access", principal.String()).LogError(ctx, s.logger)
+		}
+	}
+
+	return principal, nil
+}
+
 func (s *Service) requireTemporaryGrantAdmin(ctx context.Context, organizationID string) error {
 	return s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: organizationID, Dimensions: nil})
 }
@@ -111,12 +146,8 @@ func (s *Service) CreateTemporaryGrant(ctx context.Context, payload *gen.CreateT
 	if err := s.requireTemporaryGrantAdmin(ctx, ac.ActiveOrganizationID); err != nil {
 		return nil, err
 	}
-	trace.SpanFromContext(ctx).SetAttributes(
-		attr.OrganizationID(ac.ActiveOrganizationID),
-		attr.UserID(ac.UserID),
-		attr.AccessMemberID(payload.UserID),
-	)
-	logger := s.logger.With(attr.SlogOrganizationID(ac.ActiveOrganizationID), attr.SlogAccessMemberID(payload.UserID))
+	trace.SpanFromContext(ctx).SetAttributes(attr.OrganizationID(ac.ActiveOrganizationID), attr.UserID(ac.UserID))
+	logger := s.logger.With(attr.SlogOrganizationID(ac.ActiveOrganizationID))
 
 	scope := authz.Scope(payload.Scope)
 	if err := ValidateTemporaryGrantScope(scope); err != nil {
@@ -138,16 +169,12 @@ func (s *Service) CreateTemporaryGrant(ctx context.Context, payload *gen.CreateT
 		return nil, oops.E(oops.CodeBadRequest, err, "%s", err.Error()).LogError(ctx, logger)
 	}
 
-	recipient, err := connectedUser(ctx, s.db, ac.ActiveOrganizationID, payload.UserID)
-	switch {
-	case errors.Is(err, errConnectedUserNotFound):
-		return nil, oops.E(oops.CodeNotFound, nil, "member not found").LogError(ctx, logger)
-	case err != nil:
-		return nil, oops.E(oops.CodeUnexpected, err, "get member").LogError(ctx, logger)
+	recipientPrincipal, err := s.temporaryGrantRecipient(ctx, ac.ActiveOrganizationID, payload.PrincipalUrn)
+	if err != nil {
+		return nil, err
 	}
 
 	actor := urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID)
-	recipientPrincipal := urn.NewPrincipal(urn.PrincipalTypeUser, recipient.ID)
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -184,13 +211,18 @@ func (s *Service) CreateTemporaryGrant(ctx context.Context, payload *gen.CreateT
 		return nil, oops.E(oops.CodeUnexpected, err, "render temporary grant").LogError(ctx, logger)
 	}
 
+	recipientEmail, err := temporaryGrantRecipientEmail(ctx, dbtx, recipientPrincipal)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "get recipient").LogError(ctx, logger)
+	}
+
 	if err := s.audit.LogAccessTemporaryGrantCreate(ctx, dbtx, audit.LogAccessTemporaryGrantCreateEvent{
 		OrganizationID:              ac.ActiveOrganizationID,
 		Actor:                       actor,
 		ActorDisplayName:            ac.Email,
 		ActorSlug:                   nil,
 		TemporaryGrantURN:           urn.NewTemporaryGrant(row.ID),
-		RecipientEmail:              recipient.Email,
+		RecipientEmail:              recipientEmail,
 		Reason:                      strings.TrimSpace(conv.PtrValOr(payload.Reason, "")),
 		TemporaryGrantSnapshotAfter: result,
 	}); err != nil {
@@ -205,16 +237,16 @@ func (s *Service) CreateTemporaryGrant(ctx context.Context, payload *gen.CreateT
 }
 
 // temporaryGrantConflict explains why a temporary grant could not be written:
-// the member already holds the same grant, permanently or temporarily.
+// the principal already holds the same grant, permanently or temporarily.
 func (s *Service) temporaryGrantConflict(ctx context.Context, dbtx database.DBTX, identity repo.GetPrincipalGrantByIdentityParams) error {
 	existing, err := repo.New(dbtx).GetPrincipalGrantByIdentity(ctx, identity)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "get conflicting grant").LogError(ctx, s.logger)
 	}
 	if !existing.ExpiresAt.Valid {
-		return oops.E(oops.CodeConflict, nil, "the member already holds this grant permanently")
+		return oops.E(oops.CodeConflict, nil, "the principal already holds this grant permanently")
 	}
-	return oops.E(oops.CodeConflict, nil, "the member already holds this grant temporarily until %s; renew it instead", existing.ExpiresAt.Time.UTC().Format(time.RFC3339))
+	return oops.E(oops.CodeConflict, nil, "the principal already holds this grant temporarily until %s; renew it instead", existing.ExpiresAt.Time.UTC().Format(time.RFC3339))
 }
 
 func (s *Service) ListTemporaryGrants(ctx context.Context, payload *gen.ListTemporaryGrantsPayload) (*gen.ListTemporaryGrantsResult, error) {
@@ -229,19 +261,16 @@ func (s *Service) ListTemporaryGrants(ctx context.Context, payload *gen.ListTemp
 		return nil, oops.E(oops.CodeUnexpected, err, "check organization admin").LogError(ctx, s.logger)
 	}
 
-	userID := conv.PtrValOr(payload.UserID, "")
-	if !isAdmin {
-		// A member sees the boundary and remaining time of their own grants
-		// only.
-		if userID != "" && userID != ac.UserID {
-			return nil, oops.C(oops.CodeForbidden)
-		}
-		userID = ac.UserID
+	principal, err := urn.ParsePrincipal(payload.PrincipalUrn)
+	if err != nil {
+		return nil, oops.E(oops.CodeBadRequest, err, "invalid principal urn").LogError(ctx, s.logger)
 	}
-	principalURN := ""
-	if userID != "" {
-		principalURN = urn.NewPrincipal(urn.PrincipalTypeUser, userID).String()
+	// A member who is not an administrator sees the boundary and remaining
+	// time of grants given directly to them only.
+	if !isAdmin && principal.String() != urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID).String() {
+		return nil, oops.C(oops.CodeForbidden)
 	}
+	principalURN := principal.String()
 
 	rows, err := repo.New(s.db).ListTemporaryGrants(ctx, repo.ListTemporaryGrantsParams{
 		OrganizationID: ac.ActiveOrganizationID,
@@ -391,7 +420,7 @@ func (s *Service) RevokeTemporaryGrant(ctx context.Context, payload *gen.RevokeT
 	}
 
 	// Recorded while the grant is still active, so the snapshot shows which
-	// other access the member keeps once it ends.
+	// other access the holder keeps once it ends.
 	otherAccess, err := newTemporaryGrantExplainer(dbtx).otherAccess(ctx, before)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "explain other access").LogError(ctx, logger)
@@ -466,7 +495,12 @@ func temporaryGrantExpiredConflict() error {
 	return oops.E(oops.CodeConflict, nil, "temporary grant has expired; give it again instead")
 }
 
+// temporaryGrantRecipientEmail names a member recipient in the audit log. Other
+// principals have no email; the audit entry names them by URN instead.
 func temporaryGrantRecipientEmail(ctx context.Context, dbtx database.DBTX, principal urn.Principal) (string, error) {
+	if principal.Type != urn.PrincipalTypeUser || principal.ID == urn.AllUsersPrincipalID {
+		return "", nil
+	}
 	user, err := usersrepo.New(dbtx).GetUser(ctx, principal.ID)
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
@@ -502,7 +536,6 @@ func temporaryGrantView(row temporaryGrantRow, status string, otherAccess []stri
 
 	return &gen.TemporaryGrant{
 		ID:               row.ID.String(),
-		UserID:           row.PrincipalUrn.ID,
 		PrincipalUrn:     row.PrincipalUrn.String(),
 		Scope:            row.Scope,
 		Selector:         authzSelectorToGen(selector),
@@ -516,9 +549,9 @@ func temporaryGrantView(row temporaryGrantRow, status string, otherAccess []stri
 }
 
 // temporaryGrantExplainer answers, for each active temporary grant, which of
-// the member's other grants already give the same access, so ending the grant
-// is explainable: access through those routes remains. Member grants are
-// loaded once per member.
+// the holder's other grants already give the same access, so ending the grant
+// is explainable: access through those routes remains. Grants are loaded once
+// per holder.
 type temporaryGrantExplainer struct {
 	db     database.DBTX
 	grants map[urn.Principal][]authz.Grant
@@ -539,18 +572,18 @@ func (e *temporaryGrantExplainer) otherAccess(ctx context.Context, row temporary
 
 	grants, ok := e.grants[row.PrincipalUrn]
 	if !ok {
-		principals, err := authz.ResolveUserPrincipals(ctx, e.db, row.OrganizationID, row.PrincipalUrn.ID)
+		principals, err := temporaryGrantHolderPrincipals(ctx, e.db, row.OrganizationID, row.PrincipalUrn)
 		switch {
-		case errors.Is(err, authz.ErrPrincipalNotFound):
-			// The member left the organization: nothing gives them access.
+		case errors.Is(err, authz.ErrPrincipalNotFound), errors.Is(err, agents.ErrPrincipalNotFound):
+			// The holder is gone from the organization: nothing gives it access.
 			e.grants[row.PrincipalUrn] = nil
 			return nil, nil
 		case err != nil:
-			return nil, fmt.Errorf("resolve member principals: %w", err)
+			return nil, fmt.Errorf("resolve holder principals: %w", err)
 		}
 		grants, err = authz.LoadGrants(ctx, e.db, row.OrganizationID, principals)
 		if err != nil {
-			return nil, fmt.Errorf("load member grants: %w", err)
+			return nil, fmt.Errorf("load holder grants: %w", err)
 		}
 		e.grants[row.PrincipalUrn] = grants
 	}
@@ -558,9 +591,24 @@ func (e *temporaryGrantExplainer) otherAccess(ctx context.Context, row temporary
 	return otherAccessFor(grants, row.PrincipalUrn.String(), authz.Scope(row.Scope), selector), nil
 }
 
+// temporaryGrantHolderPrincipals returns the principals whose grants reach the
+// holder of a temporary grant, the same set a request made as the holder is
+// evaluated against. A member or agent inherits from its roles and from
+// everyone (user:all); a role or everyone holds only its own grants.
+func temporaryGrantHolderPrincipals(ctx context.Context, db database.DBTX, organizationID string, holder urn.Principal) ([]urn.Principal, error) {
+	switch {
+	case holder.Type == urn.PrincipalTypeUser && holder.ID != urn.AllUsersPrincipalID:
+		return authz.ResolveUserPrincipals(ctx, db, organizationID, holder.ID)
+	case holder.Type == urn.PrincipalTypeAgent:
+		return authz.ResolveAgentPrincipals(ctx, db, organizationID, holder)
+	default:
+		return []urn.Principal{holder}, nil
+	}
+}
+
 // otherAccessFor returns the principals whose grants, other than the one
 // temporary grant described by (holder, scope, selector), contain that
-// grant's boundary. grants is the member's full loaded set, which holds the
+// grant's boundary. grants is the holder's full loaded set, which holds the
 // temporary grant itself exactly once (one row per target), and that copy is
 // left out. Blocks are not evaluated: this names the routes that give the
 // same access, and the access explanation decides a specific request.

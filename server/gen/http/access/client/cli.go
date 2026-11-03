@@ -1854,7 +1854,7 @@ func BuildCreateTemporaryGrantPayload(accessCreateTemporaryGrantBody string, acc
 	{
 		err = json.Unmarshal([]byte(accessCreateTemporaryGrantBody), &body)
 		if err != nil {
-			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"reason\": \"aaa\",\n      \"scope\": \"abc123\",\n      \"selector\": {\n         \"client_type\": \"service_account\",\n         \"connection_owner\": \"abc123\",\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\",\n         \"upstream_client\": \"abc123\"\n      },\n      \"user_id\": \"abc123\"\n   }'")
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"principal_urn\": \"abc123\",\n      \"reason\": \"aaa\",\n      \"scope\": \"abc123\",\n      \"selector\": {\n         \"client_type\": \"service_account\",\n         \"connection_owner\": \"abc123\",\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\",\n         \"upstream_client\": \"abc123\"\n      }\n   }'")
 		}
 		if body.Selector != nil {
 			if err2 := ValidateSelectorRequestBody(body.Selector); err2 != nil {
@@ -1878,10 +1878,10 @@ func BuildCreateTemporaryGrantPayload(accessCreateTemporaryGrantBody string, acc
 		}
 	}
 	v := &access.CreateTemporaryGrantPayload{
-		UserID:    body.UserID,
-		Scope:     body.Scope,
-		ExpiresAt: body.ExpiresAt,
-		Reason:    body.Reason,
+		PrincipalUrn: body.PrincipalUrn,
+		Scope:        body.Scope,
+		ExpiresAt:    body.ExpiresAt,
+		Reason:       body.Reason,
 	}
 	if body.Selector != nil {
 		v.Selector = marshalSelectorRequestBodyToAccessSelector(body.Selector)
@@ -1893,13 +1893,11 @@ func BuildCreateTemporaryGrantPayload(accessCreateTemporaryGrantBody string, acc
 
 // BuildListTemporaryGrantsPayload builds the payload for the access
 // listTemporaryGrants endpoint from CLI flags.
-func BuildListTemporaryGrantsPayload(accessListTemporaryGrantsUserID string, accessListTemporaryGrantsIncludeExpired string, accessListTemporaryGrantsSessionToken string) (*access.ListTemporaryGrantsPayload, error) {
+func BuildListTemporaryGrantsPayload(accessListTemporaryGrantsPrincipalUrn string, accessListTemporaryGrantsIncludeExpired string, accessListTemporaryGrantsSessionToken string) (*access.ListTemporaryGrantsPayload, error) {
 	var err error
-	var userID *string
+	var principalUrn string
 	{
-		if accessListTemporaryGrantsUserID != "" {
-			userID = &accessListTemporaryGrantsUserID
-		}
+		principalUrn = accessListTemporaryGrantsPrincipalUrn
 	}
 	var includeExpired bool
 	{
@@ -1917,7 +1915,7 @@ func BuildListTemporaryGrantsPayload(accessListTemporaryGrantsUserID string, acc
 		}
 	}
 	v := &access.ListTemporaryGrantsPayload{}
-	v.UserID = userID
+	v.PrincipalUrn = principalUrn
 	v.IncludeExpired = includeExpired
 	v.SessionToken = sessionToken
 

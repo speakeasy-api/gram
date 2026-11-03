@@ -9772,9 +9772,7 @@ func EncodeListTemporaryGrantsRequest(encoder func(*http.Request) goahttp.Encode
 			req.Header.Set("Gram-Session", head)
 		}
 		values := req.URL.Query()
-		if p.UserID != nil {
-			values.Add("user_id", *p.UserID)
-		}
+		values.Add("principal_urn", p.PrincipalUrn)
 		values.Add("include_expired", fmt.Sprintf("%v", p.IncludeExpired))
 		req.URL.RawQuery = values.Encode()
 		return nil
@@ -11601,7 +11599,6 @@ func unmarshalAccessibleSkillResponseBodyToAccessAccessibleSkill(v *AccessibleSk
 func unmarshalTemporaryGrantResponseBodyToAccessTemporaryGrant(v *TemporaryGrantResponseBody) *access.TemporaryGrant {
 	res := &access.TemporaryGrant{
 		ID:               *v.ID,
-		UserID:           *v.UserID,
 		PrincipalUrn:     *v.PrincipalUrn,
 		Scope:            *v.Scope,
 		ExpiresAt:        *v.ExpiresAt,

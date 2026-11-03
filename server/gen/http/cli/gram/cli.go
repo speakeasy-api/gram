@@ -506,7 +506,7 @@ func ParseEndpoint(
 		accessCreateTemporaryGrantSessionTokenFlag = accessCreateTemporaryGrantFlags.String("session-token", "", "")
 
 		accessListTemporaryGrantsFlags              = flag.NewFlagSet("list-temporary-grants", flag.ExitOnError)
-		accessListTemporaryGrantsUserIDFlag         = accessListTemporaryGrantsFlags.String("user-id", "", "")
+		accessListTemporaryGrantsPrincipalUrnFlag   = accessListTemporaryGrantsFlags.String("principal-urn", "REQUIRED", "")
 		accessListTemporaryGrantsIncludeExpiredFlag = accessListTemporaryGrantsFlags.String("include-expired", "", "")
 		accessListTemporaryGrantsSessionTokenFlag   = accessListTemporaryGrantsFlags.String("session-token", "", "")
 
@@ -10369,7 +10369,7 @@ func ParseEndpoint(
 				data, err = accessc.BuildCreateTemporaryGrantPayload(*accessCreateTemporaryGrantBodyFlag, *accessCreateTemporaryGrantSessionTokenFlag)
 			case "list-temporary-grants":
 				endpoint = c.ListTemporaryGrants()
-				data, err = accessc.BuildListTemporaryGrantsPayload(*accessListTemporaryGrantsUserIDFlag, *accessListTemporaryGrantsIncludeExpiredFlag, *accessListTemporaryGrantsSessionTokenFlag)
+				data, err = accessc.BuildListTemporaryGrantsPayload(*accessListTemporaryGrantsPrincipalUrnFlag, *accessListTemporaryGrantsIncludeExpiredFlag, *accessListTemporaryGrantsSessionTokenFlag)
 			case "renew-temporary-grant":
 				endpoint = c.RenewTemporaryGrant()
 				data, err = accessc.BuildRenewTemporaryGrantPayload(*accessRenewTemporaryGrantBodyFlag, *accessRenewTemporaryGrantSessionTokenFlag)
@@ -13825,10 +13825,10 @@ func accessUsage() {
 	fmt.Fprintln(os.Stderr, `    list-challenge-buckets: List authz challenges grouped into time-based burst buckets. Consecutive challenges with the same dimensions within a 10-minute window are collapsed into a single bucket.`)
 	fmt.Fprintln(os.Stderr, `    resolve-challenge: Dismiss one or more denied authz challenges, or atomically add one custom role to the denied user before recording the challenges as resolved.`)
 	fmt.Fprintln(os.Stderr, `    list-identity-access: List the MCP servers and skills an identity is authorized to reach, through grants on the user or on any role they hold, less any blocking grant that withdraws the same scope. Authorization only: plugin membership decides what a resource is distributed through, not who may use it, so it does not widen this list.`)
-	fmt.Fprintln(os.Stderr, `    create-temporary-grant: Give one organization member a scope on a resource or activity boundary until a deadline, without changing their roles. Once the deadline passes the grant stops authorizing new requests, with no role change or sign-out. Fails with a conflict when the member already holds the same grant permanently, or temporarily (renew that one instead). An expired grant for the same boundary is restarted. Requires org:admin. An administrator may give themselves temporary access; the audit event records that it was self-granted. Session only: the grant is attributed to the person who gave it.`)
-	fmt.Fprintln(os.Stderr, `    list-temporary-grants: List temporary grants with their boundary, deadline and remaining time, soonest deadline first. Organization administrators see every member's grants; anyone else sees only their own. Each active grant says which other grants the member holds that would still give the same access once it ends. Revoked grants are removed and appear only in the audit log.`)
+	fmt.Fprintln(os.Stderr, `    create-temporary-grant: Give one principal (a member, role, agent, or everyone) a scope on a resource or activity boundary until a deadline, without changing role assignments. Once the deadline passes the grant stops authorizing new requests, with no role change or sign-out. Fails with a conflict when the principal already holds the same grant permanently, or temporarily (renew that one instead). An expired grant for the same boundary is restarted. Requires org:admin. An administrator may give themselves temporary access; the audit event records that it was self-granted. Session only: the grant is attributed to the person who gave it.`)
+	fmt.Fprintln(os.Stderr, `    list-temporary-grants: List the temporary grants given to one principal, with their boundary, deadline and remaining time, soonest deadline first. Organization administrators may list any principal's grants; anyone else may list only grants given to themselves (their own user:<id>). Each active grant says which other grants would still give the principal the same access once it ends. Revoked grants are removed and appear only in the audit log.`)
 	fmt.Fprintln(os.Stderr, `    renew-temporary-grant: Move an active temporary grant's deadline, earlier or later. The boundary cannot change: to widen access, give a new grant. An expired grant cannot be renewed; give it again instead. Requires org:admin.`)
-	fmt.Fprintln(os.Stderr, `    revoke-temporary-grant: End an active temporary grant before its deadline. Only this grant ends: a permanent grant is never removed this way, and the member's roles and other grants giving the same access are left alone. Requires org:admin, except that a member may end a grant given to themselves.`)
+	fmt.Fprintln(os.Stderr, `    revoke-temporary-grant: End an active temporary grant before its deadline. Only this grant ends: a permanent grant is never removed this way, and the principal's roles and other grants giving the same access are left alone. Requires org:admin, except that a member may end a grant given directly to themselves.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s access COMMAND --help\n", os.Args[0])
@@ -14738,7 +14738,7 @@ func accessCreateTemporaryGrantUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Give one organization member a scope on a resource or activity boundary until a deadline, without changing their roles. Once the deadline passes the grant stops authorizing new requests, with no role change or sign-out. Fails with a conflict when the member already holds the same grant permanently, or temporarily (renew that one instead). An expired grant for the same boundary is restarted. Requires org:admin. An administrator may give themselves temporary access; the audit event records that it was self-granted. Session only: the grant is attributed to the person who gave it.`)
+	fmt.Fprintln(os.Stderr, `Give one principal (a member, role, agent, or everyone) a scope on a resource or activity boundary until a deadline, without changing role assignments. Once the deadline passes the grant stops authorizing new requests, with no role change or sign-out. Fails with a conflict when the principal already holds the same grant permanently, or temporarily (renew that one instead). An expired grant for the same boundary is restarted. Requires org:admin. An administrator may give themselves temporary access; the audit event records that it was self-granted. Session only: the grant is attributed to the person who gave it.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
@@ -14746,29 +14746,29 @@ func accessCreateTemporaryGrantUsage() {
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access create-temporary-grant --body '{\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"reason\": \"aaa\",\n      \"scope\": \"abc123\",\n      \"selector\": {\n         \"client_type\": \"service_account\",\n         \"connection_owner\": \"abc123\",\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\",\n         \"upstream_client\": \"abc123\"\n      },\n      \"user_id\": \"abc123\"\n   }' --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access create-temporary-grant --body '{\n      \"expires_at\": \"1970-01-01T00:00:01Z\",\n      \"principal_urn\": \"abc123\",\n      \"reason\": \"aaa\",\n      \"scope\": \"abc123\",\n      \"selector\": {\n         \"client_type\": \"service_account\",\n         \"connection_owner\": \"abc123\",\n         \"disposition\": \"destructive\",\n         \"project_id\": \"abc123\",\n         \"resource_id\": \"abc123\",\n         \"resource_kind\": \"mcp\",\n         \"server_url\": \"https://example.com/foo\",\n         \"tool\": \"abc123\",\n         \"upstream_client\": \"abc123\"\n      }\n   }' --session-token \"abc123\"")
 }
 
 func accessListTemporaryGrantsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] access list-temporary-grants", os.Args[0])
-	fmt.Fprint(os.Stderr, " -user-id STRING")
+	fmt.Fprint(os.Stderr, " -principal-urn STRING")
 	fmt.Fprint(os.Stderr, " -include-expired BOOL")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `List temporary grants with their boundary, deadline and remaining time, soonest deadline first. Organization administrators see every member's grants; anyone else sees only their own. Each active grant says which other grants the member holds that would still give the same access once it ends. Revoked grants are removed and appear only in the audit log.`)
+	fmt.Fprintln(os.Stderr, `List the temporary grants given to one principal, with their boundary, deadline and remaining time, soonest deadline first. Organization administrators may list any principal's grants; anyone else may list only grants given to themselves (their own user:<id>). Each active grant says which other grants would still give the principal the same access once it ends. Revoked grants are removed and appear only in the audit log.`)
 
 	// Flags list
-	fmt.Fprintln(os.Stderr, `    -user-id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -principal-urn STRING: `)
 	fmt.Fprintln(os.Stderr, `    -include-expired BOOL: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-temporary-grants --user-id \"abc123\" --include-expired false --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "access list-temporary-grants --principal-urn \"abc123\" --include-expired false --session-token \"abc123\"")
 }
 
 func accessRenewTemporaryGrantUsage() {
@@ -14800,7 +14800,7 @@ func accessRevokeTemporaryGrantUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `End an active temporary grant before its deadline. Only this grant ends: a permanent grant is never removed this way, and the member's roles and other grants giving the same access are left alone. Requires org:admin, except that a member may end a grant given to themselves.`)
+	fmt.Fprintln(os.Stderr, `End an active temporary grant before its deadline. Only this grant ends: a permanent grant is never removed this way, and the principal's roles and other grants giving the same access are left alone. Requires org:admin, except that a member may end a grant given directly to themselves.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

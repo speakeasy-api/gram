@@ -11,6 +11,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -29,15 +30,24 @@ func seedTemporaryGrantRecipient(t *testing.T, ctx context.Context, conn *pgxpoo
 	return urn.NewPrincipal(urn.PrincipalTypeUser, temporaryGrantRecipientID)
 }
 
+func userPrincipalURN(userID string) string {
+	return urn.NewPrincipal(urn.PrincipalTypeUser, userID).String()
+}
+
 func inOneHour() string {
 	return time.Now().Add(time.Hour).UTC().Format(time.RFC3339)
 }
 
 func createTemporaryGrant(t *testing.T, ctx context.Context, ti *testInstance, userID string, scope authz.Scope, reason *string) *gen.TemporaryGrant {
 	t.Helper()
+	return createTemporaryGrantFor(t, ctx, ti, userPrincipalURN(userID), scope, reason)
+}
+
+func createTemporaryGrantFor(t *testing.T, ctx context.Context, ti *testInstance, principalURN string, scope authz.Scope, reason *string) *gen.TemporaryGrant {
+	t.Helper()
 	grant, err := ti.service.CreateTemporaryGrant(ctx, &gen.CreateTemporaryGrantPayload{
 		SessionToken: nil,
-		UserID:       userID,
+		PrincipalUrn: principalURN,
 		Scope:        string(scope),
 		Selector:     nil,
 		ExpiresAt:    inOneHour(),
@@ -102,11 +112,11 @@ func TestTemporaryGrant_AuthorizesUntilDeadline(t *testing.T) {
 
 	require.Empty(t, listPrincipalGrants(t, ctx, ti.conn, orgID, urn.NewPrincipal(urn.PrincipalTypeUser, temporaryGrantRecipientID)), "management reads ignore the expired row")
 
-	active, err := ti.service.ListTemporaryGrants(ctx, &gen.ListTemporaryGrantsPayload{SessionToken: nil, UserID: nil, IncludeExpired: false})
+	active, err := ti.service.ListTemporaryGrants(ctx, &gen.ListTemporaryGrantsPayload{SessionToken: nil, PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), IncludeExpired: false})
 	require.NoError(t, err)
 	require.Empty(t, active.Grants)
 
-	all, err := ti.service.ListTemporaryGrants(ctx, &gen.ListTemporaryGrantsPayload{SessionToken: nil, UserID: nil, IncludeExpired: true})
+	all, err := ti.service.ListTemporaryGrants(ctx, &gen.ListTemporaryGrantsPayload{SessionToken: nil, PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), IncludeExpired: true})
 	require.NoError(t, err)
 	require.Len(t, all.Grants, 1)
 	require.Equal(t, "expired", all.Grants[0].Status)
@@ -140,14 +150,14 @@ func TestTemporaryGrant_ConflictsWithExistingGrant(t *testing.T) {
 	recipient := seedTemporaryGrantRecipient(t, ctx, ti.conn, orgID)
 
 	seedGrant(t, ctx, ti.conn, orgID, recipient, authz.ScopeLogRead, authz.WildcardResource)
-	_, err := ti.service.CreateTemporaryGrant(ctx, &gen.CreateTemporaryGrantPayload{SessionToken: nil, UserID: temporaryGrantRecipientID, Scope: string(authz.ScopeLogRead), Selector: nil, ExpiresAt: inOneHour(), Reason: nil})
+	_, err := ti.service.CreateTemporaryGrant(ctx, &gen.CreateTemporaryGrantPayload{SessionToken: nil, PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), Scope: string(authz.ScopeLogRead), Selector: nil, ExpiresAt: inOneHour(), Reason: nil})
 	requireOopsCode(t, err, oops.CodeConflict)
 
 	rows := listPrincipalGrants(t, ctx, ti.conn, orgID, recipient)
 	require.Len(t, rows, 1)
 
 	createTemporaryGrant(t, ctx, ti, temporaryGrantRecipientID, authz.ScopeChatRead, nil)
-	_, err = ti.service.CreateTemporaryGrant(ctx, &gen.CreateTemporaryGrantPayload{SessionToken: nil, UserID: temporaryGrantRecipientID, Scope: string(authz.ScopeChatRead), Selector: nil, ExpiresAt: inOneHour(), Reason: nil})
+	_, err = ti.service.CreateTemporaryGrant(ctx, &gen.CreateTemporaryGrantPayload{SessionToken: nil, PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), Scope: string(authz.ScopeChatRead), Selector: nil, ExpiresAt: inOneHour(), Reason: nil})
 	requireOopsCode(t, err, oops.CodeConflict)
 }
 
@@ -171,7 +181,7 @@ func TestTemporaryGrant_PermanentWriteTakesOverTemporaryRow(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 	require.Len(t, listPrincipalGrants(t, ctx, ti.conn, orgID, recipient), 1, "revoking never removes a permanent grant")
 
-	listed, err := ti.service.ListTemporaryGrants(ctx, &gen.ListTemporaryGrantsPayload{SessionToken: nil, UserID: nil, IncludeExpired: true})
+	listed, err := ti.service.ListTemporaryGrants(ctx, &gen.ListTemporaryGrantsPayload{SessionToken: nil, PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), IncludeExpired: true})
 	require.NoError(t, err)
 	require.Empty(t, listed.Grants)
 }
@@ -326,7 +336,7 @@ func TestTemporaryGrant_RequiresOrgAdmin(t *testing.T) {
 
 	memberCtx := authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgRead, orgID))
 
-	_, err := ti.service.CreateTemporaryGrant(memberCtx, &gen.CreateTemporaryGrantPayload{SessionToken: nil, UserID: authCtx.UserID, Scope: string(authz.ScopeChatWrite), Selector: nil, ExpiresAt: inOneHour(), Reason: nil})
+	_, err := ti.service.CreateTemporaryGrant(memberCtx, &gen.CreateTemporaryGrantPayload{SessionToken: nil, PrincipalUrn: userPrincipalURN(authCtx.UserID), Scope: string(authz.ScopeChatWrite), Selector: nil, ExpiresAt: inOneHour(), Reason: nil})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	_, err = ti.service.RenewTemporaryGrant(memberCtx, &gen.RenewTemporaryGrantPayload{SessionToken: nil, ID: mine.ID, ExpiresAt: inOneHour()})
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -335,11 +345,10 @@ func TestTemporaryGrant_RequiresOrgAdmin(t *testing.T) {
 	_, err = ti.service.RevokeTemporaryGrant(memberCtx, &gen.RevokeTemporaryGrantPayload{SessionToken: nil, ID: uuid.NewString()})
 	requireOopsCode(t, err, oops.CodeForbidden)
 
-	other := temporaryGrantRecipientID
-	_, err = ti.service.ListTemporaryGrants(memberCtx, &gen.ListTemporaryGrantsPayload{SessionToken: nil, UserID: &other, IncludeExpired: false})
+	_, err = ti.service.ListTemporaryGrants(memberCtx, &gen.ListTemporaryGrantsPayload{SessionToken: nil, PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), IncludeExpired: false})
 	requireOopsCode(t, err, oops.CodeForbidden)
 
-	own, err := ti.service.ListTemporaryGrants(memberCtx, &gen.ListTemporaryGrantsPayload{SessionToken: nil, UserID: nil, IncludeExpired: false})
+	own, err := ti.service.ListTemporaryGrants(memberCtx, &gen.ListTemporaryGrantsPayload{SessionToken: nil, PrincipalUrn: userPrincipalURN(authCtx.UserID), IncludeExpired: false})
 	require.NoError(t, err)
 	require.Len(t, own.Grants, 1, "a member sees only their own grants")
 	require.Equal(t, mine.ID, own.Grants[0].ID)
@@ -366,14 +375,14 @@ func TestTemporaryGrant_TenantIsolation(t *testing.T) {
 	otherCtx := contextvalues.SetAuthContext(ctx, &otherAuthCtx)
 	otherCtx = authztest.WithAdminGrants(otherCtx)
 
-	listed, err := ti.service.ListTemporaryGrants(otherCtx, &gen.ListTemporaryGrantsPayload{SessionToken: nil, UserID: nil, IncludeExpired: true})
+	listed, err := ti.service.ListTemporaryGrants(otherCtx, &gen.ListTemporaryGrantsPayload{SessionToken: nil, PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), IncludeExpired: true})
 	require.NoError(t, err)
 	require.Empty(t, listed.Grants)
 	_, err = ti.service.RevokeTemporaryGrant(otherCtx, &gen.RevokeTemporaryGrantPayload{SessionToken: nil, ID: grant.ID})
 	requireOopsCode(t, err, oops.CodeNotFound)
 	_, err = ti.service.RenewTemporaryGrant(otherCtx, &gen.RenewTemporaryGrantPayload{SessionToken: nil, ID: grant.ID, ExpiresAt: inOneHour()})
 	requireOopsCode(t, err, oops.CodeNotFound)
-	_, err = ti.service.CreateTemporaryGrant(otherCtx, &gen.CreateTemporaryGrantPayload{SessionToken: nil, UserID: temporaryGrantRecipientID, Scope: string(authz.ScopeChatRead), Selector: nil, ExpiresAt: inOneHour(), Reason: nil})
+	_, err = ti.service.CreateTemporaryGrant(otherCtx, &gen.CreateTemporaryGrantPayload{SessionToken: nil, PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), Scope: string(authz.ScopeChatRead), Selector: nil, ExpiresAt: inOneHour(), Reason: nil})
 	requireOopsCode(t, err, oops.CodeNotFound)
 
 	otherPrincipals := []urn.Principal{urn.NewPrincipal(urn.PrincipalTypeUser, temporaryGrantRecipientID)}
@@ -391,15 +400,15 @@ func TestTemporaryGrant_Validation(t *testing.T) {
 	seedTemporaryGrantRecipient(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
 
 	cases := map[string]*gen.CreateTemporaryGrantPayload{
-		"blocklist scope":   {UserID: temporaryGrantRecipientID, Scope: string(authz.ScopeMCPBlockedConnect), ExpiresAt: inOneHour()},
-		"auth client scope": {UserID: temporaryGrantRecipientID, Scope: string(authz.ScopeMCPAuth), ExpiresAt: inOneHour()},
-		"risk policy scope": {UserID: temporaryGrantRecipientID, Scope: string(authz.ScopeRiskPolicyBypass), ExpiresAt: inOneHour()},
-		"root scope":        {UserID: temporaryGrantRecipientID, Scope: string(authz.ScopeRoot), ExpiresAt: inOneHour()},
-		"org admin scope":   {UserID: temporaryGrantRecipientID, Scope: string(authz.ScopeOrgAdmin), ExpiresAt: inOneHour()},
-		"too short":         {UserID: temporaryGrantRecipientID, Scope: string(authz.ScopeChatRead), ExpiresAt: time.Now().Add(time.Minute).UTC().Format(time.RFC3339)},
-		"too long":          {UserID: temporaryGrantRecipientID, Scope: string(authz.ScopeChatRead), ExpiresAt: time.Now().Add(31 * 24 * time.Hour).UTC().Format(time.RFC3339)},
-		"past":              {UserID: temporaryGrantRecipientID, Scope: string(authz.ScopeChatRead), ExpiresAt: time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)},
-		"wrong selector":    {UserID: temporaryGrantRecipientID, Scope: string(authz.ScopeChatRead), ExpiresAt: inOneHour(), Selector: &gen.Selector{ResourceKind: "mcp", ResourceID: "*"}},
+		"blocklist scope":   {PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), Scope: string(authz.ScopeMCPBlockedConnect), ExpiresAt: inOneHour()},
+		"auth client scope": {PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), Scope: string(authz.ScopeMCPAuth), ExpiresAt: inOneHour()},
+		"risk policy scope": {PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), Scope: string(authz.ScopeRiskPolicyBypass), ExpiresAt: inOneHour()},
+		"root scope":        {PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), Scope: string(authz.ScopeRoot), ExpiresAt: inOneHour()},
+		"org admin scope":   {PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), Scope: string(authz.ScopeOrgAdmin), ExpiresAt: inOneHour()},
+		"too short":         {PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), Scope: string(authz.ScopeChatRead), ExpiresAt: time.Now().Add(time.Minute).UTC().Format(time.RFC3339)},
+		"too long":          {PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), Scope: string(authz.ScopeChatRead), ExpiresAt: time.Now().Add(31 * 24 * time.Hour).UTC().Format(time.RFC3339)},
+		"past":              {PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), Scope: string(authz.ScopeChatRead), ExpiresAt: time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)},
+		"wrong selector":    {PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), Scope: string(authz.ScopeChatRead), ExpiresAt: inOneHour(), Selector: &gen.Selector{ResourceKind: "mcp", ResourceID: "*"}},
 	}
 	for name, payload := range cases {
 		_, err := ti.service.CreateTemporaryGrant(ctx, payload)
@@ -407,8 +416,32 @@ func TestTemporaryGrant_Validation(t *testing.T) {
 		requireOopsCode(t, err, oops.CodeBadRequest)
 	}
 
-	_, err := ti.service.CreateTemporaryGrant(ctx, &gen.CreateTemporaryGrantPayload{UserID: "local_not_a_member", Scope: string(authz.ScopeChatRead), ExpiresAt: inOneHour()})
-	requireOopsCode(t, err, oops.CodeNotFound)
+	invalidPrincipals := map[string]string{
+		"malformed": "not-a-principal",
+		"email":     "email:investigator@test.com",
+		"api key":   urn.NewAPIKeyPrincipal(uuid.New()).String(),
+		"system":    urn.NewSystemPrincipal("issuer-metadata-refresh").String(),
+		"role kind": "role:" + uuid.NewString(),
+	}
+	for name, principal := range invalidPrincipals {
+		_, err := ti.service.CreateTemporaryGrant(ctx, &gen.CreateTemporaryGrantPayload{PrincipalUrn: principal, Scope: string(authz.ScopeChatRead), ExpiresAt: inOneHour()})
+		require.Error(t, err, name)
+		requireOopsCode(t, err, oops.CodeBadRequest)
+	}
+
+	_, err := ti.service.ListTemporaryGrants(ctx, &gen.ListTemporaryGrantsPayload{PrincipalUrn: "not-a-principal", IncludeExpired: false})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
+	missingPrincipals := []string{
+		userPrincipalURN("local_not_a_member"),
+		urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+uuid.NewString()).String(),
+		urn.NewPrincipal(urn.PrincipalTypeAgent, uuid.NewString()).String(),
+	}
+	for _, principal := range missingPrincipals {
+		_, err = ti.service.CreateTemporaryGrant(ctx, &gen.CreateTemporaryGrantPayload{PrincipalUrn: principal, Scope: string(authz.ScopeChatRead), ExpiresAt: inOneHour()})
+		require.Error(t, err, principal)
+		requireOopsCode(t, err, oops.CodeNotFound)
+	}
 
 	rows, err := accessrepo.New(ti.conn).ListTemporaryGrants(ctx, accessrepo.ListTemporaryGrantsParams{OrganizationID: authCtx.ActiveOrganizationID, PrincipalUrn: "", IncludeExpired: true})
 	require.NoError(t, err)
@@ -426,10 +459,10 @@ func TestTemporaryGrant_ListedInIdentityAccess(t *testing.T) {
 	server := seedRemoteMCPServer(t, ctx, ti.conn, orgID)
 
 	grant, err := ti.service.CreateTemporaryGrant(ctx, &gen.CreateTemporaryGrantPayload{
-		UserID:    temporaryGrantRecipientID,
-		Scope:     string(authz.ScopeMCPConnect),
-		Selector:  &gen.Selector{ResourceKind: "mcp", ResourceID: server},
-		ExpiresAt: inOneHour(),
+		PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID),
+		Scope:        string(authz.ScopeMCPConnect),
+		Selector:     &gen.Selector{ResourceKind: "mcp", ResourceID: server},
+		ExpiresAt:    inOneHour(),
 	})
 	require.NoError(t, err)
 
@@ -455,10 +488,10 @@ func TestTemporaryGrant_SurvivesAudienceReplacement(t *testing.T) {
 	server := seedRemoteMCPServer(t, ctx, ti.conn, orgID)
 
 	_, err := ti.service.CreateTemporaryGrant(ctx, &gen.CreateTemporaryGrantPayload{
-		UserID:    temporaryGrantRecipientID,
-		Scope:     string(authz.ScopeMCPConnect),
-		Selector:  &gen.Selector{ResourceKind: "mcp", ResourceID: server},
-		ExpiresAt: inOneHour(),
+		PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID),
+		Scope:        string(authz.ScopeMCPConnect),
+		Selector:     &gen.Selector{ResourceKind: "mcp", ResourceID: server},
+		ExpiresAt:    inOneHour(),
 	})
 	require.NoError(t, err)
 
@@ -466,8 +499,97 @@ func TestTemporaryGrant_SurvivesAudienceReplacement(t *testing.T) {
 	require.NoError(t, authz.ReplaceResourceAudience(ctx, ti.conn, resource, nil))
 	require.NoError(t, authz.ReplaceGrantsForResource(ctx, ti.conn, authz.ResourceGrant{Resource: resource, Principals: nil, Selector: nil}))
 
-	listed, err := ti.service.ListTemporaryGrants(ctx, &gen.ListTemporaryGrantsPayload{SessionToken: nil, UserID: nil, IncludeExpired: false})
+	listed, err := ti.service.ListTemporaryGrants(ctx, &gen.ListTemporaryGrantsPayload{SessionToken: nil, PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), IncludeExpired: false})
 	require.NoError(t, err)
 	require.Len(t, listed.Grants, 1, "replacing a resource audience leaves the temporary grant in place")
 	require.Equal(t, recipient.String(), listed.Grants[0].PrincipalUrn)
+}
+
+func TestTemporaryGrant_RolePrincipal(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+	seedTemporaryGrantRecipient(t, ctx, ti.conn, orgID)
+	seedRole(t, ctx, ti.conn, orgID, mockRole("role_investigators", "Investigators", "investigators", ""))
+	seedRoleAssignment(t, ctx, ti.conn, orgID, temporaryGrantRecipientID, mockMember("", "membership_investigator", "workos_investigator", "investigators"))
+	role := seededRolePrincipal(t, ctx, ti.conn, orgID, "investigators")
+
+	allowed, err := authz.GrantsAuthorize(loadMemberGrants(t, ctx, ti.conn, orgID, temporaryGrantRecipientID), chatReadCheck(orgID))
+	require.NoError(t, err)
+	require.False(t, allowed)
+
+	grant := createTemporaryGrantFor(t, ctx, ti, role.String(), authz.ScopeChatRead, nil)
+	require.Equal(t, role.String(), grant.PrincipalUrn)
+	require.Empty(t, grant.OtherAccess, "the role holds no other grant giving the same access")
+
+	allowed, err = authz.GrantsAuthorize(loadMemberGrants(t, ctx, ti.conn, orgID, temporaryGrantRecipientID), chatReadCheck(orgID))
+	require.NoError(t, err)
+	require.True(t, allowed, "members holding the role get the access while the grant is active")
+
+	byRole, err := ti.service.ListTemporaryGrants(ctx, &gen.ListTemporaryGrantsPayload{SessionToken: nil, PrincipalUrn: role.String(), IncludeExpired: false})
+	require.NoError(t, err)
+	require.Len(t, byRole.Grants, 1)
+	require.Equal(t, grant.ID, byRole.Grants[0].ID)
+
+	byMember, err := ti.service.ListTemporaryGrants(ctx, &gen.ListTemporaryGrantsPayload{SessionToken: nil, PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), IncludeExpired: false})
+	require.NoError(t, err)
+	require.Empty(t, byMember.Grants, "listing by member shows only grants given to the member directly")
+
+	record, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionAccessTemporaryGrantCreate, grant.ID)
+	require.NoError(t, err)
+	metadata, err := audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, role.String(), metadata["recipient_urn"])
+	require.Equal(t, false, metadata["self_granted"])
+
+	expireTemporaryGrant(t, ctx, ti.conn, grant.ID)
+	allowed, err = authz.GrantsAuthorize(loadMemberGrants(t, ctx, ti.conn, orgID, temporaryGrantRecipientID), chatReadCheck(orgID))
+	require.NoError(t, err)
+	require.False(t, allowed, "the role's members lose the access at the deadline")
+}
+
+func TestTemporaryGrant_AgentPrincipal(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+
+	agent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: orgID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "Incident responder",
+	})
+	require.NoError(t, err)
+	principal := urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String())
+
+	grant := createTemporaryGrantFor(t, ctx, ti, principal.String(), authz.ScopeChatRead, nil)
+	require.Equal(t, principal.String(), grant.PrincipalUrn)
+
+	principals, err := authz.ResolveAgentPrincipals(ctx, ti.conn, orgID, principal)
+	require.NoError(t, err)
+	grants, err := authz.LoadGrants(ctx, ti.conn, orgID, principals)
+	require.NoError(t, err)
+	allowed, err := authz.GrantsAuthorize(grants, chatReadCheck(orgID))
+	require.NoError(t, err)
+	require.True(t, allowed, "the agent gets the access while the grant is active")
+
+	suspended, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: orgID,
+		OwnerUserID:    authCtx.UserID,
+		Name:           "Paused agent",
+	})
+	require.NoError(t, err)
+	_, err = agentsrepo.New(ti.conn).SuspendAgent(ctx, agentsrepo.SuspendAgentParams{OrganizationID: orgID, ID: suspended.ID})
+	require.NoError(t, err)
+	_, err = ti.service.CreateTemporaryGrant(ctx, &gen.CreateTemporaryGrantPayload{
+		PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeAgent, suspended.ID.String()).String(),
+		Scope:        string(authz.ScopeChatRead),
+		ExpiresAt:    inOneHour(),
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
 }
