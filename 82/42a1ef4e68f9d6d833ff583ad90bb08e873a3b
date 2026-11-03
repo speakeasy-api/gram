@@ -1,0 +1,20 @@
+.github/workflows/dashboard-nginx.yaml
+  h_2620cc60cfd1e9 1-40
+client/admin/nginx.conf
+  h_2620cc60cfd1e9 16
+client/dashboard/nginx.conf
+  h_2620cc60cfd1e9 16
+client/test_nginx_logging.py
+  h_2620cc60cfd1e9 31-32,63-68,96-101
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "8242a1ef4e68f9d6d833ff583ad90bb08e873a3b",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
