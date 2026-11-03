@@ -133,7 +133,8 @@ func PrepareThreadContext(ctx context.Context, descriptor ToolDescriptor, env to
 // DescriptorForContext returns an independent schema for this request. Shared
 // descriptors and schemas are never mutated, including across concurrent callers.
 func DescriptorForContext(ctx context.Context, descriptor ToolDescriptor) ToolDescriptor {
-	if automatic, ok := contextvalues.GetAssistantPrincipal(ctx); (ok && automatic.ThreadID != uuid.Nil) || descriptor.ThreadContext == "" {
+	automatic, hasPrincipal := contextvalues.GetAssistantPrincipal(ctx)
+	if (hasPrincipal && automatic.ThreadID != uuid.Nil) || descriptor.ThreadContext == "" {
 		return descriptor
 	}
 	var schema map[string]any
@@ -151,8 +152,11 @@ func DescriptorForContext(ctx context.Context, descriptor ToolDescriptor) ToolDe
 	description := "Assistant thread ID to use when no automatic assistant context is available."
 	switch descriptor.ThreadContext {
 	case core.ThreadContextRequired:
-		required, _ := schema["required"].([]any)
-		schema["required"] = append(required, "thread_id")
+		// An assistant-scoped principal keeps working without a thread.
+		if !hasPrincipal {
+			required, _ := schema["required"].([]any)
+			schema["required"] = append(required, "thread_id")
+		}
 	case core.ThreadContextSlackSelf:
 		description += " Required when route_replies is self."
 	case core.ThreadContextWake:

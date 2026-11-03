@@ -234,3 +234,17 @@ func TestDescriptorForContextConcurrent(t *testing.T) {
 		}
 	}
 }
+
+func TestDescriptorForContextThreadlessPrincipalOffersOptionalThread(t *testing.T) {
+	t.Parallel()
+	original := ToolDescriptor{ThreadContext: core.ThreadContextRequired, InputSchema: []byte(`{"type":"object","properties":{},"additionalProperties":false}`)}
+	ctx := contextvalues.SetAssistantPrincipal(t.Context(), contextvalues.AssistantPrincipal{AssistantID: uuid.New()})
+	desc := DescriptorForContext(ctx, original)
+	var schema jsonschema.Schema
+	require.NoError(t, json.Unmarshal(desc.InputSchema, &schema))
+	resolved, err := schema.Resolve(nil)
+	require.NoError(t, err)
+	require.NotNil(t, schema.Properties["thread_id"])
+	require.NoError(t, resolved.Validate(map[string]any{}), "an assistant-scoped principal may omit thread_id")
+	require.NoError(t, resolved.Validate(map[string]any{"thread_id": uuid.NewString()}))
+}
