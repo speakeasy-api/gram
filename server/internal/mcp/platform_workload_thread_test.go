@@ -10,6 +10,8 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
@@ -21,11 +23,12 @@ import (
 )
 
 type workloadThreadProbe struct {
-	calls     int
-	principal contextvalues.AssistantPrincipal
-	actor     urn.Principal
-	project   uuid.UUID
-	chatID    string
+	calls                  int
+	principal              contextvalues.AssistantPrincipal
+	authenticatedAssistant bool
+	actor                  urn.Principal
+	project                uuid.UUID
+	chatID                 string
 }
 
 func (*workloadThreadProbe) Descriptor() core.ToolDescriptor {
@@ -38,7 +41,8 @@ func (*workloadThreadProbe) Descriptor() core.ToolDescriptor {
 
 func (p *workloadThreadProbe) Call(ctx context.Context, env toolconfig.ToolCallEnv, _ io.Reader, wr io.Writer) error {
 	p.calls++
-	p.principal, _ = contextvalues.GetAssistantPrincipal(ctx)
+	p.principal, _ = contextvalues.GetAssistantToolTarget(ctx)
+	_, p.authenticatedAssistant = contextvalues.GetAssistantPrincipal(ctx)
 	p.actor, _ = contextvalues.AuthenticatedActor(ctx)
 	auth, _ := contextvalues.GetAuthContext(ctx)
 	if auth != nil && auth.ProjectID != nil {
@@ -99,15 +103,28 @@ func TestPlatformWorkloadExplicitThreadHTTP(t *testing.T) {
 	// The same token gains access only through existing live agent/owner policy.
 	seedPrincipalGrant(t, t.Context(), f.ti, f.fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, f.agentID.String()), authz.ScopeAssistantRead, assistant.ID.String())
 	seedPrincipalGrant(t, t.Context(), f.ti, f.fx.orgID, urn.NewPrincipal(urn.PrincipalTypeUser, f.fx.userID), authz.ScopeAssistantRead, assistant.ID.String())
+	countBefore, err := audittest.AuditLogCountByAction(t.Context(), f.ti.conn, audit.ActionAssistantToolCall)
+	require.NoError(t, err)
 	response, err := servePlatformHTTP(t, f.ti, slug, body, token)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, response.Code, response.Body.String())
 	require.False(t, jsonToolCallFailed(response.Body.Bytes()), response.Body.String())
 	require.Equal(t, 1, probe.calls)
+	require.False(t, probe.authenticatedAssistant, "explicit selection must not reclassify the authenticated caller")
 	require.Equal(t, contextvalues.AssistantPrincipal{AssistantID: assistant.ID, ThreadID: threadID}, probe.principal)
 	require.Equal(t, urn.NewWorkloadPrincipal(f.issuerID, f.subject), probe.actor, "thread selection must preserve the authenticated workload")
 	require.Equal(t, f.fx.target.ProjectID, probe.project)
 	require.Equal(t, chatID.String(), probe.chatID)
+	countAfter, err := audittest.AuditLogCountByAction(t.Context(), f.ti.conn, audit.ActionAssistantToolCall)
+	require.NoError(t, err)
+	require.Equal(t, countBefore+1, countAfter)
+	record, err := audittest.LatestAuditLogByAction(t.Context(), f.ti.conn, audit.ActionAssistantToolCall)
+	require.NoError(t, err)
+	require.Equal(t, string(urn.PrincipalTypeWorkload), record.ActorType)
+	require.Equal(t, probe.actor.ID, record.ActorID)
+	metadata, err := audittest.DecodeAuditData(record.Metadata)
+	require.NoError(t, err)
+	require.Equal(t, threadID.String(), metadata["thread_id"])
 }
 
 func jsonToolCallFailed(body []byte) bool {

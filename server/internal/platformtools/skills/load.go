@@ -71,7 +71,7 @@ func (t *Load) Descriptor() core.ToolDescriptor {
 }
 
 func (t *Load) Call(ctx context.Context, env toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+	principal, ok := contextvalues.GetAssistantToolTarget(ctx)
 	if !ok {
 		return oops.E(oops.CodeUnauthorized, nil, "skills tools require an assistant principal")
 	}

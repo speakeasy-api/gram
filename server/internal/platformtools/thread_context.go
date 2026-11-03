@@ -35,8 +35,35 @@ func WithThreadFallback(tool PlatformToolExecutor, resolve ThreadContextResolver
 }
 
 func (t *threadFallback) Call(ctx context.Context, env toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	if _, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
-		return callThreadTool(t.PlatformToolExecutor, ctx, env, payload, wr)
+	ctx, env, payload, err := PrepareThreadContext(ctx, t.Descriptor(), env, payload, t.resolve)
+	if err != nil {
+		return err
+	}
+	if _, automatic := contextvalues.GetAssistantPrincipal(ctx); !automatic {
+		if _, selected := contextvalues.GetAssistantToolTarget(ctx); selected && payload != nil {
+			var input map[string]json.RawMessage
+			if err := json.NewDecoder(payload).Decode(&input); err != nil {
+				return fmt.Errorf("decode prepared tool input: %w", err)
+			}
+			delete(input, "thread_id")
+			body, err := json.Marshal(input)
+			if err != nil {
+				return fmt.Errorf("encode prepared tool input: %w", err)
+			}
+			payload = bytes.NewReader(body)
+		}
+	}
+	return callThreadTool(t.PlatformToolExecutor, ctx, env, payload, wr)
+}
+
+// PrepareThreadContext resolves explicit tool targeting without changing caller
+// authentication. Callers can use the returned context for both execution and
+// target attribution. The returned reader preserves the original payload, including
+// thread_id, for gateway schema validation. Only the executor wrapper strips it.
+// Repeated preparation preserves an already selected target.
+func PrepareThreadContext(ctx context.Context, descriptor ToolDescriptor, env toolconfig.ToolCallEnv, payload io.Reader, resolve ThreadContextResolver) (context.Context, toolconfig.ToolCallEnv, io.Reader, error) {
+	if _, ok := contextvalues.GetAssistantToolTarget(ctx); ok || descriptor.ThreadContext == "" {
+		return ctx, env, payload, nil
 	}
 	var body []byte
 	var err error
@@ -44,16 +71,16 @@ func (t *threadFallback) Call(ctx context.Context, env toolconfig.ToolCallEnv, p
 		body, err = io.ReadAll(payload)
 	}
 	if err != nil {
-		return fmt.Errorf("read tool input: %w", err)
+		return ctx, env, nil, fmt.Errorf("read tool input: %w", err)
 	}
 	var input map[string]json.RawMessage
 	if len(body) != 0 {
 		if err := json.Unmarshal(body, &input); err != nil {
-			return fmt.Errorf("decode tool input: %w", err)
+			return ctx, env, nil, fmt.Errorf("decode tool input: %w", err)
 		}
 	}
-	needed := t.Descriptor().ThreadContext == core.ThreadContextRequired
-	switch t.Descriptor().ThreadContext {
+	needed := descriptor.ThreadContext == core.ThreadContextRequired
+	switch descriptor.ThreadContext {
 	case core.ThreadContextRequired:
 		needed = true
 	case core.ThreadContextSlackSelf:
@@ -68,34 +95,29 @@ func (t *threadFallback) Call(ctx context.Context, env toolconfig.ToolCallEnv, p
 		needed = nested.DefinitionSlug == "wake"
 	}
 	if !needed {
-		return callThreadTool(t.PlatformToolExecutor, ctx, env, bytes.NewReader(body), wr)
+		return ctx, env, bytes.NewReader(body), nil
 	}
 	var rawID string
 	if err := json.Unmarshal(input["thread_id"], &rawID); err != nil {
-		return fmt.Errorf("thread_id is required without an assistant principal")
+		return ctx, env, nil, fmt.Errorf("thread_id is required without an assistant principal")
 	}
 	threadID, err := uuid.Parse(rawID)
 	if err != nil || threadID == uuid.Nil {
-		return fmt.Errorf("thread_id must be a non-zero UUID")
+		return ctx, env, nil, fmt.Errorf("thread_id must be a non-zero UUID")
 	}
-	if t.resolve == nil {
-		return fmt.Errorf("explicit thread selection is not configured")
+	if resolve == nil {
+		return ctx, env, nil, fmt.Errorf("explicit thread selection is not configured")
 	}
-	principal, chatID, err := t.resolve(ctx, threadID)
+	principal, chatID, err := resolve(ctx, threadID)
 	if err != nil {
-		return err
+		return ctx, env, nil, err
 	}
 	if principal.ThreadID != threadID || principal.AssistantID == uuid.Nil {
-		return fmt.Errorf("thread resolver returned invalid context")
+		return ctx, env, nil, fmt.Errorf("thread resolver returned invalid context")
 	}
-	ctx = contextvalues.SetAssistantPrincipal(ctx, principal)
+	ctx = contextvalues.SetAssistantToolTarget(ctx, principal)
 	env.GramChatID = chatID
-	delete(input, "thread_id")
-	body, err = json.Marshal(input)
-	if err != nil {
-		return fmt.Errorf("encode tool input: %w", err)
-	}
-	return callThreadTool(t.PlatformToolExecutor, ctx, env, bytes.NewReader(body), wr)
+	return ctx, env, bytes.NewReader(body), nil
 }
 
 // DescriptorForContext returns an independent schema for this request. Shared

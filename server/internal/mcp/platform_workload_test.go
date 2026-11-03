@@ -6,6 +6,8 @@ import (
 	"net/url"
 	"testing"
 
+	"github.com/google/uuid"
+
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
@@ -78,4 +80,34 @@ func TestPlatformWorkloadLiveRevocation(t *testing.T) {
 			require.Error(t, err, "live revocation must reject an already issued token")
 		})
 	}
+}
+
+// Missing or invalid assertions must not reveal whether a target project exists
+// in the issuer's organization. Authenticated issuance still checks tenancy.
+func TestPlatformWorkloadUnauthenticatedProjectRefusals(t *testing.T) {
+	t.Parallel()
+	f := newWorkloadGrantFixture(t)
+	foreign := newWorkloadGrantFixture(t)
+	f.sharedIssuer(t)
+	organizationIssuer := createOrganizationIssuer(t, f.fixtureContext(t), f.ti, f.fx.orgID)
+	setIssuerMode(t, f.fixtureContext(t), f.ti, organizationIssuer, "shared", "")
+	resource := platformtools.PlatformToolsetURL(f.ti.serverURL, platformtools.AssistantsPlatformToolsetSlug)
+	for _, issuerID := range []uuid.UUID{f.fx.target.UserSessionIssuerID, organizationIssuer} {
+		for _, assertion := range []string{"", "invalid-assertion"} {
+			var wantCode int
+			var wantBody string
+			for i, projectID := range []uuid.UUID{f.fx.target.ProjectID, uuid.New(), foreign.fx.target.ProjectID} {
+				response := sharedToken(t, t.Context(), f.ti, issuerID.String(), url.Values{
+					"grant_type": {workloadGrantJWTBearer}, "assertion": {assertion}, "resource": {resource}, "project_id": {projectID.String()},
+				})
+				require.Equal(t, http.StatusBadRequest, response.Code, response.Body.String())
+				if i == 0 {
+					wantCode, wantBody = response.Code, response.Body.String()
+				}
+				require.Equal(t, wantCode, response.Code)
+				require.JSONEq(t, wantBody, response.Body.String(), "unauthenticated refusal must not disclose project tenancy")
+			}
+		}
+	}
+	require.Empty(t, f.workloadSessions(t))
 }

@@ -178,7 +178,7 @@ func callerAssistantThread(ctx context.Context, router ThreadRouter, env toolcon
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return bgtriggers.AssistantThread{}, fmt.Errorf("route_replies %q requires a project", routeRepliesSelf)
 	}
-	principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+	principal, ok := contextvalues.GetAssistantToolTarget(ctx)
 	if !ok {
 		return bgtriggers.AssistantThread{}, fmt.Errorf("route_replies %q is only available to assistants", routeRepliesSelf)
 	}

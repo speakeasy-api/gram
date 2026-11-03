@@ -76,9 +76,21 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 		require.NotEmpty(t, b.Workload.ServiceAccount)
 		// Built-ins exchange for their own resource and request explicit thread
 		// targets when no automatic context is available.
-		require.Contains(t, string(b.MCPJSON), "/platform/mcp/assistants")
-		require.Contains(t, string(b.MCPJSON), "builtin-assistants")
-		require.Contains(t, string(b.MCPJSON), `"project_id":"`+r.ProjectID.String()+`"`)
+		var document struct {
+			Servers map[string]struct {
+				URL  string `json:"url"`
+				Auth struct {
+					Resource   string            `json:"resource"`
+					Extensions map[string]string `json:"extensions"`
+				} `json:"auth"`
+			} `json:"mcpServers"`
+		}
+		require.NoError(t, json.Unmarshal(b.MCPJSON, &document))
+		builtin, ok := document.Servers["builtin-assistants"]
+		require.True(t, ok)
+		require.Equal(t, "https://api.example/platform/mcp/assistants", builtin.URL)
+		require.Equal(t, builtin.URL, builtin.Auth.Resource)
+		require.Equal(t, map[string]string{"project_id": r.ProjectID.String()}, builtin.Auth.Extensions)
 		require.NotContains(t, string(b.AgentsMD), "human-delegated sign-in are unavailable")
 		return b
 	}

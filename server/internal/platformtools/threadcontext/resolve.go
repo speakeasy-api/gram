@@ -17,6 +17,9 @@ import (
 // Assistant access uses the same resource-aware read check as sending an
 // assistant message. The caller's identity and grants remain authoritative;
 // selecting a thread does not authenticate as its assistant or creator.
+// Dashboard chat ownership gates human message ingress, not machine tool
+// targeting. Keep the existing tool authorization rather than adding chat-owner
+// or assistant-write requirements to target selection.
 func Resolve(ctx context.Context, db *pgxpool.Pool, authorizer *authz.Engine, threadID uuid.UUID) (contextvalues.AssistantPrincipal, string, error) {
 	var empty contextvalues.AssistantPrincipal
 	authCtx, ok := contextvalues.GetAuthContext(ctx)

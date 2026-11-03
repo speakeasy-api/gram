@@ -52,7 +52,9 @@ const (
 // minted with. It carries no authorizer: a workload records no approving human,
 // which is where it differs from an agent credential.
 type workloadSessionCredential struct {
-	// Set only by the resource-bound builtin contract after validating its marker.
+	// Set by the resource-bound builtin contract at issuance and, after marker
+	// validation, at consumption. Admission derives the ceiling from live agent
+	// policy and intersects it with live agent and owner authority.
 	DerivesPolicyAtAdmission bool
 	DelegatedGrants          []byte
 	DelegatedGrantsVersion   int32

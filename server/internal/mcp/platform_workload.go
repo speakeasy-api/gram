@@ -57,9 +57,27 @@ func (s *Service) handlePlatformWorkloadGrant(ctx context.Context, w http.Respon
 	if refused, err := s.refuseUnservedWorkloadGrant(ctx, w, r, extractClientCredentials(r), logger); refused {
 		return err
 	}
+	assertion := r.PostForm.Get(oauthwire.ParamAssertion)
+	if assertion == "" {
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "assertion is required")
+	}
 	projectID, err := uuid.Parse(r.PostForm.Get("project_id"))
 	shared := issuer.authorizationServer
-	if err != nil || len(r.PostForm["project_id"]) != 1 || projectID == uuid.Nil || (shared.projectID != uuid.Nil && shared.projectID != projectID) {
+	if err != nil || len(r.PostForm["project_id"]) != 1 || projectID == uuid.Nil {
+		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, "a project in the authorization issuer's tenancy is required")
+	}
+	urls, err := shared.urls()
+	if err != nil {
+		return fmt.Errorf("exchange workload platform: %w", err)
+	}
+	// Authenticate before looking up project existence or tenancy. The requested
+	// project still selects project-tier workload admission; tenancy is checked
+	// below before any credential can be issued.
+	presented, err := admitWorkloadAssertion(ctx, s.workloadGrant, workloadTenancy{OrganizationID: issuer.organizationID, ProjectID: projectID, UserSessionIssuerID: shared.issuerID}, []string{urls.Issuer, urls.Token}, assertion)
+	if err != nil {
+		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, err)
+	}
+	if shared.projectID != uuid.Nil && shared.projectID != projectID {
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidTarget, "a project in the authorization issuer's tenancy is required")
 	}
 	project, err := projectsrepo.New(s.db).GetProjectByID(ctx, projectID)
@@ -68,20 +86,6 @@ func (s *Service) handlePlatformWorkloadGrant(ctx context.Context, w http.Respon
 	}
 	if err != nil {
 		return fmt.Errorf("exchange workload platform: %w", err)
-	}
-	assertion := r.PostForm.Get(oauthwire.ParamAssertion)
-	if assertion == "" {
-		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidRequest, "assertion is required")
-	}
-	urls, err := shared.urls()
-	if err != nil {
-		return fmt.Errorf("exchange workload platform: %w", err)
-	}
-	// The target project has been checked against the authorization server tenancy.
-	// Use it for project-tier admission, including organization-owned issuers.
-	presented, err := admitWorkloadAssertion(ctx, s.workloadGrant, workloadTenancy{OrganizationID: issuer.organizationID, ProjectID: projectID, UserSessionIssuerID: shared.issuerID}, []string{urls.Issuer, urls.Token}, assertion)
-	if err != nil {
-		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, err)
 	}
 	version := runtimepolicy.IssuedDelegatedPolicyVersion
 	grants, err := encodePlatformWorkloadPolicy(projectID, version)

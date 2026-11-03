@@ -70,7 +70,7 @@ func (t *RecallTool) Descriptor() core.ToolDescriptor {
 }
 
 func (t *RecallTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+	principal, ok := contextvalues.GetAssistantToolTarget(ctx)
 	if !ok {
 		return oops.E(oops.CodeUnauthorized, nil, "memory tools require an assistant principal")
 	}

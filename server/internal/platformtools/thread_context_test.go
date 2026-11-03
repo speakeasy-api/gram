@@ -43,12 +43,49 @@ func TestGatewayThreadContextSchemas(t *testing.T) {
 	}
 }
 
+func TestPrepareThreadContextPreservesValidationPayloadAndIdentity(t *testing.T) {
+	t.Parallel()
+	target := contextvalues.AssistantPrincipal{AssistantID: uuid.New(), ThreadID: uuid.New()}
+	original := `{"thread_id":"` + target.ThreadID.String() + `","content":"keep"}`
+	calls := 0
+	resolve := func(context.Context, uuid.UUID) (contextvalues.AssistantPrincipal, string, error) {
+		calls++
+		return target, "selected-chat", nil
+	}
+	descriptor := ToolDescriptor{ThreadContext: core.ThreadContextRequired}
+	ctx, env, payload, err := PrepareThreadContext(t.Context(), descriptor, toolconfig.ToolCallEnv{}, strings.NewReader(original), resolve)
+	require.NoError(t, err)
+	body, err := io.ReadAll(payload)
+	require.NoError(t, err)
+	require.Equal(t, original, string(body), "gateway validation still needs thread_id")
+	_, authenticated := contextvalues.GetAssistantPrincipal(ctx)
+	require.False(t, authenticated)
+	selected, ok := contextvalues.GetAssistantToolTarget(ctx)
+	require.True(t, ok)
+	require.Equal(t, target, selected)
+	require.Equal(t, "selected-chat", env.GramChatID)
+	executor := WithThreadFallback(threadTestExecutor{descriptor: descriptor, call: func(callCtx context.Context, callEnv toolconfig.ToolCallEnv, reader io.Reader, _ io.Writer) error {
+		_, authenticated := contextvalues.GetAssistantPrincipal(callCtx)
+		require.False(t, authenticated)
+		got, ok := contextvalues.GetAssistantToolTarget(callCtx)
+		require.True(t, ok)
+		require.Equal(t, target, got)
+		require.Equal(t, env.GramChatID, callEnv.GramChatID)
+		body, err := io.ReadAll(reader)
+		require.NoError(t, err)
+		require.JSONEq(t, `{"content":"keep"}`, string(body))
+		return nil
+	}}, resolve)
+	require.NoError(t, executor.Call(ctx, env, strings.NewReader(original), io.Discard))
+	require.Equal(t, 1, calls, "prepared selection must not resolve twice")
+}
+
 func TestThreadFallbackAutomatic(t *testing.T) {
 	t.Parallel()
 	principal := contextvalues.AssistantPrincipal{AssistantID: uuid.New(), ThreadID: uuid.New()}
 	ctx := contextvalues.SetAssistantPrincipal(t.Context(), principal)
 	tool := WithThreadFallback(threadTestExecutor{descriptor: ToolDescriptor{ThreadContext: core.ThreadContextRequired}, call: func(ctx context.Context, env toolconfig.ToolCallEnv, r io.Reader, _ io.Writer) error {
-		got, ok := contextvalues.GetAssistantPrincipal(ctx)
+		got, ok := contextvalues.GetAssistantToolTarget(ctx)
 		require.True(t, ok)
 		require.Equal(t, principal, got)
 		require.Equal(t, "automatic-chat", env.GramChatID)
@@ -76,7 +113,7 @@ func TestThreadFallbackExplicit(t *testing.T) {
 		gotAuth, ok := contextvalues.GetAuthContext(ctx)
 		require.True(t, ok)
 		require.Same(t, auth, gotAuth)
-		got, ok := contextvalues.GetAssistantPrincipal(ctx)
+		got, ok := contextvalues.GetAssistantToolTarget(ctx)
 		require.True(t, ok)
 		require.Equal(t, principal, got)
 		require.Equal(t, "selected-chat", env.GramChatID)
@@ -138,7 +175,7 @@ func TestThreadFallbackConditional(t *testing.T) {
 func TestThreadFallbackConcurrent(t *testing.T) {
 	t.Parallel()
 	tool := WithThreadFallback(threadTestExecutor{descriptor: ToolDescriptor{ThreadContext: core.ThreadContextRequired}, call: func(ctx context.Context, env toolconfig.ToolCallEnv, _ io.Reader, _ io.Writer) error {
-		principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+		principal, ok := contextvalues.GetAssistantToolTarget(ctx)
 		if !ok || env.GramChatID != principal.ThreadID.String() {
 			return errors.New("thread context leaked across calls")
 		}

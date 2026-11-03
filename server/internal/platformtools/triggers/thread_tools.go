@@ -59,7 +59,7 @@ func (t *UnsubscribeThread) Call(ctx context.Context, env toolconfig.ToolCallEnv
 	if err != nil {
 		return err
 	}
-	principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+	principal, ok := contextvalues.GetAssistantToolTarget(ctx)
 	if !ok {
 		return fmt.Errorf("unsubscribing from a thread requires an assistant principal")
 	}

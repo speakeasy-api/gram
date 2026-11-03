@@ -88,6 +88,14 @@ func TestResolvePlatformThreadContextAuthorization(t *testing.T) {
 	var notFound *oops.ShareableError
 	require.ErrorAs(t, err, &notFound)
 	require.Equal(t, oops.CodeNotFound, notFound.Code)
+	wrongOrganization := contextvalues.SetAuthContext(allowedCtx, &contextvalues.AuthContext{ActiveOrganizationID: "org_other_thread_test", ProjectID: &project.ID, UserID: auth.UserID})
+	_, _, err = service.resolvePlatformThreadContext(wrongOrganization, firstThread)
+	require.ErrorAs(t, err, &notFound)
+	require.Equal(t, oops.CodeNotFound, notFound.Code)
+	_, _, err = service.resolvePlatformThreadContext(allowedCtx, uuid.Nil)
+	var badRequest *oops.ShareableError
+	require.ErrorAs(t, err, &badRequest)
+	require.Equal(t, oops.CodeBadRequest, badRequest.Code)
 	_, _, err = service.resolvePlatformThreadContext(ctx, firstThread)
 	var unauthorized *oops.ShareableError
 	require.ErrorAs(t, err, &unauthorized)

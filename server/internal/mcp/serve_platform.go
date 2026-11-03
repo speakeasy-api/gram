@@ -482,20 +482,25 @@ func (s *Service) callPlatformToolsetTool(
 	}
 
 	requestBodyBytes := params.Arguments
+	// Resolve selection once so execution and audit use the same target. This
+	// does not change caller identity; retain the original bytes for validation.
+	ctx, toolCallEnv, _, err := platformtools.PrepareThreadContext(ctx, desc, toolCallEnv, bytes.NewReader(requestBodyBytes), s.resolvePlatformThreadContext)
+	if err != nil {
+		return nil, platformToolCallError(ctx, logger, err, attr.SlogToolName(params.Name))
+	}
 	requestBytes := int64(len(requestBodyBytes))
 	var outputBytes int64
 	platformToolsetSlug := toolset.Slug
-	chatID := chatIDHeader
+	chatID := toolCallEnv.GramChatID
 	if chatID == "" {
-		if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
+		if principal, ok := contextvalues.GetAssistantToolTarget(ctx); ok {
 			chatID = principal.ThreadID.String()
 		}
 	}
 
-	// Platform toolsets are runtime-only, so every call here is assistant-
-	// initiated; record the durable audit trail entry on dispatch, regardless
-	// of how the tool execution turns out.
-	if principal, ok := contextvalues.GetAssistantPrincipal(ctx); ok {
+	// Record dispatch for automatic or explicitly selected assistant targets,
+	// retaining the authenticated caller as actor regardless of tool outcome.
+	if principal, ok := contextvalues.GetAssistantToolTarget(ctx); ok {
 		recordAssistantToolCallAudit(ctx, logger, s.auditLogger, s.db, assistantToolCallAudit{
 			organizationID: authCtx.ActiveOrganizationID,
 			projectID:      *authCtx.ProjectID,

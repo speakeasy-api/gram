@@ -347,7 +347,7 @@ func (t *ListTriggers) Call(ctx context.Context, _ toolconfig.ToolCallEnv, paylo
 	var selfTargetRef string
 	var selfCorrelationID string
 	if t.assistantSelfScoped {
-		principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+		principal, ok := contextvalues.GetAssistantToolTarget(ctx)
 		if !ok {
 			return fmt.Errorf("assistant list-triggers requires an assistant principal")
 		}
@@ -485,7 +485,7 @@ func (t *ConfigureTrigger) upsertTrigger(
 		return t.upsertWake(ctx, authCtx, params)
 	}
 	if t.assistantSelfScoped {
-		principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+		principal, ok := contextvalues.GetAssistantToolTarget(ctx)
 		if !ok {
 			return nil, fmt.Errorf("assistant configure-trigger requires an assistant principal")
 		}
@@ -641,7 +641,7 @@ func (t *ConfigureTrigger) upsertWake(
 	authCtx *contextvalues.AuthContext,
 	params configureTriggerParams,
 ) (*configureTriggerResult, error) {
-	principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+	principal, ok := contextvalues.GetAssistantToolTarget(ctx)
 	if !ok {
 		return nil, fmt.Errorf("wake triggers require an assistant principal")
 	}

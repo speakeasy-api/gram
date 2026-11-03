@@ -28,8 +28,12 @@ func TestPlatformWorkloadResourceExact(t *testing.T) {
 
 func TestPlatformWorkloadMarkerBindsProject(t *testing.T) {
 	t.Parallel()
-	a, err := encodePlatformWorkloadPolicy(uuid.New(), runtimepolicy.IssuedDelegatedPolicyVersion)
+	projectID := uuid.New()
+	a, err := encodePlatformWorkloadPolicy(projectID, runtimepolicy.IssuedDelegatedPolicyVersion)
 	require.NoError(t, err)
+	again, err := encodePlatformWorkloadPolicy(projectID, runtimepolicy.IssuedDelegatedPolicyVersion)
+	require.NoError(t, err)
+	require.Equal(t, a, again, "the same project and policy version must produce a stable marker")
 	b, err := encodePlatformWorkloadPolicy(uuid.New(), runtimepolicy.IssuedDelegatedPolicyVersion)
 	require.NoError(t, err)
 	require.NotEqual(t, a, b, "persisted project cannot be retargeted without invalidating its marker")

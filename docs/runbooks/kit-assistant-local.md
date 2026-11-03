@@ -17,8 +17,8 @@ Before starting, obtain:
 - The resource's persisted user-session issuer UUID and advertised OAuth issuer.
   These must identify the same issuer; an unrelated UUID will not work.
 
-Built-in Platform MCP machine authentication is not supported by this local
-composition. Do not substitute a human token or an inference bearer.
+Built-in Platform MCP toolsets use resource-bound workload authentication in
+this local composition. Do not substitute a human token or an inference bearer.
 
 For a fresh worktree, initialize the development environment:
 
