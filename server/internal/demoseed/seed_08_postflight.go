@@ -156,6 +156,21 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			fail:  postflightMessage(func(n int64) bool { return n != 0 }, "network ingress rows remain"),
 		},
 		read("http tools", &toolCount, byProject(s.q.PostflightCountHTTPTools)),
+		{
+			what:  "organizational memory sessions",
+			count: byProject(s.q.MemoryCountRemembered),
+			fail:  postflightMessage(func(n int64) bool { return n == 0 }, "expected remembered Organizational Memory sessions"),
+		},
+		{
+			what:  "organizational memory memos",
+			count: byProject(s.q.MemoryCountMemos),
+			fail:  postflightMustEqual(int64(len(memoryMemos)), "expected one row per demo memo, found %d"),
+		},
+		{
+			what:  "organizational memory digests",
+			count: byProject(s.q.MemoryCountDigests),
+			fail:  postflightMessage(func(n int64) bool { return n == 0 }, "expected Organizational Memory digests"),
+		},
 
 		// Killswitch aggregate counts are exact: six headers, two successor
 		// versions, eight complete selected snapshots, one expiry marker, and
