@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -376,7 +377,7 @@ func TestCompleteRemoteLogin_RetryFailuresKeepTheirOwnCode(t *testing.T) {
 	t.Run("a removed connection is not a refusal", func(t *testing.T) {
 		t.Parallel()
 		ctx, fx, rec, login := begin(t, "attempt-retry-removed")
-		_, err := fx.ti.conn.Exec(ctx, `UPDATE remote_session_clients SET deleted_at = now() WHERE id = $1`, fx.clients[0].ID)
+		_, err := repo.New(fx.ti.conn).DeleteRemoteSessionClient(ctx, repo.DeleteRemoteSessionClientParams{ID: fx.clients[0].ID, ProjectID: uuid.NullUUID{UUID: fx.parent.ProjectID, Valid: true}})
 		require.NoError(t, err)
 		require.Error(t, callback(ctx, fx, "error=invalid_target&state="+url.QueryEscape(login)))
 		rowFor(t, rec, mcpconnectionattempts.CodeConnectionChanged)
