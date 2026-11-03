@@ -693,3 +693,8 @@ func signedSlackHeaders(t *testing.T, body []byte, signingSecret string) http.He
 	headers.Set("X-Slack-Signature", "v0="+hex.EncodeToString(mac.Sum(nil)))
 	return headers
 }
+
+func TestSlackInitialLoadingMessage(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, []string{"Thinking…"}, slackInitialLoadingMessages)
+}

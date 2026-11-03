@@ -12,6 +12,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/chat"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	assistantidentityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
+	assistantsrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
@@ -1668,4 +1669,31 @@ func TestListChats_NumMessagesIgnoresOtherProjectRows(t *testing.T) {
 	require.NoError(t, err)
 	require.WithinDuration(t, early.Add(time.Minute), lastMessageAt, 0,
 		"a later sibling-project stamp must not move last_message_timestamp")
+}
+
+func TestListChatsSpeakeasySlackSurface(t *testing.T) {
+	t.Parallel()
+	ti := newTestChatService(t)
+	ctx := grantOrgAdminWithChatRead(t, initSessionCtx(t, ti))
+	slackChat := seedChatWithSource(t, ctx, ti, "ext-slack", "assistants")
+	ordinaryChat := seedChatWithSource(t, ctx, ti, "ext-assistant", "assistants")
+	require.NoError(t, assistantsrepo.New(ti.conn).UpsertAssistantChat(ctx, assistantsrepo.UpsertAssistantChatParams{
+		ChatID: slackChat, ProjectID: ti.projectID, OrganizationID: ti.orgID, UserID: pgtype.Text{}, Title: pgtype.Text{}, SessionSurface: conv.ToPGText("speakeasy-slack"),
+	}))
+	sources, err := ti.service.ListSources(ctx, &gen.ListSourcesPayload{})
+	require.NoError(t, err)
+	require.ElementsMatch(t, []string{"assistants", "speakeasy-slack"}, sources.Sources)
+	for _, tc := range []struct {
+		source string
+		id     uuid.UUID
+	}{{"speakeasy-slack", slackChat}, {"assistants", ordinaryChat}} {
+		payload := defaultPayload()
+		payload.Source = &tc.source
+		result, err := ti.service.ListChats(ctx, payload)
+		require.NoError(t, err)
+		require.Equal(t, 1, result.Total)
+		require.Len(t, result.Chats, 1)
+		require.Equal(t, tc.id.String(), result.Chats[0].ID)
+		require.Equal(t, &tc.source, result.Chats[0].Source)
+	}
 }

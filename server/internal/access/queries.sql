@@ -1956,3 +1956,25 @@ WHERE id = @id
 -- Test fixture: a digest of the whole stored row, so a test can prove it was
 -- not touched without reading any credential value.
 SELECT md5(row_to_json(s)::text) AS row_digest FROM remote_sessions s WHERE s.id = @id;
+-- name: ListManagedAssistantAgentIDs :many
+-- The requested agents that are currently bound to a project's managed
+-- assistant. Only these agents may hold organization-wide read policy; every
+-- other agent has org:read filtered out of its runtime policy.
+SELECT aab.agent_id::uuid AS agent_id
+FROM assistant_agent_bindings AS aab
+JOIN project_managed_assistants AS pma
+  ON pma.project_id = aab.project_id
+  AND pma.assistant_id = aab.assistant_id
+JOIN assistants
+  ON assistants.id = aab.assistant_id
+  AND assistants.project_id = aab.project_id
+  AND assistants.organization_id = aab.organization_id
+  AND assistants.deleted IS FALSE
+JOIN agents
+  ON agents.id = aab.agent_id
+  AND agents.organization_id = aab.organization_id
+  AND agents.project_id = aab.project_id
+  AND agents.deleted IS FALSE
+WHERE aab.organization_id = @organization_id
+  AND aab.deleted IS FALSE
+  AND aab.agent_id = ANY(@agent_ids::uuid[]);

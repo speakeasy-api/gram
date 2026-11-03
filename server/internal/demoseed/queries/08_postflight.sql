@@ -576,6 +576,11 @@ WHERE organization_id = @org_id::text AND project_id = @project_id::uuid
 SELECT count(*) FROM mcp_server_auth_clients
 WHERE organization_id = @org_id::text AND deleted IS FALSE;
 
+-- name: PostflightCountMCPReviews :one
+-- The MCP reviews queue needs its one seeded request awaiting a decision.
+SELECT count(*) FROM mcp_approval_requests
+WHERE organization_id = @org_id::text AND deleted IS FALSE AND status = 'requested';
+
 -- name: PostflightCountApprovals :one
 -- The Tool approvals tab needs its four seeded approval requests: pending,
 -- used, denied and expired.

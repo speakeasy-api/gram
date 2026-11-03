@@ -17,6 +17,7 @@ func TestNeedsClaudeTurnUsage(t *testing.T) {
 	require.False(t, needsClaudeTurnUsage(ptr("cursor"), nil))
 	require.False(t, needsClaudeTurnUsage(ptr("codex"), nil))
 	require.False(t, needsClaudeTurnUsage(nil, ptr("codex")))
+	require.False(t, needsClaudeTurnUsage(ptr("speakeasy-slack"), nil))
 	require.True(t, needsClaudeTurnUsage(ptr("claude-code"), nil))
 	require.True(t, needsClaudeTurnUsage(ptr("litellm"), ptr("claude-code")))
 	require.False(t, needsClaudeTurnUsage(ptr("litellm"), ptr("codex")))

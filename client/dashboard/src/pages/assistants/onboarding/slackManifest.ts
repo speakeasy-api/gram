@@ -352,6 +352,14 @@ export function buildSlackManifest(
   if (input.webhookUrl && unfurlDomains.length > 0) {
     features.unfurl_domains = unfurlDomains;
   }
+  // The Home tab is published by Speakeasy on app_home_opened, which only
+  // arrives over the event_subscriptions webhook. Without one, leave it off so
+  // Slack doesn't show a Home tab that spins forever.
+  features.app_home = {
+    home_tab_enabled: Boolean(input.webhookUrl),
+    messages_tab_enabled: true,
+    messages_tab_read_only_enabled: false,
+  };
 
   const manifest: Record<string, unknown> = {
     _metadata: { major_version: 1, minor_version: 1 },

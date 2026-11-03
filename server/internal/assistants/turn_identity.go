@@ -17,6 +17,10 @@ import (
 // fail the event terminally instead of retrying it.
 var ErrTurnIdentity = errors.New("assistant turn identity rejected")
 
+// ErrSlackSenderUnlinked means a Speakeasy Slack app sender is not linked to a
+// Speakeasy user.
+var ErrSlackSenderUnlinked = errors.New("slack sender is not linked to a Speakeasy user")
+
 // wakeIdentityVersionRequester marks wakes that captured their requester when
 // they were scheduled.
 const wakeIdentityVersionRequester = 1
@@ -100,7 +104,7 @@ func selectTurnUser(ctx context.Context, assistant assistantRecord, threadSource
 		if sender != "" {
 			return sender, true, nil
 		}
-	case sourceKindSlack:
+	case sourceKindSlack, sourceKindSpeakeasySlack:
 		team, err := exactField[string](fields, "team_id")
 		if err != nil {
 			return "", false, err
@@ -114,6 +118,11 @@ func selectTurnUser(ctx context.Context, assistant assistantRecord, threadSource
 			if err == nil && user != "" {
 				return user, true, nil
 			}
+		}
+		// The Speakeasy Slack app answers anyone in the workspace, so a turn
+		// must never fall back to the owner's permissions.
+		if source == sourceKindSpeakeasySlack {
+			return "", false, ErrSlackSenderUnlinked
 		}
 	}
 	if assistant.CreatedByUserID == "" {
@@ -154,7 +163,16 @@ func (s *ServiceCore) resolveTurnIdentity(ctx context.Context, assistant assista
 	}
 	switch states[assistant.ID].State {
 	case assistantidentity.NeverConfigured:
-		return turnIdentity{UserID: legacyTurnUserID(assistant, thread, event), AgentBacked: false, HumanKnown: false}, nil
+		if thread.SourceKind != sourceKindSpeakeasySlack {
+			return turnIdentity{UserID: legacyTurnUserID(assistant, thread, event), AgentBacked: false, HumanKnown: false}, nil
+		}
+		// Speakeasy Slack app turns act as the linked sender even without a
+		// dedicated agent.
+		user, err := s.checkedTurnUser(ctx, assistant, thread, event)
+		if err != nil {
+			return turnIdentity{}, err
+		}
+		return turnIdentity{UserID: user, AgentBacked: false, HumanKnown: true}, nil
 	case assistantidentity.Active:
 	default:
 		return turnIdentity{}, fmt.Errorf("%w: assistant agent is not active", ErrTurnIdentity)
@@ -164,11 +182,30 @@ func (s *ServiceCore) resolveTurnIdentity(ctx context.Context, assistant assista
 	if err != nil {
 		return turnIdentity{}, fmt.Errorf("%w: %w", ErrTurnIdentity, err)
 	}
-	if err := assistantidentity.CheckActor(ctx, s.db, s.authz, assistant.OrganizationID, assistant.ProjectID, user); err != nil {
-		if errors.Is(err, assistantidentity.ErrActorIneligible) {
-			return turnIdentity{}, fmt.Errorf("%w: turn user: %w", ErrTurnIdentity, err)
-		}
-		return turnIdentity{}, fmt.Errorf("check turn user: %w", err)
+	if err := s.checkTurnActor(ctx, assistant, user); err != nil {
+		return turnIdentity{}, err
 	}
 	return turnIdentity{UserID: user, AgentBacked: true, HumanKnown: known}, nil
+}
+
+// checkedTurnUser selects the turn user and checks it may act in the project.
+func (s *ServiceCore) checkedTurnUser(ctx context.Context, assistant assistantRecord, thread assistantThreadRecord, event assistantThreadEventRecord) (string, error) {
+	user, _, err := selectTurnUser(ctx, assistant, thread.SourceKind, event, slackrepo.New(s.db).ResolveSlackMappingUser)
+	if err != nil {
+		return "", fmt.Errorf("%w: %w", ErrTurnIdentity, err)
+	}
+	if err := s.checkTurnActor(ctx, assistant, user); err != nil {
+		return "", err
+	}
+	return user, nil
+}
+
+func (s *ServiceCore) checkTurnActor(ctx context.Context, assistant assistantRecord, user string) error {
+	if err := assistantidentity.CheckActor(ctx, s.db, s.authz, assistant.OrganizationID, assistant.ProjectID, user); err != nil {
+		if errors.Is(err, assistantidentity.ErrActorIneligible) {
+			return fmt.Errorf("%w: turn user: %w", ErrTurnIdentity, err)
+		}
+		return fmt.Errorf("check turn user: %w", err)
+	}
+	return nil
 }

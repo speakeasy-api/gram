@@ -14,6 +14,14 @@ const (
 
 	// ChatWrite lets the app send approval requests to approvers as DMs.
 	ChatWrite = "chat:write"
+
+	// AppMentionsRead lets the app receive @mentions, which the project's
+	// assistant answers.
+	AppMentionsRead = "app_mentions:read"
+
+	// IMHistory lets the app receive direct messages sent to it, which the
+	// project's assistant answers.
+	IMHistory = "im:history"
 )
 
 // Directory are the scopes an install cannot connect without.
@@ -22,7 +30,7 @@ var Directory = []string{UsersRead, UsersReadEmail}
 // Requested are the scopes every install asks for. Slack grants scopes at
 // install time only, so a workspace installed before a scope joined this list
 // keeps working without it until an admin reinstalls the app.
-var Requested = []string{UsersRead, UsersReadEmail, ChatWrite}
+var Requested = []string{UsersRead, UsersReadEmail, ChatWrite, AppMentionsRead, IMHistory}
 
 // Missing lists the requested scopes an install has not granted, in the
 // order they are requested.

@@ -634,10 +634,17 @@ RETURNING sd.*, prev.updated_at AS previous_updated_at, resolved.id AS resolved_
 -- retry doesn't unclaim the chat; pre-existing rows with NULL user_id are
 -- backfilled on first owned send so dashboard ownership checks accept the
 -- legitimate owner.
-INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, created_at, updated_at)
-VALUES (@chat_id, @project_id, @organization_id, sqlc.narg('user_id')::TEXT, NULL, @title, NOW(), NOW())
+--
+-- session_surface is the server-derived product surface for sources that the
+-- inference credential alone cannot tell apart (the Speakeasy Slack app runs on
+-- the same assistants runtime as every other assistant). It is stamped from the
+-- persisted thread source kind, never from a request header, and an existing
+-- value is kept.
+INSERT INTO chats (id, project_id, organization_id, user_id, external_user_id, title, session_surface, created_at, updated_at)
+VALUES (@chat_id, @project_id, @organization_id, sqlc.narg('user_id')::TEXT, NULL, @title, sqlc.narg('session_surface')::TEXT, NOW(), NOW())
 ON CONFLICT (id) DO UPDATE SET
   user_id = COALESCE(chats.user_id, EXCLUDED.user_id),
+  session_surface = COALESCE(chats.session_surface, EXCLUDED.session_surface),
   updated_at = NOW();
 
 -- name: UpsertAssistantThread :one

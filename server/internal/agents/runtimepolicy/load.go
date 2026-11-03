@@ -53,8 +53,18 @@ func LoadAgentPolicy(ctx context.Context, db accessrepo.DBTX, organizationID str
 			grants = append(grants, grant)
 		}
 	}
+	if !hasOrganizationRead(grants) {
+		return grants, nil
+	}
 
-	return grants, nil
+	managed, err := managedAssistantAgents(ctx, queries, organizationID, []uuid.UUID{agent.ID})
+	if err != nil {
+		return nil, err
+	}
+	if _, ok := managed[agent.ID]; ok {
+		return grants, nil
+	}
+	return withoutOrganizationRead(grants), nil
 }
 
 // LoadKnownAgentPolicies loads direct runtime-safe policy for agent IDs that a
@@ -124,7 +134,66 @@ func LoadKnownAgentPolicies(ctx context.Context, db accessrepo.DBTX, organizatio
 		}
 	}
 
+	// org:read is only admitted for agents currently bound to a project's
+	// managed assistant; one batched read covers every candidate that holds it.
+	orgReaders := make([]uuid.UUID, 0)
+	for agentID, grants := range policies {
+		if hasOrganizationRead(grants) {
+			orgReaders = append(orgReaders, agentID)
+		}
+	}
+	if len(orgReaders) == 0 {
+		return policies, nil
+	}
+	managed, err := managedAssistantAgents(ctx, queries, organizationID, orgReaders)
+	if err != nil {
+		return nil, err
+	}
+	for _, agentID := range orgReaders {
+		if _, ok := managed[agentID]; !ok {
+			policies[agentID] = withoutOrganizationRead(policies[agentID])
+		}
+	}
+
 	return policies, nil
+}
+
+// managedAssistantAgents returns the subset of agentIDs currently bound to a
+// live project managed assistant in organizationID.
+func managedAssistantAgents(ctx context.Context, queries *accessrepo.Queries, organizationID string, agentIDs []uuid.UUID) (map[uuid.UUID]struct{}, error) {
+	ids, err := queries.ListManagedAssistantAgentIDs(ctx, accessrepo.ListManagedAssistantAgentIDsParams{
+		OrganizationID: organizationID,
+		AgentIds:       agentIDs,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("query managed assistant agents: %w", err)
+	}
+	managed := make(map[uuid.UUID]struct{}, len(ids))
+	for _, id := range ids {
+		managed[id] = struct{}{}
+	}
+	return managed, nil
+}
+
+func hasOrganizationRead(grants []authz.Grant) bool {
+	for _, grant := range grants {
+		if grant.Scope == authz.ScopeOrgRead {
+			return true
+		}
+	}
+	return false
+}
+
+// withoutOrganizationRead drops org:read allows. MCP exclusions and other
+// restrictions are untouched, so they keep narrowing the remaining policy.
+func withoutOrganizationRead(grants []authz.Grant) []authz.Grant {
+	filtered := make([]authz.Grant, 0, len(grants))
+	for _, grant := range grants {
+		if grant.Scope != authz.ScopeOrgRead {
+			filtered = append(filtered, grant)
+		}
+	}
+	return filtered
 }
 
 func normalizeAgentPolicyGrant(row accessrepo.GetPrincipalGrantsRow) (authz.Grant, bool) {

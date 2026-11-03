@@ -368,6 +368,12 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 			count: byOrg(s.q.PostflightCountApprovals),
 			fail:  postflightMustEqual(4, "expected 4 tool approval requests, found %d"),
 		},
+		// The one seeded MCP server review awaiting a decision.
+		{
+			what:  "mcp reviews",
+			count: byOrg(s.q.PostflightCountMCPReviews),
+			fail:  postflightMustEqual(1, "expected 1 requested mcp review, found %d"),
+		},
 		{
 			what: "foreign-org chats",
 			count: func() (int64, error) {

@@ -52,6 +52,46 @@ ON CONFLICT (project_id, target_ref)
 DO NOTHING
 RETURNING *;
 
+-- name: CreateSpeakeasySlackTriggerInstance :one
+INSERT INTO trigger_instances (
+    organization_id,
+    project_id,
+    definition_slug,
+    name,
+    environment_id,
+    target_kind,
+    target_ref,
+    target_display,
+    config_json,
+    status
+) VALUES (
+    @organization_id,
+    @project_id,
+    'speakeasy_slack',
+    @name,
+    NULL,
+    @target_kind,
+    @target_ref,
+    @target_display,
+    @config_json,
+    'active'
+)
+ON CONFLICT (project_id, target_ref)
+  WHERE definition_slug = 'speakeasy_slack' AND status = 'active' AND deleted IS FALSE
+DO NOTHING
+RETURNING *;
+
+-- name: GetSpeakeasySlackTriggerInstance :one
+SELECT *
+FROM trigger_instances
+WHERE project_id = @project_id
+  AND definition_slug = 'speakeasy_slack'
+  AND target_kind = @target_kind
+  AND target_ref = @target_ref
+  AND status = 'active'
+  AND deleted IS FALSE
+LIMIT 1;
+
 -- name: ListTriggerInstances :many
 SELECT *
 FROM trigger_instances ti

@@ -3,13 +3,17 @@ package assistants
 import (
 	"context"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"log/slog"
 	"strings"
 
+	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
@@ -29,6 +33,34 @@ const (
 // images; satisfied by *slackapi.Client.
 type slackImageFetcher interface {
 	FetchImageFile(ctx context.Context, fileID string, token string) (*slackapi.ImageFile, error)
+}
+
+// SpeakeasySlackTokens resolves the bot token of the Slack workspace whose
+// Speakeasy app answers for a project.
+type SpeakeasySlackTokens interface {
+	ProjectBotToken(ctx context.Context, organizationID string, projectID uuid.UUID) (string, error)
+}
+
+// SetSpeakeasySlackTokens wires the token source for Speakeasy Slack app
+// turns.
+func (s *ServiceCore) SetSpeakeasySlackTokens(tokens SpeakeasySlackTokens) {
+	s.speakeasySlack = tokens
+}
+
+// speakeasySlackRouted reports whether a connected workspace routes the
+// Speakeasy Slack app to the assistant's project.
+func (s *ServiceCore) speakeasySlackRouted(ctx context.Context, assistant assistantRecord) (bool, error) {
+	_, err := slackrepo.New(s.db).GetSlackRoutingConnectionByProject(ctx, slackrepo.GetSlackRoutingConnectionByProjectParams{
+		OrganizationID:   assistant.OrganizationID,
+		DefaultProjectID: uuid.NullUUID{UUID: assistant.ProjectID, Valid: true},
+	})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return false, nil
+	}
+	if err != nil {
+		return false, fmt.Errorf("resolve Speakeasy Slack app workspace: %w", err)
+	}
+	return true, nil
 }
 
 // SetSlackImageInlining wires the environment loader and Slack file
@@ -82,7 +114,20 @@ func (s *ServiceCore) slackTriggerToken(ctx context.Context, thread assistantThr
 	if err != nil {
 		return "", fmt.Errorf("load trigger instance for turn image inlining: %w", err)
 	}
-	if instance.ProjectID != thread.ProjectID || !instance.EnvironmentID.Valid {
+	if instance.ProjectID != thread.ProjectID {
+		return "", nil
+	}
+	if instance.DefinitionSlug == sourceKindSpeakeasySlack {
+		if s.speakeasySlack == nil {
+			return "", nil
+		}
+		token, err := s.speakeasySlack.ProjectBotToken(ctx, instance.OrganizationID, instance.ProjectID)
+		if err != nil {
+			return "", fmt.Errorf("resolve Speakeasy Slack app token for turn image inlining: %w", err)
+		}
+		return token, nil
+	}
+	if !instance.EnvironmentID.Valid {
 		return "", nil
 	}
 	envMap, err := s.envLoader.Load(ctx, thread.ProjectID, toolconfig.ID(instance.EnvironmentID.UUID))

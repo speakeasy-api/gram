@@ -138,7 +138,7 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 		// quietly grant them. If the runner is ever moved onto the assistant
 		// runtime, this is where its principal is checked.
 		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
-	case platformtools.ManagedAssistantPlatformToolsetSlug, platformtools.PlatformMCPReadToolsetSlug:
+	case platformtools.ManagedAssistantPlatformToolsetSlug, platformtools.PlatformMCPReadToolsetSlug, platformtools.SpeakeasySlackPlatformToolsetSlug:
 	default:
 		return nil
 	}
@@ -158,6 +158,14 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 
 	if managed.ID != principal.AssistantID {
 		return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
+	}
+
+	// The Speakeasy Slack app toolset is not a rollout variant: the managed
+	// assistant has it alongside whichever variant it is on. Each call
+	// resolves the workspace that routes to the project, and fails when
+	// there is none.
+	if slug == platformtools.SpeakeasySlackPlatformToolsetSlug {
+		return nil
 	}
 
 	// The two managed-only toolsets are rollout variants of each other: an org

@@ -2576,6 +2576,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS trigger_instances_dashboard_target_uniq
 ON trigger_instances (project_id, target_ref)
 WHERE definition_slug = 'dashboard' AND status = 'active' AND deleted IS FALSE;
 
+-- One Speakeasy Slack app trigger routes to each managed assistant.
+CREATE UNIQUE INDEX IF NOT EXISTS trigger_instances_speakeasy_slack_target_uniq
+ON trigger_instances (project_id, target_ref)
+WHERE definition_slug = 'speakeasy_slack' AND status = 'active' AND deleted IS FALSE;
+
 -- trigger_thread_routes records how events on one external conversation (a
 -- trigger correlation id such as a Slack thread) reach a trigger target:
 -- whether the target is subscribed to it, and which of the target's
@@ -7734,11 +7739,15 @@ CREATE TABLE IF NOT EXISTS slack_directory_connections (
   last_sync_failed_at timestamptz,
   -- Store a typed failure code and omit the raw provider response.
   last_error_code TEXT,
+  -- The project whose managed assistant answers mentions and direct messages
+  -- sent to the Speakeasy app in this workspace. NULL leaves the app silent.
+  default_project_id uuid,
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
 
   CONSTRAINT slack_directory_connections_pkey PRIMARY KEY (id),
-  CONSTRAINT slack_directory_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL
+  CONSTRAINT slack_directory_connections_organization_id_fkey FOREIGN KEY (organization_id) REFERENCES organization_metadata (id) ON DELETE SET NULL,
+  CONSTRAINT slack_directory_connections_default_project_id_fkey FOREIGN KEY (default_project_id) REFERENCES projects (id) ON DELETE SET NULL
 );
 
 COMMENT ON COLUMN slack_directory_connections.id IS '@access: confidential';
@@ -7755,12 +7764,25 @@ COMMENT ON COLUMN slack_directory_connections.last_full_sync_generation IS '@acc
 COMMENT ON COLUMN slack_directory_connections.last_full_sync_succeeded_at IS '@access: confidential';
 COMMENT ON COLUMN slack_directory_connections.last_sync_failed_at IS '@access: confidential';
 COMMENT ON COLUMN slack_directory_connections.last_error_code IS '@access: confidential';
+COMMENT ON COLUMN slack_directory_connections.default_project_id IS 'Project whose managed assistant answers the Speakeasy app in this workspace.
+@access: confidential';
 COMMENT ON COLUMN slack_directory_connections.created_at IS '@access: confidential';
 COMMENT ON COLUMN slack_directory_connections.updated_at IS '@access: confidential';
 
 -- Reconnect the same workspace in place; disconnection does not release its key.
 CREATE UNIQUE INDEX IF NOT EXISTS slack_directory_connections_org_team_key
 ON slack_directory_connections (organization_id, slack_team_id);
+
+-- A project answers in at most one workspace, so its assistant's Slack replies
+-- resolve to exactly one bot token.
+CREATE UNIQUE INDEX IF NOT EXISTS slack_directory_connections_default_project_id_key
+ON slack_directory_connections (default_project_id)
+WHERE default_project_id IS NOT NULL;
+
+-- Find the workspace that routes Slack events by team.
+CREATE INDEX IF NOT EXISTS slack_directory_connections_slack_team_id_idx
+ON slack_directory_connections (slack_team_id)
+WHERE default_project_id IS NOT NULL AND disconnected_at IS NULL;
 
 -- Store verified members of the connected workspace. Seeing an external Slack
 -- Connect user in a shared channel does not establish membership. Full syncs

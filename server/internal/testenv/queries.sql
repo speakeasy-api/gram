@@ -2569,3 +2569,9 @@ FROM remote_sessions WHERE id = @id AND deleted;
 
 -- name: GetDeletedRemoteSessionCredentialsFixture :one
 SELECT subject_urn, access_token_encrypted, refresh_token_encrypted FROM remote_sessions WHERE id = @id AND deleted;
+-- name: SetAgentProjectFixture :exec
+-- Moves an existing agent into a project so tests can bind it to a project
+-- managed assistant without recreating the agent.
+UPDATE agents
+SET project_id = @project_id, updated_at = clock_timestamp()
+WHERE organization_id = @organization_id AND id = @id AND deleted IS FALSE;

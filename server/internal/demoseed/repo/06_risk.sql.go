@@ -296,6 +296,72 @@ func (q *Queries) RiskInsertExclusions(ctx context.Context, arg RiskInsertExclus
 	return err
 }
 
+const riskInsertMCPReview = `-- name: RiskInsertMCPReview :exec
+INSERT INTO mcp_approval_requests
+  (id, organization_id, project_id, target_kind, target_raw, target_key,
+   status, created_at, updated_at)
+VALUES
+  ($1, $2, $3, $4, $5, $6,
+   'requested', now() - interval '2 hours', now() - interval '2 hours')
+`
+
+type RiskInsertMCPReviewParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	TargetKind     string
+	TargetRaw      string
+	TargetKey      string
+}
+
+// One MCP server review waiting on an admin, so the MCP reviews queue and the
+// Slack app's Home tab have a request to show. Evidence is left ungathered.
+// The project delete cascades the review and its requesters.
+func (q *Queries) RiskInsertMCPReview(ctx context.Context, arg RiskInsertMCPReviewParams) error {
+	_, err := q.db.Exec(ctx, riskInsertMCPReview,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.TargetKind,
+		arg.TargetRaw,
+		arg.TargetKey,
+	)
+	return err
+}
+
+const riskInsertMCPReviewRequester = `-- name: RiskInsertMCPReviewRequester :exec
+INSERT INTO mcp_approval_request_requesters
+  (id, organization_id, project_id, mcp_approval_request_id, user_id,
+   user_email, note, requested_at, created_at, updated_at)
+VALUES
+  ($1, $2, $3, $4, $5,
+   $6::text, $7::text, now() - interval '2 hours',
+   now() - interval '2 hours', now() - interval '2 hours')
+`
+
+type RiskInsertMCPReviewRequesterParams struct {
+	ID                   uuid.UUID
+	OrganizationID       string
+	ProjectID            uuid.UUID
+	McpApprovalRequestID uuid.UUID
+	UserID               string
+	UserEmail            string
+	Note                 string
+}
+
+func (q *Queries) RiskInsertMCPReviewRequester(ctx context.Context, arg RiskInsertMCPReviewRequesterParams) error {
+	_, err := q.db.Exec(ctx, riskInsertMCPReviewRequester,
+		arg.ID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.McpApprovalRequestID,
+		arg.UserID,
+		arg.UserEmail,
+		arg.Note,
+	)
+	return err
+}
+
 const riskInsertPolicy = `-- name: RiskInsertPolicy :exec
 
 INSERT INTO risk_policies (id, project_id, organization_id, name, policy_type,

@@ -1311,6 +1311,21 @@ func (q *Queries) PostflightIDSlackIdentityMappings(ctx context.Context, orgID s
 	return count, err
 }
 
+const postflightIDSlackbotSession = `-- name: PostflightIDSlackbotSession :one
+SELECT count(*) FROM assistant_threads t
+JOIN chats c ON c.id = t.chat_id AND c.project_id = t.project_id
+WHERE t.project_id = $1::uuid
+  AND t.source_kind = 'speakeasy_slack'
+  AND c.session_surface = 'speakeasy-slack'
+`
+
+func (q *Queries) PostflightIDSlackbotSession(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDSlackbotSession, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDTriggerInstances = `-- name: PostflightIDTriggerInstances :one
 SELECT count(*) FROM trigger_instances
 WHERE organization_id = $1::text AND project_id = $2::uuid AND deleted IS FALSE

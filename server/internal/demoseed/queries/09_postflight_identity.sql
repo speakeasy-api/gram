@@ -707,3 +707,10 @@ WHERE i.organization_id = @org_id::text AND i.id = @issuer_id::uuid
   AND agent_grant.selectors = jsonb_build_object(
     'resource_kind', 'inference', 'resource_id', '*', 'project_id', ag.project_id::text)
   AND owner_grant.selectors = agent_grant.selectors;
+
+-- name: PostflightIDSlackbotSession :one
+SELECT count(*) FROM assistant_threads t
+JOIN chats c ON c.id = t.chat_id AND c.project_id = t.project_id
+WHERE t.project_id = @project_id::uuid
+  AND t.source_kind = 'speakeasy_slack'
+  AND c.session_surface = 'speakeasy-slack';

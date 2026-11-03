@@ -26,9 +26,18 @@ import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { safeExternalHttpUrl } from "@/lib/safe-external-url";
 import { ConfirmDialog } from "@/components/ui/ConfirmDialog";
+import { Label } from "@/components/ui/Label";
+import {
+  Select,
+  SelectContent,
+  SelectItem,
+  SelectTrigger,
+  SelectValue,
+} from "@/components/ui/Select";
 import type { SlackDirectoryConnection } from "@gram/client/models/components/slackdirectoryconnection.js";
 import { useBeginSlackDirectoryConnectionMutation } from "@gram/client/react-query/beginSlackDirectoryConnection.js";
 import { useDisconnectSlackDirectoryConnectionMutation } from "@gram/client/react-query/disconnectSlackDirectoryConnection.js";
+import { useSetSlackDirectoryDefaultProjectMutation } from "@gram/client/react-query/setSlackDirectoryDefaultProject.js";
 import {
   invalidateAllSlackDirectoryConnections,
   useSlackDirectoryConnections,
@@ -74,6 +83,80 @@ function statusLabel(status: SlackDirectoryConnection["status"]): string {
   return "Needs authorization";
 }
 
+const NO_DEFAULT_PROJECT = "none";
+
+// Picks the project whose managed assistant answers @Speakeasy mentions and
+// DMs in one workspace. A project can answer in at most one workspace, so
+// projects already chosen elsewhere are shown but disabled.
+function DefaultProjectSelect({
+  connection,
+  connections,
+  disabled,
+  onChange,
+}: {
+  connection: SlackDirectoryConnection;
+  connections: SlackDirectoryConnection[];
+  disabled: boolean;
+  onChange: (projectId: string | undefined) => void;
+}): JSX.Element {
+  const organization = useOrganization();
+  const projects = [...(organization.projects ?? [])].sort((a, b) =>
+    a.name.localeCompare(b.name),
+  );
+  const current = connection.defaultProjectId ?? NO_DEFAULT_PROJECT;
+  const unavailable =
+    current !== NO_DEFAULT_PROJECT &&
+    !projects.some((project) => project.id === current);
+  const fieldId = `slack-default-project-${connection.id}`;
+  return (
+    <div className="space-y-1 pt-2">
+      <Label htmlFor={fieldId}>Default project</Label>
+      <p className="text-muted-foreground text-xs">
+        Project whose assistant answers @Speakeasy mentions and DMs in this
+        workspace.
+      </p>
+      <Select
+        value={current}
+        disabled={disabled}
+        onValueChange={(value) => {
+          if (value === current) return;
+          onChange(value === NO_DEFAULT_PROJECT ? undefined : value);
+        }}
+      >
+        <SelectTrigger id={fieldId} size="sm" className="min-w-56">
+          <SelectValue />
+        </SelectTrigger>
+        <SelectContent>
+          <SelectItem value={NO_DEFAULT_PROJECT}>None</SelectItem>
+          {projects.map((project) => {
+            const elsewhere = connections.find(
+              (other) =>
+                other.id !== connection.id &&
+                other.defaultProjectId === project.id,
+            );
+            return (
+              <SelectItem
+                key={project.id}
+                value={project.id}
+                disabled={elsewhere !== undefined}
+              >
+                {elsewhere
+                  ? `${project.name} (answers in ${elsewhere.workspaceName || elsewhere.workspaceId})`
+                  : project.name}
+              </SelectItem>
+            );
+          })}
+          {unavailable && (
+            <SelectItem value={current} disabled>
+              Unavailable project
+            </SelectItem>
+          )}
+        </SelectContent>
+      </Select>
+    </div>
+  );
+}
+
 export function SlackWorkspaces(): JSX.Element {
   return (
     <RequireScope scope="org:admin" level="page">
@@ -113,6 +196,15 @@ function SlackWorkspacesContent(): JSX.Element {
     onSuccess: () => {
       setSelected(null);
       toast.success("Slack workspace disconnected");
+      void invalidateAllSlackDirectoryConnections(queryClient);
+    },
+  });
+  const setDefaultProject = useSetSlackDirectoryDefaultProjectMutation({
+    onError: () => {
+      void invalidateAllSlackDirectoryConnections(queryClient);
+    },
+    onSuccess: () => {
+      toast.success("Default project updated");
       void invalidateAllSlackDirectoryConnections(queryClient);
     },
   });
@@ -204,7 +296,9 @@ function SlackWorkspacesContent(): JSX.Element {
           {notice}
         </Alert>
       )}
-      <ApiErrorAlert error={query.error ?? begin.error} />
+      <ApiErrorAlert
+        error={query.error ?? begin.error ?? setDefaultProject.error}
+      />
       {redirectError && <Alert variant="error">{redirectError}</Alert>}
       {query.isError && (
         <Button
@@ -303,6 +397,22 @@ function SlackWorkspacesContent(): JSX.Element {
                       {connectionError(connection.lastErrorCode)}
                     </p>
                   )}
+                  <DefaultProjectSelect
+                    connection={connection}
+                    connections={connections}
+                    disabled={isDemo || setDefaultProject.isPending}
+                    onChange={(projectId) => {
+                      setDefaultProject.mutate({
+                        request: {
+                          setSlackDirectoryDefaultProjectRequestBody: {
+                            id: connection.id,
+                            ...(projectId ? { projectId } : {}),
+                          },
+                        },
+                        security: SESSION_SECURITY,
+                      });
+                    }}
+                  />
                 </div>
               </div>
               <div className="flex flex-wrap items-center gap-2">

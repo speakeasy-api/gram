@@ -37,6 +37,13 @@ describe("formatPlatform", () => {
     expect(formatPlatform("aws-bedrock")).toBe("AWS Bedrock");
   });
 
+  it("separates the Speakeasy Slackbot from other assistant sessions", () => {
+    expect(formatPlatform("speakeasy-slack")).toBe("Speakeasy Slackbot");
+    expect(formatPlatform("speakeasy_slack")).toBe("Speakeasy Slackbot");
+    expect(formatPlatform("assistants")).toBe("Assistants");
+    expect(formatPlatform("slack")).toBe("Slack");
+  });
+
   it("distinguishes Copilot CLI from Microsoft Copilot", () => {
     for (const source of [
       "copilot",

@@ -17,7 +17,9 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgerrcode"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	srv "github.com/speakeasy-api/gram/server/gen/http/slack_directory_connections/server"
@@ -35,6 +37,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"go.opentelemetry.io/otel/trace"
@@ -346,6 +349,14 @@ func (s *Service) Disconnect(ctx context.Context, p *gen.DisconnectPayload) (*ge
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "could not disconnect Slack workspace").LogError(ctx, s.logger)
 	}
+	// A disconnected workspace cannot answer for a project, and keeping the
+	// default would block choosing that project in another workspace.
+	if row.DefaultProjectID.Valid {
+		row, err = queries.SetSlackDirectoryConnectionDefaultProject(ctx, repo.SetSlackDirectoryConnectionDefaultProjectParams{OrganizationID: ac.ActiveOrganizationID, ID: id, DefaultProjectID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "could not clear Slack default project").LogError(ctx, s.logger)
+		}
+	}
 	memberCount, err := queries.CountSlackDirectorySnapshotMembers(ctx, repo.CountSlackDirectorySnapshotMembersParams{OrganizationID: ac.ActiveOrganizationID, ID: id})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "could not count Slack members").LogError(ctx, s.logger)
@@ -370,6 +381,73 @@ func (s *Service) Disconnect(ctx context.Context, p *gen.DisconnectPayload) (*ge
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "could not disconnect Slack workspace").LogError(ctx, s.logger)
+	}
+	return result, nil
+}
+
+// SetDefaultProject chooses the project whose managed assistant answers
+// Speakeasy app mentions and direct messages in a connected workspace.
+func (s *Service) SetDefaultProject(ctx context.Context, p *gen.SetDefaultProjectPayload) (*gen.SlackDirectoryConnection, error) {
+	ac, err := s.authorizeMutation(ctx)
+	if err != nil {
+		return nil, err
+	}
+	id, err := uuid.Parse(p.ID)
+	if err != nil {
+		return nil, oops.C(oops.CodeBadRequest)
+	}
+	projectID := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	if p.ProjectID != nil {
+		parsed, err := uuid.Parse(*p.ProjectID)
+		if err != nil {
+			return nil, oops.E(oops.CodeBadRequest, err, "invalid project ID")
+		}
+		projectID = uuid.NullUUID{UUID: parsed, Valid: true}
+	}
+	tx, err := s.db.Begin(ctx)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "could not update Slack workspace").LogError(ctx, s.logger)
+	}
+	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
+	queries := repo.New(tx)
+	before, err := queries.LockSlackDirectoryConnection(ctx, repo.LockSlackDirectoryConnectionParams{OrganizationID: ac.ActiveOrganizationID, ID: id})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return nil, oops.C(oops.CodeNotFound)
+	}
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "could not read Slack workspace").LogError(ctx, s.logger)
+	}
+	if projectID.Valid {
+		if before.DisconnectedAt.Valid {
+			return nil, oops.E(oops.CodeBadRequest, nil, "Reconnect the workspace before choosing a default project.")
+		}
+		if _, err := projectsrepo.New(tx).GetProjectByIDAndOrganizationID(ctx, projectsrepo.GetProjectByIDAndOrganizationIDParams{ID: projectID.UUID, OrganizationID: ac.ActiveOrganizationID}); err != nil {
+			if errors.Is(err, pgx.ErrNoRows) {
+				return nil, oops.E(oops.CodeBadRequest, nil, "The project does not exist in this organization.")
+			}
+			return nil, oops.E(oops.CodeUnexpected, err, "could not read project").LogError(ctx, s.logger)
+		}
+	}
+	row, err := queries.SetSlackDirectoryConnectionDefaultProject(ctx, repo.SetSlackDirectoryConnectionDefaultProjectParams{OrganizationID: ac.ActiveOrganizationID, ID: id, DefaultProjectID: projectID})
+	if err != nil {
+		if pgErr, ok := errors.AsType[*pgconn.PgError](err); ok && pgErr.Code == pgerrcode.UniqueViolation {
+			return nil, oops.E(oops.CodeConflict, nil, "This project already answers in another Slack workspace. Clear it there first.")
+		}
+		return nil, oops.E(oops.CodeUnexpected, err, "could not update Slack workspace").LogError(ctx, s.logger)
+	}
+	memberCount, err := queries.CountSlackDirectorySnapshotMembers(ctx, repo.CountSlackDirectorySnapshotMembersParams{OrganizationID: ac.ActiveOrganizationID, ID: id})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "could not count Slack members").LogError(ctx, s.logger)
+	}
+	result := s.connectionView(ctx, row)
+	result.MemberCount = memberCount
+	previous := s.connectionView(ctx, before)
+	previous.MemberCount = memberCount
+	if err := s.audit.LogSlackDirectoryConnectionDefaultProject(ctx, tx, audit.LogSlackDirectoryConnectionEvent{OrganizationID: ac.ActiveOrganizationID, Actor: urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID), ActorDisplayName: ac.Email, ConnectionURN: urn.NewSlackDirectoryConnection(row.ID), ConnectionSnapshotBefore: previous, ConnectionSnapshotAfter: result}); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "could not audit Slack default project change").LogError(ctx, s.logger)
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "could not update Slack workspace").LogError(ctx, s.logger)
 	}
 	return result, nil
 }

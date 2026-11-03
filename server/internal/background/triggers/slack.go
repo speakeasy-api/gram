@@ -707,7 +707,7 @@ func slackThreadStatusTarget(event EventEnvelope) (channelID, threadTS string, o
 // tool.
 const slackThinkingStatus = "is thinking…"
 
-var slackInitialLoadingMessages = []string{"Routing…"}
+var slackInitialLoadingMessages = []string{"Thinking…"}
 
 // slackSigningSecretEnv is the environment variable holding the Slack
 // signing secret. Declared as a constant so the name is referenced rather

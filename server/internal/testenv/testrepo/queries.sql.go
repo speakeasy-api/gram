@@ -6426,6 +6426,25 @@ func (q *Queries) SetAgentOwnerLatchTimestampOnlyFixture(ctx context.Context, id
 	return err
 }
 
+const setAgentProjectFixture = `-- name: SetAgentProjectFixture :exec
+UPDATE agents
+SET project_id = $1, updated_at = clock_timestamp()
+WHERE organization_id = $2 AND id = $3 AND deleted IS FALSE
+`
+
+type SetAgentProjectFixtureParams struct {
+	ProjectID      uuid.NullUUID
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+// Moves an existing agent into a project so tests can bind it to a project
+// managed assistant without recreating the agent.
+func (q *Queries) SetAgentProjectFixture(ctx context.Context, arg SetAgentProjectFixtureParams) error {
+	_, err := q.db.Exec(ctx, setAgentProjectFixture, arg.ProjectID, arg.OrganizationID, arg.ID)
+	return err
+}
+
 const setAgentRevokedAndOwnerLatchFixture = `-- name: SetAgentRevokedAndOwnerLatchFixture :exec
 UPDATE agents
 SET suspended_at = NULL,

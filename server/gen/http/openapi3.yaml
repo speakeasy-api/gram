@@ -78015,6 +78015,99 @@ paths:
             x-speakeasy-name-override: listPersonAccounts
             x-speakeasy-react-hook:
                 name: SlackPersonAccounts
+    /rpc/slackDirectoryConnections.setDefaultProject:
+        post:
+            description: Choose the project whose managed assistant answers Speakeasy app mentions and direct messages in a connected workspace. Omit project_id to clear it. A project can be the default for at most one workspace.
+            operationId: setSlackDirectoryDefaultProject
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetSlackDirectoryDefaultProjectRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/SlackDirectoryConnection'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/vnd.goa.error:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: Slack connections are unavailable or authorization is not configured.'
+            security:
+                - session_header_Gram-Session: []
+            summary: setDefaultProject slackDirectoryConnections
+            tags:
+                - slackDirectoryConnections
+            x-speakeasy-name-override: setDefaultProject
+            x-speakeasy-react-hook:
+                name: SetSlackDirectoryDefaultProject
     /rpc/slackDirectoryConnections.setMapping:
         post:
             description: Explicitly confirm, reassign or remove a Slack association. This grants no permissions and does not establish runtime eligibility.
@@ -126540,6 +126633,19 @@ components:
             required:
                 - mcp_server_id
                 - scopes
+        SetSlackDirectoryDefaultProjectRequestBody:
+            type: object
+            properties:
+                id:
+                    type: string
+                    description: Durable organization workspace connection ID.
+                    format: uuid
+                project_id:
+                    type: string
+                    description: Project in the organization. Omit to clear the default project.
+                    format: uuid
+            required:
+                - id
         SetSlackIdentityMappingRequestBody:
             type: object
             properties:
@@ -128413,6 +128519,10 @@ components:
         SlackDirectoryConnection:
             type: object
             properties:
+                default_project_id:
+                    type: string
+                    description: Project whose managed assistant answers Speakeasy app mentions and direct messages in this workspace.
+                    format: uuid
                 directory_status:
                     type: string
                     description: Whether a snapshot belongs to the usable current authorization.

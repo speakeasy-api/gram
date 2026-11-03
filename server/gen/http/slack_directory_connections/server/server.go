@@ -26,6 +26,7 @@ type Server struct {
 	GetMember          http.Handler
 	SetMapping         http.Handler
 	Begin              http.Handler
+	SetDefaultProject  http.Handler
 	Disconnect         http.Handler
 }
 
@@ -63,6 +64,7 @@ func New(
 			{"GetMember", "GET", "/rpc/slackDirectoryConnections.getMember"},
 			{"SetMapping", "POST", "/rpc/slackDirectoryConnections.setMapping"},
 			{"Begin", "POST", "/rpc/slackDirectoryConnections.begin"},
+			{"SetDefaultProject", "POST", "/rpc/slackDirectoryConnections.setDefaultProject"},
 			{"Disconnect", "POST", "/rpc/slackDirectoryConnections.disconnect"},
 		},
 		List:               NewListHandler(e.List, mux, decoder, encoder, errhandler, formatter),
@@ -72,6 +74,7 @@ func New(
 		GetMember:          NewGetMemberHandler(e.GetMember, mux, decoder, encoder, errhandler, formatter),
 		SetMapping:         NewSetMappingHandler(e.SetMapping, mux, decoder, encoder, errhandler, formatter),
 		Begin:              NewBeginHandler(e.Begin, mux, decoder, encoder, errhandler, formatter),
+		SetDefaultProject:  NewSetDefaultProjectHandler(e.SetDefaultProject, mux, decoder, encoder, errhandler, formatter),
 		Disconnect:         NewDisconnectHandler(e.Disconnect, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -88,6 +91,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetMember = m(s.GetMember)
 	s.SetMapping = m(s.SetMapping)
 	s.Begin = m(s.Begin)
+	s.SetDefaultProject = m(s.SetDefaultProject)
 	s.Disconnect = m(s.Disconnect)
 }
 
@@ -103,6 +107,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetMemberHandler(mux, h.GetMember)
 	MountSetMappingHandler(mux, h.SetMapping)
 	MountBeginHandler(mux, h.Begin)
+	MountSetDefaultProjectHandler(mux, h.SetDefaultProject)
 	MountDisconnectHandler(mux, h.Disconnect)
 }
 
@@ -460,6 +465,60 @@ func NewBeginHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "begin")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "slackDirectoryConnections")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetDefaultProjectHandler configures the mux to serve the
+// "slackDirectoryConnections" service "setDefaultProject" endpoint.
+func MountSetDefaultProjectHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/slackDirectoryConnections.setDefaultProject", f)
+}
+
+// NewSetDefaultProjectHandler creates a HTTP handler which loads the HTTP
+// request and calls the "slackDirectoryConnections" service
+// "setDefaultProject" endpoint.
+func NewSetDefaultProjectHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetDefaultProjectRequest(mux, decoder)
+		encodeResponse = EncodeSetDefaultProjectResponse(encoder)
+		encodeError    = EncodeSetDefaultProjectError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setDefaultProject")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "slackDirectoryConnections")
 		payload, err := decodeRequest(r)
 		if err != nil {

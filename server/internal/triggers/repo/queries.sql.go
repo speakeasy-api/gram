@@ -126,6 +126,77 @@ func (q *Queries) CreateDashboardTriggerInstance(ctx context.Context, arg Create
 	return i, err
 }
 
+const createSpeakeasySlackTriggerInstance = `-- name: CreateSpeakeasySlackTriggerInstance :one
+INSERT INTO trigger_instances (
+    organization_id,
+    project_id,
+    definition_slug,
+    name,
+    environment_id,
+    target_kind,
+    target_ref,
+    target_display,
+    config_json,
+    status
+) VALUES (
+    $1,
+    $2,
+    'speakeasy_slack',
+    $3,
+    NULL,
+    $4,
+    $5,
+    $6,
+    $7,
+    'active'
+)
+ON CONFLICT (project_id, target_ref)
+  WHERE definition_slug = 'speakeasy_slack' AND status = 'active' AND deleted IS FALSE
+DO NOTHING
+RETURNING id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
+`
+
+type CreateSpeakeasySlackTriggerInstanceParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Name           string
+	TargetKind     string
+	TargetRef      string
+	TargetDisplay  string
+	ConfigJson     []byte
+}
+
+func (q *Queries) CreateSpeakeasySlackTriggerInstance(ctx context.Context, arg CreateSpeakeasySlackTriggerInstanceParams) (TriggerInstance, error) {
+	row := q.db.QueryRow(ctx, createSpeakeasySlackTriggerInstance,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.Name,
+		arg.TargetKind,
+		arg.TargetRef,
+		arg.TargetDisplay,
+		arg.ConfigJson,
+	)
+	var i TriggerInstance
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.DefinitionSlug,
+		&i.Name,
+		&i.EnvironmentID,
+		&i.TargetKind,
+		&i.TargetRef,
+		&i.TargetDisplay,
+		&i.ConfigJson,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const createTriggerInstance = `-- name: CreateTriggerInstance :one
 INSERT INTO trigger_instances (
     organization_id,
@@ -265,6 +336,47 @@ func (q *Queries) DeleteTriggerInstancesByTargetExceptDefinition(ctx context.Con
 		arg.ExcludedDefinitionSlug,
 	)
 	return err
+}
+
+const getSpeakeasySlackTriggerInstance = `-- name: GetSpeakeasySlackTriggerInstance :one
+SELECT id, organization_id, project_id, definition_slug, name, environment_id, target_kind, target_ref, target_display, config_json, status, created_at, updated_at, deleted_at, deleted
+FROM trigger_instances
+WHERE project_id = $1
+  AND definition_slug = 'speakeasy_slack'
+  AND target_kind = $2
+  AND target_ref = $3
+  AND status = 'active'
+  AND deleted IS FALSE
+LIMIT 1
+`
+
+type GetSpeakeasySlackTriggerInstanceParams struct {
+	ProjectID  uuid.UUID
+	TargetKind string
+	TargetRef  string
+}
+
+func (q *Queries) GetSpeakeasySlackTriggerInstance(ctx context.Context, arg GetSpeakeasySlackTriggerInstanceParams) (TriggerInstance, error) {
+	row := q.db.QueryRow(ctx, getSpeakeasySlackTriggerInstance, arg.ProjectID, arg.TargetKind, arg.TargetRef)
+	var i TriggerInstance
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.DefinitionSlug,
+		&i.Name,
+		&i.EnvironmentID,
+		&i.TargetKind,
+		&i.TargetRef,
+		&i.TargetDisplay,
+		&i.ConfigJson,
+		&i.Status,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
 }
 
 const getTriggerInstanceByID = `-- name: GetTriggerInstanceByID :one

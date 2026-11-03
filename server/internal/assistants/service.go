@@ -64,17 +64,25 @@ const (
 	StatusActive = "active"
 	StatusPaused = "paused"
 
-	sourceKindSlack     = bgtriggers.DefinitionSlugSlack
-	sourceKindMSTeams   = bgtriggers.DefinitionSlugMSTeams
-	sourceKindLinear    = bgtriggers.DefinitionSlugLinear
-	sourceKindGithub    = bgtriggers.DefinitionSlugGithub
-	sourceKindCron      = bgtriggers.DefinitionSlugCron
-	sourceKindWake      = bgtriggers.DefinitionSlugWake
-	sourceKindDashboard = bgtriggers.DefinitionSlugDashboard
+	sourceKindSlack = bgtriggers.DefinitionSlugSlack
+	// sourceKindSpeakeasySlack carries mentions of, and direct messages to,
+	// the Speakeasy Slack app, routed to the project's managed assistant.
+	sourceKindSpeakeasySlack = bgtriggers.DefinitionSlugSpeakeasySlack
+	sourceKindMSTeams        = bgtriggers.DefinitionSlugMSTeams
+	sourceKindLinear         = bgtriggers.DefinitionSlugLinear
+	sourceKindGithub         = bgtriggers.DefinitionSlugGithub
+	sourceKindCron           = bgtriggers.DefinitionSlugCron
+	sourceKindWake           = bgtriggers.DefinitionSlugWake
+	sourceKindDashboard      = bgtriggers.DefinitionSlugDashboard
 	// sourceKindWarmup marks the event-less thread that eager-boots the
 	// runtime at assistant creation. It has no source adapter — adapters are
 	// only consulted while processing events, and this thread never has any.
 	sourceKindWarmup = "warmup"
+
+	// SessionSurfaceSpeakeasySlack is the chat session surface for turns from
+	// the built-in Speakeasy Slack app, so session lists can tell them apart
+	// from ordinary assistant chats that share the assistants inference source.
+	SessionSurfaceSpeakeasySlack = "speakeasy-slack"
 	// sourceKindSetup marks a client-driven setup/onboarding chat linked to an
 	// assistant by the /chat/completions handler (see chat.linkSetupAssistantThread).
 	// Like warmup it carries no source adapter and enqueues no runtime events, so
@@ -471,6 +479,7 @@ type ServiceCore struct {
 	assetSigningKey   string
 	envLoader         toolconfig.EnvironmentLoader
 	slackImages       slackImageFetcher
+	speakeasySlack    SpeakeasySlackTokens
 	dashboardIngestor DashboardIngestor
 	featureFlags      feature.Provider
 	turnClassified    metric.Int64Counter
@@ -531,6 +540,7 @@ func NewServiceCore(
 		assetSigningKey:             "",
 		envLoader:                   nil,
 		slackImages:                 nil,
+		speakeasySlack:              nil,
 		dashboardIngestor:           nil,
 		featureFlags:                nil,
 		turnClassified:              turnClassified,
@@ -2428,6 +2438,7 @@ func (s *ServiceCore) EnqueueTriggerTask(ctx context.Context, task bgtriggers.Ta
 		OrganizationID: assistant.OrganizationID,
 		UserID:         conv.ToPGTextEmpty(assistantChatOwnerID(sourceKind, normalizedPayloadJSON, assistant.CreatedByUserID)),
 		Title:          conv.ToPGText(chat.DefaultChatTitle),
+		SessionSurface: conv.ToPGTextEmpty(assistantChatSessionSurface(sourceKind)),
 	}); err != nil {
 		return EnqueueResult{}, fmt.Errorf("upsert assistant chat: %w", err)
 	}
@@ -2581,7 +2592,7 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		sourcePayloadJSON = wrapped
 	}
 	switch task.DefinitionSlug {
-	case sourceKindSlack:
+	case sourceKindSlack, sourceKindSpeakeasySlack:
 		var event slackEventPayload
 		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
 			return "", nil, nil, nil, fmt.Errorf("decode slack trigger event: %w", err)
@@ -2598,7 +2609,7 @@ func buildAssistantEventPayload(task bgtriggers.Task) (string, []byte, []byte, [
 		if err != nil {
 			return "", nil, nil, nil, fmt.Errorf("marshal slack source ref: %w", err)
 		}
-		return sourceKindSlack, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
+		return task.DefinitionSlug, sourceRefJSON, task.EventJSON, sourcePayloadJSON, nil
 	case sourceKindMSTeams:
 		var event msteamsEventPayload
 		if err := json.Unmarshal(task.EventJSON, &event); err != nil {
@@ -2888,8 +2899,9 @@ func (s *ServiceCore) EnsureWarmupThread(ctx context.Context, assistantID uuid.U
 		OrganizationID: assistant.OrganizationID,
 		// Warmup turns have no user either, so the creator owns them for the
 		// same reason external-source turns do.
-		UserID: conv.ToPGTextEmpty(assistant.CreatedByUserID),
-		Title:  conv.ToPGText(chat.DefaultChatTitle),
+		UserID:         conv.ToPGTextEmpty(assistant.CreatedByUserID),
+		Title:          conv.ToPGText(chat.DefaultChatTitle),
+		SessionSurface: conv.ToPGTextEmpty(assistantChatSessionSurface(sourceKindWarmup)),
 	}); err != nil {
 		return noop, fmt.Errorf("upsert warmup chat: %w", err)
 	}
@@ -3373,10 +3385,18 @@ func (s *ServiceCore) processEventTurnWithProtocol(
 		if err != nil {
 			return nil, fmt.Errorf("decode assistant turn: %w", err)
 		}
+		senderLine, err := s.speakeasySenderContextLine(ctx, thread, identity)
+		if err != nil {
+			return nil, err
+		}
+		prompt, err = insertAssistantEnvironmentChange(prompt, senderLine)
+		if err != nil {
+			return nil, err
+		}
 		// Best-effort: files attached to the triggering message ride along as
 		// vision/text content. Failures degrade to the metadata-only turn.
 		switch thread.SourceKind {
-		case sourceKindSlack:
+		case sourceKindSlack, sourceKindSpeakeasySlack:
 			inputParts = s.slackTurnImageParts(ctx, thread, event)
 		case sourceKindDashboard:
 			inputParts = s.dashboardTurnAttachmentParts(ctx, assistant.ProjectID, event)
@@ -3469,6 +3489,13 @@ func (s *ServiceCore) assistantPlatformSlugs(ctx context.Context, assistant assi
 				platformSlugs = append(platformSlugs, platformtools.PlatformMCPReadToolsetSlug)
 			} else {
 				platformSlugs = append(platformSlugs, platformtools.ManagedAssistantPlatformToolsetSlug)
+			}
+			routed, err := s.speakeasySlackRouted(ctx, assistant)
+			if err != nil {
+				return nil, err
+			}
+			if routed {
+				platformSlugs = append(platformSlugs, platformtools.SpeakeasySlackPlatformToolsetSlug)
 			}
 		}
 	case errors.Is(mErr, pgx.ErrNoRows):

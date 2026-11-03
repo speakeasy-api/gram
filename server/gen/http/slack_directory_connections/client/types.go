@@ -41,6 +41,15 @@ type BeginRequestBody struct {
 	ConnectionID *string `form:"connection_id,omitempty" json:"connection_id,omitempty" xml:"connection_id,omitempty"`
 }
 
+// SetDefaultProjectRequestBody is the type of the "slackDirectoryConnections"
+// service "setDefaultProject" endpoint HTTP request body.
+type SetDefaultProjectRequestBody struct {
+	// Durable organization workspace connection ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Project in the organization. Omit to clear the default project.
+	ProjectID *string `form:"project_id,omitempty" json:"project_id,omitempty" xml:"project_id,omitempty"`
+}
+
 // DisconnectRequestBody is the type of the "slackDirectoryConnections" service
 // "disconnect" endpoint HTTP request body.
 type DisconnectRequestBody struct {
@@ -172,6 +181,54 @@ type BeginResponseBody struct {
 	AuthorizationURL *string `form:"authorization_url,omitempty" json:"authorization_url,omitempty" xml:"authorization_url,omitempty"`
 }
 
+// SetDefaultProjectResponseBody is the type of the "slackDirectoryConnections"
+// service "setDefaultProject" endpoint HTTP response body.
+type SetDefaultProjectResponseBody struct {
+	// Durable organization workspace connection ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Verified Slack workspace ID.
+	WorkspaceID *string `form:"workspace_id,omitempty" json:"workspace_id,omitempty" xml:"workspace_id,omitempty"`
+	// Workspace display name from Slack.
+	WorkspaceName *string `form:"workspace_name,omitempty" json:"workspace_name,omitempty" xml:"workspace_name,omitempty"`
+	// Authorization status, independent of directory sync.
+	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	// Connection generation used to reject stale changes.
+	Generation *string `form:"generation,omitempty" json:"generation,omitempty" xml:"generation,omitempty"`
+	// Permissions granted by Slack.
+	GrantedScopes []string `form:"granted_scopes,omitempty" json:"granted_scopes,omitempty" xml:"granted_scopes,omitempty"`
+	// Permissions Speakeasy asks for that this install has not granted.
+	// Reinstalling the app grants them. Without chat:write, approval requests do
+	// not reach approvers in Slack.
+	MissingScopes []string `form:"missing_scopes,omitempty" json:"missing_scopes,omitempty" xml:"missing_scopes,omitempty"`
+	// Bounded authorization failure code, when known.
+	LastErrorCode *string `form:"last_error_code,omitempty" json:"last_error_code,omitempty" xml:"last_error_code,omitempty"`
+	// When credentials were removed.
+	DisconnectedAt *string `form:"disconnected_at,omitempty" json:"disconnected_at,omitempty" xml:"disconnected_at,omitempty"`
+	// Members observed in the last complete snapshot, including guests and bots.
+	MemberCount *int64 `form:"member_count,omitempty" json:"member_count,omitempty" xml:"member_count,omitempty"`
+	// Whether a snapshot belongs to the usable current authorization.
+	DirectoryStatus *string `form:"directory_status,omitempty" json:"directory_status,omitempty" xml:"directory_status,omitempty"`
+	// Latest workflow state. Unknown means progress could not be checked.
+	SyncStatus *string `form:"sync_status,omitempty" json:"sync_status,omitempty" xml:"sync_status,omitempty"`
+	// Bounded progress phase while syncing.
+	SyncPhase *string `form:"sync_phase,omitempty" json:"sync_phase,omitempty" xml:"sync_phase,omitempty"`
+	// Completed pages in the current attempt.
+	SyncPages *int `form:"sync_pages,omitempty" json:"sync_pages,omitempty" xml:"sync_pages,omitempty"`
+	// Verified members fetched in the current attempt.
+	SyncMembers *int `form:"sync_members,omitempty" json:"sync_members,omitempty" xml:"sync_members,omitempty"`
+	// Start of the latest attempted sync.
+	LastSyncStartedAt *string `form:"last_sync_started_at,omitempty" json:"last_sync_started_at,omitempty" xml:"last_sync_started_at,omitempty"`
+	// Most recent failed attempt; may precede a successful sync.
+	LastSyncFailedAt *string `form:"last_sync_failed_at,omitempty" json:"last_sync_failed_at,omitempty" xml:"last_sync_failed_at,omitempty"`
+	// Last complete directory publication, possibly from an earlier authorization.
+	LastFullSyncSucceededAt *string `form:"last_full_sync_succeeded_at,omitempty" json:"last_full_sync_succeeded_at,omitempty" xml:"last_full_sync_succeeded_at,omitempty"`
+	// Last connection change timestamp.
+	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Project whose managed assistant answers Speakeasy app mentions and direct
+	// messages in this workspace.
+	DefaultProjectID *string `form:"default_project_id,omitempty" json:"default_project_id,omitempty" xml:"default_project_id,omitempty"`
+}
+
 // DisconnectResponseBody is the type of the "slackDirectoryConnections"
 // service "disconnect" endpoint HTTP response body.
 type DisconnectResponseBody struct {
@@ -215,6 +272,9 @@ type DisconnectResponseBody struct {
 	LastFullSyncSucceededAt *string `form:"last_full_sync_succeeded_at,omitempty" json:"last_full_sync_succeeded_at,omitempty" xml:"last_full_sync_succeeded_at,omitempty"`
 	// Last connection change timestamp.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Project whose managed assistant answers Speakeasy app mentions and direct
+	// messages in this workspace.
+	DefaultProjectID *string `form:"default_project_id,omitempty" json:"default_project_id,omitempty" xml:"default_project_id,omitempty"`
 }
 
 // ListUnauthorizedResponseBody is the type of the "slackDirectoryConnections"
@@ -1649,6 +1709,215 @@ type BeginUnavailableResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// SetDefaultProjectUnauthorizedResponseBody is the type of the
+// "slackDirectoryConnections" service "setDefaultProject" endpoint HTTP
+// response body for the "unauthorized" error.
+type SetDefaultProjectUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetDefaultProjectForbiddenResponseBody is the type of the
+// "slackDirectoryConnections" service "setDefaultProject" endpoint HTTP
+// response body for the "forbidden" error.
+type SetDefaultProjectForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetDefaultProjectBadRequestResponseBody is the type of the
+// "slackDirectoryConnections" service "setDefaultProject" endpoint HTTP
+// response body for the "bad_request" error.
+type SetDefaultProjectBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetDefaultProjectNotFoundResponseBody is the type of the
+// "slackDirectoryConnections" service "setDefaultProject" endpoint HTTP
+// response body for the "not_found" error.
+type SetDefaultProjectNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetDefaultProjectConflictResponseBody is the type of the
+// "slackDirectoryConnections" service "setDefaultProject" endpoint HTTP
+// response body for the "conflict" error.
+type SetDefaultProjectConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetDefaultProjectUnsupportedMediaResponseBody is the type of the
+// "slackDirectoryConnections" service "setDefaultProject" endpoint HTTP
+// response body for the "unsupported_media" error.
+type SetDefaultProjectUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetDefaultProjectInvalidResponseBody is the type of the
+// "slackDirectoryConnections" service "setDefaultProject" endpoint HTTP
+// response body for the "invalid" error.
+type SetDefaultProjectInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetDefaultProjectInvariantViolationResponseBody is the type of the
+// "slackDirectoryConnections" service "setDefaultProject" endpoint HTTP
+// response body for the "invariant_violation" error.
+type SetDefaultProjectInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetDefaultProjectUnexpectedResponseBody is the type of the
+// "slackDirectoryConnections" service "setDefaultProject" endpoint HTTP
+// response body for the "unexpected" error.
+type SetDefaultProjectUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetDefaultProjectGatewayErrorResponseBody is the type of the
+// "slackDirectoryConnections" service "setDefaultProject" endpoint HTTP
+// response body for the "gateway_error" error.
+type SetDefaultProjectGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetDefaultProjectUnavailableResponseBody is the type of the
+// "slackDirectoryConnections" service "setDefaultProject" endpoint HTTP
+// response body for the "unavailable" error.
+type SetDefaultProjectUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // DisconnectUnauthorizedResponseBody is the type of the
 // "slackDirectoryConnections" service "disconnect" endpoint HTTP response body
 // for the "unauthorized" error.
@@ -1900,6 +2169,9 @@ type SlackDirectoryConnectionResponseBody struct {
 	LastFullSyncSucceededAt *string `form:"last_full_sync_succeeded_at,omitempty" json:"last_full_sync_succeeded_at,omitempty" xml:"last_full_sync_succeeded_at,omitempty"`
 	// Last connection change timestamp.
 	UpdatedAt *string `form:"updated_at,omitempty" json:"updated_at,omitempty" xml:"updated_at,omitempty"`
+	// Project whose managed assistant answers Speakeasy app mentions and direct
+	// messages in this workspace.
+	DefaultProjectID *string `form:"default_project_id,omitempty" json:"default_project_id,omitempty" xml:"default_project_id,omitempty"`
 }
 
 // SlackDirectoryMemberResponseBody is used to define fields on response body
@@ -1995,6 +2267,17 @@ func NewSetMappingRequestBody(p *slackdirectoryconnections.SetMappingPayload) *S
 func NewBeginRequestBody(p *slackdirectoryconnections.BeginPayload) *BeginRequestBody {
 	body := &BeginRequestBody{
 		ConnectionID: p.ConnectionID,
+	}
+	return body
+}
+
+// NewSetDefaultProjectRequestBody builds the HTTP request body from the
+// payload of the "setDefaultProject" endpoint of the
+// "slackDirectoryConnections" service.
+func NewSetDefaultProjectRequestBody(p *slackdirectoryconnections.SetDefaultProjectPayload) *SetDefaultProjectRequestBody {
+	body := &SetDefaultProjectRequestBody{
+		ID:        p.ID,
+		ProjectID: p.ProjectID,
 	}
 	return body
 }
@@ -3295,6 +3578,207 @@ func NewBeginUnavailable(body *BeginUnavailableResponseBody) *goa.ServiceError {
 	return v
 }
 
+// NewSetDefaultProjectSlackDirectoryConnectionOK builds a
+// "slackDirectoryConnections" service "setDefaultProject" endpoint result from
+// a HTTP "OK" response.
+func NewSetDefaultProjectSlackDirectoryConnectionOK(body *SetDefaultProjectResponseBody) *slackdirectoryconnections.SlackDirectoryConnection {
+	v := &slackdirectoryconnections.SlackDirectoryConnection{
+		ID:                      *body.ID,
+		WorkspaceID:             *body.WorkspaceID,
+		WorkspaceName:           *body.WorkspaceName,
+		Status:                  *body.Status,
+		Generation:              *body.Generation,
+		LastErrorCode:           body.LastErrorCode,
+		DisconnectedAt:          body.DisconnectedAt,
+		MemberCount:             *body.MemberCount,
+		DirectoryStatus:         *body.DirectoryStatus,
+		SyncStatus:              *body.SyncStatus,
+		SyncPhase:               body.SyncPhase,
+		SyncPages:               body.SyncPages,
+		SyncMembers:             body.SyncMembers,
+		LastSyncStartedAt:       body.LastSyncStartedAt,
+		LastSyncFailedAt:        body.LastSyncFailedAt,
+		LastFullSyncSucceededAt: body.LastFullSyncSucceededAt,
+		UpdatedAt:               *body.UpdatedAt,
+		DefaultProjectID:        body.DefaultProjectID,
+	}
+	v.GrantedScopes = make([]string, len(body.GrantedScopes))
+	for i, val := range body.GrantedScopes {
+		v.GrantedScopes[i] = val
+	}
+	v.MissingScopes = make([]string, len(body.MissingScopes))
+	for i, val := range body.MissingScopes {
+		v.MissingScopes[i] = val
+	}
+
+	return v
+}
+
+// NewSetDefaultProjectUnauthorized builds a slackDirectoryConnections service
+// setDefaultProject endpoint unauthorized error.
+func NewSetDefaultProjectUnauthorized(body *SetDefaultProjectUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetDefaultProjectForbidden builds a slackDirectoryConnections service
+// setDefaultProject endpoint forbidden error.
+func NewSetDefaultProjectForbidden(body *SetDefaultProjectForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetDefaultProjectBadRequest builds a slackDirectoryConnections service
+// setDefaultProject endpoint bad_request error.
+func NewSetDefaultProjectBadRequest(body *SetDefaultProjectBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetDefaultProjectNotFound builds a slackDirectoryConnections service
+// setDefaultProject endpoint not_found error.
+func NewSetDefaultProjectNotFound(body *SetDefaultProjectNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetDefaultProjectConflict builds a slackDirectoryConnections service
+// setDefaultProject endpoint conflict error.
+func NewSetDefaultProjectConflict(body *SetDefaultProjectConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetDefaultProjectUnsupportedMedia builds a slackDirectoryConnections
+// service setDefaultProject endpoint unsupported_media error.
+func NewSetDefaultProjectUnsupportedMedia(body *SetDefaultProjectUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetDefaultProjectInvalid builds a slackDirectoryConnections service
+// setDefaultProject endpoint invalid error.
+func NewSetDefaultProjectInvalid(body *SetDefaultProjectInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetDefaultProjectInvariantViolation builds a slackDirectoryConnections
+// service setDefaultProject endpoint invariant_violation error.
+func NewSetDefaultProjectInvariantViolation(body *SetDefaultProjectInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetDefaultProjectUnexpected builds a slackDirectoryConnections service
+// setDefaultProject endpoint unexpected error.
+func NewSetDefaultProjectUnexpected(body *SetDefaultProjectUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetDefaultProjectGatewayError builds a slackDirectoryConnections service
+// setDefaultProject endpoint gateway_error error.
+func NewSetDefaultProjectGatewayError(body *SetDefaultProjectGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetDefaultProjectUnavailable builds a slackDirectoryConnections service
+// setDefaultProject endpoint unavailable error.
+func NewSetDefaultProjectUnavailable(body *SetDefaultProjectUnavailableResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // NewDisconnectSlackDirectoryConnectionOK builds a "slackDirectoryConnections"
 // service "disconnect" endpoint result from a HTTP "OK" response.
 func NewDisconnectSlackDirectoryConnectionOK(body *DisconnectResponseBody) *slackdirectoryconnections.SlackDirectoryConnection {
@@ -3316,6 +3800,7 @@ func NewDisconnectSlackDirectoryConnectionOK(body *DisconnectResponseBody) *slac
 		LastSyncFailedAt:        body.LastSyncFailedAt,
 		LastFullSyncSucceededAt: body.LastFullSyncSucceededAt,
 		UpdatedAt:               *body.UpdatedAt,
+		DefaultProjectID:        body.DefaultProjectID,
 	}
 	v.GrantedScopes = make([]string, len(body.GrantedScopes))
 	for i, val := range body.GrantedScopes {
@@ -3717,6 +4202,84 @@ func ValidateBeginResponseBody(body *BeginResponseBody) (err error) {
 	return
 }
 
+// ValidateSetDefaultProjectResponseBody runs the validations defined on
+// SetDefaultProjectResponseBody
+func ValidateSetDefaultProjectResponseBody(body *SetDefaultProjectResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.WorkspaceID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("workspace_id", "body"))
+	}
+	if body.WorkspaceName == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("workspace_name", "body"))
+	}
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.Generation == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("generation", "body"))
+	}
+	if body.GrantedScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("granted_scopes", "body"))
+	}
+	if body.MissingScopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("missing_scopes", "body"))
+	}
+	if body.UpdatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("updated_at", "body"))
+	}
+	if body.MemberCount == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("member_count", "body"))
+	}
+	if body.DirectoryStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("directory_status", "body"))
+	}
+	if body.SyncStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("sync_status", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "connected" || *body.Status == "disconnected" || *body.Status == "reconnect_required") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"connected", "disconnected", "reconnect_required"}))
+		}
+	}
+	if body.Generation != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.generation", *body.Generation, goa.FormatUUID))
+	}
+	if body.DisconnectedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.disconnected_at", *body.DisconnectedAt, goa.FormatDateTime))
+	}
+	if body.DirectoryStatus != nil {
+		if !(*body.DirectoryStatus == "never_synced" || *body.DirectoryStatus == "current" || *body.DirectoryStatus == "stale") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.directory_status", *body.DirectoryStatus, []any{"never_synced", "current", "stale"}))
+		}
+	}
+	if body.SyncStatus != nil {
+		if !(*body.SyncStatus == "idle" || *body.SyncStatus == "queued" || *body.SyncStatus == "running" || *body.SyncStatus == "retrying" || *body.SyncStatus == "failed" || *body.SyncStatus == "unknown") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.sync_status", *body.SyncStatus, []any{"idle", "queued", "running", "retrying", "failed", "unknown"}))
+		}
+	}
+	if body.LastSyncStartedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_sync_started_at", *body.LastSyncStartedAt, goa.FormatDateTime))
+	}
+	if body.LastSyncFailedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_sync_failed_at", *body.LastSyncFailedAt, goa.FormatDateTime))
+	}
+	if body.LastFullSyncSucceededAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_full_sync_succeeded_at", *body.LastFullSyncSucceededAt, goa.FormatDateTime))
+	}
+	if body.UpdatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	if body.DefaultProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.default_project_id", *body.DefaultProjectID, goa.FormatUUID))
+	}
+	return
+}
+
 // ValidateDisconnectResponseBody runs the validations defined on
 // DisconnectResponseBody
 func ValidateDisconnectResponseBody(body *DisconnectResponseBody) (err error) {
@@ -3788,6 +4351,9 @@ func ValidateDisconnectResponseBody(body *DisconnectResponseBody) (err error) {
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	if body.DefaultProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.default_project_id", *body.DefaultProjectID, goa.FormatUUID))
 	}
 	return
 }
@@ -5640,6 +6206,270 @@ func ValidateBeginUnavailableResponseBody(body *BeginUnavailableResponseBody) (e
 	return
 }
 
+// ValidateSetDefaultProjectUnauthorizedResponseBody runs the validations
+// defined on setDefaultProject_unauthorized_response_body
+func ValidateSetDefaultProjectUnauthorizedResponseBody(body *SetDefaultProjectUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetDefaultProjectForbiddenResponseBody runs the validations defined
+// on setDefaultProject_forbidden_response_body
+func ValidateSetDefaultProjectForbiddenResponseBody(body *SetDefaultProjectForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetDefaultProjectBadRequestResponseBody runs the validations defined
+// on setDefaultProject_bad_request_response_body
+func ValidateSetDefaultProjectBadRequestResponseBody(body *SetDefaultProjectBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetDefaultProjectNotFoundResponseBody runs the validations defined
+// on setDefaultProject_not_found_response_body
+func ValidateSetDefaultProjectNotFoundResponseBody(body *SetDefaultProjectNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetDefaultProjectConflictResponseBody runs the validations defined
+// on setDefaultProject_conflict_response_body
+func ValidateSetDefaultProjectConflictResponseBody(body *SetDefaultProjectConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetDefaultProjectUnsupportedMediaResponseBody runs the validations
+// defined on setDefaultProject_unsupported_media_response_body
+func ValidateSetDefaultProjectUnsupportedMediaResponseBody(body *SetDefaultProjectUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetDefaultProjectInvalidResponseBody runs the validations defined on
+// setDefaultProject_invalid_response_body
+func ValidateSetDefaultProjectInvalidResponseBody(body *SetDefaultProjectInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetDefaultProjectInvariantViolationResponseBody runs the validations
+// defined on setDefaultProject_invariant_violation_response_body
+func ValidateSetDefaultProjectInvariantViolationResponseBody(body *SetDefaultProjectInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetDefaultProjectUnexpectedResponseBody runs the validations defined
+// on setDefaultProject_unexpected_response_body
+func ValidateSetDefaultProjectUnexpectedResponseBody(body *SetDefaultProjectUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetDefaultProjectGatewayErrorResponseBody runs the validations
+// defined on setDefaultProject_gateway_error_response_body
+func ValidateSetDefaultProjectGatewayErrorResponseBody(body *SetDefaultProjectGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetDefaultProjectUnavailableResponseBody runs the validations
+// defined on setDefaultProject_unavailable_response_body
+func ValidateSetDefaultProjectUnavailableResponseBody(body *SetDefaultProjectUnavailableResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateDisconnectUnauthorizedResponseBody runs the validations defined on
 // disconnect_unauthorized_response_body
 func ValidateDisconnectUnauthorizedResponseBody(body *DisconnectUnauthorizedResponseBody) (err error) {
@@ -5975,6 +6805,9 @@ func ValidateSlackDirectoryConnectionResponseBody(body *SlackDirectoryConnection
 	}
 	if body.UpdatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.updated_at", *body.UpdatedAt, goa.FormatDateTime))
+	}
+	if body.DefaultProjectID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.default_project_id", *body.DefaultProjectID, goa.FormatUUID))
 	}
 	return
 }

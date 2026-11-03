@@ -11,6 +11,7 @@ export const AUDIT_ACTIONS = [
   "slack-directory-connection:authorize",
   "slack-directory-connection:disconnect",
   "slack-directory-connection:sync",
+  "slack-directory-connection:set-default-project",
   "slack-identity-mapping:confirm",
   "slack-identity-mapping:reassign",
   "slack-identity-mapping:reconfirm",
@@ -392,6 +393,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "authorized Slack workspace";
     case "slack-directory-connection:disconnect":
       return "disconnected Slack workspace";
+    case "slack-directory-connection:set-default-project":
+      return "changed the default project for Slack workspace";
     case "access_challenge:resolve":
       return "resolved access challenge";
     case "access_member:revoke_sign_ins":
