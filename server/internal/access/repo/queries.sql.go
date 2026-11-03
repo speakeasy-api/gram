@@ -2569,6 +2569,10 @@ JOIN assistants
   AND assistants.project_id = aab.project_id
   AND assistants.organization_id = aab.organization_id
   AND assistants.deleted IS FALSE
+JOIN projects
+  ON projects.id = aab.project_id
+  AND projects.organization_id = aab.organization_id
+  AND projects.deleted IS FALSE
 JOIN agents
   ON agents.id = aab.agent_id
   AND agents.organization_id = aab.organization_id

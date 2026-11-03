@@ -175,6 +175,13 @@ func managedAssistantAgents(ctx context.Context, queries *accessrepo.Queries, or
 	return managed, nil
 }
 
+// IsManagedAssistantOnlyScope reports whether only agents bound to a project's
+// managed assistant keep scope in their runtime policy. Every other agent has
+// it filtered out when its policy loads, so roles cannot extend it to agents.
+func IsManagedAssistantOnlyScope(scope authz.Scope) bool {
+	return scope == authz.ScopeOrgRead
+}
+
 func hasOrganizationRead(grants []authz.Grant) bool {
 	for _, grant := range grants {
 		if grant.Scope == authz.ScopeOrgRead {

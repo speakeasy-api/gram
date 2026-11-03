@@ -13,6 +13,7 @@ import (
 	"golang.org/x/sync/errgroup"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections"
 	slackrepo "github.com/speakeasy-api/gram/server/internal/slackdirectoryconnections/repo"
 	slackapi "github.com/speakeasy-api/gram/server/internal/thirdparty/slack/api"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
@@ -48,8 +49,20 @@ func (s *ServiceCore) SetSpeakeasySlackTokens(tokens SpeakeasySlackTokens) {
 }
 
 // speakeasySlackRouted reports whether a connected workspace routes the
-// Speakeasy Slack app to the assistant's project.
+// Speakeasy Slack app to the assistant's project and can post right now. A
+// workspace that lost chat:write or usable credentials does not count, so its
+// Slack tools are not advertised.
 func (s *ServiceCore) speakeasySlackRouted(ctx context.Context, assistant assistantRecord) (bool, error) {
+	if s.speakeasySlack != nil {
+		_, err := s.speakeasySlack.ProjectBotToken(ctx, assistant.OrganizationID, assistant.ProjectID)
+		if errors.Is(err, slackdirectoryconnections.ErrNoRoutingWorkspace) {
+			return false, nil
+		}
+		if err != nil {
+			return false, fmt.Errorf("resolve Speakeasy Slack app workspace: %w", err)
+		}
+		return true, nil
+	}
 	_, err := slackrepo.New(s.db).GetSlackRoutingConnectionByProject(ctx, slackrepo.GetSlackRoutingConnectionByProjectParams{
 		OrganizationID:   assistant.OrganizationID,
 		DefaultProjectID: uuid.NullUUID{UUID: assistant.ProjectID, Valid: true},

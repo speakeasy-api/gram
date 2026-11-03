@@ -357,8 +357,9 @@ func scopeDefinition(input scopeDefinitionInput) *gen.ScopeDefinition {
 	// A role may hold scopes its agent members cannot. Agent policy is filtered
 	// against the runtime registry every time it is loaded, so those scopes are
 	// dropped rather than granted; reporting eligibility here lets the role
-	// editor say so instead of leaving the difference invisible.
-	agentEligible := runtimepolicy.IsRuntimeScopeSafe(runtimepolicy.CurrentRuntimeScopeRegistryVersion, input.scope)
+	// editor say so instead of leaving the difference invisible. Scopes kept
+	// only for managed assistants are not eligible through a role.
+	agentEligible := runtimepolicy.IsRuntimeScopeSafe(runtimepolicy.CurrentRuntimeScopeRegistryVersion, input.scope) && !runtimepolicy.IsManagedAssistantOnlyScope(input.scope)
 
 	return &gen.ScopeDefinition{
 		Slug:           string(input.scope),

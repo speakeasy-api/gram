@@ -12,7 +12,9 @@ Reader support and issuance are separate contracts:
 
 Before this feature, the assistant issuers used `CurrentDelegatedPolicyVersion`, which was 5. They are now pinned to 5, not downgraded to 4. Internal assistant ceilings exclude scopes introduced after version 5, preserving existing grants and exclusions even when the agent also has an external inference grant.
 
-Version 6 is necessary because delegated-policy validation interprets the policy version as its runtime scope registry version. `inference:execute` becomes safe only at registry version 6. Adding it to registry versions 4 or 5 would change the authority of old credential formats. No default role gains inference permission, and MCP/chat grants do not imply it. `CurrentDelegatedPolicyVersion = 6` means the reader understands version 6; it does not advance existing issuers.
+Version 6 is necessary because delegated-policy validation interprets the policy version as its runtime scope registry version. `inference:execute` becomes safe only at registry version 6. Adding it to registry versions 4 or 5 would change the authority of old credential formats. No default role gains inference permission, and MCP/chat grants do not imply it. Reader support does not advance existing issuers.
+
+Version 7 makes `org:read`, `org:blocked_read`, and `org:blocked_admin` safe in the runtime scope registry so a project's managed assistant can hold an organization-read ceiling in its direct agent policy. `CurrentDelegatedPolicyVersion = 7` means the reader understands version 7. No issuer emits version 7, so no delegated credential carries organization read, and pre-feature replicas never receive a version-7 policy. During a mixed deployment or after rollback, older replicas drop `org:read` from the managed assistant's runtime policy when they load it. Its organization directory tools fail closed until the upgrade completes.
 
 ## Mixed replicas and rollback
 

@@ -5328,6 +5328,8 @@ ON CONFLICT (id) DO UPDATE SET
   user_id = COALESCE(chats.user_id, EXCLUDED.user_id),
   session_surface = COALESCE(chats.session_surface, EXCLUDED.session_surface),
   updated_at = NOW()
+WHERE chats.project_id = EXCLUDED.project_id
+  AND chats.organization_id = EXCLUDED.organization_id
 `
 
 type UpsertAssistantChatParams struct {

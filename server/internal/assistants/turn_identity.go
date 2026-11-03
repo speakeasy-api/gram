@@ -131,6 +131,23 @@ func selectTurnUser(ctx context.Context, assistant assistantRecord, threadSource
 	return assistant.CreatedByUserID, false, nil
 }
 
+// turnEventSource returns the source an event's turn is selected by: the
+// server-stamped source on the event when present, otherwise the thread's.
+func turnEventSource(threadSource string, payload []byte) (string, error) {
+	var fields map[string]json.RawMessage
+	if err := json.Unmarshal(payload, &fields); err != nil {
+		return threadSource, nil //nolint:nilerr // non-object payloads are never stamped
+	}
+	stamped, err := exactField[string](fields, eventSourceKindKey)
+	if err != nil {
+		return "", err
+	}
+	if stamped != "" {
+		return stamped, nil
+	}
+	return threadSource, nil
+}
+
 // exactField decodes fields[key], matching the key exactly. A missing key or
 // JSON null yields the zero value.
 func exactField[T any](fields map[string]json.RawMessage, key string) (T, error) {
@@ -163,7 +180,14 @@ func (s *ServiceCore) resolveTurnIdentity(ctx context.Context, assistant assista
 	}
 	switch states[assistant.ID].State {
 	case assistantidentity.NeverConfigured:
-		if thread.SourceKind != sourceKindSpeakeasySlack {
+		// The event's stamped source decides, because a Speakeasy Slack app
+		// event can land on a thread another source started, and a later event
+		// on a Speakeasy Slack thread must not fall back to the owner either.
+		eventSource, err := turnEventSource(thread.SourceKind, event.NormalizedPayloadJSON)
+		if err != nil {
+			return turnIdentity{}, fmt.Errorf("%w: %w", ErrTurnIdentity, err)
+		}
+		if thread.SourceKind != sourceKindSpeakeasySlack && eventSource != sourceKindSpeakeasySlack {
 			return turnIdentity{UserID: legacyTurnUserID(assistant, thread, event), AgentBacked: false, HumanKnown: false}, nil
 		}
 		// Speakeasy Slack app turns act as the linked sender even without a

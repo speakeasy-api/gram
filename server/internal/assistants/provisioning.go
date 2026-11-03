@@ -130,7 +130,9 @@ func (s *ServiceCore) EnableManagedAssistant(
 		// Repair managed assistants provisioned before dashboard ingress existed:
 		// the trigger is provisioned lazily here so re-running enable is enough.
 		if err := pgx.BeginFunc(ctx, s.db, func(tx pgx.Tx) error {
-			if provisionIdentity && existing.IdentityState == "ACTIVE" {
+			// Repair any bound agent, including a suspended or revoked one, so
+			// the ceiling is in place when it becomes active again.
+			if provisionIdentity && existing.IdentityState != string(assistantidentity.NeverConfigured) {
 				if err := s.ensureManagedOrganizationRead(ctx, tx, organizationID, projectID, existing.ID, createdByUserID); err != nil {
 					return err
 				}

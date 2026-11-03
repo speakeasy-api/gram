@@ -71,5 +71,5 @@ func TestManagedAssistantOrganizationReadCeiling(t *testing.T) {
 	err = pgx.BeginFunc(t.Context(), db, func(tx pgx.Tx) error {
 		return core.ensureManagedOrganizationRead(t.Context(), tx, "org-test", project, ordinary.ID, "user-1")
 	})
-	require.Error(t, err, "ordinary assistants cannot receive the managed ceiling")
+	require.ErrorIs(t, err, errManagedOrganizationReadTarget, "ordinary assistants cannot receive the managed ceiling")
 }

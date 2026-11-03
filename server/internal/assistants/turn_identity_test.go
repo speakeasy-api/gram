@@ -225,3 +225,26 @@ func TestIngressPayloadCannotPoseAsWakeRequester(t *testing.T) {
 	require.Equal(t, "user-1", identity.UserID, "an ingress payload must not select the turn user")
 	require.False(t, identity.HumanKnown, "the owner fallback is not a known human")
 }
+
+func TestTurnEventSourcePrefersStampedSource(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name    string
+		thread  string
+		payload string
+		want    string
+	}{
+		{name: "stamped", thread: sourceKindSlack, payload: `{"_gram_source_kind":"speakeasy_slack"}`, want: sourceKindSpeakeasySlack},
+		{name: "unstamped", thread: sourceKindSlack, payload: `{"text":"hi"}`, want: sourceKindSlack},
+		{name: "non-object", thread: sourceKindSpeakeasySlack, payload: `"hi"`, want: sourceKindSpeakeasySlack},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			got, err := turnEventSource(tc.thread, []byte(tc.payload))
+			require.NoError(t, err)
+			require.Equal(t, tc.want, got)
+		})
+	}
+	_, err := turnEventSource(sourceKindSlack, []byte(`{"_gram_source_kind":1}`))
+	require.Error(t, err)
+}
