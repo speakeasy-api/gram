@@ -3,6 +3,7 @@ package remotesessions_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgxpool"
@@ -418,6 +419,53 @@ func TestDetachServerClientAssociation_KeepsAdministratorClients(t *testing.T) {
 
 	require.Equal(t, []uuid.UUID{adminClientID}, offeredAuthClients(t, ctx, ti.conn, first),
 		"only the link derived from the association is retired")
+}
+
+// TestDetachServerClientAssociationGatesRegistrationsBeforeTheServerRow pins
+// the lock order the shared transaction depends on. Holding a server row and
+// then waiting for a registration gate another transaction holds — while that
+// one waits for the row — deadlocks the pair, so the gate has to come first.
+// The probe asserts which lock the handler stops at, not merely that it
+// stops: stopping at the server row is the order that deadlocks.
+func TestDetachServerClientAssociationGatesRegistrationsBeforeTheServerRow(t *testing.T) {
+	t.Parallel()
+
+	// probeTimeout bounds the gate probe, independently of goroutine scheduling.
+	const probeTimeout = 100 * time.Millisecond
+	ctx, ti := newTestServiceWithConfig(t, testServiceConfig{lockTimeout: probeTimeout})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-gate-order")
+	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "gate-order-a")
+	otherID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "gate-order-b")
+	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-gate-order")
+	associate(t, ctx, ti.conn, orgID, projectID, serverID, clientID)
+	associate(t, ctx, ti.conn, orgID, projectID, otherID, clientID)
+
+	holder := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, authclientbackfill.New(holder).LockOAuthRegistrationSyncScope(ctx, authclientbackfill.LockOAuthRegistrationSyncScopeParams{
+		OrganizationID:  orgID,
+		RegistrationIds: []uuid.UUID{clientID},
+	}))
+
+	probeErr := ti.service.DetachServerClientAssociation(ctx, &gen.DetachServerClientAssociationPayload{
+		McpServerID:           serverID.String(),
+		RemoteSessionClientID: clientID.String(),
+	})
+	testenv.RequireLockNotAvailable(t, probeErr)
+	require.ErrorContains(t, probeErr, "lock mcp server auth client scope",
+		"the registration gate is reached before the server row")
+
+	require.NoError(t, holder.Rollback(ctx))
+	require.NoError(t, ti.service.DetachServerClientAssociation(ctx, &gen.DetachServerClientAssociationPayload{
+		McpServerID:           serverID.String(),
+		RemoteSessionClientID: clientID.String(),
+	}))
+	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, serverID))
 }
 
 // refuseTypedLinkRetirement makes the typed link retirement fail inside

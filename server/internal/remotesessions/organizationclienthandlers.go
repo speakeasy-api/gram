@@ -921,6 +921,12 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, affectedProjects); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock auth client writer scope").LogError(ctx, logger)
 	}
+	// Gate the registrations those servers reach before locking the client
+	// row, so this never holds a row another transaction needs while waiting
+	// for a gate that transaction holds.
+	if err := authclientbackfill.PreflightServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, affectedServers...); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock auth client scope of the affected servers").LogError(ctx, logger)
+	}
 	if _, err := txRepo.LockOrganizationRemoteSessionClientForAuthMethodWrite(ctx, repo.LockOrganizationRemoteSessionClientForAuthMethodWriteParams{
 		ID:             clientID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
@@ -1050,6 +1056,12 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 	}
 	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, affectedProjects); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock auth client writer scope").LogError(ctx, logger)
+	}
+	// Gate the registrations those servers reach before locking the client
+	// row, so this never holds a row another transaction needs while waiting
+	// for a gate that transaction holds.
+	if err := authclientbackfill.PreflightServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, affectedServers...); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock auth client scope of the affected servers").LogError(ctx, logger)
 	}
 
 	// Establish org ownership of the client before detaching the MCP server.

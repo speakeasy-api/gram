@@ -113,6 +113,13 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock association writer scope").LogError(ctx, logger)
 	}
+	// The typed synchronization below gates the registrations this server
+	// reaches. Taking those gates before the server row, rather than when the
+	// synchronization asks for them, keeps this in step with the paths that
+	// reach the same gates without holding a server row.
+	if err := authclientbackfill.PreflightServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, serverID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock mcp server auth client scope").LogError(ctx, logger)
+	}
 
 	// The server lock serializes this with identity commits and server
 	// updates, which change the bindings the sole-consumer check reads.

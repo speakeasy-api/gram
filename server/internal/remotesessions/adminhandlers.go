@@ -5,6 +5,8 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -1290,15 +1292,22 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 	txRepo := repo.New(dbtx)
 
 	// A platform-global client is reachable from several organizations. Both
-	// the discovery and each organization's writer scope precede the first
-	// mutation, so the scopes are held before any row lock is taken.
+	// the discovery and each organization's scopes precede the first mutation,
+	// so they are held before any row lock is taken. Organizations are taken
+	// in a fixed order: two deletions reaching the same pair must not take
+	// them in opposite orders.
 	affected, err := serversLosingGlobalClient(ctx, dbtx, clientID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list servers losing the global client").LogError(ctx, logger)
 	}
-	for organizationID, scope := range affected {
+	organizationIDs := slices.Sorted(maps.Keys(affected))
+	for _, organizationID := range organizationIDs {
+		scope := affected[organizationID]
 		if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, organizationID, scope.projects); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "lock auth client writer scope").LogError(ctx, logger)
+		}
+		if err := authclientbackfill.PreflightServerAssociations(ctx, dbtx, organizationID, scope.servers...); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "lock auth client scope of the affected servers").LogError(ctx, logger)
 		}
 	}
 
@@ -1331,8 +1340,8 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 	if _, err := upstreamclientsrepo.New(dbtx).RemoveGlobalClientAssociations(ctx, deleted.ID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "remove deleted client's mcp server associations").LogError(ctx, logger)
 	}
-	for organizationID, scope := range affected {
-		if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, organizationID, scope.servers...); err != nil {
+	for _, organizationID := range organizationIDs {
+		if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, organizationID, affected[organizationID].servers...); err != nil {
 			return oops.E(oops.CodeUnexpected, err, "sync auth clients of the global client's servers").LogError(ctx, logger)
 		}
 	}
