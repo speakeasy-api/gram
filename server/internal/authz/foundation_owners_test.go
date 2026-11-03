@@ -5,9 +5,8 @@ import (
 	"strings"
 )
 
-// Backend Revamp tickets that own a migration (Linear project "Practical
-// RBAC", milestone "Backend Revamp", parent AIS-830). The keys match the
-// ticket work keys used in docs/rbac-foundation-migration.md.
+// Migration batches that own consumers. The values match the batch keys in
+// docs/rbac-foundation-migration.md, which describes what each batch moves.
 const (
 	ownerA1  = "A1 AIS-879"
 	ownerAG1 = "AG1 AIS-856"
@@ -51,9 +50,9 @@ const (
 	ownerX4  = "X4 AIS-876"
 )
 
-// foundationPackageOwners assigns each consumer package to the ticket whose
-// code entry points name it. foundationFileOwners and foundationFunctionOwners
-// split packages that more than one ticket migrates.
+// foundationPackageOwners assigns each consumer package to the batch whose
+// entry points name it. foundationFileOwners and foundationFunctionOwners
+// split packages that more than one batch migrates.
 var foundationPackageOwners = map[string]string{
 	"cmd/directory-roles":                                    ownerF5,
 	"cmd/gram":                                               ownerF5,
@@ -176,13 +175,14 @@ var foundationFunctionOwners = map[string]string{
 	"internal/skills/impl.go *Service.accessibleSkillIDs":                           ownerS2,
 }
 
-// foundationOwner returns the ticket that migrates consumer. Scope metadata
-// projections and stored-grant seeding move with X1's catalogue, validation
-// and default projections (X2 for runtime-policy and key policies), wherever
-// they are called from. Engine wiring (construction, cache invalidation,
-// challenge logging) belongs to F5's shared engine construction, except in
-// demoseed, which builds its own engine to seed data and stays with X4.
-// Everything else follows its function, file or package.
+// foundationOwner returns the batch that migrates consumer. Scope metadata
+// projections and stored-grant seeding move with the scope catalogue,
+// validation and default projections (runtime-policy and key-policy
+// projections move with runtime policy), wherever they are called from.
+// Engine wiring (construction, cache invalidation, challenge logging) moves
+// with shared engine construction, except in demoseed, which builds its own
+// engine to seed data and moves with the demo seed. Everything else follows
+// its function, file or package.
 func foundationOwner(c inventoryConsumer) string {
 	dir := path.Dir(c.File)
 	switch {
