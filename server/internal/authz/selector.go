@@ -143,8 +143,13 @@ func selectorValueMatches(key, grantVal, checkVal, representedUser string) bool 
 		(checkVal == SelectorValueRepresentedUser && grantVal == representedUser)
 }
 
-// ResourceKindForScope derives the selector resource kind from a scope.
+// ResourceKindForScope derives the selector resource kind from a scope:
+// the registry declaration when there is one, otherwise the legacy prefix
+// switch below.
 func ResourceKindForScope(scope Scope) string {
+	if entry, ok := registeredScopes[scope]; ok {
+		return entry.resourceKind
+	}
 	if scope == ScopeMCPAuth || scope == ScopeMCPBlockedAuth {
 		return ResourceKindMCPAuthClient
 	}

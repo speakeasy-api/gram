@@ -13,12 +13,13 @@ const (
 	GrantSurfaceRiskPolicy GrantSurface = "risk_policy"
 )
 
-var scopeGrantSurfaces = map[Scope]GrantSurface{
+// Scopes in the scope registry are merged in by withRegistry, so this
+// literal is partial on purpose; TestEveryScopeConstantIsInEveryTable
+// checks coverage in place of the exhaustive linter.
+//
+//exhaustive:ignore
+var scopeGrantSurfaces = withRegistry("scopeGrantSurfaces", map[Scope]GrantSurface{
 	ScopeRoot:                    GrantSurfaceAccess,
-	ScopeOrgRead:                 GrantSurfaceAccess,
-	ScopeOrgBlockedRead:          GrantSurfaceAccess,
-	ScopeOrgAdmin:                GrantSurfaceAccess,
-	ScopeOrgBlockedAdmin:         GrantSurfaceAccess,
 	ScopeProjectRead:             GrantSurfaceAccess,
 	ScopeProjectBlockedRead:      GrantSurfaceAccess,
 	ScopeProjectWrite:            GrantSurfaceAccess,
@@ -62,7 +63,7 @@ var scopeGrantSurfaces = map[Scope]GrantSurface{
 	ScopeWorkloadBlockedWrite:    GrantSurfaceAccess,
 	ScopeOrgDeviceAgentSync:      GrantSurfaceAccess,
 	ScopeOrgHooksIngest:          GrantSurfaceAccess,
-}
+}, func(e *registeredScope) GrantSurface { return e.surface })
 
 // GrantSurfaceForScope returns the surface that owns writes for scope.
 func GrantSurfaceForScope(scope Scope) (GrantSurface, bool) {

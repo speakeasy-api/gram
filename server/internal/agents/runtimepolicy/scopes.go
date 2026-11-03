@@ -70,14 +70,17 @@ func retiredRuntimeScope() runtimeScopeDefinition {
 	}
 }
 
-// runtimeScopeDefinitions is the application-owned overlay that determines
-// which authorization scopes agent direct and delegated policy may use.
-var runtimeScopeDefinitions = map[authz.Scope]runtimeScopeDefinition{
+// runtimeScopeDefinitions determines which authorization scopes agent direct
+// and delegated policy may use. Scopes in the core authz scope registry carry
+// their safety there (ScopeDef.AgentRuntimeSafeSince); the literal below holds
+// the scopes not migrated yet and the retirement tombstones.
+// Scopes in the scope registry are merged in by withRegistryRuntimeScopes, so this
+// literal is partial on purpose; TestRuntimeScopeRegistryCoversAuthorizationScopes
+// checks coverage in place of the exhaustive linter.
+//
+//exhaustive:ignore
+var runtimeScopeDefinitions = withRegistryRuntimeScopes(map[authz.Scope]runtimeScopeDefinition{
 	authz.ScopeRoot:                    activeRuntimeScope(),
-	authz.ScopeOrgRead:                 activeRuntimeScope(),
-	authz.ScopeOrgBlockedRead:          activeRuntimeScope(),
-	authz.ScopeOrgAdmin:                activeRuntimeScope(),
-	authz.ScopeOrgBlockedAdmin:         activeRuntimeScope(),
 	authz.ScopeProjectRead:             safeRuntimeScope(),
 	authz.ScopeProjectBlockedRead:      safeRuntimeScopeSince(RuntimeScopeRegistryVersion4),
 	authz.ScopeProjectWrite:            safeRuntimeScope(),
@@ -127,6 +130,22 @@ var runtimeScopeDefinitions = map[authz.Scope]runtimeScopeDefinition{
 	authz.ScopeOrgHooksIngest:       safeRuntimeScopeSince(RuntimeScopeRegistryVersion2),
 	scopeMCPApprovalReadTombstone:   retiredRuntimeScope(),
 	scopeMCPApprovalDecideTombstone: retiredRuntimeScope(),
+})
+
+// withRegistryRuntimeScopes adds the runtime safety of every scope in the core
+// authz scope registry, panicking if legacy still declares one of them.
+func withRegistryRuntimeScopes(legacy map[authz.Scope]runtimeScopeDefinition) map[authz.Scope]runtimeScopeDefinition {
+	for _, scope := range authz.RegistryScopes() {
+		if _, ok := legacy[scope]; ok {
+			panic(fmt.Sprintf("runtimepolicy: scope %q is in the authz scope registry and must be removed from runtimeScopeDefinitions", scope))
+		}
+		safeSince, _ := authz.AgentRuntimeSafeSince(scope)
+		legacy[scope] = runtimeScopeDefinition{
+			lifecycle: RuntimeScopeLifecycleActive,
+			safeSince: RuntimeScopeRegistryVersion(safeSince),
+		}
+	}
+	return legacy
 }
 
 // RuntimeScopeLifecycleFor returns the lifecycle of a scope known to the agent

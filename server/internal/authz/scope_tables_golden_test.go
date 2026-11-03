@@ -31,7 +31,7 @@ func TestScopeTablesGolden(t *testing.T) {
 		require.NoError(t, os.MkdirAll("testdata", 0o750))
 		require.NoError(t, os.WriteFile(path, []byte(got), 0o600))
 	}
-	want, err := os.ReadFile(path) //nolint:gosec // fixed test path
+	want, err := os.ReadFile(path)
 	require.NoError(t, err)
 	require.Equal(t, string(want), got)
 }

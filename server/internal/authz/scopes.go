@@ -89,9 +89,7 @@ const (
 	ScopeVisibilityInternal    = "internal"
 )
 
-var adminScopes = []Scope{
-	ScopeOrgRead,
-	ScopeOrgAdmin,
+var adminScopes = withRegistryRole(SystemRoleAdmin, []Scope{
 	ScopeProjectRead,
 	ScopeProjectWrite,
 	ScopeMCPRead,
@@ -131,17 +129,18 @@ var adminScopes = []Scope{
 	// logs carry tool arguments, results, prompt text, and hook payloads from
 	// every member of a project, so viewing them must be granted explicitly per
 	// project. Neither project:* nor org:admin implies it.
-}
+})
 
 // scopeVisibilityByScope is the source of truth for whether a scope is exposed
 // to clients as a first-class permission or only used internally for storage
-// and evaluation.
-var scopeVisibilityByScope = map[Scope]scopeVisibility{
+// and evaluation, for scopes not yet in the scope registry.
+// Scopes in the scope registry are merged in by withRegistry, so this
+// literal is partial on purpose; TestEveryScopeConstantIsInEveryTable
+// checks coverage in place of the exhaustive linter.
+//
+//exhaustive:ignore
+var scopeVisibilityByScope = withRegistry("scopeVisibilityByScope", map[Scope]scopeVisibility{
 	ScopeRoot:                    scopeVisibilityInternal,
-	ScopeOrgRead:                 scopeVisibilityUserVisible,
-	ScopeOrgBlockedRead:          scopeVisibilityInternal,
-	ScopeOrgAdmin:                scopeVisibilityUserVisible,
-	ScopeOrgBlockedAdmin:         scopeVisibilityInternal,
 	ScopeProjectRead:             scopeVisibilityUserVisible,
 	ScopeProjectBlockedRead:      scopeVisibilityInternal,
 	ScopeProjectWrite:            scopeVisibilityUserVisible,
@@ -185,10 +184,9 @@ var scopeVisibilityByScope = map[Scope]scopeVisibility{
 	ScopeWorkloadBlockedWrite:    scopeVisibilityInternal,
 	ScopeOrgDeviceAgentSync:      scopeVisibilityUserVisible,
 	ScopeOrgHooksIngest:          scopeVisibilityUserVisible,
-}
+}, func(e *registeredScope) scopeVisibility { return e.visibility })
 
-var memberScopes = []Scope{
-	ScopeOrgRead,
+var memberScopes = withRegistryRole(SystemRoleMember, []Scope{
 	ScopeProjectRead,
 	ScopeMCPRead,
 	ScopeMCPConnect,
@@ -202,7 +200,7 @@ var memberScopes = []Scope{
 	// Most Observe pages are separately gated on org:admin. The Identities
 	// roster and required-employee-scoped Shadow AI read are project:read
 	// surfaces; identity detail resolution separately requires org:read.
-}
+})
 
 func (s Scope) Parts() ScopeParts {
 	resource, action, ok := strings.Cut(string(s), ":")
@@ -265,12 +263,13 @@ func ScopeVisibilityFor(scope Scope) (string, bool) {
 //
 // mcp:auth is independent of every other scope: server access, authoring and
 // administration imply no use of an auth client.
-var scopeExpansions = map[Scope][]Scope{
+// Scopes in the scope registry are merged in by withRegistry, so this
+// literal is partial on purpose; TestEveryScopeConstantIsInEveryTable
+// checks coverage in place of the exhaustive linter.
+//
+//exhaustive:ignore
+var scopeExpansions = withRegistry("scopeExpansions", map[Scope][]Scope{
 	ScopeRoot:                    nil,
-	ScopeOrgRead:                 {ScopeOrgAdmin},
-	ScopeOrgBlockedRead:          nil,
-	ScopeOrgAdmin:                nil,
-	ScopeOrgBlockedAdmin:         {ScopeOrgBlockedRead},
 	ScopeProjectRead:             {ScopeProjectWrite},
 	ScopeProjectBlockedRead:      nil,
 	ScopeProjectWrite:            nil,
@@ -314,17 +313,18 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeWorkloadBlockedWrite:    {ScopeWorkloadBlockedRead},
 	ScopeOrgDeviceAgentSync:      {ScopeOrgAdmin},
 	ScopeOrgHooksIngest:          {ScopeOrgAdmin},
-}
+}, func(e *registeredScope) []Scope { return e.satisfiedBy })
 
 // scopeExclusions maps a checked base scope to the direct blocklist scope that
 // stores exception grants for it. Broader blocklist scopes are handled by
 // scopeExpansions on the blocklist scope itself.
-var scopeExclusions = map[Scope]Scope{
+// Scopes in the scope registry are merged in by withRegistry, so this
+// literal is partial on purpose; TestEveryScopeConstantIsInEveryTable
+// checks coverage in place of the exhaustive linter.
+//
+//exhaustive:ignore
+var scopeExclusions = withRegistry("scopeExclusions", map[Scope]Scope{
 	ScopeRoot:                    "",
-	ScopeOrgRead:                 ScopeOrgBlockedRead,
-	ScopeOrgBlockedRead:          "",
-	ScopeOrgAdmin:                ScopeOrgBlockedAdmin,
-	ScopeOrgBlockedAdmin:         "",
 	ScopeProjectRead:             ScopeProjectBlockedRead,
 	ScopeProjectBlockedRead:      "",
 	ScopeProjectWrite:            ScopeProjectBlockedWrite,
@@ -368,7 +368,7 @@ var scopeExclusions = map[Scope]Scope{
 	ScopeWorkloadBlockedWrite:    "",
 	ScopeOrgDeviceAgentSync:      "",
 	ScopeOrgHooksIngest:          "",
-}
+}, func(e *registeredScope) Scope { return e.exclusion })
 
 // ExclusionScopeFor returns the scope that stores exception grants for the
 // provided base scope.

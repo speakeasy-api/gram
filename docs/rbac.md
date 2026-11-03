@@ -177,6 +177,12 @@ Read this map as "if a handler requires the key scope, any scope in the value li
 
 Expansion happens when the engine evaluates a check. If code asks for `project:read`, the engine checks for `root`, `project:read`, and `project:write` against the same resource selector. The API also exposes the inverse relationship as `sub_scopes` so role UIs can show what a broader grant implies; those sub-scopes are derived from code and are not additional database rows.
 
+#### Scope registry
+
+Scopes are moving, one product slice at a time, from the parallel tables above into a single declaration per scope: `scopeRegistry` in `server/internal/authz/registry.go`. A `ScopeDef` names the scope's resource kind, the scopes it implies, the system roles that hold it, and its agent-runtime safety. Setting `Block` derives the `<resource>:blocked_<action>` twin, which mirrors the implications in reverse (`org:admin` implies `org:read`, so `org:blocked_read` also blocks `org:admin`). `org:read` and `org:admin` are the first scopes declared there.
+
+Registry scopes are merged into the legacy tables at package initialisation, which panics if a legacy table still lists one. `TestScopeTablesGolden` (`testdata/scope_tables.golden`) and `TestRuntimeScopeDefinitionsGolden` pin every scope's resolved behaviour, so moving a scope must leave both files unchanged.
+
 ### Grant
 
 A grant gives a principal a scope for some resource selector.
