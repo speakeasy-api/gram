@@ -1,10 +1,23 @@
 import type { AdminStripeSubscriptionCandidate } from "@gram/admin-client/models/components/adminstripesubscriptioncandidate";
 import type { SetStripeSubscriptionRequestBody } from "@gram/admin-client/models/components/setstripesubscriptionrequestbody";
-import { useId, useRef, useState, type JSX, type RefObject } from "react";
+import {
+  useCallback,
+  useId,
+  useLayoutEffect,
+  useRef,
+  useState,
+  type JSX,
+  type RefObject,
+} from "react";
 import { useForm, useStore } from "@tanstack/react-form";
 import { useMutation, useQueryClient } from "@tanstack/react-query";
+import {
+  CircleCheckBig,
+  ShieldQuestionMark,
+  CircleX,
+  LoaderCircle,
+} from "lucide-react";
 
-import { useConfirmDialog } from "@/components/ConfirmDialog";
 import { CopyValue } from "@/components/CopyValue";
 import { ExternalLinkButton } from "@/components/ExternalLinkButton";
 import { Button } from "@/components/ui/button";
@@ -50,19 +63,17 @@ const MAX_STRIPE_SUBSCRIPTION_ID_LENGTH = 255;
 const MISSING_CUSTOMER_NOTE =
   "Set a Stripe customer ID before recording a subscription. Speakeasy checks that the subscription belongs to that customer.";
 
-function ConfirmationDetail({
-  label,
-  value,
-}: {
-  label: string;
-  value: string;
-}): JSX.Element {
-  return (
-    <div className="grid gap-1 sm:grid-cols-[8rem_minmax(0,1fr)]">
-      <dt className="text-muted-foreground">{label}</dt>
-      <dd className="break-all font-mono">{value}</dd>
-    </div>
-  );
+function subscriptionStatusLabel(status: string): string {
+  switch (status) {
+    case "active":
+      return "Active";
+    case "trialing":
+      return "Trialing";
+    case "past_due":
+      return "Past due";
+    default:
+      return status;
+  }
 }
 
 function hasValue(value: string | undefined): value is string {
@@ -76,12 +87,42 @@ export function SetStripeSubscription({
   org: AdminOrganization;
   focusFallbackRef?: RefObject<HTMLElement | null>;
 }): JSX.Element {
+  const activatesPayg = org.account_type !== "payg";
   const qc = useQueryClient();
-  const [confirm, confirmDialog] = useConfirmDialog();
   const { announce, showFailure } = useWriteReport();
   const inputID = useId();
   const messageID = useId();
   const [open, setOpen] = useState(false);
+  const context = JSON.stringify([
+    org.id,
+    org.name,
+    org.stripe_customer_id,
+    org.stripe_subscription_id,
+    org.account_type,
+    org.whitelisted,
+    org.disabled_at,
+    org.trial_tier,
+    org.trial_state,
+    org.trial_converted_at,
+    org.trial_demoted_at,
+    org.trial_ends_at,
+  ]);
+  // A generation, not just an ID comparison, rejects A → B → A responses.
+  const generation = useRef(0);
+  const [candidate, setCandidate] =
+    useState<AdminStripeSubscriptionCandidate | null>(null);
+  const [validationError, setValidationError] = useState<string | null>(null);
+  const [validating, setValidating] = useState(false);
+  const invalidateValidation = useCallback(() => {
+    generation.current += 1;
+    setCandidate(null);
+    setValidationError(null);
+    setValidating(false);
+  }, []);
+  // Clear validation before a changed organization context can be acted on.
+  useLayoutEffect(() => {
+    invalidateValidation();
+  }, [context, invalidateValidation]);
   const mounted = useRef(true);
   const assignmentSucceeded = useRef(false);
   useOnUnmount(() => {
@@ -135,61 +176,22 @@ export function SetStripeSubscription({
         stripeSubscriptionId: value.subscriptionID.trim(),
       };
       const reviewedOrganization = { id: org.id, name: org.name };
-      showFailure(null);
-      let preview: AdminStripeSubscriptionCandidate;
-      try {
-        preview = await getStripeSubscriptionCandidate(request);
-        if (!mounted.current) return;
-      } catch (error) {
-        if (!mounted.current) return;
-        const message = errorMessage(error);
-        if (httpStatus(error) === 409) {
-          void invalidateOrganizations(qc);
-        }
-        const text = `Could not verify Stripe subscription ID for ${reviewedOrganization.name}: ${message}`;
-        form.setErrorMap({ onSubmit: { form: message, fields: {} } });
-        announce(text);
-        showFailure(text);
-        return;
-      }
-
-      const confirmed = await confirm({
-        title: `Set Stripe subscription for ${reviewedOrganization.name}?`,
-        description:
-          "Verify this Stripe subscription belongs to the organization's Stripe customer before saving.",
-        details: (
-          <dl className="bg-muted/20 grid gap-2 border p-3 text-sm">
-            <ConfirmationDetail
-              label="Organization"
-              value={`${reviewedOrganization.name} (${reviewedOrganization.id})`}
-            />
-            <ConfirmationDetail
-              label="Requested ID"
-              value={request.stripeSubscriptionId}
-            />
-            <ConfirmationDetail label="Stripe returned ID" value={preview.id} />
-            <ConfirmationDetail
-              label="Stripe customer"
-              value={preview.customerId}
-            />
-            <ConfirmationDetail label="Status" value={preview.status} />
-          </dl>
-        ),
-        confirmLabel: "Set subscription ID",
-      });
-      if (!mounted.current || !confirmed) return;
-
+      if (!candidate) return;
       showFailure(null);
       try {
         const updated = await mutation.mutateAsync(request);
         if (!mounted.current) return;
-        const text = `Set Stripe subscription ID ${updated.stripe_subscription_id ?? request.stripeSubscriptionId} for ${updated.name}.`;
+        const text = activatesPayg
+          ? `Activated PAYG and linked Stripe subscription ID ${updated.stripe_subscription_id ?? request.stripeSubscriptionId} for ${updated.name}.`
+          : `Set Stripe subscription ID ${updated.stripe_subscription_id ?? request.stripeSubscriptionId} for ${updated.name}.`;
         announce(text);
         showFailure(null);
+        invalidateValidation();
         setOpen(false);
         form.reset();
       } catch (error) {
         if (!mounted.current) return;
+        invalidateValidation();
         const text = `Could not set Stripe subscription ID for ${reviewedOrganization.name}: ${errorMessage(error)}`;
         announce(text);
         showFailure(text);
@@ -197,14 +199,44 @@ export function SetStripeSubscription({
     },
   });
   const busy = useStore(form.store, (state) => state.isSubmitting);
-  const submitted = useStore(
-    form.store,
-    (state) => state.submissionAttempts > 0,
-  );
-  const lookupError = useStore(form.store, (state) => {
-    const error = state.errorMap.onSubmit;
-    return typeof error === "string" ? error : null;
-  });
+  const validate = async () => {
+    invalidateValidation();
+    mutation.reset();
+    showFailure(null);
+    const subscriptionID = form.getFieldValue("subscriptionID").trim();
+    const formatError = !subscriptionID
+      ? "Enter a Stripe subscription ID."
+      : subscriptionID.length > MAX_STRIPE_SUBSCRIPTION_ID_LENGTH
+        ? `Stripe subscription IDs must be ${MAX_STRIPE_SUBSCRIPTION_ID_LENGTH} characters or fewer.`
+        : !STRIPE_SUBSCRIPTION_ID.test(subscriptionID)
+          ? "Enter a Stripe subscription ID beginning with sub_ and containing only letters, numbers, or underscores."
+          : null;
+    if (formatError) {
+      setValidationError(formatError);
+      return;
+    }
+    const attempt = generation.current;
+    setValidating(true);
+    try {
+      const preview = await getStripeSubscriptionCandidate({
+        organizationId: org.id,
+        stripeSubscriptionId: subscriptionID,
+      });
+      if (!mounted.current || generation.current !== attempt) return;
+      setCandidate(preview);
+    } catch (error) {
+      if (!mounted.current || generation.current !== attempt) return;
+      const message = errorMessage(error);
+      setValidationError(message);
+      if (httpStatus(error) === 409) void invalidateOrganizations(qc);
+      const text = `Could not verify Stripe subscription ID for ${org.name}: ${message}`;
+      announce(text);
+      showFailure(text);
+    } finally {
+      if (mounted.current && generation.current === attempt)
+        setValidating(false);
+    }
+  };
 
   if (hasValue(org.stripe_subscription_id)) {
     return (
@@ -224,7 +256,31 @@ export function SetStripeSubscription({
     );
   }
 
-  if (org.account_type !== "payg") {
+  const unconvertedTrial =
+    org.trial_tier !== undefined && !hasValue(org.trial_converted_at);
+  const unconvertedEnterpriseTrial =
+    org.trial_tier === "enterprise" && unconvertedTrial;
+  const repairNote =
+    org.account_type === "payg" && unconvertedTrial
+      ? "This PAYG organization has an unconverted trial. Repair its trial lifecycle before linking a Stripe subscription."
+      : unconvertedEnterpriseTrial &&
+          ((org.account_type === "enterprise" && !org.whitelisted) ||
+            (org.account_type === "free" && org.whitelisted))
+        ? "This unconverted enterprise trial has incompatible organization access. Review and repair its trial lifecycle and book-a-demo gate before linking a Stripe subscription."
+        : null;
+  if (repairNote) {
+    return (
+      <div className="grid gap-1">
+        <span className="text-muted-foreground text-sm">-</span>
+        <p className="text-muted-foreground max-w-md text-sm">{repairNote}</p>
+      </div>
+    );
+  }
+  if (
+    org.account_type !== "payg" &&
+    org.account_type !== "free" &&
+    !(org.account_type === "enterprise" && unconvertedEnterpriseTrial)
+  ) {
     return <span className="text-muted-foreground text-sm">-</span>;
   }
 
@@ -240,7 +296,7 @@ export function SetStripeSubscription({
   }
 
   const error =
-    lookupError ?? (mutation.error ? errorMessage(mutation.error) : null);
+    validationError ?? (mutation.error ? errorMessage(mutation.error) : null);
   return (
     <div className="flex flex-wrap items-center gap-2">
       <span className="text-muted-foreground text-sm">-</span>
@@ -248,6 +304,7 @@ export function SetStripeSubscription({
         open={open}
         onOpenChange={(next) => {
           if (!next && busy) return;
+          invalidateValidation();
           if (next) {
             form.reset();
             mutation.reset();
@@ -270,65 +327,102 @@ export function SetStripeSubscription({
             noValidate
             onSubmit={(event) => {
               event.preventDefault();
-              form.setErrorMap({ onSubmit: undefined });
               void form.handleSubmit();
             }}
           >
             <DialogHeader>
               <DialogTitle>Set Stripe subscription ID</DialogTitle>
               <DialogDescription>
-                This records the initial Stripe subscription for a PAYG
-                organization. Speakeasy verifies the subscription belongs to{" "}
-                {org.stripe_customer_id}. It cannot replace a subscription that
-                is already set.
+                Link an existing subscription to {org.name}.
               </DialogDescription>
             </DialogHeader>
 
-            <form.Field
-              name="subscriptionID"
-              validators={{
-                onChange: ({ value }) => {
-                  const trimmed = value.trim();
-                  if (!trimmed) return "Enter a Stripe subscription ID.";
-                  if (trimmed.length > MAX_STRIPE_SUBSCRIPTION_ID_LENGTH) {
-                    return `Stripe subscription IDs must be ${MAX_STRIPE_SUBSCRIPTION_ID_LENGTH} characters or fewer.`;
-                  }
-                  if (!STRIPE_SUBSCRIPTION_ID.test(trimmed)) {
-                    return "Enter a Stripe subscription ID beginning with sub_ and containing only letters, numbers, or underscores.";
-                  }
-                  return undefined;
-                },
-              }}
-            >
+            <form.Field name="subscriptionID">
               {(field) => {
-                let message = error;
-                if (field.state.meta.isBlurred || submitted) {
-                  message = field.state.meta.errors[0] ?? error;
-                }
+                const message = error;
                 return (
                   <>
                     <div className="my-4 grid gap-2">
                       <label htmlFor={inputID} className="text-sm font-medium">
                         Stripe subscription ID
                       </label>
-                      <Input
-                        id={inputID}
-                        name={field.name}
-                        value={field.state.value}
-                        required
-                        autoComplete="off"
-                        placeholder="sub_..."
-                        disabled={busy}
-                        aria-invalid={Boolean(message)}
-                        aria-describedby={message ? messageID : undefined}
-                        onBlur={field.handleBlur}
-                        onChange={(event) => {
-                          field.handleChange(event.target.value);
-                          form.setErrorMap({ onSubmit: undefined });
-                          if (mutation.error) mutation.reset();
-                        }}
-                      />
+                      <div className="flex items-start gap-2">
+                        <Input
+                          id={inputID}
+                          name={field.name}
+                          value={field.state.value}
+                          required
+                          autoComplete="off"
+                          placeholder="sub_..."
+                          disabled={busy}
+                          aria-invalid={Boolean(message)}
+                          aria-describedby={
+                            message || candidate ? messageID : undefined
+                          }
+                          onBlur={field.handleBlur}
+                          onChange={(event) => {
+                            invalidateValidation();
+                            field.handleChange(event.target.value);
+                            if (mutation.error) mutation.reset();
+                          }}
+                        />
+                        <Button
+                          type="button"
+                          variant="outline"
+                          disabled={
+                            busy || validating || !field.state.value.trim()
+                          }
+                          onClick={() => void validate()}
+                          className={
+                            validationError
+                              ? "border-destructive text-destructive hover:bg-destructive/10 hover:text-destructive dark:border-destructive dark:hover:bg-destructive/10"
+                              : candidate
+                                ? "border-success-border text-success-foreground hover:bg-success hover:text-success-foreground dark:border-success-border dark:hover:bg-success"
+                                : undefined
+                          }
+                          aria-busy={validating}
+                        >
+                          Validate
+                          {validating ? (
+                            <LoaderCircle
+                              data-slot="validation-spinner"
+                              aria-hidden="true"
+                              className="animate-spin motion-reduce:animate-none"
+                            />
+                          ) : validationError ? (
+                            <CircleX
+                              data-slot="validation-error"
+                              aria-hidden="true"
+                            />
+                          ) : candidate ? (
+                            <CircleCheckBig
+                              data-slot="validation-success"
+                              aria-hidden="true"
+                            />
+                          ) : (
+                            <ShieldQuestionMark
+                              data-slot="validation-idle"
+                              aria-hidden="true"
+                            />
+                          )}
+                        </Button>
+                      </div>
                     </div>
+                    {candidate && (
+                      <div
+                        id={messageID}
+                        role="status"
+                        className="grid gap-1 text-sm"
+                      >
+                        <p className="font-medium">
+                          Valid subscription ·{" "}
+                          {subscriptionStatusLabel(candidate.status)}
+                        </p>
+                        <p className="text-muted-foreground">
+                          Matches this organization’s Stripe customer.
+                        </p>
+                      </div>
+                    )}
                     {message && (
                       <p
                         id={messageID}
@@ -343,22 +437,44 @@ export function SetStripeSubscription({
               }}
             </form.Field>
 
+            {candidate && (
+              <div className="mt-4 grid gap-2 text-sm">
+                <p>
+                  {activatesPayg
+                    ? `Applying changes will switch ${org.name} from ${org.account_type === "free" ? "Free" : "Enterprise"} to PAYG.`
+                    : "Applying changes will link this subscription. Account type and access stay unchanged."}
+                </p>
+                {activatesPayg && unconvertedTrial && (
+                  <p className="text-muted-foreground">
+                    The current trial will be marked converted.
+                  </p>
+                )}
+                {org.disabled_at && (
+                  <p className="text-muted-foreground">
+                    This organization will remain disabled.
+                  </p>
+                )}
+              </div>
+            )}
+
             <DialogFooter className="mt-4">
               <Button
                 type="button"
                 variant="ghost"
                 size="sm"
                 disabled={busy}
-                onClick={() => setOpen(false)}
+                onClick={() => {
+                  invalidateValidation();
+                  setOpen(false);
+                }}
               >
                 Cancel
               </Button>
-              <Button type="submit" size="sm" disabled={busy}>
-                {mutation.isPending ? "Setting…" : "Review and set"}
+              <Button type="submit" size="sm" disabled={busy || !candidate}>
+                {mutation.isPending ? "Setting…" : "Apply changes"}
               </Button>
             </DialogFooter>
           </form>
-          {confirmDialog}
         </DialogContent>
       </Dialog>
     </div>

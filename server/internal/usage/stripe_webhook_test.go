@@ -83,7 +83,7 @@ func (f *fakeStripeWebhookClient) GetCheckoutSession(context.Context, string) (*
 	return f.checkout, f.checkoutError
 }
 
-func (f *fakeStripeWebhookClient) GetSubscription(context.Context, string) (*stripeclient.SubscriptionState, error) {
+func (f *fakeStripeWebhookClient) GetSubscription(context.Context, string, ...stripeclient.GetSubscriptionOption) (*stripeclient.SubscriptionState, error) {
 	return nil, errors.New("not implemented")
 }
 

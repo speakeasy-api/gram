@@ -65,6 +65,7 @@ type checkoutStripeClient struct {
 	beforeCheckoutRead       func() error
 	subscriptionState        *stripeclient.SubscriptionState
 	subscriptionReadError    error
+	subscriptionReadOptions  []stripeclient.GetSubscriptionOption
 	subscriptionUpdateError  error
 	subscriptionUpdates      []stripeclient.SetSubscriptionCancelAtPeriodEndInput
 	afterSubscriptionUpdate  func()
@@ -203,9 +204,10 @@ func (c *checkoutStripeClient) GetCheckoutSession(_ context.Context, id string) 
 	return &state, nil
 }
 
-func (c *checkoutStripeClient) GetSubscription(context.Context, string) (*stripeclient.SubscriptionState, error) {
+func (c *checkoutStripeClient) GetSubscription(_ context.Context, _ string, options ...stripeclient.GetSubscriptionOption) (*stripeclient.SubscriptionState, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.subscriptionReadOptions = options
 	if c.subscriptionReadError != nil {
 		return nil, c.subscriptionReadError
 	}
