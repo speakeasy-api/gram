@@ -172,6 +172,9 @@ func (s *Service) decrypt(value string) (string, error) {
 // configurationRetryDelay paces renewal while an administrator fixes a refusal that kept the token.
 const configurationRetryDelay = 5 * time.Minute
 
+// configurationRetryLimit gives an administrator a weekend to fix the provider; past it a person signs in once.
+const configurationRetryLimit = 72 * time.Hour
+
 // refreshClaimLimit outlasts one renewal: identity chaining's 25 second attempt plus the 5 second write after it.
 const refreshClaimLimit = 30 * time.Second
 
@@ -778,6 +781,10 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 	if kind == RefreshRateLimited && retained {
 		kind = RefreshRetryable
 	}
+	// A token refused this long may be dead. A client rejection says nothing about the token.
+	if kind == RefreshConfiguration && retained && !s.now().Before(c.observedAt.Add(configurationRetryLimit)) {
+		kind = RefreshInvalidGrant
+	}
 	switch kind {
 	case RefreshInvalidGrant:
 		next.refresh = ""
@@ -790,12 +797,16 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 			next.nonce = ""
 		}
 		outcome = ErrReauthentication
-	case RefreshConfiguration:
+	case RefreshConfiguration, RefreshClientRejected:
 		// Nothing here says the refresh token is invalid.
 		next.assertion = ""
 		next.assertionExpiry = time.Time{}
 		next.status = "configuration_failure"
 		next.retryAfter = s.now().Add(configurationRetryDelay)
+		// Keep the first refusal's time, which configurationRetryLimit counts from.
+		if retained && kind == RefreshConfiguration {
+			next.observedAt = c.observedAt
+		}
 		outcome = ErrConfiguration
 	case RefreshInvalidIdentity:
 		next = clearDelegationSecrets(next)
@@ -804,6 +815,7 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 	case RefreshRetryable:
 		next.retryAfter = s.now().Add(time.Minute)
 		if retained {
+			next.observedAt = c.observedAt
 			outcome = ErrConfiguration
 		} else {
 			next.status = "temporary_failure"
