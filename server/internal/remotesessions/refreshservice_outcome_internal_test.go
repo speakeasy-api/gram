@@ -15,10 +15,10 @@ import (
 
 // Pins the mapping from every failure shape RefreshNow can produce onto the
 // upstream-refresh metric's outcome set. The ordering matters at three
-// points: an aborted POST also carries the transport marker, a deadline is
-// the caller's own only when the caller's context has expired, and
-// invalid_grant and invalid_client win over the 429 and 5xx buckets because the grant is
-// cleared on any status.
+// points: the POST and the store run detached, so their deadlines are never the
+// caller's, any other deadline is the caller's only when its context has expired,
+// and invalid_grant and invalid_client win over the 429 and 5xx buckets because
+// the grant is cleared on any status.
 func TestRefreshOutcomeForError(t *testing.T) {
 	t.Parallel()
 
@@ -39,15 +39,27 @@ func TestRefreshOutcomeForError(t *testing.T) {
 			want: remotesessionmetrics.RefreshOutcomeNoGrant,
 		},
 		{
-			name: "caller canceled mid-POST",
-			err:  fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, context.Canceled),
+			name: "caller canceled before the POST",
+			err:  fmt.Errorf("re-read active remote_session: %w", context.Canceled),
 			want: remotesessionmetrics.RefreshOutcomeCanceled,
 		},
 		{
-			name:       "caller's own deadline expired mid-POST",
+			name:       "caller's own deadline expired before the POST",
+			callerGone: true,
+			err:        fmt.Errorf("re-read active remote_session: %w", context.DeadlineExceeded),
+			want:       remotesessionmetrics.RefreshOutcomeCanceled,
+		},
+		{
+			name:       "POST's internal timeout after the caller left",
 			callerGone: true,
 			err:        fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, context.DeadlineExceeded),
-			want:       remotesessionmetrics.RefreshOutcomeCanceled,
+			want:       remotesessionmetrics.RefreshOutcomeUnreachable,
+		},
+		{
+			name:       "tokens not stored after the caller left",
+			callerGone: true,
+			err:        fmt.Errorf("persist refreshed session: %w: %w", errRefreshTokensNotStored, context.DeadlineExceeded),
+			want:       remotesessionmetrics.RefreshOutcomeInternalError,
 		},
 		{
 			name: "POST's internal timeout with a live caller",

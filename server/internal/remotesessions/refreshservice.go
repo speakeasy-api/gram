@@ -149,6 +149,8 @@ type RefreshService struct {
 
 	// restatements tracks identity restatements detached from request-path refreshes.
 	restatements sync.WaitGroup
+	// refreshes tracks request-path refreshes, which can outlive their caller.
+	refreshes sync.WaitGroup
 }
 
 // identityRestatement carries a refresh response out of the lease so identity is written after release.
@@ -204,6 +206,7 @@ func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, 
 		enricher:       nil,
 		assertions:     unavailableTokenEndpointAssertionSigner{},
 		restatements:   sync.WaitGroup{},
+		refreshes:      sync.WaitGroup{},
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -296,6 +299,9 @@ func resourceAmongSiblings(attachments map[uuid.UUID][]remotesessions_repo.ListO
 
 var errRefreshNotApplied = errors.New("remotesessions: refreshed tokens matched no active session")
 
+// errRefreshTokensNotStored marks tokens the provider issued that could not be written.
+var errRefreshTokensNotStored = errors.New("remotesessions: refreshed tokens not stored")
+
 // Ordering is the invariant, guarded by TestRefreshTimingInvariant. Invert it
 // and a waiter gives up while the holder is still mid-POST, then presents the
 // same refresh token upstream.
@@ -311,8 +317,9 @@ const (
 	refreshWaitPoll       = 200 * time.Millisecond
 	refreshReleaseTimeout = 5 * time.Second
 
-	// Bounds the POST and storing its outcome once detached from the caller.
-	refreshRotationTimeout = refreshUpstreamTimeout + 5*time.Second
+	// Bounds the POST and storing its outcome. A store past the lease is safe:
+	// its compare-and-swap refuses a row another holder moved.
+	refreshRotationTimeout = refreshUpstreamTimeout + 30*time.Second
 )
 
 func refreshLockKey(subject urn.SessionSubject, clientID uuid.UUID) string {
@@ -338,7 +345,42 @@ func refreshLockKey(subject urn.SessionSubject, clientID uuid.UUID) string {
 // A definitive invalid_grant clears only the refresh grant: the existing
 // access token remains usable until its own known expiry. This keeps
 // proactive refresh failure from forcing a reconnect.
+//
+// A request-path caller stops waiting when ctx ends, but a POST already started
+// runs on and stores its result; other triggers wait for it.
 func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_repo.RemoteSession, callerResource string, trigger remotesessionmetrics.RefreshTrigger) (RefreshResult, error) {
+	if trigger != remotesessionmetrics.RefreshTriggerRequest {
+		return s.refreshNow(ctx, sess, callerResource, trigger)
+	}
+
+	type refreshed struct {
+		result RefreshResult
+		err    error
+	}
+	done := make(chan refreshed, 1)
+	s.refreshes.Go(func() {
+		// Off the handler goroutine, so the HTTP recovery middleware cannot catch this.
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				err := fmt.Errorf("remote session refresh panicked: %v", recovered)
+				s.logger.ErrorContext(ctx, "remote session refresh panicked", attr.SlogError(err))
+				done <- refreshed{result: RefreshResult{}, err: &RefreshError{IssuerURL: "", Outcome: remotesessionmetrics.RefreshOutcomeInternalError, err: err}}
+			}
+		}()
+		result, err := s.refreshNow(ctx, sess, callerResource, trigger)
+		done <- refreshed{result: result, err: err}
+	})
+
+	select {
+	case out := <-done:
+		return out.result, out.err
+	case <-ctx.Done():
+		return RefreshResult{}, &RefreshError{IssuerURL: "", Outcome: remotesessionmetrics.RefreshOutcomeCanceled, err: ctx.Err()}
+	}
+}
+
+// refreshNow is RefreshNow's body, on whichever goroutine the trigger requires.
+func (s *RefreshService) refreshNow(ctx context.Context, sess remotesessions_repo.RemoteSession, callerResource string, trigger remotesessionmetrics.RefreshTrigger) (RefreshResult, error) {
 	var zero RefreshResult
 	q := remotesessions_repo.New(s.db)
 
@@ -402,11 +444,9 @@ func refreshClientLoadError(err error) error {
 
 // refreshOutcomeForError maps a failed refresh onto the metric outcome set.
 //
-// The caller going away is checked before the transport marker because an
-// aborted POST surfaces as a transport error too, and it is neither the
-// upstream's fault nor Speakeasy's. A deadline is the caller's own only when ctx
-// itself has expired; otherwise it was the POST's internal timeout, which is
-// the upstream not answering.
+// The POST and the store run detached from the caller, so their markers are
+// checked first: a deadline on either is never the caller's, even if ctx has
+// since ended. Any other deadline is the caller's own only when ctx has expired.
 //
 // invalid_grant and invalid_client are checked before the status-based
 // buckets because refresh clears the grant on either regardless of status,
@@ -417,10 +457,12 @@ func refreshOutcomeForError(ctx context.Context, err error) remotesessionmetrics
 	switch {
 	case errors.Is(err, ErrNoValidToken):
 		return remotesessionmetrics.RefreshOutcomeNoGrant
-	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded) && ctx.Err() != nil:
-		return remotesessionmetrics.RefreshOutcomeCanceled
 	case errors.Is(err, errRefreshUpstreamUnreachable):
 		return remotesessionmetrics.RefreshOutcomeUnreachable
+	case errors.Is(err, errRefreshTokensNotStored):
+		return remotesessionmetrics.RefreshOutcomeInternalError
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded) && ctx.Err() != nil:
+		return remotesessionmetrics.RefreshOutcomeCanceled
 	case !errors.As(err, &tokenErr) || tokenErr.statusCode == 0:
 		// Plain infrastructure errors, and TokenRefreshErrors raised before or
 		// after the POST (no token endpoint, unreadable stored values, an empty
@@ -564,8 +606,7 @@ func (s *RefreshService) refresh(
 		return zero, nil, nil, refreshClientLoadError(err)
 	}
 
-	// The provider may consume the refresh token once the POST starts, so a
-	// caller going away must not discard the tokens that replace it.
+	// The provider may consume the refresh token once the POST starts; keep its replacement.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshRotationTimeout)
 	defer cancel()
 

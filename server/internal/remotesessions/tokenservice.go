@@ -1146,7 +1146,13 @@ func (s *RefreshService) refreshSessionTokens(
 		if errors.Is(err, pgx.ErrNoRows) {
 			return zero, noToken, newTokenRefreshError("the session was rotated by another request or revoked while this refresh was in flight; reload to see its current state", errRefreshNotApplied, refreshRemedyRetry)
 		}
-		return zero, noToken, fmt.Errorf("persist refreshed session: %w", err)
+		s.logger.ErrorContext(ctx, "provider issued tokens that could not be stored; the connection may need reconnecting",
+			attr.SlogRemoteSessionID(sess.ID.String()),
+			attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
+			attr.SlogOAuthIssuer(client.IssuerUrl),
+			attr.SlogError(err),
+		)
+		return zero, noToken, fmt.Errorf("persist refreshed session: %w: %w", errRefreshTokensNotStored, err)
 	}
 
 	// Whether the provider rotates refresh tokens, and how long it says they
