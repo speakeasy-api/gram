@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -601,4 +602,56 @@ func TestReconcileCustomDomain_PendingDomainAppliesButNeverActivates(t *testing.
 	require.NoError(t, err)
 	require.False(t, row.Verified, "reconciliation must never set verified")
 	require.False(t, row.Activated, "an unverified domain must not activate")
+}
+
+func TestReconcileCustomDomain_BackfillsDNSTargetToken(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+	conn, err := infra.CloneTestDatabase(t, "reconcile_backfill_token_test")
+	require.NoError(t, err)
+	customDomain, err := customdomainsRepo.New(conn).CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
+		OrganizationID:  "org-reconcile-backfill",
+		Domain:          "reconcile-backfill.example.com",
+		ProvisionerKind: string(k8s.ProvisionerKindIngress),
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+	require.False(t, customDomain.DnsTargetToken.Valid)
+
+	provisioner := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
+	reconciler := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: provisioner}, activities.WithSetupSleep(0))
+	require.NoError(t, reconciler.ReconcileCustomDomain(ctx, activities.ReconcileCustomDomainArgs{CustomDomainID: customDomain.ID}))
+
+	route, err := customdomainsRepo.New(conn).GetCustomDomainRouteConfig(ctx, customDomain.ID)
+	require.NoError(t, err)
+	require.True(t, route.DnsTargetToken.Valid)
+	require.Len(t, route.DnsTargetToken.String, customdomains.DNSTargetTokenLength)
+}
+
+func TestReconcileCustomDomain_KeepsExistingDNSTargetToken(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	logger := testenv.NewLogger(t)
+	conn, err := infra.CloneTestDatabase(t, "reconcile_keep_token_test")
+	require.NoError(t, err)
+	customDomain, err := customdomainsRepo.New(conn).CreateCustomDomain(ctx, customdomainsRepo.CreateCustomDomainParams{
+		OrganizationID:  "org-reconcile-keep",
+		Domain:          "reconcile-keep.example.com",
+		ProvisionerKind: string(k8s.ProvisionerKindIngress),
+		IpAllowlist:     []string{},
+	})
+	require.NoError(t, err)
+	token, err := customdomains.EnsureDNSTargetToken(ctx, conn, customDomain.OrganizationID, customDomain.ID, customdomains.NewDNSTargetToken)
+	require.NoError(t, err)
+
+	provisioner := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)
+	reconciler := activities.NewCustomDomainIngress(logger, conn, &stubProvisionerFactory{provisioner: provisioner}, activities.WithSetupSleep(0))
+	require.NoError(t, reconciler.ReconcileCustomDomain(ctx, activities.ReconcileCustomDomainArgs{CustomDomainID: customDomain.ID}))
+
+	route, err := customdomainsRepo.New(conn).GetCustomDomainRouteConfig(ctx, customDomain.ID)
+	require.NoError(t, err)
+	require.Equal(t, token, route.DnsTargetToken.String)
 }

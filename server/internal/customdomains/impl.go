@@ -56,6 +56,9 @@ type Service struct {
 	// for apex domains, which cannot carry a CNAME.
 	expectedTargetCNAME string
 	expectedARecords    []netip.Addr
+	// dnsTargetSuffix is the normalized parent DNS name of per-domain CNAME
+	// targets (<token>.<suffix>); empty disables them.
+	dnsTargetSuffix string
 }
 
 type NetworkIngressPinChecker func(ctx context.Context, dbtx pgx.Tx, organizationID string, customDomainID uuid.UUID) (bool, error)
@@ -83,6 +86,7 @@ func NewService(
 	networkIngressPins NetworkIngressPinChecker,
 	expectedTargetCNAME string,
 	expectedARecords []netip.Addr,
+	dnsTargetSuffix string,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("custom_domains"))
 
@@ -98,6 +102,7 @@ func NewService(
 		publicationRequests: nil,
 		expectedTargetCNAME: expectedTargetCNAME,
 		expectedARecords:    expectedARecords,
+		dnsTargetSuffix:     dnsTargetSuffix,
 	}
 }
 
@@ -110,10 +115,13 @@ func (s *Service) WithPublicationRequests(requester OrganizationPublicationReque
 	return s
 }
 
-// domainView builds the API view of a custom domain, annotated with the DNS
+// domainView builds the API view of a custom domain, annotated with the
+// deployment's DNS settings: its per-domain CNAME target and the DNS
 // record-type suggestion for its hostname. The suggestion is a publicsuffix
 // heuristic: an apex-looking domain gets "a" only when static ingress IPs are
-// configured, everything else gets "cname".
+// configured, everything else gets "cname". This service's audit snapshots use
+// this view too, so they record the target the customer was shown; snapshots
+// built by other services from mv.BuildCustomDomainView carry the token only.
 func (s *Service) domainView(domain repo.CustomDomain, isUpdating bool, rootMcpEndpointID uuid.UUID) *gen.CustomDomain {
 	view := mv.BuildCustomDomainView(domain, isUpdating, rootMcpEndpointID)
 	suggested := "cname"
@@ -121,6 +129,9 @@ func (s *Service) domainView(domain repo.CustomDomain, isUpdating bool, rootMcpE
 		suggested = "a"
 	}
 	view.SuggestedRecordType = suggested
+	if target, ok := DNSTarget(s.dnsTargetSuffix, domain.DnsTargetToken); ok {
+		view.DNSTarget = &target
+	}
 	return view
 }
 
@@ -282,6 +293,16 @@ func (s *Service) CreateDomain(ctx context.Context, payload *gen.CreateDomainPay
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get custom domain").LogError(ctx, s.logger)
 	}
 
+	// New rows get their token here; a reverify backfills a row created before
+	// tokens existed.
+	if !domain.DnsTargetToken.Valid {
+		token, err := EnsureDNSTargetToken(ctx, dbtx, domain.OrganizationID, domain.ID, NewDNSTargetToken)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to assign custom domain dns target").LogError(ctx, s.logger)
+		}
+		domain.DnsTargetToken = conv.ToPGTextEmpty(token)
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to save custom domain").LogError(ctx, s.logger)
 	}
@@ -371,7 +392,7 @@ func (s *Service) UpdateDomain(ctx context.Context, payload *gen.UpdateDomainPay
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load custom domain route before update").LogError(ctx, s.logger)
 	}
-	beforeView := mv.BuildCustomDomainView(domain, false, routeBefore.RootMcpEndpointID)
+	beforeView := s.domainView(domain, false, routeBefore.RootMcpEndpointID)
 
 	domain, err = repository.UpdateCustomDomainSettings(ctx, repo.UpdateCustomDomainSettingsParams{
 		UpdateIpAllowlist:              payload.IPAllowlist != nil,
@@ -383,7 +404,7 @@ func (s *Service) UpdateDomain(ctx context.Context, payload *gen.UpdateDomainPay
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "update custom domain settings").LogError(ctx, s.logger)
 	}
-	afterView := mv.BuildCustomDomainView(domain, false, routeBefore.RootMcpEndpointID)
+	afterView := s.domainView(domain, false, routeBefore.RootMcpEndpointID)
 
 	if err := s.audit.LogCustomDomainUpdate(ctx, dbtx, audit.LogCustomDomainUpdateEvent{
 		OrganizationID:             authCtx.ActiveOrganizationID,
@@ -476,7 +497,7 @@ func (s *Service) SetRootMcpEndpoint(ctx context.Context, payload *gen.SetRootMc
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load current root endpoint").LogError(ctx, s.logger)
 	}
-	beforeView := mv.BuildCustomDomainView(domain, false, beforeRoute.RootMcpEndpointID)
+	beforeView := s.domainView(domain, false, beforeRoute.RootMcpEndpointID)
 
 	if rootServerID != uuid.Nil {
 		// Custom domains are org-scoped, so the org:admin gate above
@@ -608,7 +629,7 @@ func (s *Service) SetRootMcpEndpoint(ctx context.Context, payload *gen.SetRootMc
 		}
 	}
 
-	afterView := mv.BuildCustomDomainView(domain, false, targetID)
+	afterView := s.domainView(domain, false, targetID)
 	if err := s.audit.LogCustomDomainUpdate(ctx, dbtx, audit.LogCustomDomainUpdateEvent{
 		OrganizationID:             authCtx.ActiveOrganizationID,
 		Actor:                      urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
@@ -742,6 +763,15 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 		return oops.E(oops.CodeConflict, nil, "custom domain is pinned by an active network ingress")
 	}
 
+	// Snapshot before the cascade below clears the root mapping and the delete
+	// clears the DNS target token, so the audit log keeps the token-to-domain
+	// mapping.
+	routeBefore, err := repo.New(dbtx).GetCustomDomainRouteConfig(ctx, domain.ID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "load custom domain route before deletion").LogError(ctx, s.logger)
+	}
+	beforeView := s.domainView(domain, false, routeBefore.RootMcpEndpointID)
+
 	// The mcp_endpoints.custom_domain_id FK has ON DELETE SET NULL, but that
 	// only fires for hard deletes. Soft-delete the child endpoints explicitly
 	// so they don't outlive the tombstoned custom domain. The cascade spans
@@ -793,8 +823,9 @@ func (s *Service) DeleteDomain(ctx context.Context, _ *gen.DeleteDomainPayload) 
 		ActorDisplayName: authCtx.Email,
 		ActorSlug:        nil,
 
-		CustomDomainURN: urn.NewCustomDomain(domain.ID),
-		DomainName:      domain.Domain,
+		CustomDomainURN:            urn.NewCustomDomain(domain.ID),
+		DomainName:                 domain.Domain,
+		CustomDomainSnapshotBefore: beforeView,
 	}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "failed to create custom domain deletion audit log").LogError(ctx, s.logger)
 	}

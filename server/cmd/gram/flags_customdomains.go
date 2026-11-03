@@ -38,7 +38,36 @@ func customDomainFlags() []cli.Flag {
 				return nil
 			},
 		},
+		customDomainTargetSuffixFlag(),
 	}
+}
+
+// customDomainTargetSuffixFlag configures the parent DNS name used for
+// per-domain CNAME targets.
+func customDomainTargetSuffixFlag() cli.Flag {
+	return &cli.StringFlag{
+		Name:    "custom-domain-target-suffix",
+		Usage:   "Parent DNS name of per-domain CNAME targets (<token>.<suffix>, e.g., domains.speakeasy.com). Unset disables per-domain targets.",
+		EnvVars: []string{"GRAM_CUSTOM_DOMAIN_TARGET_SUFFIX"},
+		Action: func(_ *cli.Context, value string) error {
+			if _, err := customdomains.ParseDNSTargetSuffix(value); err != nil {
+				return fmt.Errorf("invalid --custom-domain-target-suffix: %w", err)
+			}
+			return nil
+		},
+	}
+}
+
+// customDomainTargetSuffixFromCLI returns the normalized per-domain target
+// suffix, or empty when per-domain targets are disabled. The flag-level
+// validator has already rejected invalid values, so an error here is
+// unreachable in practice but still propagated.
+func customDomainTargetSuffixFromCLI(c *cli.Context) (string, error) {
+	suffix, err := customdomains.ParseDNSTargetSuffix(c.String("custom-domain-target-suffix"))
+	if err != nil {
+		return "", fmt.Errorf("invalid --custom-domain-target-suffix: %w", err)
+	}
+	return suffix, nil
 }
 
 // customDomainARecordsFromCLI returns the parsed apex A-record targets. The

@@ -130,6 +130,11 @@ func (d *VerifyCustomDomain) createLegacyDomainRow(ctx context.Context, args Ver
 	if err != nil {
 		return noRow, fmt.Errorf("create legacy custom domain: %w", err)
 	}
+	token, err := customdomains.EnsureDNSTargetToken(ctx, dbtx, domain.OrganizationID, domain.ID, customdomains.NewDNSTargetToken)
+	if err != nil {
+		return noRow, fmt.Errorf("assign legacy custom domain dns target token: %w", err)
+	}
+	domain.DnsTargetToken = conv.ToPGTextEmpty(token)
 	if err := d.audit.LogCustomDomainCreate(ctx, dbtx, audit.LogCustomDomainCreateEvent{
 		OrganizationID:   args.OrgID,
 		Actor:            args.CreatedBy,
@@ -193,6 +198,13 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 
 	if domain.OrganizationID != args.OrgID || domain.Domain != args.Domain {
 		return noResult, newCustomDomainInvalidError(ctx, d.logger, errors.New("custom domain identity mismatch"), "custom domain does not match this registration")
+	}
+
+	// Pending rows created before token support need a target before setup can finish.
+	if !domain.DnsTargetToken.Valid {
+		if _, err := customdomains.EnsureDNSTargetToken(ctx, d.db, domain.OrganizationID, domain.ID, customdomains.NewDNSTargetToken); err != nil {
+			return noResult, fmt.Errorf("ensure custom domain DNS target: %w", err)
+		}
 	}
 
 	routingIssue, err := checkCustomDomainRouting(ctx, d.resolver, domain.Domain, d.expectedTargetCNAME, d.expectedARecords)
