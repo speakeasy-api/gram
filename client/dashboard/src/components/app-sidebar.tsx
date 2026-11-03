@@ -95,7 +95,6 @@ export function AppSidebar({
     return map;
   }, [allNavRoutes]);
   const isAssistantsEnabled = navAccess.has(routes.assistants.url);
-  const isOrgMemoryEnabled = navAccess.has(routes.orgMemory.url);
   const isExploreEnabled = navAccess.has(routes.explore.url);
   const isRiskWatchdogEnabled = navAccess.has(routes.watchdog.url);
   const isUserSessionsEnabled = navAccess.has(routes.mcpSessions.url);
@@ -304,9 +303,6 @@ export function AppSidebar({
                       ...accessFor(routes.signalsIntelligence),
                     },
                   ]
-                : []),
-              ...(isOrgMemoryEnabled
-                ? [{ item: routes.orgMemory, ...accessFor(routes.orgMemory) }]
                 : []),
               { item: routes.logs, ...accessFor(routes.logs) },
             ]}

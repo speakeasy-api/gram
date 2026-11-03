@@ -4,7 +4,6 @@ import { useFeatureFlag } from "@/hooks/useFeatureFlag";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { AppRoute, useRoutes } from "@/routes";
-import { useOrgMemoryDeveloperToggle } from "./useOrgMemoryDeveloperToggle";
 import { useProductFeatures } from "@gram/client/react-query/productFeatures.js";
 
 /** A project nav page plus the scopes that grant access to it. */
@@ -49,7 +48,6 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
     productFeatures.isSuccess &&
     productFeatures.data.signalsIntelligenceEnabled === true;
   const exploreFlag = useFeatureFlag(FEATURE_FLAGS.explore);
-  const [isOrgMemoryEnabled] = useOrgMemoryDeveloperToggle();
 
   // Explore is opt-in while it is dogfooded: the flag is released to the
   // organizations trying it, and everyone else never sees the page.
@@ -124,17 +122,8 @@ export function useProjectNavRoutes(): ProjectNavRoute[] {
             },
           ]
         : []),
-      ...(isOrgMemoryEnabled
-        ? [{ route: routes.orgMemory, scope: observe }]
-        : []),
       { route: routes.logs, scope: ["log:read"], resourceId: projectId },
       { route: routes.settings, scope: ["project:write"] },
     ];
-  }, [
-    routes,
-    projectId,
-    isExploreEnabled,
-    isOrgMemoryEnabled,
-    isSignalsIntelligenceEnabled,
-  ]);
+  }, [routes, projectId, isExploreEnabled, isSignalsIntelligenceEnabled]);
 }

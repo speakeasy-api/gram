@@ -18,7 +18,11 @@ import CatalogDetail, {
   CatalogDetailRoot,
 } from "./pages/catalog/CatalogDetail";
 import ChatSessions from "./pages/chatLogs/ChatLogs";
-import OrgMemory from "./components/observe/OrgMemory";
+import {
+  AgentSessionsRoot,
+  OrgMemoryPage,
+  OrgMemoryRedirect,
+} from "./pages/orgMemory/OrgMemoryPage";
 import { ChatConversation, ChatHome, ChatRoot } from "./pages/chat/Chat";
 import Skills from "./pages/Skills";
 import SkillsList from "./pages/skills/SkillsList";
@@ -902,14 +906,25 @@ const ROUTE_STRUCTURE = {
     title: "Agent Sessions",
     url: "agent-sessions",
     icon: "message-square",
-    component: ChatSessions,
+    component: AgentSessionsRoot,
+    indexComponent: ChatSessions,
+    subPages: {
+      memory: {
+        title: "Organizational Memory",
+        url: "memory",
+        icon: "brain",
+        stage: "preview",
+        component: OrgMemoryPage,
+      },
+    },
   },
-  orgMemory: {
+  // Retired page: Org Memory moved into Agent Sessions as its Organizational
+  // Memory tab. Old links and bookmarks land there.
+  legacyOrgMemory: {
     title: "Org Memory",
     url: "org-memory",
-    icon: "brain",
-    stage: "preview",
-    component: OrgMemory,
+    legacyRedirect: true,
+    component: OrgMemoryRedirect,
   },
   watchdog: {
     title: "Watchdog",

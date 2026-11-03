@@ -13,6 +13,10 @@ export const FEATURE_FLAGS = {
   // not enforced server-side.
   mcpScopedPolicies: "gram-mcp-scoped-policies",
   oktaConnections: "okta-connections",
+  // Organizational Memory: the Agent Sessions memory tab, the sessions
+  // table's memory column and the session sheet's memory section. The server
+  // enforces the same key on every memory endpoint.
+  orgMemory: "org-memory",
   paygSelfServeBilling: "gram-payg-self-serve-billing",
   promptPolicies: "gram-prompt-policies",
   // Multivariate (`off` | `shadow` | `llm`), org-targeted: which risk engine

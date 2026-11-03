@@ -112,6 +112,10 @@ vi.mock("@gram/client/react-query/summarizeChat.js", () => ({
   useSummarizeChatMutation: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
+vi.mock("@/pages/orgMemory/useOrgMemoryEnabled", () => ({
+  useOrgMemoryEnabled: () => false,
+}));
+
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
     hasScope: () => false,

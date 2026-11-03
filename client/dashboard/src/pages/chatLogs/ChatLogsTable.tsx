@@ -18,6 +18,8 @@ import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIco
 import { WorkUnitsRowMetrics } from "@/pages/chatLogs/WorkUnitsMetrics";
 import { useSession } from "@/contexts/Auth";
 import type { ChatOverview } from "@gram/client/models/components/chatoverview.js";
+import { MemoryStateBadge } from "@/pages/orgMemory/MemoryStateBadge";
+import { useOrgMemoryEnabled } from "@/pages/orgMemory/useOrgMemoryEnabled";
 import { useChatSetPinnedMutation } from "@gram/client/react-query/chatSetPinned.js";
 import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
 import { useListChatSessionLinks } from "@gram/client/react-query/listChatSessionLinks.js";
@@ -744,6 +746,7 @@ export function ChatLogsTable({
     [chats, linksData, ancestors],
   );
   const [deleteConfirmId, setDeleteConfirmId] = useState<string | null>(null);
+  const memoryEnabled = useOrgMemoryEnabled();
 
   const columns: Column<SessionRow>[] = [
     {
@@ -809,6 +812,18 @@ export function ChatLogsTable({
       width: "170px",
       render: ({ session: chat }) => <ActivityCell chat={chat} />,
     },
+    ...(memoryEnabled
+      ? [
+          {
+            key: "memory",
+            header: "Memory",
+            width: "110px",
+            render: ({ session: chat }: SessionRow) => (
+              <MemoryStateBadge state={chat.memoryState} />
+            ),
+          } satisfies Column<SessionRow>,
+        ]
+      : []),
     {
       key: "totalCost",
       header: "Cost",

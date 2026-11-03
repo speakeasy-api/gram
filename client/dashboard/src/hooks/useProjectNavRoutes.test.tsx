@@ -7,7 +7,6 @@ import { useProjectNavRoutes } from "./useProjectNavRoutes";
 
 const testState = vi.hoisted(() => ({
   projectId: "project_a",
-  orgMemoryEnabled: false,
   featureFlags: {} as Record<string, FeatureFlagResult>,
   productFeatures: {
     isSuccess: true,
@@ -55,7 +54,6 @@ const routes = {
   logs: route("Logs", "logs"),
   signalsIntelligence: route("Signals intelligence", "signals-intelligence"),
   mcp: route("MCP", "mcp"),
-  orgMemory: route("Org Memory", "org-memory"),
   playground: route("Playground", "playground"),
   plugins: route("Plugins", "plugins"),
   policyCenter: route("Guardrails", "risk-policies"),
@@ -82,10 +80,6 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "organization_a" }),
 }));
 
-vi.mock("./useOrgMemoryDeveloperToggle", () => ({
-  useOrgMemoryDeveloperToggle: () => [testState.orgMemoryEnabled, vi.fn()],
-}));
-
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: () => testState.productFeatures,
 }));
@@ -98,7 +92,6 @@ function unavailableFeatureFlag(
 
 beforeEach(() => {
   testState.projectId = "project_a";
-  testState.orgMemoryEnabled = false;
   testState.productFeatures = {
     isSuccess: true,
     data: { signalsIntelligenceEnabled: false },
@@ -218,22 +211,6 @@ describe("useProjectNavRoutes", () => {
 
     expect(skills?.scope).toEqual(["skill:read"]);
     expect(skills?.resourceId).toBe("project_a");
-  });
-
-  it("only includes Org Memory when its session toggle is enabled", () => {
-    testState.orgMemoryEnabled = false;
-    const { result, rerender } = renderHook(() => useProjectNavRoutes());
-
-    expect(
-      result.current.some((entry) => entry.route === routes.orgMemory),
-    ).toBe(false);
-
-    testState.orgMemoryEnabled = true;
-    rerender();
-
-    expect(
-      result.current.some((entry) => entry.route === routes.orgMemory),
-    ).toBe(true);
   });
 
   it.each(["loading", "missing", "error"] as const)(
