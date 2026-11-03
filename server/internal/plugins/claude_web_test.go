@@ -6,6 +6,7 @@ import (
 	"context"
 	"encoding/json"
 	"io"
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -90,11 +91,14 @@ func liveClaudeWebKeys(t *testing.T, ctx context.Context, ti *testInstance) int 
 	t.Helper()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	var n int
-	err := ti.conn.QueryRow(ctx, `SELECT count(*) FROM api_keys
-		WHERE organization_id = $1 AND created_by_user_id = $2 AND deleted IS FALSE
-		  AND name LIKE 'plugins-claude-web-hooks-%'`, authCtx.ActiveOrganizationID, authCtx.UserID).Scan(&n)
+	keys, err := keysrepo.New(ti.conn).ListAPIKeysByOrganization(ctx, authCtx.ActiveOrganizationID)
 	require.NoError(t, err)
+	n := 0
+	for _, k := range keys {
+		if k.CreatedByUserID == authCtx.UserID && strings.HasPrefix(k.Name, "plugins-claude-web-hooks-") {
+			n++
+		}
+	}
 	return n
 }
 
@@ -141,7 +145,6 @@ func TestClaudeWebObservabilityPlugin_RemintSparesLookalikeNames(t *testing.T) {
 
 	downloadClaudeWebPlugin(t, ctx, ti)
 
-	var deleted bool
-	require.NoError(t, ti.conn.QueryRow(ctx, `SELECT deleted FROM api_keys WHERE id = $1`, lookalike.ID).Scan(&deleted))
-	require.False(t, deleted, "a user-chosen name is never revoked")
+	_, err = keysrepo.New(ti.conn).GetAPIKeyByKeyHash(ctx, lookalike.KeyHash)
+	require.NoError(t, err, "a user-chosen name is never revoked")
 }
