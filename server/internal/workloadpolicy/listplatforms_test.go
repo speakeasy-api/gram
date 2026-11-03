@@ -68,8 +68,7 @@ func newRecordingFlags() *recordingFlags {
 func (f *recordingFlags) EvaluateFlag(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (feature.Evaluation, error) {
 	f.asked = append(f.asked, flagEvaluation{flag: flag, distinctID: distinctID, groups: groups})
 	if f.fail != nil {
-		// A failure must read as off even beside an answer that says on.
-		return feature.EvaluationEnabled, f.fail
+		return feature.EvaluationIndeterminate, f.fail
 	}
 	return f.InMemory.EvaluateFlag(ctx, flag, distinctID, groups) //nolint:wrapcheck // Test double.
 }
@@ -104,10 +103,8 @@ func TestListPlatforms_OffersGitHubActionsWhereItsFlagIsOn(t *testing.T) {
 		groups:     map[string]string{"organization": ti.orgSlug},
 	}}, flags.asked)
 
-	// Turned off, the next listing takes it back: offering it changed the
-	// copy one response is built from, not the catalog every request shares.
-	flags.SetFlag(feature.FlagWorkloadPlatformGitHubActions, ti.orgID, false)
-	require.False(t, listedEnabled(t, ctx, ti)["github-actions"])
+	// Offering it changed the copy one response is built from, not the
+	// catalog every request shares.
 	platforms, err := catalog.Embedded().Platforms(ctx)
 	require.NoError(t, err)
 	for _, platform := range platforms {

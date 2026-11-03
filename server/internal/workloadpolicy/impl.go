@@ -289,15 +289,16 @@ func (s *Service) ListPlatforms(ctx context.Context, payload *gen.ListPlatformsP
 }
 
 // offeredPlatforms resolves Enabled for the caller's organization: an entry
-// that is not enabled is enabled where its feature flag is on. The flag is
-// targeted by organization group, as the dashboard's flags are, and an off,
-// missing or failing flag leaves the entry as its file lists it. Every request
-// shares the catalog's slice, so it is copied rather than changed.
+// that names a feature flag, which only one that is not enabled may, is
+// enabled where the flag is on. The flag is targeted by organization group, as
+// the dashboard's flags are, and an off, missing or failing flag leaves the
+// entry not enabled. Every request shares the catalog's slice, so it is copied
+// rather than changed.
 func (s *Service) offeredPlatforms(ctx context.Context, t tenancy, platforms []catalog.Platform) []catalog.Platform {
 	offered := slices.Clone(platforms)
 	for i := range offered {
 		platform := &offered[i]
-		if platform.Enabled || platform.FeatureFlag == "" {
+		if platform.FeatureFlag == "" {
 			continue
 		}
 		evaluation, err := feature.EvaluateFlag(ctx, s.features, platform.FeatureFlag, t.organizationID, feature.OrgProjectGroups(t.organizationSlug, ""))
