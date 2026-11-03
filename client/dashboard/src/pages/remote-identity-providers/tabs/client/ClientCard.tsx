@@ -231,12 +231,15 @@ export function ClientCard({
     scope.length !== savedScope.length ||
     scope.some((s, i) => s !== savedScope[i]);
 
+  const savedAudience = client.audience ?? "";
+  const audienceChanged = audience !== savedAudience;
+
   const dirty =
     canEdit &&
     (clientIdChanged ||
       authMethod !== persistedAuthMethod ||
       scopeChanged ||
-      audience !== (client.audience ?? "") ||
+      audienceChanged ||
       clientSecret !== "" ||
       (privateKeyJwtSelected &&
         authAudienceFormat !== client.tokenEndpointAuthAudienceFormat) ||
@@ -248,6 +251,12 @@ export function ClientCard({
 
   const submit = () => {
     if (!canEdit || (privateKeyJwtSelected && !supportsAudience)) return;
+
+    let audienceUpdate: string | undefined;
+    if (audienceChanged) {
+      audienceUpdate = audience.trim();
+    }
+
     update.mutate({
       request: {
         updateRemoteSessionClientForm: {
@@ -258,8 +267,7 @@ export function ClientCard({
             ? authAudienceFormat
             : undefined,
           scope: scopeChanged ? scope : undefined,
-          audience:
-            audience !== (client.audience ?? "") ? audience.trim() : undefined,
+          audience: audienceUpdate,
           clientSecret: clientSecretUpdateValue(authMethod, clientSecret),
           legacyCallbackUrl:
             isPlatformAdmin &&
