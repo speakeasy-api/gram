@@ -344,11 +344,10 @@ mise run playwright kill-all
 
 ## Speakeasy repository setup
 
-Run browser automation through `mise run playwright`; the task supplies the repository config and launches the system Google Chrome with its sandbox enabled, installing Chrome on first use. Use existing `aube` package scripts for repository checks. Speakeasy does not install `@playwright/test`, so do not bootstrap a Playwright test suite unless the user explicitly asks.
+Run browser automation through `mise run playwright`; the task supplies the repository config and launches the system Google Chrome with its sandbox enabled. The task does not install Chrome; if it is missing, stop and ask the user to install it (see "Dashboard browser automation" in `CLAUDE.md`). Use existing `aube` package scripts for repository checks. Speakeasy does not install `@playwright/test`, so do not bootstrap a Playwright test suite unless the user explicitly asks.
 
 ```bash
 mise run playwright --help
-mise run playwright:install-browser --help
 ```
 
 Do not use `npm`, `npx`, or `yarn` in this repository.
