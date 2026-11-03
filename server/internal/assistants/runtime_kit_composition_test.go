@@ -26,6 +26,9 @@ func TestKitCompositionRejectsInvalidConfig(t *testing.T) {
 	valid := KitLocalCompositionConfig{Environment: "local", Image: "image:tag", Network: "isolated-test", ExtraCACertFile: "/test/ca.pem", Origin: origin, MCPResource: resource, MCPIssuer: issuer, MCPUserSessionIssuerID: uuid.New(), TurnStream: new(chat.TurnStream), WorkloadJWKSURL: "https://external.example/jwks", WorkloadIssuerURL: "https://external.example", WorkloadIssuerBaseURL: "https://issuer.example", WorkloadSubject: "operator-subject", WorkloadAssertionFile: "/run/assertion"}
 
 	require.NoError(t, validateKitLocalComposition(valid))
+	withoutAuthenticationHost := valid
+	withoutAuthenticationHost.WorkloadIssuerBaseURL = ""
+	require.NoError(t, validateKitLocalComposition(withoutAuthenticationHost))
 	for _, mutate := range []func(*KitLocalCompositionConfig){
 		func(c *KitLocalCompositionConfig) { c.Environment = "production" },
 		func(c *KitLocalCompositionConfig) { c.Image = "" },
@@ -34,7 +37,6 @@ func TestKitCompositionRejectsInvalidConfig(t *testing.T) {
 		func(c *KitLocalCompositionConfig) { c.WorkloadIssuerURL = "" },
 		func(c *KitLocalCompositionConfig) { c.WorkloadSubject = "" },
 		func(c *KitLocalCompositionConfig) { c.WorkloadAssertionFile = "" },
-		func(c *KitLocalCompositionConfig) { c.WorkloadIssuerBaseURL = "" },
 		func(c *KitLocalCompositionConfig) { c.WorkloadIssuerBaseURL = "http://issuer.example" },
 		func(c *KitLocalCompositionConfig) { c.MCPUserSessionIssuerID = uuid.Nil },
 		func(c *KitLocalCompositionConfig) { c.MCPResource, _ = url.Parse("http://mcp.example/mcp/resource") },

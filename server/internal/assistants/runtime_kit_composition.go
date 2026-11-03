@@ -57,13 +57,18 @@ func validateKitLocalComposition(c KitLocalCompositionConfig) error {
 }
 
 func validateKitComposition(c KitLocalCompositionConfig) error {
-	for _, raw := range []string{c.WorkloadIssuerURL, c.WorkloadJWKSURL, c.WorkloadIssuerBaseURL} {
+	urls := []string{c.WorkloadIssuerURL, c.WorkloadJWKSURL}
+	// Without an authentication host, shared issuers derive from the server URL.
+	if c.WorkloadIssuerBaseURL != "" {
+		urls = append(urls, c.WorkloadIssuerBaseURL)
+	}
+	for _, raw := range urls {
 		u, err := url.Parse(raw)
 		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.RawQuery != "" || u.Fragment != "" {
 			return errors.New("kit requires explicit HTTPS external workload issuer, JWKS URL and authorization host")
 		}
 	}
-	if c.Image == "" || c.WorkloadIssuerURL == "" || c.WorkloadIssuerBaseURL == "" || c.TurnStream == nil || (!c.PersistedMCP && c.MCPUserSessionIssuerID == uuid.Nil) {
+	if c.Image == "" || c.WorkloadIssuerURL == "" || c.TurnStream == nil || (!c.PersistedMCP && c.MCPUserSessionIssuerID == uuid.Nil) {
 		return errors.New("kit composition requires explicit image, workload issuer, resource issuer and turn stream")
 	}
 	if c.Origin == nil || c.Origin.String() != "https://ai.speakeasy.com" || c.AllowInsecureInference {
