@@ -140,8 +140,9 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	}
 
 	gate := &metaGateContext{
-		projectID:    endpoint.ProjectID,
-		metaServerID: endpoint.MetaMcpServerID.UUID,
+		skippedUpstreams: nil,
+		projectID:        endpoint.ProjectID,
+		metaServerID:     endpoint.MetaMcpServerID.UUID,
 		// Agent gateways reach no consent page.
 		agentID:             uuid.Nil,
 		organizationGateway: organizationGateway,

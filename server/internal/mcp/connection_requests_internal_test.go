@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -73,25 +74,48 @@ func TestGateConnectionScope(t *testing.T) {
 	require.Equal(t, project, rec.Rows()[1].ProjectID)
 }
 
-// A provider outage while resolving must not read as the person's fault.
+// A provider outage while resolving must not read as the person's fault, or as another member's.
 func TestMemberNoCredentialHappened(t *testing.T) {
 	t.Parallel()
 
-	issuer := uuid.New()
-	member := metaMember{remoteSessionIssuerID: uuid.NullUUID{UUID: issuer, Valid: true}}
+	issuer, project, otherProject := uuid.New(), uuid.New(), uuid.New()
+	member := metaMember{projectID: project, remoteSessionIssuerID: uuid.NullUUID{UUID: issuer, Valid: true}}
+	sibling := metaMember{projectID: otherProject, remoteSessionIssuerID: uuid.NullUUID{UUID: issuer, Valid: true}}
 	gate := &metaGateContext{}
-	require.Equal(t, mcpconnectionattempts.CodeInvalidRemoteSession, gate.memberNoCredentialHappened(member))
+	require.Equal(t, mcpconnectionattempts.CodeInvalidRemoteSession, gate.memberNoCredentialHappened(member), "no collector")
 
-	skipped := new(remotesessions.SkippedClients)
-	gate.authentication = &issuerGateAuthentication{skippedUpstreams: skipped}
-	skipped.Note(issuer, remotesessions.ErrRemoteSessionUnavailable)
+	gate.skippedUpstreams = new(remotesessions.SkippedClients)
+	gate.skippedUpstreams.Note(project, issuer, uuid.New(), remotesessions.ErrRemoteSessionUnavailable)
 	require.Equal(t, mcpconnectionattempts.CodeRemoteSessionUnavailable, gate.memberNoCredentialHappened(member))
+	require.Equal(t, mcpconnectionattempts.CodeInvalidRemoteSession, gate.memberNoCredentialHappened(sibling), "another member on the issuer")
 
-	skipped.Note(issuer, remotesessions.ErrRemoteSessionMisconfigured)
-	require.Equal(t, mcpconnectionattempts.CodeCredentialMisconfigured, gate.memberNoCredentialHappened(member))
+	misconfigured := &metaGateContext{skippedUpstreams: new(remotesessions.SkippedClients)}
+	misconfigured.skippedUpstreams.Note(project, issuer, uuid.New(), remotesessions.ErrRemoteSessionMisconfigured)
+	require.Equal(t, mcpconnectionattempts.CodeCredentialMisconfigured, misconfigured.memberNoCredentialHappened(member))
 
 	setup := authClientResolution{outcome: authClientGap, reason: authClientReasonSetup}
 	require.Equal(t, mcpconnectionattempts.CodeCredentialMisconfigured, (&metaGateContext{}).memberNoCredentialHappened(metaMember{authClient: &setup}))
+}
+
+func TestResolveFailureHappened(t *testing.T) {
+	t.Parallel()
+
+	require.Equal(t, mcpconnectionattempts.CodeRemoteSessionUnavailable, resolveFailureHappened(remotesessions.ErrRemoteSessionUnavailable))
+	require.Equal(t, mcpconnectionattempts.CodeCredentialMisconfigured, resolveFailureHappened(remotesessions.ErrRemoteSessionMisconfigured))
+	require.Equal(t, mcpconnectionattempts.CodeInvalidRemoteSession, resolveFailureHappened(remotesessions.ErrNoValidToken))
+	require.Equal(t, mcpconnectionattempts.CodeInternalError, resolveFailureHappened(errors.New("database")))
+}
+
+// An outage while chaining decides is no one's setup; a setup problem is the admin's.
+func TestUnconfirmedRefreshCheck(t *testing.T) {
+	t.Parallel()
+
+	for _, reason := range []identitychaining.Reason{identitychaining.ReasonTransientFailure, identitychaining.ReasonProviderUnavailable, identitychaining.ReasonUnknownRejection} {
+		require.Equal(t, upstreamRefreshCheckFailed, unconfirmedRefreshCheck(reason), reason)
+	}
+	for _, reason := range []identitychaining.Reason{identitychaining.ReasonConfigurationRequired, identitychaining.ReasonStaleConfiguration, identitychaining.ReasonInvalidClient} {
+		require.Equal(t, upstreamRefreshUnverified, unconfirmedRefreshCheck(reason), reason)
+	}
 }
 
 func TestToolsCallRefusal(t *testing.T) {
@@ -127,21 +151,22 @@ func TestInboundRefreshHappened(t *testing.T) {
 	t.Parallel()
 
 	for reason, want := range map[string]mcpconnectionattempts.Code{
-		"refresh_token_resource_mismatch": mcpconnectionattempts.CodeResourceMismatch,
-		"refresh_token_client_mismatch":   mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed,
-		"refresh_token_expired":           mcpconnectionattempts.CodeRefreshTokenExpired,
-		"sign_in_revoked":                 mcpconnectionattempts.CodeSignInRevoked,
-		"refresh_token_revoked":           mcpconnectionattempts.CodeRefreshTokenRevoked,
-		"agent_admission_denied":          mcpconnectionattempts.CodeNoServerAccess,
-		"agent_admission_unavailable":     mcpconnectionattempts.CodeInternalError,
-		"upstream_reconnect_required":     mcpconnectionattempts.CodeUpstreamReconnectRequired,
-		"upstream_ema_refused":            mcpconnectionattempts.CodeUpstreamEMARefused,
+		"refresh_token_resource_mismatch":       mcpconnectionattempts.CodeResourceMismatch,
+		"refresh_token_unknown_or_already_used": mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed,
+		"refresh_token_client_mismatch":         mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed,
+		"refresh_token_expired":                 mcpconnectionattempts.CodeRefreshTokenExpired,
+		"sign_in_revoked":                       mcpconnectionattempts.CodeSignInRevoked,
+		"refresh_token_revoked":                 mcpconnectionattempts.CodeRefreshTokenRevoked,
+		"agent_admission_denied":                mcpconnectionattempts.CodeNoServerAccess,
+		"agent_admission_unavailable":           mcpconnectionattempts.CodeInternalError,
+		"upstream_reconnect_required":           mcpconnectionattempts.CodeUpstreamReconnectRequired,
+		"upstream_ema_refused":                  mcpconnectionattempts.CodeUpstreamEMARefused,
 	} {
 		code, ok := inboundRefreshHappened(reason)
 		require.True(t, ok, reason)
 		require.Equal(t, want, code, reason)
 	}
-	for _, reason := range []string{"invalid_request", "resource_mismatch", "refresh_token_unknown_or_already_used"} {
+	for _, reason := range []string{"invalid_request", "resource_mismatch"} {
 		_, ok := inboundRefreshHappened(reason)
 		require.False(t, ok, reason)
 	}

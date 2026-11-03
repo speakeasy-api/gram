@@ -93,6 +93,9 @@ type metaGateContext struct {
 	catalogRecoveryOnly bool
 	// authentication retains validated endpoint identity for lazy catalogue loading.
 	authentication *issuerGateAuthentication
+
+	// skippedUpstreams says why partial resolution left a member's client out.
+	skippedUpstreams *remotesessions.SkippedClients
 	// unapprovedMembers are current members the catalog did not approve. They
 	// are reported by connection_status only, never discovered or executed.
 	unapprovedMembers []metaMember
@@ -802,9 +805,17 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 			}
 		}
 	}
+	skipped := new(remotesessions.SkippedClients)
+	if gateAuthentication != nil {
+		if gateAuthentication.skippedUpstreams != nil {
+			skipped = gateAuthentication.skippedUpstreams
+		}
+		gateAuthentication.skippedUpstreams = skipped
+	}
 	gate := &metaGateContext{
-		projectID:    mcpEndpoint.ProjectID,
-		metaServerID: metaServer.ID,
+		skippedUpstreams: skipped,
+		projectID:        mcpEndpoint.ProjectID,
+		metaServerID:     metaServer.ID,
 		// Both unset for a stored gateway, whose members come from
 		// meta_mcp_server_members rather than from a caller's grants.
 		agentID:             membership.agentID,

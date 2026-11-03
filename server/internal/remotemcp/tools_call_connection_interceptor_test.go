@@ -45,7 +45,7 @@ func recordingConnections(rec *mcpconnectionattemptstest.Recording, upstreamAuth
 		Details:          nil,
 		UpstreamFailures: true,
 		SelfCredential:   false,
-	}, rec.Recorder, proxy.ServerIdentity{}, "https://provider.example.com/mcp", upstreamAuth)
+	}, rec.Recorder, proxy.ServerIdentity{}, "https://provider.example.com/mcp", upstreamAuth, nil)
 }
 
 func continueCheckpoint() ToolsCallKillswitchCheckpoint {
@@ -109,12 +109,12 @@ func TestToolsCallConnections_UpstreamFailures(t *testing.T) {
 func TestUpstreamFailureHappened(t *testing.T) {
 	t.Parallel()
 
-	attached := UpstreamCredential{Attached: true, Self: false}
-	code, ok := UpstreamFailureHappened(http.StatusUnauthorized, UpstreamCredential{Attached: true, Self: true}, false)
+	attached := UpstreamCredential{Attached: true, Self: false, Configured: false}
+	code, ok := UpstreamFailureHappened(http.StatusUnauthorized, UpstreamCredential{Attached: true, Self: true, Configured: false}, false)
 	require.True(t, ok)
 	require.Equal(t, mcpconnectionattempts.CodeCredentialMisconfigured, code)
 
-	_, ok = UpstreamFailureHappened(http.StatusUnauthorized, UpstreamCredential{Attached: false, Self: false}, false)
+	_, ok = UpstreamFailureHappened(http.StatusUnauthorized, UpstreamCredential{Attached: false, Self: false, Configured: false}, false)
 	require.False(t, ok, "a 401 with no credential is the sign-in challenge")
 
 	code, _ = UpstreamFailureHappened(http.StatusBadGateway, attached, true)
@@ -151,6 +151,32 @@ func TestToolsCallConnections_KillswitchRefusals(t *testing.T) {
 			require.Equal(t, string(tc.who), row.WhoFixes)
 		})
 	}
+}
+
+// A rejected admin-set key is the admin's to fix; a header forwarded from the caller is not.
+func TestToolsCallConnections_ConfiguredCredentialRejected(t *testing.T) {
+	t.Parallel()
+
+	reject := func(w http.ResponseWriter, _ *http.Request) { w.WriteHeader(http.StatusUnauthorized) }
+	attribution := func() *ConnectionAttribution {
+		return &ConnectionAttribution{
+			Scope:            mcpconnectionattempts.ServerScope("org", uuid.New(), uuid.New(), mcpconnectionattempts.AppUnverified),
+			Details:          nil,
+			UpstreamFailures: true,
+			SelfCredential:   false,
+		}
+	}
+
+	rec := mcpconnectionattemptstest.New(t)
+	configured := []proxy.ConfiguredHeader{{IsRequired: true, Name: "X-Api-Key", StaticValue: "key", ValueFromRequestHeader: ""}}
+	serveToolsCall(t.Context(), t, newToolsCallConnections(attribution(), rec.Recorder, proxy.ServerIdentity{}, "https://provider.example.com/mcp", "", configured), reject, continueCheckpoint())
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeCredentialMisconfigured)
+	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
+
+	forwarded := mcpconnectionattemptstest.New(t)
+	fromCaller := []proxy.ConfiguredHeader{{IsRequired: false, Name: "Authorization", StaticValue: "", ValueFromRequestHeader: "Authorization"}}
+	serveToolsCall(t.Context(), t, newToolsCallConnections(attribution(), forwarded.Recorder, proxy.ServerIdentity{}, "https://provider.example.com/mcp", "", fromCaller), reject, continueCheckpoint())
+	forwarded.RequireNothing()
 }
 
 // A caller that went away says nothing about the server.

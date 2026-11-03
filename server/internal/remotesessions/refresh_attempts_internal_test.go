@@ -39,6 +39,9 @@ func TestRefreshHappened_InvalidClientFollowsWhoCanRepairIt(t *testing.T) {
 		{name: "private key", client: withEndpoint(func(c *remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow) {
 			c.TokenEndpointAuthMethod = pgtype.Text{String: string(TokenEndpointAuthMethodPrivateKeyJWT), Valid: true}
 		}), want: mcpconnectionattempts.CodeProviderOAuthInvalidClient},
+		{name: "active managed binding", client: withEndpoint(func(c *remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow) {
+			c.HasActiveEmaBinding = true
+		}), want: mcpconnectionattempts.CodeProviderOAuthInvalidClient},
 		{name: "self", client: withEndpoint(func(c *remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow) {
 			c.CredentialOwner = string(CredentialOwnerSelf)
 		}), want: mcpconnectionattempts.CodeProviderOAuthInvalidClient},
@@ -108,4 +111,19 @@ func TestRefreshHappened_NoRow(t *testing.T) {
 		_, ok := refreshHappened(outcome, client, context.Canceled)
 		require.False(t, ok, outcome)
 	}
+}
+
+// One member's outage must not read as another's on the same issuer.
+func TestSkippedClients_DoNotLeakBetweenClients(t *testing.T) {
+	t.Parallel()
+
+	projectA, projectB, issuer, clientA, clientB := uuid.New(), uuid.New(), uuid.New(), uuid.New(), uuid.New()
+	skipped := new(SkippedClients)
+	skipped.Note(projectA, issuer, clientA, ErrRemoteSessionUnavailable)
+
+	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	require.ErrorIs(t, skipped.Reason(projectA, issuer, none), ErrRemoteSessionUnavailable)
+	require.NoError(t, skipped.Reason(projectB, issuer, none), "another project's member")
+	require.NoError(t, skipped.Reason(projectA, issuer, uuid.NullUUID{UUID: clientB, Valid: true}), "another chosen client")
+	require.ErrorIs(t, skipped.Reason(projectA, issuer, uuid.NullUUID{UUID: clientA, Valid: true}), ErrRemoteSessionUnavailable)
 }

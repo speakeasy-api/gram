@@ -1632,7 +1632,7 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 	case identitychaining.RefreshServed:
 		return upstreamRefreshServed
 	case identitychaining.RefreshUnconfirmed:
-		return upstreamRefreshUnverified
+		return unconfirmedRefreshCheck(verdict.Reason)
 	case identitychaining.RefreshRefused:
 		return upstreamRefreshEMARefused
 	case identitychaining.RefreshNotChained, identitychaining.RefreshReauthenticate:

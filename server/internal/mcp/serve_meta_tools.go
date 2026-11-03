@@ -277,6 +277,7 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 		return nil, err
 	}
 	if !satisfied {
+		s.recordMemberFailure(ctx, gate, member, gate.memberNoCredentialHappened(member))
 		return marshalMetaToolError(ctx, logger, req.ID,
 			fmt.Sprintf("server %q requires authentication that this meta MCP session does not satisfy", member.slug))
 	}

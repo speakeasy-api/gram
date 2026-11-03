@@ -41,30 +41,39 @@ func (a RefreshAttribution) NotingSkips(skipped *SkippedClients) RefreshAttribut
 // SkippedClients holds why partial resolution left clients out, since a token map entry changes routing.
 type SkippedClients struct {
 	mu      sync.Mutex
-	reasons map[uuid.UUID]error
+	skipped []skippedClient
 }
 
-// Note records why the issuer's client was left out.
-func (s *SkippedClients) Note(issuerID uuid.UUID, reason error) {
+type skippedClient struct {
+	projectID uuid.UUID
+	issuerID  uuid.UUID
+	clientID  uuid.UUID
+	reason    error
+}
+
+// Note records why a project's client was left out. Nil ignores it.
+func (s *SkippedClients) Note(projectID, issuerID, clientID uuid.UUID, reason error) {
 	if s == nil {
 		return
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	if s.reasons == nil {
-		s.reasons = map[uuid.UUID]error{}
-	}
-	s.reasons[issuerID] = reason
+	s.skipped = append(s.skipped, skippedClient{projectID: projectID, issuerID: issuerID, clientID: clientID, reason: reason})
 }
 
-// Reason is why the issuer's client was left out, or nil.
-func (s *SkippedClients) Reason(issuerID uuid.UUID) error {
+// Reason is why a member's client was left out, or nil. A chosen client must match exactly.
+func (s *SkippedClients) Reason(projectID, issuerID uuid.UUID, chosenClient uuid.NullUUID) error {
 	if s == nil {
 		return nil
 	}
 	s.mu.Lock()
 	defer s.mu.Unlock()
-	return s.reasons[issuerID]
+	for _, skip := range s.skipped {
+		if skip.projectID == projectID && skip.issuerID == issuerID && (!chosenClient.Valid || skip.clientID == chosenClient.UUID) {
+			return skip.reason
+		}
+	}
+	return nil
 }
 
 // recordRefresh writes one refresh's row. A carried attempt gets a step; otherwise the refresh is its own attempt.
@@ -120,7 +129,7 @@ func refreshHappened(outcome remotesessionmetrics.RefreshOutcome, client remotes
 		return mcpconnectionattempts.CodeInvalidGrant, true
 	case remotesessionmetrics.RefreshOutcomeInvalidClient:
 		// Only a client that can re-register is repaired by the person reconnecting.
-		if client.IssuerRegistrationEndpoint.String != "" && canReregister(client.ClientIDMetadataUri, client.IdentityProviderConnectionID, client.TokenEndpointAuthMethod, client.CredentialOwner) {
+		if client.IssuerRegistrationEndpoint.String != "" && !client.HasActiveEmaBinding && canReregister(client.ClientIDMetadataUri, client.IdentityProviderConnectionID, client.TokenEndpointAuthMethod, client.CredentialOwner) {
 			return mcpconnectionattempts.CodeRefreshInvalidClient, true
 		}
 		return mcpconnectionattempts.CodeProviderOAuthInvalidClient, true

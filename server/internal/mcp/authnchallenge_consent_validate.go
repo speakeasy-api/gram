@@ -288,9 +288,10 @@ func (s *Service) metaValidationTarget(
 	}
 	// No inbound negotiation occurred; the SDK chooses the outbound revision.
 	gate := metaGateContext{
-		discoveryMode: "progressive",
-		projectID:     endpoint.ProjectID,
-		metaServerID:  endpoint.MetaMcpServerID.UUID,
+		skippedUpstreams: nil,
+		discoveryMode:    "progressive",
+		projectID:        endpoint.ProjectID,
+		metaServerID:     endpoint.MetaMcpServerID.UUID,
 		// Agent keys reach no consent page.
 		agentID:             uuid.Nil,
 		organizationGateway: endpoint.IsOrganizationGateway(),

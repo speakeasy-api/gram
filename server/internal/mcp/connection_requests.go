@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -138,21 +139,26 @@ func (s *Service) recordMemberFailure(ctx context.Context, gate *metaGateContext
 	s.connections.Once(ctx, gate.connectionScope(ctx), mcpconnectionattempts.StepMCPRequest, what, mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx))
 }
 
+// resolveFailureHappened says who fixes a member credential that could not be resolved.
+func resolveFailureHappened(err error) mcpconnectionattempts.Code {
+	switch {
+	case errors.Is(err, remotesessions.ErrRemoteSessionUnavailable):
+		return mcpconnectionattempts.CodeRemoteSessionUnavailable
+	case errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured), errors.Is(err, remotesessions.ErrClientCredentialMisconfigured):
+		return mcpconnectionattempts.CodeCredentialMisconfigured
+	case errors.Is(err, remotesessions.ErrNoValidToken):
+		return mcpconnectionattempts.CodeInvalidRemoteSession
+	}
+	return mcpconnectionattempts.CodeInternalError
+}
+
 // memberNoCredentialHappened says why a member had no credential to send.
 func (g *metaGateContext) memberNoCredentialHappened(member metaMember) mcpconnectionattempts.Code {
 	if member.authClient != nil && member.authClient.outcome == authClientGap {
 		return authClientGapHappened(member.authClient.reason)
 	}
-	var skipped *remotesessions.SkippedClients
-	if g.authentication != nil {
-		skipped = g.authentication.skippedUpstreams
-	}
-	reason := skipped.Reason(member.remoteSessionIssuerID.UUID)
-	switch {
-	case errors.Is(reason, remotesessions.ErrRemoteSessionUnavailable):
-		return mcpconnectionattempts.CodeRemoteSessionUnavailable
-	case errors.Is(reason, remotesessions.ErrRemoteSessionMisconfigured):
-		return mcpconnectionattempts.CodeCredentialMisconfigured
+	if reason := g.skippedUpstreams.Reason(member.projectID, member.remoteSessionIssuerID.UUID, member.chosenClientID); reason != nil {
+		return resolveFailureHappened(reason)
 	}
 	return mcpconnectionattempts.CodeInvalidRemoteSession
 }
@@ -215,7 +221,7 @@ const (
 	// upstreamRefreshServed: the upstream is usable, or the session needs none.
 	upstreamRefreshServed upstreamRefreshCheck = ""
 
-	// upstreamRefreshUnverified: identity chaining could not confirm the upstream.
+	// upstreamRefreshUnverified: identity chaining's setup kept it from confirming the upstream.
 	upstreamRefreshUnverified upstreamRefreshCheck = "refreshed_unverified"
 
 	// upstreamRefreshCheckFailed: our own read failed, so the refresh proceeds unjudged.
@@ -227,6 +233,18 @@ const (
 	// upstreamRefreshEMARefused: the provider refused managed sign-in for good.
 	upstreamRefreshEMARefused upstreamRefreshCheck = "upstream_ema_refused"
 )
+
+// unconfirmedRefreshCheck blames the setup only for a reason the setup causes; an outage is no one's to fix.
+func unconfirmedRefreshCheck(reason identitychaining.Reason) upstreamRefreshCheck {
+	switch reason {
+	case identitychaining.ReasonConfigurationRequired, identitychaining.ReasonStaleConfiguration, identitychaining.ReasonBindingNotReady,
+		identitychaining.ReasonInvalidTarget, identitychaining.ReasonScopePolicyDenied, identitychaining.ReasonAccessDenied, identitychaining.ReasonInvalidClient,
+		identitychaining.ReasonMalformedAssertion, identitychaining.ReasonInsufficientScope, identitychaining.ReasonIneligibleIdentity:
+		return upstreamRefreshUnverified
+	default:
+		return upstreamRefreshCheckFailed
+	}
+}
 
 func upstreamRefreshOf(reconnect bool) upstreamRefreshCheck {
 	if reconnect {
@@ -249,12 +267,12 @@ func refuseInboundRefresh(ctx context.Context, tracker *mcpconnectionattempts.Tr
 	tracker.Refuse(ctx, code, append(opts, mcpconnectionattempts.Detail(reason))...)
 }
 
-// inboundRefreshHappened leaves out what proves no real session; an unknown reason is ours.
+// inboundRefreshHappened leaves out a request with no token to judge; an unknown reason is ours.
 func inboundRefreshHappened(reason string) (mcpconnectionattempts.Code, bool) {
 	switch reason {
 	case "refresh_token_resource_mismatch":
 		return mcpconnectionattempts.CodeResourceMismatch, true
-	case "refresh_token_client_mismatch":
+	case "refresh_token_unknown_or_already_used", "refresh_token_client_mismatch":
 		return mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed, true
 	case "refresh_token_expired":
 		return mcpconnectionattempts.CodeRefreshTokenExpired, true
@@ -270,7 +288,7 @@ func inboundRefreshHappened(reason string) (mcpconnectionattempts.Code, bool) {
 		return mcpconnectionattempts.CodeUpstreamReconnectRequired, true
 	case string(upstreamRefreshEMARefused):
 		return mcpconnectionattempts.CodeUpstreamEMARefused, true
-	case "invalid_request", "resource_mismatch", "refresh_token_unknown_or_already_used":
+	case "invalid_request", "resource_mismatch":
 		var none mcpconnectionattempts.Code
 		return none, false
 	default:

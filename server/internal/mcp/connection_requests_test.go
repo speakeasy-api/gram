@@ -230,8 +230,8 @@ func TestInboundRefresh_Expired(t *testing.T) {
 	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
 }
 
-// A token no live session holds proves nothing: it may be spent or made up.
-func TestInboundRefresh_UnknownTokenRecordsNothing(t *testing.T) {
+// A client that authenticated and sent a spent or unknown token gets a row; the limiter bounds it.
+func TestInboundRefresh_UnknownTokenRecords(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -242,7 +242,9 @@ func TestInboundRefresh_UnknownTokenRecordsNothing(t *testing.T) {
 	refused := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, "refresh-"+uuid.NewString())
 	require.NoError(t, refused.err)
 	require.Equal(t, http.StatusBadRequest, refused.code, refused.body)
-	rec.RequireNothing()
+	row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed)
+	require.Equal(t, client.ID.String(), row.UserSessionClientID)
+	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
 }
 
 func TestInboundRefresh_ReplayIsNotAFailure(t *testing.T) {
@@ -280,16 +282,16 @@ func TestInboundRefresh_UpstreamReconnect(t *testing.T) {
 	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
 }
 
-// A malformed-looking token has no verdict to give, and leaves without a no_verdict row.
-func TestInboundRefresh_NoProofLeavesNoVerdictRow(t *testing.T) {
+// A malformed request has no token to judge, and leaves without a no_verdict row.
+func TestInboundRefresh_NoTokenLeavesNoRow(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
 	rec := mcpconnectionattemptstest.New(t)
 	ti.service.SetConnectionRecorder(rec.Recorder)
-	toolset, _, client, refreshToken, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
+	toolset, _, client, _, _ := seedRefreshReplaySessionDetails(t, ctx, ti, time.Now().Add(time.Hour))
 
-	refused := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, refreshToken+"-not-it")
+	refused := performRefreshRequest(ctx, ti, toolset.McpSlug.String, client.ClientID, "")
 	require.NoError(t, refused.err)
 	require.Equal(t, http.StatusBadRequest, refused.code, refused.body)
 	rec.RequireNothing()

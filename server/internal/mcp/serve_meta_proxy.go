@@ -143,6 +143,10 @@ type memberDial struct {
 	configuredHeaders bool
 }
 
+func (d memberDial) upstreamCredential() remotemcp.UpstreamCredential {
+	return remotemcp.UpstreamCredential{Attached: !d.anonymous, Self: d.clientCredential, Configured: d.configuredHeaders}
+}
+
 func memberSessionKey(route any, token string) string {
 	encoded, _ := json.Marshal([]any{route, token})
 	sum := sha256.Sum256(encoded)
@@ -261,7 +265,7 @@ func (s *Service) routeMetaMember(
 		if member.authClient != nil && member.authClient.outcome != authClientLegacy {
 			authHeaders = member.authClient.headers
 		}
-		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, connectURL: "", sessionKey: memberSessionKey([]any{remoteServer.Url, remoteServer.TransportType, headers, authHeaders}, upstreamToken), credential: memberServedCredential(gate, member, routed), tunneled: false, configuredHeaders: len(headers) > 0 || len(authHeaders) > 0, build: func(context.Context) (*proxy.Proxy, error) {
+		return memberDial{anonymous: upstreamToken == "", clientCredential: routed.CredentialOwner == remotesessions.CredentialOwnerSelf, connectURL: "", sessionKey: memberSessionKey([]any{remoteServer.Url, remoteServer.TransportType, headers, authHeaders}, upstreamToken), credential: memberServedCredential(gate, member, routed), tunneled: false, configuredHeaders: remotemcp.HasConfiguredCredential(headers) || remotemcp.HasConfiguredCredential(authHeaders), build: func(context.Context) (*proxy.Proxy, error) {
 			// No WWW-Authenticate relay: a member's auth challenge must not
 			// invite the client to re-authenticate against the meta MCP.
 			p := s.remoteProxyManager.Build(logger, &remoteServer, member.serverID.String(), headers, member.visibility, gate.organizationID, member.projectID.String(), upstreamToken, "", nil, options...)
@@ -476,6 +480,8 @@ func (s *Service) executeProxiedMemberTool(
 	if err != nil {
 		if _, credential := errors.AsType[memberCredentialError](err); credential {
 			s.recordMemberFailure(ctx, gate, member, gate.memberNoCredentialHappened(member))
+		} else if failure, ok := errors.AsType[memberConnectionError](err); ok {
+			s.recordMemberFailure(ctx, gate, member, failure.code)
 		}
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
 			return marshalMetaMemberFailure(ctx, logger, req.ID, err, memberErr.message)

@@ -5169,7 +5169,11 @@ SELECT
     i.registration_endpoint                AS issuer_registration_endpoint,
     c.client_id_metadata_uri               AS client_id_metadata_uri,
     c.identity_provider_connection_id      AS identity_provider_connection_id,
-    c.credential_owner                     AS credential_owner
+    c.credential_owner                     AS credential_owner,
+    EXISTS (
+      SELECT 1 FROM remote_session_ema_bindings AS b
+      WHERE b.remote_session_client_id = c.id AND b.state IS DISTINCT FROM 'unlinked'
+    )::boolean                             AS has_active_ema_binding
 FROM remote_session_clients AS c
 JOIN remote_session_issuers AS i ON i.id = c.remote_session_issuer_id
 WHERE c.id = $1
@@ -5221,6 +5225,7 @@ type GetRemoteSessionClientWithIssuerByIDRow struct {
 	ClientIDMetadataUri                       pgtype.Text
 	IdentityProviderConnectionID              uuid.NullUUID
 	CredentialOwner                           string
+	HasActiveEmaBinding                       bool
 }
 
 // Joined client + issuer view scoped to a single client_id. Used by
@@ -5276,6 +5281,7 @@ func (q *Queries) GetRemoteSessionClientWithIssuerByID(ctx context.Context, id u
 		&i.ClientIDMetadataUri,
 		&i.IdentityProviderConnectionID,
 		&i.CredentialOwner,
+		&i.HasActiveEmaBinding,
 	)
 	return i, err
 }
