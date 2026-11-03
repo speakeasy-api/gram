@@ -291,11 +291,14 @@ func TestConnectionCatalogExpiryAndIsolation(t *testing.T) {
 	catalog := connectionCatalog{Version: connectionCatalogVersion, ID: uuid.New(), OrganizationID: endpoint.OrganizationID, IssuerID: endpoint.UserSessionIssuerID, Resource: endpointToolSelectionResource(endpoint), ClientID: "test-client", Subject: subject, Members: map[string]connectionCatalogMember{}, Tools: []*toolListEntry{}, ExpiresAt: now.Add(time.Hour)}
 	raw, err := json.Marshal(catalog)
 	require.NoError(t, err)
-	conditional, ok := service.connectionCatalogCache.(cache.ConditionalCache)
-	require.True(t, ok)
-	stored, err := conditional.SetIfAbsent(ctx, catalog.CacheKey(), raw, catalog.ExpiresAt.Sub(now))
-	require.NoError(t, err)
-	require.True(t, stored)
+	require.NoError(t, service.publishConnectionCatalog(ctx, &catalog, now))
+	conflicting := catalog
+	conflicting.ClientID = "different-client"
+	require.ErrorContains(t, service.publishConnectionCatalog(ctx, &conflicting, now), "publication conflict")
+	expired := catalog
+	expired.ID = uuid.New()
+	expired.ExpiresAt = now
+	require.ErrorIs(t, service.publishConnectionCatalog(ctx, &expired, now), errConnectionCatalogExpired)
 	reference := &toolfilter.CatalogReference{ID: catalog.ID, Mode: toolfilter.CatalogModeCached, AllTools: true}
 	loaded, err := service.loadConnectionCatalog(ctx, endpoint, subject, reference, now)
 	require.NoError(t, err)

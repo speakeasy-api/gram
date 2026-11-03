@@ -68,7 +68,7 @@ func TestVersionedRuntimeNeverFallsBackForUnconfiguredKit(t *testing.T) {
 func TestVersionedRuntimeSwitchProductionKit(t *testing.T) {
 	t.Parallel()
 	k, provisionClient, row, _ := kitGKEBackendFixture(t)
-	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{gkeSandboxClaimGVR: "SandboxClaimList"})
+	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{kitClaimGVR: "SandboxClaimList"})
 	k.config.GKE.Dynamic = client
 	client.PrependReactor("create", "selfsubjectaccessreviews", func(ktesting.Action) (bool, runtime.Object, error) {
 		return true, &unstructured.Unstructured{Object: map[string]any{"apiVersion": "authorization.k8s.io/v1", "kind": "SelfSubjectAccessReview", "status": map[string]any{"allowed": true}}}, nil

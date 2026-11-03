@@ -11,6 +11,7 @@ import (
 
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
@@ -121,10 +122,16 @@ func (s *Service) validateRemoteLoginBrowser(r *http.Request) (retErr error) {
 	if err != nil {
 		return fmt.Errorf("validate remote login browser: %w", s.remoteLoginStateError(r.Context(), err))
 	}
+	var parentReconnect *CodeReconnectBinding
 	defer func() {
-		if retErr != nil {
-			s.recordRemoteLoginRefusal(r.Context(), remote, retErr)
+		if retErr == nil {
+			return
 		}
+		if parentReconnect.expired(time.Now()) {
+			s.endAttemptOnce(r.Context(), s.logger, remote.Attempt, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeExpired, remote.ConnectionOptions()...)
+			return
+		}
+		s.recordRemoteLoginRefusal(r.Context(), remote, retErr)
 	}()
 	if recovery, err := s.verifyConnectionRecoveryCompletion(r, remote); recovery {
 		return err
@@ -136,6 +143,7 @@ func (s *Service) validateRemoteLoginBrowser(r *http.Request) (retErr error) {
 	if err != nil {
 		return fmt.Errorf("load parent login state: %w", s.remoteLoginStateError(r.Context(), err))
 	}
+	parentReconnect = parent.CodeReconnect
 	if parent.Subject == nil || remote.Subject == nil || parent.Subject.String() != remote.Subject.String() || parent.UserSessionIssuerID != remote.UserSessionIssuerID {
 		return fmt.Errorf("validate remote login browser: %w", oops.WithBrowserReason(oops.E(oops.CodeUnauthorized, nil, "remote login parent mismatch"), oauthui.ReasonSessionChanged))
 	}

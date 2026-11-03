@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
@@ -215,4 +216,41 @@ func TestFederatedHappened(t *testing.T) {
 	require.Equal(t, mcpconnectionattempts.CodeIDPTransientFailure, federatedHappened(remotesessions.ErrFederatedUnavailable))
 	require.Equal(t, mcpconnectionattempts.CodeSignInProviderError, federatedHappened(remotesessions.ErrFederatedIdentity))
 	require.Equal(t, mcpconnectionattempts.CodeInternalError, federatedHappened(remotesessions.ErrFederatedSigning))
+}
+
+func TestReconnectFailure(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		err      error
+		code     mcpconnectionattempts.Code
+		terminal bool
+	}{
+		"catalog expired":  {errConnectionCatalogExpired, mcpconnectionattempts.CodeConnectionCatalogExpired, true},
+		"review evicted":   {redisCache.ErrCacheMiss, mcpconnectionattempts.CodeConnectionCatalogExpired, true},
+		"another approval": {errReconnectCatalogSuperseded, mcpconnectionattempts.CodeConnectionCatalogExpired, true},
+		"revoked":          {errReconnectConnectionInactive, mcpconnectionattempts.CodeRefreshTokenRevoked, true},
+		"setup changed":    {errReconnectCatalogChanged, mcpconnectionattempts.CodeConnectionChanged, true},
+		"not frozen":       {errReconnectCatalogNotFrozen, mcpconnectionattempts.CodeConnectionChanged, true},
+		"config changed":   {errConsentConfigurationChanged, mcpconnectionattempts.CodeConnectionChanged, true},
+		"too large":        {errConnectionCatalogTooLarge, mcpconnectionattempts.CodeMemberToolsMissing, false},
+		"database down":    {errors.New("database down"), mcpconnectionattempts.CodeInternalError, false},
+	} {
+		code, _, terminal := reconnectFailure(tc.err)
+		require.Equal(t, tc.code, code, name)
+		require.Equal(t, tc.terminal, terminal, name)
+	}
+}
+
+// A review not yet approved has changed nothing, so it isn't Connected however the cards read.
+func TestRecordConsentPage_PendingReviewDoesNotComplete(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	service := &Service{connections: rec.Recorder}
+	state := openState()
+	state.FirstParty = true
+	state.CodeReconnect = &CodeReconnectBinding{CatalogID: uuid.New(), ReviewReady: true}
+	service.recordConsentPage(t.Context(), nil, directEndpoint(), state, nil, nil, nil)
+	rec.RequireNothing()
 }

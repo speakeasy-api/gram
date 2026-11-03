@@ -15,8 +15,11 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/agents"
 	agentrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
+	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -28,12 +31,12 @@ import (
 func TestKitWorkloadSubjectGeneration(t *testing.T) {
 	t.Parallel()
 	r := assistantRuntimeRecord{ID: uuid.New()}
-	c := KitLocalCompositionConfig{Environment: "production", WorkloadNamespace: "assistants"}
+	c := nativeKitWorkloadTestConfig(KitLocalCompositionConfig{Environment: "production", WorkloadNamespace: "assistants"})
 	subject, sa, err := kitWorkloadSubject(r, c, "gateway-one")
 	require.NoError(t, err)
 	require.LessOrEqual(t, len(sa), 63)
 	require.Regexp(t, `^kit-[a-f0-9]{32}-[a-f0-9]{16}$`, sa)
-	require.Equal(t, "system:serviceaccount:assistants:"+sa, subject)
+	require.Equal(t, c.nativeIdentity.subject("assistants", sa), subject)
 	again, _, err := kitWorkloadSubject(r, c, "gateway-one")
 	require.NoError(t, err)
 	require.Equal(t, subject, again)
@@ -131,8 +134,8 @@ func kitWorkloadDBFixture(t *testing.T) (*ServiceCore, *pgxpool.Pool, assistantR
 	_, err = fixtures.SetUserSessionIssuerAuthorizationServerModeFixture(t.Context(), testrepo.SetUserSessionIssuerAuthorizationServerModeFixtureParams{OrganizationID: "org-test", IssuerID: issuer, AuthorizationServerMode: "shared"})
 	require.NoError(t, err)
 	r := assistantRuntimeRecord{ID: uuid.New(), ProjectID: project, AssistantID: assistant.ID, RuntimeVersion: 3}
-	c := KitLocalCompositionConfig{Environment: "production", WorkloadNamespace: "assistants", WorkloadIssuerURL: "https://cluster.example", WorkloadJWKSURL: "https://cluster.example/openid/v1/jwks", MCPUserSessionIssuerID: issuer}
-	return core, db, r, resolved, c, grant.ID
+	c := KitLocalCompositionConfig{Environment: "production", WorkloadNamespace: "assistants", MCPUserSessionIssuerID: issuer}
+	return core, db, r, resolved, nativeKitWorkloadTestConfig(c), grant.ID
 }
 
 func kitWorkloadMetadata(t *testing.T, r assistantRuntimeRecord, binding *KitWorkloadBinding) assistantRuntimeRecord {
@@ -174,6 +177,74 @@ func TestKitWorkloadDBSharedIssuerAndExactRevoke(t *testing.T) {
 	require.NoError(t, err)
 	require.Len(t, assignments, 1)
 	require.Equal(t, identity.AgentID, assignments[0].AgentID)
+}
+
+// A runtime admitting and withdrawing its own workload on every start and
+// teardown is machine access, so those entries go to the security log.
+// Registering the cluster issuer happens once per project and is a
+// configuration change. Both are attributed to the assistant's agent rather
+// than to an anonymous system component.
+func TestKitWorkloadDBAuditLogAndAttribution(t *testing.T) {
+	t.Parallel()
+	core, db, r, identity, c, _ := kitWorkloadDBFixture(t)
+	configurationAdmits, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionAdmit)
+	require.NoError(t, err)
+	configurationWithdrawals, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+
+	binding, err := core.provisionKitWorkload(t.Context(), r, c, identity, "generation-one")
+	require.NoError(t, err)
+
+	agentPrincipal := urn.NewPrincipal(urn.PrincipalTypeAgent, identity.AgentID.String())
+	agent, err := agents.ResolvePrincipal(t.Context(), db, identity.OrganizationID, agentPrincipal)
+	require.NoError(t, err)
+
+	// The project's shared issuer belongs to the runtime, not to whichever
+	// agent's start created it; that agent is kept as provenance.
+	issuerCreate, err := audittest.LatestAuditLogByAction(t.Context(), db, audit.ActionWorkloadIssuerCreate)
+	require.NoError(t, err)
+	require.Equal(t, string(urn.PrincipalTypeSystem), issuerCreate.ActorType)
+	require.Equal(t, "kit-runtime", issuerCreate.ActorID)
+	require.JSONEq(t, `{"triggered_by":"`+agentPrincipal.String()+`"}`, string(issuerCreate.Metadata))
+
+	admit, err := audittest.LatestSecurityAuditLogByAction(t.Context(), db, audit.ActionWorkloadAdmissionAdmit)
+	require.NoError(t, err)
+	require.Equal(t, binding.Subject, admit.SubjectDisplay)
+	require.Equal(t, string(urn.PrincipalTypeAgent), admit.ActorType)
+	require.Equal(t, identity.AgentID.String(), admit.ActorID)
+	require.Equal(t, agent.Name, admit.ActorDisplay, "the entry names the agent, so it stays readable after the agent is gone")
+
+	require.NoError(t, core.revokeKitWorkload(t.Context(), db, kitWorkloadMetadata(t, r, binding)))
+	withdraw, err := audittest.LatestSecurityAuditLogByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+	require.Equal(t, binding.Subject, withdraw.SubjectDisplay)
+	require.Equal(t, string(urn.PrincipalTypeAgent), withdraw.ActorType)
+	require.Equal(t, identity.AgentID.String(), withdraw.ActorID)
+	require.Equal(t, agent.Name, withdraw.ActorDisplay)
+
+	admits, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionAdmit)
+	require.NoError(t, err)
+	require.Equal(t, configurationAdmits, admits, "the runtime's admit stays out of the configuration log")
+	withdrawals, err := audittest.AuditLogCountByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+	require.Equal(t, configurationWithdrawals, withdrawals, "the runtime's withdrawal stays out of the configuration log")
+}
+
+// A runtime is withdrawn after its agent is deleted too, and the entry still
+// names the agent.
+func TestKitWorkloadDBWithdrawalNamesADeletedAgent(t *testing.T) {
+	t.Parallel()
+	core, db, r, identity, c, _ := kitWorkloadDBFixture(t)
+
+	binding, err := core.provisionKitWorkload(t.Context(), r, c, identity, "generation-one")
+	require.NoError(t, err)
+	agent, err := agentrepo.New(db).DeleteAgent(t.Context(), agentrepo.DeleteAgentParams{OrganizationID: identity.OrganizationID, ID: identity.AgentID})
+	require.NoError(t, err)
+
+	require.NoError(t, core.revokeKitWorkload(t.Context(), db, kitWorkloadMetadata(t, r, binding)))
+	withdraw, err := audittest.LatestSecurityAuditLogByAction(t.Context(), db, audit.ActionWorkloadAdmissionWithdraw)
+	require.NoError(t, err)
+	require.Equal(t, agent.Name, withdraw.ActorDisplay)
 }
 
 func TestKitWorkloadDBLocalSubjectCannotBeReused(t *testing.T) {
@@ -247,7 +318,7 @@ func TestKitWorkloadDBExactAdmissionOwnershipCollision(t *testing.T) {
 	_, err = q.UpdateWorkloadAdmission(t.Context(), workloadrepo.UpdateWorkloadAdmissionParams{OrganizationID: identity.OrganizationID, ProjectID: project, ID: admissions[0].ID, Name: pgtype.Text{String: "another-runtime", Valid: true}, Tags: []string{"kit-runtime"}})
 	require.NoError(t, err)
 	_, err = core.provisionKitWorkload(t.Context(), r, c, identity, "generation-one")
-	require.ErrorContains(t, err, "belongs to another runtime")
+	require.ErrorContains(t, err, "cannot be reused")
 	require.ErrorIs(t, core.revokeKitWorkload(t.Context(), db, kitWorkloadMetadata(t, r, binding)), ErrKitRuntimeBinding)
 	remaining, err := q.GetWorkloadAdmission(t.Context(), workloadrepo.GetWorkloadAdmissionParams{OrganizationID: identity.OrganizationID, ProjectID: project, ID: admissions[0].ID})
 	require.NoError(t, err)
@@ -478,4 +549,45 @@ func TestKitRuntimeIdentityRejectsOwnerReassignmentLatch(t *testing.T) {
 	require.ErrorIs(t, core.identities.ValidateRuntime(t.Context(), db, identity), assistantidentity.ErrInvalidIdentity)
 	_, err = core.provisionKitWorkload(t.Context(), r, config, identity, "owner-latched")
 	require.ErrorIs(t, err, assistantidentity.ErrInvalidIdentity)
+}
+
+func testKitGKEIdentityConfig() KitGKEIdentityConfig {
+	return KitGKEIdentityConfig{ProjectNumber: "123456789", OrganizationID: "987654321", ClusterLocation: "us-central1", ClusterName: "test-cluster"}
+}
+func nativeKitWorkloadTestConfig(c KitLocalCompositionConfig) KitLocalCompositionConfig {
+	return kitGKENativeIssuerConfig(KitGKECompositionConfig{KitLocalCompositionConfig: c, KitGKEIdentityConfig: testKitGKEIdentityConfig()}).KitLocalCompositionConfig
+}
+
+func TestKitNativeIdentityDerivation(t *testing.T) {
+	t.Parallel()
+	c := testKitGKEIdentityConfig()
+	require.NoError(t, c.Validate())
+	require.Equal(t, "agents.global.org-987654321.system.id.goog", c.trustDomain())
+	require.Equal(t, "https://sts.googleapis.com/v1/organizations/987654321/locations/global/workloadIdentityPools/agents.global.org-987654321.system.id.goog", c.issuer())
+	require.Equal(t, "spiffe://agents.global.org-987654321.system.id.goog/resources/container/projects/123456789/locations/us-central1/clusters/test-cluster/ns/assistants/sa/kit-generation", c.subject("assistants", "kit-generation"))
+	configured := nativeKitWorkloadTestConfig(KitLocalCompositionConfig{Environment: "production", WorkloadNamespace: "assistants", WorkloadIssuerURL: "https://untrusted.example", WorkloadJWKSURL: "https://untrusted.example/keys"})
+	require.Equal(t, c.issuer(), configured.WorkloadIssuerURL)
+	require.Equal(t, c.issuer()+"/openid/jwks", configured.WorkloadJWKSURL)
+	configured.WorkloadIssuerURL = "https://accounts.google.com"
+	_, _, err := kitWorkloadSubject(assistantRuntimeRecord{ID: uuid.New()}, configured, "generation")
+	require.ErrorIs(t, err, ErrKitRuntimeBinding)
+}
+
+func TestKitWorkloadDBNativeSubjectCannotBeReused(t *testing.T) {
+	t.Parallel()
+	core, db, r, identity, c, _ := kitWorkloadDBFixture(t)
+	first, err := core.provisionKitWorkload(t.Context(), r, c, identity, "generation-one")
+	require.NoError(t, err)
+	_, err = core.provisionKitWorkload(t.Context(), r, c, identity, "generation-one")
+	require.ErrorContains(t, err, "cannot be reused")
+	require.NoError(t, core.revokeKitWorkload(t.Context(), db, kitWorkloadMetadata(t, r, first)))
+	_, err = core.provisionKitWorkload(t.Context(), r, c, identity, "generation-one")
+	require.ErrorContains(t, err, "cannot be reused")
+	_, err = workloadrepo.New(db).SoftDeleteWorkloadIssuer(t.Context(), workloadrepo.SoftDeleteWorkloadIssuerParams{OrganizationID: identity.OrganizationID, ProjectID: uuid.NullUUID{UUID: r.ProjectID, Valid: true}, ID: first.IssuerID})
+	require.NoError(t, err)
+	_, err = core.provisionKitWorkload(t.Context(), r, c, identity, "generation-one")
+	require.ErrorContains(t, err, "cannot be reused", "deleted admissions under a deleted issuer still fence old assertions")
+	second, err := core.provisionKitWorkload(t.Context(), r, c, identity, "generation-two")
+	require.NoError(t, err)
+	require.NotEqual(t, first.IssuerID, second.IssuerID)
 }

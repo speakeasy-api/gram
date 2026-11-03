@@ -20,14 +20,20 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	authclientfixtures "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
@@ -488,4 +494,362 @@ await tools.call(path, {})`, false)
 	upstream.requireToolCallAuth(t, "Bearer reconnected-token")
 	require.Len(t, result.ToolCalls, 1)
 	t.Log("AFTER: a fresh Python execution discovers, describes and calls one read tool with the newly connected credential.")
+}
+
+func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
+	for _, tc := range []struct {
+		name              string
+		selection         []string
+		typedAuth         bool
+		revoke            bool
+		evictCatalog      bool
+		revokeAtApproval  bool
+		commitFailure     bool
+		completionFailure bool
+		cancel            bool
+	}{
+		{name: "all tools"},
+		{name: "commit failure preserves catalogue", commitFailure: true},
+		{name: "completion failure can retry", completionFailure: true},
+		{name: "selected tools", selection: []string{"other-tracker--tool_000"}},
+		{name: "typed auth client", typedAuth: true},
+		{name: "revoked during consent", revoke: true},
+		{name: "catalogue evicted during consent", evictCatalog: true},
+		{name: "cancel preserves catalogue", cancel: true},
+		{name: "revoked while reviewing", revokeAtApproval: true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			mock := memberMock()
+			mock.buildAuthURLResult, _ = url.Parse("https://login.example.test/authorize")
+			var completionCache *reconnectCompletionFailureCache
+			var wrap func(cache.Cache) cache.Cache
+			if tc.completionFailure {
+				wrap = func(delegate cache.Cache) cache.Cache {
+					completionCache = &reconnectCompletionFailureCache{OwnershipStore: delegate.(codemode.OwnershipStore)}
+					return completionCache
+				}
+			}
+			ctx, ti := newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), mock, mcp.TunnelPublicConfig{}, wrap)
+			auth, _ := contextvalues.GetAuthContext(ctx)
+			mock.upsertResult = auth.UserID
+			ti.service.manual = true
+			configureCodeRunner(t, ctx, ti)
+			_, issuerRow, downstream := seedPrivateToolsetWithIssuer(t, ctx, ti)
+			issuer := issuerRow.ID
+			slug := "code-reconnect-" + uuid.NewString()
+			gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, slug, issuer)
+			upstream := newRecordingUpstream(t, "ping")
+			var exchanged atomic.Value
+			provider := newConsentExchangeAS(t, &exchanged, "reconnected-token")
+			client := createConsentRemoteClient(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "code-oauth", provider.URL, []uuid.UUID{issuer})
+			remoteIssuer := clientRemoteIssuerID(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, client)
+			member := createMetaMember(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "tracker", upstream.url, conv.ToNullUUID(remoteIssuer), 0)
+			selection := selectionFixture{ti: ti, projectID: *auth.ProjectID, orgID: auth.ActiveOrganizationID}
+			selection.associate(t, ctx, member.mcpServerID, client)
+			var permitCallers func() []string
+			if tc.typedAuth {
+				permitCallers = ti.service.RecordAuthClientPermitCallers()
+				fixtures := authclientfixtures.New(ti.conn)
+				authClientID, err := fixtures.SeedAuthClientFixture(ctx, authclientfixtures.SeedAuthClientFixtureParams{OrganizationID: auth.ActiveOrganizationID, ProjectID: conv.ToNullUUID(*auth.ProjectID), ClientType: "remote_session", Source: "admin", RemoteSessionClientID: conv.ToNullUUID(client)})
+				require.NoError(t, err)
+				require.NoError(t, fixtures.SeedServerAuthClientLinkFixture(ctx, authclientfixtures.SeedServerAuthClientLinkFixtureParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, McpServerID: member.mcpServerID, AuthClientID: authClientID, Source: "admin"}))
+				_, err = productfeaturesrepo.New(ti.conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{OrganizationID: auth.ActiveOrganizationID, FeatureName: string(productfeatures.FeatureUpstreamAuthEnforced)})
+				require.NoError(t, err)
+			}
+			other := newCatalogUpstream(t, 2)
+			// Different servers can have the same display name.
+			seedMetaMemberWithUpstream(t, ctx, ti.conn, *auth.ProjectID, gateway.ID, "tracker", "other-tracker", 1, other.url)
+			bearer := approveGatewayCatalog(t, ctx, ti, issuer, downstream, gateway.ID, slug, toolfilter.CatalogModeCached, metamcp.DiscoveryModeCode, tc.selection).token
+			other.future.Store(true)
+
+			claims, err := usersessions.NewSigner("test-jwt-secret").Validate(bearer, urn.NewUserSessionIssuer(issuer).String())
+			require.NoError(t, err)
+			sessionPolicy, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuer, Jti: claims.ID})
+			require.NoError(t, err)
+			if tc.typedAuth {
+				params := usersessionsrepo.GetReconnectSessionPolicyParams{CredentialID: sessionPolicy.CredentialID, UserSessionIssuerID: issuer, OrganizationID: auth.ActiveOrganizationID, ProjectID: conv.ToNullUUID(*auth.ProjectID), SubjectUrn: urn.NewUserSubject(auth.UserID), ClientID: downstream.ClientID}
+				_, err := usersessionsrepo.New(ti.conn).GetReconnectSessionPolicy(ctx, params)
+				require.NoError(t, err)
+				params.OrganizationID = "another-organization"
+				_, err = usersessionsrepo.New(ti.conn).GetReconnectSessionPolicy(ctx, params)
+				require.Error(t, err)
+				params.OrganizationID = auth.ActiveOrganizationID
+				params.ProjectID = conv.ToNullUUID(uuid.New())
+				_, err = usersessionsrepo.New(ti.conn).GetReconnectSessionPolicy(ctx, params)
+				require.Error(t, err)
+			}
+			_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{UserSessionIssuerID: issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: sessionPolicy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{member.mcpServerID}, PickedClientIds: []uuid.UUID{client}})
+			require.NoError(t, err)
+			unrelatedGateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "unrelated-"+uuid.NewString(), issuer)
+			unrelated := createMetaMember(t, ctx, ti.conn, *auth.ProjectID, unrelatedGateway.ID, "unrelated", upstream.url, conv.ToNullUUID(remoteIssuer), 0)
+			selection.associate(t, ctx, unrelated.mcpServerID, client)
+			_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{UserSessionIssuerID: issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: sessionPolicy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{unrelated.mcpServerID}, PickedClientIds: []uuid.UUID{client}})
+			require.NoError(t, err)
+			execute := func(code string, restricted bool) codemode.ExecutionResult {
+				t.Helper()
+				args := map[string]any{"code": code}
+				if restricted {
+					args["tools"] = []string{}
+				}
+				w, err := servePublicHTTP(t, ctx, ti, slug, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": args}), bearer, nil)
+				require.NoError(t, err)
+				require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+				var response struct {
+					Result struct {
+						StructuredContent codemode.ExecutionResult `json:"structuredContent"`
+					} `json:"result"`
+				}
+				require.NoError(t, json.Unmarshal(w.Body.Bytes(), &response))
+				require.Nil(t, response.Result.StructuredContent.Error, w.Body.String())
+				return response.Result.StructuredContent
+			}
+			status := execute(`await tools.servers()`, true)
+			require.Contains(t, string(status.Value), `"authentication":"unknown"`)
+
+			require.Contains(t, string(status.Value), `"consent":"required"`)
+			verified := execute(`await tools.servers(server="tracker", verify=True)`, false)
+			require.Contains(t, string(verified.Value), `"consent":"required"`)
+
+			t.Log("BEFORE: Python lists connection metadata without probing the upstream; no business tool has run.")
+			handoff := execute(`await tools.connect(server="tracker")`, true)
+			var action codemode.ConnectionAction
+			require.NoError(t, json.Unmarshal(handoff.Value, &action))
+			require.NotEmpty(t, action.AuthorizationURL)
+			require.False(t, action.ClientReconnectRequired)
+			require.Empty(t, handoff.ToolCalls)
+			upstream.requireNeverCarried(t, "Bearer reconnected-token")
+			rec := recordConnections(t, ti)
+			remotesessions.WithConnectionRecorder(rec.Recorder)(ti.service.RemoteChallengeManager())
+			route := chi.NewRouteContext()
+			route.URLParams.Add("mcpSlug", slug)
+			entry := httptest.NewRequest(http.MethodGet, action.AuthorizationURL, nil).WithContext(context.WithValue(ctx, chi.RouteCtxKey, route))
+			started := httptest.NewRecorder()
+			require.NoError(t, ti.service.HandleFirstPartyConnect(started, entry))
+			require.Equal(t, mock.buildAuthURLResult.String(), started.Header().Get("Location"))
+			callback := httptest.NewRequest(http.MethodGet, "/mcp/idp_callback?state="+url.QueryEscape(mock.buildAuthURLParams.State)+"&code=idp-auth-code", nil).WithContext(ctx)
+			identified := httptest.NewRecorder()
+			require.NoError(t, ti.service.HandleIDPCallback(identified, callback))
+			landing, err := url.Parse(identified.Header().Get("Location"))
+			require.NoError(t, err)
+			stateID := landing.Query().Get("state")
+			state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+			require.NoError(t, err)
+			require.Equal(t, auth.UserID, state.Subject.ID)
+
+			require.NotEqual(t, uuid.Nil, state.CodeReconnect.CatalogID)
+
+			endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, slug, "mcp")
+			require.NoError(t, err)
+			form := url.Values{"state": {stateID}, "csrf_token": {state.CSRFToken}, "action": {"connect"}, "client_id": {client.String()}, "server": {"tracker"}}
+			connect := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect/remote-session", strings.NewReader(form.Encode())).WithContext(ctx)
+			connect.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			sent := httptest.NewRecorder()
+			require.NoError(t, ti.service.ServeConsentAction(sent, connect, endpoint))
+			authorization, err := url.Parse(sent.Header().Get("Location"))
+			require.NoError(t, err)
+			require.Equal(t, provider.URL, authorization.Scheme+"://"+authorization.Host)
+			remoteCallback := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?state="+url.QueryEscape(authorization.Query().Get("state"))+"&code=synthetic-approved-code", nil).WithContext(ctx)
+			catalogKey := "mcpConnectionCatalog:v1:" + auth.ActiveOrganizationID + ":" + state.CodeReconnect.CatalogID.String()
+			var originalCatalog []byte
+			require.NoError(t, ti.cacheAdapter.Get(ctx, catalogKey, &originalCatalog))
+			completed := httptest.NewRecorder()
+			permitChecksBefore := 0
+			if permitCallers != nil {
+				permitChecksBefore = len(permitCallers())
+			}
+			if tc.evictCatalog {
+				key := "mcpConnectionCatalog:v1:" + auth.ActiveOrganizationID + ":" + state.CodeReconnect.CatalogID.String()
+				require.NoError(t, ti.cacheAdapter.Delete(ctx, key))
+				require.NoError(t, ti.service.HandleRemoteLoginCallback(completed, remoteCallback))
+				require.Equal(t, http.StatusSeeOther, completed.Code)
+				require.NotNil(t, exchanged.Load())
+				redirect, err := url.Parse(completed.Header().Get("Location"))
+				require.NoError(t, err)
+				require.Equal(t, "required", redirect.Query().Get("catalog_reconnect"))
+				page := httptest.NewRecorder()
+				require.NoError(t, ti.service.ServeConsent(page, httptest.NewRequest(http.MethodGet, redirect.String(), nil).WithContext(ctx), endpoint))
+				require.Contains(t, page.Body.String(), "Session expired. Please reconnect.")
+				require.NotContains(t, page.Body.String(), "data-auto-close")
+				rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeConnectionCatalogExpired)
+				return
+			}
+			if tc.revoke {
+				session, err := usersessionsrepo.New(ti.conn).GetUserSessionByJTI(ctx, usersessionsrepo.GetUserSessionByJTIParams{UserSessionIssuerID: issuer, Jti: claims.ID})
+				require.NoError(t, err)
+				_, err = usersessionsrepo.New(ti.conn).RevokeUserSession(ctx, usersessionsrepo.RevokeUserSessionParams{ID: session.ID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID})
+				require.NoError(t, err)
+
+				key := "mcpConnectionCatalog:v1:" + auth.ActiveOrganizationID + ":" + state.CodeReconnect.CatalogID.String()
+				var before, after []byte
+				require.NoError(t, ti.cacheAdapter.Get(ctx, key, &before))
+				require.ErrorContains(t, ti.service.HandleRemoteLoginCallback(completed, remoteCallback), "no longer active")
+				require.NoError(t, ti.cacheAdapter.Get(ctx, key, &after))
+				require.Equal(t, before, after, "revoked credentials cannot expand a catalogue")
+				rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeRefreshTokenRevoked)
+				return
+			}
+			require.NoError(t, ti.service.HandleRemoteLoginCallback(completed, remoteCallback))
+
+			require.Equal(t, http.StatusSeeOther, completed.Code)
+			reviewState, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+			require.NoError(t, err)
+			require.True(t, reviewState.CodeReconnect.ReviewReady)
+			require.False(t, reviewState.CodeReconnect.CatalogComplete)
+			var beforeApprovalCatalog []byte
+			require.NoError(t, ti.cacheAdapter.Get(ctx, catalogKey, &beforeApprovalCatalog))
+			require.Equal(t, originalCatalog, beforeApprovalCatalog, "OAuth does not change approved tools")
+			beforeApproval := execute(`await tools.servers()`, false)
+			require.Contains(t, string(beforeApproval.Value), `"consent":"required"`)
+			reviewPage := consentGetPageWithContext(t, ctx, ti, slug, stateID)
+			require.Contains(t, reviewPage, "data-catalog-changes")
+			require.Contains(t, reviewPage, `data-gateway="true"`)
+			require.Contains(t, reviewPage, "Review updated tools")
+			require.Contains(t, reviewPage, "other-tracker")
+			require.Contains(t, reviewPage, "other-tracker--tool_002")
+			rec.RequireStep(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultReviewShown)
+			rec.RequireNotEnded()
+			if tc.cancel {
+				key := "mcpConnectionCatalog:v1:" + auth.ActiveOrganizationID + ":" + state.CodeReconnect.CatalogID.String()
+				var before, after []byte
+				require.NoError(t, ti.cacheAdapter.Get(ctx, key, &before))
+				form := url.Values{"state": {stateID}, "csrf_token": {state.CSRFToken}, "action": {"deny"}}
+				req := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(form.Encode())).WithContext(ctx)
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				response := httptest.NewRecorder()
+				require.NoError(t, ti.service.ServeConsent(response, req, endpoint))
+				require.Contains(t, response.Body.String(), "No tool changes were approved")
+				require.NoError(t, ti.cacheAdapter.Get(ctx, key, &after))
+				require.Equal(t, before, after)
+				row := rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeReviewCanceled)
+				require.Equal(t, string(mcpconnectionattempts.OutcomeDeclined), row.Outcome)
+				return
+			}
+			inventory := gatewayInventoryFromPage(t, reviewPage)
+			approveForm := url.Values{"state": {stateID}, "csrf_token": {state.CSRFToken}, "action": {"approve"}, "tool_inventory_id": {inventory.Attempt}, "tool_filtering": {"off"}, "tool_catalog_mode": {"cached"}}
+			if tc.selection != nil {
+				approveForm.Set("tool_filtering", "on")
+				approveForm["tools"] = append(append([]string{}, tc.selection...), "tracker--ping")
+			}
+			approvedRequest := httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(approveForm.Encode())).WithContext(ctx)
+			approvedRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			approved := httptest.NewRecorder()
+			if tc.revokeAtApproval {
+				session, err := usersessionsrepo.New(ti.conn).GetUserSessionByJTI(ctx, usersessionsrepo.GetUserSessionByJTIParams{UserSessionIssuerID: issuer, Jti: claims.ID})
+				require.NoError(t, err)
+				_, err = usersessionsrepo.New(ti.conn).RevokeUserSession(ctx, usersessionsrepo.RevokeUserSessionParams{ID: session.ID, ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID})
+				require.NoError(t, err)
+				require.ErrorContains(t, ti.service.ServeConsent(approved, approvedRequest, endpoint), "no longer active")
+				var after []byte
+				require.NoError(t, ti.cacheAdapter.Get(ctx, catalogKey, &after))
+				require.Equal(t, originalCatalog, after)
+				rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeRefreshTokenRevoked)
+				return
+			}
+			if tc.commitFailure {
+				_, err := ti.conn.Exec(ctx, `CREATE FUNCTION reject_reconnect_commit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected reconnect commit failure'; END $$;
+                CREATE CONSTRAINT TRIGGER reject_reconnect_commit AFTER UPDATE ON user_sessions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION reject_reconnect_commit();`)
+				require.NoError(t, err)
+				require.ErrorContains(t, ti.service.ServeConsent(approved, approvedRequest, endpoint), "injected reconnect commit failure")
+				var unchanged []byte
+				require.NoError(t, ti.cacheAdapter.Get(ctx, catalogKey, &unchanged))
+				require.Equal(t, originalCatalog, unchanged)
+				afterPolicy, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuer, Jti: claims.ID})
+				require.NoError(t, err)
+				require.Equal(t, sessionPolicy.ToolSelection, afterPolicy.ToolSelection)
+				rec.RequireStep(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeInternalError)
+				rec.RequireNotEnded()
+				return
+			}
+			if tc.completionFailure {
+				completionCache.fail.Store(true)
+				require.ErrorContains(t, ti.service.ServeConsent(approved, approvedRequest, endpoint), "injected completion failure")
+				committed, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuer, Jti: claims.ID})
+				require.NoError(t, err)
+				pending, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+				require.NoError(t, err)
+				require.False(t, pending.CodeReconnect.CatalogComplete)
+				// Reloading and retrying must finish the committed approval, not replace it.
+				retryPage := consentGetPageWithContext(t, ctx, ti, slug, stateID)
+				require.Contains(t, retryPage, `id="consent-approve-button"`)
+				approveForm.Set("tool_inventory_id", gatewayInventoryFromPage(t, retryPage).Attempt)
+				approvedRequest = httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(approveForm.Encode())).WithContext(ctx)
+				approvedRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				approved = httptest.NewRecorder()
+				require.NoError(t, ti.service.ServeConsent(approved, approvedRequest, endpoint))
+				afterRetry, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuer, Jti: claims.ID})
+				require.NoError(t, err)
+				require.Equal(t, committed.ToolSelection, afterRetry.ToolSelection)
+			} else {
+				require.NoError(t, ti.service.ServeConsent(approved, approvedRequest, endpoint))
+			}
+			require.Equal(t, http.StatusSeeOther, approved.Code, approved.Body.String())
+			if permitCallers != nil {
+				calls := permitCallers()[permitChecksBefore:]
+				require.NotEmpty(t, calls)
+				for _, user := range calls {
+					require.Equal(t, auth.UserID, user)
+				}
+			}
+
+			updatedSession, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuer, Jti: claims.ID})
+			require.NoError(t, err)
+			updatedPolicy, err := toolfilter.ParseSessionPolicy(updatedSession.ToolSelection)
+			require.NoError(t, err)
+			var unrelatedChoices int
+			require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM upstream_client_selections WHERE credential_id = $1 AND mcp_server_id = $2 AND deleted_at IS NULL`, sessionPolicy.CredentialID, unrelated.mcpServerID).Scan(&unrelatedChoices))
+			require.Equal(t, 1, unrelatedChoices, "approval must preserve choices outside this gateway")
+			var unchanged, updatedCatalog []byte
+			require.NoError(t, ti.cacheAdapter.Get(ctx, catalogKey, &unchanged))
+			require.Equal(t, originalCatalog, unchanged)
+			require.NoError(t, ti.cacheAdapter.Get(ctx, "mcpConnectionCatalog:v1:"+auth.ActiveOrganizationID+":"+updatedPolicy.Catalog.ID.String(), &updatedCatalog))
+			var beforeJSON, afterJSON map[string]json.RawMessage
+			require.NoError(t, json.Unmarshal(originalCatalog, &beforeJSON))
+			require.NoError(t, json.Unmarshal(updatedCatalog, &afterJSON))
+			require.Equal(t, beforeJSON["expires_at"], afterJSON["expires_at"])
+			require.NotEqual(t, beforeJSON["id"], afterJSON["id"])
+			completedState, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+			require.NoError(t, err)
+			require.True(t, completedState.CodeReconnect.CatalogComplete)
+			row := rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete)
+			require.Equal(t, string(mcpconnectionattempts.OutcomeConnected), row.Outcome)
+			page := consentGetPageWithContext(t, ctx, ti, slug, stateID)
+			require.Contains(t, page, "data-auto-close")
+			require.NotContains(t, page, ">other-tracker</span>")
+
+			require.NotNil(t, exchanged.Load(), "real token POST reached owned OAuth provider")
+			t.Log("HANDOFF: original user identified; member-scoped OAuth callback exchanges a code and stores the upstream grant.")
+			after := execute(`await tools.servers()`, false)
+			require.NotContains(t, string(after.Value), `"consent":"required"`)
+			otherTools := execute(`await tools.search("", server="other-tracker")`, false)
+			require.Contains(t, string(otherTools.Value), "tool_000")
+			if tc.selection != nil {
+				require.NotContains(t, string(otherTools.Value), "tool_001")
+				require.NotContains(t, string(otherTools.Value), "tool_002")
+			} else {
+				require.Contains(t, string(otherTools.Value), "tool_002")
+			}
+
+			result := execute(`page = await tools.search("", server="tracker")
+path = page["items"][0]["path"]
+details = await tools.describe(path)
+await tools.call(path, {})`, false)
+			require.Contains(t, string(result.Value), `"ok":true`)
+			upstream.requireToolCallAuth(t, "Bearer reconnected-token")
+			require.Len(t, result.ToolCalls, 1)
+			t.Log("AFTER: a fresh Python execution discovers, describes and calls one read tool with the newly connected credential.")
+		})
+	}
+}
+
+// Retain every cache capability while failing exactly the final challenge CAS.
+type reconnectCompletionFailureCache struct {
+	codemode.OwnershipStore
+	fail atomic.Bool
+}
+
+func (c *reconnectCompletionFailureCache) CompareAndSwap(ctx context.Context, key string, expected, replacement any, ttl time.Duration) (bool, error) {
+	if state, ok := replacement.(mcp.AuthnChallengeState); ok && state.CodeReconnect != nil && state.CodeReconnect.CatalogComplete && c.fail.Swap(false) {
+		return false, fmt.Errorf("injected completion failure")
+	}
+	return c.OwnershipStore.CompareAndSwap(ctx, key, expected, replacement, ttl)
 }

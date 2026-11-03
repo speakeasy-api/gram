@@ -4,8 +4,6 @@ import (
 	"context"
 	"crypto/sha256"
 	"encoding/base64"
-	"encoding/json"
-	"fmt"
 	"net/http"
 	"net/http/httptest"
 	"net/url"
@@ -766,7 +764,7 @@ func TestConnectionOutcome_ParentGoneDuringProviderSignIn(t *testing.T) {
 	})
 }
 
-// Direct tools/list writes only real failures, on the first page, after the inventory is built.
+// Direct tools/list writes only real failures, after the inventory is built.
 func TestConnectionOutcome_DirectListingWritesOnlyFailures(t *testing.T) {
 	t.Parallel()
 
@@ -775,11 +773,7 @@ func TestConnectionOutcome_DirectListingWritesOnlyFailures(t *testing.T) {
 	authCtx, _ := contextvalues.GetAuthContext(ctx)
 	slug := "gateway-" + uuid.NewString()
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
-	names := make([]string, 101)
-	for i := range names {
-		names[i] = fmt.Sprintf("tool_%03d", i)
-	}
-	seedHostedMetaMember(t, ctx, ti, gateway.ID, "Paged tools", 1, mcpservers.VisibilityPublic, names...)
+	seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted tools", 1, mcpservers.VisibilityPublic, "alpha")
 	downSlug := "down-" + uuid.NewString()[:8]
 	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Down", downSlug, 2, newListingUpstream(t, nil, func() bool { return false }))
 	down, err := mcpserversrepo.New(ti.conn).GetMCPServerBySlug(ctx, mcpserversrepo.GetMCPServerBySlugParams{Slug: conv.ToPGText(downSlug), ProjectID: *authCtx.ProjectID})
@@ -788,24 +782,15 @@ func TestConnectionOutcome_DirectListingWritesOnlyFailures(t *testing.T) {
 
 	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
 	require.NoError(t, err)
-	var page struct {
-		Result struct {
-			NextCursor string `json:"nextCursor"`
-		} `json:"result"`
-	}
-	require.NoError(t, json.Unmarshal(w.Body.Bytes(), &page))
-	require.NotEmpty(t, page.Result.NextCursor)
+	require.Equal(t, http.StatusOK, w.Code)
 
 	row := rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeMemberToolsMissing)
 	require.Equal(t, down.ID.String(), row.MemberID)
 	require.Len(t, rec.Rows(), 1, "no Connected listing and no row for a healthy member")
-
-	_, err = servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{"cursor": page.Result.NextCursor}), "", nil)
-	require.NoError(t, err)
-	require.Len(t, rec.Rows(), 1, "a later page repeats nothing")
 }
 
-func TestConnectionOutcome_FailedDirectListingWritesNothing(t *testing.T) {
+// A member with invalid definitions is left out of the listing, and recorded.
+func TestConnectionOutcome_MalformedMemberIsRecorded(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestMCPService(t)
@@ -816,10 +801,9 @@ func TestConnectionOutcome_FailedDirectListingWritesNothing(t *testing.T) {
 	upstream := newListingUpstream(t, []any{map[string]any{"description": "missing name", "inputSchema": map[string]any{"type": "object"}}}, nil)
 	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Catalog member", "catalog-member", 1, upstream)
 	setGatewayMode(t, ctx, ti, gateway.ID, "direct")
-	w, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
+	_, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", nil)
 	require.NoError(t, err)
-	require.Contains(t, w.Body.String(), "invalid definitions")
-	rec.RequireNothing()
+	rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeMemberToolsMissing)
 }
 
 // A consent capture records each member on the sign-in's attempt, with no listing rows.
@@ -885,4 +869,30 @@ func TestConnectionOutcome_AuthorizeClientMetadataFailures(t *testing.T) {
 			require.Len(t, rec.Rows(), 1)
 		})
 	}
+}
+
+// An expired code reconnect is expired, however wrong the browser looks.
+func TestConnectionOutcome_ExpiredReviewIsNotAWrongBrowser(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	rec := recordConnections(t, ti)
+	toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	stateID := seedAttemptChallenge(t, ctx, ti, toolset, client, "v")
+	state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+	require.NoError(t, err)
+	state.CodeReconnect = &mcp.CodeReconnectBinding{UserID: state.Subject.ID, Server: "tracker", ServerID: uuid.New(), ExpiresAt: time.Now().Add(-time.Minute)}
+	state.FirstParty = true
+	state.FocusServer = "tracker"
+	require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
+	endpoint, err := ti.service.LoadResolvedMcpEndpointBySlug(ctx, ti.logger, toolset.McpSlug.String, "mcp")
+	require.NoError(t, err)
+
+	req := func() *http.Request {
+		return httptest.NewRequest(http.MethodGet, "/mcp/x/connect?state="+stateID, nil).WithContext(ctx)
+	}
+	require.Error(t, ti.service.ServeConsent(httptest.NewRecorder(), req(), endpoint))
+	require.Error(t, ti.service.ServeConsent(httptest.NewRecorder(), req(), endpoint))
+
+	rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeExpired)
 }

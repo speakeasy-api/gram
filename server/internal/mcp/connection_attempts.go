@@ -71,7 +71,43 @@ func (s *Service) recordWrongConsentBrowser(ctx context.Context, endpoint *Resol
 	if endpoint.validateChallengeRef(challengeState.Endpoint, challengeState.UserSessionIssuerID) != nil {
 		return
 	}
-	s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeSessionChanged, mcpconnectionattempts.Subject(challengeState.Subject))
+	attempt := challengeState.connectionAttempt(endpoint)
+	if challengeState.CodeReconnect.expired(time.Now()) {
+		s.endAttemptOnce(ctx, s.logger, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeExpired, mcpconnectionattempts.Subject(challengeState.Subject))
+		return
+	}
+	s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeSessionChanged, mcpconnectionattempts.Subject(challengeState.Subject))
+}
+
+// reconnectFailure maps a failed catalogue reconnect, and whether a retry can't fix it.
+func reconnectFailure(err error) (mcpconnectionattempts.Code, mcpconnectionattempts.Option, bool) {
+	switch {
+	case errors.Is(err, errReconnectCatalogSuperseded):
+		return mcpconnectionattempts.CodeConnectionCatalogExpired, mcpconnectionattempts.Detail("another_approval"), true
+	case errors.Is(err, errConnectionCatalogExpired), errors.Is(err, redisCache.ErrCacheMiss):
+		return mcpconnectionattempts.CodeConnectionCatalogExpired, mcpconnectionattempts.Detail(""), true
+	case errors.Is(err, errReconnectConnectionInactive):
+		return mcpconnectionattempts.CodeRefreshTokenRevoked, mcpconnectionattempts.Detail("revoked_during_review"), true
+	case errors.Is(err, errReconnectCatalogChanged), errors.Is(err, errReconnectCatalogNotFrozen), errors.Is(err, errConsentConfigurationChanged):
+		return mcpconnectionattempts.CodeConnectionChanged, mcpconnectionattempts.Detail("catalog_setup"), true
+	case errors.Is(err, errConnectionCatalogTooLarge):
+		return mcpconnectionattempts.CodeMemberToolsMissing, mcpconnectionattempts.Detail("catalog_too_large"), false
+	default:
+		return mcpconnectionattempts.CodeInternalError, mcpconnectionattempts.Detail(""), false
+	}
+}
+
+// refuseReconnect ends the attempt once when a retry can't help. The review page
+// stays reachable, so this can repeat.
+func (s *Service) refuseReconnect(ctx context.Context, logger *slog.Logger, t *mcpconnectionattempts.Tracker, attempt mcpconnectionattempts.Attempt, err error) {
+	code, detail, terminal := reconnectFailure(err)
+	if !terminal {
+		t.Attach(attempt)
+		t.Refuse(ctx, code, detail)
+		return
+	}
+	s.endAttemptOnce(ctx, logger, attempt, mcpconnectionattempts.StepInboundConsent, code, detail)
+	t.Continue()
 }
 
 // recordTicketExpired is a live connection ticket past its time, on the endpoint it was minted for.
@@ -128,7 +164,7 @@ func (s *Service) recordConsentPage(
 	if problem != nil {
 		s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, problem, subject)
 	}
-	if challengeState.FirstParty && firstPartyConnected(gateway, cards) {
+	if challengeState.FirstParty && !challengeState.CodeReconnect.catalogPending() && firstPartyConnected(gateway, cards) {
 		s.endAttemptOnce(ctx, logger, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete, subject)
 	}
 }
@@ -212,6 +248,9 @@ func firstPartyCardsDone(cards []remoteSessionCard) bool {
 
 // endChainedFirstParty ends a first-party attempt once a chained check leaves nothing to do. It never touches the response.
 func (s *Service) endChainedFirstParty(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, checked uuid.UUID) {
+	if challengeState.CodeReconnect.catalogPending() {
+		return
+	}
 	cards, err := s.buildRemoteSessionCards(ctx, endpoint, challengeState, s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID))
 	if err != nil {
 		logger.WarnContext(ctx, "read cards to end connection attempt", attr.SlogError(err))

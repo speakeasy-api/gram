@@ -413,6 +413,9 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 	if err := challengeState.CodeReconnect.authorize(gramUserID, impersonated, time.Now()); err != nil {
 		s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 		logger.WarnContext(ctx, "code reconnect owner authorization rejected", attr.SlogError(err))
+		if challengeState.CodeReconnect.expired(time.Now()) {
+			t.Refuse(ctx, mcpconnectionattempts.CodeExpired)
+		}
 		t.Refuse(ctx, mcpconnectionattempts.CodeSessionChanged, mcpconnectionattempts.Detail("reconnect_owner"))
 		return err
 	}

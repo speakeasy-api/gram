@@ -57,6 +57,7 @@ var connectionEndings = []connectionEnding{
 	{mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeCanceled},
 	{mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete},
 	{mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodePKCEMismatch},
+	{mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeReviewCanceled},
 	{mcpconnectionattempts.StepProviderToken, mcpconnectionattempts.CodeProviderOAuthInvalidGrant},
 }
 
