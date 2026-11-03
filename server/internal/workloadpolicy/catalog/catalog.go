@@ -411,6 +411,11 @@ var (
 	placeholderPattern = regexp.MustCompile(`\{([^{}]*)\}`)
 )
 
+// platformFlags are the feature flags a catalog entry may name. Each is
+// declared in the feature package, which says how it is targeted, so a file
+// cannot name a flag no one declared.
+var platformFlags = []feature.Flag{feature.FlagWorkloadPlatformGitHubActions}
+
 // stemDelimiters are the characters a wildcard stem may end on. Ending
 // anywhere else lets the stem match a longer neighboring value: "repo:acme/app"
 // would also admit "repo:acme/app-evil".
@@ -432,8 +437,8 @@ func validate(p Platform) error {
 		if p.Enabled {
 			return errors.New("feature_flag is only for an entry that is not enabled: an enabled one is offered to every organization")
 		}
-		if !keyPattern.MatchString(string(p.FeatureFlag)) {
-			return fmt.Errorf("feature_flag %q must be lowercase words joined by hyphens", p.FeatureFlag)
+		if !slices.Contains(platformFlags, p.FeatureFlag) {
+			return fmt.Errorf("feature_flag %q is not a workload platform flag declared in the feature package", p.FeatureFlag)
 		}
 	}
 	if err := validateConstant("issuer", p.Issuer); err != nil {
