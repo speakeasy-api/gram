@@ -43,8 +43,9 @@ type RepresentedUserPolicy struct {
 }
 
 // GrantsToContext stores resolved grants on the request context.
+// It also starts the boundary's pinned migration routes if none exist yet.
 func GrantsToContext(ctx context.Context, grants []Grant) context.Context {
-	return context.WithValue(ctx, grantsContextKey, grants)
+	return context.WithValue(withRoutePins(ctx), grantsContextKey, grants)
 }
 
 // GrantsFromContext loads resolved grants from the request context.
@@ -66,6 +67,9 @@ func (e *Engine) RefreshContext(ctx context.Context) (context.Context, error) {
 type AdmissionBoundary struct {
 	policies grantAuthorization
 	valid    bool
+	// routes are the migration routes the admitting request pinned, so the
+	// job keeps deciding with the same evaluators.
+	routes *routePins
 }
 
 // CaptureAdmissionBoundary captures prepared policies without retaining a request.
@@ -74,13 +78,13 @@ func (e *Engine) CaptureAdmissionBoundary(ctx context.Context) (AdmissionBoundar
 	if !valid {
 		enforce, err := e.ShouldEnforce(ctx)
 		if err != nil {
-			return AdmissionBoundary{policies: policies, valid: false}, fmt.Errorf("check admission enforcement: %w", err)
+			return AdmissionBoundary{policies: policies, valid: false, routes: nil}, fmt.Errorf("check admission enforcement: %w", err)
 		}
 		if enforce {
-			return AdmissionBoundary{policies: policies, valid: false}, fmt.Errorf("admission requires prepared authorization")
+			return AdmissionBoundary{policies: policies, valid: false, routes: nil}, fmt.Errorf("admission requires prepared authorization")
 		}
 	}
-	return AdmissionBoundary{policies: policies, valid: valid}, nil
+	return AdmissionBoundary{policies: policies, valid: valid, routes: routePinsFromContext(ctx)}, nil
 }
 
 // Apply intersects all later grant refreshes with the original admission.
@@ -88,10 +92,14 @@ func (b AdmissionBoundary) Apply(ctx context.Context) context.Context {
 	if !b.valid {
 		return ctx
 	}
+	if b.routes != nil {
+		ctx = context.WithValue(ctx, routePinsKey{}, b.routes)
+	}
 	return context.WithValue(ctx, admissionBoundaryKey{}, b.policies)
 }
 
 func admittedPoliciesToContext(ctx context.Context, represented RepresentedUserPolicy, legacyAuthCeiling bool, sets ...[]Grant) context.Context {
+	ctx = withRoutePins(ctx)
 	policies := grantAuthorization{
 		policies:            make([][]Grant, 0, len(sets)),
 		representedUser:     represented.UserID,

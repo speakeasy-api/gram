@@ -162,6 +162,15 @@ var consumerEntryPoints = map[string]consumerCategory{
 	"DefaultRegistry":               categoryWiring,
 	"DefaultRegistryConfig":         categoryWiring,
 	"DefaultDeclarations":           categoryWiring,
+	"NewMigrationRouter":            categoryWiring,
+	"DefaultMigrationUnits":         categoryWiring,
+	"FeatureFlagModes":              categoryWiring,
+	"FixedModes":                    categoryWiring,
+	"NewShadowRecorder":             categoryWiring,
+	"WithMigrationRouter":           categoryWiring,
+	"WithShadowRecorder":            categoryWiring,
+	"WithShadowBudget":              categoryWiring,
+	"WithBuildVersion":              categoryWiring,
 
 	// Value constructors: not inventoried.
 	"NewGrant":                     "",

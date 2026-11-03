@@ -65,7 +65,7 @@ Counts are call sites at the baseline. Prerequisites are the Linear blocked-by r
 | C1 AIS-869  | P1, AG1, AS1        | 4     | check 3, gate 1                                               | chat (point reads, writes, turn stream)                                                                                                   |
 | C3 AIS-872  | Q1                  | 7     | check 4, engine 2, gate 1                                     | chat (visibility scope, conversation access, summaries, trends)                                                                           |
 | E1 AIS-852  | P1                  | 8     | check 8                                                       | environments                                                                                                                              |
-| F5 AIS-835  | F4                  | 16    | engine 1, wiring 15                                           | cmd/gram, cmd/directory-roles, platformmcp engine construction                                                                            |
+| F5 AIS-835  | F4                  | 25    | engine 1, wiring 24                                           | cmd/gram, cmd/directory-roles, platformmcp engine construction                                                                            |
 | G1 AIS-850  | O1, P1, M5          | 76    | check 73, engine 2, evaluator 1                               | remotesessions                                                                                                                            |
 | G2 AIS-849  | O1, P1, M5          | 28    | check 28                                                      | usersessions                                                                                                                              |
 | I1 AIS-864  | P1, AS1             | 9     | check 5, evaluator 2, loader 2                                | mcp (workload inference), assistants (kit workload), assistantidentity (inference delegation)                                             |
@@ -99,7 +99,7 @@ Counts are call sites at the baseline. Prerequisites are the Linear blocked-by r
 | X3 AIS-875  | most domain batches | 91    | check 43, engine 10, evaluator 13, loader 24, writer 1        | platformmcp, launcher, mcp platform tool scopes                                                                                           |
 | X4 AIS-876  | X1, X3              | 2     | wiring 2                                                      | demoseed                                                                                                                                  |
 
-F1-F4, F6, C2, Q1, Z1 and Z2 own no call site: they build the foundation, characterize chat collections, or verify and retire. The total is 953 sites in 922 rows.
+F1-F4, F6, C2, Q1, Z1 and Z2 own no call site: they build the foundation, characterize chat collections, or verify and retire. The total is 962 sites in 931 rows.
 
 ### Contract notes per batch
 
@@ -185,7 +185,7 @@ The corpus freezes these as they are. Changing any of them is a product decision
 
 ## Using this in later tickets
 
-- F6 compares shadow decisions against this corpus, not against new compiler output.
+- Shadow comparison runs the same selection with every unit in shadow mode (`TestShadowFoundationCorpus`): responses must still meet the frozen expectations, because the engine decides, and the registry evaluator must not disagree with the engine on any case. A registry that compiles but drops a block is caught as `new_allow` (`TestShadowDetectsBrokenProjection`). See [cutover routing and shadow comparison](rbac-cutover-routing.md).
 - The grant evaluator (`authz.RegistryEvaluator`) runs every ordinary-human `require`, `require_any` and `risk_policy_applies` fixture through compiled test declarations (`TestRegistryEvaluatorFoundationCorpus`). Fixtures it cannot express are listed with a reason in `corpusSkips`; the test fails when a listed skip goes stale or the number of selected fixtures changes, so a change to the selection has to be looked at.
 - Policy composition (`RegistryEvaluator.Decide` and `DecideAlternatives`) runs every credential, principal API key and workload `require`/`require_any` fixture, plus the `require_any_unblocked` veto, through the same declarations (`TestPolicyCompositionFoundationCorpus`).
 - The typed client (`authz.Client`) runs every `require`, `require_any_unblocked`, `evaluate` and `find_matched` fixture whose scopes the default registry declares, for every caller profile, through `foundationContext` (`TestClientFoundationCorpus`). As a migration declares new types, more fixtures join automatically; the expected count in the test must be raised deliberately.

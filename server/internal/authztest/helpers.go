@@ -46,11 +46,33 @@ func ChallengeLoggingAlwaysEnabled(context.Context, string) (bool, error) {
 }
 
 // NewClient builds the typed authorization client over engine with the
-// default registry, failing the test if the registry does not compile.
+// default registry, failing the test if the registry does not compile. Like
+// production with every migration flag off, the engine decides every call.
 func NewClient(t *testing.T, engine *authz.Engine) *authz.Client {
 	t.Helper()
 
 	client, err := authz.NewDefaultClient(engine)
+	if err != nil {
+		t.Fatalf("create authorization client: %v", err)
+	}
+	return client
+}
+
+// NewClientInMode builds the default client with every default migration
+// unit routed to mode, so a migrated service's tests can run against the
+// engine, a shadow comparison, and the registry evaluator alike.
+func NewClientInMode(t *testing.T, engine *authz.Engine, mode authz.MigrationMode) *authz.Client {
+	t.Helper()
+
+	registry, err := authz.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("compile authorization registry: %v", err)
+	}
+	router, err := authz.NewMigrationRouter(registry, authz.FixedModes(mode), authz.DefaultMigrationUnits()...)
+	if err != nil {
+		t.Fatalf("create authorization migration router: %v", err)
+	}
+	client, err := authz.NewClient(engine, registry, authz.WithMigrationRouter(router))
 	if err != nil {
 		t.Fatalf("create authorization client: %v", err)
 	}

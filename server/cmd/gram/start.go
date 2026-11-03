@@ -1038,9 +1038,23 @@ func newStartCommand() *cli.Command {
 					AdmitWorkloadSessionInTx:         runtimepolicy.AdmitWorkloadSessionInTx,
 					DevMode:                          c.String("environment") == "local",
 				})
-			// The typed client must compile its registry at startup; a broken
-			// declaration stops the server instead of failing checks later.
-			if _, err := authz.NewDefaultClient(authzEngine); err != nil {
+			// The typed client must compile its registry and migration units at
+			// startup; a broken declaration stops the server instead of failing
+			// checks later. Each unit's flag routes it, and every unit starts
+			// with the engine deciding.
+			authzRegistry, err := authz.DefaultRegistry()
+			if err != nil {
+				return fmt.Errorf("compile authorization registry: %w", err)
+			}
+			authzRouter, err := authz.NewMigrationRouter(authzRegistry, authz.FeatureFlagModes(featureFlags), authz.DefaultMigrationUnits()...)
+			if err != nil {
+				return fmt.Errorf("create authorization migration router: %w", err)
+			}
+			if _, err := authz.NewClient(authzEngine, authzRegistry,
+				authz.WithMigrationRouter(authzRouter),
+				authz.WithShadowRecorder(authz.NewShadowRecorder(logger, meterProvider)),
+				authz.WithBuildVersion(shortGitSHA()),
+			); err != nil {
 				return fmt.Errorf("create authorization client: %w", err)
 			}
 
