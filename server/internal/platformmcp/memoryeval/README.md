@@ -29,7 +29,9 @@ Arms C (`search_team_memory`) and D (`recall_team_history` + `zoom` +
 
 The flag turns on when arm D meets every gate:
 
-- **Recall**: at least 15 points above arm B on the hard set.
+- **Complete run**: no errored answers in either arm, since errors drop out
+  of every rate below.
+- **Hard-set lift**: at least 15 points above arm B on the hard set.
 - **Overall accuracy**: at least 80%, and no lower than arm B.
 - **Privacy**: no leaked secret, and nothing from another project or a
   private session.
