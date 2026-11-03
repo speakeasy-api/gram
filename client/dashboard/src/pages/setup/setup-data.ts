@@ -194,7 +194,7 @@ const setupAgentPlatforms = (
             {
               title: "Allow Speakeasy in Claude's network egress settings",
               description:
-                "Cowork runs plugin hooks in a sandbox that reaches only allowed hosts, so hooks cannot report to Speakeasy until its domains are allowed. Each person opens Settings → Capabilities → Code execution and file creation in Claude, turns on Allow network egress, keeps Domain allowlist on Package managers only, and adds each domain below under Additional allowed domains. Hook events and the first-run hooks binary download both go to these hosts; no other domain is needed. All domains also works but opens the sandbox to the whole internet.",
+                "Cowork runs plugin hooks in a sandbox that reaches only allowed hosts, so hooks cannot report to Speakeasy until its domains are allowed. Each person opens Settings → Capabilities in Claude and turns on Code execution and file creation if it is off (the network egress controls stay hidden until it is on). Then they turn on Allow network egress, keep Domain allowlist on Package managers only, and add each domain below under Additional allowed domains. Hook events and the first-run hooks binary download both go to these hosts; no other domain is needed. All domains also works but opens the sandbox to the whole internet.",
               fields: coworkEgressFields(egressHosts),
               afterFields:
                 "Egress changes apply to new Cowork sessions only; a session that is already running keeps its old rules.",
@@ -270,7 +270,7 @@ const setupAgentPlatforms = (
       {
         title: "Allow Speakeasy in Claude's network egress settings",
         description:
-          "Cowork runs plugin hooks in a sandbox that reaches only the hosts your organization allows, so hooks cannot report to Speakeasy until its domains are allowed. As an Owner or Primary Owner, open Organization settings → Capabilities → Code execution and file creation, turn on Allow network egress, keep Domain allowlist on Package managers only, and add each domain below under Additional allowed domains. Hook events and the first-run hooks binary download both go to these hosts; no other domain is needed. All domains also works but opens the sandbox to the whole internet. Native OTEL monitoring, set up next, allowlists its own collector; plugin hooks do not.",
+          "Cowork runs plugin hooks in a sandbox that reaches only the hosts your organization allows, so hooks cannot report to Speakeasy until its domains are allowed. As an Owner or Primary Owner, open Organization settings → Capabilities and turn on Code execution and file creation if it is off (the network egress controls stay hidden until it is on). Then turn on Allow network egress, keep Domain allowlist on Package managers only, and add each domain below under Additional allowed domains. Hook events and the first-run hooks binary download both go to these hosts; no other domain is needed. All domains also works but opens the sandbox to the whole internet. Native OTEL monitoring, set up next, allowlists its own collector; plugin hooks do not.",
         helpLink: {
           url: "https://claude.ai/admin-settings/capabilities",
           linkLabel: "Capabilities settings",

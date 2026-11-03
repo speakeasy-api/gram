@@ -74,7 +74,7 @@ describe("getAgentPlatforms", () => {
 
     const step = steps[index]!;
     expect(step.description).toContain(
-      "Organization settings → Capabilities → Code execution and file creation",
+      "Organization settings → Capabilities and turn on Code execution and file creation if it is off",
     );
     expect(step.description).toContain("turn on Allow network egress");
     expect(step.description).toContain("Package managers only");
@@ -108,8 +108,9 @@ describe("getAgentPlatforms", () => {
 
     const step = personal[index]!;
     expect(step.description).toContain(
-      "Settings → Capabilities → Code execution and file creation",
+      "Settings → Capabilities in Claude and turns on Code execution and file creation if it is off",
     );
+    expect(step.description).toContain("turn on Allow network egress");
     expect(step.description).not.toContain("Organization settings");
     expect(step.fields).toEqual([
       { label: "Additional allowed domains", value: "app.getgram.ai" },
