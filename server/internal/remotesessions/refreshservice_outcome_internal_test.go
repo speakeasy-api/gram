@@ -58,7 +58,7 @@ func TestRefreshOutcomeForError(t *testing.T) {
 		{
 			name:       "tokens not stored after the caller left",
 			callerGone: true,
-			err:        fmt.Errorf("persist refreshed session: %w: %w", errRefreshTokensNotStored, context.DeadlineExceeded),
+			err:        fmt.Errorf("persist refreshed session: %w: %w", errRefreshOutcomeNotStored, context.DeadlineExceeded),
 			want:       remotesessionmetrics.RefreshOutcomeInternalError,
 		},
 		{

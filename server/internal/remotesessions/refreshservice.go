@@ -299,8 +299,8 @@ func resourceAmongSiblings(attachments map[uuid.UUID][]remotesessions_repo.ListO
 
 var errRefreshNotApplied = errors.New("remotesessions: refreshed tokens matched no active session")
 
-// errRefreshTokensNotStored marks tokens the provider issued that could not be written.
-var errRefreshTokensNotStored = errors.New("remotesessions: refreshed tokens not stored")
+// errRefreshOutcomeNotStored marks a provider answer that could not be written.
+var errRefreshOutcomeNotStored = errors.New("remotesessions: refresh outcome not stored")
 
 // Ordering is the invariant, guarded by TestRefreshTimingInvariant. Invert it
 // and a waiter gives up while the holder is still mid-POST, then presents the
@@ -376,6 +376,24 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 		return out.result, out.err
 	case <-ctx.Done():
 		return RefreshResult{}, &RefreshError{IssuerURL: "", Outcome: remotesessionmetrics.RefreshOutcomeCanceled, err: ctx.Err()}
+	}
+}
+
+// DrainRefreshes waits for refreshes that outlived their callers, and the
+// identity restatements they started, until ctx ends. Call it once handlers
+// have drained and before the datastores close.
+func (s *RefreshService) DrainRefreshes(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		s.refreshes.Wait()
+		s.restatements.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("wait for refreshes: %w", ctx.Err())
 	}
 }
 
@@ -459,7 +477,7 @@ func refreshOutcomeForError(ctx context.Context, err error) remotesessionmetrics
 		return remotesessionmetrics.RefreshOutcomeNoGrant
 	case errors.Is(err, errRefreshUpstreamUnreachable):
 		return remotesessionmetrics.RefreshOutcomeUnreachable
-	case errors.Is(err, errRefreshTokensNotStored):
+	case errors.Is(err, errRefreshOutcomeNotStored):
 		return remotesessionmetrics.RefreshOutcomeInternalError
 	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded) && ctx.Err() != nil:
 		return remotesessionmetrics.RefreshOutcomeCanceled
@@ -673,7 +691,7 @@ func (s *RefreshService) refresh(
 		case err == nil:
 			return zero, &client, nil, refreshErr
 		case !errors.Is(err, pgx.ErrNoRows):
-			return zero, &client, nil, fmt.Errorf("clear remote session refresh token after %s: %w", tokenRefreshErr.UpstreamCode(), err)
+			return zero, &client, nil, fmt.Errorf("clear remote session refresh token after %s: %w: %w", tokenRefreshErr.UpstreamCode(), errRefreshOutcomeNotStored, err)
 		}
 		// A row that moved after our refresh attempt belongs to a concurrent
 		// winner. Re-read it below and adopt that token instead of clearing it.

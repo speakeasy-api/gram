@@ -85,6 +85,11 @@ func (s *Service) Shutdown(ctx context.Context) error {
 	if err := s.autoVerifications.shutdown(ctx); err != nil {
 		errs = append(errs, fmt.Errorf("drain automatic verifications: %w", err))
 	}
+	if s.remoteChallengeMgr != nil {
+		if err := s.remoteChallengeMgr.DrainRefreshes(ctx); err != nil {
+			errs = append(errs, fmt.Errorf("drain upstream token refreshes: %w", err))
+		}
+	}
 	s.toolCallLogger.Close()
 	return errors.Join(errs...)
 }

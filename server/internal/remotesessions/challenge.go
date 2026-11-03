@@ -1169,6 +1169,11 @@ func (m *ChallengeManager) RefreshRemoteSession(
 	return m.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerManual)
 }
 
+// DrainRefreshes waits for request-path refreshes that outlived their callers.
+func (m *ChallengeManager) DrainRefreshes(ctx context.Context) error {
+	return m.refresher.DrainRefreshes(ctx)
+}
+
 // FallbackResourceForClient derives one client's RFC 8707 resource from its
 // attached MCP servers; ambiguous or absent upstreams derive "".
 func (m *ChallengeManager) FallbackResourceForClient(ctx context.Context, clientID uuid.UUID) (string, error) {

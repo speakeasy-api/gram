@@ -1152,7 +1152,7 @@ func (s *RefreshService) refreshSessionTokens(
 			attr.SlogOAuthIssuer(client.IssuerUrl),
 			attr.SlogError(err),
 		)
-		return zero, noToken, fmt.Errorf("persist refreshed session: %w: %w", errRefreshTokensNotStored, err)
+		return zero, noToken, fmt.Errorf("persist refreshed session: %w: %w", errRefreshOutcomeNotStored, err)
 	}
 
 	// Whether the provider rotates refresh tokens, and how long it says they

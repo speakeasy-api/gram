@@ -110,6 +110,39 @@ func TestRefreshNow_CallerDeadlineHoldsWhileRefreshFinishes(t *testing.T) {
 	requireStoredRotation(t, ctx, env, &refreshes)
 }
 
+func TestDrainRefreshes_WaitsForARefreshThatOutlivedItsCaller(t *testing.T) {
+	t.Parallel()
+
+	var refreshes atomic.Int32
+	arrived := make(chan struct{})
+	release := make(chan struct{})
+	ctx, env := newExpiredRefreshEnv(t, "refresh-drain", rotatingProvider(&refreshes, arrived, release))
+
+	requestCtx, cancelRequest := context.WithCancel(ctx)
+	defer cancelRequest()
+	go func() {
+		<-arrived
+		cancelRequest()
+	}()
+	_, err := env.mgr.ResolveAccessToken(requestCtx, env.clientID, env.subject, "")
+	require.NoError(t, err)
+
+	expired, cancelExpired := context.WithTimeout(ctx, 10*time.Millisecond)
+	defer cancelExpired()
+	require.ErrorIs(t, env.mgr.DrainRefreshes(expired), context.DeadlineExceeded, "the drain must respect its budget")
+
+	close(release)
+	require.NoError(t, env.mgr.DrainRefreshes(ctx))
+	active, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            env.subject,
+		RemoteSessionClientID: env.clientID,
+	})
+	require.NoError(t, err)
+	stored, err := env.enc.Decrypt(active.RefreshTokenEncrypted.String)
+	require.NoError(t, err)
+	require.Equal(t, "refresh-rotated", stored, "a completed drain means the rotated token is stored")
+}
+
 func TestRefreshNow_ManualTriggerWaitsForTheResult(t *testing.T) {
 	t.Parallel()
 
