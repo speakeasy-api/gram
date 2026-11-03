@@ -56,12 +56,13 @@ func NewDNSTargetToken() string {
 }
 
 // ParseDNSTargetSuffix normalizes and validates the parent DNS name of
-// per-domain targets. An empty value is valid and disables per-domain targets.
+// per-domain targets. An empty or whitespace-only value is valid and disables
+// per-domain targets; any other value must be a valid DNS name.
 func ParseDNSTargetSuffix(value string) (string, error) {
-	suffix := NormalizeDomainName(value)
-	if suffix == "" {
+	if strings.TrimSpace(value) == "" {
 		return "", nil
 	}
+	suffix := NormalizeDomainName(value)
 	// The suffix must leave room for the token label and its separating dot.
 	if len(suffix) > maxDNSNameLength-DNSTargetTokenLength-1 || !domainRegex.MatchString(suffix) {
 		return "", fmt.Errorf("custom domain target suffix is invalid: %s", value)
@@ -79,17 +80,17 @@ func DNSTarget(suffix string, token pgtype.Text) (string, bool) {
 	return token.String + "." + suffix, true
 }
 
-// EnsureDNSTargetToken assigns a DNS target token to the live custom domain
-// with the given id when it has none, and returns the domain's token. It
-// returns an empty token and no error when the domain is not live (missing
-// or soft deleted).
+// EnsureDNSTargetToken assigns a DNS target token to the organization's live
+// custom domain with the given id when it has none, and returns the domain's
+// token. It returns an empty token and no error when the organization has no
+// live domain with that id (missing or soft deleted).
 //
 // Each attempt runs in its own transaction from db, so a token collision on
 // the live-row unique index is retried with a new token from newToken without
 // aborting a caller's enclosing transaction.
-func EnsureDNSTargetToken(ctx context.Context, db TxBeginner, id uuid.UUID, newToken func() string) (string, error) {
+func EnsureDNSTargetToken(ctx context.Context, db TxBeginner, organizationID string, id uuid.UUID, newToken func() string) (string, error) {
 	for range maxDNSTargetTokenAttempts {
-		token, err := assignDNSTargetToken(ctx, db, id, newToken())
+		token, err := assignDNSTargetToken(ctx, db, organizationID, id, newToken())
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == dnsTargetTokenIndex {
 			continue
@@ -102,7 +103,7 @@ func EnsureDNSTargetToken(ctx context.Context, db TxBeginner, id uuid.UUID, newT
 	return "", fmt.Errorf("assign custom domain dns target token: %d attempts collided", maxDNSTargetTokenAttempts)
 }
 
-func assignDNSTargetToken(ctx context.Context, db TxBeginner, id uuid.UUID, token string) (string, error) {
+func assignDNSTargetToken(ctx context.Context, db TxBeginner, organizationID string, id uuid.UUID, token string) (string, error) {
 	tx, err := db.Begin(ctx)
 	if err != nil {
 		return "", fmt.Errorf("begin dns target token assignment: %w", err)
@@ -113,10 +114,14 @@ func assignDNSTargetToken(ctx context.Context, db TxBeginner, id uuid.UUID, toke
 	assigned, err := queries.AssignCustomDomainDNSTargetToken(ctx, repo.AssignCustomDomainDNSTargetTokenParams{
 		DnsTargetToken: token,
 		ID:             id,
+		OrganizationID: organizationID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		// Already assigned (possibly by a concurrent caller) or no longer live.
-		assigned, err = queries.GetCustomDomainDNSTargetToken(ctx, id)
+		assigned, err = queries.GetCustomDomainDNSTargetToken(ctx, repo.GetCustomDomainDNSTargetTokenParams{
+			ID:             id,
+			OrganizationID: organizationID,
+		})
 		if errors.Is(err, pgx.ErrNoRows) {
 			return "", nil
 		}

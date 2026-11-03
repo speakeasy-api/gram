@@ -644,7 +644,7 @@ func TestReconcileCustomDomain_KeepsExistingDNSTargetToken(t *testing.T) {
 		IpAllowlist:     []string{},
 	})
 	require.NoError(t, err)
-	token, err := customdomains.EnsureDNSTargetToken(ctx, conn, customDomain.ID, customdomains.NewDNSTargetToken)
+	token, err := customdomains.EnsureDNSTargetToken(ctx, conn, customDomain.OrganizationID, customDomain.ID, customdomains.NewDNSTargetToken)
 	require.NoError(t, err)
 
 	provisioner := k8s.NewStubProvisioner(k8s.ProvisionerKindIngress, logger)

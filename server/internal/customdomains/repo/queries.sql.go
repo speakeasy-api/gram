@@ -55,6 +55,7 @@ SET
     dns_target_token = $1::text,
     updated_at = clock_timestamp()
 WHERE id = $2
+  AND organization_id = $3
   AND deleted IS FALSE
   AND dns_target_token IS NULL
 RETURNING dns_target_token
@@ -63,13 +64,14 @@ RETURNING dns_target_token
 type AssignCustomDomainDNSTargetTokenParams struct {
 	DnsTargetToken string
 	ID             uuid.UUID
+	OrganizationID string
 }
 
 // Tokens are immutable once set: only a live row without one is updated, so
 // concurrent assigners cannot overwrite each other. No row means the domain
 // already has a token or is no longer live.
 func (q *Queries) AssignCustomDomainDNSTargetToken(ctx context.Context, arg AssignCustomDomainDNSTargetTokenParams) (pgtype.Text, error) {
-	row := q.db.QueryRow(ctx, assignCustomDomainDNSTargetToken, arg.DnsTargetToken, arg.ID)
+	row := q.db.QueryRow(ctx, assignCustomDomainDNSTargetToken, arg.DnsTargetToken, arg.ID, arg.OrganizationID)
 	var dns_target_token pgtype.Text
 	err := row.Scan(&dns_target_token)
 	return dns_target_token, err
@@ -463,11 +465,17 @@ const getCustomDomainDNSTargetToken = `-- name: GetCustomDomainDNSTargetToken :o
 SELECT dns_target_token
 FROM custom_domains
 WHERE id = $1
+  AND organization_id = $2
   AND deleted IS FALSE
 `
 
-func (q *Queries) GetCustomDomainDNSTargetToken(ctx context.Context, id uuid.UUID) (pgtype.Text, error) {
-	row := q.db.QueryRow(ctx, getCustomDomainDNSTargetToken, id)
+type GetCustomDomainDNSTargetTokenParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) GetCustomDomainDNSTargetToken(ctx context.Context, arg GetCustomDomainDNSTargetTokenParams) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getCustomDomainDNSTargetToken, arg.ID, arg.OrganizationID)
 	var dns_target_token pgtype.Text
 	err := row.Scan(&dns_target_token)
 	return dns_target_token, err

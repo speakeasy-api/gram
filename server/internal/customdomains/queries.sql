@@ -406,6 +406,7 @@ SET
     dns_target_token = @dns_target_token::text,
     updated_at = clock_timestamp()
 WHERE id = @id
+  AND organization_id = @organization_id
   AND deleted IS FALSE
   AND dns_target_token IS NULL
 RETURNING dns_target_token;
@@ -414,6 +415,7 @@ RETURNING dns_target_token;
 SELECT dns_target_token
 FROM custom_domains
 WHERE id = @id
+  AND organization_id = @organization_id
   AND deleted IS FALSE;
 
 -- name: DisableCustomDomainForHealth :one
