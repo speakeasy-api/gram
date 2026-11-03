@@ -561,6 +561,9 @@ jobs:
 
   assistant-runtime-image:
     name: assistant-runtime-image
+    # The image is content-addressed by agents/ (the server embeds the same
+    # hash and pulls the runtime image by it), so an unchanged runtime is
+    # re-tagged rather than rebuilt, the same way code-runner-image works.
     # TEMPORARY: on GitHub-hosted runners (and so on upstream checkout/buildx/
     # build-push actions) because Blacksmith runners cannot reach the Ubuntu apt
     # mirrors, which breaks the musl toolchain install below. Move back to
@@ -578,93 +581,41 @@ jobs:
       # This job runs GitHub-hosted, so keep its cache keys out of the
       # Blacksmith-backed CI namespace (see .mise-tasks/github/pre-cache.mts).
       CACHE_NAMESPACE: github-v1
+      IMAGE: gcr.io/linen-analyst-344721/${{ github.repository_owner }}/gram-assistant-runtime
     steps:
       - name: Checkout
         uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
         with:
           persist-credentials: false
 
-      - name: Setup Mise
-        # Caches restored here also feed the image this job publishes. On
-        # main they can only come from main's own runs: GitHub scopes caches
-        # that PR runs write to the PR's ref, so a PR cannot poison them.
-        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0 # zizmor: ignore[cache-poisoning]
-        with:
-          minimum_release_age: 1d
-          install: true
-          cache: true
-          cache_key_prefix: mise-github-v1
-          env: false
-
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Install musl toolchain
-        run: |
-          sudo apt-get update -qq -o Acquire::Languages=none
-          sudo apt-get install -y -qq --no-install-recommends musl-tools
-
-      - name: Setup Rust
-        # Same cache scoping as Setup Mise above.
-        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0 # zizmor: ignore[cache-poisoning]
-        with:
-          target: ${{ env.RUNNER_TARGET }}
-          rust-src-dir: agents/runner
-          # Release-artifact build; the action's -D warnings default would
-          # diverge from the in-image fallback build.
-          rustflags: ""
-          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
-
-      - name: Build assistant runner
-        run: |
-          mise run build:assistant-runner --release --bin gram-assistant-runner --target ${RUNNER_TARGET}
-          mkdir -p ${RUNNER_BINARY_DIR}
-          cp agents/runner/target/${RUNNER_TARGET}/release/gram-assistant-runner ${RUNNER_BINARY_DIR}/gram-assistant-runner
-
-      - name: Smoke test assistant runner binary
-        run: |
-          file -b ${RUNNER_BINARY_DIR}/gram-assistant-runner | grep -Eq "statically linked|static-pie linked" \
-            || { echo "runner binary is not statically linked; it would fail inside the runtime image" >&2; exit 1; }
-          ${RUNNER_BINARY_DIR}/gram-assistant-runner --help
-
-      - name: Generate preview tag
-        id: assistant-preview-tag
+      - name: Compute image tags
+        id: tags
         shell: bash
         env:
-          PR_HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          EVENT_NAME: ${{ github.event_name }}
           PR_NUMBER: ${{ github.event.pull_request.number }}
-        run: |
-          if [ "${GITHUB_EVENT_NAME}" == "pull_request" ]; then
-            SHORT_SHA=$(echo "${PR_HEAD_SHA}" | cut -c1-8)
-            echo "tag=pr-${PR_NUMBER}-${SHORT_SHA}" >> $GITHUB_OUTPUT
-            echo "enabled=true" >> $GITHUB_OUTPUT
-          else
-            echo "tag=" >> $GITHUB_OUTPUT
-            echo "enabled=false" >> $GITHUB_OUTPUT
-          fi
-
-      - name: Compute runtime image content hash
-        id: assistant-runtime-hash
-        shell: bash
+          HEAD_SHA: ${{ github.event.pull_request.head.sha }}
+          REF_NAME: ${{ github.ref_name }}
         run: |
           set -euo pipefail
-          hash=$(mise run hash:assistant-runtime-image)
-          if [ -z "$hash" ]; then
-            echo "runtime image hash is empty" >&2
-            exit 1
+          # Same value as `mise run hash:assistant-runtime-image`.
+          hash=$(git rev-parse HEAD:agents | cut -c1-12)
+          tags=("sha-${GITHUB_SHA}" "sha-${GITHUB_SHA::7}")
+          if [[ "$EVENT_NAME" == "pull_request" ]]; then
+            tags+=("pr-${PR_NUMBER}" "pr-${PR_NUMBER}-${HEAD_SHA::8}")
+          elif [[ "$REF_NAME" == "main" ]]; then
+            tags+=("main")
           fi
-          echo "hash=$hash" >> "$GITHUB_OUTPUT"
+          {
+            echo "hash=$hash"
+            echo "aliases=${tags[*]}"
+            echo "push<<EOF"
+            echo "${IMAGE}:${hash}"
+            for tag in "${tags[@]}"; do echo "${IMAGE}:${tag}"; done
+            echo "EOF"
+          } >> "$GITHUB_OUTPUT"
 
-      - name: Setup Docker builder
-        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
-
-      - name: Log in to Docker Hub
-        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
-        with:
-          username: ${{ secrets.DOCKERHUB_USERNAME }}
-          password: ${{ secrets.DOCKERHUB_TOKEN }}
-
-      - id: assistantGcrAuth
+      - id: gcrAuth
         name: "Authenticate to Google Cloud"
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         with:
@@ -674,7 +625,7 @@ jobs:
 
       - name: Login to GCR
         env:
-          GCR_TOKEN: ${{ steps.assistantGcrAuth.outputs.access_token }}
+          GCR_TOKEN: ${{ steps.gcrAuth.outputs.access_token }}
         run: |
           max_attempts=3
           for ((i=1; i<=max_attempts; i++)); do
@@ -691,22 +642,89 @@ jobs:
           echo "All login attempts failed"
           exit 1
 
-      - name: Extract assistant runtime metadata for GCR
-        id: assistantMetaGcr
-        uses: docker/metadata-action@dc802804100637a589fabce1cb79ff13a1411302 # v6.2.0
+      - name: Setup Docker builder
+        uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
+
+      - name: Find an existing image
+        id: existing
+        env:
+          HASH: ${{ steps.tags.outputs.hash }}
+        run: |
+          if docker buildx imagetools inspect "${IMAGE}:${HASH}" >/dev/null 2>&1; then
+            echo "found=true" >> "$GITHUB_OUTPUT"
+          else
+            echo "found=false" >> "$GITHUB_OUTPUT"
+          fi
+
+      - name: Tag the existing image
+        if: steps.existing.outputs.found == 'true'
+        env:
+          HASH: ${{ steps.tags.outputs.hash }}
+          ALIASES: ${{ steps.tags.outputs.aliases }}
+        run: |
+          set -euo pipefail
+          args=()
+          for tag in $ALIASES; do args+=(--tag "${IMAGE}:${tag}"); done
+          docker buildx imagetools create "${args[@]}" "${IMAGE}:${HASH}"
+
+      - name: Setup Mise
+        if: steps.existing.outputs.found != 'true'
+        # Caches restored here also feed the image this job publishes. On
+        # main they can only come from main's own runs: GitHub scopes caches
+        # that PR runs write to the PR's ref, so a PR cannot poison them.
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0 # zizmor: ignore[cache-poisoning]
         with:
-          images: ${{ env.REGISTRY }}/${{ env.DOCKER_REPOSITORY_OWNER }}/gram-assistant-runtime
-          tags: |
-            type=ref,event=branch,enable=${{ github.event_name != 'merge_group' }}
-            type=ref,event=tag
-            type=ref,event=pr
-            type=raw,value=${{ steps.assistant-preview-tag.outputs.tag }},enable=${{ steps.assistant-preview-tag.outputs.enabled }}
-            type=raw,value=${{ steps.assistant-runtime-hash.outputs.hash }}
-            type=schedule,pattern=nightly
-            type=sha
-            type=sha,format=long
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-github-v1
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        if: steps.existing.outputs.found != 'true'
+        run: mise run github
+
+      - name: Install musl toolchain
+        if: steps.existing.outputs.found != 'true'
+        run: |
+          sudo apt-get update -qq -o Acquire::Languages=none
+          sudo apt-get install -y -qq --no-install-recommends musl-tools
+
+      - name: Setup Rust
+        if: steps.existing.outputs.found != 'true'
+        # Same cache scoping as Setup Mise above.
+        uses: actions-rust-lang/setup-rust-toolchain@166cdcfd11aee3cb47222f9ddb555ce30ddb9659 # v1.17.0 # zizmor: ignore[cache-poisoning]
+        with:
+          target: ${{ env.RUNNER_TARGET }}
+          rust-src-dir: agents/runner
+          # Release-artifact build; the action's -D warnings default would
+          # diverge from the in-image fallback build.
+          rustflags: ""
+          cache-save-if: ${{ github.ref == 'refs/heads/main' }}
+
+      - name: Build assistant runner
+        if: steps.existing.outputs.found != 'true'
+        run: |
+          mise run build:assistant-runner --release --bin gram-assistant-runner --target ${RUNNER_TARGET}
+          mkdir -p ${RUNNER_BINARY_DIR}
+          cp agents/runner/target/${RUNNER_TARGET}/release/gram-assistant-runner ${RUNNER_BINARY_DIR}/gram-assistant-runner
+
+      - name: Smoke test assistant runner binary
+        if: steps.existing.outputs.found != 'true'
+        run: |
+          file -b ${RUNNER_BINARY_DIR}/gram-assistant-runner | grep -Eq "statically linked|static-pie linked" \
+            || { echo "runner binary is not statically linked; it would fail inside the runtime image" >&2; exit 1; }
+          ${RUNNER_BINARY_DIR}/gram-assistant-runner --help
+
+      - name: Log in to Docker Hub
+        if: steps.existing.outputs.found != 'true'
+        uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
+        with:
+          username: ${{ secrets.DOCKERHUB_USERNAME }}
+          password: ${{ secrets.DOCKERHUB_TOKEN }}
 
       - name: Build and push assistant runtime image to GCR
+        if: steps.existing.outputs.found != 'true'
         uses: docker/build-push-action@53b7df96c91f9c12dcc8a07bcb9ccacbed38856a # v7.3.0
         with:
           context: .
@@ -718,8 +736,7 @@ jobs:
           file: ./agents/runtime-image/Dockerfile
           platforms: linux/amd64
           push: true
-          tags: ${{ steps.assistantMetaGcr.outputs.tags }}
-          labels: ${{ steps.assistantMetaGcr.outputs.labels }}
+          tags: ${{ steps.tags.outputs.push }}
 
   code-runner-image:
     name: code-runner-image
