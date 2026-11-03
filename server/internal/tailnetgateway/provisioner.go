@@ -16,14 +16,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
+	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/tailnetgateway/repo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/tailscaleapi"
 )
 
 const (
-	// RuntimeGateway marks an ingress hosted by the tailnet gateway.
-	RuntimeGateway = "gateway"
-
 	// DefaultSlots is how many node identities host each ingress. It matches
 	// the gateway StatefulSet's maximum replica count.
 	DefaultSlots = 3
@@ -251,11 +249,6 @@ func (p *Provisioner) Apply(ctx context.Context, desired k8s.NetworkIngressDesir
 		}
 	}
 
-	if _, err := queries.MarkNetworkIngressRuntime(ctx, repo.MarkNetworkIngressRuntimeParams{
-		Runtime: conv.ToPGText(RuntimeGateway), ID: desired.ID, OrganizationID: desired.OrganizationID,
-	}); err != nil {
-		return errorObservation(""), fmt.Errorf("mark ingress runtime: %w", err)
-	}
 	return p.observe(ctx, desired.ID, desired.OrganizationID)
 }
 
@@ -385,7 +378,7 @@ func (p *Provisioner) DeleteWithCredentials(ctx context.Context, resources k8s.N
 		if err != nil {
 			return fmt.Errorf("list gateway slots: %w", err)
 		}
-		if own.runtime != RuntimeGateway && len(nodes) == 0 {
+		if own.runtime != networkingress.RuntimeGateway && len(nodes) == 0 {
 			return nil
 		}
 		return fmt.Errorf("%w: credentials are required to delete the tailnet service and devices", k8s.ErrNetworkIngressProviderCredentialsRejected)
