@@ -6,21 +6,26 @@
 #
 # REPORT is Claude's structured output, so it is untrusted, and the comment is
 # public. Its text renders as plain text on one line: no Markdown, HTML, links
-# or @mentions. The script fails closed, printing nothing: when REPORT is not a
-# complete review, and when the report or the rendered comment contains
-# anything shaped like a credential, an email address or a UUID.
+# or @mentions. The script fails closed: when REPORT is not a complete review,
+# or when the report or the rendered comment contains anything shaped like a
+# credential, an email address or a UUID, it prints a "no verdict" notice in
+# place of the review and exits 1.
 set -euo pipefail
 
 : "${MARKER:?}" "${HEAD_SHA:?}" "${RUN_URL:?}"
 REPORT=${REPORT:-}
 
-if ! jq -e '
+notice() {
+  echo "::error::$1" >&2
+  printf '%s\n### Performance review: no verdict\n\nThe review of commit %s did not produce a report that can be posted. See the [run](%s).\n' \
+    "$MARKER" "${HEAD_SHA:0:7}" "$RUN_URL"
+  exit 1
+}
+
+jq -e '
   (.verdict | type) == "string" and (.summary | type) == "string"
   and (.findings | type) == "array" and (.baselines | type) == "array"
-' <<<"$REPORT" >/dev/null 2>&1; then
-  echo "::error::The perf review is missing or incomplete, so nothing was posted." >&2
-  exit 1
-fi
+' <<<"$REPORT" >/dev/null 2>&1 || notice "The perf review is missing or incomplete."
 
 body=$(jq -r --arg marker "$MARKER" --arg head "$HEAD_SHA" --arg run "$RUN_URL" '
   def line: tostring | gsub("[[:space:][:cntrl:]]+"; " ");
@@ -47,7 +52,7 @@ body=$(jq -r --arg marker "$MARKER" --arg head "$HEAD_SHA" --arg run "$RUN_URL" 
     else "" end)
   + (if .mcp_status then "\n\n_MCP: \(.mcp_status | text)_" else "" end)
   + "\n\n<sub>Commit \($head[0:7]) · [run](\($run)) · Claude Code with Speakeasy MCP</sub>"
-' <<<"$REPORT")
+' <<<"$REPORT" 2>/dev/null) || notice "The perf review could not be rendered."
 
 patterns=(
   'eyJ[a-z0-9_-]{10,}\.'                                         # JWTs
@@ -68,8 +73,7 @@ redact=$(IFS='|' && echo "${patterns[*]}")
 # The report's values as well as the comment: escaping splits an email address.
 values=$(jq -r '.. | scalars' <<<"$REPORT")
 if grep -Eiq -e "$redact" <<<"$values"$'\n'"$body"; then
-  echo "::error::The perf review matched the redaction check, so nothing was posted." >&2
-  exit 1
+  notice "The perf review matched the redaction check."
 fi
 
 printf '%s\n' "$body"
