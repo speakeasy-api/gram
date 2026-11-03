@@ -248,3 +248,15 @@ func TestDescriptorForContextThreadlessPrincipalOffersOptionalThread(t *testing.
 	require.NoError(t, resolved.Validate(map[string]any{}), "an assistant-scoped principal may omit thread_id")
 	require.NoError(t, resolved.Validate(map[string]any{"thread_id": uuid.NewString()}))
 }
+
+func TestThreadFallbackThreadlessPrincipalAcceptsEmptyInput(t *testing.T) {
+	t.Parallel()
+	called := false
+	tool := WithThreadFallback(threadTestExecutor{descriptor: ToolDescriptor{ThreadContext: core.ThreadContextRequired}, call: func(context.Context, toolconfig.ToolCallEnv, io.Reader, io.Writer) error {
+		called = true
+		return nil
+	}}, nil)
+	ctx := contextvalues.SetAssistantPrincipal(t.Context(), contextvalues.AssistantPrincipal{AssistantID: uuid.New()})
+	require.NoError(t, tool.Call(ctx, toolconfig.ToolCallEnv{}, strings.NewReader(""), io.Discard))
+	require.True(t, called)
+}

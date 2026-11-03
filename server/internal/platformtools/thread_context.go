@@ -43,16 +43,23 @@ func (t *threadFallback) Call(ctx context.Context, env toolconfig.ToolCallEnv, p
 	}
 	if automatic, ok := contextvalues.GetAssistantPrincipal(ctx); !ok || automatic.ThreadID == uuid.Nil {
 		if _, selected := contextvalues.GetAssistantToolTarget(ctx); selected && payload != nil {
-			var input map[string]json.RawMessage
-			if err := json.NewDecoder(payload).Decode(&input); err != nil {
-				return fmt.Errorf("decode prepared tool input: %w", err)
-			}
-			delete(input, "thread_id")
-			body, err := json.Marshal(input)
+			raw, err := io.ReadAll(payload)
 			if err != nil {
-				return fmt.Errorf("encode prepared tool input: %w", err)
+				return fmt.Errorf("read prepared tool input: %w", err)
 			}
-			payload = bytes.NewReader(body)
+			payload = bytes.NewReader(raw)
+			if len(bytes.TrimSpace(raw)) != 0 {
+				var input map[string]json.RawMessage
+				if err := json.Unmarshal(raw, &input); err != nil {
+					return oops.E(oops.CodeBadRequest, err, "decode prepared tool input")
+				}
+				delete(input, "thread_id")
+				body, err := json.Marshal(input)
+				if err != nil {
+					return fmt.Errorf("encode prepared tool input: %w", err)
+				}
+				payload = bytes.NewReader(body)
+			}
 		}
 	}
 	return callThreadTool(t.PlatformToolExecutor, ctx, env, payload, wr)
