@@ -310,6 +310,9 @@ const (
 	refreshWaitBudget     = 12 * time.Second
 	refreshWaitPoll       = 200 * time.Millisecond
 	refreshReleaseTimeout = 5 * time.Second
+
+	// Bounds the POST and storing its outcome once detached from the caller.
+	refreshRotationTimeout = refreshUpstreamTimeout + 5*time.Second
 )
 
 func refreshLockKey(subject urn.SessionSubject, clientID uuid.UUID) string {
@@ -560,6 +563,11 @@ func (s *RefreshService) refresh(
 	if err != nil {
 		return zero, nil, nil, refreshClientLoadError(err)
 	}
+
+	// The provider may consume the refresh token once the POST starts, so a
+	// caller going away must not discard the tokens that replace it.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshRotationTimeout)
+	defer cancel()
 
 	updated, tok, refreshErr := s.refreshSessionTokens(ctx, q, client, sess, resource)
 	if refreshErr == nil {
