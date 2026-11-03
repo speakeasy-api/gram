@@ -279,6 +279,9 @@ SET
     unhealthy_since = @unhealthy_since,
     certificate_expires_at = @certificate_expires_at,
     consecutive_failures = @consecutive_failures,
+    dns_routing_method = sqlc.narg(dns_routing_method),
+    dns_configuration_status = sqlc.narg(dns_configuration_status),
+    dns_checked_at = sqlc.narg(dns_checked_at),
     updated_at = clock_timestamp()
 WHERE id = @id
   AND organization_id = @organization_id
@@ -417,19 +420,6 @@ FROM custom_domains
 WHERE id = @id
   AND organization_id = @organization_id
   AND deleted IS FALSE;
-
--- name: DisableCustomDomainForHealth :one
--- Clearing activated drops the domain from health sweeps; clearing verified
--- puts it back into the dashboard reverify flow. Caller tears down k8s.
-UPDATE custom_domains
-SET
-    verified = FALSE,
-    activated = FALSE,
-    updated_at = clock_timestamp()
-WHERE id = @id
-  AND organization_id = @organization_id
-  AND deleted IS FALSE
-RETURNING id;
 
 -- name: GetCustomDomainByDomainAndOrganization :one
 SELECT * FROM custom_domains

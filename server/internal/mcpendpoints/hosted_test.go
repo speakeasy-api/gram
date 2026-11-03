@@ -476,7 +476,7 @@ func TestUpdateMcpEndpointHostedKeepsHealthDisabledDomain(t *testing.T) {
 		ConsecutiveFailures: pgtype.Int4{Int32: 5, Valid: true}, ID: domain.ID, OrganizationID: f.authCtx.ActiveOrganizationID,
 	})
 	require.NoError(t, err)
-	_, err = domains.DisableCustomDomainForHealth(ctx, customdomainsrepo.DisableCustomDomainForHealthParams{ID: domain.ID, OrganizationID: f.authCtx.ActiveOrganizationID})
+	_, err = domains.UpdateCustomDomain(ctx, customdomainsrepo.UpdateCustomDomainParams{ID: domain.ID, Verified: false, Activated: false, ProvisionerKind: domain.ProvisionerKind, IngressName: domain.IngressName, CertSecretName: domain.CertSecretName})
 	require.NoError(t, err)
 	placed := f.requireProjected(t, ctx)
 

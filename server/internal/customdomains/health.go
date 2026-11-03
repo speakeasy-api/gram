@@ -30,6 +30,12 @@ const (
 	HealthIssueCheckFailed         HealthIssue = "check_failed"
 )
 
+// IsDNSHealthIssue identifies routing findings written by workers that combine
+// DNS and infrastructure health. These findings do not establish an infrastructure outage.
+func IsDNSHealthIssue(issue HealthIssue) bool {
+	return issue == HealthIssueDNSNotFound || issue == HealthIssueDNSTargetMismatch
+}
+
 type HealthState struct {
 	Status               HealthStatus
 	Issue                HealthIssue
@@ -105,27 +111,6 @@ func HealthIssueMessage(issue HealthIssue, remediation DNSRemediation) string {
 	default:
 		return "The latest health check found a problem with the domain."
 	}
-}
-
-// Both thresholds must hold: rapid manual rechecks alone cannot reach a week,
-// and a week of wall-clock unhealthiness alone is not enough without sustained
-// failing checks.
-const (
-	AutoDisableConsecutiveFailures int32         = 7
-	AutoDisableUnhealthyFor        time.Duration = 7 * 24 * time.Hour
-)
-
-// ShouldAutoDisable reports whether both auto-disable thresholds are crossed.
-// check_failed is excluded: a Speakeasy-side probe failure is not a customer fault.
-func ShouldAutoDisable(state HealthState, now time.Time) bool {
-	if state.Status != HealthStatusUnhealthy || state.Issue == HealthIssueCheckFailed {
-		return false
-	}
-	if state.ConsecutiveFailures < AutoDisableConsecutiveFailures {
-		return false
-	}
-	return state.UnhealthySince != nil &&
-		now.UTC().Sub(state.UnhealthySince.UTC()) >= AutoDisableUnhealthyFor
 }
 
 func ShouldNotifyUnhealthyTransition(current, next HealthState) bool {

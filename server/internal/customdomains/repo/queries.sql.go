@@ -190,32 +190,6 @@ func (q *Queries) DeleteCustomDomain(ctx context.Context, organizationID string)
 	return err
 }
 
-const disableCustomDomainForHealth = `-- name: DisableCustomDomainForHealth :one
-UPDATE custom_domains
-SET
-    verified = FALSE,
-    activated = FALSE,
-    updated_at = clock_timestamp()
-WHERE id = $1
-  AND organization_id = $2
-  AND deleted IS FALSE
-RETURNING id
-`
-
-type DisableCustomDomainForHealthParams struct {
-	ID             uuid.UUID
-	OrganizationID string
-}
-
-// Clearing activated drops the domain from health sweeps; clearing verified
-// puts it back into the dashboard reverify flow. Caller tears down k8s.
-func (q *Queries) DisableCustomDomainForHealth(ctx context.Context, arg DisableCustomDomainForHealthParams) (uuid.UUID, error) {
-	row := q.db.QueryRow(ctx, disableCustomDomainForHealth, arg.ID, arg.OrganizationID)
-	var id uuid.UUID
-	err := row.Scan(&id)
-	return id, err
-}
-
 const ensureCustomDomainResourceNames = `-- name: EnsureCustomDomainResourceNames :execrows
 UPDATE custom_domains
 SET
@@ -1208,22 +1182,28 @@ SET
     unhealthy_since = $4,
     certificate_expires_at = $5,
     consecutive_failures = $6,
+    dns_routing_method = $7,
+    dns_configuration_status = $8,
+    dns_checked_at = $9,
     updated_at = clock_timestamp()
-WHERE id = $7
-  AND organization_id = $8
+WHERE id = $10
+  AND organization_id = $11
   AND deleted IS FALSE
 RETURNING id, organization_id, domain, verified, activated, ingress_name, cert_secret_name, provisioner_kind, ip_allowlist, openai_apps_challenge_token, health_status, health_issue, health_checked_at, unhealthy_since, certificate_expires_at, consecutive_failures, dns_target_token, dns_routing_method, dns_configuration_status, dns_checked_at, created_at, updated_at, deleted_at, deleted
 `
 
 type UpdateCustomDomainHealthParams struct {
-	HealthStatus         pgtype.Text
-	HealthIssue          pgtype.Text
-	CheckedAt            pgtype.Timestamptz
-	UnhealthySince       pgtype.Timestamptz
-	CertificateExpiresAt pgtype.Timestamptz
-	ConsecutiveFailures  pgtype.Int4
-	ID                   uuid.UUID
-	OrganizationID       string
+	HealthStatus           pgtype.Text
+	HealthIssue            pgtype.Text
+	CheckedAt              pgtype.Timestamptz
+	UnhealthySince         pgtype.Timestamptz
+	CertificateExpiresAt   pgtype.Timestamptz
+	ConsecutiveFailures    pgtype.Int4
+	DnsRoutingMethod       pgtype.Text
+	DnsConfigurationStatus pgtype.Text
+	DnsCheckedAt           pgtype.Timestamptz
+	ID                     uuid.UUID
+	OrganizationID         string
 }
 
 func (q *Queries) UpdateCustomDomainHealth(ctx context.Context, arg UpdateCustomDomainHealthParams) (CustomDomain, error) {
@@ -1234,6 +1214,9 @@ func (q *Queries) UpdateCustomDomainHealth(ctx context.Context, arg UpdateCustom
 		arg.UnhealthySince,
 		arg.CertificateExpiresAt,
 		arg.ConsecutiveFailures,
+		arg.DnsRoutingMethod,
+		arg.DnsConfigurationStatus,
+		arg.DnsCheckedAt,
 		arg.ID,
 		arg.OrganizationID,
 	)
