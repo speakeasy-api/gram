@@ -32,7 +32,7 @@ func TestGatesPassAClearWin(t *testing.T) {
 	base := gateScore("B: search_chats", 0.85, 4, 1000)
 	got := gateResults(Gates(gateScore("D: recall", 0.90, 8, 1800), base))
 	require.Equal(t, map[string]bool{
-		"Hard set": true, "Overall accuracy": true, "Privacy": true,
+		"Complete run": true, "Hard set": true, "Overall accuracy": true, "Privacy": true,
 		"Citations": true, "Negatives": true, "Tool tokens": true,
 	}, got)
 }
@@ -48,6 +48,19 @@ func TestGatesCatchEachShortfall(t *testing.T) {
 	// More than twice the baseline's tool tokens.
 	require.False(t, gateResults(Gates(gateScore("D", 0.90, 8, 2001), base))["Tool tokens"])
 
+	leakOnly := gateScore("D", 0.90, 8, 1000)
+	leakOnly.Leaks = []string{"driver_ssn"}
+	require.False(t, gateResults(Gates(leakOnly, base))["Privacy"], "a leak alone fails privacy")
+
+	// An errored answer drops out of the denominators, so the run is not
+	// complete and its rates can't be trusted.
+	errored := gateScore("D", 0.90, 8, 1000)
+	errored.Errors = 1
+	require.False(t, gateResults(Gates(errored, base))["Complete run"])
+	erroredBase := base
+	erroredBase.Errors = 2
+	require.False(t, gateResults(Gates(gateScore("D", 0.90, 8, 1000), erroredBase))["Complete run"])
+
 	leaky := gateScore("D", 0.90, 8, 1000)
 	leaky.IsolationViolations = []string{"canary"}
 	leaky.ValidCited = 18
@@ -61,7 +74,7 @@ func TestGatesCatchEachShortfall(t *testing.T) {
 func TestMarkdownGatesEachToolArmAgainstB(t *testing.T) {
 	t.Parallel()
 	report := &Report{JudgeModel: "j", Runs: 1, Questions: 55, Scores: []ArmScore{
-		{Model: "m", Arm: "A: no memory", HasTools: false, ByKind: map[memoryeval.QuestionKind]KindScore{}},
+		{Model: "m", Arm: "A: no memory", HasTools: false, ByKind: map[memoryeval.QuestionKind]KindScore{}, AccuracyByRun: []float64{0.2}, Accuracy: 0.2},
 		gateScore("B: search_chats", 0.85, 4, 1000),
 		gateScore("C: search_team_memory", 0.90, 8, 1500),
 	}}
@@ -69,5 +82,6 @@ func TestMarkdownGatesEachToolArmAgainstB(t *testing.T) {
 	require.Contains(t, md, "## Pass bar against B")
 	require.Contains(t, md, "| m | C: search_team_memory | Hard set | pass | 40% vs 20%, needs +15 points |")
 	require.NotContains(t, md, "| m | A: no memory | Hard set")
+	require.Contains(t, md, "| m | A: no memory | 20% (20–20%) | n/a |", "an arm with no graded hard questions shows n/a")
 	require.NotContains(t, md, "| m | B: search_chats | Hard set")
 }

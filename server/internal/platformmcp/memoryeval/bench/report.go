@@ -253,9 +253,12 @@ func (r *Report) Markdown() string {
 		if s.Answerable > 0 && s.HasTools {
 			citations = fmt.Sprintf("%.0f%%", 100*float64(s.ValidCited)/float64(s.Answerable))
 		}
-		hard := s.Hard()
-		fmt.Fprintf(&b, "| %s | %s | %s | %.0f%% | %s | %s | %s | %s | %s | %s | %s | %s | %d %v | %d %v | %d/%d | %d | %d/%d/%d | $%.2f | %.1fs/%.1fs |\n",
-			s.Model, s.Arm, accuracy, 100*hard.rate(),
+		hard := "n/a"
+		if h := s.Hard(); h.Total > 0 {
+			hard = fmt.Sprintf("%.0f%%", 100*h.rate())
+		}
+		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %d %v | %d %v | %d/%d | %d | %d/%d/%d | $%.2f | %.1fs/%.1fs |\n",
+			s.Model, s.Arm, accuracy, hard,
 			kind(memoryeval.QuestionPointLookup), kind(memoryeval.QuestionTimeline), kind(memoryeval.QuestionReversal),
 			kind(memoryeval.QuestionParaphrase), kind(memoryeval.QuestionSynthesis), kind(memoryeval.QuestionNegative), kind(memoryeval.QuestionIsolation),
 			citations, len(s.Leaks), s.Leaks, len(s.IsolationViolations), s.IsolationViolations,

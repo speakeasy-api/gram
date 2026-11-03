@@ -8,8 +8,8 @@ import (
 )
 
 // Pass-bar thresholds an arm must meet against the search_chats baseline.
-// The recall block size gate (under 8k tokens) is asserted by the recall
-// probe, not here, because ArmScore does not carry it.
+// The recall block size gate (under 8k tokens) is not checked here because
+// ArmScore does not carry the block size.
 const (
 	gateHardLiftPoints     = 15
 	gateMinAccuracy        = 0.80
@@ -45,6 +45,13 @@ func Gates(candidate, baseline ArmScore) []Gate {
 	citations := float64(candidate.ValidCited) / float64(max(candidate.Answerable, 1))
 	notFound := float64(candidate.NotFound) / float64(max(candidate.Negatives, 1))
 	return []Gate{
+		{
+			// Errored answers are left out of every denominator, so the other
+			// gates are only meaningful when both arms graded every answer.
+			Name:   "Complete run",
+			Pass:   candidate.Errors == 0 && baseline.Errors == 0,
+			Detail: fmt.Sprintf("%d errors vs %d, needs none", candidate.Errors, baseline.Errors),
+		},
 		{
 			Name:   "Hard set",
 			Pass:   100*(hard-baseHard) >= gateHardLiftPoints,
