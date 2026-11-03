@@ -79,8 +79,7 @@ type Service struct {
 	// catalog is the platforms the Access Hub offers to trust.
 	catalog catalog.Source
 
-	// features evaluates the flags that offer a catalog entry which is not
-	// enabled to some organizations. Nil offers none of them.
+	// features evaluates platformFlags. Nil offers none of their entries.
 	features feature.Provider
 
 	// sharedHosts are the hosts the deployment serves shared authorization
@@ -288,20 +287,26 @@ func (s *Service) ListPlatforms(ctx context.Context, payload *gen.ListPlatformsP
 	return mv.BuildWorkloadPlatformCatalogView(s.offeredPlatforms(ctx, t, platforms)), nil
 }
 
+// platformFlags offer catalog entries that are not enabled yet, by key, to
+// the organizations each flag is on for. An entry's flag goes once its catalog
+// file enables it.
+var platformFlags = map[string]feature.Flag{
+	"github-actions": feature.FlagWorkloadPlatformGitHubActions,
+}
+
 // offeredPlatforms resolves Enabled for the caller's organization: an entry
-// that names a feature flag, which only one that is not enabled may, is
-// enabled where the flag is on. The flag is targeted by organization group, as
-// the dashboard's flags are, and an off, missing or failing flag leaves the
-// entry not enabled. Every request shares the catalog's slice, so it is copied
-// rather than changed.
+// that is not enabled is enabled where its flag in platformFlags is on, and
+// stays not enabled where the flag is off, missing or fails. Every request
+// shares the catalog's slice, so it is copied rather than changed.
 func (s *Service) offeredPlatforms(ctx context.Context, t tenancy, platforms []catalog.Platform) []catalog.Platform {
 	offered := slices.Clone(platforms)
 	for i := range offered {
 		platform := &offered[i]
-		if platform.FeatureFlag == "" {
+		flag, ok := platformFlags[platform.Key]
+		if !ok || platform.Enabled {
 			continue
 		}
-		evaluation, err := feature.EvaluateFlag(ctx, s.features, platform.FeatureFlag, t.organizationID, feature.OrgProjectGroups(t.organizationSlug, ""))
+		evaluation, err := feature.EvaluateFlag(ctx, s.features, flag, t.organizationID, feature.OrgProjectGroups(t.organizationSlug, ""))
 		if err != nil {
 			s.logger.WarnContext(ctx, "evaluate workload platform feature flag, keeping the platform coming soon", attr.SlogError(err), attr.SlogOrganizationID(t.organizationID))
 		}

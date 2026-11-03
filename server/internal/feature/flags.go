@@ -205,13 +205,12 @@ const (
 
 	// FlagWorkloadPlatformGitHubActions offers the GitHub Actions workload
 	// platform to an organization before its catalog entry is enabled, so it
-	// can be tried in production. The entry's catalog file names this key as
-	// its feature_flag, which the catalog's platformFlags must list. Evaluated
-	// server-side when the platform catalog is listed, so the catalog reports
-	// the entry as enabled and the picker, Command K and preselected setup
-	// links offer it. Targeted by PostHog organization group (org slug). Fails
-	// closed: off, missing or failing, the entry stays "Coming soon". Removed
-	// once the entry is enabled.
+	// can be tried in production. Evaluated server-side when the platform
+	// catalog is listed (workloadpolicy), so the catalog reports the entry as
+	// enabled and the picker, Command K and preselected setup links offer it.
+	// Targeted by PostHog organization group (org slug). Fails closed: off,
+	// missing or failing, the entry stays "Coming soon". Removed once the entry
+	// is enabled.
 	FlagWorkloadPlatformGitHubActions Flag = "workload-platform-github-actions"
 
 	// FlagAuthClientResolver makes the typed auth client resolver

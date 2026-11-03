@@ -99,7 +99,7 @@ func TestListPlatforms_OffersGitHubActionsWhereItsFlagIsOn(t *testing.T) {
 	flags.SetFlag(feature.FlagWorkloadPlatformGitHubActions, ti.orgID, true)
 
 	require.Equal(t, map[string]bool{"claude-tag": true, "github-actions": true, "gke": true}, listedEnabled(t, ctx, ti))
-	// Asked once, for the one entry that names a flag, as the caller's
+	// Asked once, for the one entry with a flag, as the caller's
 	// organization and its organization group, which the flag targets.
 	require.NotEmpty(t, ti.orgSlug)
 	require.Equal(t, []flagRequest{{

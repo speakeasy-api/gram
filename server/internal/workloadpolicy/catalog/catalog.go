@@ -31,7 +31,6 @@ import (
 
 	"gopkg.in/yaml.v3"
 
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 )
 
@@ -301,11 +300,6 @@ type Platform struct {
 	// Enabled is false for an entry listed but not offered.
 	Enabled bool `yaml:"enabled"`
 
-	// FeatureFlag offers an entry that is not enabled to the organizations
-	// the flag is on for, so it can be tried before everyone is offered it.
-	// Empty where no flag does.
-	FeatureFlag feature.Flag `yaml:"feature_flag"`
-
 	// Issuer is the issuer identifier its tokens carry.
 	Issuer Constant `yaml:"issuer"`
 
@@ -411,11 +405,6 @@ var (
 	placeholderPattern = regexp.MustCompile(`\{([^{}]*)\}`)
 )
 
-// platformFlags are the feature flags a catalog entry may name. Each is
-// declared in the feature package, which says how it is targeted, so a file
-// cannot name a flag no one declared.
-var platformFlags = []feature.Flag{feature.FlagWorkloadPlatformGitHubActions}
-
 // stemDelimiters are the characters a wildcard stem may end on. Ending
 // anywhere else lets the stem match a longer neighboring value: "repo:acme/app"
 // would also admit "repo:acme/app-evil".
@@ -431,14 +420,6 @@ func validate(p Platform) error {
 	if p.Icon != "" {
 		if err := requireOriginPath(p.Icon, "icon"); err != nil {
 			return err
-		}
-	}
-	if p.FeatureFlag != "" {
-		if p.Enabled {
-			return errors.New("feature_flag is only for an entry that is not enabled: an enabled one is offered to every organization")
-		}
-		if !slices.Contains(platformFlags, p.FeatureFlag) {
-			return fmt.Errorf("feature_flag %q is not a workload platform flag declared in the feature package", p.FeatureFlag)
 		}
 	}
 	if err := validateConstant("issuer", p.Issuer); err != nil {
