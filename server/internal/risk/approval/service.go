@@ -112,9 +112,7 @@ const (
 )
 
 var (
-	// ErrNotFound is returned for an unknown token or request, and for a token
-	// presented by a principal other than the requester, so a caller cannot
-	// tell those apart.
+	// ErrNotFound is returned for an unknown token or request.
 	ErrNotFound = errors.New("approval request not found")
 
 	// ErrNotPending is returned when deciding a request that is no longer
@@ -364,18 +362,10 @@ func (s *Service) consumeAll(ctx context.Context, call HoldInput, fingerprint st
 // RequestInput is an agent's approval request for a held call.
 type RequestInput struct {
 	// Token is the request token from the block message. It names one held
-	// call, and holding it is enough to request approval for that call.
+	// call, and holding it is enough to request approval for that call:
+	// approvers still decide, and only the original caller's retry of the
+	// same call can use the approval.
 	Token string
-
-	// RequesterURN, when set, is an authenticated caller that must match the
-	// principal that made the held call. Empty skips the check: approvers
-	// still decide, and only the original caller's retry of the same call can
-	// use the approval.
-	RequesterURN string
-
-	// OrganizationID, when set with RequesterURN, is the caller's
-	// organization.
-	OrganizationID string
 
 	// Reason is the agent's one-sentence reason, shown to approvers.
 	Reason string
@@ -400,9 +390,6 @@ func (s *Service) Request(ctx context.Context, input RequestInput) (repo.RiskPol
 	}
 	if err != nil {
 		return repo.RiskPolicyApproval{}, "", fmt.Errorf("get approval by token: %w", err)
-	}
-	if input.RequesterURN != "" && (row.RequesterUrn != input.RequesterURN || row.OrganizationID != input.OrganizationID) {
-		return repo.RiskPolicyApproval{}, "", ErrNotFound
 	}
 	if Status(row.Status) != StatusBlocked {
 		return row, s.EffectiveStatus(row), nil

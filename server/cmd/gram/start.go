@@ -1966,7 +1966,7 @@ func newStartCommand() *cli.Command {
 			}
 			mcp.Attach(mux, mcpRuntime.MCP, mcpRuntime.Metadata)
 			mcp.AttachAuthenticationHost(mcpAuthenticationHost, mcpRuntime.MCP)
-			attachApprovals(mux, logger, approvalService, mcpRuntime.MCP, ratelimit.NewRedisStore(redisClient))
+			attachApprovals(mux, logger, approvalService, ratelimit.NewRedisStore(redisClient))
 			if secret := c.String("slack-signing-secret"); secret != "" && secret != "unset" {
 				approvalCards := slackapproval.NewCards(db, approvalService, orgHosts)
 				slackInteractions := slackapproval.NewInteractions(logger, approvalCards, slackapproval.NewHTTPResponder(guardianPolicy.PooledClient()), secret)
@@ -2054,14 +2054,6 @@ func newStartCommand() *cli.Command {
 				platformToolsets,
 				approvalService,
 			)
-			// The first approval policy adds the approvals server to the Default
-			// plugin and republishes it, like an endpoint added to a live server.
-			riskService.WithApprovalsServerPublishing(plugins.PublicationRequests{Enabled: publicationEmit}, func(ctx context.Context, projectID uuid.UUID, userID string, pluginCreated bool) {
-				if pluginsGitHub == nil || temporalEnv == nil {
-					return
-				}
-				background.TriggerPluginPublish(ctx, temporalEnv, logger, projectID, userID, pluginCreated)
-			})
 			chatWriter.AddObserver(riskService)
 			risk.Attach(mux, riskService)
 

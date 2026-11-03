@@ -30,6 +30,7 @@ import (
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	gatewaymcp "github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -44,7 +45,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
-	"github.com/speakeasy-api/gram/server/internal/usersessions/serverissuer"
 )
 
 type Service struct {
@@ -135,7 +135,6 @@ var gatewayWriteRefusals = []struct {
 	{ErrMemberServerNotInProject, oops.CodeInvalid},
 	{ErrMemberServerHasNoSlug, oops.CodeInvalid},
 	{ErrMemberServerUnproxied, oops.CodeInvalid},
-	{ErrMemberServerBuiltin, oops.CodeInvalid},
 	{ErrMemberServerIsHostedToolset, oops.CodeInvalid},
 	{ErrMemberSharesBackend, oops.CodeConflict},
 	{ErrMemberAlreadyPresent, oops.CodeConflict},
@@ -354,7 +353,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		issuerID = existing.UserSessionIssuerID
 	}
 	if !issuerID.Valid {
-		issuerID, err = serverissuer.Mint(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, payload.Name)
+		issuerID, err = mcpservers.MintServerUserSessionIssuer(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, payload.Name)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "mint meta mcp issuer").LogError(ctx, logger)
 		}

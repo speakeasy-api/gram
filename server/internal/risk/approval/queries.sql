@@ -116,7 +116,7 @@ WHERE organization_id = @organization_id
 -- name: MarkApprovalRequested :one
 -- Moves a blocked request to pending once the agent asks for approval. A
 -- request that is already pending is returned unchanged by the caller, so
--- repeating request_approval never re-notifies approvers.
+-- repeating a request never re-notifies approvers.
 UPDATE risk_policy_approvals
 SET status = 'pending'
   , reason = sqlc.narg(reason)::text
@@ -277,57 +277,4 @@ SELECT name, slug
 FROM mcp_servers
 WHERE id = @id
   AND project_id = @project_id
-  AND deleted IS FALSE;
-
--- name: GetBuiltinMCPServer :one
--- The project's live server for a first-party backend, with the slug of its
--- oldest platform endpoint when it has one.
-SELECT ms.id
-  , ms.slug
-  , coalesce((
-      SELECT me.slug
-      FROM mcp_endpoints me
-      WHERE me.mcp_server_id = ms.id
-        AND me.project_id = ms.project_id
-        AND me.custom_domain_id IS NULL
-        AND me.deleted IS FALSE
-      ORDER BY me.created_at, me.id
-      LIMIT 1
-    ), '')::text AS endpoint_slug
-FROM mcp_servers ms
-WHERE ms.project_id = @project_id
-  AND ms.builtin_backend = @builtin_backend
-  AND ms.deleted IS FALSE;
-
--- name: CreateBuiltinMCPServer :one
--- Creates the project's server for a first-party backend. A concurrent create
--- for the same project and backend inserts nothing, and the caller rereads.
-INSERT INTO mcp_servers (
-  id
-  , project_id
-  , name
-  , slug
-  , builtin_backend
-  , visibility
-  , network_access_mode
-) VALUES (
-  @id
-  , @project_id
-  , @name
-  , @slug
-  , @builtin_backend
-  , @visibility
-  , @network_access_mode
-)
-ON CONFLICT (project_id, builtin_backend) WHERE builtin_backend IS NOT NULL AND deleted IS FALSE DO NOTHING
-RETURNING id, slug;
-
--- name: SetBuiltinMCPServerUserSessionIssuer :exec
--- Gives a first-party backend's server the issuer its callers sign in with.
-UPDATE mcp_servers
-SET user_session_issuer_id = @user_session_issuer_id
-  , updated_at = clock_timestamp()
-WHERE id = @id
-  AND project_id = @project_id
-  AND builtin_backend IS NOT NULL
   AND deleted IS FALSE;

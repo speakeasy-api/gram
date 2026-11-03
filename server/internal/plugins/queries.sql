@@ -527,12 +527,10 @@ ORDER BY t.id, ec.variable_name ASC, ec.header_display_name ASC;
 -- construction in lockstep, so a dangling custom-domain endpoint is never
 -- picked and emitted as a (wrong) platform URL. A server backed by an
 -- unproxied MCP server never has an mcp_endpoints row, so it's resolved via
--- unproxied_mcp_servers, exposing the vendor's own URL. A built-in server
--- (builtin_backend) is served by Speakeasy itself at its endpoint. Servers
--- with neither a usable endpoint nor an unproxied backing are dropped unless
--- their stored network mode needs fail-closed validation. Private-only
--- endpoints are picked only from the ingress-pinned namespace; absence blocks
--- publication in Go.
+-- unproxied_mcp_servers, exposing the vendor's own URL. Servers with neither a
+-- usable endpoint nor an unproxied backing are dropped unless their stored
+-- network mode needs fail-closed validation. Private-only endpoints are picked
+-- only from the ingress-pinned namespace; absence blocks publication in Go.
 -- env_toolset_id is set only for a toolset's canonical wrapper, whose
 -- environment comes from the toolset.
 SELECT
@@ -603,7 +601,6 @@ WHERE p.project_id = @project_id
     OR (s.tunneled_mcp_server_id IS NOT NULL AND tms.id IS NOT NULL)
     OR (s.toolset_id IS NOT NULL AND mts.id IS NOT NULL)
     OR (s.unproxied_mcp_server_id IS NOT NULL AND ump.id IS NOT NULL)
-    OR s.builtin_backend IS NOT NULL
   )
 ORDER BY p.slug, ps.sort_order ASC;
 

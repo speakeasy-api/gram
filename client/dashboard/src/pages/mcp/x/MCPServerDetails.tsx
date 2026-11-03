@@ -588,11 +588,9 @@ function useMcpServerVisibilityUpdate(server: McpServer): {
   updating: boolean;
 } {
   const { hasScope } = useRBAC();
-  // Speakeasy manages a built-in server's visibility.
   const canWrite =
     hasScope("mcp:write") &&
-    isKnownEnumValue(KnownUpdateMcpServerFormVisibility, server.visibility) &&
-    !server.builtinBackend;
+    isKnownEnumValue(KnownUpdateMcpServerFormVisibility, server.visibility);
   const queryClient = useQueryClient();
   const telemetry = useTelemetry();
   const update = useUpdateMcpServerMutation({

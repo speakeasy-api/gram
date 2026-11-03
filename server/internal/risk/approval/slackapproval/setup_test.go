@@ -215,12 +215,10 @@ func (f *fixture) pendingRequest(t *testing.T, policy policycore.Policy, request
 	require.NoError(t, err)
 	require.False(t, outcome.Allowed)
 	row, status, err := f.approvals.Request(t.Context(), approval.RequestInput{
-		Token:          outcome.Token,
-		RequesterURN:   requesterURN,
-		OrganizationID: f.organizationID,
-		Reason:         "Tell the team the deploy finished.",
-		Scope:          "",
-		ExpiresIn:      0,
+		Token:     outcome.Token,
+		Reason:    "Tell the team the deploy finished.",
+		Scope:     "",
+		ExpiresIn: 0,
 	})
 	require.NoError(t, err)
 	require.Equal(t, approval.StatusPending, status)

@@ -191,18 +191,6 @@ func (s *seeder) seedRiskPolicies(ctx context.Context) error {
 	if err := s.seedToolApprovals(ctx); err != nil {
 		return err
 	}
-	// The approval policy's first save gives the project its approvals
-	// server, so the demo has one too.
-	if err := s.q.RiskInsertApprovalsServer(ctx, repo.RiskInsertApprovalsServerParams{
-		IssuerID:     s.det("issuer-approvals"),
-		ServerID:     s.det("mcpserver-approvals"),
-		ProjectID:    s.projectID(),
-		EndpointID:   s.det("endpoint-approvals"),
-		EndpointSlug: s.spec.OrgSlug + "-default-approvals",
-		OrgID:        s.orgID(),
-	}); err != nil {
-		return fmt.Errorf("insert demo approvals server: %w", err)
-	}
 
 	// The same canonical target has two grants, so Platform MCP demonstrates
 	// target counts rather than leaking or counting the target audience.

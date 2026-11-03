@@ -66,26 +66,6 @@ func (q *Queries) PostflightCountApprovals(ctx context.Context, orgID string) (i
 	return count, err
 }
 
-const postflightCountApprovalsServers = `-- name: PostflightCountApprovalsServers :one
-
-SELECT count(*)
-FROM mcp_servers s
-JOIN mcp_endpoints e ON e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE
-JOIN plugin_servers ps ON ps.mcp_server_id = s.id AND ps.deleted IS FALSE
-JOIN plugins p ON p.id = ps.plugin_id AND p.project_id = s.project_id AND p.is_default IS TRUE AND p.deleted IS FALSE
-WHERE s.project_id = $1::uuid AND s.builtin_backend = 'approvals'
-  AND s.deleted IS FALSE
-`
-
-// The approval policy is only usable when the approvals server it points
-// agents at has an endpoint and sits in the Default plugin.
-func (q *Queries) PostflightCountApprovalsServers(ctx context.Context, projectID uuid.UUID) (int64, error) {
-	row := q.db.QueryRow(ctx, postflightCountApprovalsServers, projectID)
-	var count int64
-	err := row.Scan(&count)
-	return count, err
-}
-
 const postflightCountAuthClientAssociations = `-- name: PostflightCountAuthClientAssociations :one
 SELECT count(*) FROM mcp_server_auth_clients
 WHERE organization_id = $1::text AND deleted IS FALSE

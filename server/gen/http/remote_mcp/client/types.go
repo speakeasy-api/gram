@@ -3405,10 +3405,6 @@ type McpServerResponseBody struct {
 	// The ID of the tool variations group enabling MCP tool filtering for this
 	// server, if any.
 	ToolVariationsGroupID *string `form:"tool_variations_group_id,omitempty" json:"tool_variations_group_id,omitempty" xml:"tool_variations_group_id,omitempty"`
-	// A first-party backend Speakeasy serves itself, if any. approvals is the
-	// server agents call request_approval on; Speakeasy creates it with a
-	// project's first approval policy and manages its backend.
-	BuiltinBackend *string `form:"builtin_backend,omitempty" json:"builtin_backend,omitempty" xml:"builtin_backend,omitempty"`
 	// The visibility of the server
 	Visibility *string `form:"visibility,omitempty" json:"visibility,omitempty" xml:"visibility,omitempty"`
 	// The effective allowed network surfaces. Existing NULL rows are public_only.
@@ -10658,11 +10654,6 @@ func ValidateMcpServerResponseBody(body *McpServerResponseBody) (err error) {
 	}
 	if body.ToolVariationsGroupID != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.tool_variations_group_id", *body.ToolVariationsGroupID, goa.FormatUUID))
-	}
-	if body.BuiltinBackend != nil {
-		if !(*body.BuiltinBackend == "approvals") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.builtin_backend", *body.BuiltinBackend, []any{"approvals"}))
-		}
 	}
 	if body.Visibility != nil {
 		if !(*body.Visibility == "disabled" || *body.Visibility == "private" || *body.Visibility == "public") {

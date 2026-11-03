@@ -14,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
-	"github.com/speakeasy-api/gram/server/internal/risk/approval"
 )
 
 // recordSpanForRequest runs the middleware inside a recorded span, mimicking
@@ -123,12 +122,6 @@ func TestMCPProtocolVersionTelemetryMatchesRegisteredRoutes(t *testing.T) {
 	require.Equal(t, mcpversions.Version20250618, got[string(attr.McpNegotiatedProtocolVersionKey)],
 		"/platform-mcp is an MCP JSON-RPC endpoint and must be matched")
 
-	// The Approvals MCP server also carries no slug. It is registered for POST
-	// only.
-	got = recordSpanForRequest(t, http.MethodPost, approval.MCPPath, mcpversions.Version20250618)
-	require.Equal(t, mcpversions.Version20250618, got[string(attr.McpNegotiatedProtocolVersionKey)],
-		"%s is an MCP JSON-RPC endpoint and must be matched", approval.MCPPath)
-
 	// The per-agent gateway is addressed by agent id rather than slug and is
 	// registered for POST only, hence no verb cross-product.
 	agentPath := routePathForSlug(t, mcp.AgentGatewayRoute, "0e3b6b1a-0000-4000-8000-000000000001")
@@ -152,7 +145,6 @@ func TestMCPProtocolVersionTelemetryIgnoresOAuthSubRoutes(t *testing.T) {
 		"/platform-mcp/token",
 		"/platform-mcp/provider-setup",
 		"/platform-mcp/local-fixture/mcp",
-		approval.MCPPath + "/extra",
 	} {
 		got := recordSpanForRequest(t, http.MethodPost, path, mcpversions.Version20250618)
 		require.NotContains(t, got, string(attr.McpNegotiatedProtocolVersionKey), "path %s", path)

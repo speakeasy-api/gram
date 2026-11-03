@@ -54,7 +54,6 @@ describe("mcpServerFacets", () => {
     [{ remoteMcpServerId: "r" }, "remote"],
     [{ tunneledMcpServerId: "t" }, "tunneled"],
     [{ unproxiedMcpServerId: "u", toolsetId: "t" }, "unproxied"],
-    [{ builtinBackend: "approvals" }, "built_in"],
   ])("derives the source of %o as %s", (fields, source) => {
     expect(
       mcpServerFacets(
