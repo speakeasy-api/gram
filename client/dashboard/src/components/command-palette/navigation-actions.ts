@@ -2,6 +2,15 @@ import type { CommandAction } from "@/contexts/CommandPalette";
 import type { PagedRoute } from "@/route-pages";
 import type { AppRoute } from "@/routes";
 
+// Same shape test as `childRoutes` in route-pages. Inlined so this module does
+// not import the page map: `@/routes` is pulled in by shared components, and
+// only the app shell may load `route-pages.tsx`.
+const childRoutes = (route: PagedRoute): PagedRoute[] =>
+  Object.values(route).filter(
+    (value) =>
+      value && typeof value === "object" && "title" in value && "url" in value,
+  ) as unknown as PagedRoute[];
+
 // Convert a single route into a command-palette navigation action.
 export const routeToNavAction = (
   route: AppRoute,
@@ -44,14 +53,46 @@ const routesToNavActions = (
       routeToNavAction(route, group, `${idPrefix}-${key}`),
     );
 
+// Nested routes that opted in via `commandPalette`. Tabs have no flag, so they
+// stay out. A route behind a path parameter or splat is skipped with everything
+// under it, matching `pageHrefs`: it has no single destination. The scope on
+// the route is the only gate — do not fetch page state (billing eligibility
+// lives on the page).
+const nestedPaletteRoutes = (
+  orgRoutes: Record<string, PagedRoute>,
+  showPlatformAdmin: boolean,
+  hasAnyScope: (scopes: NonNullable<PagedRoute["commandPalette"]>) => boolean,
+): Record<string, PagedRoute> => {
+  const found: Record<string, PagedRoute> = {};
+  const walk = (route: PagedRoute, key: string) => {
+    if (
+      route.external ||
+      /[:*]/.test(route.url) ||
+      (!showPlatformAdmin && route.url.startsWith("platform-"))
+    ) {
+      return;
+    }
+    for (const child of childRoutes(route)) {
+      const childKey = `${key}-${child.url}`;
+      if (
+        child.commandPalette &&
+        !/[:*]/.test(child.url) &&
+        hasAnyScope(child.commandPalette)
+      ) {
+        found[childKey] = child;
+      }
+      walk(child, childKey);
+    }
+  };
+  for (const [key, route] of Object.entries(orgRoutes)) walk(route, key);
+  return found;
+};
+
 export const orgRoutesToNavActions = (
   orgRoutes: Record<string, PagedRoute>,
   showPlatformAdmin: boolean,
-  canAccessBilling: boolean,
+  hasAnyScope: (scopes: NonNullable<PagedRoute["commandPalette"]>) => boolean,
 ): CommandAction[] => {
-  // Sub-pages sit on the route object under their own keys.
-  const billing = orgRoutes.billing as PagedRoute &
-    Record<"setup" | "paymentMethod", PagedRoute>;
   const paletteOrgRoutes = Object.fromEntries(
     Object.entries(orgRoutes).filter(
       ([key, route]) =>
@@ -65,14 +106,7 @@ export const orgRoutesToNavActions = (
   return routesToNavActions(
     {
       ...paletteOrgRoutes,
-      // Only these nested pages are launcher destinations. Their pages own
-      // billing eligibility checks; registration must not fetch billing state.
-      ...(canAccessBilling
-        ? {
-            "billing-setup": billing.setup,
-            "billing-payment-method": billing.paymentMethod,
-          }
-        : {}),
+      ...nestedPaletteRoutes(orgRoutes, showPlatformAdmin, hasAnyScope),
     },
     "Organization",
     "nav-org",
