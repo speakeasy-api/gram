@@ -9,6 +9,8 @@ Two tests keep it honest, so this page cannot drift from the code:
 
 Both live in `server/internal/authz/` and run with `mise run test:server ./internal/authz/`.
 
+Design decisions taken while migrating, including those made without reviewer input, are recorded in the [decision log](rbac-decision-log.md).
+
 ## Baseline
 
 The inventory and fixtures are pinned to `main` at the commit this document landed in. The design source's own inspection baseline was `985506c4`; the package paths it names still exist, and the inventory was regenerated against the newer tree rather than copied from it.
