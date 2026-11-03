@@ -1901,54 +1901,11 @@ jobs:
       (needs.changes.outputs.client == 'true' || needs.changes.outputs.server == 'true')
     env:
       GRAM_GIT_SHA: "${{ github.sha }}"
+    outputs:
+      reused: ${{ steps.existing.outputs.found }}
     steps:
       - name: Checkout
         uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1
-
-      - name: Setup Mise
-        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
-        with:
-          minimum_release_age: 1d
-          install: true
-          cache: true
-          cache_key_prefix: mise-blacksmith-v1
-          env: false
-
-      - name: Prepare GitHub Actions environment
-        run: mise run github
-
-      - name: Cache aube store
-        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
-        with:
-          key: ${{ env.GH_CACHE_AUBE_KEY }}
-          restore-keys: |
-            ${{ env.GH_CACHE_AUBE_KEY }}
-            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
-          path: |
-            ${{ env.AUBE_STORE_PATH }}
-
-      - name: Install dependencies
-        run: aube install --frozen-lockfile
-
-      - name: Build
-        env:
-          NODE_ENV: production
-        run: mise exec --env viteprod -- aube run build
-
-      # Published for upload-dashboard-assets so the CDN bucket receives the
-      # exact assets this image ships with (a rebuild there could hash
-      # differently, e.g. GRAM_GIT_SHA is only set in this job).
-      - name: Upload built assets artifact
-        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
-        with:
-          name: dashboard-assets
-          path: client/dashboard/dist/assets
-          retention-days: 2
-
-      - name: Upload source maps to DataDog
-        env:
-          DATADOG_API_KEY: ${{ secrets.DATADOG_API_KEY }}
-        run: mise run datadog:sourcemaps --git-sha "${GITHUB_SHA}"
 
       - id: "auth"
         name: "Authenticate to Google Cloud"
@@ -1975,6 +1932,76 @@ jobs:
           done
           echo "All login attempts failed"
           exit 1
+
+      # The merge queue run for this commit already built both images and
+      # uploaded their assets and source maps, so a push to main skips the
+      # build and only tags the queue images (see the build-push action).
+      - name: Find the merge queue images
+        id: existing
+        env:
+          IMAGES: ${{ env.REGISTRY }}/${{ env.DOCKER_REPOSITORY_OWNER }}/gram-dashboard ${{ env.REGISTRY }}/${{ env.DOCKER_REPOSITORY_OWNER }}/gram-admin-dashboard
+        run: |
+          found=false
+          if [[ "$GITHUB_EVENT_NAME" == "push" ]]; then
+            found=true
+            for image in $IMAGES; do
+              docker buildx imagetools inspect "${image}:sha-${GITHUB_SHA}" >/dev/null 2>&1 || found=false
+            done
+          fi
+          echo "found=$found" >> "$GITHUB_OUTPUT"
+
+      - name: Setup Mise
+        if: steps.existing.outputs.found != 'true'
+        uses: jdx/mise-action@9149ea85001c7435d5a66bb127d6a1b6227cb0a5 # v5.0.0
+        with:
+          minimum_release_age: 1d
+          install: true
+          cache: true
+          cache_key_prefix: mise-blacksmith-v1
+          env: false
+
+      - name: Prepare GitHub Actions environment
+        if: steps.existing.outputs.found != 'true'
+        run: mise run github
+
+      - name: Cache aube store
+        if: steps.existing.outputs.found != 'true'
+        uses: actions/cache@55cc8345863c7cc4c66a329aec7e433d2d1c52a9 # v6.1.0
+        with:
+          key: ${{ env.GH_CACHE_AUBE_KEY }}
+          restore-keys: |
+            ${{ env.GH_CACHE_AUBE_KEY }}
+            ${{ env.GH_CACHE_AUBE_KEY_PARTIAL }}
+          path: |
+            ${{ env.AUBE_STORE_PATH }}
+
+      - name: Install dependencies
+        if: steps.existing.outputs.found != 'true'
+        run: aube install --frozen-lockfile
+
+      - name: Build
+        if: steps.existing.outputs.found != 'true'
+        env:
+          NODE_ENV: production
+        run: mise exec --env viteprod -- aube run build
+
+      # Published for upload-dashboard-assets so the CDN bucket receives the
+      # exact assets this image ships with (a rebuild there could hash
+      # differently, e.g. GRAM_GIT_SHA is only set in this job).
+      - name: Upload built assets artifact
+        if: steps.existing.outputs.found != 'true'
+        uses: actions/upload-artifact@043fb46d1a93c77aae656e7c1c64a875d1fc6a0a # v7.0.1
+        with:
+          name: dashboard-assets
+          path: client/dashboard/dist/assets
+          retention-days: 2
+
+      - name: Upload source maps to DataDog
+        if: steps.existing.outputs.found != 'true'
+        env:
+          DATADOG_API_KEY: ${{ secrets.DATADOG_API_KEY }}
+        run: mise run datadog:sourcemaps --git-sha "${GITHUB_SHA}"
+
       # The Speakeasy admin dashboard. It ships as its own image because it is
       # served from the admin origin (same host as the admin API) rather than
       # the app origin. The `pnpm build` step above already produced its dist,
@@ -2017,7 +2044,7 @@ jobs:
           cache-key: gram/dashboard-image
 
       - name: Prune aube store
-        if: success()
+        if: success() && steps.existing.outputs.found != 'true'
         run: aube store prune
 
   upload-dashboard-assets:
@@ -2044,8 +2071,11 @@ jobs:
         include:
           - environment: dev
           - environment: prod
+    # When docker-build-client reused the merge queue images, the queue run
+    # already uploaded their assets to both buckets.
     steps:
       - name: Download built assets artifact
+        if: needs.docker-build-client.outputs.reused != 'true'
         uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
         with:
           name: dashboard-assets
@@ -2053,6 +2083,7 @@ jobs:
 
       - id: "auth"
         name: "Authenticate to Google Cloud"
+        if: needs.docker-build-client.outputs.reused != 'true'
         uses: google-github-actions/auth@7c6bc770dae815cd3e89ee6cdf493a5fab2cc093 # v3.0.0
         # Each secret is named outright: indexing secrets[...] with a matrix
         # value would load the whole secrets context into the runner. Of each
@@ -2062,6 +2093,7 @@ jobs:
           service_account: ${{ matrix.environment == 'dev' && secrets.ASSET_BUCKET_SERVICE_ACCOUNT_DEV || '' }}${{ matrix.environment == 'prod' && secrets.ASSET_BUCKET_SERVICE_ACCOUNT_PROD || '' }}
 
       - name: Upload assets to bucket
+        if: needs.docker-build-client.outputs.reused != 'true'
         uses: google-github-actions/upload-cloud-storage@6397bd7208e18d13ba2619ee21b9873edc94427a # v3.0.0
         with:
           path: dist/assets
@@ -2402,39 +2434,6 @@ jobs:
       - name: Install dependencies
         run: aube install --frozen-lockfile
 
-      - name: Download melange packages artifact
-        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
-        with:
-          name: functions-packages
-          path: functions/packages
-
-      - name: Build apko image (${{ matrix.runtime }})
-        id: apko
-        env:
-          MELANGE_PUBLIC_KEY: ${{ vars.MELANGE_PUBLIC_KEY }}
-          MATRIX_APKO_CONFIG: ${{ matrix.apko-config }}
-          MATRIX_RUNTIME: ${{ matrix.runtime }}
-        run: |
-          KEY_DIR=$(mktemp -d)
-          KEY_FILE="$KEY_DIR/melange-signing-key.rsa.pub"
-          echo "$MELANGE_PUBLIC_KEY" > "$KEY_FILE"
-
-          mise run build:functions-image \
-            --melange-public-key "$KEY_FILE" \
-            --apko-config ${MATRIX_APKO_CONFIG} \
-            --image "apko-${MATRIX_RUNTIME}:${GITHUB_SHA}" \
-            --tarball-name ${MATRIX_RUNTIME} \
-            --out oci/${MATRIX_RUNTIME}
-
-      - name: Run safety checks
-        run: |
-          mise run test:apko-functions \
-            --image ${STEPS_APKO_OUTPUTS_IMAGE} \
-            --tarball ${STEPS_APKO_OUTPUTS_TARBALL}
-        env:
-          STEPS_APKO_OUTPUTS_IMAGE: ${{ steps.apko.outputs.image }}
-          STEPS_APKO_OUTPUTS_TARBALL: ${{ steps.apko.outputs.tarball }}
-
       - name: "[DEV] Create fly app"
         id: flyCreateDev
         if: github.event.pull_request.user.login != 'dependabot[bot]'
@@ -2467,6 +2466,70 @@ jobs:
         if: github.event.pull_request.user.login != 'dependabot[bot]'
         uses: docker/setup-buildx-action@37fe631027851001ddb9b187196cc803df7f5f0e # v4.3.0
 
+      # The merge queue run for this commit already built and pushed this
+      # runtime's image to both registries, so a push to main skips the build
+      # and only tags those images.
+      - name: Find the merge queue images
+        id: existing
+        if: github.event_name == 'push'
+        env:
+          FLY_API_TOKEN_DEV: ${{ secrets.FLY_API_TOKEN_DEV }}
+          FLY_API_TOKEN_PROD: ${{ secrets.FLY_API_TOKEN_PROD }}
+          FLY_APP_REGISTRY_DEV: ${{ steps.flyCreateDev.outputs.flyAppRegistry }}
+          FLY_APP_REGISTRY_PROD: ${{ steps.flyCreateProd.outputs.flyAppRegistry }}
+          MATRIX_RUNTIME: ${{ matrix.runtime }}
+        run: |
+          set -euo pipefail
+          found=true
+          for env in dev prod; do
+            if [[ "$env" == dev ]]; then
+              token=$FLY_API_TOKEN_DEV registry=$FLY_APP_REGISTRY_DEV
+            else
+              token=$FLY_API_TOKEN_PROD registry=$FLY_APP_REGISTRY_PROD
+            fi
+            export DOCKER_CONFIG="${RUNNER_TEMP}/docker-${env}"
+            mkdir -p "$DOCKER_CONFIG"
+            FLY_API_TOKEN=$token fly auth docker
+            docker buildx imagetools inspect "${registry}:${GITHUB_SHA}-${MATRIX_RUNTIME}" >/dev/null 2>&1 || found=false
+          done
+          echo "found=$found" >> "$GITHUB_OUTPUT"
+
+      - name: Download melange packages artifact
+        if: steps.existing.outputs.found != 'true'
+        uses: actions/download-artifact@3e5f45b2cfb9172054b4087a40e8e0b5a5461e7c # v8.0.1
+        with:
+          name: functions-packages
+          path: functions/packages
+
+      - name: Build apko image (${{ matrix.runtime }})
+        id: apko
+        if: steps.existing.outputs.found != 'true'
+        env:
+          MELANGE_PUBLIC_KEY: ${{ vars.MELANGE_PUBLIC_KEY }}
+          MATRIX_APKO_CONFIG: ${{ matrix.apko-config }}
+          MATRIX_RUNTIME: ${{ matrix.runtime }}
+        run: |
+          KEY_DIR=$(mktemp -d)
+          KEY_FILE="$KEY_DIR/melange-signing-key.rsa.pub"
+          echo "$MELANGE_PUBLIC_KEY" > "$KEY_FILE"
+
+          mise run build:functions-image \
+            --melange-public-key "$KEY_FILE" \
+            --apko-config ${MATRIX_APKO_CONFIG} \
+            --image "apko-${MATRIX_RUNTIME}:${GITHUB_SHA}" \
+            --tarball-name ${MATRIX_RUNTIME} \
+            --out oci/${MATRIX_RUNTIME}
+
+      - name: Run safety checks
+        if: steps.existing.outputs.found != 'true'
+        run: |
+          mise run test:apko-functions \
+            --image ${STEPS_APKO_OUTPUTS_IMAGE} \
+            --tarball ${STEPS_APKO_OUTPUTS_TARBALL}
+        env:
+          STEPS_APKO_OUTPUTS_IMAGE: ${{ steps.apko.outputs.image }}
+          STEPS_APKO_OUTPUTS_TARBALL: ${{ steps.apko.outputs.tarball }}
+
       - name: Log in to Docker Hub
         uses: docker/login-action@dbcb813823bdd20940b903addbd779551569679f # v4.6.0
         with:
@@ -2489,7 +2552,7 @@ jobs:
             type=sha,format=long,prefix=,suffix=-${{ matrix.runtime }}
 
       - name: Tag images
-        if: github.event.pull_request.user.login != 'dependabot[bot]'
+        if: steps.existing.outputs.found != 'true' && github.event.pull_request.user.login != 'dependabot[bot]'
         working-directory: functions
         run: |
           set -x
@@ -2514,17 +2577,28 @@ jobs:
               FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_DEV }}
               CURRENT_TAGS: ${{ steps.meta.outputs.tags }}
               FLY_APP_REGISTRY: ${{ steps.flyCreateDev.outputs.flyAppRegistry }}
+              REUSE: ${{ steps.existing.outputs.found }}
+              MATRIX_RUNTIME: ${{ matrix.runtime }}
             run: |
               set -euo pipefail
               mkdir -p "$DOCKER_CONFIG"
               fly auth docker
 
               matched=false
+              retag=()
               while IFS= read -r tag; do
                 [[ "$tag" == "$FLY_APP_REGISTRY":* ]] || continue
-                docker push "$tag"
+                if [[ "$REUSE" == true ]]; then
+                  retag+=(--tag "$tag")
+                else
+                  docker push "$tag"
+                fi
                 matched=true
               done <<< "$CURRENT_TAGS"
+
+              if [[ "$REUSE" == true && "$matched" == true ]]; then
+                docker buildx imagetools create "${retag[@]}" "${FLY_APP_REGISTRY}:${GITHUB_SHA}-${MATRIX_RUNTIME}"
+              fi
 
               if [[ "$matched" != true ]]; then
                 echo "::error::No current image tags matched $FLY_APP_REGISTRY"
@@ -2538,17 +2612,28 @@ jobs:
               FLY_API_TOKEN: ${{ secrets.FLY_API_TOKEN_PROD }}
               CURRENT_TAGS: ${{ steps.meta.outputs.tags }}
               FLY_APP_REGISTRY: ${{ steps.flyCreateProd.outputs.flyAppRegistry }}
+              REUSE: ${{ steps.existing.outputs.found }}
+              MATRIX_RUNTIME: ${{ matrix.runtime }}
             run: |
               set -euo pipefail
               mkdir -p "$DOCKER_CONFIG"
               fly auth docker
 
               matched=false
+              retag=()
               while IFS= read -r tag; do
                 [[ "$tag" == "$FLY_APP_REGISTRY":* ]] || continue
-                docker push "$tag"
+                if [[ "$REUSE" == true ]]; then
+                  retag+=(--tag "$tag")
+                else
+                  docker push "$tag"
+                fi
                 matched=true
               done <<< "$CURRENT_TAGS"
+
+              if [[ "$REUSE" == true && "$matched" == true ]]; then
+                docker buildx imagetools create "${retag[@]}" "${FLY_APP_REGISTRY}:${GITHUB_SHA}-${MATRIX_RUNTIME}"
+              fi
 
               if [[ "$matched" != true ]]; then
                 echo "::error::No current image tags matched $FLY_APP_REGISTRY"
