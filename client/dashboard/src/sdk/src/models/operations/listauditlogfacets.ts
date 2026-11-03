@@ -4,17 +4,36 @@
 
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
+import { ClosedEnum } from "../../types/enums.js";
 
 export type ListAuditLogFacetsSecurity = {
   apikeyHeaderGramKey?: string | undefined;
   sessionHeaderGramSession?: string | undefined;
 };
 
+/**
+ * Category of entries to compute facet values from, matching the list being filtered. Defaults to 'configuration'.
+ */
+export const ListAuditLogFacetsQueryParamCategory = {
+  Configuration: "configuration",
+  Security: "security",
+} as const;
+/**
+ * Category of entries to compute facet values from, matching the list being filtered. Defaults to 'configuration'.
+ */
+export type ListAuditLogFacetsQueryParamCategory = ClosedEnum<
+  typeof ListAuditLogFacetsQueryParamCategory
+>;
+
 export type ListAuditLogFacetsRequest = {
   /**
    * Project slug to filter facet values to a specific project.
    */
   projectSlug?: string | undefined;
+  /**
+   * Category of entries to compute facet values from, matching the list being filtered. Defaults to 'configuration'.
+   */
+  category?: ListAuditLogFacetsQueryParamCategory | undefined;
   /**
    * API Key header
    */
@@ -57,8 +76,14 @@ export function listAuditLogFacetsSecurityToJSON(
 }
 
 /** @internal */
+export const ListAuditLogFacetsQueryParamCategory$outboundSchema: z.ZodMiniEnum<
+  typeof ListAuditLogFacetsQueryParamCategory
+> = z.enum(ListAuditLogFacetsQueryParamCategory);
+
+/** @internal */
 export type ListAuditLogFacetsRequest$Outbound = {
   project_slug?: string | undefined;
+  category: string;
   "Gram-Key"?: string | undefined;
   "Gram-Session"?: string | undefined;
 };
@@ -70,6 +95,10 @@ export const ListAuditLogFacetsRequest$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     projectSlug: z.optional(z.string()),
+    category: z._default(
+      ListAuditLogFacetsQueryParamCategory$outboundSchema,
+      "configuration",
+    ),
     gramKey: z.optional(z.string()),
     gramSession: z.optional(z.string()),
   }),

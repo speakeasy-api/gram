@@ -33,7 +33,11 @@ export interface InventoryServer {
   projectId: string;
   projectName: string;
   projectSlug: string;
-  /** Present when the server authorizes each person separately. */
+  /**
+   * The server's user session issuer, when it has one. An issuer can be
+   * shared across the organization, so whether the server asks each person
+   * to sign in comes from its own auth clients (see offersPersonalSignIn).
+   */
   issuerId?: string;
   activityTarget?: string;
   connectUrl?: string;

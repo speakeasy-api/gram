@@ -18,9 +18,9 @@ var (
 	// enabled.
 	ErrChoiceNotOffered = errors.New("the server does not offer that credential")
 
-	// ErrChoiceUpstreamAuthUndecided is a no-auth choice for a server whose
-	// need for upstream authentication nobody has decided.
-	ErrChoiceUpstreamAuthUndecided = errors.New("decide on the server whether it needs upstream authentication before choosing none")
+	// ErrChoiceUpstreamAuthPending is a no-auth choice for a server with
+	// upstream credentials no auth client records yet.
+	ErrChoiceUpstreamAuthPending = errors.New("this server has upstream credentials that are not set up as auth clients yet; set them up before choosing")
 
 	// ErrChoiceNeedsNoCredential names a credential for a server that needs
 	// no upstream authentication.
@@ -35,27 +35,27 @@ var (
 // key or an issuance profile, against what the server offers: offered is the
 // server's ListServerConsentAuthClients rows, one with no client when it
 // offers none. clientID is invalid for no upstream authentication, which only
-// a server decided to need none takes; such a server takes nothing else. With
+// a server offering no enabled client takes; such a server takes nothing else,
+// and one with upstream credentials no auth client records yet takes no
+// choice at all until they are. With
 // sharedOnly, personal and identity-provider clients are refused. The choice
 // grants nothing: whoever uses it is checked again on use.
 func CheckConfiguredChoice(offered []repo.ListServerConsentAuthClientsRow, clientID uuid.NullUUID, sharedOnly bool) error {
 	if len(offered) == 0 {
 		return ErrChoiceNotOffered
 	}
-	requires := offered[0].RequiresUpstreamAuth
-	needsNone := requires.Valid && !requires.Bool
-	if !clientID.Valid {
-		switch {
-		case needsNone:
-			return nil
-		case requires.Valid || offered[0].AuthClientID.Valid:
+	if offered[0].RequiresUpstreamAuth {
+		if !clientID.Valid {
 			return ErrChoiceNeedsCredential
-		default:
-			return ErrChoiceUpstreamAuthUndecided
 		}
-	}
-	if needsNone {
-		return ErrChoiceNeedsNoCredential
+	} else {
+		if offered[0].UpstreamAuthPending {
+			return ErrChoiceUpstreamAuthPending
+		}
+		if clientID.Valid {
+			return ErrChoiceNeedsNoCredential
+		}
+		return nil
 	}
 	for _, row := range offered {
 		if row.AuthClientID != clientID {

@@ -4,10 +4,8 @@ import { afterEach, describe, expect, it, vi } from "vitest";
 
 import { RoleLink } from "./role-link";
 
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    access: { roles: { href: () => "/acme/access/roles" } },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "acme", projectSlug: "project" }),
 }));
 
 afterEach(cleanup);

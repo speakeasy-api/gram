@@ -7919,11 +7919,12 @@ func NewRenamePayload(body *RenameRequestBody, sessionToken *string) *agents.Ren
 
 // NewListDelegableGrantsPayload builds a agents service listDelegableGrants
 // endpoint payload.
-func NewListDelegableGrantsPayload(agentID string, toolsetID *string, toolsetIds []string, sessionToken *string) *agents.ListDelegableGrantsPayload {
+func NewListDelegableGrantsPayload(agentID string, toolsetID *string, toolsetIds []string, carryExclusions bool, sessionToken *string) *agents.ListDelegableGrantsPayload {
 	v := &agents.ListDelegableGrantsPayload{}
 	v.AgentID = agentID
 	v.ToolsetID = toolsetID
 	v.ToolsetIds = toolsetIds
+	v.CarryExclusions = carryExclusions
 	v.SessionToken = sessionToken
 
 	return v

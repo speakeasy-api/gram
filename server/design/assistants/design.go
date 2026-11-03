@@ -431,9 +431,9 @@ var ExecutionProfileServer = Type("ExecutionProfileServer", func() {
 	Attribute("chosen", Boolean, "Whether the server has a choice.")
 	Attribute("auth_client_id", String, "The chosen auth client. Absent with a choice means no upstream authentication.", func() { Format(FormatUUID) })
 	Attribute("source", ExecutionProfileChoiceSource, "How the choice was made: admin, issuance, backfill, or automatic for one the next turn makes on its own.")
-	Attribute("no_auth_allowed", Boolean, "Whether the server was decided to need no upstream authentication, so no-auth can be chosen.")
+	Attribute("no_auth_allowed", Boolean, "Whether the server offers no enabled auth client and has no upstream credentials left to record as one, so no-auth can be chosen.")
 	Attribute("gap_reason", String, "Why a server without a choice gets none on its own.", func() {
-		Enum("selection_required", "personal_requires_user", "no_client", "setup_incomplete", "upstream_auth_undecided")
+		Enum("selection_required", "personal_requires_user", "no_client", "setup_incomplete")
 	})
 	Attribute("options", ArrayOf(ExecutionProfileOption), "The credentials that can be chosen.")
 	Required("mcp_server_id", "chosen", "options", "no_auth_allowed")

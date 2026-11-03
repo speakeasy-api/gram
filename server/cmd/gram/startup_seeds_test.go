@@ -36,7 +36,7 @@ func TestStartupSeedsHaveDistinctNames(t *testing.T) {
 	t.Parallel()
 
 	seen := map[string]bool{}
-	for _, seed := range startupSeeds(nil, nil) {
+	for _, seed := range startupSeeds(nil, nil, nil) {
 		require.NotEmpty(t, seed.Name)
 		require.NotEmpty(t, seed.Version)
 		require.False(t, seen[seed.Name], "seed names key workflow IDs, so they must be distinct: %s", seed.Name)

@@ -52,7 +52,8 @@ func seedPluginMetadataFixture(t *testing.T, name string) (context.Context, plug
 	budget := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
 	service := testPluginTargets(conn).
 		WithAuthorization(engine).
-		WithMetadataMutations(testenv.NewLogger(t), plugindelivery.NewPluginMetadataCore(audit.NewLogger(), plugindelivery.PublicationRequests{Enabled: false}), OperationBudget{Connection: budget, Organization: allowOperationLimiter{}})
+		WithMetadataMutations(testenv.NewLogger(t), plugindelivery.NewPluginMetadataCore(audit.NewLogger(), plugindelivery.PublicationRequests{Enabled: false}), OperationBudget{Connection: budget, Organization: allowOperationLimiter{}}).
+		WithAutoSyncGuard(&stubAutoSyncGuard{})
 	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	ctx = contextvalues.SetActingSurface(ctx, contextvalues.ActingSurfacePlatformMCP)
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID)})
@@ -183,6 +184,26 @@ func TestCreatePluginRefusesASlugAnotherPluginHolds(t *testing.T) {
 	require.ErrorAs(t, err, &refusal)
 	require.Equal(t, "invalid_request", refusal.Code)
 	require.Contains(t, refusal.Message, plugindelivery.ErrPluginSlugInvalid.Error())
+}
+
+// A slug whose packages would land in a directory another plugin publishes
+// into is refused with the dashboard's own wording, naming that directory.
+func TestCreatePluginRefusesASlugWhosePackagesShareADirectory(t *testing.T) {
+	t.Parallel()
+	ctx, fixture := seedPluginMetadataFixture(t, "platform_mcp_create_plugin_shared_directory")
+	_, err := fixture.service.CreatePlugin(ctx, fixture.principal, CreatePluginInput{
+		ProjectID: fixture.project.ID.String(), Name: "Support", Slug: "support", IdempotencyKey: "first", Confirmed: true,
+	})
+	require.NoError(t, err)
+
+	_, err = fixture.service.CreatePlugin(ctx, fixture.principal, CreatePluginInput{
+		ProjectID: fixture.project.ID.String(), Name: "Support Codex", Slug: "support-codex", IdempotencyKey: "second", Confirmed: true,
+	})
+	var refusal *PluginMetadataMutationError
+	require.ErrorAs(t, err, &refusal)
+	require.Equal(t, "invalid_request", refusal.Code)
+	require.Equal(t, "invalid slug: support-codex would publish into support-codex/, which is already used by plugin support; choose a different slug.", refusal.Message)
+	require.Equal(t, 1, fixture.pluginCount(t, ctx, fixture.project.ID))
 }
 
 func TestCreatePluginRefusesAnUnconfirmedRequest(t *testing.T) {
@@ -517,7 +538,7 @@ func TestPluginMetadataNeverReturnsDatabaseErrorText(t *testing.T) {
 func TestPluginMetadataUnavailableRegistrationMatchesLiveManifest(t *testing.T) {
 	t.Parallel()
 	_, fixture := seedPluginMetadataFixture(t, "platform_mcp_plugin_metadata_manifest")
-	require.True(t, fixture.service.metadataMutationValid(), "the live side must be a composed service")
+	require.True(t, fixture.service.autoSyncMutationValid(), "the live side must be a composed service")
 
 	describe := func(service *PluginsService) map[string]Descriptor {
 		registrar := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "plugin-metadata-manifest", Version: "0.0.1"}, nil))
@@ -530,7 +551,7 @@ func TestPluginMetadataUnavailableRegistrationMatchesLiveManifest(t *testing.T) 
 	}
 	live := describe(fixture.service)
 	unavailable := describe(nil)
-	require.Len(t, unavailable, 2)
+	require.Len(t, unavailable, 3)
 	require.Len(t, live, len(unavailable))
 	for name, descriptor := range unavailable {
 		other, ok := live[name]

@@ -325,7 +325,7 @@ func TestWorkloadAssertionGrant_ResourceRequiredAndBound(t *testing.T) {
 
 	w := f.exchange(t, f.assertion(t, f.advertisedIssuer))
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-	require.Contains(t, w.Body.String(), "invalid_request")
+	require.Contains(t, w.Body.String(), "invalid_target")
 
 	w = f.exchange(t, f.assertion(t, f.advertisedIssuer), f.resource+"-other")
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())

@@ -54,6 +54,10 @@ const (
 	// AuthClientTypeKey is the type of the typed auth client a request resolved through.
 	AuthClientTypeKey = attribute.Key("gram.auth_client.type")
 
+	// AuthClientConnectionOwnerUserIDKey is the user whose personal connection a
+	// typed auth client served a request with. Absent for a shared credential.
+	AuthClientConnectionOwnerUserIDKey = attribute.Key("gram.auth_client.connection_owner_user_id")
+
 	// AuthClientOutcomeKey is the outcome of resolving a request's typed auth client.
 	AuthClientOutcomeKey = attribute.Key("gram.auth_client.outcome")
 
@@ -578,6 +582,15 @@ const (
 	OAuthFlowStageKey = attribute.Key("gram.oauth.flow_stage")
 	OAuthGrantKey     = attribute.Key("gram.oauth.grant")
 	OAuthIssuerKey    = attribute.Key("gram.oauth.issuer")
+
+	// OAuthIDJAGOutcomeKey is an ID-JAG token exchange's outcome: accepted, rejected, or error for an unexpected server failure.
+	OAuthIDJAGOutcomeKey = attribute.Key("gram.oauth.id_jag.outcome")
+
+	// OAuthIDJAGRejectionReasonKey is the bounded reason an ID-JAG token exchange was rejected.
+	OAuthIDJAGRejectionReasonKey = attribute.Key("gram.oauth.id_jag.rejection_reason")
+
+	// OAuthIDJAGResourceSourceKey is where a shared token endpoint took an ID-JAG exchange's target MCP server from when neither the request nor the assertion named it.
+	OAuthIDJAGResourceSourceKey = attribute.Key("gram.oauth.id_jag.resource_source")
 
 	// OAuthAssertionAudienceKey records which accepted audience form a verified client assertion carried.
 	OAuthAssertionAudienceKey = attribute.Key("gram.oauth.assertion_audience")
@@ -2407,6 +2420,26 @@ func SlogOAuthErrorDescription(v string) slog.Attr {
 func OAuthFailureReason(v string) attribute.KeyValue { return OAuthFailureReasonKey.String(v) }
 func SlogOAuthFailureReason(v string) slog.Attr {
 	return slog.String(string(OAuthFailureReasonKey), v)
+}
+
+func OAuthIDJAGOutcome(v string) attribute.KeyValue { return OAuthIDJAGOutcomeKey.String(v) }
+func SlogOAuthIDJAGOutcome(v string) slog.Attr {
+	return slog.String(string(OAuthIDJAGOutcomeKey), v)
+}
+
+func OAuthIDJAGRejectionReason[V ~string](v V) attribute.KeyValue {
+	return OAuthIDJAGRejectionReasonKey.String(string(v))
+}
+
+func SlogOAuthIDJAGRejectionReason[V ~string](v V) slog.Attr {
+	return slog.String(string(OAuthIDJAGRejectionReasonKey), string(v))
+}
+
+func OAuthIDJAGResourceSource(v string) attribute.KeyValue {
+	return OAuthIDJAGResourceSourceKey.String(v)
+}
+func SlogOAuthIDJAGResourceSource(v string) slog.Attr {
+	return slog.String(string(OAuthIDJAGResourceSourceKey), v)
 }
 
 func OAuthGrant(v string) attribute.KeyValue { return OAuthGrantKey.String(v) }

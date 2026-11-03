@@ -346,9 +346,9 @@ func newAdminCommand() *cli.Command {
 		Usage: "Start the Speakeasy admin server",
 		Flags: flags,
 		Action: func(c *cli.Context) error {
-			siteURL, err := url.Parse(c.String("site-url"))
-			if err != nil || siteURL.Host == "" || (siteURL.Scheme != "http" && siteURL.Scheme != "https") {
-				return fmt.Errorf("invalid site-url: must be an absolute HTTP(S) URL")
+			siteURL, err := parseSiteURL(c.String("site-url"))
+			if err != nil {
+				return fmt.Errorf("invalid site-url: %w", err)
 			}
 			if c.String("environment") == "prod" && siteURL.Scheme != "https" {
 				return fmt.Errorf("invalid site-url: HTTPS is required in production")
@@ -524,7 +524,7 @@ func newAdminCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("load registry validator: %w", err)
 			}
-			registryService := mcpregistry.New(db, registryValidator)
+			registryService := mcpregistry.New(db, registryValidator).WithAssetBaseURL(siteURL)
 			if err := registryService.Ready(ctx); err != nil {
 				return fmt.Errorf("registry readiness: %w", err)
 			}

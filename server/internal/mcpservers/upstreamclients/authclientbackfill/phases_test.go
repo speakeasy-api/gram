@@ -1006,37 +1006,6 @@ func TestRun_AFailedPhaseLeavesTheOthers(t *testing.T) { //nolint:paralleltest /
 	require.Contains(t, f.links(server), staticID)
 }
 
-func TestRun_MarksHeaderAndEMAServersAsNeedingUpstreamAuth(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	source := f.source()
-	headerServer := f.serverOn(source)
-	decidedNone := f.serverOn(source)
-	f.staticHeader(source, "Authorization")
-	require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(t.Context(), SetRequiresUpstreamAuthFixtureParams{RequiresUpstreamAuth: pgtype.Bool{Bool: false, Valid: true}, ID: decidedNone}))
-
-	usi := f.userSessionIssuer()
-	clientID, issuerID := f.emaClient()
-	resource := "https://mcp.vendor.example.com/mcp"
-	emaServer := f.serverAt(resource, usi)
-	f.binding(usi, issuerID, clientID, resource, []string{})
-
-	dry := f.run(false)
-	require.Equal(t, 2, dry.PendingMarkedServers, "the explicitly undecided header and EMA servers")
-	applied := f.run(true)
-	require.Equal(t, 2, applied.ServersMarked)
-
-	for _, server := range []uuid.UUID{headerServer, emaServer} {
-		got, err := f.q.GetRequiresUpstreamAuthFixture(t.Context(), server)
-		require.NoError(t, err)
-		require.True(t, got.Valid && got.Bool, "a server offering a backfilled client needs upstream auth")
-	}
-	got, err := f.q.GetRequiresUpstreamAuthFixture(t.Context(), decidedNone)
-	require.NoError(t, err)
-	require.True(t, got.Valid && !got.Bool, "an explicit decision is never overwritten")
-	require.Zero(t, f.run(true).ServersMarked)
-}
-
 func TestRun_NeverCopiesCredentialHeadersOntoAnOAuthClientSharedAcrossSources(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
@@ -1086,7 +1055,7 @@ func TestRun_EMASameOriginServerItCannotConfirmIsAWarning(t *testing.T) {
 	require.Equal(t, 1, report.ByKind[KindEMA].Warnings)
 	require.Zero(t, report.ByKind[KindEMA].Unresolved)
 	dry := f.run(false)
-	require.Zero(t, dry.PendingClients+dry.PendingLinks+dry.PendingHeaders+dry.PendingRetiredClients+dry.PendingRetiredLinks+dry.PendingMarkedServers)
+	require.Zero(t, dry.PendingClients+dry.PendingLinks+dry.PendingHeaders+dry.PendingRetiredClients+dry.PendingRetiredLinks)
 }
 
 func TestRun_RetiresCopiesOnceAnOAuthClientIsSharedAcrossSources(t *testing.T) {
@@ -1438,39 +1407,6 @@ func TestRun_DryRunModelsReviving(t *testing.T) {
 	require.Equal(t, dry.ByKind[KindHeader].PendingClients, applied.ByKind[KindHeader].PendingClients)
 	require.Zero(t, applied.LinksRetired)
 	require.Equal(t, []uuid.UUID{clientID}, f.links(server))
-}
-
-func TestRun_MarksOnlyServersWhoseHeaderOrEMAEvidenceHolds(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	ctx := t.Context()
-	source := f.source()
-	headerServer := f.serverOn(source)
-	auth := f.staticHeader(source, "Authorization")
-	usi := f.userSessionIssuer()
-	clientID, issuerID := f.emaClient()
-	resource := "https://mcp.vendor.example.com/mcp"
-	emaServer := f.serverAt(resource, usi)
-	binding := f.binding(usi, issuerID, clientID, resource, []string{})
-	f.run(true)
-
-	servers := []uuid.UUID{headerServer, emaServer}
-	undecided := pgtype.Bool{Bool: false, Valid: false}
-	for _, server := range servers {
-		require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(ctx, SetRequiresUpstreamAuthFixtureParams{RequiresUpstreamAuth: undecided, ID: server}))
-	}
-	listed, err := f.q.ListUndecidedUpstreamAuthServers(ctx, ListUndecidedUpstreamAuthServersParams{OrganizationID: f.orgID, McpServerIds: servers})
-	require.NoError(t, err)
-	require.ElementsMatch(t, servers, listed, "both still hold their evidence")
-
-	require.NoError(t, f.q.SoftDeleteRemoteHeaderFixture(ctx, auth))
-	require.NoError(t, f.q.DeleteEMABindingFixture(ctx, binding))
-	listed, err = f.q.ListUndecidedUpstreamAuthServers(ctx, ListUndecidedUpstreamAuthServersParams{OrganizationID: f.orgID, McpServerIds: servers})
-	require.NoError(t, err)
-	require.Empty(t, listed)
-	marked, err := f.q.MarkServersRequiringUpstreamAuth(ctx, MarkServersRequiringUpstreamAuthParams{OrganizationID: f.orgID, McpServerIds: servers})
-	require.NoError(t, err)
-	require.Empty(t, marked, "a link whose evidence is gone never marks its server")
 }
 
 func TestRun_AnAssociationOutOfReachLeavesCredentialHeadersTheirOwnClient(t *testing.T) {

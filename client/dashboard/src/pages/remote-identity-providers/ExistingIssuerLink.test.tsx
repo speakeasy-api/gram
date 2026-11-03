@@ -10,15 +10,8 @@ vi.mock("@/contexts/Auth", () => ({
   }),
   useProject: () => ({ id: "active-project", slug: "active" }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: ({ projectSlug }: { projectSlug: string }) => ({
-    remoteIdentityProviders: {
-      issuerDetail: {
-        href: (id: string) =>
-          `/org/projects/${projectSlug}/remote-identity-providers/${id}`,
-      },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "active" }),
 }));
 // Resolved by id, so a match past the org's first listing page still links.
 const issuersById: Record<string, { id: string; projectId: string }> = {

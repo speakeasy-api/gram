@@ -312,12 +312,65 @@ func (q *Queries) ListAssistantProfileTargets(ctx context.Context, arg ListAssis
 const listProfileServers = `-- name: ListProfileServers :many
 SELECT s.id AS mcp_server_id,
        s.project_id,
-       s.requires_upstream_auth,
+       (
+         -- Upstream credentials the auth client records do not cover yet: no
+         -- auth client was ever linked to the server, live or detached, but it
+         -- has a live upstream OAuth client or a credential header on its source.
+         NOT EXISTS (
+           SELECT 1
+           FROM mcp_server_auth_clients AS pend_link
+           WHERE pend_link.mcp_server_id = s.id
+             AND pend_link.project_id = s.project_id
+             AND pend_link.organization_id = $1
+         )
+         AND (
+           EXISTS (
+             SELECT 1
+             FROM mcp_server_remote_session_clients AS pend_assoc
+             JOIN remote_session_clients AS pend_client
+               ON pend_client.id = pend_assoc.remote_session_client_id
+              AND pend_client.attachment_scope = pend_assoc.client_attachment_scope
+              AND pend_client.deleted IS FALSE
+             JOIN remote_session_issuers AS pend_issuer
+               ON pend_issuer.id = pend_client.remote_session_issuer_id
+              AND pend_issuer.deleted IS FALSE
+              AND (pend_issuer.project_id = pend_assoc.project_id
+                   OR (pend_issuer.project_id IS NULL AND pend_issuer.organization_id = pend_assoc.organization_id)
+                   OR (pend_issuer.project_id IS NULL AND pend_issuer.organization_id IS NULL))
+             WHERE pend_assoc.mcp_server_id = s.id
+               AND pend_assoc.project_id = s.project_id
+               AND pend_assoc.organization_id = $1
+               AND pend_assoc.deleted IS FALSE
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM remote_mcp_server_headers AS pend_header
+             JOIN remote_mcp_servers AS pend_source
+               ON pend_source.id = pend_header.remote_mcp_server_id
+              AND pend_source.project_id = s.project_id
+              AND pend_source.deleted IS FALSE
+             WHERE pend_header.remote_mcp_server_id = s.remote_mcp_server_id
+               AND pend_header.deleted IS FALSE
+               AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM tunneled_mcp_server_headers AS pend_header
+             JOIN tunneled_mcp_servers AS pend_source
+               ON pend_source.id = pend_header.tunneled_mcp_server_id
+              AND pend_source.project_id = s.project_id
+              AND pend_source.deleted IS FALSE
+             WHERE pend_header.tunneled_mcp_server_id = s.tunneled_mcp_server_id
+               AND pend_header.deleted IS FALSE
+               AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
+           )
+         )
+       )::boolean AS upstream_auth_pending,
        EXISTS (
          SELECT 1
          FROM upstream_client_selections AS sel
          WHERE sel.credential_kind = 'execution_profile_version'
-           AND sel.credential_id = $1::uuid
+           AND sel.credential_id = $2::uuid
            AND sel.mcp_server_id = s.id
            AND sel.deleted IS FALSE
        )::boolean AS has_choice,
@@ -336,7 +389,7 @@ SELECT s.id AS mcp_server_id,
          FROM mcp_server_auth_clients AS l
          JOIN mcp_auth_clients AS ac
            ON ac.id = l.auth_client_id
-          AND ac.organization_id = $2
+          AND ac.organization_id = $1
           AND ac.deleted IS FALSE
           AND ac.enabled
          WHERE l.mcp_server_id = s.id
@@ -348,7 +401,7 @@ SELECT s.id AS mcp_server_id,
          FROM mcp_server_auth_clients AS l
          JOIN mcp_auth_clients AS ac
            ON ac.id = l.auth_client_id
-          AND ac.organization_id = $2
+          AND ac.organization_id = $1
           AND ac.deleted IS FALSE
           AND ac.enabled
          WHERE l.mcp_server_id = s.id
@@ -360,7 +413,7 @@ SELECT s.id AS mcp_server_id,
          FROM mcp_server_auth_clients AS l
          JOIN mcp_auth_clients AS ac
            ON ac.id = l.auth_client_id
-          AND ac.organization_id = $2
+          AND ac.organization_id = $1
           AND ac.deleted IS FALSE
           AND ac.enabled
          WHERE l.mcp_server_id = s.id
@@ -375,7 +428,7 @@ JOIN mcp_servers AS s
  AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
 JOIN projects AS p
   ON p.id = s.project_id
- AND p.organization_id = $2
+ AND p.organization_id = $1
  AND p.deleted IS FALSE
 WHERE am.assistant_id = $3
   AND am.project_id = $4
@@ -383,8 +436,8 @@ ORDER BY s.id
 `
 
 type ListProfileServersParams struct {
-	VersionID      uuid.NullUUID
 	OrganizationID string
+	VersionID      uuid.NullUUID
 	AssistantID    uuid.UUID
 	ProjectID      uuid.UUID
 }
@@ -392,7 +445,7 @@ type ListProfileServersParams struct {
 type ListProfileServersRow struct {
 	McpServerID               uuid.UUID
 	ProjectID                 uuid.UUID
-	RequiresUpstreamAuth      pgtype.Bool
+	UpstreamAuthPending       bool
 	HasChoice                 bool
 	RegistrationIds           []uuid.UUID
 	AuthClientIds             []uuid.UUID
@@ -408,8 +461,8 @@ type ListProfileServersRow struct {
 // the live, enabled clients linked to it.
 func (q *Queries) ListProfileServers(ctx context.Context, arg ListProfileServersParams) ([]ListProfileServersRow, error) {
 	rows, err := q.db.Query(ctx, listProfileServers,
-		arg.VersionID,
 		arg.OrganizationID,
+		arg.VersionID,
 		arg.AssistantID,
 		arg.ProjectID,
 	)
@@ -423,7 +476,7 @@ func (q *Queries) ListProfileServers(ctx context.Context, arg ListProfileServers
 		if err := rows.Scan(
 			&i.McpServerID,
 			&i.ProjectID,
-			&i.RequiresUpstreamAuth,
+			&i.UpstreamAuthPending,
 			&i.HasChoice,
 			&i.RegistrationIds,
 			&i.AuthClientIds,

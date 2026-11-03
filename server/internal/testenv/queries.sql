@@ -2311,6 +2311,16 @@ VALUES (@id, @project_id, 'streamable-http', @url);
 INSERT INTO mcp_servers (id, project_id, slug, name, remote_mcp_server_id, visibility)
 VALUES (@id, @project_id, @slug, @slug, @remote_mcp_server_id, @visibility);
 
+-- name: CreateRemoteMCPCredentialHeaderFixture :exec
+INSERT INTO remote_mcp_server_headers (remote_mcp_server_id, name, is_secret, value)
+VALUES (@remote_mcp_server_id, 'Authorization', TRUE, @value);
+
+-- name: SetMCPServerRequiresUpstreamAuthFixture :exec
+UPDATE mcp_servers SET requires_upstream_auth = @requires_upstream_auth WHERE id = @id;
+
+-- name: GetMCPServerRequiresUpstreamAuthFixture :one
+SELECT requires_upstream_auth FROM mcp_servers WHERE id = @id;
+
 -- name: CreateAuthClientFixture :one
 INSERT INTO mcp_auth_clients (organization_id, project_id, client_type, source, name)
 VALUES (@organization_id, @project_id, @client_type, 'backfill', @name)
@@ -2398,3 +2408,10 @@ WHERE id = @id AND organization_id = @organization_id;
 -- Returns a feature setting to never configured, removing even the
 -- soft-deleted row that records an explicit opt-in.
 DELETE FROM organization_features WHERE organization_id = @organization_id AND feature_name = @feature_name;
+
+-- name: SetAPIKeyCreatorFixture :exec
+-- Test-only fixture: an agent key issued by another member of the organization.
+UPDATE api_keys
+SET created_by_user_id = @created_by_user_id
+WHERE id = @id
+  AND organization_id = @organization_id;

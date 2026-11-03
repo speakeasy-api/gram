@@ -3,17 +3,8 @@ import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { AgentLink } from "./agent-link";
 
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    identities: {
-      detail: {
-        overview: {
-          href: (urn: string) =>
-            `/org/projects/project/identities/${urn}/overview`,
-        },
-      },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 
 afterEach(cleanup);

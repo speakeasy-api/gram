@@ -186,10 +186,11 @@ func PluginGeneratorRolloutWorkflow(ctx workflow.Context, input PluginGeneratorR
 					continue
 				}
 				futures = append(futures, workflow.ExecuteActivity(ctx, a.PublishPluginProject, plugins.PublishProjectInput{
-					ProjectID:       candidate.ProjectID,
-					CreatedByUserID: candidate.CreatedByUserID,
-					CommitMessage:   commitMessage,
-					SkipIfUnchanged: true,
+					ProjectID:            candidate.ProjectID,
+					CreatedByUserID:      candidate.CreatedByUserID,
+					CommitMessage:        commitMessage,
+					SkipIfUnchanged:      true,
+					IncludePausedPlugins: false,
 				}))
 			}
 
