@@ -23,22 +23,6 @@ const (
 	FamilyKiro            = "kiro"
 	FamilyReplit          = "replit"
 	FamilyNotion          = "notion"
-
-	// Inferred from product names in Figma's client catalog, not seen in Speakeasy traffic.
-	FamilyXcode         = "xcode"
-	FamilyGrok          = "grok"
-	FamilyAntigravity   = "antigravity"
-	FamilySlack         = "slack"
-	FamilyWindsurf      = "windsurf"
-	FamilyWarp          = "warp"
-	FamilyFactoryDroid  = "factory_droid"
-	FamilyAugment       = "augment"
-	FamilyRovo          = "rovo"
-	FamilyAndroidStudio = "android_studio"
-	FamilyAmazonQ       = "amazon_q"
-	FamilyOpenHands     = "openhands"
-	FamilyServiceNow    = "servicenow"
-	FamilyDevin         = "devin"
 )
 
 const (
@@ -68,23 +52,6 @@ var clientFamilies = []struct {
 	{FamilyKiro, []string{"kiro"}},
 	{FamilyReplit, []string{"replit-agent-mcp-client", "replit"}},
 	{FamilyNotion, []string{"notion-mcp-client"}},
-
-	// Inferred from product names in Figma's client catalog, not seen in Speakeasy traffic.
-	{FamilyXcode, []string{"xcode"}},
-	{FamilyGrok, []string{"grok"}},
-	{FamilyAntigravity, []string{"antigravity"}},
-	{FamilySlack, []string{"slack"}},
-	{FamilyWindsurf, []string{"windsurf"}},
-	{FamilyWarp, []string{"warp"}},
-	{FamilyFactoryDroid, []string{"droid"}},
-	{FamilyAugment, []string{"augment"}},
-	{FamilyRovo, []string{"rovo"}},
-	{FamilyAndroidStudio, []string{"android studio", "androidstudio"}},
-	{FamilyAmazonQ, []string{"amazon-q", "amazonq"}},
-	{FamilyOpenHands, []string{"openhands"}},
-	{FamilyServiceNow, []string{"servicenow"}},
-	{FamilyDevin, []string{"devin"}},
-
 	{FamilyVSCode, []string{"vscode", "visual studio code"}},
 	{FamilyPerplexity, []string{"perplexity"}},
 	{FamilyScript, []string{"python-httpx", "python-requests", "aiohttp", "node-fetch", "undici", "axios", "node", "libcurl", "curl", "wget", "go-http-client", "okhttp", "java"}},
