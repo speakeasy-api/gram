@@ -144,7 +144,7 @@ func (s *AccessRoleMutationService) ConfigureInference(ctx context.Context, prin
 			return AccessRoleMutationReceiptResult{}, accessRoleMutationNotFound()
 		}
 		delivery = reconciliation
-		return s.receiptResult(result.After, result.Slug, "updated", "complete")
+		return s.receiptResult(current, result.After, result.Slug, "updated", "complete")
 	})
 	if err != nil {
 		return ConfigureInferenceAccessRoleOutput{}, err
