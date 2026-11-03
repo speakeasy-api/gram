@@ -14,7 +14,7 @@ Synthetic corpus, questions and checks for team chat memory in the Platform MCP.
   weeks apart and shares no keywords with them, which
   `TestHardQuestionsShareNoKeywordsWithSources` enforces, so rewriting the
   question into a keyword search still leaves the agent to find and order
-  several chats across search windows.
+  several chats over time.
 - **Mechanical checks** (CI, every PR): `TestSearchChatsBaselineMechanical`
   loads the corpus into Postgres and probes the `search_chats` baseline. It
   asserts no credential leaks, no other-project results and full retrieval of
