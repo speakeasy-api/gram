@@ -200,7 +200,7 @@ func newTailnetGatewayCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create encryption client: %w", err)
 			}
-			gateway, err := tailnetgateway.New(logger, meterProvider, db, encryptionClient, config, &tailnetgateway.TsnetRuntime{Logger: logger})
+			gateway, err := tailnetgateway.New(logger, meterProvider, db, encryptionClient, config, tailnetgateway.NewTsnetRuntime(tailnetgateway.WithLogger(logger)))
 			if err != nil {
 				return fmt.Errorf("configure tailnet gateway: %w", err)
 			}
