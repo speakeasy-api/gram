@@ -247,6 +247,36 @@ func (r *MigrationRouter) routeFor(ctx context.Context, ops []Operation) route {
 	return route{mode: mode, units: units}
 }
 
+// routeForOrganization chooses the evaluator for work that runs outside any
+// request admission on behalf of one organization, such as resolving a
+// notification audience. Each call is its own boundary: it reads the units'
+// modes for that organization afresh and pins nothing.
+func (r *MigrationRouter) routeForOrganization(ctx context.Context, organizationID string, ops []Operation) route {
+	old := route{mode: MigrationModeOld, units: nil}
+	if r == nil || organizationID == "" || len(ops) == 0 {
+		return old
+	}
+	var units []string
+	for _, op := range ops {
+		for _, typeName := range operationTypes(op) {
+			unit, ok := r.unitOfType[typeName]
+			if !ok {
+				return old
+			}
+			units = append(units, unit)
+		}
+	}
+	slices.Sort(units)
+	units = slices.Compact(units)
+	mode := MigrationModeNew
+	for _, unit := range units {
+		for _, dep := range r.closure[unit] {
+			mode = min(mode, r.source.MigrationMode(ctx, dep, organizationID))
+		}
+	}
+	return route{mode: mode, units: units}
+}
+
 func operationTypes(op Operation) []string {
 	if !op.alternatives {
 		return []string{op.permission.Type}

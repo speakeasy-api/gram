@@ -8,12 +8,15 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/directoryreview"
 	reviewrepo "github.com/speakeasy-api/gram/server/internal/directoryreview/repo"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 )
 
 // mapUnheldAttribute maps an attribute value nobody holds and reconciles, so
@@ -42,7 +45,7 @@ func TestDirectoryReviewEmails_AnnounceThenRemind(t *testing.T) {
 	captured := &captureLoopsClient{sent: nil, failNext: 0}
 	sender := activities.NewDirectoryReviewEmails(testenv.NewLogger(t), conn, email.NewService(testenv.NewLogger(t), captured, email.NewTemplateIDs(map[string]string{
 		"directory_review_pending": "directory-review-pending-test-id",
-	}), true), customDomainTestOrgHosts(t))
+	}), true), customDomainTestOrgHosts(t), directoryReviewParityClient(t, conn))
 	send := func(at time.Time) {
 		t.Helper()
 		require.NoError(t, sender.Send(t.Context(), activities.SendDirectoryReviewEmailsArgs{Now: at}))
@@ -111,7 +114,15 @@ func TestDirectoryReviewEmails_SkipsOrganizationsThatOptedOut(t *testing.T) {
 	captured := &captureLoopsClient{sent: nil, failNext: 0}
 	sender := activities.NewDirectoryReviewEmails(testenv.NewLogger(t), conn, email.NewService(testenv.NewLogger(t), captured, email.NewTemplateIDs(map[string]string{
 		"directory_review_pending": "directory-review-pending-test-id",
-	}), true), customDomainTestOrgHosts(t))
+	}), true), customDomainTestOrgHosts(t), directoryReviewParityClient(t, conn))
 	require.NoError(t, sender.Send(t.Context(), activities.SendDirectoryReviewEmailsArgs{Now: time.Now().Add(time.Hour)}))
 	require.Empty(t, captured.Sent())
+}
+
+// directoryReviewParityClient resolves recipients with both evaluators and
+// fails the test if they disagree about any member.
+func directoryReviewParityClient(t *testing.T, conn *pgxpool.Pool) *authz.Client {
+	t.Helper()
+	engine := authz.NewEngine(testenv.NewLogger(t), conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	return authztest.NewParityClient(t, engine)
 }

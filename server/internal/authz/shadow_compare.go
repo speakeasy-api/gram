@@ -197,6 +197,25 @@ func (s *shadowComparer) compare(ctx context.Context, entry string, rt route, op
 	s.recorder.RecordShadowComparison(ctx, record)
 }
 
+// recordAudience records a comparison the caller already ran in full, such
+// as an audience resolution that asks both evaluators about each member
+// while it reads their grants once. It is not bounded by the budget: the
+// registry evaluator does no I/O, and the caller owns the reads.
+func (s *shadowComparer) recordAudience(ctx context.Context, organizationID string, rt route, ops []Operation, old, got shadowAnswer, duration time.Duration) {
+	outcome, detail := classifyShadow(old, got)
+	s.recorder.RecordShadowComparison(ctx, ShadowComparison{
+		OrganizationID: organizationID,
+		Units:          rt.units,
+		Entry:          "audience",
+		Permissions:    operationPermissions(ops),
+		Outcome:        outcome,
+		Detail:         detail,
+		Duration:       duration,
+		BuildVersion:   s.buildVersion,
+		ModelVersion:   s.modelVersion,
+	})
+}
+
 var errShadowPanic = errors.New("shadow evaluation panicked")
 
 // classifyShadow compares two answers to the same call, and names the error
