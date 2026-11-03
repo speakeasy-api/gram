@@ -98,9 +98,10 @@ jobs:
     environment: speakeasy-perf # the only subject the Speakeasy agent's rule admits
     timeout-minutes: 20
     # One review per pull request at a time; a newer request waits for the
-    # current one. GitHub keeps only the newest waiting job in a group, so the
-    # group is the pull request's only once the gate approved: no other
-    # comment can replace a queued review.
+    # current one. GitHub keeps only the newest waiting job in a group and
+    # cancels the one it replaces, so the group is the pull request's only
+    # once the gate approved: an unapproved comment cannot replace a queued
+    # review.
     concurrency:
       group: >-
         ${{ github.workflow }}-analyse-${{ needs.gate.outputs.approved == 'true' &&
@@ -226,10 +227,13 @@ jobs:
     name: post
     needs: [gate, analyse]
     # Also after a failed review, so that a "no verdict" notice replaces an
-    # earlier verdict. A request the gate refused posts nothing, and so does
-    # one that a newer request replaced in the queue before it started; the
-    # newer one posts.
-    if: always() && needs.gate.outputs.approved == 'true' && needs.analyse.outputs.started == 'true'
+    # earlier verdict, even when it failed before its first step. A request
+    # the gate refused posts nothing, and so does one that a newer request
+    # replaced in the queue: it is cancelled before it starts, and the newer
+    # one posts.
+    if: >-
+      always() && needs.gate.outputs.approved == 'true' &&
+      (needs.analyse.outputs.started == 'true' || needs.analyse.result == 'failure')
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 5
     # One comment update per pull request at a time, in the order the reviews
