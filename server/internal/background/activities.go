@@ -417,7 +417,7 @@ func NewActivities(
 		promoteStagedTelemetry:           activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter, telemetryLogPublisher),
 		listStagedTelemetryProjects:      activities.NewListStagedTelemetryProjects(logger, chConn),
 		generateChatTitle:                activities.NewGenerateChatTitle(logger, db, chatClient),
-		memoryDigests:                    activities.NewMemoryDigests(logger, db, chatClient, features),
+		memoryDigests:                    activities.NewMemoryDigests(logger, db, chatClient),
 		processDeployment:                activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpCatalog),
 		provisionFunctionsAccess:         activities.NewProvisionFunctionsAccess(logger, db, encryption),
 		deployFunctionRunners:            activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
