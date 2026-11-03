@@ -3,8 +3,13 @@ package mcp_test
 import (
 	"encoding/json"
 	"fmt"
+	"net/http"
+	"net/http/httptest"
+	"net/url"
+	"testing"
+	"time"
+
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgtype"
 	agentsrepo "github.com/speakeasy-api/gram/server/internal/agents/repo"
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
@@ -16,15 +21,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/platformtools"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/usersessions"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 	"github.com/stretchr/testify/require"
-	"net/http"
-	"net/http/httptest"
-	"net/url"
-	"testing"
-	"time"
 )
 
 func TestAgentClientCredentialsPublicRegistrationRenewalAndRevocation(t *testing.T) {
@@ -156,8 +157,7 @@ func TestAgentClientOrganizationSharedIssuer(t *testing.T) {
 	signer := newAssertionSigner(t)
 	request := usersessions.RegistrationRequest{ClientName: "Organization issuer agent", GrantTypes: []string{"client_credentials"}, TokenEndpointAuthMethod: "private_key_jwt", JWKS: signer.jwks}
 	register := func(target mcp.AgentAuthorizationTarget) (usersessionsrepo.UserSessionClient, error) {
-		tx, err := ti.conn.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
-		require.NoError(t, err)
+		tx := testenv.BeginTx(t, ctx, ti.conn)
 		defer func() { _ = tx.Rollback(ctx) }()
 		client, err := mcp.RegisterAgentOAuthClient(agentCtx, tx, target, request)
 		if err == nil {
