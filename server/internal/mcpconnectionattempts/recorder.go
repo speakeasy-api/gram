@@ -77,6 +77,7 @@ const (
 	dropLogsCheck    dropReason = "logs_check_failed"
 	dropPanic        dropReason = "panic"
 	dropRateLimited  dropReason = "rate_limited"
+	dropQueueReserve dropReason = "queue_reserved"
 )
 
 // shortLabel is the shape of a sub-reason or grant type. It is what keeps a raw
@@ -363,6 +364,7 @@ func newDropCounters() map[dropReason]*atomic.Int64 {
 		dropLogsCheck:    {},
 		dropPanic:        {},
 		dropRateLimited:  {},
+		dropQueueReserve: {},
 	}
 }
 
@@ -454,8 +456,8 @@ func (r *Recorder) End(ctx context.Context, attempt Attempt, step Step, what Hap
 	r.record(ctx, attempt, step, what, true, false, opts)
 }
 
-// Once records an attempt that is one request: one row, final. It has no proof of a real
-// flow behind it, so repeats are held back and count as rate_limited.
+// Once records an attempt that is one request: one row, final. It has no proof of a real flow
+// behind it, so repeats count as rate_limited, and rows past its queue share as queue_reserved.
 func (r *Recorder) Once(ctx context.Context, scope Scope, step Step, what Happened, opts ...Option) {
 	r.record(ctx, Begin(scope), step, what, true, true, opts)
 }
@@ -469,9 +471,15 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		r.drop(ctx, dropInvalidEvent, 1, err)
 		return
 	}
-	if limited && r.limiter != nil && (r.queueReserved() || !r.limiter.allow(row, time.Now())) {
-		r.drop(ctx, dropRateLimited, 1, nil)
-		return
+	if limited && r.limiter != nil {
+		if r.queueReserved() {
+			r.drop(ctx, dropQueueReserve, 1, nil)
+			return
+		}
+		if !r.limiter.allow(row, time.Now()) {
+			r.drop(ctx, dropRateLimited, 1, nil)
+			return
+		}
 	}
 	if spanCtx := trace.SpanContextFromContext(ctx); spanCtx.HasTraceID() {
 		row.TraceID = spanCtx.TraceID().String()
