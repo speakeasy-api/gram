@@ -429,6 +429,11 @@ func TestCompile_RejectsInvalidDeclarations(t *testing.T) {
 			want:  `stored scope "thing:deny" must be a blocked_* scope`,
 		},
 		{
+			name:  "block without an action",
+			types: []s.TypeDecl{simple("thing", s.Block("blocked", s.StoredAs("thing:blocked_")))},
+			want:  `stored scope "thing:blocked_" names no action after blocked_`,
+		},
+		{
 			name:  "grant on a blocking scope",
 			types: []s.TypeDecl{simple("thing", grant("deny", "thing:blocked_read"))},
 			want:  `stored scope "thing:blocked_read" is a blocking scope; declare it with Block`,
@@ -625,4 +630,53 @@ func TestCompile_RejectsConflictingBlockExpansions(t *testing.T) {
 		s.Permission("write", s.Rel("writer"), s.Checks("thing:write"), s.ExcludedBy("read_blocked", "write_blocked")),
 	))
 	require.ErrorContains(t, err, `block "read_blocked" directly excludes several permissions with different broader blocks ([thing:blocked_all] and [thing:blocked_write])`)
+}
+
+func TestCompile_FactsKeepDeclarationOrder(t *testing.T) {
+	t.Parallel()
+
+	reg, err := s.Compile(testConfig, s.NewType("note", s.WrittenBy("access"),
+		s.Attr("author_id", s.FactNullableString),
+		s.Derived("author", s.NonEmptyPrincipal(s.FactUser, "author_id")),
+		s.Attr("archived", s.FactBool),
+	))
+	require.NoError(t, err)
+	note, ok := reg.Type("note")
+	require.True(t, ok)
+	require.Equal(t, []s.Fact{
+		{Name: "author_id", Type: s.FactNullableString, DerivedFrom: ""},
+		{Name: "author", Type: s.FactUser, DerivedFrom: "author_id"},
+		{Name: "archived", Type: s.FactBool, DerivedFrom: ""},
+	}, note.Facts)
+}
+
+// Options copy their arguments, so changing a caller's slice after building
+// an option cannot change the declaration.
+func TestOptions_CopyTheirArguments(t *testing.T) {
+	t.Parallel()
+
+	anchors := []string{"organization", s.Self}
+	roles := []string{"admin"}
+	blocks := []string{"read_blocked"}
+	anchoredAt := s.AnchoredAt(anchors...)
+	defaultFor := s.DefaultFor(roles...)
+	excludedBy := s.ExcludedBy(blocks...)
+	anchors[0] = "project"
+	roles[0] = "member"
+	blocks[0] = "missing"
+
+	reg, err := s.Compile(testConfig,
+		s.NewType("organization", s.WrittenBy("access")),
+		s.NewType("thing", s.Parent("organization"), s.WrittenBy("access"),
+			s.Grant("reader", s.StoredAs("thing:read"), s.Describe("read"), anchoredAt, defaultFor),
+			s.Block("read_blocked", s.StoredAs("thing:blocked_read")),
+			s.Permission("read", s.Rel("reader"), s.Checks("thing:read"), excludedBy),
+		),
+	)
+	require.NoError(t, err)
+	read, ok := reg.Scope("thing:read")
+	require.True(t, ok)
+	require.Equal(t, []string{"organization", s.Self}, read.Anchors)
+	require.Equal(t, []string{"admin"}, read.Roles)
+	require.Equal(t, "thing:blocked_read", read.Exclusion)
 }

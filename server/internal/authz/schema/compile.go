@@ -439,6 +439,8 @@ func (c *compiler) validateStoredAs(where string, r relationDecl) {
 	c.scopeOwner[r.storedAs] = where
 	blocked := strings.HasPrefix(action, blockedActionPrefix)
 	switch {
+	case action == blockedActionPrefix:
+		c.problemf("%s: stored scope %q names no action after %s", where, r.storedAs, blockedActionPrefix)
 	case r.kind == relationBlock && !blocked:
 		c.problemf("%s: stored scope %q must be a %s* scope", where, r.storedAs, blockedActionPrefix)
 	case r.kind == relationGrant && blocked:

@@ -89,7 +89,8 @@ func Is(fact string) Expr {
 }
 
 // Via evaluates permission on the resource that fact refers to. The fact must
-// be an Attr whose type is another declared resource type.
+// be an Attr whose type is a declared resource type, which may be the
+// declaring type itself.
 func Via(fact, permission string) Expr {
 	return newExpr(OpVia, fact, permission, "", nil)
 }

@@ -92,8 +92,10 @@ type ScopeDefinition struct {
 	// authz.Check for this scope, one step and sorted.
 	SatisfiedBy []string
 
-	// Exclusion is the blocking scope that directly excludes an authz.Check
-	// for this scope, or "".
+	// Exclusion is the scope whose grants directly exclude an authz.Check for
+	// this scope: the first ExcludedBy block, or the subtracted grant of a
+	// top-level raw Minus such as risk_policy:bypass. It is "" when nothing
+	// excludes the check.
 	Exclusion string
 
 	// Closure lists every scope whose check a grant of this scope satisfies,
@@ -155,8 +157,10 @@ type PermissionDefinition struct {
 	// Expr is the resolved expression.
 	Expr Expr
 
-	// ExcludedBy lists the blocking scopes applied with block precedence, in
-	// declaration order.
+	// ExcludedBy lists the blocking scopes this permission applies with block
+	// precedence, in declaration order. Blocks of a permission reused through
+	// Perm stay on that permission and apply to its branch only; Scopes lists
+	// them.
 	ExcludedBy []string
 
 	// Checks is the stored scope whose authz.Check this permission answers, or
@@ -413,11 +417,13 @@ func compileType(t *TypeDecl) TypeDefinition {
 		Permissions:  nil,
 		Alternatives: nil,
 	}
-	for _, a := range t.attrs {
-		out.Facts = append(out.Facts, Fact{Name: a.name, Type: a.factType, DerivedFrom: ""})
-	}
-	for _, d := range t.derived {
-		out.Facts = append(out.Facts, Fact{Name: d.name, Type: d.projection.principalType, DerivedFrom: d.projection.fact})
+	for _, name := range t.factOrder {
+		if i := slices.IndexFunc(t.attrs, func(a attrDecl) bool { return a.name == name }); i >= 0 {
+			out.Facts = append(out.Facts, Fact{Name: name, Type: t.attrs[i].factType, DerivedFrom: ""})
+			continue
+		}
+		d := t.derived[slices.IndexFunc(t.derived, func(d derivedDecl) bool { return d.name == name })]
+		out.Facts = append(out.Facts, Fact{Name: name, Type: d.projection.principalType, DerivedFrom: d.projection.fact})
 	}
 	for _, g := range t.guards {
 		out.Guards = append(out.Guards, g.name)

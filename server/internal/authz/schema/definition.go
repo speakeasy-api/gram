@@ -45,6 +45,7 @@ type TypeDecl struct {
 	selectorKeys []string
 	writtenBy    string
 	attrs        []attrDecl
+	factOrder    []string
 	derived      []derivedDecl
 	guards       []guardDecl
 	relations    []relationDecl
@@ -159,6 +160,7 @@ func NewType(name string, opts ...TypeOption) TypeDecl {
 		selectorKeys: nil,
 		writtenBy:    "",
 		attrs:        nil,
+		factOrder:    nil,
 		derived:      nil,
 		guards:       nil,
 		relations:    nil,
@@ -191,6 +193,7 @@ func StoredKind(kind string) TypeOption {
 func Attr(name, factType string) TypeOption {
 	return typeOptionFunc(func(t *TypeDecl) {
 		t.attrs = append(t.attrs, attrDecl{name: name, factType: factType})
+		t.factOrder = append(t.factOrder, name)
 	})
 }
 
@@ -198,6 +201,7 @@ func Attr(name, factType string) TypeOption {
 func Derived(name string, projection Projection) TypeOption {
 	return typeOptionFunc(func(t *TypeDecl) {
 		t.derived = append(t.derived, derivedDecl{name: name, projection: projection})
+		t.factOrder = append(t.factOrder, name)
 	})
 }
 
@@ -221,6 +225,7 @@ func Block(name string, opts ...RelationOption) TypeOption {
 }
 
 func relation(kind relationKind, name string, opts []RelationOption) TypeOption {
+	opts = slices.Clone(opts)
 	return typeOptionFunc(func(t *TypeDecl) {
 		r := relationDecl{
 			kind:          kind,
@@ -248,6 +253,7 @@ func relation(kind relationKind, name string, opts []RelationOption) TypeOption 
 // Permission declares an operation callers check, composed from relations,
 // facts and other permissions.
 func Permission(name string, expr Expr, opts ...PermissionOption) TypeOption {
+	opts = slices.Clone(opts)
 	return typeOptionFunc(func(t *TypeDecl) {
 		p := permissionDecl{name: name, expr: expr, excludedBy: nil, checks: "", description: ""}
 		for _, opt := range opts {
@@ -261,6 +267,7 @@ func Permission(name string, expr Expr, opts ...PermissionOption) TypeOption {
 // passes when one alternative passes in every policy; it is not a Union, so
 // different policies cannot each satisfy a different alternative.
 func Alternatives(name string, opts ...AlternativesOption) TypeOption {
+	opts = slices.Clone(opts)
 	return typeOptionFunc(func(t *TypeDecl) {
 		a := alternativesDecl{name: name, options: nil, veto: false}
 		for _, opt := range opts {
@@ -298,12 +305,14 @@ func StoredAs(scope string) RelationOption {
 // chain. A grant anchored at a parent applies to every resource of this type
 // under it through selector matching; it does not verify that relationship.
 func AnchoredAt(levels ...string) RelationOption {
+	levels = slices.Clone(levels)
 	return relationOptionFunc(func(r *relationDecl) { r.anchors = append(r.anchors, levels...) })
 }
 
 // Conditions attaches registered pure conditions that every path through the
 // relation must satisfy, such as MCP tool and disposition limits.
 func Conditions(names ...string) RelationOption {
+	names = slices.Clone(names)
 	return relationOptionFunc(func(r *relationDecl) { r.conditions = append(r.conditions, names...) })
 }
 
@@ -325,6 +334,7 @@ func StrictMatching() RelationOption {
 
 // DefaultFor lists the system roles that hold the grant by default.
 func DefaultFor(roles ...string) RelationOption {
+	roles = slices.Clone(roles)
 	return relationOptionFunc(func(r *relationDecl) { r.roles = append(r.roles, roles...) })
 }
 
@@ -349,6 +359,7 @@ func SubjectScoped(_ ...string) RelationOption {
 // Checks a scope, the first block is that scope's direct exclusion and the
 // rest are the broader blocks that also exclude it.
 func ExcludedBy(blocks ...string) PermissionOption {
+	blocks = slices.Clone(blocks)
 	return permissionOptionFunc(func(p *permissionDecl) { p.excludedBy = append(p.excludedBy, blocks...) })
 }
 

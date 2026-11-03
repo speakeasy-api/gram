@@ -35,6 +35,30 @@ func TestSchemaProjectionsMatchFrozenTables(t *testing.T) {
 	}, frozenSliceDeclarations()...)
 	require.NoError(t, err)
 
+	declared := []Scope{
+		ScopeLogRead,
+		ScopeMCPAuth, ScopeMCPBlockedAuth, ScopeMCPBlockedConnect, ScopeMCPBlockedRead, ScopeMCPBlockedWrite,
+		ScopeMCPConnect, ScopeMCPRead, ScopeMCPWrite,
+		ScopeOrgAdmin, ScopeOrgBlockedAdmin, ScopeOrgBlockedRead, ScopeOrgDeviceAgentSync, ScopeOrgHooksIngest, ScopeOrgRead,
+		ScopePluginBlockedWrite, ScopePluginWrite,
+		ScopeProjectBlockedRead, ScopeProjectBlockedWrite, ScopeProjectRead, ScopeProjectWrite,
+	}
+	var compiledNames []Scope
+	for _, scope := range reg.Scopes() {
+		compiledNames = append(compiledNames, Scope(scope.Name))
+	}
+	require.Equal(t, declared, compiledNames, "the registry must compile exactly the declared slice")
+
+	var runtimeNames []string
+	for _, scope := range reg.RuntimeScopes() {
+		runtimeNames = append(runtimeNames, scope.Name)
+	}
+	wantRuntimeNames := []string{"mcp_approval:decide", "mcp_approval:read"}
+	for _, scope := range declared {
+		wantRuntimeNames = append(wantRuntimeNames, string(scope))
+	}
+	require.ElementsMatch(t, wantRuntimeNames, runtimeNames)
+
 	frozenScopes := readGoldenRecords(t, filepath.Join(foundationCompatibilityDir, "scope_tables.golden"))
 	var got, want strings.Builder
 	for _, scope := range reg.Scopes() {
