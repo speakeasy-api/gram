@@ -286,7 +286,7 @@ export function CommandPalette(): JSX.Element {
         onClick={() => changeOpen(true)}
         // Named for what it opens rather than what it is. The shortcut is on
         // the button as an attribute too, so it is announced and not only drawn.
-        aria-label="Search organizations and pages"
+        aria-label="Search organizations, custom domains, and pages"
         aria-keyshortcuts={shortcut.announced}
         // Square and iconic where the bar is narrow, an input-shaped box where
         // there is room for one. Never hidden outright: the shortcut is the
@@ -312,7 +312,7 @@ export function CommandPalette(): JSX.Element {
           <DialogHeader className="sr-only">
             <DialogTitle>Command palette</DialogTitle>
             <DialogDescription>
-              Search organizations, or jump to a page
+              Search organizations or custom domains, or jump to a page
             </DialogDescription>
           </DialogHeader>
 
@@ -325,7 +325,7 @@ export function CommandPalette(): JSX.Element {
             <CommandInput
               value={term}
               onValueChange={changeTerm}
-              placeholder="Search organizations, or jump to a page..."
+              placeholder="Search organizations or custom domains, or jump to a page..."
             />
             <CommandList>
               {searchState !== "idle" && (

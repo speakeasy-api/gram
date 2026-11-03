@@ -244,7 +244,9 @@ describe("CommandPalette", () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Search organizations and pages" }),
+      screen.getByRole("button", {
+        name: "Search organizations, custom domains, and pages",
+      }),
     );
 
     expect(await screen.findByRole("dialog")).toBeTruthy();
