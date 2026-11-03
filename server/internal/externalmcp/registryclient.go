@@ -798,7 +798,7 @@ func (c *RegistryClient) GetServerDetails(ctx context.Context, registry Registry
 		return fmt.Sprintf("%s:filter:%s", baseKey, strings.Join(sortedURLs, ","))
 	}
 
-	// Check cache after authorization so headers are populated.
+	// Serve cached details before fetching from the registry.
 	cacheKey := buildCacheKey()
 	cached, err := c.detailsCache.Get(ctx, cacheKey)
 	if err == nil {
