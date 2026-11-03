@@ -18,6 +18,9 @@ it.each(["tools/list", "DELETE"])(
     vi.stubGlobal(
       "fetch",
       vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        expect(new Headers(init?.headers).get("Gram-Consent-Auth-Client")).toBe(
+          "00000000-0000-4000-8000-000000000001",
+        );
         const request =
           init?.method === "POST" && typeof init.body === "string"
             ? JSON.parse(init.body)
@@ -61,6 +64,7 @@ it.each(["tools/list", "DELETE"])(
       "csrf",
       "attempt",
       deadline.signal,
+      "00000000-0000-4000-8000-000000000001",
     );
     // Attach rejection handling before aborting the real SDK request.
     const outcome = inventory.then(

@@ -52,9 +52,10 @@ import (
 // pure MCP messages. The attempt id is non-secret; state + CSRF are the
 // credential.
 const (
-	consentStateHeader   = "Gram-Consent-State"
-	consentCSRFHeader    = "Gram-Consent-Csrf"
-	consentAttemptHeader = "Gram-Consent-Inventory-Attempt"
+	consentStateHeader      = "Gram-Consent-State"
+	consentCSRFHeader       = "Gram-Consent-Csrf"
+	consentAttemptHeader    = "Gram-Consent-Inventory-Attempt"
+	consentAuthClientHeader = "Gram-Consent-Auth-Client"
 )
 
 // consentMCPBodyLimit bounds inbound consent transport bodies.
@@ -194,6 +195,9 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 		return oops.E(oops.CodeUnavailable, err, "service temporarily unavailable").LogError(ctx, logger)
 	}
 
+	postedAuthClient := r.Header.Get(consentAuthClientHeader)
+	r.Header.Del(consentAuthClientHeader)
+
 	// The consent credential must never travel upstream.
 	r.Header.Del(consentStateHeader)
 	r.Header.Del(consentCSRFHeader)
@@ -207,7 +211,7 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 		return s.serveConsentBuiltinMCP(w, r, endpoint, challengeState, draft, serverRow)
 	}
 	if serverRow != nil {
-		return s.serveConsentProxiedMCP(w, r, endpoint, challengeState, draft, serverRow)
+		return s.serveConsentProxiedMCP(w, r, endpoint, challengeState, draft, serverRow, postedAuthClient)
 	}
 	return oops.E(oops.CodeUnexpected, nil, "mcp endpoint has neither toolset nor mcp server backend").LogError(ctx, logger)
 }
@@ -377,6 +381,7 @@ func (s *Service) serveConsentProxiedMCP(
 	challengeState AuthnChallengeState,
 	draft consentToolInventory,
 	serverRow *mcpservers_repo.McpServer,
+	postedAuthClient string,
 ) error {
 	ctx, cancel := context.WithTimeout(r.Context(), consentUpstreamTimeout)
 	defer cancel()
@@ -399,7 +404,35 @@ func (s *Service) serveConsentProxiedMCP(
 	if serverRow.Visibility == mcpservers.VisibilityPrivate && subject.Kind == urn.SessionSubjectKindAnonymous {
 		return oops.E(oops.CodeBadRequest, nil, "anonymous subject cannot enumerate a private MCP server").LogWarn(ctx, logger)
 	}
-	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+	auth, err := s.consentDirectPreviewAuth(ctx, endpoint, challengeState, postedAuthClient)
+	if err != nil {
+		return oops.E(oops.CodeFailedPrecondition, err, "The credential you chose can no longer be used. Reload this page to choose again.").LogWarn(ctx, logger)
+	}
+	if err := bindDirectConsentInventory(&draft, auth); err != nil {
+		return oops.E(oops.CodeFailedPrecondition, err, "The credential changed; reload the tool preview.").LogWarn(ctx, logger)
+	}
+	if auth != nil {
+		if err := s.consentToolInventoryCache.Store(ctx, draft); err != nil {
+			return oops.E(oops.CodeUnavailable, err, "store consent credential binding").LogError(ctx, logger)
+		}
+	}
+	var tokens map[uuid.UUID]remotesessions.UpstreamToken
+	backendIssuerID := serverRow.RemoteSessionIssuerID
+	switch {
+	case auth == nil:
+		tokens, err = s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+	case auth.outcome == authClientNoAuth || auth.headersOnly() || (auth.outcome == authClientLegacy && auth.choice.noAuth()):
+		// No issuer-derived bearer is needed for this credential.
+	case auth.choice.clientID.Valid:
+		backendIssuerID = auth.choice.remoteSessionIssuerID
+		tokens, err = s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
+			ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
+			UserSessionIssuerID: endpoint.UserSessionIssuerID, Subject: subject,
+			RegistrationID: auth.choice.clientID.UUID, SkipUnusable: false,
+		})
+	default:
+		err = errConsentConfigurationChanged
+	}
 	if err != nil {
 		if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 			return remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
@@ -421,7 +454,7 @@ func (s *Service) serveConsentProxiedMCP(
 		}
 		return oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for consent transport").LogError(ctx, logger)
 	}
-	upstreamToken, err := routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, serverRow.TunneledMcpServerID.Valid, serverRow.RemoteSessionIssuerID)
+	upstreamToken, err := routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, serverRow.TunneledMcpServerID.Valid, backendIssuerID)
 	var routeErr *upstreamRoutingError
 	switch {
 	case errors.As(err, &routeErr):
@@ -463,7 +496,11 @@ func (s *Service) serveConsentProxiedMCP(
 		if herr != nil {
 			return oops.E(oops.CodeUnexpected, herr, "load remote mcp server headers for consent transport").LogError(ctx, logger)
 		}
-		p = s.remoteProxyManager.Build(logger, &remoteServer, serverRow.ID.String(), headers, serverRow.Visibility, endpoint.OrganizationID, endpoint.ProjectID.String(), upstreamToken.Token, "", nil)
+		var options []remotemcp.BuildOption
+		if auth != nil && (auth.outcome != authClientLegacy || auth.sendsClientHeaders()) {
+			options = append(options, remotemcp.WithAuthClientHeaders(auth.headers))
+		}
+		p = s.remoteProxyManager.Build(logger, &remoteServer, serverRow.ID.String(), headers, serverRow.Visibility, endpoint.OrganizationID, endpoint.ProjectID.String(), upstreamToken.Token, "", nil, options...)
 	} else {
 		// One state-derived affinity key pins the whole consent session
 		// (initialize, list pages, DELETE) to a single gateway.
