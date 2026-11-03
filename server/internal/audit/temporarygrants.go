@@ -14,9 +14,9 @@ import (
 )
 
 const (
-	ActionAccessTemporaryGrantCreate Action = "access_temporary_grant:create"
-	ActionAccessTemporaryGrantRenew  Action = "access_temporary_grant:renew"
-	ActionAccessTemporaryGrantRevoke Action = "access_temporary_grant:revoke"
+	ActionAccessGrantCreateTemporary Action = "access_grant:create_temporary"
+	ActionAccessGrantRenewTemporary  Action = "access_grant:renew_temporary"
+	ActionAccessGrantRevokeTemporary Action = "access_grant:revoke_temporary"
 )
 
 // temporaryGrantAuditMetadata is recorded on every temporary grant event so
@@ -53,15 +53,15 @@ type LogAccessTemporaryGrantCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	TemporaryGrantURN urn.TemporaryGrant
-	RecipientEmail    string
-	Reason            string
+	AccessGrantURN urn.AccessGrant
+	RecipientEmail string
+	Reason         string
 
 	TemporaryGrantSnapshotAfter *accessgen.TemporaryGrant
 }
 
 func (l *Logger) LogAccessTemporaryGrantCreate(ctx context.Context, dbtx repo.DBTX, event LogAccessTemporaryGrantCreateEvent) error {
-	action := ActionAccessTemporaryGrantCreate
+	action := ActionAccessGrantCreateTemporary
 
 	afterSnapshot, err := marshalAuditPayload(event.TemporaryGrantSnapshotAfter)
 	if err != nil {
@@ -72,7 +72,7 @@ func (l *Logger) LogAccessTemporaryGrantCreate(ctx context.Context, dbtx repo.DB
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: temporaryGrantAuditParams(action, event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.TemporaryGrantURN, event.TemporaryGrantSnapshotAfter, event.RecipientEmail, nil, afterSnapshot, metadata), OutboxEvent: events.AccessTemporaryGrantV1})
+	return l.log(ctx, dbtx, auditEntry{Params: temporaryGrantAuditParams(action, event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.AccessGrantURN, event.TemporaryGrantSnapshotAfter, event.RecipientEmail, nil, afterSnapshot, metadata), OutboxEvent: events.AccessGrantV1})
 }
 
 type LogAccessTemporaryGrantRenewEvent struct {
@@ -82,15 +82,15 @@ type LogAccessTemporaryGrantRenewEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	TemporaryGrantURN urn.TemporaryGrant
-	RecipientEmail    string
+	AccessGrantURN urn.AccessGrant
+	RecipientEmail string
 
 	TemporaryGrantSnapshotBefore *accessgen.TemporaryGrant
 	TemporaryGrantSnapshotAfter  *accessgen.TemporaryGrant
 }
 
 func (l *Logger) LogAccessTemporaryGrantRenew(ctx context.Context, dbtx repo.DBTX, event LogAccessTemporaryGrantRenewEvent) error {
-	action := ActionAccessTemporaryGrantRenew
+	action := ActionAccessGrantRenewTemporary
 
 	beforeSnapshot, err := marshalAuditPayload(event.TemporaryGrantSnapshotBefore)
 	if err != nil {
@@ -105,7 +105,7 @@ func (l *Logger) LogAccessTemporaryGrantRenew(ctx context.Context, dbtx repo.DBT
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: temporaryGrantAuditParams(action, event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.TemporaryGrantURN, event.TemporaryGrantSnapshotAfter, event.RecipientEmail, beforeSnapshot, afterSnapshot, metadata), OutboxEvent: events.AccessTemporaryGrantV1})
+	return l.log(ctx, dbtx, auditEntry{Params: temporaryGrantAuditParams(action, event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.AccessGrantURN, event.TemporaryGrantSnapshotAfter, event.RecipientEmail, beforeSnapshot, afterSnapshot, metadata), OutboxEvent: events.AccessGrantV1})
 }
 
 type LogAccessTemporaryGrantRevokeEvent struct {
@@ -115,15 +115,15 @@ type LogAccessTemporaryGrantRevokeEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	TemporaryGrantURN urn.TemporaryGrant
-	RecipientEmail    string
+	AccessGrantURN urn.AccessGrant
+	RecipientEmail string
 
 	TemporaryGrantSnapshotBefore *accessgen.TemporaryGrant
 	TemporaryGrantSnapshotAfter  *accessgen.TemporaryGrant
 }
 
 func (l *Logger) LogAccessTemporaryGrantRevoke(ctx context.Context, dbtx repo.DBTX, event LogAccessTemporaryGrantRevokeEvent) error {
-	action := ActionAccessTemporaryGrantRevoke
+	action := ActionAccessGrantRevokeTemporary
 
 	beforeSnapshot, err := marshalAuditPayload(event.TemporaryGrantSnapshotBefore)
 	if err != nil {
@@ -138,7 +138,7 @@ func (l *Logger) LogAccessTemporaryGrantRevoke(ctx context.Context, dbtx repo.DB
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: temporaryGrantAuditParams(action, event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.TemporaryGrantURN, event.TemporaryGrantSnapshotAfter, event.RecipientEmail, beforeSnapshot, afterSnapshot, metadata), OutboxEvent: events.AccessTemporaryGrantV1})
+	return l.log(ctx, dbtx, auditEntry{Params: temporaryGrantAuditParams(action, event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.AccessGrantURN, event.TemporaryGrantSnapshotAfter, event.RecipientEmail, beforeSnapshot, afterSnapshot, metadata), OutboxEvent: events.AccessGrantV1})
 }
 
 func temporaryGrantAuditParams(
@@ -147,7 +147,7 @@ func temporaryGrantAuditParams(
 	actor urn.Principal,
 	actorDisplayName *string,
 	actorSlug *string,
-	grantURN urn.TemporaryGrant,
+	grantURN urn.AccessGrant,
 	grant *accessgen.TemporaryGrant,
 	recipientEmail string,
 	beforeSnapshot []byte,
@@ -177,7 +177,7 @@ func temporaryGrantAuditParams(
 		Action: string(action),
 
 		SubjectID:          grantURN.ID.String(),
-		SubjectType:        string(subjectTypeAccessTemporaryGrant),
+		SubjectType:        string(subjectTypeAccessGrant),
 		SubjectDisplayName: conv.ToPGTextEmpty(displayName),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
 

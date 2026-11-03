@@ -237,24 +237,24 @@ func TestTemporaryGrant_RenewAndRevoke(t *testing.T) {
 	grant := createTemporaryGrant(t, ctx, ti, temporaryGrantRecipientID, authz.ScopeLogRead, nil)
 	require.Equal(t, []string{rolePrincipal.String()}, grant.OtherAccess, "the role still gives log access once the grant ends")
 
-	renewBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessTemporaryGrantRenew)
+	renewBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessGrantRenewTemporary)
 	require.NoError(t, err)
 	later := time.Now().Add(3 * time.Hour).UTC().Format(time.RFC3339)
 	renewed, err := ti.service.RenewTemporaryGrant(ctx, &gen.RenewTemporaryGrantPayload{SessionToken: nil, ID: grant.ID, ExpiresAt: later})
 	require.NoError(t, err)
 	require.Equal(t, later, renewed.ExpiresAt)
 	require.Greater(t, renewed.RemainingSeconds, int64(2*time.Hour/time.Second))
-	renewAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessTemporaryGrantRenew)
+	renewAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessGrantRenewTemporary)
 	require.NoError(t, err)
 	require.Equal(t, renewBefore+1, renewAfter)
 
-	revokeBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessTemporaryGrantRevoke)
+	revokeBefore, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessGrantRevokeTemporary)
 	require.NoError(t, err)
 	revoked, err := ti.service.RevokeTemporaryGrant(ctx, &gen.RevokeTemporaryGrantPayload{SessionToken: nil, ID: grant.ID})
 	require.NoError(t, err)
 	require.Equal(t, "revoked", revoked.Status)
 	require.Zero(t, revoked.RemainingSeconds)
-	revokeAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessTemporaryGrantRevoke)
+	revokeAfter, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionAccessGrantRevokeTemporary)
 	require.NoError(t, err)
 	require.Equal(t, revokeBefore+1, revokeAfter)
 
@@ -293,9 +293,9 @@ func TestTemporaryGrant_SelfGrantIsAllowedAndAudited(t *testing.T) {
 
 	grant := createTemporaryGrant(t, ctx, ti, authCtx.UserID, authz.ScopeChatRead, new("Verify onboarding traffic"))
 
-	record, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionAccessTemporaryGrantCreate, grant.ID)
+	record, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionAccessGrantCreateTemporary, grant.ID)
 	require.NoError(t, err)
-	require.Equal(t, "access_temporary_grant", record.SubjectType)
+	require.Equal(t, "access_grant", record.SubjectType)
 	require.Equal(t, authCtx.UserID, record.ActorID)
 	metadata, err := audittest.DecodeAuditData(record.Metadata)
 	require.NoError(t, err)
@@ -314,7 +314,7 @@ func TestTemporaryGrant_OtherMemberGrantIsNotSelfGranted(t *testing.T) {
 	seedTemporaryGrantRecipient(t, ctx, ti.conn, authCtx.ActiveOrganizationID)
 
 	grant := createTemporaryGrant(t, ctx, ti, temporaryGrantRecipientID, authz.ScopeChatRead, nil)
-	record, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionAccessTemporaryGrantCreate, grant.ID)
+	record, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionAccessGrantCreateTemporary, grant.ID)
 	require.NoError(t, err)
 	metadata, err := audittest.DecodeAuditData(record.Metadata)
 	require.NoError(t, err)
@@ -538,7 +538,7 @@ func TestTemporaryGrant_RolePrincipal(t *testing.T) {
 	require.NoError(t, err)
 	require.Empty(t, byMember.Grants, "listing by member shows only grants given to the member directly")
 
-	record, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionAccessTemporaryGrantCreate, grant.ID)
+	record, err := audittest.LatestAuditLogByActionAndSubject(ctx, ti.conn, audit.ActionAccessGrantCreateTemporary, grant.ID)
 	require.NoError(t, err)
 	metadata, err := audittest.DecodeAuditData(record.Metadata)
 	require.NoError(t, err)

@@ -9,23 +9,23 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-func TestTemporaryGrantRoundTrip(t *testing.T) {
+func TestAccessGrantRoundTrip(t *testing.T) {
 	t.Parallel()
 
 	id := uuid.MustParse("33333333-3333-3333-3333-333333333333")
-	original := urn.NewTemporaryGrant(id)
+	original := urn.NewAccessGrant(id)
 
-	require.Equal(t, "temporary_grant:33333333-3333-3333-3333-333333333333", original.String())
+	require.Equal(t, "access_grant:33333333-3333-3333-3333-333333333333", original.String())
 
-	parsed, err := urn.ParseTemporaryGrant(original.String())
+	parsed, err := urn.ParseAccessGrant(original.String())
 	require.NoError(t, err)
 	require.Equal(t, original.ID, parsed.ID)
 
 	data, err := json.Marshal(original)
 	require.NoError(t, err)
-	require.Equal(t, `"temporary_grant:33333333-3333-3333-3333-333333333333"`, string(data))
+	require.Equal(t, `"access_grant:33333333-3333-3333-3333-333333333333"`, string(data))
 
-	var fromJSON urn.TemporaryGrant
+	var fromJSON urn.AccessGrant
 	err = json.Unmarshal(data, &fromJSON)
 	require.NoError(t, err)
 	require.Equal(t, original.ID, fromJSON.ID)
@@ -33,7 +33,7 @@ func TestTemporaryGrantRoundTrip(t *testing.T) {
 	text, err := original.MarshalText()
 	require.NoError(t, err)
 
-	var fromText urn.TemporaryGrant
+	var fromText urn.AccessGrant
 	err = fromText.UnmarshalText(text)
 	require.NoError(t, err)
 	require.Equal(t, original.ID, fromText.ID)
@@ -41,27 +41,27 @@ func TestTemporaryGrantRoundTrip(t *testing.T) {
 	value, err := original.Value()
 	require.NoError(t, err)
 
-	var fromDB urn.TemporaryGrant
+	var fromDB urn.AccessGrant
 	err = fromDB.Scan(value)
 	require.NoError(t, err)
 	require.Equal(t, original.ID, fromDB.ID)
 }
 
-func TestTemporaryGrantRejectsInvalidValues(t *testing.T) {
+func TestAccessGrantRejectsInvalidValues(t *testing.T) {
 	t.Parallel()
 
-	_, err := urn.ParseTemporaryGrant("")
+	_, err := urn.ParseAccessGrant("")
 	require.ErrorIs(t, err, urn.ErrInvalid)
 
-	_, err = urn.ParseTemporaryGrant("toolset:33333333-3333-3333-3333-333333333333")
+	_, err = urn.ParseAccessGrant("toolset:33333333-3333-3333-3333-333333333333")
 	require.ErrorIs(t, err, urn.ErrInvalid)
 
-	_, err = urn.ParseTemporaryGrant("temporary_grant:not-a-uuid")
+	_, err = urn.ParseAccessGrant("access_grant:not-a-uuid")
 	require.ErrorIs(t, err, urn.ErrInvalid)
 
-	_, err = urn.ParseTemporaryGrant("temporary_grant:" + uuid.Nil.String())
+	_, err = urn.ParseAccessGrant("access_grant:" + uuid.Nil.String())
 	require.ErrorIs(t, err, urn.ErrInvalid)
 
-	_, err = urn.NewTemporaryGrant(uuid.Nil).MarshalJSON()
+	_, err = urn.NewAccessGrant(uuid.Nil).MarshalJSON()
 	require.ErrorIs(t, err, urn.ErrInvalid)
 }
