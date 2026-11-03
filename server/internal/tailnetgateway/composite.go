@@ -29,6 +29,11 @@ type OperatorProvisioner interface {
 type CompositeProvisioner struct {
 	operator OperatorProvisioner
 	gateway  *Provisioner
+
+	// gatewayDeployed reports whether gateway pods run in this environment.
+	// Without them, gateway ingresses wait as provider-unavailable rather
+	// than being picked up by the operator.
+	gatewayDeployed bool
 }
 
 var (
@@ -37,12 +42,13 @@ var (
 )
 
 // NewCompositeProvisioner builds the cutover provider. operator may be nil
-// once the operator is decommissioned.
-func NewCompositeProvisioner(operator OperatorProvisioner, gateway *Provisioner) (*CompositeProvisioner, error) {
+// once the operator is decommissioned. gatewayDeployed is false until the
+// gateway pods run in this environment.
+func NewCompositeProvisioner(operator OperatorProvisioner, gateway *Provisioner, gatewayDeployed bool) (*CompositeProvisioner, error) {
 	if gateway == nil {
 		return nil, errors.New("composite network ingress provisioner requires the gateway provider")
 	}
-	return &CompositeProvisioner{operator: operator, gateway: gateway}, nil
+	return &CompositeProvisioner{operator: operator, gateway: gateway, gatewayDeployed: gatewayDeployed}, nil
 }
 
 //nolint:exhaustruct // observations populate only the state they know.
@@ -60,6 +66,10 @@ func (c *CompositeProvisioner) Apply(ctx context.Context, desired k8s.NetworkIng
 			return observation, fmt.Errorf("apply operator resources: %w", err)
 		}
 		return observation, nil
+	}
+
+	if !c.gatewayDeployed {
+		return k8s.NetworkIngressObservation{Status: k8s.NetworkIngressStatusPending}, fmt.Errorf("%w: the tailnet gateway is not deployed in this environment", k8s.ErrNetworkIngressProviderUnavailable)
 	}
 
 	// Never dismantle the operator backend for a desired state the gateway

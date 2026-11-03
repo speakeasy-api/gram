@@ -33,6 +33,10 @@ const (
 
 var (
 	ErrNetworkIngressUnsupportedProvider = errors.New("unsupported network ingress provider")
+
+	// ErrNetworkIngressProviderUnavailable means the provider that hosts this
+	// ingress is known but not deployed or enabled in this environment yet.
+	ErrNetworkIngressProviderUnavailable = errors.New("network ingress provider unavailable")
 	ErrNetworkIngressInvalidDesiredState = errors.New("invalid network ingress desired state")
 	ErrNetworkIngressReplacementPending  = errors.New("network ingress immutable replacement pending")
 
