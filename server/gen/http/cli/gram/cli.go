@@ -165,7 +165,7 @@ func UsageCommands() []string {
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"registry-discovery (discover-servers|discover-versions|discover-version)",
-		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server)",
+		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server|get-mcp-server-usage-impact)",
 		"meta-mcp (create-meta-mcp-server|get-meta-mcp-server|list-meta-mcp-servers|update-meta-mcp-server|delete-meta-mcp-server|list-meta-mcp-members|add-meta-mcp-member|update-meta-mcp-member|remove-meta-mcp-member)",
 		"model-keys (list-keys|upsert-key|set-key-enabled|delete-key)",
 		"network-ingress (get-ingress|create-ingress|update-ingress|rotate-credentials|get-delete-impact|delete-ingress|check-health)",
@@ -2218,6 +2218,12 @@ func ParseEndpoint(
 		mcpServersDeleteMcpServerSessionTokenFlag     = mcpServersDeleteMcpServerFlags.String("session-token", "", "")
 		mcpServersDeleteMcpServerApikeyTokenFlag      = mcpServersDeleteMcpServerFlags.String("apikey-token", "", "")
 		mcpServersDeleteMcpServerProjectSlugInputFlag = mcpServersDeleteMcpServerFlags.String("project-slug-input", "", "")
+
+		mcpServersGetMcpServerUsageImpactFlags                = flag.NewFlagSet("get-mcp-server-usage-impact", flag.ExitOnError)
+		mcpServersGetMcpServerUsageImpactIDFlag               = mcpServersGetMcpServerUsageImpactFlags.String("id", "REQUIRED", "")
+		mcpServersGetMcpServerUsageImpactSessionTokenFlag     = mcpServersGetMcpServerUsageImpactFlags.String("session-token", "", "")
+		mcpServersGetMcpServerUsageImpactApikeyTokenFlag      = mcpServersGetMcpServerUsageImpactFlags.String("apikey-token", "", "")
+		mcpServersGetMcpServerUsageImpactProjectSlugInputFlag = mcpServersGetMcpServerUsageImpactFlags.String("project-slug-input", "", "")
 
 		metaMcpFlags = flag.NewFlagSet("meta-mcp", flag.ContinueOnError)
 
@@ -5943,6 +5949,7 @@ func ParseEndpoint(
 	mcpServersSetToolMetadataFlags.Usage = mcpServersSetToolMetadataUsage
 	mcpServersDeleteToolMetadataFlags.Usage = mcpServersDeleteToolMetadataUsage
 	mcpServersDeleteMcpServerFlags.Usage = mcpServersDeleteMcpServerUsage
+	mcpServersGetMcpServerUsageImpactFlags.Usage = mcpServersGetMcpServerUsageImpactUsage
 
 	metaMcpFlags.Usage = metaMcpUsage
 	metaMcpCreateMetaMcpServerFlags.Usage = metaMcpCreateMetaMcpServerUsage
@@ -8139,6 +8146,9 @@ func ParseEndpoint(
 
 			case "delete-mcp-server":
 				epf = mcpServersDeleteMcpServerFlags
+
+			case "get-mcp-server-usage-impact":
+				epf = mcpServersGetMcpServerUsageImpactFlags
 
 			}
 
@@ -11456,6 +11466,9 @@ func ParseEndpoint(
 			case "delete-mcp-server":
 				endpoint = c.DeleteMcpServer()
 				data, err = mcpserversc.BuildDeleteMcpServerPayload(*mcpServersDeleteMcpServerIDFlag, *mcpServersDeleteMcpServerSessionTokenFlag, *mcpServersDeleteMcpServerApikeyTokenFlag, *mcpServersDeleteMcpServerProjectSlugInputFlag)
+			case "get-mcp-server-usage-impact":
+				endpoint = c.GetMcpServerUsageImpact()
+				data, err = mcpserversc.BuildGetMcpServerUsageImpactPayload(*mcpServersGetMcpServerUsageImpactIDFlag, *mcpServersGetMcpServerUsageImpactSessionTokenFlag, *mcpServersGetMcpServerUsageImpactApikeyTokenFlag, *mcpServersGetMcpServerUsageImpactProjectSlugInputFlag)
 			}
 		case "meta-mcp":
 			c := metamcpc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -22103,6 +22116,7 @@ func mcpServersUsage() {
 	fmt.Fprintln(os.Stderr, `    set-tool-metadata: Set the annotation hints of a single tool metadata entry (manual override). This is a full-record replace: omitted hints become unset on the stored record.`)
 	fmt.Fprintln(os.Stderr, `    delete-tool-metadata: Soft-delete a single tool metadata entry.`)
 	fmt.Fprintln(os.Stderr, `    delete-mcp-server: Delete an MCP server. A toolset's own hosted server (its id equals the toolset id) is disabled instead, as turning MCP off on the toolset does, and stays listed with visibility disabled. Other servers, including other toolset-backed ones, are deleted.`)
+	fmt.Fprintln(os.Stderr, `    get-mcp-server-usage-impact: Preview who a breaking change to an MCP server affects: the server's active signed-in connections and when each subject last used them. Authorizes the caller as updateMcpServer does. Only sessions issued by the server's user session issuer are counted, so servers without sign-in report sign_in_required=false and no subjects.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s mcp-servers COMMAND --help\n", os.Args[0])
@@ -22403,6 +22417,30 @@ func mcpServersDeleteMcpServerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers delete-mcp-server --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpServersGetMcpServerUsageImpactUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-servers get-mcp-server-usage-impact", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Preview who a breaking change to an MCP server affects: the server's active signed-in connections and when each subject last used them. Authorizes the caller as updateMcpServer does. Only sessions issued by the server's user session issuer are counted, so servers without sign-in report sign_in_required=false and no subjects.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers get-mcp-server-usage-impact --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // metaMcpUsage displays the usage of the meta-mcp command and its subcommands.

@@ -16,18 +16,19 @@ import (
 
 // Endpoints wraps the "mcpServers" service endpoints.
 type Endpoints struct {
-	CreateMcpServer      goa.Endpoint
-	GetMcpServer         goa.Endpoint
-	ListMcpServers       goa.Endpoint
-	ListMcpServersForOrg goa.Endpoint
-	UpdateMcpServer      goa.Endpoint
-	ListToolFilters      goa.Endpoint
-	SetToolMetadataBatch goa.Endpoint
-	AddToolMetadataBatch goa.Endpoint
-	ListToolMetadata     goa.Endpoint
-	SetToolMetadata      goa.Endpoint
-	DeleteToolMetadata   goa.Endpoint
-	DeleteMcpServer      goa.Endpoint
+	CreateMcpServer         goa.Endpoint
+	GetMcpServer            goa.Endpoint
+	ListMcpServers          goa.Endpoint
+	ListMcpServersForOrg    goa.Endpoint
+	UpdateMcpServer         goa.Endpoint
+	ListToolFilters         goa.Endpoint
+	SetToolMetadataBatch    goa.Endpoint
+	AddToolMetadataBatch    goa.Endpoint
+	ListToolMetadata        goa.Endpoint
+	SetToolMetadata         goa.Endpoint
+	DeleteToolMetadata      goa.Endpoint
+	DeleteMcpServer         goa.Endpoint
+	GetMcpServerUsageImpact goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "mcpServers" service with endpoints.
@@ -35,18 +36,19 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateMcpServer:      NewCreateMcpServerEndpoint(s, a.APIKeyAuth),
-		GetMcpServer:         NewGetMcpServerEndpoint(s, a.APIKeyAuth),
-		ListMcpServers:       NewListMcpServersEndpoint(s, a.APIKeyAuth),
-		ListMcpServersForOrg: NewListMcpServersForOrgEndpoint(s, a.APIKeyAuth),
-		UpdateMcpServer:      NewUpdateMcpServerEndpoint(s, a.APIKeyAuth),
-		ListToolFilters:      NewListToolFiltersEndpoint(s, a.APIKeyAuth),
-		SetToolMetadataBatch: NewSetToolMetadataBatchEndpoint(s, a.APIKeyAuth),
-		AddToolMetadataBatch: NewAddToolMetadataBatchEndpoint(s, a.APIKeyAuth),
-		ListToolMetadata:     NewListToolMetadataEndpoint(s, a.APIKeyAuth),
-		SetToolMetadata:      NewSetToolMetadataEndpoint(s, a.APIKeyAuth),
-		DeleteToolMetadata:   NewDeleteToolMetadataEndpoint(s, a.APIKeyAuth),
-		DeleteMcpServer:      NewDeleteMcpServerEndpoint(s, a.APIKeyAuth),
+		CreateMcpServer:         NewCreateMcpServerEndpoint(s, a.APIKeyAuth),
+		GetMcpServer:            NewGetMcpServerEndpoint(s, a.APIKeyAuth),
+		ListMcpServers:          NewListMcpServersEndpoint(s, a.APIKeyAuth),
+		ListMcpServersForOrg:    NewListMcpServersForOrgEndpoint(s, a.APIKeyAuth),
+		UpdateMcpServer:         NewUpdateMcpServerEndpoint(s, a.APIKeyAuth),
+		ListToolFilters:         NewListToolFiltersEndpoint(s, a.APIKeyAuth),
+		SetToolMetadataBatch:    NewSetToolMetadataBatchEndpoint(s, a.APIKeyAuth),
+		AddToolMetadataBatch:    NewAddToolMetadataBatchEndpoint(s, a.APIKeyAuth),
+		ListToolMetadata:        NewListToolMetadataEndpoint(s, a.APIKeyAuth),
+		SetToolMetadata:         NewSetToolMetadataEndpoint(s, a.APIKeyAuth),
+		DeleteToolMetadata:      NewDeleteToolMetadataEndpoint(s, a.APIKeyAuth),
+		DeleteMcpServer:         NewDeleteMcpServerEndpoint(s, a.APIKeyAuth),
+		GetMcpServerUsageImpact: NewGetMcpServerUsageImpactEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -64,6 +66,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.SetToolMetadata = m(e.SetToolMetadata)
 	e.DeleteToolMetadata = m(e.DeleteToolMetadata)
 	e.DeleteMcpServer = m(e.DeleteMcpServer)
+	e.GetMcpServerUsageImpact = m(e.GetMcpServerUsageImpact)
 }
 
 // NewCreateMcpServerEndpoint returns an endpoint function that calls the
@@ -735,5 +738,64 @@ func NewDeleteMcpServerEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc)
 			return nil, err
 		}
 		return nil, s.DeleteMcpServer(ctx, p)
+	}
+}
+
+// NewGetMcpServerUsageImpactEndpoint returns an endpoint function that calls
+// the method "getMcpServerUsageImpact" of service "mcpServers".
+func NewGetMcpServerUsageImpactEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*GetMcpServerUsageImpactPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.GetMcpServerUsageImpact(ctx, p)
 	}
 }
