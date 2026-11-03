@@ -1,6 +1,15 @@
 import type { CommandAction } from "@/contexts/CommandPalette";
-import { childRoutes, type PagedRoute } from "@/route-pages";
+import type { PagedRoute } from "@/route-pages";
 import type { AppRoute } from "@/routes";
+
+// Same shape test as `childRoutes` in route-pages. Inlined so this module does
+// not import the page map: `@/routes` is pulled in by shared components, and
+// only the app shell may load `route-pages.tsx`.
+const childRoutes = (route: PagedRoute): PagedRoute[] =>
+  Object.values(route).filter(
+    (value) =>
+      value && typeof value === "object" && "title" in value && "url" in value,
+  ) as unknown as PagedRoute[];
 
 // Convert a single route into a command-palette navigation action.
 export const routeToNavAction = (
