@@ -164,5 +164,6 @@ func SearchChatsArm(logger *slog.Logger, target Target) (Arm, error) {
 		},
 		Call:         call,
 		Instructions: fmt.Sprintf("The team's project_id is %s. search_chats needs from and to as RFC3339 timestamps at most 31 days apart, so search older history in more than one window.", projectID),
+		Sources:      nil,
 	}, nil
 }

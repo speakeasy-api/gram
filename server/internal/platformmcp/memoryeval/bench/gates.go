@@ -28,10 +28,10 @@ type Gate struct {
 	Detail string `json:"detail"`
 }
 
-// Hard sums the paraphrase and synthesis questions, which share no keywords
+// Hard sums the temporal and synthesis questions, which share no keywords
 // with their sources.
 func (s ArmScore) Hard() KindScore {
-	p, y := s.ByKind[memoryeval.QuestionParaphrase], s.ByKind[memoryeval.QuestionSynthesis]
+	p, y := s.ByKind[memoryeval.QuestionTemporal], s.ByKind[memoryeval.QuestionSynthesis]
 	return KindScore{Correct: p.Correct + y.Correct, Total: p.Total + y.Total}
 }
 

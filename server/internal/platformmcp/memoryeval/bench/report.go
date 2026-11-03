@@ -6,6 +6,8 @@ import (
 	"strings"
 	"time"
 
+	"github.com/google/uuid"
+
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval"
 )
 
@@ -56,10 +58,11 @@ type ArmScore struct {
 	ByKind map[memoryeval.QuestionKind]KindScore `json:"by_kind"`
 
 	// Answerable counts graded answers to questions that have an answer;
-	// CitedAnswers of those cite at least one source and ValidCited cite at
-	// least one chat and only chats that contain the answer. Memo and digest
-	// citations can't be checked against the corpus, so they neither make an
-	// answer valid nor invalid; MemoOrDigestCited counts answers that use them.
+	// CitedAnswers of those cite at least one source and ValidCited cite only
+	// sources that back the answer. A memo or digest citation backs it when
+	// one of the chats it was built from is a source containing the answer;
+	// when the arm can't resolve memos and digests, those citations are left
+	// unchecked. MemoOrDigestCited counts answers that cite memos or digests.
 	Answerable        int `json:"answerable"`
 	CitedAnswers      int `json:"cited_answers"`
 	ValidCited        int `json:"valid_cited"`
@@ -167,16 +170,18 @@ func summarize(corpus *memoryeval.Corpus, cfg Config, arms []Arm, answers []answ
 			s.Answerable++
 			if len(ans.citations) > 0 {
 				s.CitedAnswers++
-				chats, valid, other := 0, true, false
+				checked, valid, other := 0, true, false
 				for _, c := range ans.citations {
 					if c.kind != "chat" {
 						other = true
-						continue
 					}
-					chats++
-					valid = valid && corpus.ChatCitationValid(ans.question, c.id)
+					ok, isChecked := citationValid(corpus, ans.question, c)
+					if isChecked {
+						checked++
+						valid = valid && ok
+					}
 				}
-				if chats > 0 && valid {
+				if checked > 0 && valid {
 					s.ValidCited++
 				}
 				if other {
@@ -202,6 +207,21 @@ func summarize(corpus *memoryeval.Corpus, cfg Config, arms []Arm, answers []answ
 		s.LatencyMeanMS, s.LatencyP95MS = latencyStats(t.latencies)
 	}
 	return report
+}
+
+// citationValid reports whether one citation backs the answer, and whether
+// it could be checked at all. A chat citation is valid when the chat is one
+// of the question's sources and contains the answer. A memo or digest
+// citation is valid when one of the chats it was built from is; it can't be
+// checked when its arm offers no way to resolve it.
+func citationValid(corpus *memoryeval.Corpus, q memoryeval.Question, c citation) (valid, checked bool) {
+	if c.kind == "chat" {
+		return corpus.ChatCitationValid(q, c.id), true
+	}
+	if !c.resolved {
+		return false, false
+	}
+	return slices.ContainsFunc(c.chats, func(id uuid.UUID) bool { return corpus.ChatCitationValid(q, id) }), true
 }
 
 // latencyStats returns the mean and 95th percentile in milliseconds.
@@ -239,7 +259,7 @@ func (r *Report) Markdown() string {
 			fmt.Fprintf(&b, "%d memory-writing calls reported no cost, so those costs are a lower bound.\n\n", unpriced)
 		}
 	}
-	b.WriteString("| Model | Arm | Accuracy (mean, range) | Hard set | Point | Timeline | Reversal | Paraphrase | Synthesis | Negative | Isolation | Valid citations | Leaks | Isolation violations | Not found on negatives | Tool tokens/question | Misses (retrieval/reasoning/error) | Cost | Latency mean/p95 |\n")
+	b.WriteString("| Model | Arm | Accuracy (mean, range) | Hard set | Point | Timeline | Reversal | Temporal | Synthesis | Negative | Isolation | Valid citations | Leaks | Isolation violations | Not found on negatives | Tool tokens/question | Misses (retrieval/reasoning/error) | Cost | Latency mean/p95 |\n")
 	b.WriteString("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
 	for _, s := range r.Scores {
 		accuracy := "n/a"
@@ -260,12 +280,12 @@ func (r *Report) Markdown() string {
 		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %s | %d %v | %d %v | %d/%d | %d | %d/%d/%d | $%.2f | %.1fs/%.1fs |\n",
 			s.Model, s.Arm, accuracy, hard,
 			kind(memoryeval.QuestionPointLookup), kind(memoryeval.QuestionTimeline), kind(memoryeval.QuestionReversal),
-			kind(memoryeval.QuestionParaphrase), kind(memoryeval.QuestionSynthesis), kind(memoryeval.QuestionNegative), kind(memoryeval.QuestionIsolation),
+			kind(memoryeval.QuestionTemporal), kind(memoryeval.QuestionSynthesis), kind(memoryeval.QuestionNegative), kind(memoryeval.QuestionIsolation),
 			citations, len(s.Leaks), s.Leaks, len(s.IsolationViolations), s.IsolationViolations,
 			s.NotFound, s.Negatives, s.ToolTokensPerQuestion, s.RetrievalMisses, s.ReasoningMisses, s.Errors,
 			s.CostUSD, float64(s.LatencyMeanMS)/1000, float64(s.LatencyP95MS)/1000)
 	}
-	b.WriteString("\nCounts in the kind columns are summed across runs. Hard set is accuracy on the paraphrase and synthesis questions, which share no keywords with their sources. Valid citations is the share of answerable questions whose answer cites at least one chat and only chats that contain the answer; memo and digest citations are not checked against the corpus. Runs where nothing was graded are left out of accuracy. Cost is what the answering model reported; it is $0.00 when the provider reports none.\n")
+	b.WriteString("\nCounts in the kind columns are summed across runs. Hard set is accuracy on the temporal and synthesis questions, which share no keywords with their sources and each need three or more chats weeks apart. Valid citations is the share of answerable questions whose answer cites at least one checkable source and only sources that contain the answer; a memo or digest counts through the chats it was built from. Runs where nothing was graded are left out of accuracy. Cost is what the answering model reported; it is $0.00 when the provider reports none.\n")
 	b.WriteString(r.gatesMarkdown())
 	return b.String()
 }

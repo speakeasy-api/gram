@@ -39,3 +39,34 @@ FROM (
     AND octet_length(d.content) <= 65536
 ) items
 ORDER BY items.at, items.id;
+
+-- name: MemoSourceChats :many
+-- The chat a memo was saved from, for crediting memo citations. A memo saved
+-- outside any chat has none.
+SELECT m.chat_id::uuid AS chat_id
+FROM memory_memos m
+WHERE m.id = @memo_id AND m.organization_id = @organization_id AND m.chat_id IS NOT NULL;
+
+-- name: DigestSourceChats :many
+-- Every chat a digest was built from, for crediting digest citations: a day
+-- digest's chats and the chats of its memos, and for week and month digests
+-- the same for every digest below them.
+WITH RECURSIVE tree AS (
+  SELECT d.id, d.chat_ids, d.memo_ids, d.child_digest_ids
+  FROM memory_digests d
+  WHERE d.id = @digest_id AND d.organization_id = @organization_id
+  UNION
+  SELECT child.id, child.chat_ids, child.memo_ids, child.child_digest_ids
+  FROM memory_digests child
+  JOIN tree ON child.id = ANY(tree.child_digest_ids)
+  WHERE child.organization_id = @organization_id
+)
+SELECT DISTINCT sources.chat_id::uuid AS chat_id
+FROM (
+  SELECT unnest(tree.chat_ids) AS chat_id FROM tree
+  UNION ALL
+  SELECT m.chat_id
+  FROM memory_memos m
+  WHERE m.organization_id = @organization_id AND m.chat_id IS NOT NULL
+    AND m.id IN (SELECT unnest(tree.memo_ids) FROM tree)
+) sources;

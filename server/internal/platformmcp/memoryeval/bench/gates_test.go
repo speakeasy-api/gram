@@ -12,8 +12,8 @@ func gateScore(arm string, accuracy float64, hardCorrect int, tokens int) ArmSco
 	return ArmScore{
 		Model: "m", Arm: arm, HasTools: true, Accuracy: accuracy, AccuracyByRun: []float64{accuracy},
 		ByKind: map[memoryeval.QuestionKind]KindScore{
-			memoryeval.QuestionParaphrase: {Correct: hardCorrect, Total: 10},
-			memoryeval.QuestionSynthesis:  {Correct: 0, Total: 10},
+			memoryeval.QuestionTemporal:  {Correct: hardCorrect, Total: 10},
+			memoryeval.QuestionSynthesis: {Correct: 0, Total: 10},
 		},
 		Answerable: 20, ValidCited: 19, NotFound: 5, Negatives: 5, ToolTokensPerQuestion: tokens,
 	}

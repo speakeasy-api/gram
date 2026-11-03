@@ -185,5 +185,6 @@ func SearchTeamMemoryArm(logger *slog.Logger, target Target) (Arm, error) {
 		},
 		Call:         call,
 		Instructions: searcher.instructions(),
+		Sources:      MemorySources(target),
 	}, nil
 }

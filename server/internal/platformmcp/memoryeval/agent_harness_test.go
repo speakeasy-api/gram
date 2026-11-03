@@ -126,7 +126,7 @@ func TestJudgedEvalHarnessScoresScriptedAnswers(t *testing.T) {
 	require.NoError(t, err)
 	markdown := report.Markdown()
 	t.Log("\n" + markdown)
-	require.Contains(t, markdown, "| google/gemini-3.1-flash-lite | B: search_chats | 2% (2–2%)")
+	require.Contains(t, markdown, "| google/gemini-3.1-flash-lite | B: search_chats | 4% (4–4%)")
 	require.Len(t, report.Scores, 4)
 
 	for _, model := range cfg.AnswerModels {
@@ -140,10 +140,10 @@ func TestJudgedEvalHarnessScoresScriptedAnswers(t *testing.T) {
 			}
 		}
 		require.InDelta(t, 10.0/55, none.AccuracyByRun[0], 1e-9, "no memory answers Not found, which is right for the 10 negative and isolation questions")
-		require.InDelta(t, 1.0/55, search.AccuracyByRun[0], 1e-9, "the scripted search arm only answers the pooler question")
+		require.InDelta(t, 2.0/55, search.AccuracyByRun[0], 1e-9, "the scripted search arm only answers the two pooler questions")
 		require.Equal(t, 45, search.Answerable)
 		require.Equal(t, 45, search.CitedAnswers)
-		require.Equal(t, 1, search.ValidCited, "the reversal chat supports only the pooler question")
+		require.Equal(t, 3, search.ValidCited, "the reversal chat backs the two pooler questions and the list of reversals")
 		require.Empty(t, search.Leaks)
 		require.Empty(t, search.IsolationViolations)
 		require.Positive(t, search.ToolTokensPerQuestion)
