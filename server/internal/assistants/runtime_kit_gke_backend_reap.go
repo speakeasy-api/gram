@@ -181,13 +181,13 @@ func (k *KitGKERuntimeBackend) deleteOwned(ctx context.Context, gvr schema.Group
 		if obj.GetUID() != uid {
 			return fmt.Errorf("kit GKE resource replaced while waiting for deletion")
 		}
-		if err := keepKitLifecycleAlive(ctx); err != nil {
-			return err
-		}
 		select {
 		case <-ctx.Done():
 			return fmt.Errorf("wait Kit GKE deletion: %w", ctx.Err())
 		case <-time.After(gkeRuntimePollInterval):
+			if err := keepKitLifecycleAlive(ctx); err != nil {
+				return err
+			}
 		}
 	}
 }

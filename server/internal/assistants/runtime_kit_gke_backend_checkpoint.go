@@ -463,7 +463,14 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 		// No lifecycle step resumes these phases: an interrupted restore or close
 		// cannot be adopted safely. The conversation is dropped and a fresh
 		// runtime replaces this one.
-		return empty, fmt.Errorf("%w: Kit GKE phase %s cannot be restored", errKitRuntimeUnrecoverable, state.Phase)
+		unrecoverable := fmt.Errorf("%w: Kit GKE phase %s cannot be restored", errKitRuntimeUnrecoverable, state.Phase)
+		// Revoke the abandoned process's credentials before the row is retired.
+		fenceCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 10*time.Second)
+		defer cancel()
+		if err := k.config.Fence(fenceCtx, r); err != nil {
+			return empty, errors.Join(unrecoverable, fmt.Errorf("fence unrecoverable Kit runtime: %w", err))
+		}
+		return empty, unrecoverable
 	default:
 		return empty, fmt.Errorf("kit GKE phase %s is not safely restorable; finish checkpoint or reconcile fenced attempt", state.Phase)
 	}
@@ -751,9 +758,6 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 		if statusErr == nil && status.Configured {
 			break
 		}
-		if err := keepKitLifecycleAlive(readyCtx); err != nil {
-			return empty, err
-		}
 		select {
 		case <-readyCtx.Done():
 			if statusErr != nil {
@@ -761,6 +765,9 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 			}
 			return empty, fmt.Errorf("fresh restored gateway is not configured: %w", readyCtx.Err())
 		case <-time.After(gkeRuntimePollInterval):
+			if err := keepKitLifecycleAlive(readyCtx); err != nil {
+				return empty, err
+			}
 		}
 	}
 	// Only authenticated startup proves the marker gate ran. Until this point

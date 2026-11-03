@@ -279,7 +279,7 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 			}
 		}
 	}
-	slugs, err := s.assistantPlatformSlugs(ctx, assistant)
+	slugs, err := s.assistantPlatformSlugs(ctx, assistant, true)
 	if err != nil {
 		return zero, err
 	}

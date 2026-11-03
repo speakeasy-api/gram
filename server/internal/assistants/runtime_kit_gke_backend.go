@@ -451,7 +451,11 @@ func keepKitLifecycleAlive(ctx context.Context) error {
 	if !ok || tx == nil {
 		return nil
 	}
-	if _, err := tx.Exec(ctx, "SELECT 1"); err != nil {
+	// The wait's own deadline must surface as that wait's error, not as a
+	// failed keep-alive.
+	pingCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), 5*time.Second)
+	defer cancel()
+	if _, err := tx.Exec(pingCtx, "SELECT 1"); err != nil {
 		return fmt.Errorf("keep Kit lifecycle transaction alive: %w", err)
 	}
 	return nil
@@ -512,13 +516,13 @@ func (k *KitGKERuntimeBackend) finishColdProvision(ctx context.Context, r assist
 		if _, err = k.protocol(readyCtx, r); err == nil {
 			break
 		}
-		if err := keepKitLifecycleAlive(readyCtx); err != nil {
-			return RuntimeBackendEnsureResult{ColdStart: false, BackendMetadataJSON: raw}, err
-		}
 		select {
 		case <-readyCtx.Done():
 			return RuntimeBackendEnsureResult{ColdStart: false, BackendMetadataJSON: raw}, fmt.Errorf("wait for authenticated Kit gateway: %w", err)
 		case <-time.After(gkeRuntimePollInterval):
+			if err := keepKitLifecycleAlive(readyCtx); err != nil {
+				return RuntimeBackendEnsureResult{ColdStart: false, BackendMetadataJSON: raw}, err
+			}
 		}
 	}
 	return RuntimeBackendEnsureResult{ColdStart: true, BackendMetadataJSON: raw}, nil
@@ -567,13 +571,13 @@ func (k *KitGKERuntimeBackend) waitPod(ctx context.Context, r assistantRuntimeRe
 				return nil, kitGKEAdmissionTerminalError{fmt.Errorf("kit GKE process exited; cold replacement requires explicit fenced reset")}
 			}
 		}
-		if err := keepKitLifecycleAlive(ctx); err != nil {
-			return nil, err
-		}
 		select {
 		case <-ctx.Done():
 			return nil, fmt.Errorf("wait Kit GKE pod: %w", ctx.Err())
 		case <-time.After(gkeRuntimePollInterval):
+			if err := keepKitLifecycleAlive(ctx); err != nil {
+				return nil, err
+			}
 		}
 	}
 }
