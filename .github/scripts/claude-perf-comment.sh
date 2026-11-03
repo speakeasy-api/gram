@@ -76,10 +76,10 @@ patterns=(
   '[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}'                        # emails
   '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' # UUIDs
 )
-redact=$(IFS='|' && echo "${patterns[*]}")
-# The report's values as well as the comment: escaping splits an email address.
-values=$(jq -r '.. | scalars' <<<"$REPORT")
-if grep -Eiq -e "$redact" <<<"$values"$'\n'"$body"; then
+# Every value of the report as it reads in the comment, on one line and before
+# escaping, which would split an email address or a token; then the comment.
+values=$(jq -r '.. | scalars | tostring | gsub("[[:space:][:cntrl:]]+"; " ")' <<<"$REPORT")
+if grep -Eiq -f <(printf '%s\n' "${patterns[@]}") <<<"$values"$'\n'"$body"; then
   notice "The perf review matched the redaction check."
 fi
 
