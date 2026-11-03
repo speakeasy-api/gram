@@ -298,7 +298,7 @@ func NewActivities(
 	chatAnalysisJudges, err := analysis.NewJudges(
 		analysis.NewWorkUnitsJudge(logger, tracerProvider, chatClient, judgeRateLimiter),
 		businessmemory.NewJudge(logger, tracerProvider, db, chatClient, judgeRateLimiter),
-		summaryjudge.NewJudge(logger, db, features, chatClient, judgeRateLimiter),
+		summaryjudge.NewJudge(logger, db, chatClient, judgeRateLimiter),
 	)
 	if err != nil {
 		panic(fmt.Errorf("new chat analysis judges: %w", err))
