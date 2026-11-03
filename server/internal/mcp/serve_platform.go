@@ -49,8 +49,8 @@ const PlatformToolsetRoute = "/platform/mcp/{toolsetSlug}"
 const platformToolsetMaxBodyBytes = 1 << 20
 
 // ServePlatformToolset is the runtime-only entrypoint for platform toolsets:
-// accepts runtime-bound assistant credentials and principal-mode
-// agent API keys. User OAuth, ordinary user API keys, and chat sessions are not accepted.
+// accepts runtime-bound assistant credentials, resource-bound workloads, and
+// principal-mode agent API keys. User OAuth, ordinary user API keys, and chat sessions are not accepted.
 func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
@@ -83,6 +83,7 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 	}
 
 	var authedCtx context.Context
+	workloadPlatform := false
 	if principalcredential.IsToken(token) {
 		// Turn credentials must retain their live assistant/thread binding.
 		// Generic principal authentication would discard that runtime fence.
@@ -97,13 +98,16 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 			return nil
 		})
 	} else {
-		authedCtx, _, err = s.assistantTokens.AuthorizeRuntime(ctx, token)
+		authedCtx, workloadPlatform, err = s.authorizeWorkloadPlatform(ctx, token, platformtools.PlatformToolsetURL(s.serverURL, slug))
+		if !workloadPlatform {
+			authedCtx, _, err = s.assistantTokens.AuthorizeRuntime(ctx, token)
+		}
 	}
 	if err != nil {
 		return fmt.Errorf("authorize platform agent: %w", err)
 	}
 	ctx = authedCtx
-	if project := r.Header.Get("Gram-Project"); project != "" {
+	if project := r.Header.Get("Gram-Project"); project != "" && !workloadPlatform {
 		ctx, err = s.auth.Authorize(ctx, project, &security.APIKeyScheme{Name: constants.ProjectSlugSecuritySchema, Scopes: nil, RequiredScopes: nil})
 		if err != nil {
 			return err
@@ -172,7 +176,7 @@ func (s *Service) authorizePlatformToolset(ctx context.Context, slug string, aut
 
 	actor, agent := contextvalues.AuthenticatedActor(ctx)
 	principal, runtimeBound := contextvalues.GetAssistantPrincipal(ctx)
-	if runtimeBound || !agent || actor.Type != urn.PrincipalTypeAgent {
+	if runtimeBound || !agent || (actor.Type != urn.PrincipalTypeAgent && actor.Type != urn.PrincipalTypeWorkload) {
 		if !runtimeBound {
 			return oops.E(oops.CodeNotFound, nil, "platform toolset not found")
 		}
@@ -366,7 +370,7 @@ func (s *Service) listPlatformToolsetTools(
 		if extra.RequiredScope != "" && !grantedScopes[extra.RequiredScope] {
 			continue
 		}
-		entry := toolToListEntry(extra.Executor.Descriptor().ToTool(*authCtx.ProjectID))
+		entry := toolToListEntry(platformtools.DescriptorForContext(ctx, extra.Executor.Descriptor()).ToTool(*authCtx.ProjectID))
 		if entry != nil {
 			tools = append(tools, entry)
 		}
@@ -423,7 +427,7 @@ func (s *Service) callPlatformToolsetTool(
 		return nil, oops.E(oops.CodeNotFound, nil, "tool not found").LogWarn(ctx, s.logger)
 	}
 
-	desc := matched.Executor.Descriptor()
+	desc := platformtools.DescriptorForContext(ctx, matched.Executor.Descriptor())
 	descriptor := &gateway.ToolDescriptor{
 		ID:               desc.SyntheticID(),
 		Name:             desc.Name,
@@ -443,7 +447,7 @@ func (s *Service) callPlatformToolsetTool(
 		InputSchema: desc.InputSchema,
 		// The toolset slice is authoritative; the runtime's URN registry can
 		// hold a differently scoped variant of the same tool.
-		Executor: matched.Executor,
+		Executor: platformtools.WithThreadFallback(matched.Executor, s.resolvePlatformThreadContext),
 	})
 
 	ctx, logger := o11y.EnrichToolCallContext(ctx, s.logger, descriptor.OrganizationSlug, descriptor.ProjectSlug)

@@ -169,7 +169,7 @@ func (s *Service) HandleDeviceAgentToken(w http.ResponseWriter, r *http.Request)
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, workloadGrantStageUnavailable("agent_admission_unavailable", err))
 	}
 	authorizationCtx := contextvalues.WithAuthenticatedActor(ctx, authCtx, principal)
-	_, err = s.admitWorkloadSession(authorizationCtx, organizationID, subject, workloadSessionCredential{DelegatedGrants: ceiling, DelegatedGrantsVersion: version})
+	_, err = s.admitWorkloadSession(authorizationCtx, organizationID, subject, workloadSessionCredential{DerivesPolicyAtAdmission: false, DelegatedGrants: ceiling, DelegatedGrantsVersion: version})
 	switch {
 	case errors.Is(err, errCredentialRejected), err != nil && isCredentialDenial(err):
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("agent_admission_denied", err))
@@ -185,7 +185,7 @@ func (s *Service) HandleDeviceAgentToken(w http.ResponseWriter, r *http.Request)
 	if err := lockWorkloadAssertionPolicy(ctx, tx, organizationID, nil, presented); err != nil {
 		return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, err)
 	}
-	if _, err := s.admitWorkloadGrantInTx(authorizationCtx, tx, organizationID, subject, workloadSessionCredential{DelegatedGrants: ceiling, DelegatedGrantsVersion: version}); err != nil {
+	if _, err := s.admitWorkloadGrantInTx(authorizationCtx, tx, organizationID, subject, workloadSessionCredential{DerivesPolicyAtAdmission: false, DelegatedGrants: ceiling, DelegatedGrantsVersion: version}); err != nil {
 		if isCredentialDenial(err) {
 			return s.writeWorkloadGrantRefusal(ctx, w, logger, presented, refuseWorkloadGrant("agent_admission_denied", err))
 		}

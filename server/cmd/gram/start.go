@@ -1153,6 +1153,7 @@ func newStartCommand() *cli.Command {
 				telemSvc,
 				auditLogger,
 				platformtoolsruntime.WithTriggerTools(triggerApp),
+				platformtoolsruntime.WithThreadContextAuthorizer(authzEngine),
 				platformtoolsruntime.WithSlackHTTPClient(guardianPolicy.PooledClient()),
 				platformtoolsruntime.WithFileURLMinting(encryptionClient, serverURL),
 				platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),

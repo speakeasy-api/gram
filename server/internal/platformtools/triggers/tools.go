@@ -308,16 +308,21 @@ func dedupeStrings(values []string) []string {
 }
 
 func (t *ListTriggers) Descriptor() core.ToolDescriptor {
+	var threadContext core.ThreadContextPolicy
+	if t.assistantSelfScoped {
+		threadContext = core.ThreadContextRequired
+	}
 	readOnly := true
 	destructive := false
 	idempotent := true
 	openWorld := false
 
 	return core.ToolDescriptor{
-		SourceSlug:  sourceTriggers,
-		HandlerName: "list_triggers",
-		Name:        toolNameListTriggers,
-		Description: "List trigger instances configured for the current project.",
+		SourceSlug:    sourceTriggers,
+		ThreadContext: threadContext,
+		HandlerName:   "list_triggers",
+		Name:          toolNameListTriggers,
+		Description:   "List trigger instances configured for the current project.",
 		InputSchema: core.BuildInputSchema[listTriggersInput](
 			core.WithPropertyEnum("definition_slug", stringSliceToAny(listDefinitionSlugs())...),
 		),
@@ -403,22 +408,27 @@ func (t *ListTriggers) Call(ctx context.Context, _ toolconfig.ToolCallEnv, paylo
 }
 
 func (t *ConfigureTrigger) Descriptor() core.ToolDescriptor {
+	threadContext := core.ThreadContextWake
+	if t.assistantSelfScoped {
+		threadContext = core.ThreadContextRequired
+	}
 	readOnly := false
 	destructive := false
 	idempotent := false
 	openWorld := false
 
 	return core.ToolDescriptor{
-		SourceSlug:  sourceTriggers,
-		HandlerName: "configure_trigger",
-		Name:        toolNameConfigure,
-		Description: "Create or update a trigger instance using a definition-specific config schema selected by definition_slug.",
-		InputSchema: t.inputSchema,
-		Annotations: triggerToolAnnotations(readOnly, destructive, idempotent, openWorld),
-		Managed:     true,
-		Variables:   nil,
-		OwnerKind:   nil,
-		OwnerID:     nil,
+		SourceSlug:    sourceTriggers,
+		ThreadContext: threadContext,
+		HandlerName:   "configure_trigger",
+		Name:          toolNameConfigure,
+		Description:   "Create or update a trigger instance using a definition-specific config schema selected by definition_slug.",
+		InputSchema:   t.inputSchema,
+		Annotations:   triggerToolAnnotations(readOnly, destructive, idempotent, openWorld),
+		Managed:       true,
+		Variables:     nil,
+		OwnerKind:     nil,
+		OwnerID:       nil,
 	}
 }
 

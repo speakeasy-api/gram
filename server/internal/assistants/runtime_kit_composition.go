@@ -19,6 +19,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/chat"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/platformtools"
 )
 
 // KitLocalCompositionConfig composes runtime-owned workload authentication.
@@ -276,12 +277,14 @@ func (s *ServiceCore) kitCompositionBootstrap(ctx context.Context, r assistantRu
 			}
 		}
 	}
-	// Built-in endpoints require a dedicated runtime/thread-bound workload
-	// token interface. A runtime-wide projected assertion has no exact session
-	// attribution, so never emit built-in connections with this credential.
-	// Keep their logical desired-set entries in the hash, matching turn-time
-	// resolution, without claiming they are available in Kit's MCP config.
-	slugs, _ := s.assistantPlatformSlugs(ctx, assistant)
+	slugs, err := s.assistantPlatformSlugs(ctx, assistant)
+	if err != nil {
+		return zero, err
+	}
+	// Built-ins exchange the workload assertion for their own resource, never
+	// reuse an inference token. Tools request a thread target when no automatic
+	// thread context is attached; target selection does not change authorization.
+	c.mcpConnections = append(c.mcpConnections, kitBuiltinMCPConnections(s.serverURL, r.ProjectID, slugs)...)
 	if r.LifecycleTx == nil {
 		return zero, errors.New("kit bootstrap requires the runtime admission lock")
 	}
@@ -343,6 +346,16 @@ type kitMCPConnection struct {
 	Name        string
 	Resource    *url.URL
 	Environment string
+	ProjectID   uuid.UUID `exhaustruct:"optional"`
+}
+
+func kitBuiltinMCPConnections(base *url.URL, projectID uuid.UUID, slugs []string) []kitMCPConnection {
+	connections := make([]kitMCPConnection, 0, len(slugs))
+	for _, slug := range slugs {
+		resource, _ := url.Parse(platformtools.PlatformToolsetURL(base, slug))
+		connections = append(connections, kitMCPConnection{Name: "builtin-" + slug, Resource: resource, ProjectID: projectID, Environment: ""})
+	}
+	return connections
 }
 
 func kitCompositionMCP(c KitLocalCompositionConfig, binding *KitWorkloadBinding) ([]byte, error) {
@@ -369,12 +382,15 @@ func kitCompositionMCP(c KitLocalCompositionConfig, binding *KitWorkloadBinding)
 		if connection.Environment != "" {
 			headers["Gram-Environment"] = connection.Environment
 		}
+		auth := map[string]any{
+			"type": "workload_identity", "tokenFile": KitWorkloadAssertionPath, "endpointMode": "explicit", "grant": "jwtBearer",
+			"tokenEndpoint": binding.Audience + "/token", "resource": u.String(), "scope": "mcp:connect",
+		}
+		if connection.ProjectID != uuid.Nil {
+			auth["extensions"] = map[string]string{"project_id": connection.ProjectID.String()}
+		}
 		servers[connection.Name] = map[string]any{
-			"type": "streamable-http", "url": u.String(), "headers": headers,
-			"auth": map[string]any{
-				"type": "workload_identity", "tokenFile": KitWorkloadAssertionPath, "endpointMode": "explicit", "grant": "jwtBearer",
-				"tokenEndpoint": binding.Audience + "/token", "resource": u.String(), "scope": "mcp:connect",
-			},
+			"type": "streamable-http", "url": u.String(), "headers": headers, "auth": auth,
 		}
 	}
 	data, err := json.Marshal(map[string]any{"mcpServers": servers})

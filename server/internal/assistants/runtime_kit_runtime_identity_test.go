@@ -74,9 +74,11 @@ func TestKitBootstrapMultipleRootsAndIndependentEventRevocation(t *testing.T) {
 		r.LifecycleTx = nil
 		require.Equal(t, identity, b.Workload.Identity)
 		require.NotEmpty(t, b.Workload.ServiceAccount)
-		// Runtime-wide assertions cannot authenticate thread-bound built-ins.
-		require.NotContains(t, string(b.MCPJSON), "/platform/mcp/")
-		require.NotContains(t, string(b.MCPJSON), "platform-assistants")
+		// Built-ins exchange for their own resource and request explicit thread
+		// targets when no automatic context is available.
+		require.Contains(t, string(b.MCPJSON), "/platform/mcp/assistants")
+		require.Contains(t, string(b.MCPJSON), "builtin-assistants")
+		require.Contains(t, string(b.MCPJSON), `"project_id":"`+r.ProjectID.String()+`"`)
 		require.NotContains(t, string(b.AgentsMD), "human-delegated sign-in are unavailable")
 		return b
 	}

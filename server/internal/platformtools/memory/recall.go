@@ -48,10 +48,11 @@ func NewRecallTool(svc Service) *RecallTool {
 	return &RecallTool{
 		svc: svc,
 		descriptor: core.ToolDescriptor{
-			SourceSlug:  platformtools.SourceMemory,
-			HandlerName: handlerRecall,
-			Name:        platformtools.ToolNameMemoryRecall,
-			Description: "Recall relevant memories for the current assistant. Returns scored, optionally tag-filtered matches sorted by relevance.",
+			SourceSlug:    platformtools.SourceMemory,
+			ThreadContext: core.ThreadContextRequired,
+			HandlerName:   handlerRecall,
+			Name:          platformtools.ToolNameMemoryRecall,
+			Description:   "Recall relevant memories for the current assistant. Returns scored, optionally tag-filtered matches sorted by relevance.",
 			InputSchema: core.BuildInputSchema[recallInput](
 				core.WithPropertyNumberRange("limit", float64(recallMinLimit), float64(recallMaxLimit)),
 			),

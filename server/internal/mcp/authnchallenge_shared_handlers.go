@@ -350,6 +350,11 @@ func (s *Service) HandleSharedToken(w http.ResponseWriter, r *http.Request) erro
 		if grantType == oauthwire.GrantTypeJWTBearer && len(resources) == 1 && resources[0] == InferenceResource && extractClientCredentials(r).clientless(r) {
 			return s.handleInferenceWorkloadGrant(ctx, w, r, issuer)
 		}
+		if grantType == oauthwire.GrantTypeJWTBearer && len(resources) == 1 && extractClientCredentials(r).clientless(r) {
+			if _, ok := s.platformWorkloadResource(resources[0]); ok {
+				return s.handlePlatformWorkloadGrant(ctx, w, r, issuer, resources[0])
+			}
+		}
 		if grantType == oauthwire.GrantTypeJWTBearer && len(resources) == 0 && extractClientCredentials(r).clientless(r) {
 			return s.handleIssuerWorkloadAssertionGrant(ctx, w, r, issuer)
 		}

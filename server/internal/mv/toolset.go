@@ -687,6 +687,8 @@ func DescribeToolset(
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset tools").LogError(ctx, logger)
 	}
 
+	toolsetTools = adaptPlatformToolSchemas(ctx, toolsetTools, platformExtras...)
+
 	err = ApplyVariations(ctx, logger, tx, pid, toolVariationsGroupID, toolsetTools.Tools)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to apply variations to toolset").LogError(ctx, logger)
@@ -1137,6 +1139,34 @@ func GetToolsetsSummary(
 	}
 
 	return result, nil
+}
+
+// adaptPlatformToolSchemas keeps the cached base catalog caller-independent.
+// Copy platform definitions before adapting schemas or applying variations so
+// concurrent callers cannot change each other's view of the same cache entry.
+func adaptPlatformToolSchemas(ctx context.Context, cached *ToolsetBaseContents, extras ...platformtools.ExternalTool) *ToolsetBaseContents {
+	result := *cached
+	result.Tools = slices.Clone(cached.Tools)
+	var descriptors map[string]platformtools.ToolDescriptor
+	for i, tool := range cached.Tools {
+		if tool == nil || tool.PlatformToolDefinition == nil {
+			continue
+		}
+		if descriptors == nil {
+			descriptors = make(map[string]platformtools.ToolDescriptor)
+			for _, descriptor := range platformtools.ListPlatformTools(extras...) {
+				descriptors[descriptor.ToolURN().String()] = descriptor
+			}
+		}
+		clonedTool := *tool
+		definition := *tool.PlatformToolDefinition
+		if descriptor, ok := descriptors[definition.ToolUrn]; ok {
+			definition.Schema = string(platformtools.DescriptorForContext(ctx, descriptor).InputSchema)
+		}
+		clonedTool.PlatformToolDefinition = &definition
+		result.Tools[i] = &clonedTool
+	}
+	return &result
 }
 
 func readToolsetTools(

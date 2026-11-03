@@ -525,8 +525,14 @@ func kitConsumeNotifications(ctx context.Context, notifications <-chan kitacp.No
 // untrusted image URLs from the control-plane adapter.
 func kitProtocolPrompt(req runTurnRequest) ([]map[string]any, error) {
 	prompt := []map[string]any{}
-	if req.SourceInstructions != "" {
-		prompt = append(prompt, map[string]any{"type": "text", "text": req.SourceInstructions})
+	instructions := req.SourceInstructions
+	if req.ThreadID != uuid.Nil {
+		// This is a convenient default target, not an authorization claim. Keep
+		// it per turn rather than in the shared runtime bootstrap instructions.
+		instructions += "\n\nCurrent assistant thread_id: " + req.ThreadID.String() + ". When a built-in tool requires thread_id, use this ID for the current conversation. Other targets remain subject to the tool's existing authorization."
+	}
+	if instructions != "" {
+		prompt = append(prompt, map[string]any{"type": "text", "text": instructions})
 	}
 	prompt = append(prompt, map[string]any{"type": "text", "text": req.Prompt})
 	for _, part := range req.InputParts {

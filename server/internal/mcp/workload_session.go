@@ -52,8 +52,10 @@ const (
 // minted with. It carries no authorizer: a workload records no approving human,
 // which is where it differs from an agent credential.
 type workloadSessionCredential struct {
-	DelegatedGrants        []byte
-	DelegatedGrantsVersion int32
+	// Set only by the resource-bound builtin contract after validating its marker.
+	DerivesPolicyAtAdmission bool
+	DelegatedGrants          []byte
+	DelegatedGrantsVersion   int32
 }
 
 // encodeIssuerWorkloadSessionPolicy is the ceiling of a workload session
@@ -171,8 +173,9 @@ func checkWorkloadSessionCredential(
 	}
 
 	return workloadSessionCredential{
-		DelegatedGrants:        append([]byte(nil), delegatedGrants...),
-		DelegatedGrantsVersion: delegatedGrantsVersion.Int32,
+		DerivesPolicyAtAdmission: false,
+		DelegatedGrants:          append([]byte(nil), delegatedGrants...),
+		DelegatedGrantsVersion:   delegatedGrantsVersion.Int32,
 	}, nil
 }
 
@@ -199,12 +202,16 @@ func (s *Service) prepareWorkloadSessionContext(ctx context.Context, organizatio
 		return ctx, oops.C(oops.CodeUnauthorized)
 	}
 	actor := urn.NewWorkloadPrincipal(workloadIssuerID, externalSubject)
+	grants, version := credential.DelegatedGrants, credential.DelegatedGrantsVersion
+	if credential.DerivesPolicyAtAdmission {
+		grants, version = nil, 0
+	}
 	ctx = contextvalues.WithPrincipalCredentialAuthorization(ctx, authCtx, actor, contextvalues.PrincipalCredential{
 		// No authorizer, so admission must not require one.
 		AuthorizerUserID:         "",
-		DelegatedGrants:          credential.DelegatedGrants,
-		DelegatedGrantsVersion:   credential.DelegatedGrantsVersion,
-		DerivesPolicyAtAdmission: false,
+		DelegatedGrants:          grants,
+		DelegatedGrantsVersion:   version,
+		DerivesPolicyAtAdmission: credential.DerivesPolicyAtAdmission,
 	})
 	return ctx, nil
 }

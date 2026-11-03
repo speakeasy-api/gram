@@ -87,7 +87,7 @@ func (s *Service) handleInferenceWorkloadGrant(ctx context.Context, w http.Respo
 	if err != nil {
 		return fmt.Errorf("exchange workload inference: %w", err)
 	}
-	credential := workloadSessionCredential{DelegatedGrants: grants, DelegatedGrantsVersion: int32(version)}
+	credential := workloadSessionCredential{DerivesPolicyAtAdmission: false, DelegatedGrants: grants, DelegatedGrantsVersion: int32(version)}
 	subject := urn.NewWorkloadSubject(presented.issuerID, presented.subject)
 	session := workloadSessionIssuance(workloadSessionTarget{userSessionIssuerID: shared.issuerID, projectID: projectID, organizationID: issuer.organizationID, issuer: shared.issuer, audience: InferenceResource}, subject, credential)
 	// The session row inherits its issuer tenancy (organization issuers have
