@@ -27,9 +27,11 @@ permissions: {}
 
 # One run per pull request: each event cancels the run before it, even when
 # its own jobs then skip (a draft, a bot's push), and a cancelled run posts
-# nothing.
+# nothing. A manual re-run gets a group of its own, so re-running an older run
+# never cancels the current one; post's head check stops a stale re-run from
+# posting.
 concurrency:
-  group: ${{ github.workflow }}-${{ github.event.pull_request.number }}
+  group: ${{ github.workflow }}-${{ github.run_attempt == '1' && github.event.pull_request.number || github.run_id }}
   cancel-in-progress: true
 
 jobs:
