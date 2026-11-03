@@ -4,7 +4,7 @@
 // refresh handler (challenge.go, organizationsessionhandlers.go), and the
 // scheduled pre-emptive refresh activity (background worker). Sharing matters
 // because refresh tokens rotate: two callers presenting the same refresh token
-// to a provider with reuse detection (OAuth 2.0 Security BCP 4.13.2) can
+// to a provider with reuse detection (OAuth 2.0 Security BCP, RFC 9700 section 4.14.2) can
 // revoke the whole token family.
 
 package remotesessions
@@ -317,8 +317,8 @@ const (
 	refreshWaitPoll       = 200 * time.Millisecond
 	refreshReleaseTimeout = 5 * time.Second
 
-	// Bounds the POST and storing its outcome. A store past the lease is safe:
-	// its compare-and-swap refuses a row another holder moved.
+	// Bounds the POST and storing its outcome, and the lease is held for it: a
+	// second caller presenting the old token could revoke the new one at the provider.
 	refreshRotationTimeout = refreshUpstreamTimeout + 30*time.Second
 )
 
@@ -526,6 +526,7 @@ func (s *RefreshService) refresh(
 	lockKey := refreshLockKey(sess.SubjectUrn, sess.RemoteSessionClientID)
 	lockAcquiredAt := time.Now()
 	held, lockErr := s.locks.Add(ctx, lockKey, refreshLockTTL)
+	leaseDeadline := lockAcquiredAt.Add(refreshLockTTL)
 
 	switch {
 	case lockErr != nil:
@@ -548,7 +549,7 @@ func (s *RefreshService) refresh(
 	default:
 		defer o11y.LogDefer(ctx, s.logger, "failed to release remote session refresh lock", func() error {
 			// Past TTL the key may be a new holder's lock. Skip delete; TTL reaps.
-			if time.Since(lockAcquiredAt) >= refreshLockTTL {
+			if !time.Now().Before(leaseDeadline) {
 				s.logger.WarnContext(ctx, "remote session refresh outlived its lock lease; leaving release to TTL",
 					attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
 					attr.SlogCacheKey(lockKey),
@@ -567,7 +568,7 @@ func (s *RefreshService) refresh(
 
 	// sess predates the lock, so a holder that finished while we were acquiring
 	// has already consumed its refresh token. Replaying one makes providers with
-	// reuse detection (OAuth 2.0 Security BCP 4.13.2) revoke the whole family,
+	// reuse detection (OAuth 2.0 Security BCP, RFC 9700 section 4.14.2) revoke the whole family,
 	// the winner's fresh pair included, which nothing below can detect.
 	snapshotAt := sess.UpdatedAt.Time
 
@@ -633,6 +634,18 @@ func (s *RefreshService) refresh(
 	// The provider may consume the refresh token once the POST starts; keep its replacement.
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshRotationTimeout)
 	defer cancel()
+
+	if lockErr == nil && held && time.Now().Before(leaseDeadline) {
+		if err := s.locks.Set(ctx, lockKey, "1", refreshRotationTimeout); err != nil {
+			s.logger.WarnContext(ctx, "failed to extend remote session refresh lease",
+				attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
+				attr.SlogCacheKey(lockKey),
+				attr.SlogError(err),
+			)
+		} else {
+			leaseDeadline = time.Now().Add(refreshRotationTimeout)
+		}
+	}
 
 	updated, tok, refreshErr := s.refreshSessionTokens(ctx, q, client, sess, resource)
 	if refreshErr == nil {

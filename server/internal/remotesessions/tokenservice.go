@@ -1319,7 +1319,7 @@ func (s *RefreshService) postRefreshGrant(
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if err != nil {
-		return zero, fmt.Errorf("read refresh response: %w", err)
+		return zero, fmt.Errorf("read refresh response: %w: %w", errRefreshUpstreamUnreachable, err)
 	}
 	if resp.StatusCode/100 != 2 {
 		return zero, newTokenRefreshErrorFromHTTP(resp.StatusCode, resp.Status, body)

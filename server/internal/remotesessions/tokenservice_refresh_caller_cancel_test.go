@@ -3,15 +3,18 @@ package remotesessions_test
 import (
 	"context"
 	"net/http"
+	"sync"
 	"sync/atomic"
 	"testing"
 	"time"
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // rotatingProvider consumes the refresh token on first use, as a rotating
@@ -145,6 +148,75 @@ func TestDrainRefreshes_WaitsForARefreshThatOutlivedItsCaller(t *testing.T) {
 	stored, err := env.enc.Decrypt(active.RefreshTokenEncrypted.String)
 	require.NoError(t, err)
 	require.Equal(t, "refresh-rotated", stored, "a completed drain means the rotated token is stored")
+}
+
+// leaseSpyCache records the lock lease a refresh holds.
+type leaseSpyCache struct {
+	cache.Cache
+	mu      sync.Mutex
+	ttl     time.Duration
+	deleted bool
+}
+
+func (c *leaseSpyCache) Add(_ context.Context, _ string, ttl time.Duration) (bool, error) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.ttl = ttl
+	return true, nil
+}
+
+func (c *leaseSpyCache) Set(_ context.Context, _ string, _ any, ttl time.Duration) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.ttl = ttl
+	return nil
+}
+
+func (c *leaseSpyCache) Delete(context.Context, string) error {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	c.deleted = true
+	return nil
+}
+
+func (c *leaseSpyCache) state() (time.Duration, bool) {
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	return c.ttl, c.deleted
+}
+
+func TestRefreshNow_HoldsTheLeaseUntilTheOutcomeIsStored(t *testing.T) {
+	t.Parallel()
+
+	const lockTTL = 12 * time.Second
+	var refreshes atomic.Int32
+	arrived := make(chan struct{})
+	release := make(chan struct{})
+	close(release)
+	spy := &leaseSpyCache{Cache: cache.NoopCache}
+	var ttlDuringPost atomic.Int64
+	var deletedDuringPost atomic.Bool
+	provider := rotatingProvider(&refreshes, arrived, release)
+	ctx, env := newExpiredRefreshEnv(t, "refresh-lease", func(w http.ResponseWriter, r *http.Request) {
+		ttl, deleted := spy.state()
+		ttlDuringPost.Store(int64(ttl))
+		deletedDuringPost.Store(deleted)
+		provider(w, r)
+	})
+	refresher := env.newRefresher(testenv.NewMeterProvider(t), spy)
+	active, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
+		SubjectUrn:            env.subject,
+		RemoteSessionClientID: env.clientID,
+	})
+	require.NoError(t, err)
+
+	_, err = refresher.RefreshNow(ctx, active, "", remotesessionmetrics.RefreshTriggerManual)
+	require.NoError(t, err)
+
+	require.Greater(t, time.Duration(ttlDuringPost.Load()), lockTTL, "the lease must outlast the store, not only the POST")
+	require.False(t, deletedDuringPost.Load())
+	_, deleted := spy.state()
+	require.True(t, deleted, "a finished refresh releases its extended lease")
 }
 
 func TestRefreshNow_ManualTriggerWaitsForTheResult(t *testing.T) {
