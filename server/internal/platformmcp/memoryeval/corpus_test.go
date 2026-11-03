@@ -6,6 +6,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval"
@@ -104,8 +105,8 @@ func TestQuestionMix(t *testing.T) {
 		memoryeval.QuestionReversal:    7,
 		memoryeval.QuestionNegative:    5,
 		memoryeval.QuestionIsolation:   5,
-		memoryeval.QuestionParaphrase:  10,
-		memoryeval.QuestionSynthesis:   5,
+		memoryeval.QuestionTemporal:    7,
+		memoryeval.QuestionSynthesis:   8,
 	}, kinds)
 }
 
@@ -130,9 +131,21 @@ func TestHardQuestionsShareNoKeywordsWithSources(t *testing.T) {
 			continue
 		}
 		hard++
-		if q.Kind == memoryeval.QuestionSynthesis {
-			require.GreaterOrEqual(t, len(q.Sources), 2, "%s: a synthesis needs several chats", q.ID)
+		// Every hard question needs at least three chats, and they span more
+		// than one search_chats window of 31 days or at least two weeks.
+		require.GreaterOrEqual(t, len(q.Sources), 3, "%s: a hard question needs three or more chats", q.ID)
+		var first, last time.Time
+		for i, key := range q.Sources {
+			chat, ok := c.Chat(key)
+			require.True(t, ok, key)
+			if i == 0 || chat.StartedAt().Before(first) {
+				first = chat.StartedAt()
+			}
+			if i == 0 || chat.StartedAt().After(last) {
+				last = chat.StartedAt()
+			}
 		}
+		require.GreaterOrEqual(t, last.Sub(first), 14*24*time.Hour, "%s: sources should be weeks apart", q.ID)
 		for _, key := range q.Sources {
 			chat, ok := c.Chat(key)
 			require.True(t, ok, key)
@@ -142,7 +155,7 @@ func TestHardQuestionsShareNoKeywordsWithSources(t *testing.T) {
 				if len(word) < 4 || questionStopwords[word] {
 					continue
 				}
-				require.NotContains(t, text, word, "%s shares %q with its source %s", q.ID, word, key)
+				assert.NotContains(t, text, word, "%s shares %q with its source %s", q.ID, word, key)
 			}
 		}
 	}

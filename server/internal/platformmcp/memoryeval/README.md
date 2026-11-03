@@ -9,9 +9,12 @@ Synthetic corpus, questions and checks for team chat memory in the Platform MCP.
 - **Questions**: 55, each with an answer key. Answerable questions also name
   their source chats and the evidence terms a source must contain; the 5
   negative and 5 isolation questions expect "Not found" and have neither. The
-  hard set (10 paraphrases and 5 syntheses across several chats) shares no
-  keywords with its sources, which `TestHardQuestionsShareNoKeywordsWithSources`
-  enforces, so keyword search on the question text alone cannot answer it.
+  hard set has 7 temporal questions (what was true when another event
+  happened) and 8 syntheses. Each needs three or more chats at least two
+  weeks apart and shares no keywords with them, which
+  `TestHardQuestionsShareNoKeywordsWithSources` enforces, so rewriting the
+  question into a keyword search still leaves the agent to find and order
+  several chats across search windows.
 - **Mechanical checks** (CI, every PR): `TestSearchChatsBaselineMechanical`
   loads the corpus into Postgres and probes the `search_chats` baseline. It
   asserts no credential leaks, no other-project results and full retrieval of
