@@ -3000,8 +3000,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		Attempt:           0,
 	})
 
-	// Claim Kit's first event before bootstrap so inference uses its real root,
-	// not an arbitrary root chosen from the assistant's triggers.
+	// Claim Kit's first event before bootstrap to fence concurrent workers.
 	var firstEvent assistantThreadEventRecord
 	var firstClaimed bool
 	stopStartupHeartbeat := func() {}
@@ -3015,7 +3014,7 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			// bootstrap without a claimed execution identity.
 			return ProcessThreadEventsResult{
 				AssistantID: assistant.ID, WarmUntil: runtimeRecord.WarmUntil.Time,
-				WarmTTLSeconds: assistant.WarmTTLSeconds, RuntimeActive: true,
+				WarmTTLSeconds: assistant.WarmTTLSeconds, RuntimeActive: runtimeRecord.State == runtimeStateActive,
 				RetryAdmission: false, ProcessedAnyEvent: false, BootstrappedRuntime: false,
 			}, nil
 		}
@@ -3033,11 +3032,10 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 		}
 		// Dashboard fallback can heal a missing trigger; resolve before Ensure
 		// takes the lifecycle transaction so healing cannot reacquire its lock.
-		trigger, err := s.executionTrigger(ctx, assistant, firstEvent)
+		_, err := s.executionTrigger(ctx, assistant, firstEvent)
 		if err != nil {
 			return ProcessThreadEventsResult{}, err
 		}
-		ctx = context.WithValue(ctx, kitExecutionTriggerKey{}, trigger)
 	}
 
 	ensureCtx := ctx

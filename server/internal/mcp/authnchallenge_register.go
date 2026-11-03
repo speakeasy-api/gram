@@ -117,7 +117,7 @@ func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *
 	var target *AgentAuthorizationTarget
 	grants := usersessions.RegistrableGrantTypes
 	if req.AgentURN != "" {
-		if len(endpoints) != 1 || req.TokenEndpointAuthMethod != "private_key_jwt" || len(req.GrantTypes) != 1 || req.GrantTypes[0] != "client_credentials" {
+		if len(req.RedirectURIs) != 0 || len(endpoints) != 1 || req.TokenEndpointAuthMethod != "private_key_jwt" || len(req.GrantTypes) != 1 || req.GrantTypes[0] != "client_credentials" {
 			return writeDCRError(ctx, w, logger, "invalid_client_metadata", "agent registration requires private_key_jwt and client_credentials on a resource endpoint")
 		}
 		endpoint := endpoints[0]
@@ -135,7 +135,7 @@ func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *
 		ctx = keyCtx
 		target, _ = agentAuthorizationTarget(endpoint)
 		if target == nil {
-			return oops.C(oops.CodeUnauthorized)
+			return writeDCRError(ctx, w, logger, "invalid_client_metadata", "endpoint does not support agent registration")
 		}
 		grants = []string{"client_credentials"}
 	}
@@ -179,7 +179,15 @@ func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *
 	var row usersessions_repo.UserSessionClient
 	var err error
 	if target != nil {
-		row, err = RegisterAgentOAuthClient(ctx, s.db, *target, req.RegistrationRequest)
+		tx, beginErr := s.db.BeginTx(ctx, pgx.TxOptions{IsoLevel: pgx.RepeatableRead})
+		if beginErr != nil {
+			return oops.E(oops.CodeUnexpected, beginErr, "begin agent client registration").LogError(ctx, logger)
+		}
+		defer func() { _ = tx.Rollback(ctx) }()
+		row, err = RegisterAgentOAuthClient(ctx, tx, *target, req.RegistrationRequest)
+		if err == nil {
+			err = tx.Commit(ctx)
+		}
 		clientID = row.ClientID
 	} else {
 		row, err = usersessions_repo.New(s.db).CreateUserSessionClient(ctx, usersessions_repo.CreateUserSessionClientParams{
@@ -204,6 +212,9 @@ func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *
 		// issuer lands here instead of on a tombstone.
 		if errors.Is(err, pgx.ErrNoRows) {
 			return oops.E(oops.CodeNotFound, err, "user_session_issuer not found").LogError(ctx, logger)
+		}
+		if isCredentialDenial(err) {
+			return err
 		}
 		return oops.E(oops.CodeUnexpected, err, "failed to create user session client").LogError(ctx, logger)
 	}

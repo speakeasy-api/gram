@@ -2,8 +2,11 @@ package mcp
 
 import (
 	"context"
+	"errors"
 	"log/slog"
 	"net/http"
+
+	"github.com/jackc/pgx/v5"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
@@ -20,6 +23,13 @@ func (s *Service) handleAgentClientCredentialsGrant(ctx context.Context, w http.
 	}
 	reject := func(code string) error {
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, code, "agent client authorization refused")
+	}
+	admissionFailure := func(err error) error {
+		if errors.Is(err, pgx.ErrNoRows) || isCredentialDenial(err) {
+			return reject("unauthorized_client")
+		}
+		logger.ErrorContext(ctx, "agent client admission unavailable", "error", err)
+		return writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "agent client authorization unavailable")
 	}
 	if method != "private_key_jwt" || client.TokenEndpointAuthMethod.String != "private_key_jwt" || client.UserSessionIssuerID != endpoint.UserSessionIssuerID {
 		return reject("unauthorized_client")
@@ -44,19 +54,26 @@ func (s *Service) handleAgentClientCredentialsGrant(ctx context.Context, w http.
 		ctx, err = s.admitAgentSession(ctx, endpoint, subject, credential)
 	}
 	if err != nil {
-		return reject("unauthorized_client")
+		return admissionFailure(err)
 	}
 	tx, err := s.db.Begin(ctx)
 	if err != nil {
-		return oops.E(oops.CodeUnavailable, err, "begin agent token issuance")
+		return admissionFailure(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	q := usersessions_repo.New(tx)
 	if _, err = q.LockLiveUserSessionIssuerForChildWrite(ctx, usersessions_repo.LockLiveUserSessionIssuerForChildWriteParams{ID: endpoint.UserSessionIssuerID, ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID}); err != nil {
-		return reject("unauthorized_client")
+		return admissionFailure(err)
 	}
 	if _, err = q.LockUserSessionConsentClient(ctx, usersessions_repo.LockUserSessionConsentClientParams{UserSessionClientID: client.ID, ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID}); err != nil {
-		return reject("unauthorized_client")
+		return admissionFailure(err)
+	}
+	ctx, err = s.authz.AdmitPrincipalCredentialWithDBTX(ctx, tx)
+	if err == nil {
+		ctx, err = s.requireAgentSessionAuthorization(ctx, endpoint)
+	}
+	if err != nil {
+		return admissionFailure(err)
 	}
 	minted, err := s.mintSession(ctx, endpoint, client, q, mintSessionParams{
 		AuthorizationExpiresAt: nil, DesiredSessionDuration: nil, Replayable: false, SignInID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, CredentialID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ToolSelection: nil, UpstreamClientPicks: nil, Catalog: nil,

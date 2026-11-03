@@ -48,8 +48,8 @@ const PlatformToolsetRoute = "/platform/mcp/{toolsetSlug}"
 const platformToolsetMaxBodyBytes = 1 << 20
 
 // ServePlatformToolset is the runtime-only entrypoint for platform toolsets:
-// only the assistant token is accepted, so user OAuth/API keys/chat sessions
-// are intentionally not honored here.
+// accepts assistant tokens, admitted agent principal credentials, and principal-mode
+// agent API keys. User OAuth, ordinary user API keys, and chat sessions are not accepted.
 func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) error {
 	ctx := r.Context()
 
@@ -101,7 +101,7 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 		authedCtx, _, err = s.assistantTokens.AuthorizeRuntime(ctx, token)
 	}
 	if err != nil {
-		return oops.E(oops.CodeUnauthorized, err, "failed to authorize platform toolset request").LogError(ctx, s.logger)
+		return err
 	}
 	ctx = authedCtx
 	if project := r.Header.Get("Gram-Project"); project != "" {
@@ -151,7 +151,7 @@ func (s *Service) ServePlatformToolset(w http.ResponseWriter, r *http.Request) e
 }
 
 // authorizePlatformToolset gates entry to a platform toolset before any work
-// runs. The managed-assistant toolset carries the dashboard egress tool and is
+// runs. The managed-assistant toolset carries the dashboard egress tool;
 // legacy assistant tokens remain restricted to the managed assistant. Ordinary
 // agent credentials instead use live agent policy and per-tool authorization;
 // neither runtime variant requires a managed-assistant row for those callers.

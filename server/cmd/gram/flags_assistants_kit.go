@@ -46,7 +46,7 @@ func assistantKitRuntimeFlags() []cli.Flag {
 		&cli.StringFlag{Name: "assistant-kit-gke-work-size-limit", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_WORK_SIZE_LIMIT"}, Value: "1Gi", Usage: "Kit workspace volume size limit."},
 		&cli.StringFlag{Name: "assistant-kit-gke-tmp-size-limit", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_TMP_SIZE_LIMIT"}, Value: "128Mi", Usage: "Kit temporary volume size limit."},
 		&cli.BoolFlag{Name: "assistant-kit-gke-snapshots-enabled", EnvVars: []string{"GRAM_ASSISTANT_KIT_GKE_SNAPSHOTS_ENABLED"}, Usage: "Enable Kit GKE snapshot provisioning for new sessions."},
-		&cli.StringFlag{Name: "assistant-kit-mcp-auth-method", EnvVars: []string{"GRAM_ASSISTANT_KIT_MCP_AUTH_METHOD"}, Value: "client_secret_basic", Usage: "Kit workload authentication: client_secret_basic or private_key_jwt."},
+		&cli.StringFlag{Name: "assistant-kit-mcp-auth-method", EnvVars: []string{"GRAM_ASSISTANT_KIT_MCP_AUTH_METHOD"}, Value: "private_key_jwt", Usage: "Kit native MCP authentication (private_key_jwt only)."},
 		&cli.StringFlag{Name: "assistant-kit-network", EnvVars: []string{"GRAM_ASSISTANT_KIT_NETWORK"}, Usage: "Isolated local container network with a trusted TLS relay for ai.speakeasy.com."},
 		&cli.StringFlag{Name: "assistant-kit-image", EnvVars: []string{"GRAM_ASSISTANT_KIT_IMAGE"}, Usage: "Opt new assistant sessions into Kit v3 using an explicit non-latest tag or digest; empty preserves legacy composition."},
 		&cli.StringFlag{Name: "assistant-kit-mcp-resource", EnvVars: []string{"GRAM_ASSISTANT_KIT_MCP_RESOURCE"}, Usage: "Exact HTTPS URL of the attached issuer-gated MCP resource to provision for Kit."},
@@ -61,7 +61,7 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 		return nil
 	}
 	authMethod := c.String("assistant-kit-mcp-auth-method")
-	if authMethod != "client_secret_basic" && authMethod != "private_key_jwt" {
+	if authMethod != "private_key_jwt" {
 		return fmt.Errorf("invalid assistant-kit-mcp-auth-method")
 	}
 	base, err := assistantRuntimeConfigFromCLI(c, serverURL)

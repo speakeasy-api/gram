@@ -12,6 +12,8 @@ import (
 
 // ResolveLocked resolves identity on the caller's transaction and keeps its
 // binding, issuer, admission and assignment stable until that transaction ends.
+// With a nil trigger, it resolves only the stable assistant agent under the
+// assistant lock, without locking a trigger or issuer or checking admission or assignment.
 // It follows the writer lock order: assistant, trigger, then workload issuer.
 // Call before taking any of those locks in another order. Unlike Resolve it
 // neither acquires another connection nor opens a separate read snapshot.

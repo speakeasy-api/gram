@@ -62,7 +62,7 @@ func TestKitWorkloadAuthMethodConfiguration(t *testing.T) {
 			found = true
 			value, ok := f.(*cli.StringFlag)
 			require.True(t, ok)
-			require.Equal(t, "client_secret_basic", value.Value)
+			require.Equal(t, "private_key_jwt", value.Value)
 			require.Equal(t, []string{"GRAM_ASSISTANT_KIT_MCP_AUTH_METHOD"}, value.EnvVars)
 		}
 	}
@@ -70,6 +70,8 @@ func TestKitWorkloadAuthMethodConfiguration(t *testing.T) {
 	set := flag.NewFlagSet("test", flag.ContinueOnError)
 	set.String("assistant-kit-image", "kit:test", "")
 	set.String("assistant-kit-mcp-auth-method", "invalid", "")
+	require.ErrorContains(t, installKitLocalRuntimeFromCLI(cli.NewContext(nil, set, nil), nil, nil, nil, nil, nil), "invalid assistant-kit-mcp-auth-method")
+	require.NoError(t, set.Set("assistant-kit-mcp-auth-method", "client_secret_basic"))
 	require.ErrorContains(t, installKitLocalRuntimeFromCLI(cli.NewContext(nil, set, nil), nil, nil, nil, nil, nil), "invalid assistant-kit-mcp-auth-method")
 }
 

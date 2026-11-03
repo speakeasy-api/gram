@@ -160,9 +160,8 @@ func (s *ServiceCore) kitProtocolFactory(c KitLocalCompositionConfig, cidrs []st
 	}
 }
 
-// Per-turn MCP configuration uses the same scoped credentials as the default runtime.
+// The claimed execution event remains available during startup.
 type kitExecutionEventKey struct{}
-type kitExecutionTriggerKey struct{}
 
 var errKitStartupUndispatched = errors.New("kit startup did not dispatch event")
 

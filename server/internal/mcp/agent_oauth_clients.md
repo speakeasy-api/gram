@@ -4,6 +4,9 @@ An ordinary agent can register a renewable asymmetric OAuth client through the
 existing resource registration endpoint. This does not require an assistant,
 runtime, trigger, or workload issuer.
 
+Use HTTPS for registration and token requests; never transmit the agent API key
+or signed client assertion over plaintext HTTP.
+
 Send `POST /mcp/<SLUG>/register` with `Authorization: Bearer <AGENT_API_KEY>` and
 `Content-Type: application/json`:
 
@@ -13,11 +16,11 @@ Send `POST /mcp/<SLUG>/register` with `Authorization: Bearer <AGENT_API_KEY>` an
   "agent_urn": "agent:<AGENT_ID>",
   "grant_types": ["client_credentials"],
   "token_endpoint_auth_method": "private_key_jwt",
-  "jwks": { "keys": ["<PUBLIC_JWK>"] }
+  "jwks": { "keys": [{ "kty": "RSA", "n": "<PUBLIC_MODULUS>", "e": "AQAB" }] }
 }
 ```
 
-Replace the public-key placeholder with a public JWK object. The agent URN must
+Replace the example public JWK with your public JWK object. The agent URN must
 exactly match the authenticated agent. Registration checks the key's delegated
 ceiling, the live agent policy, the current owner's policy, and the original
 authorizer's policy for the target MCP resource. Anonymous DCR cannot establish

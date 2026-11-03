@@ -1824,6 +1824,7 @@ const accessTokenLifetime = 1 * time.Hour
 //   - refresh token: the remaining authorization lifetime. Speakeasy does not
 //     impose a separate refresh-token idle timeout.
 //   - access token: min(accessTokenLifetime, remaining authorization).
+//   - agent client: fixed 15-minute authorization, with no refresh token.
 //
 // `iss` / audience: the JWT issuer claim is built from baseURL (which the
 // caller computes from custom-domain context so it matches what the AS
@@ -1855,8 +1856,8 @@ func (s *Service) mintSession(
 			return nil, oops.E(oops.CodeUnexpected, nil, "issuer-scoped session must not override its audience").LogError(ctx, logger)
 		}
 	case sessionIssuancePolicyAgentClient:
-		if params.Audience == "" || params.Subject.Kind != urn.SessionSubjectKindAgent {
-			return nil, oops.C(oops.CodeUnauthorized)
+		if params.Audience == "" || params.Subject.Kind != urn.SessionSubjectKindAgent || params.AuthorizationExpiresAt != nil || params.DesiredSessionDuration != nil || params.Replayable || params.ToolSelection != nil {
+			return nil, oops.E(oops.CodeUnexpected, nil, "invalid agent-client session issuance parameters").LogError(ctx, logger)
 		}
 		audience, resource, refreshable = params.Audience, params.Audience, false
 		lifetime := 15 * time.Minute

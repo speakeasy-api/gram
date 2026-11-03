@@ -201,10 +201,9 @@ func TestKitCompositionBootstrapWithoutAttachments(t *testing.T) {
 
 }
 
-func TestKitCompositionUnavailableDiscoveryDoesNotGateTurn(t *testing.T) {
+func TestKitCompositionRejectsMissingModel(t *testing.T) {
 	t.Parallel()
-	// No core or database: a discovery retry would panic before the protocol
-	// can validate the turn. Nil means preserve existing MCP configuration.
+	// Missing model validation must precede database or transport access.
 	protocol := &kitConfiguredRuntimeProtocol{KitRuntimeProtocol: &KitRuntimeProtocol{}}
 	err := protocol.RunTurn(t.Context(), assistantRuntimeRecord{RuntimeVersion: 3}, runTurnRequest{MCPServers: nil})
 	require.ErrorContains(t, err, "kit turn requires the persisted assistant model")

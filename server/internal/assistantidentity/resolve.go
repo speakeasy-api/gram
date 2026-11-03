@@ -153,6 +153,9 @@ func resolveStable(ctx context.Context, tx pgx.Tx, org string, project, assistan
 		return Resolution{}, ErrInvalidIdentity
 	}
 	binding, err := repo.New(tx).GetAssistantBinding(ctx, repo.GetAssistantBindingParams{ProjectID: project, AssistantID: assistant})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return Resolution{State: NeverConfigured, Identity: nil}, nil
+	}
 	if err != nil {
 		return Resolution{}, fmt.Errorf("resolve stable assistant agent: %w", err)
 	}
@@ -160,6 +163,9 @@ func resolveStable(ctx context.Context, tx pgx.Tx, org string, project, assistan
 		return Resolution{}, ErrInvalidIdentity
 	}
 	agent, err := agents.ResolvePrincipal(ctx, tx, org, urn.NewPrincipal(urn.PrincipalTypeAgent, binding.OriginalAgentID.String()))
+	if errors.Is(err, agents.ErrPrincipalNotFound) {
+		return Resolution{State: Unavailable, Identity: nil}, nil
+	}
 	if err != nil {
 		return Resolution{}, fmt.Errorf("resolve stable assistant agent: %w", err)
 	}

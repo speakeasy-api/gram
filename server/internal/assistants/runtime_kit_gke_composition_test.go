@@ -171,7 +171,7 @@ func TestKitGKEEligibilityIndependentOfAttachments(t *testing.T) {
 	}
 	check(true) // No attachments: inference and platform tools remain available.
 	f.addServerRow(t, f.remote.ID, uuid.NullUUID{})
-	check(true) // No configured issuer: connection failure is not startup failure.
+	check(true) // An attached server without an issuer does not affect eligibility.
 	f.addServerRow(t, f.hosted.ID, uuid.NullUUID{})
 	check(true) // Multiple connections do not change eligibility.
 	f.remote.Visibility = "disabled"

@@ -31,6 +31,14 @@ func TestAgentClientCredentialsPublicRegistrationRenewalAndRevocation(t *testing
 	_, err = keysrepo.New(ti.conn).CreateAgentAPIKey(ctx, keysrepo.CreateAgentAPIKeyParams{OrganizationID: fx.orgID, CreatedByUserID: fx.userID, Name: "agent registration", KeyPrefix: prefix, KeyHash: hash, SubjectUrn: pgtype.Text{String: session.SubjectUrn.String(), Valid: true}, DelegatedGrants: session.DelegatedGrants, DelegatedGrantsVersion: session.DelegatedGrantsVersion, ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}})
 	require.NoError(t, err)
 	signer := newAssertionSigner(t)
+	badBody, err := json.Marshal(map[string]any{"agent_urn": urn.NewAgentSubject(agent.ID).String(), "grant_types": []string{"client_credentials"}, "token_endpoint_auth_method": "private_key_jwt", "jwks": json.RawMessage(signer.jwks), "redirect_uris": []string{"https://example.com/callback"}})
+	require.NoError(t, err)
+	badRequest := newRegisterRequest(t, fx.toolset.McpSlug.String, string(badBody))
+	badRequest.Header.Set("Authorization", "Bearer "+raw)
+	badResponse := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleRegister(badResponse, badRequest))
+	require.Equal(t, http.StatusBadRequest, badResponse.Code)
+	require.Contains(t, badResponse.Body.String(), "invalid_client_metadata")
 	body, _ := json.Marshal(map[string]any{"client_name": "ordinary agent", "agent_urn": urn.NewAgentSubject(agent.ID).String(), "grant_types": []string{"client_credentials"}, "token_endpoint_auth_method": "private_key_jwt", "jwks": json.RawMessage(signer.jwks)})
 	req := newRegisterRequest(t, fx.toolset.McpSlug.String, string(body))
 	// Anonymous DCR cannot assign a trusted agent profile.
@@ -92,14 +100,18 @@ func TestRuntimeBuiltinToolsAcceptOrdinaryAgentKey(t *testing.T) {
 	_, err = tokenrepo.New(ti.conn).CreateKitAPIKey(ctx, tokenrepo.CreateKitAPIKeyParams{ProjectID: uuid.NullUUID{UUID: fx.target.ProjectID, Valid: true}, OrganizationID: fx.orgID, CreatedByUserID: fx.userID, Name: "ordinary scoped agent", KeyPrefix: prefix, KeyHash: hash, SubjectUrn: pgtype.Text{String: session.SubjectUrn.String(), Valid: true}, DelegatedGrants: session.DelegatedGrants, DelegatedGrantsVersion: session.DelegatedGrantsVersion, ExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true}})
 	require.NoError(t, err)
 	// No assistant, runtime binding, trigger, or managed-project association.
-	for _, slug := range []string{platformtools.AssistantsPlatformToolsetSlug, platformtools.ManagedAssistantPlatformToolsetSlug} {
+	for slug, expected := range map[string]string{platformtools.AssistantsPlatformToolsetSlug: "skills_load", platformtools.ManagedAssistantPlatformToolsetSlug: "platform_get_tool_usage_summary"} {
 		w, err := servePlatformHTTP(t, ti, slug, toolsListBody(), raw)
 		require.NoError(t, err)
 		require.Equal(t, http.StatusOK, w.Code, w.Body.String())
+		require.Contains(t, w.Body.String(), `"`+expected+`"`)
+		require.NotContains(t, w.Body.String(), `"error"`)
 	}
 	ti.features.SetFlagVariant(feature.FlagAssistantPlatformMCP, fx.orgID, feature.VariantAssistantToolsPlatformMCP)
 	w, err := servePlatformHTTP(t, ti, platformtools.PlatformMCPReadToolsetSlug, toolsListBody(), raw)
 	require.NoError(t, err)
 	require.Equal(t, http.StatusOK, w.Code, w.Body.String())
-
+	require.Contains(t, w.Body.String(), `"get_platform_context"`)
+	require.Contains(t, w.Body.String(), `"list_projects"`)
+	require.NotContains(t, w.Body.String(), `"error"`)
 }

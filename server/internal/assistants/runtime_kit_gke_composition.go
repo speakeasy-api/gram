@@ -71,7 +71,7 @@ func (s *ServiceCore) InstallKitGKERuntime(c KitGKECompositionConfig) error {
 	c.Provision.GuestPort = int32(c.GKE.GuestPort)
 	backend, err := NewKitGKERuntimeBackend(KitGKERuntimeConfig{
 		GKE: c.GKE, Provision: c.Provision, Snapshots: c.Snapshots,
-		BootstrapGeneration: "per-turn-mcp-v1",
+		BootstrapGeneration: "native-mcp-v1",
 		AuthorityStore:      NewKitGKEPostgresAuthorityStore(s.db),
 		Fence:               s.fenceKitRuntimeAlreadyLocked,
 		Lifecycle:           s.kitGKELifecycle,
@@ -178,8 +178,8 @@ func (s *ServiceCore) kitGKELifecycle(ctx context.Context, r assistantRuntimeRec
 
 // kitGKEAssistantEligible verifies the assistant exists in the selected project
 // and organization without imposing tool-availability requirements.
-// Tool availability is not runtime eligibility. Per-turn credentials and the
-// existing MCP admission path authorize each connection independently.
+// Tool availability is not runtime eligibility. Stable agent credentials and
+// native OAuth clients authorize each connection independently.
 func (s *ServiceCore) kitGKEAssistantEligible(ctx context.Context, tx pgx.Tx, assistant assistantRecord, _ KitLocalCompositionConfig) (bool, error) {
 	row, err := assistantrepo.New(tx).GetAssistant(ctx, assistantrepo.GetAssistantParams{ProjectID: assistant.ProjectID, AssistantID: assistant.ID})
 	if errors.Is(err, pgx.ErrNoRows) {

@@ -249,7 +249,7 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 		if state.Phase != "active" {
 			return k.restore(ctx, r, state, obj)
 		}
-		if !time.Now().Before(state.Metadata.AuthorityNotAfter) || state.Metadata.BootstrapGeneration != k.config.BootstrapGeneration {
+		if !time.Now().Before(state.Metadata.AuthorityNotAfter) || (k.config.Provision.SnapshotsEnabled && state.Metadata.BootstrapGeneration != k.config.BootstrapGeneration) {
 			// Renew authority or update bootstrap format only through durable
 			// checkpoint and fresh-process restore;
 			// never rotate credentials beneath an existing process.

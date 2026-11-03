@@ -520,3 +520,17 @@ func TestKitGKEBootstrapGenerationRefreshPreservesRuntime(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, 1, *fences, "current bootstrap must not restart on every turn")
 }
+
+func TestKitGKEBackendGenerationMismatchWithoutSnapshotsReusesRuntime(t *testing.T) {
+	t.Parallel()
+	k, _, r, fences := kitGKEBackendFixture(t)
+	require.False(t, k.config.Provision.SnapshotsEnabled)
+	result, err := k.Ensure(t.Context(), r)
+	require.NoError(t, err)
+	r.BackendMetadataJSON = result.BackendMetadataJSON
+	k.config.BootstrapGeneration = "native-mcp-v1"
+	result, err = k.Ensure(t.Context(), r)
+	require.NoError(t, err)
+	require.False(t, result.ColdStart)
+	require.Zero(t, *fences, "generation refresh must not fence a runtime that cannot checkpoint")
+}

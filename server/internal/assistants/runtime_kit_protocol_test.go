@@ -289,7 +289,7 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 			mu.Lock()
 			controlled := controls[r.Header.Get("Acp-Connection-Id")]
 			mu.Unlock()
-			if msg.Method != "session/new" && msg.Method != "session/resume" && msg.Method != "session/list" && !controlled {
+			if msg.Method != "session/new" && msg.Method != "session/resume" && !controlled {
 				w.WriteHeader(http.StatusAccepted)
 				if len(msg.ID) > 0 {
 					ch <- fmt.Sprintf("data: {\"jsonrpc\":\"2.0\",\"id\":%s,\"error\":{\"code\":-32000,\"message\":\"resume session before controlling it\"}}\n\n", msg.ID)
@@ -393,12 +393,6 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 					ch <- `data: {"jsonrpc":"2.0","method":"session/update","params":{"sessionId":"session-one","update":{"sessionUpdate":"agent_message_chunk","messageId":"reply","content":{"type":"text","text":"final"}}}}` + "\n\n"
 				}
 				result = `{"sessionId":"session-one","settled":true,"foregroundActive":false,"backgroundActive":false,"pendingBackgroundTerminals":false,"activeSubagents":0}`
-			case "session/list":
-				state := "restorable"
-				if resident {
-					state = "resident"
-				}
-				result = fmt.Sprintf(`{"sessions":[{"sessionId":"session-one","cwd":"/workspace","_meta":{"kit.gateway.state":%q}}]}`, state)
 			case "session/close":
 				resident = false
 			case "session/cancel":

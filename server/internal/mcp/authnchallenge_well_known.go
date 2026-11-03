@@ -465,7 +465,7 @@ func (s *Service) ServeGetAuthorizationServer(w http.ResponseWriter, r *http.Req
 		oauthwire.GrantTypeAuthorizationCode,
 		oauthwire.GrantTypeRefreshToken,
 	}
-	if !endpoint.IsOrganizationGateway() {
+	if _, supported := agentAuthorizationTarget(endpoint); supported {
 		grantTypes = append(grantTypes, "client_credentials")
 	}
 	var grantProfiles []string
