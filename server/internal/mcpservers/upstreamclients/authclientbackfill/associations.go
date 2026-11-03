@@ -1,9 +1,11 @@
 package authclientbackfill
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -54,8 +56,9 @@ func gateOAuthRegistrations(ctx context.Context, q *Queries, organizationID stri
 	return registrations, nil
 }
 
-// dedupeServers drops the nil id and repeats, so a caller can pass whatever
-// its discovery produced.
+// dedupeServers drops the nil id and repeats and sorts what is left, so a
+// caller can pass whatever its discovery produced and the locks taken for it
+// are still in UUID order.
 func dedupeServers(serverIDs []uuid.UUID) []uuid.UUID {
 	servers := make([]uuid.UUID, 0, len(serverIDs))
 	seen := make(map[uuid.UUID]bool, len(serverIDs))
@@ -66,6 +69,7 @@ func dedupeServers(serverIDs []uuid.UUID) []uuid.UUID {
 		seen[id] = true
 		servers = append(servers, id)
 	}
+	slices.SortFunc(servers, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
 	return servers
 }
 
@@ -121,6 +125,13 @@ func SyncServerAssociations(ctx context.Context, tx pgx.Tx, organizationID strin
 	registrations, err := gateOAuthRegistrations(ctx, q, organizationID, servers)
 	if err != nil {
 		return err
+	}
+	// Lock the servers in UUID order, which is the order the EMA writer scope
+	// walks them in. The link insert below takes a foreign-key lock on each
+	// server it records and records them in association order, so the two
+	// orders disagree unless they are all held up front.
+	if err := q.LockServersForAuthClientSync(ctx, LockServersForAuthClientSyncParams{OrganizationID: organizationID, McpServerIds: servers}); err != nil {
+		return fmt.Errorf("lock servers for synchronization: %w", err)
 	}
 	// Lock every existing candidate and stale client in UUID order before any
 	// link insert can acquire a foreign-key lock. Administrator detaches use
