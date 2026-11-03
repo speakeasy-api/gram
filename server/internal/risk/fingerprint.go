@@ -29,6 +29,7 @@ var (
 	ErrInvalidFingerprintPepperJSON    = errors.New("invalid fingerprint pepper keyring json")
 	ErrInvalidFingerprintPepperKeyRing = errors.New("invalid fingerprint pepper keyring")
 	ErrFingerprintPepperKeyNotFound    = errors.New("fingerprint pepper key not found")
+	ErrReservedKeyInfo                 = errors.New("info label is reserved for fingerprints")
 )
 
 type Fingerprinter struct {
@@ -192,9 +193,12 @@ func (p Fingerprinter) deriveKey(version string, tenantID string, cache map[stri
 }
 
 // DeriveCurrentKey derives a per-tenant key from the current pepper for another use of it. The
-// info label keeps it cryptographically separate from fingerprints and from other uses. A zero
-// Fingerprinter returns an error.
+// info label keeps it cryptographically separate from fingerprints and from other uses, so the
+// fingerprint label is refused. A zero Fingerprinter returns an error.
 func (p Fingerprinter) DeriveCurrentKey(info, tenantID string) ([]byte, error) {
+	if info == hkdfInfo {
+		return nil, ErrReservedKeyInfo
+	}
 	pepper, err := p.get(p.currentVersion)
 	if err != nil {
 		return nil, err

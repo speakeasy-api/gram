@@ -72,11 +72,15 @@ func parseOptionalPepperKeyRing(ctx context.Context, logger *slog.Logger, raw st
 	return fingerprinter, nil
 }
 
-// connectionDeviceKeys derives connection device keys from the keyring, for processes that don't
-// otherwise need it. Unset warns in parseOptionalPepperKeyRing. An unusable keyring must not stop
-// the process: the device key just stays empty.
+// connectionDeviceKeys derives connection device keys from the keyring, for processes that
+// don't otherwise need it. An unset or unusable keyring only leaves device_key empty.
 func connectionDeviceKeys(ctx context.Context, logger *slog.Logger, raw string) mcpconnectionattempts.RecorderOption {
-	fingerprinter, err := parseOptionalPepperKeyRing(ctx, logger, raw)
+	var fingerprinter risk.Fingerprinter
+	if raw == "" {
+		logger.WarnContext(ctx, "risk fingerprint pepper keyring not configured; device_key stays empty on connection events")
+		return mcpconnectionattempts.WithDeviceKeys(fingerprinter.DeriveCurrentKey)
+	}
+	fingerprinter, err := risk.ParsePepperKeyRing([]byte(raw))
 	if err != nil {
 		logger.WarnContext(ctx, "risk fingerprint pepper keyring is unusable; device_key stays empty on connection events", attr.SlogError(err))
 	}
