@@ -419,6 +419,8 @@ func providerFailure(err error, code string) *ReconcileError {
 		return reconcileFailure("replacement_pending")
 	case errors.Is(err, k8s.ErrNetworkIngressInvalidDesiredState):
 		return reconcileFailure("invalid_desired_state")
+	case errors.Is(err, k8s.ErrNetworkIngressProviderUnavailable):
+		return reconcileFailure("provider_configuration_unavailable")
 	case errors.Is(err, k8s.ErrNetworkIngressUnsupportedProvider):
 		return reconcileFailure("unsupported_provider")
 	}

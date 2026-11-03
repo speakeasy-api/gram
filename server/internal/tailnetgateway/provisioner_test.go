@@ -355,7 +355,7 @@ func TestCompositeMovesOperatorIngressToGatewayAfterTeardown(t *testing.T) {
 	ctx := t.Context()
 	f := newProvisionerFixture(t, "tailnetcomposite")
 	operator := &fakeOperator{present: true, deleteErr: k8s.ErrNetworkIngressDeletionPending, deleteCalls: 0, observe: k8s.NetworkIngressObservation{Status: k8s.NetworkIngressStatusOnline, DNSName: "old.example.ts.net", ErrorCode: "", ConnectedAt: nil}, observed: 0, applied: 0}
-	composite, err := tailnetgateway.NewCompositeProvisioner(operator, f.provisioner)
+	composite, err := tailnetgateway.NewCompositeProvisioner(operator, f.provisioner, true)
 	require.NoError(t, err)
 	f.setRuntime(t, "")
 
@@ -407,11 +407,32 @@ func TestCompositeMovesOperatorIngressToGatewayAfterTeardown(t *testing.T) {
 	require.Equal(t, []string{"nONE"}, f.api.DeletedDevices())
 }
 
+func TestCompositeHoldsGatewayIngressesUntilTheGatewayIsDeployed(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+	f := newProvisionerFixture(t, "tailnetcompositeundeployed")
+	operator := &fakeOperator{present: false, deleteErr: nil, deleteCalls: 0, observe: k8s.NetworkIngressObservation{Status: k8s.NetworkIngressStatusOnline, DNSName: "old.example.ts.net", ErrorCode: "", ConnectedAt: nil}, observed: 0, applied: 0}
+	composite, err := tailnetgateway.NewCompositeProvisioner(operator, f.provisioner, false)
+	require.NoError(t, err)
+
+	observation, err := composite.Apply(ctx, f.desired(t))
+	require.ErrorIs(t, err, k8s.ErrNetworkIngressProviderUnavailable)
+	require.Equal(t, k8s.NetworkIngressStatusPending, observation.Status)
+	require.Zero(t, operator.applied, "a gateway ingress never falls back to the operator")
+	require.Empty(t, f.api.Keys())
+
+	// Ingresses that were never moved keep working on the operator meanwhile.
+	f.setRuntime(t, "")
+	_, err = composite.Apply(ctx, f.desired(t))
+	require.NoError(t, err)
+	require.Equal(t, 1, operator.applied)
+}
+
 func TestCompositeWithoutOperatorIsPlainGateway(t *testing.T) {
 	t.Parallel()
 	ctx := t.Context()
 	f := newProvisionerFixture(t, "tailnetcompositegw")
-	composite, err := tailnetgateway.NewCompositeProvisioner(nil, f.provisioner)
+	composite, err := tailnetgateway.NewCompositeProvisioner(nil, f.provisioner, true)
 	require.NoError(t, err)
 	_, err = composite.Apply(ctx, f.desired(t))
 	require.NoError(t, err)
@@ -419,7 +440,7 @@ func TestCompositeWithoutOperatorIsPlainGateway(t *testing.T) {
 	orphans, err := composite.FindOrphans(ctx, nil)
 	require.NoError(t, err)
 	require.Empty(t, orphans)
-	_, err = tailnetgateway.NewCompositeProvisioner(nil, nil)
+	_, err = tailnetgateway.NewCompositeProvisioner(nil, nil, true)
 	require.Error(t, err)
 
 	// Without the operator, an ingress that was never moved has no provider.

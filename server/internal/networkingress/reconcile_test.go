@@ -389,3 +389,30 @@ func TestNetworkIngressExecutorApplyGateSkipsAttestorSettingsForGateway(t *testi
 	require.Equal(t, ti.orgID, applied.OrganizationID, "the gateway provider needs the owning organization")
 	require.NotEmpty(t, applied.Credentials)
 }
+
+func TestNetworkIngressExecutorReportsUndeployedProviderAsUnavailable(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	id := uuid.MustParse(ti.create(t, ctx).ID)
+	provider := lifecycleProvider{
+		apply: func(context.Context, k8s.NetworkIngressDesired) (k8s.NetworkIngressObservation, error) {
+			return k8s.NetworkIngressObservation{Status: k8s.NetworkIngressStatusPending, DNSName: "", ErrorCode: "", ConnectedAt: nil}, fmt.Errorf("%w: gateway not deployed", k8s.ErrNetworkIngressProviderUnavailable)
+		},
+		observe: nil,
+		delete:  nil,
+	}
+	registry, err := k8s.NewNetworkIngressProvisionerRegistry(map[string]k8s.NetworkIngressProvisioner{"tailscale": provider}, testenv.NewLogger(t), nil)
+	require.NoError(t, err)
+	executor := networkingress.NewExecutor(ti.conn, testenv.NewEncryptionClient(t), registry, networkingress.ExecutorOptions{
+		Queue: "test-network-ingress", AttestorRequired: false, CanApply: func(context.Context) error { return nil },
+	})
+
+	_, err = executor.Reconcile(ctx, ti.orgID, id)
+	var failure *networkingress.ReconcileError
+	require.ErrorAs(t, err, &failure)
+	require.Equal(t, "provider_configuration_unavailable", failure.Code)
+	require.False(t, failure.Retryable, "the hourly sweep re-drives it once the gateway is deployed")
+	row, err := repo.New(ti.conn).GetNetworkIngressForReconcile(ctx, repo.GetNetworkIngressForReconcileParams{ID: id, OrganizationID: ti.orgID})
+	require.NoError(t, err)
+	require.Equal(t, "provider_configuration_unavailable", row.LastError.String)
+}

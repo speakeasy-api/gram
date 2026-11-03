@@ -36,9 +36,11 @@ The `network_ingresses.runtime` column decides, per organization:
 - `NULL` (or anything else): hosted by the Tailscale Kubernetes operator, as
   before. Enabling the gateway never moves these.
 
-With `GRAM_NETWORK_INGRESS_GATEWAY_ENABLED` set, the API server records
-`gateway` on every ingress it creates. Existing operator ingresses move only
-when staff move that organization.
+Every new ingress is created with `gateway`. Ingresses created before the
+gateway existed stay on the operator until staff move that organization.
+`GRAM_NETWORK_INGRESS_GATEWAY_ENABLED` tells the reconciler the gateway pods
+are deployed; until it is set, gateway ingresses wait as
+`provider_configuration_unavailable` instead of falling back to the operator.
 
 ## Running locally
 
