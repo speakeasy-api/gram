@@ -23,7 +23,8 @@ const state = vi.hoisted(() => ({
   speakeasyRefetch: vi.fn(),
   orgAdmin: true,
   upstreamAuth: "legacy" as "loading" | "enforced" | "legacy" | "error",
-  registrations: [{ id: "client" }] as { id: string }[],
+  linked: [{ id: "client" }] as { id: string }[],
+  registrations: [] as { id: string }[],
   clientFilters: [] as unknown[],
   credentials: [] as { remoteSessionClientId?: string }[],
 }));
@@ -62,10 +63,18 @@ vi.mock("@gram/client/react-query/mcpServerAuthentication.js", () => ({
   }),
 }));
 vi.mock("@/lib/remote-identity", () => ({
-  useAllRemoteSessionClients: (filters: unknown) => (
-    state.clientFilters.push(filters),
+  useAllRemoteSessionClients: (
+    filters: { userSessionIssuerId?: string },
+    options?: { enabled?: boolean },
+  ) => (
+    options?.enabled !== false && state.clientFilters.push(filters),
     {
-      items: state.registrations,
+      items:
+        options?.enabled === false
+          ? []
+          : filters.userSessionIssuerId
+            ? state.linked
+            : state.registrations,
       isLoading: state.clientsLoading,
       isError: state.clientsError,
       refetch: state.clientsRefetch,
@@ -159,7 +168,8 @@ beforeEach(() => {
   state.speakeasyRefetch.mockReset();
   state.orgAdmin = true;
   state.upstreamAuth = "legacy";
-  state.registrations = [{ id: "client" }];
+  state.linked = [{ id: "client" }];
+  state.registrations = [];
   state.clientFilters = [];
   state.credentials = [];
 });
@@ -192,15 +202,17 @@ describe("IdentityChainingSection", () => {
     });
   });
 
-  it("offers the registrations behind the server's credentials when upstream auth is enforced", () => {
+  it("adds the registrations behind the server's credentials when upstream auth is enforced", () => {
     state.upstreamAuth = "enforced";
     state.registrations = [
+      { id: "client" },
       { id: "attached" },
-      { id: "linked-to-sign-in-only" },
+      { id: "unattached" },
       { id: "ema-registration" },
     ];
     state.credentials = [
       { remoteSessionClientId: "attached" },
+      { remoteSessionClientId: "client" },
       { remoteSessionClientId: "ema-registration" },
       {},
     ];
@@ -209,20 +221,19 @@ describe("IdentityChainingSection", () => {
       screen
         .getByTestId("identity-chaining")
         .getAttribute("data-linked-clients"),
-    ).toBe("attached,ema-registration");
-    expect(state.clientFilters).toContainEqual({});
+    ).toBe("client,attached,ema-registration");
   });
 
-  it("offers clients linked to the sign-in when upstream auth isn't enforced", () => {
+  it("offers only clients linked to the sign-in when upstream auth isn't enforced", () => {
+    state.registrations = [{ id: "attached" }];
+    state.credentials = [{ remoteSessionClientId: "attached" }];
     render(<IdentityChainingSection mcpServer={server} />, { wrapper: Router });
     expect(
       screen
         .getByTestId("identity-chaining")
         .getAttribute("data-linked-clients"),
     ).toBe("client");
-    expect(state.clientFilters).toContainEqual({
-      userSessionIssuerId: "issuer",
-    });
+    expect(state.clientFilters).toEqual([{ userSessionIssuerId: "issuer" }]);
   });
 
   it("says a project sign-in can't chain, and where to change it", () => {
