@@ -598,9 +598,17 @@ func (e *temporaryGrantExplainer) otherAccess(ctx context.Context, row temporary
 func temporaryGrantHolderPrincipals(ctx context.Context, db database.DBTX, organizationID string, holder urn.Principal) ([]urn.Principal, error) {
 	switch {
 	case holder.Type == urn.PrincipalTypeUser && holder.ID != urn.AllUsersPrincipalID:
-		return authz.ResolveUserPrincipals(ctx, db, organizationID, holder.ID)
+		principals, err := authz.ResolveUserPrincipals(ctx, db, organizationID, holder.ID)
+		if err != nil {
+			return nil, fmt.Errorf("resolve user principals: %w", err)
+		}
+		return principals, nil
 	case holder.Type == urn.PrincipalTypeAgent:
-		return authz.ResolveAgentPrincipals(ctx, db, organizationID, holder)
+		principals, err := authz.ResolveAgentPrincipals(ctx, db, organizationID, holder)
+		if err != nil {
+			return nil, fmt.Errorf("resolve agent principals: %w", err)
+		}
+		return principals, nil
 	default:
 		return []urn.Principal{holder}, nil
 	}
