@@ -1,6 +1,7 @@
 package mcpconnectionattempts
 
 import (
+	"errors"
 	"strconv"
 	"sync/atomic"
 	"testing"
@@ -49,6 +50,12 @@ func TestOnceLimiter_KeysAreSeparate(t *testing.T) {
 	require.True(t, limiter.allow(limiterRow("org", "other-server", "invalid_request", "user:a"), now))
 	require.True(t, limiter.allow(limiterRow("org", "server", "expired", "user:a"), now))
 	require.True(t, limiter.allow(limiterRow("org", "server", "invalid_request", "user:b"), now))
+	otherProvider := row
+	otherProvider.ProviderHost = "login.example.com"
+	require.True(t, limiter.allow(otherProvider, now), "one provider can't hold back another")
+	otherMember := row
+	otherMember.MemberID = "member"
+	require.True(t, limiter.allow(otherMember, now), "one gateway member can't hold back another")
 	otherStep := row
 	otherStep.Step = StepInboundToken.String()
 	require.True(t, limiter.allow(otherStep, now), "one stage can't hold back another")
@@ -177,7 +184,7 @@ func TestOnce_HeldBackRowsNeverBlockOrReachTheQueue(t *testing.T) {
 	defer close(release)
 	conn := &scriptedConn{Conn: nil, block: release, err: nil, prepares: atomic.Int64{}}
 	cfg := testConfig()
-	cfg.queueSize = onceKeyBurst
+	cfg.queueSize = onceKeyBurst * 2
 	cfg.insertTimeout = time.Minute
 	recorder := newTestRecorder(t, conn, cfg)
 	scope := testScope()
@@ -211,4 +218,34 @@ func TestOnce_AHeldBackRowCountsNoStep(t *testing.T) {
 
 	require.Equal(t, int64(onceKeyBurst), stepsCounted(t, recorder))
 	require.Equal(t, int64(2), recorder.dropped(t, dropRateLimited))
+}
+
+// A burst across keys stops at its share of the queue, leaving room for real attempts.
+func TestOnce_LeavesTheQueueReserveForRealAttempts(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	defer close(release)
+	conn := &scriptedConn{Conn: nil, block: release, err: errors.New("stalled"), prepares: atomic.Int64{}}
+	cfg := testConfig()
+	cfg.queueSize = 8
+	cfg.maxBatch = 1
+	cfg.insertTimeout = time.Minute
+	recorder := newTestRecorder(t, conn, cfg)
+	attempt := Begin(testScope())
+
+	recorder.Step(t.Context(), attempt, StepInboundAuthorize, ResultAccepted)
+	require.Eventually(t, func() bool { return conn.prepares.Load() == 1 }, 10*time.Second, time.Millisecond)
+
+	for range 20 {
+		recorder.Once(t.Context(), testScope(), StepInboundAuthorize, CodeInvalidRequest)
+	}
+	require.Equal(t, int64(14), recorder.dropped(t, dropRateLimited), "6 of 8 slots go to Once rows")
+
+	recorder.Step(t.Context(), attempt, StepInboundAuthorize, ResultAccepted)
+	recorder.End(t.Context(), attempt, StepInboundConsent, CodeCanceled)
+	require.Zero(t, recorder.dropped(t, dropQueueFull), "real attempts took the reserve")
+
+	recorder.Step(t.Context(), attempt, StepInboundAuthorize, ResultAccepted)
+	require.Equal(t, int64(1), recorder.dropped(t, dropQueueFull), "real attempts aren't held back, only limited by the queue")
 }

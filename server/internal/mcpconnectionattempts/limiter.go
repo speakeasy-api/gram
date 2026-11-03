@@ -23,6 +23,11 @@ const (
 	onceOrgBurst     = 200
 	onceOrgPerSecond = 10
 
+	// onceQueueShareNumerator and onceQueueShareDenominator give Once rows 3/4 of the queue,
+	// so a burst across organizations can't crowd out Step and End.
+	onceQueueShareNumerator   = 3
+	onceQueueShareDenominator = 4
+
 	// onceMaxKeys bounds memory to a few MiB. An evicted key only gets a fresh burst.
 	onceMaxKeys = 10_000
 
@@ -37,6 +42,8 @@ type onceKey struct {
 	step           string
 	what           string
 	subject        string
+	providerHost   string
+	memberID       string
 }
 
 // onceLimiter holds back Once rows, which have no proof of a real flow behind them.
@@ -68,7 +75,7 @@ func (l *onceLimiter) allow(row Row, now time.Time) bool {
 	if what == "" {
 		what = row.StepResult
 	}
-	key := onceKey{organizationID: row.OrganizationID, serverID: row.ServerID, step: row.Step, what: what, subject: subject}
+	key := onceKey{organizationID: row.OrganizationID, serverID: row.ServerID, step: row.Step, what: what, subject: subject, providerHost: row.ProviderHost, memberID: row.MemberID}
 
 	l.mu.Lock()
 	defer l.mu.Unlock()

@@ -2,6 +2,7 @@ package mcpconnectionattempts
 
 import (
 	"context"
+	"errors"
 	"slices"
 )
 
@@ -90,8 +91,13 @@ func (t *Tracker) Continue() {
 	}
 }
 
-// Finish goes in a defer. With no verdict it records internal_error, so a missed branch is visible.
+// Finish goes in a defer. With no verdict it records internal_error, so a missed branch is
+// visible, unless the caller disconnected, which isn't an outage.
 func (t *Tracker) Finish(ctx context.Context) {
+	if errors.Is(ctx.Err(), context.Canceled) {
+		t.Continue()
+		return
+	}
 	t.decide(ctx, CodeInternalError, []Option{Detail(NoVerdictDetail)})
 }
 
