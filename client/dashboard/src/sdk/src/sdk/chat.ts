@@ -6,12 +6,14 @@ import { chatCreditUsage } from "../funcs/chatCreditUsage.js";
 import { chatDelete } from "../funcs/chatDelete.js";
 import { chatGenerateTitle } from "../funcs/chatGenerateTitle.js";
 import { chatGetAssistantSessionSummary } from "../funcs/chatGetAssistantSessionSummary.js";
+import { chatGetMemory } from "../funcs/chatGetMemory.js";
 import { chatGetWorkUnitsTrend } from "../funcs/chatGetWorkUnitsTrend.js";
 import { chatList } from "../funcs/chatList.js";
 import { chatListSessionLinks } from "../funcs/chatListSessionLinks.js";
 import { chatListSources } from "../funcs/chatListSources.js";
 import { chatLoad } from "../funcs/chatLoad.js";
 import { chatLoadOverview } from "../funcs/chatLoadOverview.js";
+import { chatSetMemoryExcluded } from "../funcs/chatSetMemoryExcluded.js";
 import { chatSetPinned } from "../funcs/chatSetPinned.js";
 import { chatSubmitFeedback } from "../funcs/chatSubmitFeedback.js";
 import { chatSummarize } from "../funcs/chatSummarize.js";
@@ -20,6 +22,7 @@ import { ClientSDK, RequestOptions } from "../lib/sdks.js";
 import { AssistantSessionSummary } from "../models/components/assistantsessionsummary.js";
 import { CaptureEventResult } from "../models/components/captureeventresult.js";
 import { Chat as Chat$Model } from "../models/components/chat.js";
+import { ChatMemory } from "../models/components/chatmemory.js";
 import { ChatOverview } from "../models/components/chatoverview.js";
 import { CreditUsageResponseBody } from "../models/components/creditusageresponsebody.js";
 import { GenerateTitleResponseBody } from "../models/components/generatetitleresponsebody.js";
@@ -46,6 +49,10 @@ import {
   GetAssistantSessionSummarySecurity,
 } from "../models/operations/getassistantsessionsummary.js";
 import {
+  GetChatMemoryRequest,
+  GetChatMemorySecurity,
+} from "../models/operations/getchatmemory.js";
+import {
   GetWorkUnitsTrendRequest,
   GetWorkUnitsTrendSecurity,
 } from "../models/operations/getworkunitstrend.js";
@@ -69,6 +76,10 @@ import {
   LoadChatOverviewRequest,
   LoadChatOverviewSecurity,
 } from "../models/operations/loadchatoverview.js";
+import {
+  SetChatMemoryExcludedRequest,
+  SetChatMemoryExcludedSecurity,
+} from "../models/operations/setchatmemoryexcluded.js";
 import {
   SetChatPinnedRequest,
   SetChatPinnedSecurity,
@@ -157,6 +168,25 @@ export class Chat extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AssistantSessionSummary> {
     return unwrapAsync(chatGetAssistantSessionSummary(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * getMemory chat
+   *
+   * @remarks
+   * Show whether Organizational Memory reads this session, the masked summary it reads, memos saved from it and the day digest that folded it. Requires the org-memory rollout.
+   */
+  async getMemory(
+    request: GetChatMemoryRequest,
+    security?: GetChatMemorySecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ChatMemory> {
+    return unwrapAsync(chatGetMemory(
       this,
       request,
       security,
@@ -271,6 +301,25 @@ export class Chat extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ChatOverview> {
     return unwrapAsync(chatLoadOverview(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setMemoryExcluded chat
+   *
+   * @remarks
+   * Exclude a session from Organizational Memory, or return it. Anyone who can read the session may exclude it; returning someone else's session needs chat:write. Digests that folded an excluded session are rebuilt without it on the next rollup. Requires the org-memory rollout.
+   */
+  async setMemoryExcluded(
+    request: SetChatMemoryExcludedRequest,
+    security?: SetChatMemoryExcludedSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<ChatMemory> {
+    return unwrapAsync(chatSetMemoryExcluded(
       this,
       request,
       security,

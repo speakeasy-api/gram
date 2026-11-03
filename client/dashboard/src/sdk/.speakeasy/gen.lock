@@ -216,6 +216,7 @@ trackedFiles:
   src/funcs/chatDelete.ts: {}
   src/funcs/chatGenerateTitle.ts: {}
   src/funcs/chatGetAssistantSessionSummary.ts: {}
+  src/funcs/chatGetMemory.ts: {}
   src/funcs/chatGetWorkUnitsTrend.ts: {}
   src/funcs/chatList.ts: {}
   src/funcs/chatListSessionLinks.ts: {}
@@ -224,6 +225,7 @@ trackedFiles:
   src/funcs/chatLoadOverview.ts: {}
   src/funcs/chatSessionsCreate.ts: {}
   src/funcs/chatSessionsRevoke.ts: {}
+  src/funcs/chatSetMemoryExcluded.ts: {}
   src/funcs/chatSetPinned.ts: {}
   src/funcs/chatSubmitFeedback.ts: {}
   src/funcs/chatSummarize.ts: {}
@@ -446,6 +448,10 @@ trackedFiles:
   src/funcs/oktaServerSuggestionsDismiss.ts: {}
   src/funcs/oktaServerSuggestionsList.ts: {}
   src/funcs/oktaServerSuggestionsRestore.ts: {}
+  src/funcs/orgMemoryGetDigest.ts: {}
+  src/funcs/orgMemoryListDigests.ts: {}
+  src/funcs/orgMemoryOverview.ts: {}
+  src/funcs/orgMemoryRecent.ts: {}
   src/funcs/organizationAssetsUploadImage.ts: {}
   src/funcs/organizationRemoteSessionClientsAttachKeySet.ts: {}
   src/funcs/organizationRemoteSessionClientsCreate.ts: {}
@@ -1055,6 +1061,8 @@ trackedFiles:
   src/models/components/chat.ts: {}
   src/models/components/chatanalysissettings.ts: {}
   src/models/components/chatcontentpart.ts: {}
+  src/models/components/chatmemory.ts: {}
+  src/models/components/chatmemorymemo.ts: {}
   src/models/components/chatmessage.ts: {}
   src/models/components/chatoverview.ts: {}
   src/models/components/chatparticipant.ts: {}
@@ -1309,6 +1317,8 @@ trackedFiles:
   src/models/components/getobservabilityoverviewpayload.ts: {}
   src/models/components/getobservabilityoverviewresult.ts: {}
   src/models/components/getorganizationgatewayactivitypayload.ts: {}
+  src/models/components/getorgmemorydigestresponsebody.ts: {}
+  src/models/components/getorgmemoryoverviewresponsebody.ts: {}
   src/models/components/getpluginsresult.ts: {}
   src/models/components/getprojectmetricssummarypayload.ts: {}
   src/models/components/getprojectoverviewresult.ts: {}
@@ -1516,6 +1526,8 @@ trackedFiles:
   src/models/components/listorganizationremotesessionissuersresult.ts: {}
   src/models/components/listorganizationremotesessionsresult.ts: {}
   src/models/components/listorganizationusersessionissuersresult.ts: {}
+  src/models/components/listorgmemorydigestsresponsebody.ts: {}
+  src/models/components/listorgmemoryrecentresponsebody.ts: {}
   src/models/components/listpackagesresult.ts: {}
   src/models/components/listpersonaccountsresponsebody.ts: {}
   src/models/components/listpluginsresult.ts: {}
@@ -1682,6 +1694,9 @@ trackedFiles:
   src/models/components/organizationusersessionissuerdeletepreflight.ts: {}
   src/models/components/organizationusersessionissuermigratepreflight.ts: {}
   src/models/components/organizationusersessionissuerreference.ts: {}
+  src/models/components/orgmemorydigest.ts: {}
+  src/models/components/orgmemorymemo.ts: {}
+  src/models/components/orgmemorysession.ts: {}
   src/models/components/otelattribute.ts: {}
   src/models/components/otelattributevalue.ts: {}
   src/models/components/oteldestination.ts: {}
@@ -1921,6 +1936,7 @@ trackedFiles:
   src/models/components/setkeyenabledrequestbody.ts: {}
   src/models/components/setmcpmetadatarequestbody.ts: {}
   src/models/components/setmcpserverupstreamauthrequirementrequestbody.ts: {}
+  src/models/components/setmemoryexcludedrequestbody.ts: {}
   src/models/components/setorganizationwhitelistrequestbody.ts: {}
   src/models/components/setpinnedrequestbody.ts: {}
   src/models/components/setpluginassignmentsform.ts: {}
@@ -2486,6 +2502,7 @@ trackedFiles:
   src/models/operations/getawskmskey.ts: {}
   src/models/operations/getbillingemail.ts: {}
   src/models/operations/getchatanalysissettings.ts: {}
+  src/models/operations/getchatmemory.ts: {}
   src/models/operations/getcustomdetectionrule.ts: {}
   src/models/operations/getdashboard.ts: {}
   src/models/operations/getdeployment.ts: {}
@@ -2552,6 +2569,8 @@ trackedFiles:
   src/models/operations/getorganizationusersessionissuercimdclient.ts: {}
   src/models/operations/getorganizationusersessionissuerdeletepreflight.ts: {}
   src/models/operations/getorganizationusersessionissuermigratepreflight.ts: {}
+  src/models/operations/getorgmemorydigest.ts: {}
+  src/models/operations/getorgmemoryoverview.ts: {}
   src/models/operations/getpaygbillingsummary.ts: {}
   src/models/operations/getperiodusage.ts: {}
   src/models/operations/getplatformmcponboarding.ts: {}
@@ -2744,6 +2763,8 @@ trackedFiles:
   src/models/operations/listorganizationusersessionissuercimdclients.ts: {}
   src/models/operations/listorganizationusersessionissuermcpservers.ts: {}
   src/models/operations/listorganizationusersessionissuers.ts: {}
+  src/models/operations/listorgmemorydigests.ts: {}
+  src/models/operations/listorgmemoryrecent.ts: {}
   src/models/operations/listpackages.ts: {}
   src/models/operations/listplatformexternalcredentials.ts: {}
   src/models/operations/listplugins.ts: {}
@@ -2947,6 +2968,7 @@ trackedFiles:
   src/models/operations/setauthclientheaders.ts: {}
   src/models/operations/setbillingemail.ts: {}
   src/models/operations/setbillingmetadata.ts: {}
+  src/models/operations/setchatmemoryexcluded.ts: {}
   src/models/operations/setchatpinned.ts: {}
   src/models/operations/setdeviceintegrationscheduleenabled.ts: {}
   src/models/operations/setdirectoryrolemappings.ts: {}
@@ -3208,8 +3230,11 @@ trackedFiles:
   src/react-query/chatAnalysisSettings.ts: {}
   src/react-query/chatDelete.ts: {}
   src/react-query/chatGenerateTitle.ts: {}
+  src/react-query/chatMemory.core.ts: {}
+  src/react-query/chatMemory.ts: {}
   src/react-query/chatSessionsCreate.ts: {}
   src/react-query/chatSessionsRevoke.ts: {}
+  src/react-query/chatSetMemoryExcluded.ts: {}
   src/react-query/chatSetPinned.ts: {}
   src/react-query/chatSubmitFeedback.ts: {}
   src/react-query/checkAgentPolicyGrants.ts: {}
@@ -3766,6 +3791,14 @@ trackedFiles:
   src/react-query/oktaServerSuggestions.ts: {}
   src/react-query/onboardingStatus.core.ts: {}
   src/react-query/onboardingStatus.ts: {}
+  src/react-query/orgMemoryDigest.core.ts: {}
+  src/react-query/orgMemoryDigest.ts: {}
+  src/react-query/orgMemoryDigests.core.ts: {}
+  src/react-query/orgMemoryDigests.ts: {}
+  src/react-query/orgMemoryOverview.core.ts: {}
+  src/react-query/orgMemoryOverview.ts: {}
+  src/react-query/orgMemoryRecent.core.ts: {}
+  src/react-query/orgMemoryRecent.ts: {}
   src/react-query/organization.core.ts: {}
   src/react-query/organization.ts: {}
   src/react-query/organizationGateway.core.ts: {}
@@ -4390,6 +4423,7 @@ trackedFiles:
   src/sdk/organizationremotesessions.ts: {}
   src/sdk/organizations.ts: {}
   src/sdk/organizationusersessionissuers.ts: {}
+  src/sdk/orgmemory.ts: {}
   src/sdk/otel.ts: {}
   src/sdk/overview.ts: {}
   src/sdk/packages.ts: {}
@@ -7418,6 +7452,18 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  getChatMemory:
+    speakeasy-default-get-chat-memory:
+      parameters:
+        query:
+          id: "1b496901-3a4d-4139-a5f8-802f1cf1db32"
+      responses:
+        "200":
+          application/json: {"can_exclude": true, "can_include": true, "memos": [], "state": "personal"}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getChatToolCallCount:
     speakeasy-default-get-chat-tool-call-count:
       parameters:
@@ -7983,6 +8029,30 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getOrgMemoryDigest:
+    speakeasy-default-get-org-memory-digest:
+      parameters:
+        query:
+          id: "21e8dff5-dcf7-4335-81c7-a2dd8da131f0"
+      responses:
+        "200":
+          application/json: {"children": [{"child_count": 668149, "content": "<value>", "generated_at": "2025-06-01T07:13:12.893Z", "id": "cf94ffbe-a3d7-47d9-8c3b-9aeccf62c4a2", "level": "day", "memo_count": 481809, "period_end": "2026-12-11", "period_start": "2024-02-17", "session_count": 484782}], "digest": {"child_count": 396836, "content": "<value>", "generated_at": "2026-01-05T05:05:50.889Z", "id": "125f6a1f-b40b-46ce-abdf-bc83c2aa5de3", "level": "month", "memo_count": 37231, "period_end": "2026-01-07", "period_start": "2025-03-17", "session_count": 327759}, "memos": [], "sessions": [{"id": "3679b8a3-daf7-407c-9b81-df34d1a8631a", "summarized_at": "2025-09-13T17:45:57.391Z", "summary": "<value>", "title": "<value>"}]}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  getOrgMemoryOverview:
+    speakeasy-default-get-org-memory-overview:
+      parameters:
+        query:
+          days: 30
+      responses:
+        "200":
+          application/json: {"days": 443662, "memos_saved": 702993, "recalls": 306118, "sessions_left_out": 961052, "sessions_remembered": 607399}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   getOrganization:
     speakeasy-default-get-organization:
       responses:
@@ -10407,6 +10477,31 @@ examples:
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  listOrgMemoryDigests:
+    speakeasy-default-list-org-memory-digests:
+      parameters:
+        query:
+          level: "week"
+          limit: 12
+      responses:
+        "200":
+          application/json: {"digests": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+  listOrgMemoryRecent:
+    speakeasy-default-list-org-memory-recent:
+      parameters:
+        query:
+          limit: 20
+      responses:
+        "200":
+          application/json: {"memos": [{"author_kind": "system", "content": "<value>", "created_at": "2024-03-04T13:54:24.986Z", "id": "9e5c63ba-ae2e-49f0-bbfe-bc3368b96c13"}], "sessions": []}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   listOrganizationRemoteSessionClientMcpServers:
     speakeasy-default-list-organization-remote-session-client-mcp-servers:
       parameters:
@@ -12939,6 +13034,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+  setChatMemoryExcluded:
+    speakeasy-default-set-chat-memory-excluded:
+      requestBody:
+        application/json: {"excluded": false, "id": "3e1ee8a5-642a-4506-b6db-0d65ab716846"}
+      responses:
+        "200":
+          application/json: {"can_exclude": true, "can_include": false, "memos": [{"content": "<value>", "created_at": "2025-06-03T00:06:34.057Z", "id": "405fa227-b355-4ac7-ab56-cc63c00f41e8"}], "state": "excluded"}
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
   setChatPinned:
     speakeasy-default-set-chat-pinned:
       requestBody:

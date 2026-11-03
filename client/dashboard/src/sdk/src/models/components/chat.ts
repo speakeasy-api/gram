@@ -5,6 +5,8 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import { AgentUsage, AgentUsage$inboundSchema } from "./agentusage.js";
@@ -19,6 +21,20 @@ import {
 } from "./chatparticipant.js";
 import { ChatTotals, ChatTotals$inboundSchema } from "./chattotals.js";
 import { RiskSegment, RiskSegment$inboundSchema } from "./risksegment.js";
+
+/**
+ * Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it.
+ */
+export const ChatMemoryState1 = {
+  Remembered: "remembered",
+  NotSummarized: "not_summarized",
+  Excluded: "excluded",
+  Personal: "personal",
+} as const;
+/**
+ * Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it.
+ */
+export type ChatMemoryState1 = OpenEnum<typeof ChatMemoryState1>;
 
 export type Chat = {
   /**
@@ -94,6 +110,10 @@ export type Chat = {
    * The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.
    */
   maxGeneration: number;
+  /**
+   * Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it.
+   */
+  memoryState?: ChatMemoryState1 | undefined;
   /**
    * The list of messages in the chat for the returned generation, ordered oldest to newest by `seq`.
    */
@@ -189,6 +209,12 @@ export type Chat = {
 };
 
 /** @internal */
+export const ChatMemoryState1$inboundSchema: z.ZodMiniType<
+  ChatMemoryState1,
+  unknown
+> = openEnums.inboundSchema(ChatMemoryState1);
+
+/** @internal */
 export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
   z.object({
     account_email: z.optional(z.string()),
@@ -216,6 +242,7 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
     litellm_proxied: z.optional(z.boolean()),
     match_segments: z.optional(z.array(RiskSegment$inboundSchema)),
     max_generation: z.int(),
+    memory_state: z.optional(ChatMemoryState1$inboundSchema),
     messages: z.array(ChatMessage$inboundSchema),
     num_messages: z.int(),
     originating_client: z.optional(z.string()),
@@ -264,6 +291,7 @@ export const Chat$inboundSchema: z.ZodMiniType<Chat, unknown> = z.pipe(
       "litellm_proxied": "litellmProxied",
       "match_segments": "matchSegments",
       "max_generation": "maxGeneration",
+      "memory_state": "memoryState",
       "num_messages": "numMessages",
       "originating_client": "originatingClient",
       "risk_findings_count": "riskFindingsCount",

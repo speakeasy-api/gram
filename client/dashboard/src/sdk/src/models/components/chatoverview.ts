@@ -5,12 +5,28 @@
 import * as z from "zod/v4-mini";
 import { remap as remap$ } from "../../lib/primitives.js";
 import { safeParse } from "../../lib/schemas.js";
+import * as openEnums from "../../types/enums.js";
+import { OpenEnum } from "../../types/enums.js";
 import { Result as SafeParseResult } from "../../types/fp.js";
 import { SDKValidationError } from "../errors/sdkvalidationerror.js";
 import {
   ChatParticipant,
   ChatParticipant$inboundSchema,
 } from "./chatparticipant.js";
+
+/**
+ * Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it.
+ */
+export const MemoryState = {
+  Remembered: "remembered",
+  NotSummarized: "not_summarized",
+  Excluded: "excluded",
+  Personal: "personal",
+} as const;
+/**
+ * Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it.
+ */
+export type MemoryState = OpenEnum<typeof MemoryState>;
 
 export type ChatOverview = {
   /**
@@ -61,6 +77,10 @@ export type ChatOverview = {
    * True when the session's traffic was observed by the LiteLLM proxy, including sessions whose transcript is owned by the agent's own hook stream
    */
   litellmProxied?: boolean | undefined;
+  /**
+   * Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it.
+   */
+  memoryState?: MemoryState | undefined;
   /**
    * The number of messages in the chat
    */
@@ -140,6 +160,10 @@ export type ChatOverview = {
 };
 
 /** @internal */
+export const MemoryState$inboundSchema: z.ZodMiniType<MemoryState, unknown> =
+  openEnums.inboundSchema(MemoryState);
+
+/** @internal */
 export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
   z.pipe(
     z.object({
@@ -161,6 +185,7 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
         z.transform(v => new Date(v)),
       ),
       litellm_proxied: z.optional(z.boolean()),
+      memory_state: z.optional(MemoryState$inboundSchema),
       num_messages: z.int(),
       originating_client: z.optional(z.string()),
       participants: z.optional(z.array(ChatParticipant$inboundSchema)),
@@ -199,6 +224,7 @@ export const ChatOverview$inboundSchema: z.ZodMiniType<ChatOverview, unknown> =
         "external_user_id": "externalUserId",
         "last_message_timestamp": "lastMessageTimestamp",
         "litellm_proxied": "litellmProxied",
+        "memory_state": "memoryState",
         "num_messages": "numMessages",
         "originating_client": "originatingClient",
         "risk_findings_count": "riskFindingsCount",
