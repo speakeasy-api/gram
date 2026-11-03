@@ -277,12 +277,10 @@ func (s *Service) resolveGateMemberSnapshot(ctx context.Context, logger *slog.Lo
 // dashboard stops appearing on the caller's very next request with nothing to
 // redistribute or re-install.
 //
-// userSessionIssuerID is the organization gateway's issuer. Legacy eligibility
-// requires its clients to connect members that sign in upstream. Enforced typed
-// offers instead determine proxied-member capability; pending setup retains the
-// legacy check. uuid.Nil (the agent gateway) skips issuer matching. A nonzero
-// scopeProjectID restricts candidates before admission and credential association
-// for project gateways.
+// userSessionIssuerID limits legacy sign-in eligibility to the gateway's clients;
+// uuid.Nil (the agent gateway) skips issuer matching. Enforced typed offers
+// replace this check for proxied members; pending setup retains it. A nonzero
+// scopeProjectID restricts candidates before admission and credential association.
 //
 // The organization gateway also drops servers backed by a toolset with
 // Platform tools, mirroring automatic plugin delivery: those toolsets serve
@@ -414,8 +412,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 		}
 		var supported, needsOAuth bool
 		if offer, known := offers[member.serverID]; known && !offer.pending && member.backend == metaMemberBackendProxied {
-			// Detached offers still need the source's complete legacy header
-			// requirements, but discovery must not decrypt its credentials.
+			// Check detached offers against legacy source headers without decrypting credentials.
 			supported, needsOAuth = remoteMemberAuth(offerMetadata.source[member.remoteServerID.UUID], memberNeedsSignIn(member))
 		} else {
 			supported, needsOAuth, err = s.derivedMemberAuth(ctx, shadow, authzSurface, member)

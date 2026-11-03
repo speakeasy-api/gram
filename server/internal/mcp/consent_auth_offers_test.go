@@ -119,8 +119,7 @@ func TestConfiguredAuthOffersDoNotDecryptOrVetoAdminHeaders(t *testing.T) {
 	f.requireSourceHeader(f.sourceHeader("X-API-Key", true, pgtype.Text{}, text("X-API-Key")))
 	id := f.adminClient(authClientTypeStaticCredential, uuid.NullUUID{})
 	f.copyHeader(id, "X-API-Key", true, true, text("not-valid-ciphertext"), pgtype.Text{})
-	// No decryptor is available to discovery; malformed stored secrets are a
-	// serving/readiness concern, not grounds for hiding the configuration.
+	// Discovery must work without decrypting stored secrets.
 	f.service.enc = nil
 	offers, err := f.service.configuredAuthOffers(t.Context(), f.orgID, []uuid.UUID{f.serverID})
 	require.NoError(t, err)

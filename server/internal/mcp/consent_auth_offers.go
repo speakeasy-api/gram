@@ -14,10 +14,7 @@ import (
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 )
 
-// configuredAuthOffer is configuration, not permission or credential readiness.
-// An absent snapshot entry is unknown, never a declaration of no authentication.
-// Pending setup retains legacy discovery eligibility. Consent and the serving
-// resolver remain the authorities for authorizing and selecting a credential.
+// An absent snapshot entry is unknown, not an unauthenticated server.
 type configuredAuthOffer struct {
 	clients []upstreamclientsrepo.ListServerConsentAuthClientsRow
 	pending bool
@@ -53,8 +50,6 @@ func (o configuredAuthOffer) personalRegistrations() []uuid.UUID {
 	return ids
 }
 
-// gatewayCapability checks only whether the gateway can supply this kind of
-// authentication. It neither picks a client nor claims that setup is complete.
 func (o configuredAuthOffer) gatewayCapability(tunneled bool, headers map[uuid.UUID][]proxy.ConfiguredHeader) (supported, oauth bool) {
 	if len(o.clients) == 0 {
 		return true, false
@@ -83,8 +78,7 @@ func (o configuredAuthOffer) gatewayCapability(tunneled bool, headers map[uuid.U
 	return supported, oauth
 }
 
-// Only presence and source metadata participate in discovery. Never decrypt a
-// credential before its permission and readiness are checked by the resolver.
+// Discovery needs header presence and source metadata, so it can avoid decrypting secrets.
 func (s *Service) gatewayAuthHeaderMetadata(ctx context.Context, organizationID string, ids []uuid.UUID) (map[uuid.UUID][]proxy.ConfiguredHeader, error) {
 	rows, err := authclientsrepo.New(s.db).ListAuthClientHeaders(ctx, authclientsrepo.ListAuthClientHeadersParams{OrganizationID: organizationID, AuthClientIds: ids})
 	if err != nil {
@@ -101,8 +95,6 @@ func (s *Service) gatewayAuthHeaderMetadata(ctx context.Context, organizationID 
 	return headers, nil
 }
 
-// gatewayOfferMetadata is a request-local, metadata-only snapshot. Its reads
-// are batched across members; capability evaluation never queries or decrypts.
 type gatewayOfferMetadata struct {
 	headers       map[uuid.UUID][]proxy.ConfiguredHeader
 	source        map[uuid.UUID][]proxy.ConfiguredHeader
@@ -162,9 +154,7 @@ func (s *Service) loadGatewayOfferMetadata(ctx context.Context, organizationID s
 	return metadata, nil
 }
 
-// Match the serving resolver's effective header source, without permission
-// checks, acquiring tokens, or reading decrypted credentials. A setup gap is
-// not a discovery veto; consent explains it and serving still refuses it.
+// Use the serving resolver's effective header source so discovery matches execution.
 func gatewayOfferCapability(member metaMember, offer configuredAuthOffer, metadata gatewayOfferMetadata) bool {
 	if member.tunneledServerID.Valid {
 		supported, _ := offer.gatewayCapability(true, nil)
@@ -176,8 +166,6 @@ func gatewayOfferCapability(member metaMember, offer configuredAuthOffer, metada
 		if !supported {
 			continue
 		}
-		// Reuse the authoritative resolver's metadata decision rather than copy
-		// its administrator/backfill, stale-copy, and identity-chaining rules.
 		row, ok := metadata.selections[[2]uuid.UUID{member.serverID, client.AuthClientID.UUID}]
 		if !ok {
 			continue
