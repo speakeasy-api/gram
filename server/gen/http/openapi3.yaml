@@ -95591,7 +95591,7 @@ components:
                     description: The device agent version grid. Empty for days before versions were recorded.
                 from_cache:
                     type: boolean
-                    description: True when the grids came from the cache rather than a fresh ClickHouse read. Cached grids last 24 hours and refresh in the background once an hour old.
+                    description: True when the grids came from the cache rather than a fresh ClickHouse read. Cached grids last 48 hours and refresh in the background once an hour old. The default window is also refreshed nightly.
                 inference:
                     type: array
                     items:

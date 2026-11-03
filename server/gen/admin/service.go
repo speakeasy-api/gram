@@ -628,7 +628,8 @@ type AdminHookClientsResult struct {
 	// When the grids were read from ClickHouse.
 	QueriedAt string
 	// True when the grids came from the cache rather than a fresh ClickHouse read.
-	// Cached grids last 24 hours and refresh in the background once an hour old.
+	// Cached grids last 48 hours and refresh in the background once an hour old.
+	// The default window is also refreshed nightly.
 	FromCache bool
 	// Every organization that appears in any grid.
 	Organizations []*AdminHookClientOrganization

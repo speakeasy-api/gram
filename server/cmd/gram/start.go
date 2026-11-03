@@ -2204,6 +2204,7 @@ func newStartCommand() *cli.Command {
 					}
 
 					temporalWorker := background.NewTemporalWorker(temporalEnv, logger, tracerProvider, meterProvider, &background.WorkerOptions{
+						FleetHealthCache:               admin.NewHookClientsCache(logger, cache.NewRedisCacheAdapter(redisClient), tm.NewHookClients(chDB), deviceagentversions.NewStore(redisClient)),
 						CatalogPromotions:              catalogpromotion.New(db, mcpregistry.New(db, registryValidator).WithAssetBaseURL(siteURL), productFeatures, tm.NewMCPServerHealth(db, chDB), catalogPromotionDelivery(c, guardianPolicy), guardianPolicy),
 						CatalogPromotionDeliveryPaused: c.Bool("catalog-promotion-delivery-paused"),
 						GuardianPolicy:                 guardianPolicy,
