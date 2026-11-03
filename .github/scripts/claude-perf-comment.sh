@@ -6,8 +6,8 @@
 #
 # REPORT is Claude's structured output, so it is untrusted, and the comment is
 # public. The script fails closed, printing nothing: when REPORT is not a
-# complete review, and when the rendered comment contains anything shaped like
-# a credential, an email address or a UUID.
+# complete review, and when the report or the rendered comment contains
+# anything shaped like a credential, an email address or a UUID.
 set -euo pipefail
 
 : "${MARKER:?}" "${HEAD_SHA:?}" "${RUN_URL:?}"
@@ -40,10 +40,25 @@ body=$(jq -r --arg marker "$MARKER" --arg head "$HEAD_SHA" --arg run "$RUN_URL" 
   + "\n\n<sub>Commit \($head[0:7]) · [run](\($run)) · Claude Code with Speakeasy MCP</sub>"
 ' <<<"$REPORT")
 
-# JWTs, GitHub tokens, Anthropic keys, Speakeasy API keys (auth.APIKeyPrefix)
-# and device join tokens (workloadpolicy), emails and UUIDs.
-redact='eyJ[a-z0-9_-]{10,}\.|gh[oprsu]_[a-z0-9]{20,}|github_pat_|sk-ant-|gram_(live|test|local|dj)_|[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
-if grep -Eiq "$redact" <<<"$body"; then
+patterns=(
+  'eyJ[a-z0-9_-]{10,}\.'                                         # JWTs
+  'gh[oprsu]_[a-z0-9]{20,}' 'github_pat_'                        # GitHub tokens
+  'sk-ant-'                                                      # Anthropic keys
+  'gram_(live|test|local|dj)_'                                   # Speakeasy API keys (auth.APIKeyPrefix) and device join tokens (workloadpolicy)
+  'xox[abeprs]-'                                                 # Slack tokens
+  '[rs]k_live_'                                                  # Stripe secret and restricted keys
+  '(akia|asia)[0-9a-z]{16}'                                      # AWS access key IDs
+  'aiza[0-9a-z_-]{35}'                                           # Google API keys
+  '-----begin [a-z ]*private key'                                # PEM and PGP private keys
+  '://[^/@[:space:]]*:[^/@[:space:]]*@'                          # URLs with a password
+  'bearer[[:space:]]+[a-z0-9._~+/=-]{20,}'                       # bearer tokens
+  '[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}'                        # emails
+  '[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}' # UUIDs
+)
+redact=$(IFS='|' && echo "${patterns[*]}")
+# The report's values as well as the comment, which may change them.
+values=$(jq -r '.. | scalars' <<<"$REPORT")
+if grep -Eiq -e "$redact" <<<"$values"$'\n'"$body"; then
   echo "::error::The perf review matched the redaction check, so nothing was posted." >&2
   exit 1
 fi
