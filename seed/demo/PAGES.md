@@ -430,3 +430,13 @@ Browser verification: [~] — follow check 33 in `seed/demo/verify.md`.
 - This is display-only trust configuration: no working platform key, token, API key, or inference session is seeded. Runtime exchange uses the shared issuer token endpoint with `resource=urn:speakeasy:inference` and `project_id`; returned access tokens are for `/chat/completions`, not MCP.
 - Reseeding removes workload trust and agent rows through the existing organization-scoped cleanup, and explicitly removes the owner's deterministic direct grant before recreating it. Postflight checks verify the exact trust chain and both project-scoped grants, and reject additional inference grants.
 - Browser verification and live reseeding have not been run for this addition.
+
+### [x] Custom domain diagnostics
+
+Network Access settings show a tenant-specific reserved example hostname with a saved
+unconfirmed DNS observation alongside healthy infrastructure. This demonstrates
+that proxies or flattened DNS can hide a target without proving a service outage.
+The fixture is not activated and creates no public route or certificate.
+Verified with the Custom domain diagnostics check in `verify.md`: two local/demo
+seed runs, both organizations at desktop and narrow widths, DNS records, no
+recheck action for the inactive fixture, and the seed safety suite.

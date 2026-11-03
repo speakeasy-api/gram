@@ -2415,3 +2415,9 @@ UPDATE api_keys
 SET created_by_user_id = @created_by_user_id
 WHERE id = @id
   AND organization_id = @organization_id;
+
+-- name: SetCustomDomainHealthWithoutDNSObservation :exec
+-- Models a worker that does not write the independent DNS observation columns.
+UPDATE custom_domains
+SET health_status = 'unhealthy', health_issue = 'check_failed', health_checked_at = @checked_at
+WHERE id = @id AND organization_id = @organization_id AND deleted IS FALSE;

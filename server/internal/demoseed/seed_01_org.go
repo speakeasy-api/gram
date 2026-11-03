@@ -2,8 +2,10 @@ package demoseed
 
 import (
 	"context"
+	"encoding/base32"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -44,6 +46,12 @@ func (s *seeder) seedOrg(ctx context.Context) error {
 	}
 	if err := s.orgFeaturesAndUsers(ctx); err != nil {
 		return err
+	}
+	domainID := s.det("custom-domain")
+	// Ten base32 characters give each tenant a stable, valid DNS target label.
+	targetToken := strings.ToLower(base32.StdEncoding.EncodeToString(domainID[:]))[:10]
+	if err := s.q.OrgSeedCustomDomain(ctx, repo.OrgSeedCustomDomainParams{ID: domainID, OrgID: s.orgID(), Domain: s.spec.CustomDomain, DnsTargetToken: pgtype.Text{String: targetToken, Valid: true}}); err != nil {
+		return fmt.Errorf("seed custom domain diagnostics: %w", err)
 	}
 	return s.orgMemberships(ctx)
 }
@@ -218,6 +226,9 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 			return s.q.OrgDeleteExternalOAuthServerMetadata(ctx, repo.OrgDeleteExternalOAuthServerMetadataParams{ProjectID: proj, OrgID: org})
 		}},
 		{"delete toolsets", func() error { return s.q.OrgDeleteToolsets(ctx, org) }},
+		// Domain SET NULL references must be gone before deleting their domain:
+		// root endpoints require it and toolset slugs can collide without it.
+		{"delete custom domains", func() error { return s.q.OrgDeleteCustomDomains(ctx, org) }},
 		// environments.project_id is NOT NULL but its FK is ON DELETE SET NULL,
 		// so the projects delete below fails outright on any environment row.
 		// The demo tenant seeds none, but the local development tenant does

@@ -1,3 +1,4 @@
+import { queryOptions } from "@tanstack/react-query";
 import { detectPlatform } from "@tanstack/react-hotkeys";
 import {
   cleanup,
@@ -20,6 +21,7 @@ import { renderRouteTree } from "@/test/harness";
 type Mounted = Awaited<ReturnType<typeof renderRouteTree>>;
 
 const mocks = vi.hoisted(() => ({
+  listCustomDomains: vi.fn(),
   getSession: vi.fn(),
   listUsers: vi
     .fn()
@@ -42,6 +44,18 @@ vi.mock("@/lib/gramAdminApi", async (importOriginal) => {
     getOrganizationStats: mocks.getOrganizationStats,
     listOrganizationProjects: mocks.listOrganizationProjects,
     listOrganizationMembers: mocks.listOrganizationMembers,
+  };
+});
+
+vi.mock("@/lib/gramAdminClient", async (importOriginal) => {
+  const actual = await importOriginal<typeof import("@/lib/gramAdminClient")>();
+  return {
+    ...actual,
+    adminListCustomDomainsQuery: (request = {}) =>
+      queryOptions({
+        queryKey: ["customDomains", request],
+        queryFn: () => mocks.listCustomDomains(request),
+      }),
   };
 });
 
@@ -125,6 +139,8 @@ async function renderWithSubmitCaptured(): Promise<void> {
 }
 
 beforeEach(() => {
+  mocks.listCustomDomains.mockReset();
+  mocks.listCustomDomains.mockResolvedValue({ customDomains: [] });
   submitted = [];
   connectedAtSubmit = [];
   router = undefined;
@@ -228,7 +244,9 @@ describe("CommandPalette", () => {
     await renderRouteTree(routeTree, { initialPath: "/organizations" });
 
     fireEvent.click(
-      screen.getByRole("button", { name: "Search organizations and pages" }),
+      screen.getByRole("button", {
+        name: "Search organizations, custom domains, and pages",
+      }),
     );
 
     expect(await screen.findByRole("dialog")).toBeTruthy();
@@ -634,5 +652,68 @@ describe("CommandPalette", () => {
     expect(
       within(reopened).queryByRole("option", { name: /^Northwind Logistics/ }),
     ).toBeNull();
+  });
+});
+
+describe("custom domain search", () => {
+  it("waits until the palette opens and a search is entered", async () => {
+    await renderWithSubmitCaptured();
+    expect(mocks.listCustomDomains).not.toHaveBeenCalled();
+    pressTheShortcut();
+    expect(mocks.listCustomDomains).not.toHaveBeenCalled();
+    type("example.test");
+    await waitFor(() => expect(mocks.listCustomDomains).toHaveBeenCalledOnce());
+  });
+
+  it("matches a domain beyond the display limit and opens its own organization", async () => {
+    mocks.listCustomDomains.mockResolvedValue({
+      customDomains: [
+        ...Array.from({ length: 20 }, (_, i) => ({
+          id: `other_${i}`,
+          domain: `other${i}.example.test`,
+          organizationId: OTHER.id,
+          organizationName: OTHER.name,
+          organizationSlug: OTHER.slug,
+        })),
+        {
+          id: "domain_1",
+          domain: "mcp.example.test",
+          organizationId: ORG.id,
+          organizationName: ORG.name,
+          organizationSlug: ORG.slug,
+        },
+      ],
+    });
+    await renderWithSubmitCaptured();
+    pressTheShortcut();
+    type("MCP.EXAMPLE");
+    fireEvent.click(
+      await within(palette()).findByRole("option", {
+        name: /mcp.example.test/,
+      }),
+    );
+    await waitFor(() =>
+      expect(router?.state.location.pathname).toBe(
+        `/organizations/${ORG.slug}/custom-domain`,
+      ),
+    );
+    await waitFor(() =>
+      expect(mocks.listCustomDomains).toHaveBeenCalledWith({
+        organizationId: ORG.id,
+      }),
+    );
+  });
+
+  it("isolates a failed domain search from organization results", async () => {
+    mocks.listCustomDomains.mockRejectedValue(new Error("unavailable"));
+    await renderWithSubmitCaptured();
+    pressTheShortcut();
+    type(ORG.name);
+    await within(palette()).findByText("Could not search custom domains.");
+    expect(
+      await within(palette()).findByRole("option", {
+        name: new RegExp(`^${ORG.name}`),
+      }),
+    ).toBeTruthy();
   });
 });

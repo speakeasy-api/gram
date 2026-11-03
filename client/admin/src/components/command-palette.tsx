@@ -10,6 +10,7 @@ import {
   CreditCardIcon,
   ExternalLinkIcon,
   FolderIcon,
+  GlobeIcon,
   HistoryIcon,
   SearchIcon,
   ServerIcon,
@@ -36,6 +37,7 @@ import {
 } from "@/components/ui/dialog";
 import { useOnUnmount } from "@/hooks/useOnUnmount";
 import { organizationQuery, organizationsListQuery } from "@/lib/adminQueries";
+import { adminListCustomDomainsQuery } from "@/lib/gramAdminClient";
 import { ADMIN_NAV } from "@/lib/adminNav";
 import {
   openOrganizationDashboard,
@@ -237,6 +239,19 @@ export function CommandPalette(): JSX.Element {
           ? "empty"
           : "results";
 
+  // This endpoint returns the complete custom-domain inventory.
+  // Reuse the fleet page cache; never fetch while the palette is closed.
+  const domainsQuery = useQuery({
+    ...adminListCustomDomainsQuery(),
+    enabled: open && searching,
+    retry: false,
+  });
+  const domainResults = searching
+    ? (domainsQuery.data?.customDomains
+        .filter((domain) => matches(trimmed, domain.domain))
+        .slice(0, RESULT_LIMIT) ?? [])
+    : [];
+
   const lowered = trimmed.toLowerCase();
   const navItems = ADMIN_NAV.filter((item) =>
     matches(lowered, `${item.label} ${item.keywords}`),
@@ -271,7 +286,7 @@ export function CommandPalette(): JSX.Element {
         onClick={() => changeOpen(true)}
         // Named for what it opens rather than what it is. The shortcut is on
         // the button as an attribute too, so it is announced and not only drawn.
-        aria-label="Search organizations and pages"
+        aria-label="Search organizations, custom domains, and pages"
         aria-keyshortcuts={shortcut.announced}
         // Square and iconic where the bar is narrow, an input-shaped box where
         // there is room for one. Never hidden outright: the shortcut is the
@@ -297,7 +312,7 @@ export function CommandPalette(): JSX.Element {
           <DialogHeader className="sr-only">
             <DialogTitle>Command palette</DialogTitle>
             <DialogDescription>
-              Search organizations, or jump to a page
+              Search organizations or custom domains, or jump to a page
             </DialogDescription>
           </DialogHeader>
 
@@ -310,7 +325,7 @@ export function CommandPalette(): JSX.Element {
             <CommandInput
               value={term}
               onValueChange={changeTerm}
-              placeholder="Search organizations, or jump to a page..."
+              placeholder="Search organizations or custom domains, or jump to a page..."
             />
             <CommandList>
               {searchState !== "idle" && (
@@ -384,6 +399,48 @@ export function CommandPalette(): JSX.Element {
                           ? "No organizations match."
                           : "Searching..."}
                     </div>
+                  )}
+                </CommandGroup>
+              )}
+
+              {searching && (
+                <CommandGroup heading="Custom domains">
+                  {domainResults.map((domain) => (
+                    <CommandItem
+                      key={domain.id}
+                      value={`domain:${domain.id}`}
+                      onSelect={() => {
+                        changeOpen(false);
+                        void navigate({
+                          to: "/organizations/$idOrSlug/custom-domain",
+                          params: {
+                            idOrSlug:
+                              domain.organizationSlug || domain.organizationId,
+                          },
+                        });
+                      }}
+                    >
+                      <GlobeIcon />
+                      <span className="truncate">{domain.domain}</span>
+                      <span className="text-muted-foreground ml-auto truncate pl-2 text-xs">
+                        {domain.organizationName}
+                      </span>
+                    </CommandItem>
+                  ))}
+                  {domainsQuery.isError && (
+                    <p className="text-muted-foreground px-2 py-3 text-sm">
+                      Could not search custom domains.
+                    </p>
+                  )}
+                  {domainsQuery.isPending && (
+                    <p className="text-muted-foreground px-2 py-3 text-sm">
+                      Searching custom domains...
+                    </p>
+                  )}
+                  {domainsQuery.isSuccess && domainResults.length === 0 && (
+                    <p className="text-muted-foreground px-2 py-3 text-sm">
+                      No custom domains match.
+                    </p>
                   )}
                 </CommandGroup>
               )}

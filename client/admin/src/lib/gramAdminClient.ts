@@ -77,6 +77,8 @@ import { buildAdminGetMcpServerToolCallsQuery } from "@gram/admin-client/react-q
 import { buildAdminChangeTrialEndDateMutation } from "@gram/admin-client/react-query/adminChangeTrialEndDate";
 import type { ChangeTrialEndDateRequestBody } from "@gram/admin-client/models/components/changetrialenddaterequestbody";
 import { buildAdminListExternalMcpMigrationCandidatesQuery } from "@gram/admin-client/react-query/adminListExternalMcpMigrationCandidates.core";
+import { buildAdminListCustomDomainsQuery } from "@gram/admin-client/react-query/adminListCustomDomains.core";
+import type { AdminListCustomDomainsRequest } from "@gram/admin-client/models/operations/adminlistcustomdomains";
 import {
   buildAdminPreviewExternalMcpMigrationMutation,
   type AdminPreviewExternalMcpMigrationMutationVariables,
@@ -1208,6 +1210,27 @@ export function adminListExternalMcpMigrationCandidatesQuery(): ReturnType<
   typeof createAdminListExternalMcpMigrationCandidatesQuery
 > {
   return createAdminListExternalMcpMigrationCandidatesQuery();
+}
+
+function createAdminListCustomDomainsQuery(
+  request: AdminListCustomDomainsRequest,
+) {
+  const generated = buildAdminListCustomDomainsQuery(
+    redirectingClient,
+    request,
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+// Every live custom domain, or the one an organization owns. Both filters are
+// applied by the server, so the query key carries them.
+export function adminListCustomDomainsQuery(
+  request: AdminListCustomDomainsRequest = {},
+): ReturnType<typeof createAdminListCustomDomainsQuery> {
+  return createAdminListCustomDomainsQuery(request);
 }
 
 export function adminPreviewExternalMcpMigration(

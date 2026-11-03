@@ -21,6 +21,7 @@ import {
   ChartColumnStackedIcon,
   ArrowRightLeftIcon,
   ActivityIcon,
+  GlobeIcon,
 } from "lucide-react";
 
 import { McpIcon } from "@/components/ui/mcp-icon";
@@ -108,6 +109,12 @@ export const ADMIN_NAV_GROUPS = [
         label: "External MCP migration",
         keywords: "external mcp attachments remote servers migrate cutover",
         icon: ArrowRightLeftIcon,
+      },
+      {
+        to: "/custom-domains",
+        label: "Custom domains",
+        keywords: "dns cname routing target hostname domain vanity",
+        icon: GlobeIcon,
       },
       {
         to: "/fleet-health",
