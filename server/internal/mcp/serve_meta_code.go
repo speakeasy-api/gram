@@ -146,13 +146,16 @@ func (s *Service) executeMetaCode(ctx context.Context, logger *slog.Logger, endp
 	defer func() {
 		if retErr != nil {
 			outcome = "error"
+			if errors.Is(retErr, context.Canceled) {
+				outcome = "cancelled"
+			}
 		}
 		if timing == nil {
 			timing = new(newCodeExecutionTiming(started, execution))
 		}
 		recordCodeExecutionTiming(ctx, *timing, outcome)
 		var shareable *oops.ShareableError
-		if outcome != "ok" && (!errors.As(retErr, &shareable) || !shareable.SpanHandled()) {
+		if outcome != "ok" && outcome != "cancelled" && (!errors.As(retErr, &shareable) || !shareable.SpanHandled()) {
 			span.SetStatus(codes.Error, outcome)
 		}
 		span.End()
@@ -199,6 +202,9 @@ func (s *Service) executeMetaCode(ctx context.Context, logger *slog.Logger, endp
 			logger.WarnContext(ctx, "code execution was not admitted", attr.SlogError(err))
 		}
 		outcome = "refused"
+		if refusal.Error.Code == codeRefusalCancelled {
+			outcome = "cancelled"
+		}
 		timing = new(newCodeExecutionTiming(started, nil))
 		return marshalCodeAdmissionRefusal(ctx, logger, req.ID, refusal, *timing)
 	}

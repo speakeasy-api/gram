@@ -62,11 +62,12 @@ type ExecutionResult struct {
 
 // ExecutionTiming is where an execution spent its server-side time.
 type ExecutionTiming struct {
-	// Admission covers waiting for caller, organization and runner capacity
-	// and recording ownership, until the program could be submitted.
+	// Admission covers coordinator overhead outside Run: capacity, ownership,
+	// allocation and connection setup, plus callback and stream cleanup.
 	Admission time.Duration
 
-	// Run covers submission, Python and tool callbacks, until the result.
+	// Run covers submission, Python and tool callbacks until the result,
+	// excluding subsequent callback and stream cleanup.
 	Run time.Duration
 }
 
@@ -242,8 +243,8 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 		fail("deadline_exceeded", "too little execution time remained to run the program; program was not submitted")
 		return result
 	}
-	// Everything before the start frame is admission; the coordinator reports
-	// the rest as the run.
+	// Time submission through the result, before the cleanup defers run.
+	// The coordinator counts all other elapsed time as admission overhead.
 	submitted := time.Now()
 	defer func() { result.Timing.Run = time.Since(submitted) }()
 	err = writeRunnerFrame(stream, runnerStart{Type: "start", Version: ProtocolVersion, ExecutionID: executionID.String(), Code: code, WallMS: remaining})

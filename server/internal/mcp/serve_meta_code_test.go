@@ -514,8 +514,13 @@ func TestCodeModeFailureReportsTiming(t *testing.T) {
 					continue
 				}
 				found = true
-				require.Equal(t, codes.Error, span.Status().Code)
-				require.Contains(t, span.Status().Description, tc.status, "preserve LogError's span treatment")
+				if tc.outcome == "cancelled" {
+					require.Equal(t, codes.Unset, span.Status().Code)
+					require.Empty(t, span.Status().Description)
+				} else {
+					require.Equal(t, codes.Error, span.Status().Code)
+					require.Contains(t, span.Status().Description, tc.status, "preserve LogError's span treatment")
+				}
 				require.Contains(t, span.Attributes(), attr.CodeOutcome(tc.outcome))
 				for _, field := range span.Attributes() {
 					if field.Key == attr.CodeServerMSKey {
@@ -535,4 +540,28 @@ func TestCodeModeFailureReportsTiming(t *testing.T) {
 			require.Contains(t, wide.Emit(requestCtx), attr.SlogCodeOutcome(tc.outcome))
 		})
 	}
+}
+
+func TestCodeModeCancelledAdmissionIsNotSpanError(t *testing.T) {
+	t.Parallel()
+	ctx, ti, recorder := newTestMCPServiceWithScanSpans(t)
+	fx := seedOrganizationGateway(t, ctx, ti)
+	mcp.SetTestCodeExecutor(ti.service.Service, &refusingCodeExecutor{err: codemode.ErrCancelledBeforeSubmit})
+	enableCodeMode(t, ctx, ti)
+	bearer := mintOrganizationGatewayBearerWithPolicy(t, ctx, ti, fx, metamcp.DiscoveryModeCode)
+	requestCtx := wide.Start(t.Context())
+	w, err := serveOrganizationGatewayHTTP(t, requestCtx, ti, fx.organizationSlug, bearer, makeMetaRPCBody(t, "tools/call", map[string]any{"name": "execute", "arguments": map[string]any{"code": "1"}}))
+	require.NoError(t, err)
+	require.Contains(t, w.Body.String(), `"code":"cancelled"`)
+	found := false
+	for _, span := range recorder.Ended() {
+		if span.Name() == "gateway.code.execute" {
+			found = true
+			require.Equal(t, codes.Unset, span.Status().Code)
+			require.Contains(t, span.Attributes(), attr.CodeOutcome("cancelled"))
+		}
+	}
+	require.True(t, found)
+	require.True(t, wide.Contains(requestCtx, string(attr.CodeServerMSKey)))
+	require.Contains(t, wide.Emit(requestCtx), attr.SlogCodeOutcome("cancelled"))
 }

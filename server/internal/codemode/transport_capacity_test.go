@@ -15,7 +15,11 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/yamux"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/codes"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 )
 
 // upgradingRunner accepts runner upgrades and answers with capacityHeader
@@ -243,6 +247,11 @@ func TestRunnerStreamWaitReconnectsAClosedSession(t *testing.T) {
 
 func TestRunnerAdmissionWaitBoundsConnecting(t *testing.T) {
 	t.Parallel()
+	recorder := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	t.Cleanup(func() { require.NoError(t, tracerProvider.Shutdown(context.Background())) })
+	parentCtx, parent := tracerProvider.Tracer("test").Start(t.Context(), "request")
+	defer parent.End()
 	listener, err := net.Listen("tcp", "127.0.0.1:0")
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = listener.Close() })
@@ -264,8 +273,18 @@ func TestRunnerAdmissionWaitBoundsConnecting(t *testing.T) {
 	require.NoError(t, err)
 	t.Cleanup(func() { _ = client.Close() })
 	started := time.Now()
-	result := client.Run(t.Context(), uuid.New(), "1", func(context.Context) (Host, error) { return idleHost{}, nil })
+	result := client.Run(parentCtx, uuid.New(), "1", func(context.Context) (Host, error) { return idleHost{}, nil })
 	require.NotNil(t, result.Error)
 	require.Equal(t, "capacity_exceeded", result.Error.Code)
 	require.Less(t, time.Since(started), connectTimeout, "the admission wait, not the connect timeout, bounds a hung handshake")
+
+	found := false
+	for _, span := range recorder.Ended() {
+		if span.Name() == "codemode.runner.connect" {
+			found = true
+			require.Equal(t, codes.Error, span.Status().Code)
+			require.Contains(t, span.Attributes(), attr.CodeOutcome("timeout"))
+		}
+	}
+	require.True(t, found, "a hung handshake records a timeout")
 }

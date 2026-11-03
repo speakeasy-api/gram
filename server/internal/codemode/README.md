@@ -354,17 +354,22 @@ codes `capacity_exceeded`, `runtime_unavailable`, `request_active`, `cancelled`
 and `not_admitted`. The message always says no program was submitted.
 
 Every execute result, including a refusal, carries the gateway's timing in
-`_meta["com.speakeasy.ai/timing"]`: `server_ms`, plus `admission_ms` (waiting
-for capacity) and `run_ms` once the program was submitted. Inspect shows it
-beside the browser's round trip.
+`_meta["com.speakeasy.ai/timing"]`: `server_ms`, plus `admission_ms` and
+`run_ms`. Run time covers submission through the result, before callback and
+stream cleanup. Admission is the coordinator's remaining elapsed time, so it
+includes capacity, allocation and connection setup as well as runner cleanup;
+it is not solely a pre-submission wait. Inspect shows these values beside the
+browser's round trip.
 
 Those same values appear on the request's wide log event and the
 `gateway.code.execute` span as `gram.code.server_ms`,
 `gram.code.admission_ms` and `gram.code.run_ms`, with a bounded
-`gram.code.outcome`. The gateway reports `refused` for admission refusals and
+`gram.code.outcome`. The gateway reports `refused` for non-cancellation admission refusals and
 otherwise shares the runner's bounded outcomes, including `timeout` and
-`cancelled`. Coordinator refusals omit admission/run values; early failures
-still report server time. Search Datadog logs with
+`cancelled`. Cancellation keeps its outcome without marking the span as an
+error; failed execution and admission refusal outcomes retain error status.
+Coordinator refusals omit admission/run values; early failures still report
+server time. Search Datadog logs with
 `(service:gram-server OR service:gram-mcp) @gram.code.server_ms:*` and follow
 the trace ID for sampled requests. This uses the environment's existing OTel
 configuration and sampling; it does not enable tracing in previews.
@@ -373,12 +378,14 @@ Runtime child spans separate `codemode.acquire`, `codemode.sandbox.allocate`,
 `codemode.sandbox.claim`, `codemode.sandbox.wait`,
 `codemode.sandbox.inspect`, `codemode.runner.open`,
 `codemode.runner.connect` and `codemode.runner.run`. Remote Kubernetes HTTP
-calls are nested beneath their operation. Acquisition records whether it used
+calls are traced only with a valid parent span; background housekeeping calls
+do not create root traces or HTTP metrics. Acquisition records whether it used
 an already-ready runner (`gram.code.runner_reused`); this does not measure warm
 pool adoption. Allocation records readiness polls (`gram.code.claim_polls` on
 the wait span), keeps its original trace parent, and continues independently
-of request cancellation. Runtime spans omit program text, tool arguments,
-credentials and raw error details.
+of request cancellation. Custom `codemode.*` spans omit program text, tool
+arguments, credentials and raw error details. Kubernetes HTTP spans use the
+standard HTTP instrumentation attributes and transport error reporting.
 
 Each tool call from an execution starts its own trace, linked to the
 execution's, so Tool Logs shows one correctly attributed row per member call.

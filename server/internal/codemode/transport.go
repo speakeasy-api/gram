@@ -101,7 +101,13 @@ func (c *RunnerClient) Close() error {
 func (c *RunnerClient) open(ctx context.Context, waitUntil time.Time) (_ *runnerStream, retErr error) {
 	ctx, span := runtimeTracer(ctx).Start(ctx, "codemode.runner.open")
 	defer span.End()
-	defer func() { span.SetStatus(recordRuntimeOutcome(span, retErr)) }()
+	defer func() {
+		failure := retErr
+		if failure != nil && ctx.Err() != nil {
+			failure = ctx.Err()
+		}
+		span.SetStatus(recordRuntimeOutcome(span, failure))
+	}()
 	admission, stopAdmission := context.WithDeadline(ctx, waitUntil)
 	defer stopAdmission()
 	admissionErr := func(err error) error {
@@ -220,9 +226,16 @@ func (c *RunnerClient) knownCapacity() int {
 func (c *RunnerClient) connect(ctx context.Context) (_ *yamux.Session, _ int, retErr error) {
 	ctx, span := runtimeTracer(ctx).Start(ctx, "codemode.runner.connect")
 	defer span.End()
-	defer func() { span.SetStatus(recordRuntimeOutcome(span, retErr)) }()
 	ctx, cancel := context.WithTimeout(ctx, connectTimeout)
-	defer cancel()
+	defer func() {
+		// Inspect cancellation before our cleanup cancels this context.
+		failure := retErr
+		if failure != nil && ctx.Err() != nil {
+			failure = ctx.Err()
+		}
+		span.SetStatus(recordRuntimeOutcome(span, failure))
+		cancel()
+	}()
 	port := c.endpoint.Port()
 	if port == "" {
 		if c.endpoint.Scheme == "https" {

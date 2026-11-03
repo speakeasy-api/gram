@@ -642,7 +642,7 @@ func TestCodeGKECancelledRequestDoesNotCancelWarmup(t *testing.T) {
 	}
 	acquire, allocate := spans["codemode.acquire"], spans["codemode.sandbox.allocate"]
 	require.Equal(t, parent.SpanContext().SpanID(), acquire.Parent().SpanID())
-	require.Equal(t, codes.Error, acquire.Status().Code)
+	require.Equal(t, codes.Unset, acquire.Status().Code)
 	require.Contains(t, acquire.Attributes(), attr.CodeOutcome("cancelled"))
 	require.Equal(t, acquire.SpanContext().SpanID(), allocate.Parent().SpanID())
 	require.Contains(t, allocate.Attributes(), attr.CodeOutcome("ok"), "allocation outlives the cancelled request")

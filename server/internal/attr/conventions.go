@@ -4060,7 +4060,7 @@ func SlogRegistrySeedOutcome(v string) slog.Attr {
 const (
 	// CodeServerMSKey measures the gateway's Code Mode execution handling.
 	CodeServerMSKey = attribute.Key("gram.code.server_ms")
-	// CodeAdmissionMSKey measures admission, allocation and connection before submission.
+	// CodeAdmissionMSKey measures admission and runner cleanup outside the timed run.
 	CodeAdmissionMSKey = attribute.Key("gram.code.admission_ms")
 	// CodeRunMSKey measures execution after submission, including helper callbacks.
 	CodeRunMSKey = attribute.Key("gram.code.run_ms")

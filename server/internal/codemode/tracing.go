@@ -3,6 +3,7 @@ package codemode
 import (
 	"context"
 	"errors"
+	"os"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"go.opentelemetry.io/otel"
@@ -28,7 +29,7 @@ func recordRuntimeOutcome(span trace.Span, err error) (codes.Code, string) {
 		outcome = "pending"
 	case errors.Is(err, context.Canceled):
 		outcome = "cancelled"
-	case errors.Is(err, context.DeadlineExceeded):
+	case errors.Is(err, context.DeadlineExceeded), errors.Is(err, os.ErrDeadlineExceeded):
 		outcome = "timeout"
 	case errors.Is(err, ErrCapacity), errors.Is(err, errRunnerFull):
 		outcome = "capacity"
@@ -42,7 +43,7 @@ func recordRuntimeOutcome(span trace.Span, err error) (codes.Code, string) {
 
 func recordOutcome(span trace.Span, outcome string) (codes.Code, string) {
 	span.SetAttributes(attr.CodeOutcome(outcome))
-	if outcome != "ok" && outcome != "pending" {
+	if outcome != "ok" && outcome != "pending" && outcome != "cancelled" {
 		return codes.Error, outcome
 	}
 	return codes.Unset, ""
@@ -61,6 +62,8 @@ func ExecutionOutcome(failure *ExecutionError) string {
 		return "cancelled"
 	case "capacity_exceeded":
 		return "capacity"
+	case "admission_refused":
+		return "refused"
 	case "runtime_unavailable":
 		return "unavailable"
 	default:

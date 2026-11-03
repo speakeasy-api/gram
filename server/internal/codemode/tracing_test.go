@@ -55,6 +55,7 @@ func TestRunnerTraceClassifiesExecutionFailures(t *testing.T) {
 		{code: "deadline_exceeded", outcome: "timeout", started: true},
 		{code: "cancelled", outcome: "cancelled", started: true},
 		{code: "capacity_exceeded", outcome: "capacity", started: false},
+		{code: "admission_refused", outcome: "refused", started: false},
 		{code: "runtime_unavailable", outcome: "unavailable", started: false},
 		{code: "untrusted-runner-code", outcome: "error", started: true},
 	} {
@@ -80,8 +81,13 @@ func TestRunnerTraceClassifiesExecutionFailures(t *testing.T) {
 					continue
 				}
 				found = true
-				require.Equal(t, codes.Error, span.Status().Code)
-				require.Equal(t, tc.outcome, span.Status().Description)
+				if tc.outcome == "cancelled" {
+					require.Equal(t, codes.Unset, span.Status().Code)
+					require.Empty(t, span.Status().Description)
+				} else {
+					require.Equal(t, codes.Error, span.Status().Code)
+					require.Equal(t, tc.outcome, span.Status().Description)
+				}
 				require.Len(t, span.Attributes(), 1)
 				require.Equal(t, attr.CodeOutcome(tc.outcome), span.Attributes()[0])
 				require.Empty(t, span.Events())

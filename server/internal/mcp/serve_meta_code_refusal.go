@@ -119,8 +119,8 @@ type codeExecutionTiming struct {
 	// ServerMS is the gateway's total time for the request, in milliseconds.
 	ServerMS int64 `json:"server_ms"`
 
-	// AdmissionMS is time spent waiting for capacity before submission; absent
-	// when the request was refused before reaching the runtime.
+	// AdmissionMS includes admission overhead and runner cleanup outside the
+	// timed run; absent when refused before reaching the runtime.
 	AdmissionMS *int64 `json:"admission_ms,omitempty"`
 
 	// RunMS is time from submission to the result, including tool callbacks;
