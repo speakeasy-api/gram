@@ -35,7 +35,8 @@ export function useOrgMemoryStatus(): {
   const { hasAnyScope, isLoading: grantsLoading } = useRBAC();
   const canRead = hasAnyScope(["memory:read"], project.id);
   const overview = useOrgMemoryOverview(
-    { days: ORG_MEMORY_OVERVIEW_DAYS },
+    // The project keys the cache per project; see OrgMemoryTimeline.
+    { days: ORG_MEMORY_OVERVIEW_DAYS, gramProject: project.slug },
     undefined,
     { enabled: canRead, retry: false, throwOnError: false },
   );

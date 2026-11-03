@@ -6,7 +6,7 @@ const overview = vi.fn();
 const rbac = vi.fn();
 
 vi.mock("@/contexts/Auth", () => ({
-  useProject: () => ({ id: "project-1" }),
+  useProject: () => ({ id: "project-1", slug: "default" }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => rbac(),
@@ -59,7 +59,7 @@ describe("useOrgMemoryStatus", () => {
       "disabled",
     );
     expect(overview).toHaveBeenLastCalledWith(
-      { days: 30 },
+      { days: 30, gramProject: "default" },
       undefined,
       expect.objectContaining({ enabled: false }),
     );

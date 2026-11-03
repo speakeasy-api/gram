@@ -2,6 +2,7 @@ import { InlineEmptyState } from "@/components/inline-empty-state";
 import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { Skeleton } from "@/components/ui/Skeleton";
+import { useProject } from "@/contexts/Auth";
 import { cn } from "@/lib/utils";
 import type { OrgMemoryDigest } from "@gram/client/models/components/orgmemorydigest.js";
 import type { OrgMemoryMemo } from "@gram/client/models/components/orgmemorymemo.js";
@@ -51,12 +52,19 @@ export function OrgMemoryTimeline({
   onOpenSession: ((chatId: string) => void) | undefined;
 }): JSX.Element {
   const [limit, setLimit] = useState(PAGE_SIZE);
-  const digests = useOrgMemoryDigests({ level, limit }, undefined, {
-    throwOnError: false,
-    // "Show older" grows the page; keep the current one on screen meanwhile.
-    placeholderData: keepPreviousData,
-  });
-  const recent = useOrgMemoryRecent({ limit: 20 }, undefined, {
+  // Passing the project keys every memory query per project, so switching
+  // projects never shows another project's cached memory.
+  const gramProject = useProject().slug;
+  const digests = useOrgMemoryDigests(
+    { level, limit, gramProject },
+    undefined,
+    {
+      throwOnError: false,
+      // "Show older" grows the page; keep the current one on screen meanwhile.
+      placeholderData: keepPreviousData,
+    },
+  );
+  const recent = useOrgMemoryRecent({ limit: 20, gramProject }, undefined, {
     throwOnError: false,
   });
 
@@ -218,7 +226,8 @@ function DigestDetail({
   onSelect: (digestId: string, level?: DigestLevel) => void;
   onOpenSession: ((chatId: string) => void) | undefined;
 }): JSX.Element {
-  const detail = useOrgMemoryDigest({ id: digestId }, undefined, {
+  const gramProject = useProject().slug;
+  const detail = useOrgMemoryDigest({ id: digestId, gramProject }, undefined, {
     throwOnError: false,
   });
 

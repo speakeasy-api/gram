@@ -79,7 +79,9 @@ const memoryEnableForOrganization = `-- name: MemoryEnableForOrganization :exec
 
 INSERT INTO chat_analysis_settings (organization_id, judge, enabled, daily_cap)
 VALUES ($1, 'business_memory', TRUE, 0)
-ON CONFLICT (organization_id, judge) DO UPDATE SET enabled = TRUE
+ON CONFLICT (organization_id, judge) DO UPDATE
+SET enabled = TRUE,
+    daily_cap = CASE WHEN chat_analysis_settings.enabled THEN chat_analysis_settings.daily_cap ELSE 0 END
 `
 
 // Organizational Memory: masked session summaries, memos and the day, week
@@ -91,8 +93,10 @@ ON CONFLICT (organization_id, judge) DO UPDATE SET enabled = TRUE
 // switch does.
 // Organizational Memory follows the staff admin Business Memory Extraction
 // setting. The demo org gets it switched on so the memory tab, sessions column
-// and session sheet section show. A new row's daily cap of 0 keeps the
-// extraction pipeline from spending anything; an existing row keeps its cap.
+// and session sheet section show. A daily cap of 0 keeps the extraction
+// pipeline from spending anything. A row someone already switched on keeps
+// its cap; a switched-off row gets cap 0, so enabling it here never starts
+// paid extraction.
 func (q *Queries) MemoryEnableForOrganization(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, memoryEnableForOrganization, organizationID)
 	return err
