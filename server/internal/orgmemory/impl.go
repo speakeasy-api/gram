@@ -2,9 +2,10 @@
 // Organizational Memory: the digest timeline, the sessions and memos each
 // digest cites, and recent activity not yet rolled up.
 //
-// The text it returns is already masked: summaries come from the redacted
-// transcript, memos are redacted when saved, and digests are written only
-// from those. Reads require memory:read on the project, the same grant the
+// Summaries, memos and digests are already masked: summaries come from the
+// redacted transcript, memos are redacted when saved, and digests are written
+// only from those. Session titles are raw, so they are returned only to
+// callers who also hold chat:read. Reads require memory:read on the project, the same grant the
 // Platform MCP memory tools require, so people and agents see one corpus
 // under one permission.
 package orgmemory
