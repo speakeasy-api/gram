@@ -96,7 +96,7 @@ The main frontend application lives in `client/dashboard/` (not `client/` direct
 
 ### Dashboard browser automation
 
-Use the `gram-playwright-cli` skill and `mise run playwright` for routine dashboard inspection, page interaction, console or network debugging, and screenshots. The mise task uses the repository Playwright config, installs Chromium when missing, and writes ignored artifacts to `.playwright-cli/`.
+Use the `gram-playwright-cli` skill and `mise run playwright` for routine dashboard inspection, page interaction, console or network debugging, and screenshots. The mise task uses the repository Playwright config, launches the system Google Chrome with its sandbox enabled, installs Chrome when missing, and writes ignored artifacts to `.playwright-cli/`.
 
 Use `pull-request-demo` when a user-visible change needs a shareable PR screenshot, GIF recording, or PR comment. It builds on the same `mise run playwright` workflow and adds the capture and publishing steps. Do not use `npm`, `npx`, or `yarn` for either workflow.
 

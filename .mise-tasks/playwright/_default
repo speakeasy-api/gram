@@ -19,12 +19,15 @@ fi
 
 cat "$stderr_file" >&2
 
-if ! grep -Eq 'is not installed\. Run `playwright-cli install-browser' "$stderr_file"; then
+# The repository config launches the system Google Chrome (channel "chrome") so
+# it picks up Chrome's own auto-updates, rather than Playwright's pinned
+# Chromium build, which lags behind upstream security fixes.
+if ! grep -Eq "is not installed\. Run \`playwright-cli install-browser|Chromium distribution 'chrome' is not found" "$stderr_file"; then
   exit "$status"
 fi
 
-echo "Installing Playwright browser and system dependencies..." >&2
-playwright-cli install-browser chromium --with-deps
+echo "Installing Google Chrome and system dependencies..." >&2
+playwright-cli install-browser chrome --with-deps
 
 rm -f "$stderr_file"
 trap - EXIT
