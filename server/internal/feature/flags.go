@@ -43,11 +43,6 @@ const (
 	// Targeted by PostHog organization group (org slug), like FlagBudgets.
 	// Removed once device-level matching is GA.
 	FlagDeviceLevelCoverage Flag = "device-level-coverage"
-	// FlagOrgMemory gates team chat memory end to end: the background masked
-	// chat summary job, its backfill, the period digests, and the Platform MCP
-	// memory tools. Targeted by PostHog organization group (org slug), like
-	// FlagBudgets. Removed once team memory is GA.
-	FlagOrgMemory Flag = "org-memory"
 
 	// FlagPlatformMCPRiskMutations is the exact-project kill switch for risk
 	// policy and exclusion writes exposed through Platform MCP. It is evaluated

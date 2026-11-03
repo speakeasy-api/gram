@@ -15,8 +15,8 @@ import (
 )
 
 // Browse a project's Organizational Memory: digests, the sessions and memos
-// they fold, and recent activity. Requires memory:read on the project and the
-// org-memory rollout.
+// they fold, and recent activity. Requires memory:read on the project and
+// Business Memory Extraction turned on for the organization.
 type Service interface {
 	// Summarize the project's Organizational Memory over a recent window.
 	GetOrgMemoryOverview(context.Context, *GetOrgMemoryOverviewPayload) (res *GetOrgMemoryOverviewResult, err error)

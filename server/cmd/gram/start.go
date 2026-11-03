@@ -1270,7 +1270,7 @@ func newStartCommand() *cli.Command {
 				WithWorkloadInference(mcpService).
 				WithTurnStream(turnStream).
 				WithRiskFindings(chatRiskFindings).
-				WithMaskedSummaries(chat.NewSummaryGenerator(db, chatClient, chatredact.New()), featureFlags)
+				WithMaskedSummaries(chat.NewSummaryGenerator(db, chatClient, chatredact.New()))
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger, assistantIdentities, authzEngine)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
@@ -1546,7 +1546,6 @@ func newStartCommand() *cli.Command {
 				sessionManager,
 				authzEngine,
 				auditLogger,
-				featureFlags,
 			))
 			// identityMapRefreshSignaler.Shutdown is NOT registered as a
 			// shutdownFunc, for the same reason riskSignaler's is not: it is

@@ -197,6 +197,9 @@ func TestLoadGrantsAddsAssistantDefaultsOnlyForCanonicalSystemRole(t *testing.T)
 		PrincipalUrn:   admin,
 	})
 	require.NoError(t, err)
+	// An organization seeded before these defaults: admin keeps org:admin but
+	// has no assistant or memory rows.
+	seedGrant(t, ctx, conn, organizationID, admin, ScopeOrgAdmin, WildcardResource)
 
 	grants, err := LoadGrants(ctx, conn, organizationID, []urn.Principal{admin})
 	require.NoError(t, err)
