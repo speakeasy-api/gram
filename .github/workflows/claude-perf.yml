@@ -44,7 +44,8 @@ jobs:
     # No write-access check: on this public repository, opening a pull
     # request from one of its branches takes write access to the branch or
     # membership of the organization, and a push takes write access.
-    # claude-code-action checks the actor's write access again.
+    # claude-code-action also refuses an actor without write access, but only
+    # after the job has connected to Speakeasy.
     if: >-
       vars.SPEAKEASY_ORG_ID != '' &&
       github.event.pull_request.state == 'open' &&
