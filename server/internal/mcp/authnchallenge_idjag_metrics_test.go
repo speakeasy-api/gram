@@ -289,6 +289,10 @@ func TestTokenIDJAGExchangeReleasesAssertionAfterLaterOutage(t *testing.T) {
 	f.ti.service.SetAuthzEngine(working)
 	retried := f.post(t, ctx, assertion)
 	require.Equal(t, http.StatusOK, retried.Code, retried.Body.String())
+
+	replayed := f.post(t, ctx, assertion)
+	require.Equal(t, http.StatusBadRequest, replayed.Code, replayed.Body.String())
+	require.Contains(t, replayed.Body.String(), "invalid_grant")
 }
 
 // Refusing the subject is a verdict, so the assertion stays spent.

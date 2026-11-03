@@ -299,6 +299,58 @@ func TestConnectionOutage_TunnelTransportMissingIsRecorded(t *testing.T) {
 	require.Zero(t, posts.Load())
 }
 
+// A person asking for a refresh gets one, even during an outage.
+func TestRefreshNow_ManualRefreshSkipsTheCooldown(t *testing.T) {
+	t.Parallel()
+
+	var refreshAttempts atomic.Int32
+	ctx, env := newExpiredRefreshEnv(t, "refresh-manual-cooldown", func(w http.ResponseWriter, _ *http.Request) {
+		refreshAttempts.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+
+	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
+	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
+	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+	require.EqualValues(t, 1, refreshAttempts.Load())
+
+	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerManual)
+	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+	require.EqualValues(t, 2, refreshAttempts.Load())
+}
+
+// A caller going away is not an outage: the POST may have rotated the token.
+func TestRefreshNow_CancellationIsNotAnOutage(t *testing.T) {
+	t.Parallel()
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var refreshAttempts atomic.Int32
+	ctx, env := newExpiredRefreshEnv(t, "refresh-canceled", func(w http.ResponseWriter, _ *http.Request) {
+		if refreshAttempts.Add(1) == 1 {
+			close(entered)
+		}
+		<-release
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	defer close(release)
+
+	callCtx, cancel := context.WithCancel(ctx)
+	result := make(chan error, 1)
+	go func() {
+		_, err := env.refresher.RefreshNow(callCtx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
+		result <- err
+	}()
+	<-entered
+	cancel()
+
+	err := <-result
+	require.Error(t, err)
+	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+	require.Zero(t, remotesessions.RetryAfter(err), "no cooldown starts")
+}
+
 func TestResolveAccessToken_UpstreamServerErrorIsNoToken(t *testing.T) {
 	t.Parallel()
 
