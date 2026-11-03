@@ -379,3 +379,18 @@ it("keeps the infrastructure recheck available without DNS target configuration"
   renderPage();
   expect(screen.getByRole("button", { name: "Check again" })).toBeTruthy();
 });
+
+it("distinguishes an unavailable DNS check from a check that has never run", () => {
+  state.domain = customDomain({
+    verified: true,
+    dnsConfigurationStatus: "not_configured",
+    dnsCheckedAt: new Date("2026-11-01T00:00:00Z"),
+  });
+  renderPage();
+  expect(
+    screen.getByText("DNS target verification is unavailable."),
+  ).toBeTruthy();
+  expect(
+    screen.queryByText("DNS configuration has not been checked yet."),
+  ).toBeNull();
+});

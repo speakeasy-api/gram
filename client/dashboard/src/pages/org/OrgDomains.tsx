@@ -116,7 +116,7 @@ const dnsConfigurationMessages: Record<string, string> = {
   not_found:
     "The domain name was not found in DNS. Check its records with your DNS provider.",
   check_failed: "The DNS check could not complete. Try checking again.",
-  not_configured: "DNS configuration has not been checked yet.",
+  not_configured: "DNS target verification is unavailable.",
 };
 
 const healthIssueMessages: Record<string, string> = {
