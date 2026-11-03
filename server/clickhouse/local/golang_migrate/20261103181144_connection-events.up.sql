@@ -112,7 +112,10 @@ CREATE TABLE `gram`.`mcp_connection_events` (
 @access: confidential',
   `repeats` UInt32 COMMENT 'Rows like this one that the limiter held back, which this row stands for. Failures for a key are attempts plus repeats.
 @access: confidential',
+  `device_key` String COMMENT 'Keyed hash of the client IP, unique per organization. Cannot be reversed without the key. Identifies a device or network, not a person. Kept 30 days.
+@access: confidential-pii' CODEC(ZSTD(1)),
   INDEX `idx_mcp_connection_events_attempt_id` ((attempt_id)) TYPE bloom_filter(0.01),
+  INDEX `idx_mcp_connection_events_device_key` ((device_key)) TYPE bloom_filter(0.01),
   INDEX `idx_mcp_connection_events_subject_urn` ((subject_urn)) TYPE bloom_filter(0.01)
 ) ENGINE = MergeTree
 PRIMARY KEY (`organization_id`, `project_id`, `server_kind`, `server_id`, `attempt_started_at`, `attempt_id`, `event_time`) ORDER BY (`organization_id`, `project_id`, `server_kind`, `server_id`, `attempt_started_at`, `attempt_id`, `event_time`) PARTITION BY (toDate(attempt_started_at)) TTL toDateTime(attempt_started_at) + toIntervalDay(30) SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1 COMMENT 'One row per step of an MCP connection attempt, successes included. Used for drill-in on one attempt, person or server. Rows are never updated. Kept 30 days.';
