@@ -25,7 +25,7 @@ var Session = Type("OrgMemorySession", func() {
 	Description("A session as Organizational Memory sees it: its masked summary, never the transcript.")
 	Required("id", "title", "summary", "summarized_at")
 	Attribute("id", String, "Chat ID.", func() { Format(FormatUUID) })
-	Attribute("title", String, "Session title.")
+	Attribute("title", String, "Session title. Empty unless the caller also holds chat:read on the project.")
 	Attribute("summary", String, "Masked session summary.")
 	Attribute("summarized_at", String, "When the summary was written.", func() { Format(FormatDateTime) })
 })
@@ -42,7 +42,7 @@ var Memo = Type("OrgMemoryMemo", func() {
 })
 
 var _ = Service("orgMemory", func() {
-	Description("Browse a project's Organizational Memory: digests, the sessions and memos they fold, and recent activity. Requires an unrestricted chat:read grant on the project and the org-memory rollout.")
+	Description("Browse a project's Organizational Memory: digests, the sessions and memos they fold, and recent activity. Requires memory:read on the project and the org-memory rollout.")
 	Security(security.Session, security.ProjectSlug)
 	shared.DeclareErrorResponses()
 

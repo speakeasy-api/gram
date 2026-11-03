@@ -81,10 +81,18 @@ func newFixture(t *testing.T) fixture {
 	}
 }
 
-// reader is a session reviewer: an unrestricted chat:read grant.
+// reader holds memory:read on the project.
 func (f fixture) reader(t *testing.T) context.Context {
 	t.Helper()
-	return authztest.WithExactGrants(t, f.ctx, authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource))
+	return authztest.WithExactGrants(t, f.ctx, authz.NewGrant(authz.ScopeMemoryRead, f.projectID.String()))
+}
+
+// reviewer also holds chat:read on the project, so session titles show.
+func (f fixture) reviewer(t *testing.T) context.Context {
+	t.Helper()
+	return authztest.WithExactGrants(t, f.ctx,
+		authz.NewGrant(authz.ScopeMemoryRead, f.projectID.String()),
+		authz.NewGrant(authz.ScopeChatRead, f.projectID.String()))
 }
 
 func (f fixture) summarizedChat(t *testing.T, title, summary string, at time.Time) uuid.UUID {
@@ -131,14 +139,14 @@ func (f fixture) digest(t *testing.T, level string, start, end time.Time, conten
 
 func day(y int, m time.Month, d int) time.Time { return time.Date(y, m, d, 0, 0, 0, 0, time.UTC) }
 
-func TestOrgMemoryRequiresChatReadAndRollout(t *testing.T) {
+func TestOrgMemoryRequiresMemoryReadAndRollout(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
 
 	for _, grants := range [][]authz.Grant{
 		{authz.NewGrant(authz.ScopeProjectRead, authz.WildcardResource)},
-		{authz.NewGrant(authz.ScopeMemoryRead, f.projectID.String())},
-		{authz.NewGrant(authz.ScopeChatRead, uuid.NewString())},
+		{authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource)},
+		{authz.NewGrant(authz.ScopeMemoryRead, uuid.NewString())},
 	} {
 		ctx := authztest.WithExactGrants(t, f.ctx, grants...)
 		_, err := f.service.ListOrgMemoryDigests(ctx, &gen.ListOrgMemoryDigestsPayload{Level: "week", Limit: 12})
@@ -175,10 +183,14 @@ func TestGetOrgMemoryDigestCitesOnlyEligibleSources(t *testing.T) {
 	require.Equal(t, 1, got.Digest.SessionCount, "an excluded session is neither listed nor counted")
 	require.Len(t, got.Sessions, 1)
 	require.Equal(t, kept.String(), got.Sessions[0].ID)
-	require.Equal(t, "Webhook cutover", got.Sessions[0].Title)
+	require.Empty(t, got.Sessions[0].Title, "memory:read alone gets summaries without raw titles")
 	require.Len(t, got.Memos, 1)
 	require.Equal(t, "system", got.Memos[0].AuthorKind)
 	require.Equal(t, kept.String(), *got.Memos[0].ChatID)
+
+	reviewed, err := f.service.GetOrgMemoryDigest(f.reviewer(t), &gen.GetOrgMemoryDigestPayload{ID: dayID.String()})
+	require.NoError(t, err)
+	require.Equal(t, "Webhook cutover", reviewed.Sessions[0].Title)
 
 	week, err := f.service.GetOrgMemoryDigest(f.reader(t), &gen.GetOrgMemoryDigestPayload{ID: weekID.String()})
 	require.NoError(t, err)
@@ -188,7 +200,7 @@ func TestGetOrgMemoryDigestCitesOnlyEligibleSources(t *testing.T) {
 
 	after, err := audittest.AuditLogCountByAction(t.Context(), f.db, audit.ActionTeamMemoryRead)
 	require.NoError(t, err)
-	require.Equal(t, before+2, after)
+	require.Equal(t, before+3, after)
 
 	_, err = f.service.GetOrgMemoryDigest(f.reader(t), &gen.GetOrgMemoryDigestPayload{ID: uuid.NewString()})
 	require.Error(t, err)
