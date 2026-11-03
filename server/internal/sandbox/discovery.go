@@ -17,12 +17,24 @@ import (
 const ClaimUIDLabel = "agents.x-k8s.io/claim-uid"
 
 var (
-	// Claims selects the managed GKE Agent Sandbox claim API.
+	// Claims selects the v1alpha1 claim API used by assistant runtimes.
 	Claims = schema.GroupVersionResource{Group: "extensions.agents.x-k8s.io", Version: "v1alpha1", Resource: "sandboxclaims"}
-	// Templates selects the managed GKE Agent Sandbox template API.
+	// Templates selects the v1alpha1 template API used by assistant runtimes.
 	Templates = schema.GroupVersionResource{Group: "extensions.agents.x-k8s.io", Version: "v1alpha1", Resource: "sandboxtemplates"}
-	// Sandboxes selects the managed GKE sandbox API.
+	// Sandboxes selects the v1alpha1 sandbox API used by assistant runtimes.
 	Sandboxes = schema.GroupVersionResource{Group: "agents.x-k8s.io", Version: "v1alpha1", Resource: "sandboxes"}
+	// ClaimsV1Beta1 selects native pool-based claims for Code Mode.
+	ClaimsV1Beta1 = schema.GroupVersionResource{Group: "extensions.agents.x-k8s.io", Version: "v1beta1", Resource: "sandboxclaims"}
+
+	// TemplatesV1Beta1 selects the templates referenced by native warm pools.
+	TemplatesV1Beta1 = schema.GroupVersionResource{Group: "extensions.agents.x-k8s.io", Version: "v1beta1", Resource: "sandboxtemplates"}
+
+	// WarmPoolsV1Beta1 selects the pools referenced by native claims.
+	WarmPoolsV1Beta1 = schema.GroupVersionResource{Group: "extensions.agents.x-k8s.io", Version: "v1beta1", Resource: "sandboxwarmpools"}
+
+	// SandboxesV1Beta1 selects sandboxes assigned to native claims.
+	SandboxesV1Beta1 = schema.GroupVersionResource{Group: "agents.x-k8s.io", Version: "v1beta1", Resource: "sandboxes"}
+
 	// Pods selects Kubernetes pods for claim ownership and image checks.
 	Pods = schema.GroupVersionResource{Group: "", Version: "v1", Resource: "pods"}
 )
@@ -79,7 +91,7 @@ func RunningPods(ctx context.Context, client dynamic.Interface, namespace, claim
 // controllers label Pods with the claim UID; newer controllers label the
 // Sandbox and expose its pod selector instead. A selector alone is not proof
 // of ownership: the fallback verifies both controller owner references.
-func RunningPodsForClaim(ctx context.Context, client dynamic.Interface, namespace string, claim *unstructured.Unstructured) ([]unstructured.Unstructured, error) {
+func RunningPodsForClaim(ctx context.Context, client dynamic.Interface, namespace string, claim *unstructured.Unstructured, sandboxes schema.GroupVersionResource) ([]unstructured.Unstructured, error) {
 	if claim == nil || claim.GetUID() == "" || claim.GetName() == "" || claim.GetNamespace() != namespace || claim.GetDeletionTimestamp() != nil {
 		return nil, fmt.Errorf("live sandbox claim identity is required")
 	}
@@ -91,7 +103,7 @@ func RunningPodsForClaim(ctx context.Context, client dynamic.Interface, namespac
 	if name == "" {
 		return nil, nil
 	}
-	resource, err := client.Resource(Sandboxes).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
+	resource, err := client.Resource(sandboxes).Namespace(namespace).Get(ctx, name, metav1.GetOptions{})
 	if k8serrors.IsNotFound(err) {
 		return nil, nil
 	}
