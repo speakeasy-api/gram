@@ -5465,6 +5465,11 @@ CREATE UNIQUE INDEX IF NOT EXISTS user_sessions_refresh_token_hash_key
 ON user_sessions (refresh_token_hash)
 WHERE deleted IS FALSE;
 
+-- Finds a used or revoked refresh token by hash; live rows use the index above.
+CREATE INDEX IF NOT EXISTS user_sessions_spent_refresh_token_hash_idx
+ON user_sessions (refresh_token_hash)
+WHERE deleted IS TRUE AND refresh_token_hash IS NOT NULL;
+
 CREATE INDEX IF NOT EXISTS user_sessions_subject_idx
 ON user_sessions (subject_urn, user_session_issuer_id)
 WHERE deleted IS FALSE;
