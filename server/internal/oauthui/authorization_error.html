@@ -1,8 +1,8 @@
 {{- /* Names in running copy. The client and server names are the ones the
 consent page shows, so the person recognizes the flow they started. */ -}}
-{{- define "Client"}}{{if .ClientName}}<span class="text-foreground">{{.ClientName}}</span>{{else}}Your MCP client{{end}}{{end}}
-{{- define "client"}}{{if .ClientName}}<span class="text-foreground">{{.ClientName}}</span>{{else}}your MCP client{{end}}{{end}}
-{{- define "server"}}{{if .ServerName}}<span class="text-foreground">{{.ServerName}}</span>{{else}}this MCP server{{end}}{{end -}}
+{{- define "Client"}}{{if .ClientName}}<span class="text-foreground font-medium">{{.ClientName}}</span>{{else}}Your MCP client{{end}}{{end}}
+{{- define "client"}}{{if .ClientName}}<span class="text-foreground font-medium">{{.ClientName}}</span>{{else}}your MCP client{{end}}{{end}}
+{{- define "server"}}{{if .ServerName}}<span class="text-foreground font-medium">{{.ServerName}}</span>{{else}}this MCP server{{end}}{{end -}}
 <!doctype html>
 <html lang="en">
   <head>
@@ -41,7 +41,7 @@ consent page shows, so the person recognizes the flow they started. */ -}}
             {{end}}
             {{end}}
           </h1>
-          <p class="text-sm text-muted-foreground">
+          <p class="text-sm text-foreground" data-what-happened>
             {{if .Setup}}
             {{if eq .Kind "not-allowed"}}Your account can't continue this organization's setup.
             {{else if eq .Kind "unavailable"}}Speakeasy couldn't finish checking your setup. Please try again.
@@ -72,7 +72,7 @@ consent page shows, so the person recognizes the flow they started. */ -}}
             {{template "Client" .}} isn't allowed to connect to
             {{template "server" .}}.
             {{else if eq .Kind "provider-unavailable"}}
-            {{if .ProviderName}}{{.ProviderName}}{{else}}The service you're signing in to{{end}}
+            {{if .ProviderName}}{{.ProviderName}}{{else}}The service this connection uses{{end}}
             isn't responding right now, so {{template "client" .}} couldn't connect to
             {{template "server" .}}. This isn't something you did.
             {{else if eq .Kind "unavailable"}}

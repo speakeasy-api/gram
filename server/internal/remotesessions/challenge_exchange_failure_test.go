@@ -240,7 +240,7 @@ func TestRemoteLoginCallback_TunneledProviderHostStaysOffThePage(t *testing.T) {
 	oops.BrowserErrHandle(testenv.NewLogger(t), func(http.ResponseWriter, *http.Request) error {
 		return fmt.Errorf("callback: %w", err)
 	}).ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/callback", nil))
-	require.Contains(t, page.Body.String(), "The service you're signing in to")
+	require.Contains(t, page.Body.String(), "The service this connection uses")
 	endpoint, err := url.Parse(issuerTokenEndpoint(t, env))
 	require.NoError(t, err)
 	require.NotContains(t, page.Body.String(), endpoint.Hostname())
