@@ -560,11 +560,28 @@ var WorkloadPlatformVariable = Type("WorkloadPlatformVariable", func() {
 	Required("key", "tier", "label", "help", "placeholder", "pattern", "pattern_message")
 })
 
+var WorkloadPlatformSubjectAlternative = Type("WorkloadPlatformSubjectAlternative", func() {
+	Description("An access rule a catalog platform offers in place of its default.")
+
+	Attribute("key", String, "Identifies the choice within the platform.")
+	Attribute("label", String, "What the operator chooses it by.")
+	Attribute("template", String, "The subject with {key} placeholders for rule-tier variables; the stem, for a wildcard rule.")
+	Attribute("wildcard", Boolean, "Whether the rule is the filled template followed by *.")
+
+	Required("key", "label", "template", "wildcard")
+})
+
 var WorkloadPlatformSubject = Type("WorkloadPlatformSubject", func() {
-	Description("The access rule a catalog platform produces.")
+	Description("The access rule a catalog platform produces by default, and the others the operator may choose instead.")
 
 	Attribute("template", String, "The subject with {key} placeholders for rule-tier variables; the stem, for a wildcard rule.")
 	Attribute("wildcard", Boolean, "Whether the rule is the filled template followed by *.")
+	// Both are optional, and label defaults to an empty string, so a dashboard
+	// deployed ahead of its server can still read a catalog that leaves them out.
+	Attribute("label", String, "Names the default rule beside its alternatives. Empty where there are none.", func() {
+		Default("")
+	})
+	Attribute("alternatives", ArrayOf(WorkloadPlatformSubjectAlternative), "Other rules the operator may choose instead, in the order they are offered. Absent where there are none.")
 
 	Required("template", "wildcard")
 })

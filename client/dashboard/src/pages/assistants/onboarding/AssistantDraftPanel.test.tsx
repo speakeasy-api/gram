@@ -1,5 +1,6 @@
 import { cleanup, fireEvent, render, screen } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, expect, it, vi } from "vitest";
 import { AssistantDraftPanel } from "./AssistantDraftPanel";
 
@@ -16,7 +17,9 @@ vi.mock("nuqs", async () => {
   };
 });
 vi.mock("@/contexts/Auth", () => ({ useProject: () => ({ id: "project" }) }));
-vi.mock("@/routes", () => ({ useRoutes: () => ({}) }));
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+}));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => true }),
 }));
@@ -62,7 +65,9 @@ afterEach(cleanup);
 it("keeps identity settings out of Overview and places them in Identity", () => {
   render(
     <QueryClientProvider client={new QueryClient()}>
-      <AssistantDraftPanel />
+      <MemoryRouter>
+        <AssistantDraftPanel />
+      </MemoryRouter>
     </QueryClientProvider>,
   );
   expect(

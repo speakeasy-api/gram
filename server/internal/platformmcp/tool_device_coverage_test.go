@@ -2,6 +2,7 @@ package platformmcp
 
 import (
 	"context"
+	"encoding/json"
 	"errors"
 	"testing"
 
@@ -14,22 +15,22 @@ import (
 )
 
 type stubDeviceCoverageReader struct {
-	coverage      *gen.DeviceIntegrationCoverage
+	coverage      *gen.FleetCoverage
 	coverageErr   error
-	devices       *gen.ListManagedDevicesResult
+	devices       *gen.ListFleetDevicesResult
 	devicesErr    error
 	coverageOrg   string
 	coverageProv  string
-	lastQuery     deviceintegrations.ManagedDevicesQuery
+	lastQuery     deviceintegrations.FleetDevicesQuery
 	devicesCalled bool
 }
 
-func (s *stubDeviceCoverageReader) Coverage(_ context.Context, organizationID string, provider string) (*gen.DeviceIntegrationCoverage, error) {
+func (s *stubDeviceCoverageReader) FleetCoverage(_ context.Context, organizationID string, provider string) (*gen.FleetCoverage, error) {
 	s.coverageOrg, s.coverageProv = organizationID, provider
 	return s.coverage, s.coverageErr
 }
 
-func (s *stubDeviceCoverageReader) ManagedDevices(_ context.Context, query deviceintegrations.ManagedDevicesQuery) (*gen.ListManagedDevicesResult, error) {
+func (s *stubDeviceCoverageReader) FleetDevices(_ context.Context, query deviceintegrations.FleetDevicesQuery) (*gen.ListFleetDevicesResult, error) {
 	s.lastQuery, s.devicesCalled = query, true
 	return s.devices, s.devicesErr
 }
@@ -48,8 +49,8 @@ func (s *stubOrgReadAuthorizer) Require(_ context.Context, checks ...authz.Check
 func TestDeviceCoverageGetCoverageReadsThePrincipalsOrganization(t *testing.T) {
 	t.Parallel()
 
-	reader := &stubDeviceCoverageReader{coverage: &gen.DeviceIntegrationCoverage{
-		TotalDevices: 10, AgentActive: 6, AgentActiveDeviceAttested: 5, NoAgent: 4, Attestation: "user", ActiveWindowMinutes: 60,
+	reader := &stubDeviceCoverageReader{coverage: &gen.FleetCoverage{
+		MdmConnected: true, TotalDevices: 10, AgentOnlyDevices: 2, AgentActive: 6, AgentActiveDeviceAttested: 5, NoAgent: 4, Attestation: "user", ActiveWindowMinutes: 60,
 		PolicyAttested: 3, PolicyOutdated: 1, PolicyUnreported: 1, EnforcementHalted: 1,
 	}}
 	authorizer := &stubOrgReadAuthorizer{}
@@ -61,6 +62,8 @@ func TestDeviceCoverageGetCoverageReadsThePrincipalsOrganization(t *testing.T) {
 	require.Equal(t, "org_1", reader.coverageOrg)
 	require.Equal(t, "jamf", reader.coverageProv)
 	require.EqualValues(t, 10, out.TotalDevices)
+	require.True(t, out.MDMConnected)
+	require.EqualValues(t, 2, out.AgentOnlyDevices)
 	require.Equal(t, "user", out.Attestation)
 	require.EqualValues(t, 5, out.AgentActiveDeviceAttested)
 	require.EqualValues(t, 3, out.PolicyAttested)
@@ -92,11 +95,12 @@ func TestDeviceCoverageRefusesWithoutLiveOrgRead(t *testing.T) {
 func TestDeviceCoverageListManagedDevicesProjectsAttestation(t *testing.T) {
 	t.Parallel()
 
-	reader := &stubDeviceCoverageReader{devices: &gen.ListManagedDevicesResult{
-		Devices: []*gen.ManagedDevice{{
-			ID:             "row-id",
-			ExternalID:     "mdm-id",
-			Provider:       "jamf",
+	reader := &stubDeviceCoverageReader{devices: &gen.ListFleetDevicesResult{
+		Devices: []*gen.FleetDevice{{
+			ID:             "mdm:row-id",
+			InInventory:    true,
+			ExternalID:     new("mdm-id"),
+			Provider:       new("jamf"),
 			Hostname:       new("alpha-mbp"),
 			SerialNumber:   new("C02ALPHA"),
 			UserEmail:      new("alpha@example.com"),
@@ -122,8 +126,9 @@ func TestDeviceCoverageListManagedDevicesProjectsAttestation(t *testing.T) {
 		PolicyState: "outdated", UserEmail: "alpha@example.com", Cursor: "cursor-1",
 	})
 	require.NoError(t, err)
-	require.Equal(t, deviceintegrations.ManagedDevicesQuery{
+	require.Equal(t, deviceintegrations.FleetDevicesQuery{
 		OrganizationID: "org_1",
+		InInventory:    nil,
 		PolicyState:    "outdated",
 		UserEmails:     []string{"alpha@example.com"},
 		Cursor:         "cursor-1",
@@ -134,6 +139,8 @@ func TestDeviceCoverageListManagedDevicesProjectsAttestation(t *testing.T) {
 	require.Len(t, out.Devices, 1)
 	device := out.Devices[0]
 	require.Equal(t, "alpha-mbp", device.Hostname)
+	require.True(t, device.InInventory)
+	require.Equal(t, "jamf", device.Provider)
 	require.Equal(t, "C02ALPHA", device.SerialNumber)
 	require.Equal(t, "outdated", device.PolicyState)
 	require.Equal(t, "user", device.ReportAttestation)
@@ -141,6 +148,44 @@ func TestDeviceCoverageListManagedDevicesProjectsAttestation(t *testing.T) {
 	require.True(t, device.BlockedBuild)
 	require.False(t, device.EnforcementHalted)
 	require.Equal(t, []ManagedDeviceToolOutcome{{Tool: "claude_code", Outcome: "armed"}}, device.Tools)
+}
+
+// An organization with no MDM still gets its agents: an agent-only machine has
+// no provider, and in_inventory is what tells the caller so.
+func TestDeviceCoverageListsAgentOnlyMachines(t *testing.T) {
+	t.Parallel()
+
+	reader := &stubDeviceCoverageReader{devices: &gen.ListFleetDevicesResult{
+		Devices: []*gen.FleetDevice{{
+			ID:             "agent:row-id",
+			InInventory:    false,
+			Hostname:       new("beta-mbp"),
+			SerialNumber:   new("C02BETA"),
+			UserEmail:      new("beta@example.com"),
+			CoverageBucket: "agent_active",
+			PolicyState:    new("attested"),
+			AgentState: &gen.ManagedDeviceAgentState{
+				ReportedAt:  "2026-10-29T12:00:00Z",
+				Attestation: "device",
+				Tools:       []*gen.ManagedDeviceTool{},
+			},
+		}},
+	}}
+	service := NewDeviceCoverageService(reader, &stubOrgReadAuthorizer{}, allowingBudget())
+	require.NotNil(t, service)
+
+	agentOnly := false
+	out, err := service.ListManagedDevices(t.Context(), shadowAIPrincipal(), ListManagedDevicesInput{InInventory: &agentOnly})
+	require.NoError(t, err)
+	require.Equal(t, &agentOnly, reader.lastQuery.InInventory)
+	require.Len(t, out.Devices, 1)
+	require.False(t, out.Devices[0].InInventory)
+	require.Empty(t, out.Devices[0].Provider)
+	require.Equal(t, "device", out.Devices[0].ReportAttestation)
+
+	encoded, err := json.Marshal(out.Devices[0])
+	require.NoError(t, err)
+	require.NotContains(t, string(encoded), `"provider"`, "an agent-only machine has no provider to report")
 }
 
 func TestDeviceCoverageListManagedDevicesRejectsCorrectableArguments(t *testing.T) {

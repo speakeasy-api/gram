@@ -56,3 +56,13 @@ func ListManagedDevicesDeviceIntegrationsPath() string {
 func GetCoverageDeviceIntegrationsPath() string {
 	return "/rpc/deviceIntegrations.getCoverage"
 }
+
+// ListFleetDevicesDeviceIntegrationsPath returns the URL path to the deviceIntegrations service listFleetDevices HTTP endpoint.
+func ListFleetDevicesDeviceIntegrationsPath() string {
+	return "/rpc/deviceIntegrations.listFleetDevices"
+}
+
+// GetFleetCoverageDeviceIntegrationsPath returns the URL path to the deviceIntegrations service getFleetCoverage HTTP endpoint.
+func GetFleetCoverageDeviceIntegrationsPath() string {
+	return "/rpc/deviceIntegrations.getFleetCoverage"
+}

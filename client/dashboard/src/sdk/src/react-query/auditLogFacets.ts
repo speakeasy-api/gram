@@ -22,6 +22,7 @@ import { ResponseValidationError } from "../models/errors/responsevalidationerro
 import { SDKValidationError } from "../models/errors/sdkvalidationerror.js";
 import { ServiceError } from "../models/errors/serviceerror.js";
 import {
+  ListAuditLogFacetsQueryParamCategory,
   ListAuditLogFacetsRequest,
   ListAuditLogFacetsSecurity,
 } from "../models/operations/listauditlogfacets.js";
@@ -109,6 +110,7 @@ export function setAuditLogFacetsData(
   queryKeyBase: [
     parameters: {
       projectSlug?: string | undefined;
+      category?: ListAuditLogFacetsQueryParamCategory | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
     },
@@ -125,6 +127,7 @@ export function invalidateAuditLogFacets(
   queryKeyBase: TupleToPrefixes<
     [parameters: {
       projectSlug?: string | undefined;
+      category?: ListAuditLogFacetsQueryParamCategory | undefined;
       gramKey?: string | undefined;
       gramSession?: string | undefined;
     }]

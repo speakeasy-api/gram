@@ -2283,7 +2283,9 @@ ORDER BY tb.original_trigger_id;
 
 -- name: RecordUpstreamClientSelections :execrows
 -- Records, for one inbound credential, the upstream OAuth client it uses for
--- every MCP server it can reach, or an explicit no-auth choice. An existing
+-- every MCP server it can reach, or an explicit no-auth choice. A NULL
+-- scope_mcp_server_ids keeps issuance-wide reach; a supplied array restricts
+-- recording to those servers, and an empty array records nothing. An existing
 -- client choice is never replaced. An existing no-auth choice is replaced
 -- only once the server has an associated client and one is decided for the
 -- credential: the no-auth choice is unusable by then, and recording the
@@ -2341,6 +2343,8 @@ reachable AS (
     JOIN session_issuer AS si
       ON p.organization_id = si.organization_id
     WHERE s.deleted IS FALSE
+      AND (sqlc.narg('scope_mcp_server_ids')::uuid[] IS NULL
+           OR s.id = ANY(sqlc.narg('scope_mcp_server_ids')::uuid[]))
       AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
       AND (
         s.user_session_issuer_id = si.id
@@ -2430,7 +2434,8 @@ decided AS (
 -- remote_session or service_account auth client of its registration linked
 -- to the server, and a no-auth choice the server's linked, enabled
 -- static_credential or pass_through client that carries exactly the server
--- source's current credential headers, while the server links no enabled
+-- source's current credential headers or, when the source has none, that an
+-- administrator created or linked, while the server links no enabled
 -- OAuth-backed client. A header client whose headers no longer match was
 -- derived from a configuration since changed, so it is not the server's
 -- headers: the choice is recorded unmapped, and the backfill maps it once it
@@ -2460,36 +2465,57 @@ mapped AS (
            -- compared as stored. authclientbackfill.ListSelectionMappings
            -- repeats this comparison; the two must stay identical.
            AND (
-             SELECT string_agg(format('%L|%L|%L', lower(h.name), h.value, h.value_from_request_header), ',' ORDER BY lower(h.name), h.value, h.value_from_request_header)
-             FROM mcp_auth_client_headers AS h
-             WHERE h.auth_client_id = ac.id
-               AND h.deleted IS FALSE
-           ) = (
-             SELECT string_agg(format('%L|%L|%L', lower(src.name), src.value, src.value_from_request_header), ',' ORDER BY lower(src.name), src.value, src.value_from_request_header)
+             SELECT COALESCE(
+                      cmp.client_headers = cmp.source_headers,
+                      -- A source with no credential headers has none to carry. A
+                      -- client or association an administrator created there is
+                      -- the server's own configuration and mirrors nothing, as
+                      -- GetAuthClientSelection reads it.
+                      cmp.source_headers IS NULL
+                      AND NOT (ac.source = 'backfill' AND NOT EXISTS (
+                        SELECT 1
+                        FROM mcp_server_auth_clients AS admin_link
+                        WHERE admin_link.mcp_server_id = d.mcp_server_id
+                          AND admin_link.auth_client_id = ac.id
+                          AND admin_link.organization_id = ac.organization_id
+                          AND admin_link.deleted IS FALSE
+                          AND admin_link.source <> 'backfill'
+                      ))
+                    )
              FROM (
-               SELECT rh.name, rh.value, rh.value_from_request_header, rh.is_secret
-               FROM mcp_servers AS s
-               JOIN remote_mcp_servers AS r
-                 ON r.id = s.remote_mcp_server_id
-                AND r.project_id = s.project_id
-                AND r.deleted IS FALSE
-               JOIN remote_mcp_server_headers AS rh
-                 ON rh.remote_mcp_server_id = r.id
-                AND rh.deleted IS FALSE
-               WHERE s.id = d.mcp_server_id
-               UNION ALL
-               SELECT th.name, th.value, th.value_from_request_header, th.is_secret
-               FROM mcp_servers AS s
-               JOIN tunneled_mcp_servers AS t
-                 ON t.id = s.tunneled_mcp_server_id
-                AND t.project_id = s.project_id
-                AND t.deleted IS FALSE
-               JOIN tunneled_mcp_server_headers AS th
-                 ON th.tunneled_mcp_server_id = t.id
-                AND th.deleted IS FALSE
-               WHERE s.id = d.mcp_server_id
-             ) AS src
-             WHERE lower(src.name) = 'authorization' OR src.value_from_request_header IS NOT NULL OR src.is_secret
+               SELECT (
+                 SELECT string_agg(format('%L|%L|%L', lower(h.name), h.value, h.value_from_request_header), ',' ORDER BY lower(h.name), h.value, h.value_from_request_header)
+                 FROM mcp_auth_client_headers AS h
+                 WHERE h.auth_client_id = ac.id
+                   AND h.deleted IS FALSE
+               ) AS client_headers, (
+                 SELECT string_agg(format('%L|%L|%L', lower(src.name), src.value, src.value_from_request_header), ',' ORDER BY lower(src.name), src.value, src.value_from_request_header)
+                 FROM (
+                   SELECT rh.name, rh.value, rh.value_from_request_header, rh.is_secret
+                   FROM mcp_servers AS s
+                   JOIN remote_mcp_servers AS r
+                     ON r.id = s.remote_mcp_server_id
+                    AND r.project_id = s.project_id
+                    AND r.deleted IS FALSE
+                   JOIN remote_mcp_server_headers AS rh
+                     ON rh.remote_mcp_server_id = r.id
+                    AND rh.deleted IS FALSE
+                   WHERE s.id = d.mcp_server_id
+                   UNION ALL
+                   SELECT th.name, th.value, th.value_from_request_header, th.is_secret
+                   FROM mcp_servers AS s
+                   JOIN tunneled_mcp_servers AS t
+                     ON t.id = s.tunneled_mcp_server_id
+                    AND t.project_id = s.project_id
+                    AND t.deleted IS FALSE
+                   JOIN tunneled_mcp_server_headers AS th
+                     ON th.tunneled_mcp_server_id = t.id
+                    AND th.deleted IS FALSE
+                   WHERE s.id = d.mcp_server_id
+                 ) AS src
+                 WHERE lower(src.name) = 'authorization' OR src.value_from_request_header IS NOT NULL OR src.is_secret
+               ) AS source_headers
+             ) AS cmp
            )
            AND NOT EXISTS (
              SELECT 1
@@ -2962,3 +2988,48 @@ ORDER BY members.name, members.id, ri.slug, ri.id;
 -- temporarily make the gateway unavailable for new connections.
 SELECT id FROM user_session_issuers
 WHERE organization_id = @organization_id AND project_id IS NULL AND deleted IS FALSE;
+
+-- name: GetReconnectSessionPolicy :one
+-- Resolve the original credential across refresh rotation, without reviving
+-- revoked/expired connections or borrowing another client's catalogue.
+SELECT us.tool_selection
+FROM user_sessions AS us
+JOIN user_session_clients AS c ON c.id = us.user_session_client_id
+WHERE COALESCE(us.credential_id, us.id) = @credential_id::uuid
+  AND us.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND us.organization_id = @organization_id::text
+  AND us.project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND c.user_session_issuer_id = us.user_session_issuer_id
+  AND us.subject_urn = @subject_urn
+  AND c.client_id = @client_id::text
+  AND c.deleted IS FALSE
+  AND us.deleted IS FALSE
+  AND (us.expires_at > clock_timestamp() OR us.refresh_expires_at > clock_timestamp())
+ORDER BY us.created_at DESC
+LIMIT 1
+FOR UPDATE OF us;
+
+-- name: SoftDeleteReconnectUpstreamChoices :exec
+-- Retire only active choices in the reviewed scope; preserve prior history.
+UPDATE upstream_client_selections
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE credential_kind = 'user_session'
+  AND credential_id = @credential_id::uuid
+  AND organization_id = @organization_id::text
+  AND mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND deleted IS FALSE;
+
+-- name: UpdateReconnectSessionPolicy :many
+UPDATE user_sessions AS us SET tool_selection = @tool_selection, updated_at = clock_timestamp()
+WHERE COALESCE(us.credential_id, us.id) = @credential_id::uuid
+  AND us.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND us.organization_id = @organization_id::text
+  AND us.project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND us.subject_urn = @subject_urn
+  AND us.tool_selection -> 'catalog' ->> 'id' = @catalog_id::text
+  AND EXISTS (SELECT 1 FROM user_session_clients AS c
+    WHERE c.id = us.user_session_client_id AND c.client_id = @client_id::text
+      AND c.user_session_issuer_id = us.user_session_issuer_id AND c.deleted IS FALSE)
+  AND us.deleted IS FALSE
+  AND (us.expires_at > clock_timestamp() OR us.refresh_expires_at > clock_timestamp())
+RETURNING us.jti;

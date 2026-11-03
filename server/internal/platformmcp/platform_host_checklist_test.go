@@ -55,9 +55,9 @@ type checklistHost struct {
 // client's point of view, once per platform host, through the real host
 // classification middleware: discovery metadata and the WWW-Authenticate
 // challenge name the requested host, and a full registration, authorization,
-// organization selection, consent, and token flow issues tokens for that host
-// that the runtime accepts there and refuses on the other host, before and
-// after refresh.
+// consent for the user's only organization, and token flow issues tokens for
+// that host that the runtime accepts there and refuses on the other host,
+// before and after refresh.
 func TestPlatformHostVerificationChecklistPlatformMCP(t *testing.T) {
 	t.Parallel()
 
@@ -160,8 +160,8 @@ func TestPlatformHostVerificationChecklistPlatformMCP(t *testing.T) {
 			require.Equal(t, http.StatusUnauthorized, challenge.Code, challenge.Body.String())
 			require.Equal(t, `Bearer resource_metadata="`+on.baseURL+`/.well-known/oauth-protected-resource/platform-mcp"`, challenge.Header().Get("WWW-Authenticate"))
 
-			// 2. Registration, authorization, organization selection, consent,
-			// and token exchange.
+			// 2. Registration, authorization, consent for the user's only
+			// organization, and token exchange.
 			register := serve(http.MethodPost, on.host, "/platform-mcp/register", []byte(`{"client_name":"platform host checklist","redirect_uris":["`+checklistRedirectURI+`"],"token_endpoint_auth_method":"none"}`), http.Header{"Content-Type": {"application/json"}})
 			require.Equal(t, http.StatusCreated, register.Code, register.Body.String())
 			var registered struct {
@@ -188,24 +188,18 @@ func TestPlatformHostVerificationChecklistPlatformMCP(t *testing.T) {
 			// The identity provider only knows the server URL's callback.
 			callback := serve(http.MethodGet, canonical.host, "/platform-mcp/idp_callback?"+url.Values{"state": {idpURL.Query().Get("state")}, "code": {"idp-code"}}.Encode(), nil, nil)
 			require.Equal(t, http.StatusFound, callback.Code, callback.Body.String())
-			selectionURL, err := url.Parse(callback.Header().Get("Location"))
+			connectURL, err := url.Parse(callback.Header().Get("Location"))
 			require.NoError(t, err)
-			require.Equal(t, on.baseURL+"/platform-mcp/select-organization", selectionURL.Scheme+"://"+selectionURL.Host+selectionURL.Path, "the browser must return to the requested host")
+			require.Equal(t, on.baseURL+"/platform-mcp/connect", connectURL.Scheme+"://"+connectURL.Host+connectURL.Path, "the browser must return to the requested host")
 
-			selection := serve(http.MethodGet, on.host, selectionURL.RequestURI(), nil, nil)
-			require.Equal(t, http.StatusOK, selection.Code, selection.Body.String())
-			state := selectionURL.Query().Get("state")
-			_, afterCSRF, found := strings.Cut(selection.Body.String(), `name="csrf_token" value="`)
+			consent := serve(http.MethodGet, on.host, connectURL.RequestURI(), nil, nil)
+			require.Equal(t, http.StatusOK, consent.Code, consent.Body.String())
+			state := connectURL.Query().Get("state")
+			_, afterCSRF, found := strings.Cut(consent.Body.String(), `name="csrf_token" value="`)
 			require.True(t, found)
 			csrf, _, _ := strings.Cut(afterCSRF, `"`)
 
-			selected := serve(http.MethodPost, on.host, "/platform-mcp/select-organization", []byte(url.Values{"state": {state}, "csrf_token": {csrf}, "organization_id": {organizationID}}.Encode()), formHeader)
-			require.Equal(t, http.StatusSeeOther, selected.Code, selected.Body.String())
-			connectURL, err := url.Parse(selected.Header().Get("Location"))
-			require.NoError(t, err)
-			require.Equal(t, on.baseURL+"/platform-mcp/connect", connectURL.Scheme+"://"+connectURL.Host+connectURL.Path)
-
-			approve := serve(http.MethodPost, on.host, "/platform-mcp/connect", []byte(url.Values{"state": {state}, "csrf_token": {csrf}, "action": {"approve"}}.Encode()), formHeader)
+			approve := serve(http.MethodPost, on.host, "/platform-mcp/connect", []byte(url.Values{"state": {state}, "csrf_token": {csrf}, "organization_id": {organizationID}, "action": {"approve"}}.Encode()), formHeader)
 			require.Equal(t, http.StatusSeeOther, approve.Code, approve.Body.String())
 			clientRedirect, err := url.Parse(approve.Header().Get("Location"))
 			require.NoError(t, err)
