@@ -13,7 +13,6 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -87,7 +86,7 @@ func TestTokenResponseScopeTypeRejectedAtExchangeAndRefresh(t *testing.T) {
 				}
 				_, _ = w.Write([]byte(`{"access_token":"access","refresh_token":"refresh","token_type":"Bearer","scope":""}`))
 			})
-			_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
+			_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 			require.ErrorContains(t, err, "token response scope must be a string")
 			stored, loadErr := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 			require.NoError(t, loadErr)
@@ -213,7 +212,7 @@ func TestJWTAccessTokenRefreshOrchestration(t *testing.T) {
 			initial := jwtGrant{subject: "user-123", scope: "jwt:old", scopeInToken: true}
 			ctx, env := newSyntheticExpiryEnv(t, slug, jwtGrantHandler(t, issuer, clientID, initial, tc.refreshed), withIDTokenIssuer(issuer))
 
-			result, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
+			result, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 			require.NoError(t, err)
 			stored, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 			require.NoError(t, err)
@@ -247,7 +246,7 @@ func TestJWTAccessTokenRefreshDefersToStoredUserInfo(t *testing.T) {
 		withIDTokenIssuer(issuer), withEnrichmentAS(as), withClientScope("stored:scope"))
 	require.Equal(t, remotesessions.IdentitySourceUserinfo, env.session.IdentitySource.String)
 
-	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
+	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 	require.NoError(t, err)
 	stored, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 	require.NoError(t, err)
@@ -271,7 +270,7 @@ func TestJWTAccessTokenRefreshRecoversScopeBehindStoredUserInfo(t *testing.T) {
 		withIDTokenIssuer(issuer), withEnrichmentAS(as))
 	require.Equal(t, remotesessions.IdentitySourceUserinfo, env.session.IdentitySource.String)
 
-	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
+	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 	require.NoError(t, err)
 	stored, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 	require.NoError(t, err)
@@ -289,7 +288,7 @@ func TestJWTAccessTokenRefreshFailureRecordSurvives(t *testing.T) {
 	clientID := "synthetic-cid-" + slug
 	initial := jwtGrant{subject: "user-123"}
 	ctx, env := newSyntheticExpiryEnv(t, slug, jwtGrantHandler(t, issuer, clientID, initial, jwtGrant{subject: "other-user"}), withIDTokenIssuer(issuer))
-	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
+	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 	require.NoError(t, err)
 	stored, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 	require.NoError(t, err)
@@ -371,7 +370,7 @@ func TestJWTAccessTokenRefreshCASRejectsStaleRestatement(t *testing.T) {
 				}
 			}
 			cache.armed.Store(true)
-			_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
+			_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 			require.NoError(t, err)
 			require.Nil(t, hookErr.Load())
 			require.False(t, cache.armed.Load(), "the row moved during JWT verification")
@@ -424,7 +423,7 @@ func TestJWTAccessTokenPreservesRejectedIDTokenMarker(t *testing.T) {
 	sess := reloadSession(t, env)
 	require.False(t, sess.IdentitySource.Valid)
 	require.NotContains(t, string(sess.Enrichment), "jwt_access_token")
-	_, err = env.refresher.RefreshNow(ctx, sess, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
+	_, err = env.refresher.RefreshNow(ctx, sess, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 	require.NoError(t, err)
 	sess = reloadSession(t, env)
 	require.False(t, sess.IdentitySource.Valid)
@@ -474,7 +473,7 @@ func TestJWTAccessTokenScopeRecoveryKeepsClaimsBesideStrongerIdentity(t *testing
 		withIDTokenIssuer(issuer), withEnrichmentAS(as))
 	require.Equal(t, remotesessions.IdentitySourceUserinfo, env.session.IdentitySource.String)
 
-	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
+	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 	require.NoError(t, err)
 	sess := reloadSession(t, env)
 	require.Equal(t, remotesessions.IdentitySourceUserinfo, sess.IdentitySource.String)
@@ -516,7 +515,7 @@ func TestJWTAccessTokenVerifiedRefreshIDTokenLiftsRejectedMarker(t *testing.T) {
 	require.False(t, env.session.IdentitySource.Valid)
 	require.Equal(t, []string{"initial:scope"}, env.session.Scopes, "a rejected grant recovers no scope at exchange")
 
-	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
+	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 	require.NoError(t, err)
 	sess := reloadSession(t, env)
 	require.Equal(t, remotesessions.IdentitySourceIDToken, sess.IdentitySource.String)
@@ -572,14 +571,14 @@ func TestJWTAccessTokenRotationKeepsSubjectBinding(t *testing.T) {
 	require.Equal(t, remotesessions.IdentitySourceJWTAccessToken, env.session.IdentitySource.String)
 	require.Equal(t, "user-123", env.session.UpstreamSubject.String)
 
-	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
+	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 	require.NoError(t, err)
 	sess := reloadSession(t, env)
 	require.False(t, sess.IdentitySource.Valid, "an opaque replacement retires the JWT display identity")
 	require.False(t, sess.UpstreamEmail.Valid)
 	require.Equal(t, "user-123", sess.UpstreamSubject.String, "the subject binding survives rotation")
 
-	_, err = env.refresher.RefreshNow(ctx, sess, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
+	_, err = env.refresher.RefreshNow(ctx, sess, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 	require.NoError(t, err)
 	sess = reloadSession(t, env)
 	require.Equal(t, "user-123", sess.UpstreamSubject.String)

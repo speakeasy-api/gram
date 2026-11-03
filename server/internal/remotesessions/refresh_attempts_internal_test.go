@@ -3,8 +3,10 @@ package remotesessions
 import (
 	"context"
 	"errors"
+	"net/http"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
@@ -16,14 +18,62 @@ import (
 func TestRefreshHappened_InvalidClientFollowsWhoCanRepairIt(t *testing.T) {
 	t.Parallel()
 
-	withEndpoint := remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow{IssuerRegistrationEndpoint: pgtype.Text{String: "https://idp.example.com/register", Valid: true}}
-	what, ok := refreshHappened(remotesessionmetrics.RefreshOutcomeInvalidClient, withEndpoint, nil)
-	require.True(t, ok)
-	require.Equal(t, mcpconnectionattempts.CodeRefreshInvalidClient, what)
+	withEndpoint := func(change func(*remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow)) remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow {
+		client := remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow{IssuerRegistrationEndpoint: pgtype.Text{String: "https://idp.example.com/register", Valid: true}}
+		change(&client)
+		return client
+	}
+	for _, tc := range []struct {
+		name   string
+		client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow
+		want   mcpconnectionattempts.Code
+	}{
+		{name: "dynamic", client: withEndpoint(func(*remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow) {}), want: mcpconnectionattempts.CodeRefreshInvalidClient},
+		{name: "static", client: remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow{}, want: mcpconnectionattempts.CodeProviderOAuthInvalidClient},
+		{name: "cimd", client: withEndpoint(func(c *remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow) {
+			c.ClientIDMetadataUri = pgtype.Text{String: "https://client.example.com/metadata", Valid: true}
+		}), want: mcpconnectionattempts.CodeProviderOAuthInvalidClient},
+		{name: "managed", client: withEndpoint(func(c *remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow) {
+			c.IdentityProviderConnectionID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+		}), want: mcpconnectionattempts.CodeProviderOAuthInvalidClient},
+		{name: "private key", client: withEndpoint(func(c *remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow) {
+			c.TokenEndpointAuthMethod = pgtype.Text{String: string(TokenEndpointAuthMethodPrivateKeyJWT), Valid: true}
+		}), want: mcpconnectionattempts.CodeProviderOAuthInvalidClient},
+		{name: "self", client: withEndpoint(func(c *remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow) {
+			c.CredentialOwner = string(CredentialOwnerSelf)
+		}), want: mcpconnectionattempts.CodeProviderOAuthInvalidClient},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-	what, ok = refreshHappened(remotesessionmetrics.RefreshOutcomeInvalidClient, remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow{}, nil)
-	require.True(t, ok)
-	require.Equal(t, mcpconnectionattempts.CodeProviderOAuthInvalidClient, what)
+			what, ok := refreshHappened(remotesessionmetrics.RefreshOutcomeInvalidClient, tc.client, nil)
+			require.True(t, ok)
+			require.Equal(t, tc.want, what)
+		})
+	}
+}
+
+func TestRefreshHappened_DownTunnelIsTheTunnel(t *testing.T) {
+	t.Parallel()
+
+	client := remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow{TunneledMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
+	for _, tc := range []struct {
+		name    string
+		outcome remotesessionmetrics.RefreshOutcome
+		err     error
+	}{
+		{name: "no transport", outcome: remotesessionmetrics.RefreshOutcomeInternalError, err: newTokenRefreshError("no transport", errRefreshTunnelTransport, refreshRemedyRetry)},
+		{name: "unanswered", outcome: remotesessionmetrics.RefreshOutcomeUnreachable, err: errors.New("post refresh")},
+		{name: "gateway 502", outcome: remotesessionmetrics.RefreshOutcomeUpstreamError, err: &TokenRefreshError{statusCode: http.StatusBadGateway}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+
+			what, ok := refreshHappened(tc.outcome, client, tc.err)
+			require.True(t, ok)
+			require.Equal(t, mcpconnectionattempts.CodeTunnelUnavailable, what)
+		})
+	}
 }
 
 func TestRefreshHappened_InternalErrorFollowsTheRemedy(t *testing.T) {

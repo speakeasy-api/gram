@@ -14,7 +14,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -178,7 +177,7 @@ func TestRefreshNow_TokenEndpointMissing_RefreshesIssuerMetadataOnce(t *testing.
 			session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 			require.NoError(t, err)
 
-			_, refreshErr := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, mcpconnectionattempts.Scope{})
+			_, refreshErr := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
 			var tokenErr *remotesessions.TokenRefreshError
 			require.ErrorAs(t, refreshErr, &tokenErr, "the caller's error is unchanged")
 			env.issuerMetadata.Wait()
@@ -195,7 +194,7 @@ func TestRefreshNow_TokenEndpointMissing_RefreshesIssuerMetadataOnce(t *testing.
 			// The discovered endpoint answers 404 too; inside the interval nothing starts.
 			session, err = env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 			require.NoError(t, err)
-			_, refreshErr = env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, mcpconnectionattempts.Scope{})
+			_, refreshErr = env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
 			require.ErrorAs(t, refreshErr, &tokenErr)
 			env.issuerMetadata.Wait()
 
@@ -239,7 +238,7 @@ func TestRefreshNow_UpstreamRejection_DoesNotRefreshIssuerMetadata(t *testing.T)
 
 			session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 			require.NoError(t, err)
-			_, refreshErr := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, mcpconnectionattempts.Scope{})
+			_, refreshErr := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
 			require.Error(t, refreshErr)
 			env.issuerMetadata.Wait()
 

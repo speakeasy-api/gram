@@ -4,7 +4,6 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
-	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"net/http"
 	"net/http/httptest"
@@ -174,7 +173,7 @@ func TestRefreshNow_InvalidClient_MarksClientAndClearsGrant(t *testing.T) {
 	upstream := &rotationUpstream{refreshStatus: http.StatusUnauthorized, refreshBody: invalidClientBody}
 	ctx, env := newSyntheticExpiryEnv(t, "refresh-invalid-client", upstream.handler())
 
-	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
+	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 	require.Error(t, err)
 	var failure *remotesessions.RefreshError
 	require.ErrorAs(t, err, &failure)
@@ -446,7 +445,7 @@ func TestRefreshNow_SuccessClearsUpstreamRejection(t *testing.T) {
 	rejectedAt := time.Now().Add(-time.Hour)
 	stageRegistration(t, env, "", &rejectedAt, nil)
 
-	result, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
+	result, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 	require.NoError(t, err)
 	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 

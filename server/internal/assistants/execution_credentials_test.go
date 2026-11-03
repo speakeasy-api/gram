@@ -86,7 +86,7 @@ func TestPrincipalCredentialsUseActingUserOrWorkloadOwnerUpstreamSessions(t *tes
 			require.NoError(t, err)
 			subject = urn.NewWorkloadSubject(issuerID, externalSubject)
 		}
-		return sessions.ResolveAccessTokens(caller, project, "org-test", issuer.ID, subject)
+		return sessions.ResolveAccessTokens(caller, remotesessions.RefreshAttribution{}, project, "org-test", issuer.ID, subject)
 	}
 	callers := map[string]context.Context{}
 	for _, user := range []string{"user-1", "user-2"} {

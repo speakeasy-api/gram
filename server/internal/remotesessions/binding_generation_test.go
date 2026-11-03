@@ -147,7 +147,7 @@ func testAttachmentReconnectDuringRefresh(t *testing.T, reattach bool) {
 	require.NoError(t, err)
 	agentCtx := contextvalues.WithAuthenticatedActor(ctx, auth, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()))
 	resolve := func() (remotesessions.ResolvedAuthorization, error) {
-		return env.mgr.ResolveAuthorization(agentCtx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.issuerID, urn.NewAgentSubject(agent.ID), "")
+		return env.mgr.ResolveAuthorization(agentCtx, remotesessions.RefreshAttribution{}, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.issuerID, urn.NewAgentSubject(agent.ID), "")
 	}
 	_, err = resolve()
 	require.NoError(t, err)

@@ -69,9 +69,10 @@ var connectionRequestEndings = []connectionEnding{
 	{mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeProviderServerError},
 	{mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultRefreshed},
 	{mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeRefreshTokenExpired},
+	{mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.ResultRenewed},
 }
 
-// connectionRequestRows seeds one of each single-row outcome per day, each its own attempt.
+// connectionRequestRows seeds single-row outcomes each day, each its own attempt.
 func (s *seeder) connectionRequestRows(scopes []mcpconnectionattempts.Scope) ([]mcpconnectionattempts.Row, error) {
 	subject := urn.NewUserSubject(s.userID("amara"))
 	rows := make([]mcpconnectionattempts.Row, 0, connectionAttemptDays*len(connectionRequestEndings))
@@ -79,6 +80,15 @@ func (s *seeder) connectionRequestRows(scopes []mcpconnectionattempts.Scope) ([]
 		for n, ending := range connectionRequestEndings {
 			key := "connection-request-" + strconv.Itoa(day) + "-" + strconv.Itoa(n)
 			scope := scopes[hash64(s.name(key), "scope")%uint64(len(scopes))]
+			switch ending.step {
+			case mcpconnectionattempts.StepSignInRenewal:
+				scope = mcpconnectionattempts.IdentityProviderScope(s.orgID(), mcpconnectionattempts.AppUnverified)
+			case mcpconnectionattempts.StepProviderRefresh:
+				// Half the refreshes are the scheduled sweep, which reaches no server.
+				if hash64(s.name(key), "scheduled")%2 == 0 {
+					scope = mcpconnectionattempts.ProviderSessionScope(s.orgID(), s.projectID(), mcpconnectionattempts.AppBackground)
+				}
+			}
 			started := s.now.AddDate(0, 0, -day-1).Add(time.Duration(hash64(s.name(key), "at")%connectionAttemptWindowSeconds) * time.Second)
 			opts := []mcpconnectionattempts.Option{mcpconnectionattempts.Subject(&subject)}
 			switch ending.step {

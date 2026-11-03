@@ -47,7 +47,8 @@ type SkippedClients struct {
 	reasons map[uuid.UUID]error
 }
 
-func (s *SkippedClients) note(issuerID uuid.UUID, reason error) {
+// Note records why the issuer's client was left out.
+func (s *SkippedClients) Note(issuerID uuid.UUID, reason error) {
 	if s == nil {
 		return
 	}

@@ -11,12 +11,19 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	mockidp "github.com/speakeasy-api/gram/dev-idp/pkg/testidp"
+	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
 
+	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	externalmcp_types "github.com/speakeasy-api/gram/server/internal/externalmcp/repo/types"
+	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testmcp"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -285,4 +292,200 @@ func TestInboundRefresh_NoProofLeavesNoVerdictRow(t *testing.T) {
 	require.NoError(t, refused.err)
 	require.Equal(t, http.StatusBadRequest, refused.code, refused.body)
 	rec.RequireNothing()
+}
+
+// A proxied server's failure lands on its own row, through the real request path.
+func TestProxiedUpstreamFailureRecords(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusInternalServerError)
+	}))
+	t.Cleanup(upstream.Close)
+
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	slug := "endpoint-" + uuid.NewString()
+	mcpServer, _ := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, slug, "public", issuerID)
+	subject := urn.NewUserSubject(mockidp.MockUserID)
+	token, jti, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
+		Subject:  subject,
+		Audience: urn.NewUserSessionIssuer(issuerID).String(),
+		Issuer:   ti.serverURL.String() + "/x/mcp/" + slug,
+		Lifetime: time.Hour,
+	})
+	require.NoError(t, err)
+	persistTestUserSession(t, ti, issuerID, subject, jti)
+
+	call, err := json.Marshal(map[string]any{"jsonrpc": "2.0", "id": 2, "method": "tools/call", "params": map[string]any{"name": "ping", "arguments": map[string]any{}}})
+	require.NoError(t, err)
+	_, _ = servePublicHTTP(t, context.Background(), ti, slug, call, token, nil)
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderServerError)
+	require.Equal(t, mcpServer.ID.String(), row.ServerID)
+	require.Equal(t, string(mcpconnectionattempts.WhoProvider), row.WhoFixes)
+}
+
+// Denied mcp:connect on a proxied server is the admin's to grant.
+func TestProxiedConnectDeniedRecords(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+
+	upstream := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	t.Cleanup(upstream.Close)
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, *authCtx.ProjectID)
+	slug := "endpoint-" + uuid.NewString()
+	mcpServer, _ := createRemoteMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, upstream.URL, slug, "private", issuerID)
+	subject := urn.NewUserSubject(mockidp.MockUserID)
+	token, jti, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
+		Subject:  subject,
+		Audience: urn.NewUserSessionIssuer(issuerID).String(),
+		Issuer:   ti.serverURL.String() + "/x/mcp/" + slug,
+		Lifetime: time.Hour,
+	})
+	require.NoError(t, err)
+	persistTestUserSession(t, ti, issuerID, subject, jti)
+
+	_, err = servePublicHTTP(t, context.Background(), ti, slug, makeInitializeBody(), token, nil)
+	require.Error(t, err)
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeNoServerAccess)
+	require.Equal(t, mcpServer.ID.String(), row.ServerID)
+	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
+}
+
+// A hosted tool the caller may not use is recorded, and the response stays the denial.
+func TestHostedToolDeniedRecords(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	fx := newWorkloadConsentFixture(t, ctx, ti)
+	addHTTPTools(t, ctx, ti, fx.toolset.ID, fx.target.ProjectID, fx.orgID, "deploy", "rollback")
+
+	agent := createConsentAgent(t, ctx, ti, fx, "Workload deploy agent")
+	selector := authz.NewSelector(authz.ScopeMCPConnect, fx.target.MCPResourceID.String())
+	selector[authz.SelectorKeyTool] = "rollback"
+	selectors, err := selector.MarshalJSON()
+	require.NoError(t, err)
+	_, err = accessrepo.New(ti.conn).UpsertPrincipalGrant(ctx, accessrepo.UpsertPrincipalGrantParams{
+		OrganizationID: fx.orgID,
+		PrincipalUrn:   urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()),
+		Scope:          string(authz.ScopeMCPConnect),
+		Selectors:      selectors,
+	})
+	require.NoError(t, err)
+	issuerID := seedWorkloadIssuer(t, ctx, ti, fx.orgID)
+	assignAgentToWorkload(t, ctx, ti, fx.orgID, issuerID, workloadSessionSubject, agent.ID)
+	session := seedWorkloadSession(t, ctx, ti, fx, urn.NewWorkloadSubject(issuerID, workloadSessionSubject))
+	token := mintSessionBearerExpiringAt(t, ti, fx, session, session.ExpiresAt.Time)
+	slug := fx.toolset.McpSlug.String
+
+	requireAdmitted(t, serveMCPResponse(t, ti, slug, makeInitializeBody(), token))
+	w := serveMCPResponse(t, ti, slug, makeToolsCallBody("deploy"), token)
+	require.Contains(t, w.Body.String(), mcpaccess.ToolPermissionDeniedMessage)
+
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeToolPermissionDenied)
+	require.Equal(t, fx.orgID, row.OrganizationID)
+}
+
+func TestGatewayMemberRows(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+
+	issuerID := createUserSessionIssuer(t, ctx, ti.conn, projectID)
+	metaSlug := "meta-rows-" + uuid.NewString()[:8]
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, projectID, orgID, metaSlug, issuerID)
+	deny := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusUnauthorized)
+	}))
+	t.Cleanup(deny.Close)
+	clientID := createConsentRemoteClient(t, ctx, ti.conn, projectID, orgID, "meta-rows", "", []uuid.UUID{issuerID})
+	remoteIssuerID := clientRemoteIssuerID(t, ctx, ti.conn, projectID, orgID, clientID)
+	createMetaMember(t, ctx, ti.conn, projectID, meta.ID, "member", deny.URL, conv.ToNullUUID(remoteIssuerID), 0)
+	subject := createTestUser(t, ctx, ti, "meta-rows-user-"+uuid.NewString())
+	bearer := mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject)
+
+	_, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
+	require.True(t, isError)
+	row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidRemoteSession)
+	require.Equal(t, meta.ID.String(), row.ServerID)
+	require.NotEmpty(t, row.MemberID)
+	require.Equal(t, subject.String(), row.SubjectURN)
+
+	insertQualifiedRemoteSessionToken(t, ctx, ti, issuerID, clientID, subject, "token-refused", deny.URL)
+	_, isError = metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
+	require.True(t, isError)
+	rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeProviderRejected)
+}
+
+// A gateway member that answers writes nothing, through the real request path.
+func TestHealthyGatewayMemberRecordsNothing(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	slug := "meta-" + uuid.NewString()
+	meta := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+	upstream := newRecordingUpstream(t, "ping")
+	memberSlug := "member-remote-" + uuid.NewString()[:8]
+	seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, meta.ID, "remote member", memberSlug, 1, upstream.url)
+
+	envelope := callMetaTool(t, ctx, ti, slug, "execute_tool", map[string]any{"name": memberSlug + "--ping", "arguments": map[string]any{}})
+	require.NotContains(t, string(envelope["result"]), `"isError":true`)
+	rec.RequireNothing()
+}
+
+// A row written the production way reaches ClickHouse, so the recorder is really wired to the service.
+func TestRecorderWritesRowsToClickHouse(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	recorder := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, mcpconnectionattemptstest.LogsOn)
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_ = recorder.Shutdown(cleanupCtx)
+	})
+	ti.service.SetConnectionRecorder(recorder)
+	fixture := createRemoteSessionResolverFixture(t, ctx, ti, authCtx, "gate-wired")
+	subject := urn.NewUserSubject("wired-user-" + uuid.NewString())
+	bearer := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, subject)
+
+	_, err = servePublicHTTP(t, context.Background(), ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), bearer, nil)
+	require.Error(t, err)
+
+	require.EventuallyWithT(t, func(c *assert.CollectT) {
+		rows, qerr := conn.Query(ctx, `SELECT reason FROM mcp_connection_events WHERE subject_urn = $1 AND is_final`, subject.String())
+		if !assert.NoError(c, qerr) {
+			return
+		}
+		defer rows.Close()
+		var reasons []string
+		for rows.Next() {
+			var reason string
+			assert.NoError(c, rows.Scan(&reason))
+			reasons = append(reasons, reason)
+		}
+		assert.Contains(c, reasons, mcpconnectionattempts.CodeInvalidRemoteSession.String())
+	}, 30*time.Second, 200*time.Millisecond)
 }

@@ -5,6 +5,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
@@ -70,12 +71,13 @@ func TestRenewal_FailuresKeepWhoFixes(t *testing.T) {
 		kind RefreshFailure
 		want mcpconnectionattempts.Code
 		who  mcpconnectionattempts.WhoFixes
+		rows int
 	}{
-		{name: "invalid grant", kind: RefreshInvalidGrant, want: mcpconnectionattempts.CodeInvalidGrant, who: mcpconnectionattempts.WhoPerson},
-		{name: "configuration", kind: RefreshConfiguration, want: mcpconnectionattempts.CodeRenewalMisconfigured, who: mcpconnectionattempts.WhoAdmin},
-		{name: "invalid identity", kind: RefreshInvalidIdentity, want: mcpconnectionattempts.CodeInvalidIdentity, who: mcpconnectionattempts.WhoAdmin},
-		{name: "retryable", kind: RefreshRetryable, want: mcpconnectionattempts.CodeRenewalRetryable, who: mcpconnectionattempts.WhoProvider},
-		{name: "ambiguous", kind: RefreshAmbiguous, want: mcpconnectionattempts.CodeRenewalAmbiguous, who: mcpconnectionattempts.WhoPerson},
+		{name: "invalid grant", kind: RefreshInvalidGrant, want: mcpconnectionattempts.CodeInvalidGrant, who: mcpconnectionattempts.WhoPerson, rows: 1},
+		{name: "configuration", kind: RefreshConfiguration, want: mcpconnectionattempts.CodeRenewalMisconfigured, who: mcpconnectionattempts.WhoAdmin, rows: 2},
+		{name: "invalid identity", kind: RefreshInvalidIdentity, want: mcpconnectionattempts.CodeInvalidIdentity, who: mcpconnectionattempts.WhoAdmin, rows: 2},
+		{name: "retryable", kind: RefreshRetryable, want: mcpconnectionattempts.CodeRenewalRetryable, who: mcpconnectionattempts.WhoProvider, rows: 1},
+		{name: "ambiguous", kind: RefreshAmbiguous, want: mcpconnectionattempts.CodeRenewalAmbiguous, who: mcpconnectionattempts.WhoPerson, rows: 1},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -93,10 +95,10 @@ func TestRenewal_FailuresKeepWhoFixes(t *testing.T) {
 			row := rec.RequireEnded(mcpconnectionattempts.StepSignInRenewal, tc.want)
 			require.Equal(t, string(tc.who), row.WhoFixes)
 
-			// A later call refused from the state already recorded writes nothing new.
+			// A later call adds a row only for a broken setup, which the limiter holds to a trickle.
 			_, err = s.Resolve(t.Context(), b, allow)
 			require.Error(t, err)
-			require.Len(t, rec.Rows(), 1)
+			require.Len(t, rec.Rows(), tc.rows)
 		})
 	}
 }
@@ -111,4 +113,34 @@ func TestRenewal_OfflineRefusalIsRecorded(t *testing.T) {
 	require.NoError(t, s.RecordOfflineRefusal(t.Context(), p, b.HumanID))
 	row := rec.RequireEnded(mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.CodeRenewalRefused)
 	require.Equal(t, string(mcpconnectionattempts.WhoPerson), row.WhoFixes)
+}
+
+// A setup broken before any POST still shows up.
+func TestRenewal_ChangedConfigurationIsRecorded(t *testing.T) {
+	t.Parallel()
+
+	s, _, p, b, allow := newDelegationUnitFixture(t)
+	rec := mcpconnectionattemptstest.New(t)
+	s.connections = rec.Recorder
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "id", "refresh", time.Hour), true))
+	s.loadBinding = func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error) { return nil, ErrConfiguration }
+
+	_, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrConfiguration)
+	row := rec.RequireEnded(mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.CodeRenewalMisconfigured)
+	require.Equal(t, string(mcpconnectionattempts.WhoAdmin), row.WhoFixes)
+}
+
+// An unproven caller does not reach the row: authorization comes first.
+func TestRenewal_UnauthorizedCallerRecordsNothing(t *testing.T) {
+	t.Parallel()
+
+	s, _, _, b, _ := newDelegationUnitFixture(t)
+	rec := mcpconnectionattemptstest.New(t)
+	s.connections = rec.Recorder
+	denied := delegationTestAuthority(func(context.Context, Binding) error { return ErrConfiguration })
+
+	_, err := s.Resolve(t.Context(), b, denied)
+	require.Error(t, err)
+	rec.RequireNothing()
 }

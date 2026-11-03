@@ -46,7 +46,7 @@ type connectedMeta struct {
 // issuer and subject — the same map the serving path routes from.
 func (g connectedMeta) resolveTokens(t *testing.T, ctx context.Context) map[uuid.UUID]remotesessions.UpstreamToken {
 	t.Helper()
-	tokens, err := g.mgr.ResolveAccessTokens(ctx, g.fx.projectID, g.fx.orgID, g.fx.shared, g.fx.subject)
+	tokens, err := g.mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, g.fx.projectID, g.fx.orgID, g.fx.shared, g.fx.subject)
 	require.NoError(t, err)
 	return tokens
 }

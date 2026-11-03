@@ -566,7 +566,7 @@ func TestServeConsentAction_MultiBindingExchangePersistsPerClientResource(t *tes
 	require.Equal(t, consentUpstreamB, sessB.Resource.String)
 
 	// The routing layer serves both, each token qualified by its own resource.
-	tokens, err := mgr.ResolveAccessTokens(ctx, projectID, orgID, shared, subject)
+	tokens, err := mgr.ResolveAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, orgID, shared, subject)
 	require.NoError(t, err)
 	require.Len(t, tokens, 2)
 	byClient := map[uuid.UUID]remotesessions.UpstreamToken{}

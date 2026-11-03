@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
-	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
@@ -341,7 +340,7 @@ func TestRefreshScopeRecoveryRejectsJWTForAnotherSubject(t *testing.T) {
 		withIDTokenIssuer(issuer), withEnrichmentAS(as))
 	require.Equal(t, remotesessions.IdentitySourceUserinfo, env.session.IdentitySource.String)
 
-	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
+	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 	require.NoError(t, err)
 	stored, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 	require.NoError(t, err)
@@ -372,7 +371,7 @@ func TestTokenResponseNullScopeIsUnreportedAtExchangeAndRefresh(t *testing.T) {
 	})
 	require.Equal(t, []string{"initial:read"}, env.session.Scopes)
 
-	result, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
+	result, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 	require.NoError(t, err)
 	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	stored, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})

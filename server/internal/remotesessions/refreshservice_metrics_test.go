@@ -14,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -51,7 +50,7 @@ func TestRefreshNow_RecordsInvalidGrantThenNoGrant(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	_, err = env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
+	_, err = env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 	var failure *remotesessions.RefreshError
 	require.ErrorAs(t, err, &failure)
 	require.Equal(t, "https://idp.example.com", failure.IssuerURL)
@@ -66,7 +65,7 @@ func TestRefreshNow_RecordsInvalidGrantThenNoGrant(t *testing.T) {
 	require.NoError(t, err)
 	require.False(t, cleared.RefreshTokenEncrypted.Valid)
 
-	_, err = env.refresher.RefreshNow(ctx, cleared, "", remotesessionmetrics.RefreshTriggerManual, mcpconnectionattempts.Scope{})
+	_, err = env.refresher.RefreshNow(ctx, cleared, "", remotesessionmetrics.RefreshTriggerManual, remotesessions.RefreshAttribution{})
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken, "the typed failure must not hide the no-grant sentinel")
 	require.ErrorAs(t, err, &failure)
 	require.Equal(t, "https://idp.example.com", failure.IssuerURL)
@@ -122,7 +121,7 @@ func TestRefreshNow_RecordsRefreshed(t *testing.T) {
 		ProjectID:       conv.ToNullUUID(env.projectID),
 	}))
 
-	result, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest, mcpconnectionattempts.Scope{})
+	result, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
 	require.NoError(t, err)
 	require.Equal(t, remotesessionmetrics.RefreshOutcomeRefreshed, result.Outcome)
 	require.Equal(t, replacementUpdatedAt, result.SourceUpdatedAt)

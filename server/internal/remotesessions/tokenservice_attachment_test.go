@@ -47,17 +47,17 @@ func TestResolveAuthorization_AgentAttachment(t *testing.T) {
 	sessionCtx := contextvalues.WithAuthenticatedActor(ctx, auth, agent)
 	caller := urn.NewAgentSubject(principalID)
 	resolve := func(ctx context.Context) (remotesessions.ResolvedAuthorization, error) {
-		return manager.ResolveAuthorization(ctx, projectID, organizationID, requestingIssuer, remoteIssuerID, caller, "")
+		return manager.ResolveAuthorization(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, requestingIssuer, remoteIssuerID, caller, "")
 	}
 	// Existing user credentials, including the author's grant, do not grant an
 	// agent access until this exact row is explicitly attached.
 	_, err = resolve(keyCtx)
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
-	require.NoError(t, manager.CheckAccessTokens(ctx, projectID, organizationID, requestingIssuer, subject))
+	require.NoError(t, manager.CheckAccessTokens(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, requestingIssuer, subject))
 	wasUsed, err := testrepo.New(ti.conn).AttachmentSourceWasUsedFixture(ctx, source.ID)
 	require.NoError(t, err)
 	require.False(t, wasUsed, "consent availability checks must not stamp upstream usage")
-	direct, err := manager.ResolveAuthorization(ctx, projectID, organizationID, requestingIssuer, remoteIssuerID, subject, "")
+	direct, err := manager.ResolveAuthorization(ctx, remotesessions.RefreshAttribution{}, projectID, organizationID, requestingIssuer, remoteIssuerID, subject, "")
 	require.NoError(t, err)
 	require.Equal(t, source.ID, direct.RemoteSessionID)
 
@@ -69,7 +69,7 @@ func TestResolveAuthorization_AgentAttachment(t *testing.T) {
 		require.Equal(t, "attached-token", resolved.AccessToken)
 		require.Equal(t, source.ID, resolved.RemoteSessionID)
 		require.Equal(t, source.UpdatedAt.Time, resolved.RemoteSessionUpdatedAt)
-		tokens, err := manager.ResolveAccessTokens(callerCtx, projectID, organizationID, requestingIssuer, caller)
+		tokens, err := manager.ResolveAccessTokens(callerCtx, remotesessions.RefreshAttribution{}, projectID, organizationID, requestingIssuer, caller)
 		require.NoError(t, err)
 		require.Equal(t, "https://upstream.example.com/mcp", tokens[remoteIssuerID].Resource)
 		require.Equal(t, source.ID, tokens[remoteIssuerID].RemoteSessionID)
@@ -100,7 +100,7 @@ func TestResolveAuthorization_AgentAttachment(t *testing.T) {
 	require.NoError(t, err)
 	secondCtx := contextvalues.WithAuthenticatedActor(ctx, auth, urn.NewPrincipal(urn.PrincipalTypeAgent, secondID.String()))
 	resolveSecond := func() (remotesessions.ResolvedAuthorization, error) {
-		return manager.ResolveAuthorization(secondCtx, projectID, organizationID, requestingIssuer, remoteIssuerID, urn.NewAgentSubject(secondID), "")
+		return manager.ResolveAuthorization(secondCtx, remotesessions.RefreshAttribution{}, projectID, organizationID, requestingIssuer, remoteIssuerID, urn.NewAgentSubject(secondID), "")
 	}
 	second, err := resolveSecond()
 	require.NoError(t, err)
@@ -119,7 +119,7 @@ func TestResolveAuthorization_AgentAttachment(t *testing.T) {
 	require.NoError(t, err)
 	_, err = resolve(keyCtx)
 	require.ErrorIs(t, err, remotesessions.ErrNoValidToken)
-	available, err := manager.ResolveAvailableAccessTokens(keyCtx, projectID, organizationID, requestingIssuer, caller)
+	available, err := manager.ResolveAvailableAccessTokens(keyCtx, remotesessions.RefreshAttribution{}, projectID, organizationID, requestingIssuer, caller)
 	require.NoError(t, err)
 	require.Empty(t, available)
 	_, err = resolveSecond()

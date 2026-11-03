@@ -766,7 +766,7 @@ func (s *Service) admitMetaGate(ctx context.Context, w http.ResponseWriter, logg
 			// issuer's other clients resolve lazily, for hosted members that
 			// need them, and an unrelated broken one blocks nothing else.
 			authentication.skippedUpstreams = new(remotesessions.SkippedClients)
-		gateProjectTokens = s.newOrganizationGatewayTokens(authentication.endpoint, authentication.subject, authentication.skippedUpstreams)
+			gateProjectTokens = s.newOrganizationGatewayTokens(authentication.endpoint, authentication.subject, authentication.skippedUpstreams)
 		} else {
 			tokens, err := s.resolveIssuerGateAccessTokens(ctx, w, authentication)
 			if err != nil {

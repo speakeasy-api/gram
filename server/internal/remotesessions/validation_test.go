@@ -375,7 +375,7 @@ func TestRemoteSessionValidation_ClearedByRefresh(t *testing.T) {
 	require.True(t, written)
 	require.Equal(t, "valid", getRemoteSessionRow(t, ctx, ti, clientID, subject).ValidationStatus.String)
 
-	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, "")
+	tok, err := mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, clientID, subject, "")
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, "refreshed-access", tok)

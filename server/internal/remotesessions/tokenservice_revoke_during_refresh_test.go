@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
@@ -55,7 +56,7 @@ func TestResolveAccessToken_RevokedDuringRefresh_StaysRevoked(t *testing.T) {
 	resolved := make(chan resolveResult, 1)
 
 	go func() {
-		tok, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+		tok, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 		resolved <- resolveResult{token: tok, err: err}
 	}()
 

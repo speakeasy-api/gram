@@ -14,7 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -51,13 +51,13 @@ func TestRefreshNow_RacingLazyResolves_SingleUpstreamCall(t *testing.T) {
 	for i := range lazy {
 		wg.Go(func() {
 			<-start
-			tokens[i], errs[i] = env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+			tokens[i], errs[i] = env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 		})
 	}
 	for i := range scheduled {
 		wg.Go(func() {
 			<-start
-			result, err := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
+			result, err := env.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 			tokens[lazy+i], errs[lazy+i] = result.AccessToken, err
 			outcomes[i] = result.Outcome
 		})

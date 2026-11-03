@@ -9,7 +9,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -77,7 +76,7 @@ func TestRefreshNow_ReconnectNeverAdoptsReplacement(t *testing.T) {
 				done := make(chan struct{})
 				go func() {
 					defer close(done)
-					result, refreshErr = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
+					result, refreshErr = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 				}()
 				select {
 				case <-arrived:
@@ -95,7 +94,7 @@ func TestRefreshNow_ReconnectNeverAdoptsReplacement(t *testing.T) {
 				require.EqualValues(t, 1, attempts.Load())
 			} else {
 				replacement = reconnect()
-				result, refreshErr = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, mcpconnectionattempts.Scope{})
+				result, refreshErr = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 				require.Zero(t, attempts.Load(), "replacement credentials must never reach the token endpoint")
 			}
 			require.NoError(t, refreshErr)

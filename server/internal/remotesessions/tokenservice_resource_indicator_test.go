@@ -17,6 +17,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
@@ -43,7 +44,7 @@ func TestResolveAccessToken_RefreshResourceFollowsIssuerResourceIndicatorSupport
 
 			setIssuerResourceIndicatorSupported(t, ctx, ti, clientID, tc.supported)
 
-			tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, resource)
+			tok, err := mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, clientID, subject, resource)
 			require.NoError(t, err)
 			require.NoError(t, spy.handlerErr)
 			require.Equal(t, "refreshed-access", tok)
@@ -125,7 +126,7 @@ func TestRefreshGrant_InvalidTargetRetriesOnceWithoutResource(t *testing.T) {
 	var rec refreshRecorder
 	ctx, mgr, _, clientID, subject := setupRefreshFixtureWithHandler(t, "invalid-target-retry", pgtype.Text{String: "", Valid: false}, rec.handler(rejectResourceThenRefresh))
 
-	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, resource)
+	tok, err := mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, clientID, subject, resource)
 	require.NoError(t, err)
 	require.Equal(t, "refreshed-access", tok)
 
@@ -162,7 +163,7 @@ func TestRefreshGrant_NoRetryOnOtherErrors(t *testing.T) {
 			}))
 
 			// A failed refresh collapses to "no usable token", never an error.
-			tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, resource)
+			tok, err := mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, clientID, subject, resource)
 			require.NoError(t, err)
 			require.Empty(t, tok)
 
@@ -185,7 +186,7 @@ func TestRefreshGrant_OperatorFalseSendsNoResourceAndNeverRetries(t *testing.T) 
 	}))
 	setIssuerResourceIndicatorSupported(t, ctx, ti, clientID, pgtype.Bool{Bool: false, Valid: true})
 
-	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, resource)
+	tok, err := mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, clientID, subject, resource)
 	require.NoError(t, err)
 	require.Empty(t, tok)
 

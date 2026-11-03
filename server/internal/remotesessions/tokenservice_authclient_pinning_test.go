@@ -177,7 +177,7 @@ func TestResolveAuthClientAccessTokens_WorkloadServesItsOwnersConsent(t *testing
 	require.NoError(t, err)
 	require.Equal(t, "p2-token", tokens[issuerID].Token, "so does an organization registration's consent from another project")
 
-	_, err = f.mgr.ResolveClientAccessTokens(workloadCtx, f.projectID, f.organizationID, f.signInB, caller, f.clientID, false)
+	_, err = f.mgr.ResolveClientAccessTokens(workloadCtx, remotesessions.RefreshAttribution{}, f.projectID, f.organizationID, f.signInB, caller, f.clientID, false)
 	require.ErrorIs(t, err, remotesessions.ErrChosenClientUnbound, "the legacy path still requires the sign-in link")
 }
 
@@ -228,7 +228,7 @@ func TestResolveAuthClientAccessTokens_PrincipalAPIKeyServesTheAuthorizersConsen
 	require.NoError(t, err)
 	require.False(t, reconnect)
 
-	signIn, err := f.mgr.ResolveClientAccessTokens(keyCtx, f.projectID, f.organizationID, f.signInA, authorizer, f.clientID, false)
+	signIn, err := f.mgr.ResolveClientAccessTokens(keyCtx, remotesessions.RefreshAttribution{}, f.projectID, f.organizationID, f.signInA, authorizer, f.clientID, false)
 	require.NoError(t, err)
 	require.Equal(t, "authorizer-token", signIn[f.issuerID].Token, "a handback to the upstream client choice reads the same connection")
 
@@ -398,7 +398,7 @@ func TestResolveAuthClientAccessTokens_ServesAServiceAccountWithoutTheSignInLink
 	require.Equal(t, "self-token", tokens[fx.remoteIssuerID].Token)
 	require.Equal(t, remotesessions.CredentialOwnerSelf, tokens[fx.remoteIssuerID].CredentialOwner)
 
-	_, err = mgr.ResolveClientAccessTokens(ctx, fx.projectID, fx.organizationID, otherSignIn, subject, fx.clientID, false)
+	_, err = mgr.ResolveClientAccessTokens(ctx, remotesessions.RefreshAttribution{}, fx.projectID, fx.organizationID, otherSignIn, subject, fx.clientID, false)
 	require.ErrorIs(t, err, remotesessions.ErrChosenClientUnbound)
 }
 

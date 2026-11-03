@@ -658,7 +658,7 @@ func (m *ChallengeManager) resolveClientTokens(
 				if self {
 					tokens[c.RemoteSessionIssuerID] = unavailableClientCredential(c.ClientID, selfResource, err)
 				}
-				attribution.skipped.note(c.RemoteSessionIssuerID, err)
+				attribution.skipped.Note(c.RemoteSessionIssuerID, err)
 				continue
 			}
 			// A refined failure can still be outranked by a later client that

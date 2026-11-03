@@ -35,7 +35,7 @@ func TestResolveAccessToken_NoRefreshToken_InsideSkew_ServedUntilDeadline(t *tes
 		AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(remotesessions.AccessTokenExpirySkew / 2)),
 	}))
 
-	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	resolved, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, upstreamAccessToken, resolved,
 		"with no refresh grant the token is forwarded until its stated deadline, not turned into a reconnect prompt early")
@@ -71,7 +71,7 @@ func TestResolveAccessToken_RefreshFailsInsideSkew_ServesStoredTokenUntilDeadlin
 		AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(remotesessions.AccessTokenExpirySkew / 2)),
 	}))
 
-	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	resolved, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Equal(t, upstreamAccessToken, resolved,
 		"a failed early refresh must fall back to the stored token while it is inside its stated lifetime")
@@ -99,7 +99,7 @@ func TestResolveAccessToken_RefreshFailsPastDeadline_IsUnusable(t *testing.T) {
 		AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Minute)),
 	}))
 
-	resolved, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	resolved, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Empty(t, resolved, "past the deadline there is no token to fall back to")
 	require.EqualValues(t, 1, refreshAttempts.Load())

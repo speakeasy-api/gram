@@ -63,7 +63,7 @@ func TestRefreshNow_RecordsEachEndState(t *testing.T) {
 
 			serverID := uuid.New()
 			scope := mcpconnectionattempts.ServerScope(env.organizationID, env.projectID, serverID, mcpconnectionattempts.AppDCR)
-			_, _ = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, scope)
+			_, _ = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshIn(scope))
 
 			row := rec.RequireEnded(mcpconnectionattempts.StepProviderRefresh, tc.want)
 			require.Equal(t, string(tc.who), row.WhoFixes)
@@ -78,10 +78,11 @@ func TestRefreshNow_RecordsEachEndState(t *testing.T) {
 	}
 }
 
-func TestRefreshNow_ZeroScopeFilesUnderTheClientsOwner(t *testing.T) {
+// Nothing guesses a home for a row: a caller that names no scope gets no row.
+func TestRefreshNow_ZeroAttributionWritesNoRow(t *testing.T) {
 	t.Parallel()
 
-	ctx, env := newSyntheticExpiryEnv(t, "refresh-owner", tokenAnswer(http.StatusServiceUnavailable, `{}`))
+	ctx, env := newSyntheticExpiryEnv(t, "refresh-zero", tokenAnswer(http.StatusServiceUnavailable, `{}`))
 	rec := mcpconnectionattemptstest.New(t)
 	refresher := env.newRefresher(testenv.NewMeterProvider(t), cache.NoopCache)
 	remotesessions.WithRefreshConnectionRecorder(rec.Recorder)(refresher)
@@ -89,12 +90,8 @@ func TestRefreshNow_ZeroScopeFilesUnderTheClientsOwner(t *testing.T) {
 	session, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
 	require.NoError(t, err)
 
-	_, _ = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerManual, mcpconnectionattempts.Scope{})
-
-	row := rec.RequireEnded(mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeProviderServerError)
-	require.Equal(t, env.organizationID, row.OrganizationID)
-	require.Equal(t, env.projectID, row.ProjectID)
-	require.Equal(t, "provider_session", row.ServerKind)
+	_, _ = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerManual, remotesessions.RefreshAttribution{})
+	rec.RequireNothing()
 }
 
 // A refresh inside a sign-in is a step of that attempt, so it cannot end it.
@@ -110,7 +107,7 @@ func TestRefreshNow_JoinsACarriedAttempt(t *testing.T) {
 	require.NoError(t, err)
 
 	attempt := mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope(env.organizationID, env.projectID, uuid.New(), mcpconnectionattempts.AppDCR))
-	_, _ = refresher.RefreshNow(remotesessions.WithConnectionAttempt(ctx, attempt), session, "", remotesessionmetrics.RefreshTriggerRequest, mcpconnectionattempts.Scope{})
+	_, _ = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshIn(mcpconnectionattempts.ProviderSessionScope(env.organizationID, env.projectID, mcpconnectionattempts.AppDCR)).InAttempt(attempt))
 
 	row := rec.RequireStep(mcpconnectionattempts.StepProviderRefresh, mcpconnectionattempts.CodeProviderServerError)
 	require.Equal(t, attempt.ID(), row.AttemptID)
@@ -130,7 +127,7 @@ func TestRefreshNow_NotAnEndState(t *testing.T) {
 	require.NoError(t, err)
 
 	session.ID = uuid.New()
-	_, err = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, mcpconnectionattempts.Scope{})
+	_, err = refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerRequest, remotesessions.RefreshAttribution{})
 	require.NoError(t, err)
 	rec.RequireNothing()
 }

@@ -242,7 +242,7 @@ func TestRefreshOverflowKeepsRejectedIDTokenMarker(t *testing.T) {
 
 	body := `,"hub_domain":"` + half + `"`
 	refreshBody.Store(&body)
-	_, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	_, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	sess := restatedSession(t, env)
 	require.EqualValues(t, 1, refreshes.Load())
@@ -316,7 +316,7 @@ func TestRefreshEchoedTokenKeepsDeadlineAndIntrospectionMarker(t *testing.T) {
 	require.True(t, before.RefreshExpiresAt.Valid, "introspecting the refresh token backfilled the deadline")
 	require.Equal(t, "ok", decodeEnrichment(t, before.Enrichment).Interfaces["refresh_introspection"].Status)
 
-	_, err = env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	_, err = env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.EqualValues(t, 1, refreshes.Load())
 	after := restatedSession(t, env)
@@ -846,7 +846,7 @@ func TestRefreshDropsStaleIntrospection(t *testing.T) {
 	require.Equal(t, remotesessions.IdentitySourceIntrospection, before.IdentitySource.String)
 
 	// The exchange's token expires inside the skew, so resolving refreshes.
-	_, err = env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	_, err = env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.EqualValues(t, 1, refreshes.Load())
 
@@ -894,7 +894,7 @@ func TestRefreshRotationReintrospectsTheNewRefreshToken(t *testing.T) {
 	require.Equal(t, "no exp", decodeEnrichment(t, before.Enrichment).Interfaces["refresh_introspection"].Reason)
 
 	// The refresh rotates the refresh token and reports no refresh_expires_in.
-	_, err = env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	_, err = env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.EqualValues(t, 1, refreshes.Load())
 	after := restatedSession(t, env)

@@ -133,7 +133,7 @@ func TestAgentMemberSelectedAttachmentPin(t *testing.T) {
 					chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, typedAuthClient: typed,
 					authClient: &authClientResolution{attachedSession: checked}}
 				choices := &memberChoices{enforced: true, byServer: map[uuid.UUID]*memberTokens{}, resolve: func(ctx context.Context, member metaMember) (map[uuid.UUID]remotesessions.UpstreamToken, error) {
-					return s.resolveChosenMemberTokens(ctx, endpoint, urn.NewAgentSubject(agent), true, member)
+					return s.resolveChosenMemberTokens(ctx, remotesessions.RefreshAttribution{}, endpoint, urn.NewAgentSubject(agent), true, member)
 				}}
 				// Simulate replacing the attachment after permission checked its
 				// exact session, but before the credential lookup reads it.
@@ -266,7 +266,7 @@ func TestAgentKeyHandbackReadsTheAuthorizersConnection(t *testing.T) {
 				member := metaMember{serverID: uuid.New(), projectID: endpoint.ProjectID, slug: "member", backend: metaMemberBackendProxied,
 					chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}, typedAuthClient: typed,
 					authClient: &authClientResolution{authorizerOwner: owner}}
-				_, err := s.resolveChosenMemberTokens(t.Context(), endpoint, agent, true, member)
+				_, err := s.resolveChosenMemberTokens(t.Context(), remotesessions.RefreshAttribution{}, endpoint, agent, true, member)
 				require.NoError(t, err)
 				authentication := &issuerGateAuthentication{endpoint: endpoint, subject: agent, chosenClient: uuid.NullUUID{UUID: uuid.New(), Valid: true}, authorizerOwner: owner}
 				if typed {

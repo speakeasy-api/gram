@@ -72,7 +72,7 @@ func AppOf(clientID string) App {
 	}
 	host := NormalizeProviderHost(clientID)
 	switch (App{host}) {
-	case App{""}, AppDCR, AppFirstParty, AppUnverified, AppWorkload, AppCodeMode, AppRecoveryLink:
+	case App{""}, AppDCR, AppFirstParty, AppUnverified, AppWorkload, AppCodeMode, AppRecoveryLink, AppBackground:
 		// A host spelled like a kind must not count as that kind.
 		return AppUnverified
 	}
