@@ -1649,7 +1649,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 				Description: truncateForMessage(q.Get("error_description")),
 				URI:         truncateForMessage(q.Get("error_uri")),
 			}
-			return m.retryLeg(ctx, t, logger, state, cause)
+			return m.retryWithoutResource(ctx, t, logger, state, cause)
 		}
 		t.Refuse(ctx, providerErrorHappened(errCode), mcpconnectionattempts.Detail(oautherr.RegisteredCodeLabel(errCode)))
 		m.recordCIMDAuthorizationFailure(ctx, state, errCode, q.Get("error_description"))
@@ -1762,7 +1762,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	}, audience, code)
 	if err != nil {
 		if oauthErr, ok := errors.AsType[oautherr.RFC6749Error](err); ok && oauthErr.Code == oautherr.CodeInvalidTarget {
-			return m.retryLeg(ctx, t, logger, state, err)
+			return m.retryWithoutResource(ctx, t, logger, state, err)
 		}
 		t.At(mcpconnectionattempts.StepProviderToken)
 		t.Refuse(ctx, exchangeHappened(err, clientRow.TunneledMcpServerID.Valid))
@@ -2111,22 +2111,11 @@ func denied(ctx context.Context, logger *slog.Logger, q url.Values) error {
 	)
 }
 
-// retryLeg retries a login the provider refused for its resource, which continues the attempt unless the retry is refused too.
-func (m *ChallengeManager) retryLeg(ctx context.Context, t *mcpconnectionattempts.Tracker, logger *slog.Logger, state RemoteLoginState, cause error) (RemoteLoginResult, error) {
-	result, err := m.retryWithoutResource(ctx, logger, state, cause)
-	if err != nil {
-		t.Refuse(ctx, mcpconnectionattempts.CodeProviderOAuthInvalidScope, mcpconnectionattempts.Detail(oautherr.CodeInvalidTarget))
-		return result, err
-	}
-	t.Continue()
-	return result, nil
-}
-
 // retryWithoutResource mints one resource-less leg of the same login after
 // invalid_target. Refused when the leg already omitted the resource or is the
 // retry itself, so an issuer cannot loop the user. Persists nothing: the
 // rejection may be of this resource alone, so it stays scoped to this login.
-func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slog.Logger, state RemoteLoginState, cause error) (RemoteLoginResult, error) {
+func (m *ChallengeManager) retryWithoutResource(ctx context.Context, t *mcpconnectionattempts.Tracker, logger *slog.Logger, state RemoteLoginState, cause error) (RemoteLoginResult, error) {
 	var none RemoteLoginResult
 	logger = logger.With(attr.SlogOAuthError(oautherr.CodeInvalidTarget))
 	if state.Resource == "" || state.OmitResource || state.ResourceRetried {
@@ -2134,15 +2123,18 @@ func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slo
 		if endpointErr, ok := errors.AsType[*tokenEndpointError](cause); ok {
 			attrs = append(attrs, attr.SlogHTTPResponseStatusCode(endpointErr.statusCode))
 		}
+		t.Refuse(ctx, mcpconnectionattempts.CodeProviderOAuthInvalidScope, mcpconnectionattempts.Detail(oautherr.CodeInvalidTarget))
 		return none, oops.E(oops.CodeUnauthorized, cause, "the identity provider rejected the requested resource").LogWarn(ctx, logger, attrs...)
 	}
 
 	clients, err := m.ListClients(ctx, state.ProjectID, state.OrganizationID, state.UserSessionIssuerID)
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return none, oops.E(oops.CodeUnexpected, err, "load remote session client for retry").LogError(ctx, logger)
 	}
 	idx := slices.IndexFunc(clients, func(c Client) bool { return c.ID == state.RemoteSessionClientID })
 	if idx < 0 {
+		t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
 		return none, oops.E(oops.CodeUnauthorized, cause, "the connection this login was started from no longer exists").LogWarn(ctx, logger)
 	}
 	client := clients[idx]
@@ -2157,8 +2149,10 @@ func (m *ChallengeManager) retryWithoutResource(ctx context.Context, logger *slo
 	client.IssuerResourceIndicatorSupported = &unsupported
 	authURL, err := m.mintAuthorization(ctx, state.parent(), client, &state, false)
 	if err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return none, oops.E(oops.CodeUnexpected, err, "build authorization url for retry").LogError(ctx, logger)
 	}
+	t.Continue()
 	return RemoteLoginResult{RedirectURL: authURL, Grant: nil}, nil
 }
 

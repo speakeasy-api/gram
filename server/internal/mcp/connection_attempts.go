@@ -7,6 +7,7 @@ import (
 	"errors"
 	"log/slog"
 	"strings"
+	"sync"
 	"time"
 
 	redisCache "github.com/go-redis/cache/v9"
@@ -26,6 +27,14 @@ import (
 
 // connectionAttemptEndTTL outlives the longest a browser attempt can stay live.
 const connectionAttemptEndTTL = 2 * time.Hour
+
+const (
+	// attemptEndingTimeout bounds one claim of an attempt's ending.
+	attemptEndingTimeout = 5 * time.Second
+
+	// maxPendingAttemptEndings bounds claims waiting on a slow Redis.
+	maxPendingAttemptEndings = 256
+)
 
 // federatedHappened names a failure of the organization's own sign-in service.
 func federatedHappened(err error) mcpconnectionattempts.Code {
@@ -164,7 +173,7 @@ func (s *Service) recordConsentPage(
 	if problem != nil {
 		s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, problem, subject)
 	}
-	if challengeState.FirstParty && !challengeState.CodeReconnect.catalogPending() && firstPartyConnected(gateway, cards) {
+	if challengeState.FirstParty && !challengeState.CodeReconnect.undecidedOrCanceled() && firstPartyConnected(gateway, cards) {
 		s.endAttemptOnce(ctx, logger, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete, subject)
 	}
 }
@@ -248,7 +257,7 @@ func firstPartyCardsDone(cards []remoteSessionCard) bool {
 
 // endChainedFirstParty ends a first-party attempt once a chained check leaves nothing to do. It never touches the response.
 func (s *Service) endChainedFirstParty(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, checked uuid.UUID) {
-	if challengeState.CodeReconnect.catalogPending() {
+	if challengeState.CodeReconnect.undecidedOrCanceled() {
 		return
 	}
 	cards, err := s.buildRemoteSessionCards(ctx, endpoint, challengeState, s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID))
@@ -274,25 +283,72 @@ func (s *Service) endChainedFirstParty(ctx context.Context, logger *slog.Logger,
 	}
 }
 
-// claimAttemptEnding takes the attempt's once-only marker and reports whether this call won.
-func (s *Service) claimAttemptEnding(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt) bool {
-	if attempt.IsZero() || s.userSessionRefreshReplayCoordination == nil {
-		return false
-	}
-	won, err := s.userSessionRefreshReplayCoordination.Add(ctx, "connectionAttemptEnded:"+attempt.ID().String(), connectionAttemptEndTTL)
-	if err != nil {
-		logger.WarnContext(ctx, "claim connection attempt ending", attr.SlogError(err))
-		return false
-	}
-	return won
+func attemptEndMarker(attempt mcpconnectionattempts.Attempt) string {
+	return "connectionAttemptEnded:" + attempt.ID().String()
 }
 
-// endAttemptOnce ends an attempt from a path that can repeat. If the marker
-// can't be read the attempt stays open rather than ending twice.
-func (s *Service) endAttemptOnce(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, step mcpconnectionattempts.Step, what mcpconnectionattempts.Happened, opts ...mcpconnectionattempts.Option) {
-	if s.claimAttemptEnding(ctx, logger, attempt) {
-		s.connections.End(ctx, attempt, step, what, opts...)
+// consumeChallenge spends a sign-in state and reserves its attempt's ending in one
+// Redis call, so a provider callback can't read the gap as an expired sign-in.
+func (s *Service) consumeChallenge(ctx context.Context, stateID string, attempt mcpconnectionattempts.Attempt) (AuthnChallengeState, error) {
+	if attempt.IsZero() {
+		return s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID) //nolint:wrapcheck // the typed cache names the key
 	}
+	return s.authnChallengeCache.GetAndDeleteMarking(ctx, "authnChallenge:"+stateID, attemptEndMarker(attempt), connectionAttemptEndTTL) //nolint:wrapcheck // the typed cache names the key
+}
+
+// attemptEndings runs once-only endings off the request path, so a slow Redis can't slow a sign-in.
+type attemptEndings struct {
+	slots chan struct{}
+	wg    sync.WaitGroup
+}
+
+func newAttemptEndings() *attemptEndings {
+	return &attemptEndings{slots: make(chan struct{}, maxPendingAttemptEndings), wg: sync.WaitGroup{}}
+}
+
+// drain waits for endings in flight, or ctx.
+func (a *attemptEndings) drain(ctx context.Context) error {
+	if a == nil {
+		return nil
+	}
+	drained := make(chan struct{})
+	go func() {
+		a.wg.Wait()
+		close(drained)
+	}()
+	select {
+	case <-drained:
+		return nil
+	case <-ctx.Done():
+		return ctx.Err() //nolint:wrapcheck // the caller names the drain
+	}
+}
+
+// endAttemptOnce ends an attempt from a path that can repeat, off the request path.
+// If the marker can't be read or too many are waiting, the attempt stays open rather than ending twice.
+func (s *Service) endAttemptOnce(ctx context.Context, logger *slog.Logger, attempt mcpconnectionattempts.Attempt, step mcpconnectionattempts.Step, what mcpconnectionattempts.Happened, opts ...mcpconnectionattempts.Option) {
+	if attempt.IsZero() || s.connections == nil || s.userSessionRefreshReplayCoordination == nil || s.attemptEndings == nil {
+		return
+	}
+	select {
+	case s.attemptEndings.slots <- struct{}{}:
+	default:
+		logger.WarnContext(ctx, "too many connection attempt endings waiting; leaving this one open")
+		return
+	}
+	claimCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), attemptEndingTimeout)
+	s.attemptEndings.wg.Go(func() {
+		defer cancel()
+		defer func() { <-s.attemptEndings.slots }()
+		won, err := s.userSessionRefreshReplayCoordination.Add(claimCtx, attemptEndMarker(attempt), connectionAttemptEndTTL)
+		if err != nil {
+			logger.WarnContext(claimCtx, "claim connection attempt ending", attr.SlogError(err))
+			return
+		}
+		if won {
+			s.connections.End(claimCtx, attempt, step, what, opts...)
+		}
+	})
 }
 
 // recordRemoteLoginRefusal records a provider callback refused before its login

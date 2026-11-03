@@ -1118,13 +1118,20 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	catalogReview := challengeState.CodeReconnect.reviewReady()
 	if catalogReview {
 		if action == "deny" {
+			// An earlier approval that committed but failed to complete stands.
+			approved := s.reconnectApprovalCommitted(ctx, endpoint, challengeState)
 			completed := *challengeState.CodeReconnect
 			completed.CatalogComplete = true
+			completed.CatalogCanceled = !approved
 			if err := s.updateCodeReconnect(ctx, challengeState, completed); err != nil {
 				t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 				return err
 			}
-			s.endAttemptOnce(ctx, logger, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeReviewCanceled, mcpconnectionattempts.Subject(challengeState.Subject))
+			if approved {
+				s.endAttemptOnce(ctx, logger, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete, mcpconnectionattempts.Subject(challengeState.Subject), mcpconnectionattempts.Detail("approved_before_cancel"))
+			} else {
+				s.endAttemptOnce(ctx, logger, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeReviewCanceled, mcpconnectionattempts.Subject(challengeState.Subject))
+			}
 			t.Continue()
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
 			_, err := w.Write([]byte("<!doctype html><title>Connection unchanged</title><p>No tool changes were approved. You can close this tab.</p>"))
@@ -1172,12 +1179,11 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		// preserving the original state. The user reached the consent screen
 		// and chose "no" — a decline, not an errant config. A lost consume
 		// race (double submit) reads as expired state.
-		if _, err := s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID); err != nil {
+		if _, err := s.consumeChallenge(ctx, stateID, attempt); err != nil {
 			t.Continue()
 			return consentChallengeCacheError(ctx, logger, err)
 		}
 		t.Consumed()
-		s.claimAttemptEnding(ctx, logger, attempt)
 		s.evictConsentToolInventory(ctx, stateID)
 		s.retireDeniedConsentCredentials(ctx, logger, endpoint, challengeState)
 		denyURL, err := buildClientRedirect(clientRedirectParams{
@@ -1466,14 +1472,13 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	// and get "not found or expired", so only one grant is ever minted per
 	// authorization request. The consumed value is the authority — re-run
 	// the guards against it in case the preflighted copy went stale.
-	challengeState, err = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+stateID)
+	challengeState, err = s.consumeChallenge(ctx, stateID, attempt)
 	if err != nil {
 		// Lost the race to a double submit: the winner records the attempt.
 		t.Continue()
 		return consentChallengeCacheError(ctx, logger, err)
 	}
 	t.Consumed()
-	s.claimAttemptEnding(ctx, logger, attempt)
 	if err := s.validateConsentChallenge(ctx, endpoint, &challengeState, r.PostForm.Get("csrf_token")); err != nil {
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return err.LogError(ctx, logger)

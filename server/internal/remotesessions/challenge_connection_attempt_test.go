@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
@@ -340,4 +341,44 @@ func TestCompleteRemoteLogin_SignInWithAFinalDestinationEndsConnected(t *testing
 	row := rec.RequireEnded(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.ResultSignedIn)
 	require.Equal(t, string(mcpconnectionattempts.OutcomeConnected), row.Outcome)
 	rec.RequireOneAttempt()
+}
+
+// A second invalid_target is the provider's refusal. Anything else on the retry is not.
+func TestCompleteRemoteLogin_RetryFailuresKeepTheirOwnCode(t *testing.T) {
+	t.Parallel()
+
+	begin := func(t *testing.T, tag string) (context.Context, resourceDanceFixture, *mcpconnectionattemptstest.Recording, string) {
+		t.Helper()
+		var spy upstreamSpy
+		ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", tag, &spy)
+		rec := mcpconnectionattemptstest.New(t)
+		t.Cleanup(rec.RequireNoUnclassifiedExit)
+		remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
+		parent := fx.parent
+		parent.Attempt = mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope(fx.parent.OrganizationID, fx.parent.ProjectID, uuid.New(), mcpconnectionattempts.AppDCR))
+		authURL, err := fx.mgr.BuildAuthorizationUrl(ctx, parent, fx.clients[0])
+		require.NoError(t, err)
+		return ctx, fx, rec, loginState(t, authURL)
+	}
+	callback := func(ctx context.Context, fx resourceDanceFixture, query string) error {
+		req := httptest.NewRequest(http.MethodGet, "/mcp/remote_login_callback?"+query, nil)
+		_, err := fx.mgr.CompleteRemoteLogin(req.WithContext(ctx))
+		return err //nolint:wrapcheck // compared by the caller
+	}
+
+	t.Run("a second refusal is the provider's", func(t *testing.T) {
+		t.Parallel()
+		ctx, fx, rec, login := begin(t, "attempt-retry-refused")
+		result := complete(t, ctx, fx, "error=invalid_target&state="+url.QueryEscape(login))
+		require.Error(t, callback(ctx, fx, "error=invalid_target&state="+url.QueryEscape(loginState(t, result.RedirectURL))))
+		require.Equal(t, oautherr.CodeInvalidTarget, rowFor(t, rec, mcpconnectionattempts.CodeProviderOAuthInvalidScope).SubReason)
+	})
+	t.Run("a removed connection is not a refusal", func(t *testing.T) {
+		t.Parallel()
+		ctx, fx, rec, login := begin(t, "attempt-retry-removed")
+		_, err := fx.ti.conn.Exec(ctx, `UPDATE remote_session_clients SET deleted_at = now() WHERE id = $1`, fx.clients[0].ID)
+		require.NoError(t, err)
+		require.Error(t, callback(ctx, fx, "error=invalid_target&state="+url.QueryEscape(login)))
+		rowFor(t, rec, mcpconnectionattempts.CodeConnectionChanged)
+	})
 }

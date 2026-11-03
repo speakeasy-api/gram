@@ -57,6 +57,30 @@ func (r *RedisCacheAdapter) GetAndDelete(ctx context.Context, key string, value 
 	return nil
 }
 
+// GetAndDeleteMarking reads and deletes key and sets marker in one script.
+func (r *RedisCacheAdapter) GetAndDeleteMarking(ctx context.Context, key, marker string, markerTTL time.Duration, value any) error {
+	const consume = `
+local value = redis.call("GET", KEYS[1])
+if not value then
+  return false
+end
+redis.call("DEL", KEYS[1])
+redis.call("SET", KEYS[2], "1", "PX", ARGV[1])
+return value
+`
+	raw, err := r.client.Eval(ctx, consume, []string{key, marker}, markerTTL.Milliseconds()).Text()
+	if err != nil {
+		if errors.Is(err, redis.Nil) {
+			return redisCache.ErrCacheMiss
+		}
+		return fmt.Errorf("getdel marking %s: %w", key, err)
+	}
+	if err := r.cache.Unmarshal([]byte(raw), value); err != nil {
+		return fmt.Errorf("unmarshal %s: %w", key, err)
+	}
+	return nil
+}
+
 func (r *RedisCacheAdapter) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
 	//nolint:wrapcheck // Wrapping happens in the typed cache implementation
 	return r.cache.Set(&redisCache.Item{

@@ -1,7 +1,9 @@
 package mcp
 
 import (
+	"context"
 	"errors"
+	"sync"
 	"testing"
 	"time"
 
@@ -9,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
@@ -16,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -253,4 +257,95 @@ func TestRecordConsentPage_PendingReviewDoesNotComplete(t *testing.T) {
 	state.CodeReconnect = &CodeReconnectBinding{CatalogID: uuid.New(), ReviewReady: true}
 	service.recordConsentPage(t.Context(), nil, directEndpoint(), state, nil, nil, nil)
 	rec.RequireNothing()
+}
+
+// addOnlyCache is the once-only marker alone, optionally stalled like an unreachable Redis.
+type addOnlyCache struct {
+	cache.Cache
+	release chan struct{}
+	mu      sync.Mutex
+	seen    map[string]bool
+}
+
+func (c *addOnlyCache) Add(_ context.Context, key string, _ time.Duration) (bool, error) {
+	if c.release != nil {
+		<-c.release
+	}
+	c.mu.Lock()
+	defer c.mu.Unlock()
+	if c.seen[key] {
+		return false, nil
+	}
+	if c.seen == nil {
+		c.seen = map[string]bool{}
+	}
+	c.seen[key] = true
+	return true, nil
+}
+
+// A stalled Redis can't hold up a sign-in: the claim runs off the request path.
+func TestEndAttemptOnce_StalledRedisDoesNotBlockTheRequest(t *testing.T) {
+	t.Parallel()
+
+	stalled := &addOnlyCache{release: make(chan struct{})}
+	rec := mcpconnectionattemptstest.New(t)
+	service := &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: stalled, attemptEndings: newAttemptEndings()}
+	state := openState()
+	attempt := state.connectionAttempt(directEndpoint())
+	logger := testenv.NewLogger(t)
+
+	returned := make(chan struct{})
+	go func() {
+		service.endAttemptOnce(t.Context(), logger, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete)
+		close(returned)
+	}()
+	select {
+	case <-returned:
+	case <-time.After(5 * time.Second):
+		t.Fatal("recording held up the request")
+	}
+	rec.RequireNothing()
+
+	close(stalled.release)
+	require.NoError(t, service.attemptEndings.drain(t.Context()))
+	rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete)
+}
+
+// Past the cap an ending is dropped rather than queued without limit.
+func TestEndAttemptOnce_FullQueueLeavesTheAttemptOpen(t *testing.T) {
+	t.Parallel()
+
+	stalled := &addOnlyCache{release: make(chan struct{})}
+	rec := mcpconnectionattemptstest.New(t)
+	endings := newAttemptEndings()
+	service := &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: stalled, attemptEndings: endings}
+	logger := testenv.NewLogger(t)
+	for range maxPendingAttemptEndings + 5 {
+		state := openState()
+		service.endAttemptOnce(t.Context(), logger, state.connectionAttempt(directEndpoint()), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete)
+	}
+	close(stalled.release)
+	require.NoError(t, endings.drain(t.Context()))
+	require.Len(t, rec.Rows(), maxPendingAttemptEndings)
+}
+
+// A canceled review never reads as complete, on a reload or if its own ending was lost.
+func TestRecordConsentPage_CanceledReviewNeverCompletes(t *testing.T) {
+	t.Parallel()
+
+	rec := mcpconnectionattemptstest.New(t)
+	service := &Service{connections: rec.Recorder, userSessionRefreshReplayCoordination: &addOnlyCache{}, attemptEndings: newAttemptEndings()}
+	state := openState()
+	state.FirstParty = true
+	state.CodeReconnect = &CodeReconnectBinding{CatalogID: uuid.New(), ReviewReady: true, CatalogComplete: true, CatalogCanceled: true}
+
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), directEndpoint(), state, nil, nil, nil)
+
+	require.NoError(t, service.attemptEndings.drain(t.Context()))
+	rec.RequireNothing()
+
+	state.CodeReconnect.CatalogCanceled = false
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), directEndpoint(), state, nil, nil, nil)
+	require.NoError(t, service.attemptEndings.drain(t.Context()))
+	rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete)
 }

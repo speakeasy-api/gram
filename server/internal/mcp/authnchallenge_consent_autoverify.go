@@ -85,6 +85,9 @@ func (s *Service) Shutdown(ctx context.Context) error {
 	if err := s.autoVerifications.shutdown(ctx); err != nil {
 		errs = append(errs, fmt.Errorf("drain automatic verifications: %w", err))
 	}
+	if err := s.attemptEndings.drain(ctx); err != nil {
+		errs = append(errs, fmt.Errorf("drain connection attempt endings: %w", err))
+	}
 	s.toolCallLogger.Close()
 	return errors.Join(errs...)
 }

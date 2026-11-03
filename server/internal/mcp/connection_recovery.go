@@ -364,11 +364,10 @@ func (s *Service) verifyConnectionRecoveryCompletion(r *http.Request, remote rem
 		return true, err
 	}
 	// Used up only once it has passed, so a stray callback cannot spend it.
-	if _, err := s.connectionRecoveryCache.GetAndDelete(ctx, key); err != nil {
+	// A late second callback finds the login gone; this one still ends the attempt.
+	if _, err := s.connectionRecoveryCache.GetAndDeleteMarking(ctx, key, attemptEndMarker(remote.Attempt), connectionAttemptEndTTL); err != nil {
 		return true, errRecoveryLoginExpired
 	}
-	// A late second callback finds the login gone; this one still ends the attempt.
-	s.claimAttemptEnding(ctx, s.logger, remote.Attempt)
 	return true, nil
 }
 

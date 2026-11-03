@@ -40,6 +40,7 @@ func recordConnections(t *testing.T, ti *testInstance) *mcpconnectionattemptstes
 	rec := mcpconnectionattemptstest.New(t)
 	ti.service.SetConnectionRecorder(rec.Recorder)
 	t.Cleanup(rec.RequireNoUnclassifiedExit)
+	t.Cleanup(func() { _ = ti.service.DrainConnectionEndings(context.WithoutCancel(t.Context())) })
 	return rec
 }
 
@@ -346,6 +347,7 @@ func TestConnectionOutcome_FirstPartyEndsOnceWhenNothingIsLeft(t *testing.T) {
 		require.Equal(t, http.StatusOK, page.Code, page.Body.String())
 	}
 
+	require.NoError(t, ti.service.DrainConnectionEndings(ctx))
 	row := rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete)
 	require.Equal(t, string(mcpconnectionattempts.OutcomeConnected), row.Outcome)
 	rec.RequireOneAttempt()
@@ -717,6 +719,7 @@ func TestConnectionOutcome_ChainedFirstPartyEnds(t *testing.T) {
 		require.Equal(t, "connected", chainCheckResult(t, w)["status"])
 	}
 
+	require.NoError(t, fx.ti.service.DrainConnectionEndings(ctx))
 	row := rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete)
 	require.Equal(t, state.FlowID, row.AttemptID.String())
 }
@@ -748,6 +751,7 @@ func TestConnectionOutcome_ParentGoneDuringProviderSignIn(t *testing.T) {
 		require.NoError(t, err)
 		require.Error(t, callback(ctx, fx, login))
 		require.Error(t, callback(ctx, fx, login))
+		require.NoError(t, fx.ti.service.DrainConnectionEndings(ctx))
 		row := rec.RequireEnded(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeExpired)
 		require.NotEmpty(t, row.ProviderHost)
 		rec.RequireOneAttempt()
@@ -760,7 +764,37 @@ func TestConnectionOutcome_ParentGoneDuringProviderSignIn(t *testing.T) {
 		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
 		require.NoError(t, fx.ti.service.ServeConsent(httptest.NewRecorder(), req, fx.endpoint))
 		require.Error(t, callback(ctx, fx, login))
+		require.NoError(t, fx.ti.service.DrainConnectionEndings(ctx))
 		rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeCanceled)
+	})
+	// Consent consumes the state and reserves the ending in one call, so a racing
+	// callback that finds the parent gone can never also call it expired.
+	t.Run("a callback racing the decision is never an expiry", func(t *testing.T) {
+		t.Parallel()
+		ctx, fx, rec, state, _ := setup(t)
+		for range 10 {
+			state.FlowID = uuid.NewString()
+			state.CreatedAt = time.Now()
+			require.NoError(t, fx.ti.authnChallengeCache.Store(ctx, state))
+			login := postConnectAction(t, fx, fx.clientA).Query().Get("state")
+			var group sync.WaitGroup
+			group.Go(func() {
+				form := url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"deny"}}
+				req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.endpoint.Slug+"/connect", strings.NewReader(form.Encode())).WithContext(ctx)
+				req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				_ = fx.ti.service.ServeConsent(httptest.NewRecorder(), req, fx.endpoint)
+			})
+			group.Go(func() {
+				req := httptest.NewRequestWithContext(ctx, http.MethodGet, "/mcp/remote_login_callback?error=access_denied&state="+url.QueryEscape(login), nil)
+				_ = fx.ti.service.HandleRemoteLoginCallback(httptest.NewRecorder(), req)
+			})
+			group.Wait()
+		}
+		require.NoError(t, fx.ti.service.DrainConnectionEndings(ctx))
+		rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeCanceled)
+		for _, row := range rec.Rows() {
+			require.NotEqual(t, mcpconnectionattempts.CodeExpired.String(), row.Reason)
+		}
 	})
 }
 
@@ -894,5 +928,6 @@ func TestConnectionOutcome_ExpiredReviewIsNotAWrongBrowser(t *testing.T) {
 	require.Error(t, ti.service.ServeConsent(httptest.NewRecorder(), req(), endpoint))
 	require.Error(t, ti.service.ServeConsent(httptest.NewRecorder(), req(), endpoint))
 
+	require.NoError(t, ti.service.DrainConnectionEndings(ctx))
 	rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeExpired)
 }

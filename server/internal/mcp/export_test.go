@@ -27,6 +27,11 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 )
 
+// DrainConnectionEndings waits for once-only endings in flight.
+func (s *Service) DrainConnectionEndings(ctx context.Context) error {
+	return s.attemptEndings.drain(ctx)
+}
+
 // SetConnectionRecorder replaces the connection attempt recorder.
 func (s *Service) SetConnectionRecorder(recorder *mcpconnectionattempts.Recorder) {
 	s.connections = recorder

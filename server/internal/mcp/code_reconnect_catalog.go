@@ -58,6 +58,12 @@ func (s *Service) loadReconnectConnection(ctx context.Context, q *usersessionsre
 	return policy, catalog, nil
 }
 
+// reconnectApprovalCommitted reports this challenge's approval already saved, whatever the review page still says.
+func (s *Service) reconnectApprovalCommitted(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState) bool {
+	policy, _, err := s.loadReconnectConnection(ctx, usersessionsrepo.New(s.db), endpoint, state, time.Now())
+	return err == nil && policy.Catalog.ID != state.CodeReconnect.CatalogID
+}
+
 // OAuth completion opens review; only the subsequent approval changes tools.
 func (s *Service) markReconnectReviewReady(r *http.Request, grant remotesessions.RemoteGrant) error {
 	state, err := s.authnChallengeCache.Get(r.Context(), "authnChallenge:"+grant.ParentChallengeID)

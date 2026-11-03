@@ -27,10 +27,17 @@ type CodeReconnectBinding struct {
 	ClientID        string    `json:"client_id,omitempty"`
 	ReviewReady     bool      `json:"review_ready,omitempty"`
 	CatalogComplete bool      `json:"catalog_complete,omitempty"`
+	// CatalogCanceled marks a completed review the person canceled, which changed no tools.
+	CatalogCanceled bool `json:"catalog_canceled,omitempty"`
 }
 
 func (b *CodeReconnectBinding) catalogPending() bool {
 	return b != nil && b.CatalogID != uuid.Nil && !b.CatalogComplete
+}
+
+// undecidedOrCanceled reports a review that has not connected anything.
+func (b *CodeReconnectBinding) undecidedOrCanceled() bool {
+	return b.catalogPending() || (b != nil && b.CatalogCanceled)
 }
 
 func (b *CodeReconnectBinding) expired(now time.Time) bool {
@@ -120,6 +127,7 @@ func (s *Service) updateCodeReconnect(ctx context.Context, state AuthnChallengeS
 		merged := *current.CodeReconnect
 		merged.ReviewReady = merged.ReviewReady || binding.ReviewReady
 		merged.CatalogComplete = merged.CatalogComplete || binding.CatalogComplete
+		merged.CatalogCanceled = merged.CatalogCanceled || binding.CatalogCanceled
 		updated.CodeReconnect = &merged
 		done, err := s.authnChallengeCache.CompareAndSwap(ctx, current, updated)
 		if err != nil {
