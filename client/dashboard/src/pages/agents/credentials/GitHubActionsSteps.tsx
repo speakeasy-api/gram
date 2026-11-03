@@ -425,7 +425,7 @@ function ruleWarningText(
           cannot. A <code>pull_request_target</code> workflow with{" "}
           <code>id-token: write</code> is admitted too, and if it checks out the
           pull request&apos;s head, code from a fork runs as {agent}. To admit
-          fewer jobs, choose one branch or one environment.
+          fewer jobs, choose pull requests, one branch or one environment.
         </>,
       ];
     case "branch":
@@ -462,12 +462,10 @@ function ruleWarningText(
           tags cannot. {rule}
         </>,
         <>
-          Anyone who can push a branch to the repository can open a pull request
-          that runs such a job, with the workflow as their branch has it, so
-          nobody reviews it first. Forks get no token on{" "}
+          Anyone who can push a branch can run such a job with the workflow as
+          their branch has it, so nobody reviews it first. Forks get no token on{" "}
           <code>pull_request</code>, but a <code>pull_request_target</code>{" "}
-          workflow with <code>id-token: write</code> gets the same subject, a
-          fork&apos;s pull request included.
+          workflow is admitted too, a fork&apos;s pull request included.
         </>,
       ];
   }

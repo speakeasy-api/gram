@@ -223,16 +223,21 @@ const SUMMARY_ROW_FOR_FIELD = new Map<string, string>([
 function githubActionsScopeRow(
   scope: JobScope,
 ): { label: string; value: ReactNode }[] {
-  if (scope.kind === "pull_request") {
-    return [{ label: "Jobs", value: "Pull requests" }];
+  switch (scope.kind) {
+    case "repository":
+      return [];
+    case "pull_request":
+      return [{ label: "Jobs", value: "Pull requests" }];
+    case "branch":
+    case "environment":
+      if (scope.name === "") return [];
+      return [
+        {
+          label: scope.kind === "branch" ? "Branch" : "Environment",
+          value: <code className="text-xs break-all">{scope.name}</code>,
+        },
+      ];
   }
-  if (scope.kind === "repository" || scope.name === "") return [];
-  return [
-    {
-      label: scope.kind === "branch" ? "Branch" : "Environment",
-      value: <code className="text-xs break-all">{scope.name}</code>,
-    },
-  ];
 }
 
 /**

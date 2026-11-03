@@ -268,6 +268,16 @@ describe("GitHub Actions setup", () => {
       [SUBJECT_CHOICE]: "pull_request",
     });
     expect(jobScope(pullRequests)).toEqual({ kind: "pull_request" });
+    expect(
+      valuesFromSubject(github, {
+        subject: "repo:acme@1/payments-api@2:pull_request",
+        matchKind: "exact",
+      }),
+    ).toEqual({
+      owner: "acme@1",
+      repo: "payments-api@2",
+      [SUBJECT_CHOICE]: "pull_request",
+    });
     expect(subjectRule(github, pullRequests)).toEqual({
       subject: "repo:acme/payments-api:pull_request",
       matchKind: "exact",
