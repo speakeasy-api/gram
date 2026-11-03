@@ -39,12 +39,23 @@ var (
 	// errSessionNotFound covers unknown ids AND ids owned by someone else with
 	// one message, so a caller cannot probe whether another user's session
 	// exists (GetMCP precedent).
-	errSessionNotFound = errors.New("platform mcp session not found")
+	errSessionNotFound                    = errors.New("platform mcp session not found")
+	errSessionHandoffConfirmationRequired = errors.New("platform mcp session handoff confirmation required")
+	errSessionHandoffUnavailable          = errors.New("platform mcp session handoff unavailable")
 )
 
 // recallTargetHarness is the target recorded on the recall lineage edge: the
 // continuation happens wherever the Platform MCP client runs, which is the
 // only name the server can honestly record.
+type sessionHandoffConfirmationError struct{ ttlSeconds int }
+
+func (e *sessionHandoffConfirmationError) Error() string {
+	return errSessionHandoffConfirmationRequired.Error()
+}
+func (e *sessionHandoffConfirmationError) Unwrap() error {
+	return errSessionHandoffConfirmationRequired
+}
+
 const recallTargetHarness = "platform-mcp"
 
 // recallMessageRowCap bounds how many transcript rows one recall reads — the
@@ -77,13 +88,20 @@ type RecallRiskFindingReader interface {
 // carry organization + owner user_id + not-deleted + the personal-account
 // exclusion), so there is no fetch-then-authorize step anywhere in this file.
 type SessionRecallService struct {
-	logger      *slog.Logger
-	db          *pgxpool.Pool
-	repo        *platformrepo.Queries
-	auditor     *audit.Logger
-	portability FeatureChecker
-	findings    RecallRiskFindingReader
-	budget      OperationBudget
+	logger        *slog.Logger
+	db            *pgxpool.Pool
+	repo          *platformrepo.Queries
+	auditor       *audit.Logger
+	portability   FeatureChecker
+	findings      RecallRiskFindingReader
+	budget        OperationBudget
+	handoffMinter SessionHandoffMinter
+}
+
+// SessionHandoffMinter is the narrow transport-neutral capability-link boundary.
+type SessionHandoffMinter interface {
+	Valid() bool
+	Mint(context.Context, sessionhandoff.SessionHandoffMintInput) (sessionhandoff.SessionHandoffMintResult, error)
 }
 
 // NewSessionRecallService composes recall. A nil findings reader leaves recall
@@ -98,14 +116,20 @@ func NewSessionRecallService(
 	budget OperationBudget,
 ) *SessionRecallService {
 	return &SessionRecallService{
-		logger:      logger,
-		db:          db,
-		repo:        repo,
-		auditor:     auditor,
-		portability: portability,
-		findings:    findings,
-		budget:      budget,
+		logger:        logger,
+		db:            db,
+		repo:          repo,
+		auditor:       auditor,
+		portability:   portability,
+		findings:      findings,
+		budget:        budget,
+		handoffMinter: nil,
 	}
+}
+
+func (s *SessionRecallService) WithHandoffMinter(minter SessionHandoffMinter) *SessionRecallService {
+	s.handoffMinter = minter
+	return s
 }
 
 func (s *SessionRecallService) valid() bool {
@@ -113,7 +137,7 @@ func (s *SessionRecallService) valid() bool {
 }
 
 type ListMySessionsInput struct {
-	Limit int `json:"limit,omitempty" jsonschema:"maximum number of sessions to return; server clamps this to 100"`
+	Limit int `json:"limit,omitempty" jsonschema:"maximum sessions to return for a numbered chooser; server clamps to 100; show session_id and title, compose description only from project_name/project_slug and last_active with a generic fallback, and ignore raw summary because it may be transcript-derived"`
 }
 
 // RecallableSession is one captured session the caller owns — metadata only,
@@ -135,6 +159,17 @@ type ListMySessionsOutput struct {
 
 type ContinueSessionInput struct {
 	SessionID string `json:"session_id" jsonschema:"the session to recall — a session id from list_my_sessions"`
+}
+
+type CreateSessionHandoffLinkInput struct {
+	SessionID  string `json:"session_id" jsonschema:"the exact session_id the user selected from a displayed list_my_sessions numbered chooser; never ask the user to remember or type it from memory"`
+	TTLSeconds *int   `json:"ttl_seconds,omitempty" jsonschema:"exact link lifetime the user chose or confirmed, in seconds; defaults to 900 and is clamped to 60..3600; display the exact clamped lifetime before confirmation"`
+	Confirmed  bool   `json:"confirmed" jsonschema:"true only after the user explicitly confirms the exact displayed session title/session_id and exact clamped lifetime; a general request to share is not confirmation"`
+}
+
+type CreateSessionHandoffLinkOutput struct {
+	URL       string `json:"url"`
+	ExpiresAt string `json:"expires_at"`
 }
 
 // ContinueSessionOutput carries the digest plus its fidelity as structured
@@ -166,10 +201,11 @@ func (s *SessionRecallService) ListMySessions(ctx context.Context, principal Pri
 	sessions := make([]RecallableSession, 0, len(rows))
 	for _, row := range rows {
 		sessions = append(sessions, RecallableSession{
-			SessionID:   sessionIDForChat(row.ExternalChatID, row.ID),
-			ChatID:      row.ID.String(),
-			Title:       conv.FromPGTextOrEmpty[string](row.Title),
-			Summary:     conv.FromPGTextOrEmpty[string](row.Summary),
+			SessionID: sessionIDForChat(row.ExternalChatID, row.ID),
+			ChatID:    row.ID.String(),
+			Title:     conv.FromPGTextOrEmpty[string](row.Title),
+			// Stored summaries can be transcript-derived and are deliberately not exposed.
+			Summary:     "",
 			ProjectName: row.ProjectName,
 			ProjectSlug: row.ProjectSlug,
 			Cwd:         conv.FromPGTextOrEmpty[string](row.Cwd),
@@ -208,29 +244,29 @@ func (s *SessionRecallService) riskFindingMasks(
 	return maskFindingSpans(messages, findings), nil
 }
 
-func (s *SessionRecallService) ContinueSession(ctx context.Context, principal Principal, input ContinueSessionInput) (ContinueSessionOutput, error) {
-	empty := ContinueSessionOutput{Digest: "", SourceSessionID: "", ChatID: "", NotCarriedOver: nil, Notes: nil}
-	if !s.valid() {
-		return empty, ErrUnavailable
-	}
-	if err := s.requirePortability(ctx, principal); err != nil {
-		return empty, err
-	}
-	if err := s.budget.Allow(ctx, principal); err != nil {
-		return empty, err
-	}
-	sessionID := strings.TrimSpace(input.SessionID)
+type ownedSessionDigest struct {
+	row                platformrepo.GetOwnedChatForRecallRow
+	requestedSessionID string
+	chatID             uuid.UUID
+	sourceSessionID    string
+	digest             string
+	masks              findingMasks
+	extract            transcriptTurns
+	handoff            sessionhandoff.Handoff
+}
+
+// renderOwnedSessionDigest is the one owner-scoped content path shared by
+// recall and capability-link export. Callers perform confirmation, feature,
+// and budget checks before invoking it.
+func (s *SessionRecallService) renderOwnedSessionDigest(ctx context.Context, principal Principal, rawSessionID string) (ownedSessionDigest, error) {
+	var empty ownedSessionDigest
+	sessionID := strings.TrimSpace(rawSessionID)
 	if sessionID == "" {
 		return empty, fmt.Errorf("session_id is required")
 	}
-	// Session ids resolve through the same derivation the capture paths use —
-	// never by string-matching the raw id against a chat column.
 	chatID := chat.SessionIDToChatID(sessionID)
-
 	row, err := s.repo.GetOwnedChatForRecall(ctx, platformrepo.GetOwnedChatForRecallParams{
-		ChatID:         chatID,
-		OrganizationID: principal.OrganizationID,
-		UserID:         principal.UserID,
+		ChatID: chatID, OrganizationID: principal.OrganizationID, UserID: principal.UserID,
 	})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return empty, errSessionNotFound
@@ -238,19 +274,13 @@ func (s *SessionRecallService) ContinueSession(ctx context.Context, principal Pr
 	if err != nil {
 		return empty, fmt.Errorf("resolve owned session for recall: %w", err)
 	}
-
 	messages, err := s.repo.ListOwnedChatTranscriptMessagesForRecall(ctx, platformrepo.ListOwnedChatTranscriptMessagesForRecallParams{
-		ChatID:         chatID,
-		ProjectID:      uuid.NullUUID{UUID: row.ProjectID, Valid: true},
-		OrganizationID: principal.OrganizationID,
-		UserID:         principal.UserID,
-		RowLimit:       recallMessageRowCap,
+		ChatID: chatID, ProjectID: uuid.NullUUID{UUID: row.ProjectID, Valid: true}, OrganizationID: principal.OrganizationID,
+		UserID: principal.UserID, RowLimit: recallMessageRowCap,
 	})
 	if err != nil {
 		return empty, fmt.Errorf("read session transcript for recall: %w", err)
 	}
-	// The query serves the newest rows first so the cap keeps the session's
-	// tail; everything downstream expects chronological order.
 	cappedRead := len(messages) == recallMessageRowCap
 	slices.Reverse(messages)
 	masks, err := s.riskFindingMasks(ctx, principal, chatID, row.ProjectID, messages)
@@ -258,19 +288,11 @@ func (s *SessionRecallService) ContinueSession(ctx context.Context, principal Pr
 		return empty, err
 	}
 	extract := turnsFromRows(messages, masks.content)
-
 	sourceSessionID := sessionIDForChat(row.ExternalChatID, row.ID)
-	handoff := sessionhandoff.Render(&sessionhandoff.Transcript{
-		Session: sessionhandoff.SessionMeta{
-			Title:        conv.FromPGTextOrEmpty[string](row.Title),
-			SessionID:    sourceSessionID,
-			ChatID:       chatID.String(),
-			Source:       valueOrUnknown(extract.source),
-			Cwd:          conv.FromPGTextOrEmpty[string](row.Cwd),
-			LastActivity: row.UpdatedAt.Time,
-		},
-		Turns: extract.turns,
-	}, sessionhandoff.Options{Budget: 0, RedactToolPayloads: true})
+	handoff := sessionhandoff.Render(&sessionhandoff.Transcript{Session: sessionhandoff.SessionMeta{
+		Title: conv.FromPGTextOrEmpty[string](row.Title), SessionID: sourceSessionID, ChatID: chatID.String(), Source: valueOrUnknown(extract.source),
+		Cwd: conv.FromPGTextOrEmpty[string](row.Cwd), LastActivity: row.UpdatedAt.Time,
+	}, Turns: extract.turns}, sessionhandoff.Options{Budget: 0, RedactToolPayloads: true})
 	if cappedRead {
 		handoff.Fidelity.Warnings = append(handoff.Fidelity.Warnings, fmt.Sprintf("only the most recent %d messages were considered", recallMessageRowCap))
 	}
@@ -290,67 +312,85 @@ func (s *SessionRecallService) ContinueSession(ctx context.Context, principal Pr
 	if digestTruncated {
 		handoff.Fidelity.Warnings = append(handoff.Fidelity.Warnings, "the digest exceeded the size cap and was truncated")
 	}
+	return ownedSessionDigest{row: row, requestedSessionID: sessionID, chatID: chatID, sourceSessionID: sourceSessionID, digest: digest, masks: masks, extract: extract, handoff: handoff}, nil
+}
 
-	// The lineage edge and the governance record commit together BEFORE the
-	// digest is returned: failing to record the recall refuses the call rather
-	// than serving unrecorded content.
+func (s *SessionRecallService) ContinueSession(ctx context.Context, principal Principal, input ContinueSessionInput) (ContinueSessionOutput, error) {
+	empty := ContinueSessionOutput{Digest: "", SourceSessionID: "", ChatID: "", NotCarriedOver: nil, Notes: nil}
+	if !s.valid() {
+		return empty, ErrUnavailable
+	}
+	if err := s.requirePortability(ctx, principal); err != nil {
+		return empty, err
+	}
+	if err := s.budget.Allow(ctx, principal); err != nil {
+		return empty, err
+	}
+	rendered, err := s.renderOwnedSessionDigest(ctx, principal, input.SessionID)
+	if err != nil {
+		return empty, err
+	}
+
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
 		return empty, oops.E(oops.CodeUnexpected, err, "record session recall").LogError(ctx, s.logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-
 	if err := platformrepo.New(dbtx).InsertChatSessionRecallLink(ctx, platformrepo.InsertChatSessionRecallLinkParams{
-		ProjectID:      row.ProjectID,
-		OrganizationID: principal.OrganizationID,
-		ParentChatID:   chatID,
-		// The OAuth principal carries no harness session id, so the
-		// continuation is unknowable at recall time: every recall records a
-		// distinct NULL-child edge. The digest byline's lineage marker is the
-		// retroactive correlation path.
-		ChildChatID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-		ParentSessionID: sessionID,
-		ChildSessionID:  conv.ToPGTextEmpty(""),
-		TargetHarness:   recallTargetHarness,
-		SourceSurface:   conv.ToPGText(string(principal.surface())),
-		// The OAuth path carries no email; the audit event's actor names the
-		// user.
-		ActorEmail:     conv.ToPGTextEmpty(""),
-		DeviceSerial:   conv.ToPGTextEmpty(""),
-		DeviceHostname: conv.ToPGTextEmpty(""),
+		ProjectID: rendered.row.ProjectID, OrganizationID: principal.OrganizationID, ParentChatID: rendered.chatID,
+		ChildChatID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ParentSessionID: rendered.requestedSessionID,
+		ChildSessionID: conv.ToPGTextEmpty(""), TargetHarness: recallTargetHarness,
+		SourceSurface: conv.ToPGText(string(principal.surface())), ActorEmail: conv.ToPGTextEmpty(""),
+		DeviceSerial: conv.ToPGTextEmpty(""), DeviceHostname: conv.ToPGTextEmpty(""),
 	}); err != nil {
 		return empty, oops.E(oops.CodeUnexpected, err, "record session recall link").LogError(ctx, s.logger)
 	}
-
 	if err := s.auditor.LogChatSessionRecall(ctx, dbtx, audit.LogChatSessionRecallEvent{
-		OrganizationID:     principal.OrganizationID,
-		ProjectID:          row.ProjectID,
-		Actor:              urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID),
-		ChatSessionURN:     urn.NewChatSession(chatID),
-		ChatTitle:          conv.FromPGTextOrEmpty[string](row.Title),
-		OwnerUserID:        principal.UserID,
-		SourceSessionID:    sourceSessionID,
-		RedactToolPayloads: true,
-		FindingsMasked:     masks.neutralized,
-		UnanalyzedMessages: extract.unanalyzed,
-		DigestBytes:        len(digest),
-		TurnsIncluded:      handoff.TurnsIncluded,
-		TurnsDropped:       handoff.TurnsDropped,
+		OrganizationID: principal.OrganizationID, ProjectID: rendered.row.ProjectID,
+		Actor: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), ChatSessionURN: urn.NewChatSession(rendered.chatID),
+		ChatTitle: conv.FromPGTextOrEmpty[string](rendered.row.Title), OwnerUserID: principal.UserID,
+		SourceSessionID: rendered.sourceSessionID, RedactToolPayloads: true,
+		FindingsMasked: rendered.masks.neutralized, UnanalyzedMessages: rendered.extract.unanalyzed,
+		DigestBytes: len(rendered.digest), TurnsIncluded: rendered.handoff.TurnsIncluded, TurnsDropped: rendered.handoff.TurnsDropped,
 	}); err != nil {
 		return empty, oops.E(oops.CodeUnexpected, err, "record session recall").LogError(ctx, s.logger)
 	}
-
 	if err := dbtx.Commit(ctx); err != nil {
 		return empty, oops.E(oops.CodeUnexpected, err, "record session recall").LogError(ctx, s.logger)
 	}
+	return ContinueSessionOutput{Digest: rendered.digest, SourceSessionID: rendered.sourceSessionID, ChatID: rendered.chatID.String(), NotCarriedOver: rendered.handoff.Fidelity.Missing, Notes: rendered.handoff.Fidelity.Warnings}, nil
+}
 
-	return ContinueSessionOutput{
-		Digest:          digest,
-		SourceSessionID: sourceSessionID,
-		ChatID:          chatID.String(),
-		NotCarriedOver:  handoff.Fidelity.Missing,
-		Notes:           handoff.Fidelity.Warnings,
-	}, nil
+func (s *SessionRecallService) CreateSessionHandoffLink(ctx context.Context, principal Principal, input CreateSessionHandoffLinkInput) (CreateSessionHandoffLinkOutput, error) {
+	var empty CreateSessionHandoffLinkOutput
+	if !input.Confirmed {
+		ttlSeconds := int(sessionhandoff.ClampHandoffTTL(input.TTLSeconds) / time.Second)
+		return empty, &sessionHandoffConfirmationError{ttlSeconds: ttlSeconds}
+	}
+	if !s.valid() || s.handoffMinter == nil || !s.handoffMinter.Valid() {
+		return empty, errSessionHandoffUnavailable
+	}
+	if err := s.requirePortability(ctx, principal); err != nil {
+		return empty, err
+	}
+	if err := s.budget.Allow(ctx, principal); err != nil {
+		return empty, err
+	}
+	rendered, err := s.renderOwnedSessionDigest(ctx, principal, input.SessionID)
+	if err != nil {
+		return empty, err
+	}
+	ttlSeconds := int(sessionhandoff.ClampHandoffTTL(input.TTLSeconds) / time.Second)
+	result, err := s.handoffMinter.Mint(ctx, sessionhandoff.SessionHandoffMintInput{
+		OrganizationID: principal.OrganizationID, ProjectID: rendered.row.ProjectID, UserID: principal.UserID,
+		ChatID: rendered.chatID, SessionID: rendered.sourceSessionID, ChatTitle: conv.FromPGTextOrEmpty[string](rendered.row.Title),
+		Content: rendered.digest, TTLSeconds: &ttlSeconds, SourceSurface: string(principal.surface()),
+		ActorEmail: nil, DeviceSerial: "", DeviceHostname: "",
+	})
+	if err != nil {
+		return empty, fmt.Errorf("mint session handoff: %w", err)
+	}
+	return CreateSessionHandoffLinkOutput{URL: result.URL, ExpiresAt: result.ExpiresAt}, nil
 }
 
 // requirePortability fails closed: an error resolving the feature refuses the

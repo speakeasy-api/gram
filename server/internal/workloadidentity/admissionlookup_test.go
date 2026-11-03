@@ -8,24 +8,22 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
+	wirepo "github.com/speakeasy-api/gram/server/internal/workloadidentity/repo"
 )
 
 const testSubject = "repo:acme/payments-api:ref:refs/heads/main"
 
-// seedAdmission writes one workload_identity_admissions row directly. Raw SQL
-// for the same reason seedIssuer uses it: writes are the management API's job,
-// and this package is read-only by design.
+// seedAdmission writes one workload_identity_admissions row through a fixture:
+// writes are the management API's job, and this package is read-only by design.
 func seedAdmission(t *testing.T, conn *pgxpool.Pool, organizationID string, projectID uuid.NullUUID, issuerID uuid.UUID, subject string) uuid.UUID {
 	t.Helper()
 
-	var id uuid.UUID
-	err := conn.QueryRow( //nolint:glint // notestingrawsql: no create query exists yet; writes belong to the management API milestone
-		t.Context(), `
-		INSERT INTO workload_identity_admissions
-		  (organization_id, project_id, workload_issuer_id, subject)
-		VALUES ($1, $2, $3, $4)
-		RETURNING id
-	`, organizationID, projectID, issuerID, subject).Scan(&id)
+	id, err := wirepo.New(conn).SeedWorkloadAdmissionFixture(t.Context(), wirepo.SeedWorkloadAdmissionFixtureParams{
+		OrganizationID:   organizationID,
+		ProjectID:        projectID,
+		WorkloadIssuerID: issuerID,
+		Subject:          subject,
+	})
 	require.NoError(t, err)
 
 	return id
@@ -34,9 +32,7 @@ func seedAdmission(t *testing.T, conn *pgxpool.Pool, organizationID string, proj
 func withdraw(t *testing.T, conn *pgxpool.Pool, id uuid.UUID) {
 	t.Helper()
 
-	_, err := conn.Exec( //nolint:glint // notestingrawsql: see seedAdmission
-		t.Context(), `UPDATE workload_identity_admissions SET deleted_at = clock_timestamp() WHERE id = $1`, id)
-	require.NoError(t, err)
+	require.NoError(t, wirepo.New(conn).WithdrawWorkloadAdmissionFixture(t.Context(), id))
 }
 
 // admissionFixture is one tenant with one issuer.

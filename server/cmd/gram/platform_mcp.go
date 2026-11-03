@@ -64,6 +64,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/risk/analysisstatus"
 	"github.com/speakeasy-api/gram/server/internal/risk/chatfindings"
 	"github.com/speakeasy-api/gram/server/internal/risk/policycore"
+	"github.com/speakeasy-api/gram/server/internal/sessionhandoff"
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
 	"github.com/speakeasy-api/gram/server/internal/shadowmcp/admission"
 	"github.com/speakeasy-api/gram/server/internal/sigint"
@@ -585,7 +586,8 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB)).
 		WithUserSearch(config.UserSearch).
 		WithToolCallSearch(config.ToolCallSearch)
-	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, recallRiskFindingReader(config.RiskFindingList), budgets.SensitiveSessionRecall)
+	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, recallRiskFindingReader(config.RiskFindingList), budgets.SensitiveSessionRecall).
+		WithHandoffMinter(sessionhandoff.NewSessionHandoffMinter(config.Logger, config.DB, config.AssetStorage, config.ServerURL.String(), audit.NewLogger()))
 	riskMutationControls, err := platformmcp.NewRiskMutationControls(config.DB, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), budgets.RiskMutations, config.JWTSigningKey)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create local Platform MCP risk mutation controls: %w", err)
@@ -1380,7 +1382,8 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB)).
 		WithUserSearch(config.UserSearch).
 		WithToolCallSearch(config.ToolCallSearch)
-	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, recallRiskFindingReader(config.RiskFindingList), budgets.SensitiveSessionRecall)
+	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, recallRiskFindingReader(config.RiskFindingList), budgets.SensitiveSessionRecall).
+		WithHandoffMinter(sessionhandoff.NewSessionHandoffMinter(config.Logger, config.DB, config.AssetStorage, config.ServerURL.String(), audit.NewLogger()))
 	riskMutationControls, err := platformmcp.NewRiskMutationControls(config.DB, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), budgets.RiskMutations, config.JWTSigningKey)
 	if err != nil {
 		return AssistantSurface{}, fmt.Errorf("create browser Platform MCP risk mutation controls: %w", err)

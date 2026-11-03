@@ -1153,6 +1153,16 @@ func (q *Queries) RequireReauthorizationForRefreshReuse(ctx context.Context, arg
 	return err
 }
 
+const restorePublicCatalogIconAssetFixture = `-- name: RestorePublicCatalogIconAssetFixture :exec
+UPDATE assets SET content_type = 'image/svg+xml', project_id = NULL, organization_id = NULL, deleted_at = NULL WHERE id = $1
+`
+
+// Test-only: returns an asset to the public catalog icon shape.
+func (q *Queries) RestorePublicCatalogIconAssetFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, restorePublicCatalogIconAssetFixture, id)
+	return err
+}
+
 const revokeOAuthClientFixture = `-- name: RevokeOAuthClientFixture :exec
 UPDATE admin_mcp_oauth_clients
 SET revoked_at = clock_timestamp(),

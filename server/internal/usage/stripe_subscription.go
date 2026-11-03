@@ -190,12 +190,16 @@ func canManageStripeSubscriptionLifecycle(status string) bool {
 }
 
 // GetStripeSubscriptionByID loads a live Stripe subscription for an independently
-// authorized admin assignment. The caller checks that the customer matches the organization.
-func (s *Service) GetStripeSubscriptionByID(ctx context.Context, subscriptionID string) (*stripeclient.SubscriptionState, error) {
+// authorized admin operation. The caller checks that the customer matches the organization.
+// Adoption callers must explicitly require catalog eligibility; linked-subscription reads remain tolerant.
+func (s *Service) GetStripeSubscriptionByID(ctx context.Context, subscriptionID string, options ...stripeclient.GetSubscriptionOption) (*stripeclient.SubscriptionState, error) {
 	if s.stripeClient == nil {
 		return nil, oops.E(oops.CodeUnavailable, nil, "Stripe subscription lookup is not configured")
 	}
-	state, err := s.stripeClient.GetSubscription(ctx, subscriptionID)
+	state, err := s.stripeClient.GetSubscription(ctx, subscriptionID, options...)
+	if eligibilityErr, ok := errors.AsType[*stripeclient.SubscriptionEligibilityError](err); ok {
+		return nil, oops.E(oops.CodeConflict, err, "Stripe subscription cannot be linked: %s", eligibilityErr.Reason)
+	}
 	switch {
 	case errors.Is(err, stripeclient.ErrSubscriptionNotFound):
 		return nil, oops.E(oops.CodeNotFound, err, "Stripe subscription not found")

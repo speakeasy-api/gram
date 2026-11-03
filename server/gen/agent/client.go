@@ -29,11 +29,12 @@ type Client struct {
 	ReportSessionMovedEndpoint   goa.Endpoint
 	ReportAIScanEndpoint         goa.Endpoint
 	ReportStateEndpoint          goa.Endpoint
+	ReportCrashEndpoint          goa.Endpoint
 	CreateSessionHandoffEndpoint goa.Endpoint
 }
 
 // NewClient initializes a "agent" service client given the endpoints.
-func NewClient(getPlugins, getMyConnections, hideMcpServer, unhideMcpServer, listSyncedUsers, getConfiguration, updateConfiguration, listAiScanTargets, upsertAiScanTarget, deleteAiScanTarget, getSessionMeta, reportSessionMoved, reportAIScan, reportState, createSessionHandoff goa.Endpoint) *Client {
+func NewClient(getPlugins, getMyConnections, hideMcpServer, unhideMcpServer, listSyncedUsers, getConfiguration, updateConfiguration, listAiScanTargets, upsertAiScanTarget, deleteAiScanTarget, getSessionMeta, reportSessionMoved, reportAIScan, reportState, reportCrash, createSessionHandoff goa.Endpoint) *Client {
 	return &Client{
 		GetPluginsEndpoint:           getPlugins,
 		GetMyConnectionsEndpoint:     getMyConnections,
@@ -49,6 +50,7 @@ func NewClient(getPlugins, getMyConnections, hideMcpServer, unhideMcpServer, lis
 		ReportSessionMovedEndpoint:   reportSessionMoved,
 		ReportAIScanEndpoint:         reportAIScan,
 		ReportStateEndpoint:          reportState,
+		ReportCrashEndpoint:          reportCrash,
 		CreateSessionHandoffEndpoint: createSessionHandoff,
 	}
 }
@@ -350,6 +352,28 @@ func (c *Client) ReportState(ctx context.Context, p *ReportStatePayload) (res *R
 		return
 	}
 	return ires.(*ReportStateResult), nil
+}
+
+// ReportCrash calls the "reportCrash" endpoint of the "agent" service.
+// ReportCrash may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ReportCrash(ctx context.Context, p *ReportCrashPayload) (res *ReportCrashResult, err error) {
+	var ires any
+	ires, err = c.ReportCrashEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ReportCrashResult), nil
 }
 
 // CreateSessionHandoff calls the "createSessionHandoff" endpoint of the

@@ -124,7 +124,7 @@ func UsageCommands() []string {
 		"killswitches (list-capabilities|list-mcp-servers|list|get|create|edit|lift|preview-overlaps|batch-user-badges)",
 		"about openapi",
 		"access (list-roles|get-role|create-role|update-role|delete-role|list-directory-role-mappings|list-directory-people|sync-directory-groups|set-directory-role-mapping|set-directory-role-mappings|delete-directory-role-mapping|preview-directory-role-setup|apply-directory-role-setup|list-directory-review-items|resolve-directory-review-item|get-directory-review-settings|update-directory-review-settings|list-scopes|list-members|list-grants|update-member-roles|list-shadow-mcp-inventory|get-shadow-mcp-inventory-server|update-shadow-mcp-inventory-server-name|list-shadow-mcp-inventory-users|list-shadow-mcp-inventory-servers-for-user|resolve-shadow-mcp-inventory-request|list-ai-detections|list-employee-ai-detections|list-ai-detection-users|set-ai-tool-decision|list-resource-audience|set-resource-audience|list-audience-options|explain-resource-access|request-access|list-challenges|list-challenge-buckets|resolve-challenge|list-identity-access)",
-		"agent (get-plugins|get-my-connections|hide-mcp-server|unhide-mcp-server|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|report-state|create-session-handoff)",
+		"agent (get-plugins|get-my-connections|hide-mcp-server|unhide-mcp-server|list-synced-users|get-configuration|update-configuration|list-ai-scan-targets|upsert-ai-scan-target|delete-ai-scan-target|get-session-meta|report-session-moved|report-ai-scan|report-state|report-crash|create-session-handoff)",
 		"agents (list-sessions|revoke-session|list|create|get|rename|list-delegable-grants|list-policy-grants|check-policy-grants|create-policy-grant|update-policy-grant|delete-policy-grant|list-connection-blocks|block-agent-on-connection|remove-connection-block|transfer|reassign|suspend|resume|revoke|delete)",
 		"ai-integrations (get-anthropic-inference-config|upsert-anthropic-inference-config|delete-anthropic-inference-config|get-config|upsert-config|delete-config|list-schedules|set-schedule-enabled|retry-schedule)",
 		"analytics (signal-definition|signal-findings|query|describe|dimension-values)",
@@ -165,7 +165,7 @@ func UsageCommands() []string {
 		"mcp-endpoints (create-mcp-endpoint|get-mcp-endpoint|list-mcp-endpoints|update-mcp-endpoint|check-mcp-endpoint-slug-availability|delete-mcp-endpoint)",
 		"mcp-metadata (get-mcp-metadata|set-mcp-metadata|export-mcp-metadata)",
 		"registry-discovery (discover-servers|discover-versions|discover-version)",
-		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server)",
+		"mcp-servers (create-mcp-server|get-mcp-server|list-mcp-servers|list-mcp-servers-for-org|update-mcp-server|list-tool-filters|set-tool-metadata-batch|add-tool-metadata-batch|list-tool-metadata|set-tool-metadata|delete-tool-metadata|delete-mcp-server|get-mcp-server-usage-impact)",
 		"meta-mcp (create-meta-mcp-server|get-meta-mcp-server|list-meta-mcp-servers|update-meta-mcp-server|delete-meta-mcp-server|list-meta-mcp-members|add-meta-mcp-member|update-meta-mcp-member|remove-meta-mcp-member)",
 		"model-keys (list-keys|upsert-key|set-key-enabled|delete-key)",
 		"network-ingress (get-ingress|create-ingress|update-ingress|rotate-credentials|get-delete-impact|delete-ingress|check-health)",
@@ -571,6 +571,14 @@ func ParseEndpoint(
 		agentReportStateSerialNumberFlag = agentReportStateFlags.String("serial-number", "", "")
 		agentReportStateHostnameFlag     = agentReportStateFlags.String("hostname", "", "")
 		agentReportStateEnvironmentFlag  = agentReportStateFlags.String("environment", "", "")
+
+		agentReportCrashFlags                = flag.NewFlagSet("report-crash", flag.ExitOnError)
+		agentReportCrashBodyFlag             = agentReportCrashFlags.String("body", "REQUIRED", "")
+		agentReportCrashDeviceAgentTokenFlag = agentReportCrashFlags.String("device-agent-token", "", "")
+		agentReportCrashApikeyTokenFlag      = agentReportCrashFlags.String("apikey-token", "", "")
+		agentReportCrashEmailFlag            = agentReportCrashFlags.String("email", "", "")
+		agentReportCrashSerialNumberFlag     = agentReportCrashFlags.String("serial-number", "", "")
+		agentReportCrashEnvironmentFlag      = agentReportCrashFlags.String("environment", "", "")
 
 		agentCreateSessionHandoffFlags            = flag.NewFlagSet("create-session-handoff", flag.ExitOnError)
 		agentCreateSessionHandoffBodyFlag         = agentCreateSessionHandoffFlags.String("body", "REQUIRED", "")
@@ -2210,6 +2218,12 @@ func ParseEndpoint(
 		mcpServersDeleteMcpServerSessionTokenFlag     = mcpServersDeleteMcpServerFlags.String("session-token", "", "")
 		mcpServersDeleteMcpServerApikeyTokenFlag      = mcpServersDeleteMcpServerFlags.String("apikey-token", "", "")
 		mcpServersDeleteMcpServerProjectSlugInputFlag = mcpServersDeleteMcpServerFlags.String("project-slug-input", "", "")
+
+		mcpServersGetMcpServerUsageImpactFlags                = flag.NewFlagSet("get-mcp-server-usage-impact", flag.ExitOnError)
+		mcpServersGetMcpServerUsageImpactIDFlag               = mcpServersGetMcpServerUsageImpactFlags.String("id", "REQUIRED", "")
+		mcpServersGetMcpServerUsageImpactSessionTokenFlag     = mcpServersGetMcpServerUsageImpactFlags.String("session-token", "", "")
+		mcpServersGetMcpServerUsageImpactApikeyTokenFlag      = mcpServersGetMcpServerUsageImpactFlags.String("apikey-token", "", "")
+		mcpServersGetMcpServerUsageImpactProjectSlugInputFlag = mcpServersGetMcpServerUsageImpactFlags.String("project-slug-input", "", "")
 
 		metaMcpFlags = flag.NewFlagSet("meta-mcp", flag.ContinueOnError)
 
@@ -5557,6 +5571,7 @@ func ParseEndpoint(
 	agentReportSessionMovedFlags.Usage = agentReportSessionMovedUsage
 	agentReportAIScanFlags.Usage = agentReportAIScanUsage
 	agentReportStateFlags.Usage = agentReportStateUsage
+	agentReportCrashFlags.Usage = agentReportCrashUsage
 	agentCreateSessionHandoffFlags.Usage = agentCreateSessionHandoffUsage
 
 	agentsFlags.Usage = agentsUsage
@@ -5934,6 +5949,7 @@ func ParseEndpoint(
 	mcpServersSetToolMetadataFlags.Usage = mcpServersSetToolMetadataUsage
 	mcpServersDeleteToolMetadataFlags.Usage = mcpServersDeleteToolMetadataUsage
 	mcpServersDeleteMcpServerFlags.Usage = mcpServersDeleteMcpServerUsage
+	mcpServersGetMcpServerUsageImpactFlags.Usage = mcpServersGetMcpServerUsageImpactUsage
 
 	metaMcpFlags.Usage = metaMcpUsage
 	metaMcpCreateMetaMcpServerFlags.Usage = metaMcpCreateMetaMcpServerUsage
@@ -7079,6 +7095,9 @@ func ParseEndpoint(
 			case "report-state":
 				epf = agentReportStateFlags
 
+			case "report-crash":
+				epf = agentReportCrashFlags
+
 			case "create-session-handoff":
 				epf = agentCreateSessionHandoffFlags
 
@@ -8127,6 +8146,9 @@ func ParseEndpoint(
 
 			case "delete-mcp-server":
 				epf = mcpServersDeleteMcpServerFlags
+
+			case "get-mcp-server-usage-impact":
+				epf = mcpServersGetMcpServerUsageImpactFlags
 
 			}
 
@@ -10377,6 +10399,9 @@ func ParseEndpoint(
 			case "report-state":
 				endpoint = c.ReportState()
 				data, err = agentc.BuildReportStatePayload(*agentReportStateBodyFlag, *agentReportStateApikeyTokenFlag, *agentReportStateEmailFlag, *agentReportStateSerialNumberFlag, *agentReportStateHostnameFlag, *agentReportStateEnvironmentFlag)
+			case "report-crash":
+				endpoint = c.ReportCrash()
+				data, err = agentc.BuildReportCrashPayload(*agentReportCrashBodyFlag, *agentReportCrashDeviceAgentTokenFlag, *agentReportCrashApikeyTokenFlag, *agentReportCrashEmailFlag, *agentReportCrashSerialNumberFlag, *agentReportCrashEnvironmentFlag)
 			case "create-session-handoff":
 				endpoint = c.CreateSessionHandoff()
 				data, err = agentc.BuildCreateSessionHandoffPayload(*agentCreateSessionHandoffBodyFlag, *agentCreateSessionHandoffApikeyTokenFlag, *agentCreateSessionHandoffSerialNumberFlag, *agentCreateSessionHandoffHostnameFlag)
@@ -11441,6 +11466,9 @@ func ParseEndpoint(
 			case "delete-mcp-server":
 				endpoint = c.DeleteMcpServer()
 				data, err = mcpserversc.BuildDeleteMcpServerPayload(*mcpServersDeleteMcpServerIDFlag, *mcpServersDeleteMcpServerSessionTokenFlag, *mcpServersDeleteMcpServerApikeyTokenFlag, *mcpServersDeleteMcpServerProjectSlugInputFlag)
+			case "get-mcp-server-usage-impact":
+				endpoint = c.GetMcpServerUsageImpact()
+				data, err = mcpserversc.BuildGetMcpServerUsageImpactPayload(*mcpServersGetMcpServerUsageImpactIDFlag, *mcpServersGetMcpServerUsageImpactSessionTokenFlag, *mcpServersGetMcpServerUsageImpactApikeyTokenFlag, *mcpServersGetMcpServerUsageImpactProjectSlugInputFlag)
 			}
 		case "meta-mcp":
 			c := metamcpc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -14699,6 +14727,7 @@ func agentUsage() {
 	fmt.Fprintln(os.Stderr, `    report-session-moved: Record that a captured agent session was moved to another harness on a device (session portability). Carries no session content — only the session identity, the target harness, and device attribution — and lands as a chat_session:move audit event so organizations retain governance visibility over local-first moves. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report moves. Fire-and-forget from the agent's perspective: the daemon must never fail a move because this call failed.`)
 	fmt.Fprintln(os.Stderr, `    report-ai-scan: Report the result of a device-agent AI scan: which AI tools from the served scan target catalog (or the list embedded in the agent as a fallback) were found installed or running on the device. A scan with zero matches still reports, so organizations can prove a device was scanned and came back clean. Accepts both the per-user key and the org install key (with a vouched email), mirroring getPlugins, because fleet devices must be able to report scans. Fire-and-forget from the agent's perspective: the daemon must never block on this call.`)
 	fmt.Fprintln(os.Stderr, `    report-state: Record the device agent's applied state: the policy etag it enforces, each tool's enforcement outcome, its versions and update posture. A snapshot: the latest report per enrolled user per machine replaces the previous one. Accepts the per-user key and the org install key (with a vouched email), mirroring reportAIScan; agent keys and device-agent tokens are refused. A report from a non-endpoint environment is accepted and not stored, because device coverage matches managed endpoints only. Contract: device-agent ADR-0029.`)
+	fmt.Fprintln(os.Stderr, `    report-crash: Report device agent crashes: fatal crashes, recovered panics and self-rollbacks (device-agent ADR-0030). Forwarded to Speakeasy's monitoring and not stored. Accepts the credentials getPlugins accepts: the per-user key, the org install key (with a vouched email), and, with the device-sync grant, agent keys and device-agent tokens. The agent scrubs every report before sending it; the server accepts only reports shaped like a Go crash and scrubs them again.`)
 	fmt.Fprintln(os.Stderr, `    create-session-handoff: Mint a short-lived capability URL for a rendered session-handoff document (session portability). The device agent uploads the handoff it rendered from the local transcript; the returned URL serves the markdown exactly once (burn-after-read) until expiry, so a cloud agent or another machine can continue the session. Content transits the server only for this purpose and stops being served at first read or expiry, whichever comes first. Requires a per-user key: the fleet-shared org install key is refused because minting a fetch-by-token URL for uploaded content is a per-user, content-bearing surface (the same DNO-383 blast-radius rule as getSessionMeta).`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
@@ -15008,6 +15037,34 @@ func agentReportStateUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent report-state --body '{\n      \"agent\": {\n         \"arch\": \"aaa\",\n         \"os\": \"aaa\",\n         \"speakeasy\": \"aaa\",\n         \"speakeasy_ui\": \"aaa\",\n         \"speakeasyd\": \"aaa\"\n      },\n      \"drift_counting_since\": \"1970-01-01T00:00:01Z\",\n      \"enforcement_halted\": false,\n      \"generated_at\": \"1970-01-01T00:00:01Z\",\n      \"policy\": {\n         \"applied_at\": \"1970-01-01T00:00:01Z\",\n         \"applied_etag\": \"aaa\",\n         \"remote_config_etag\": \"aaa\",\n         \"remote_config_failed\": false,\n         \"withheld_plugins\": [\n            {\n               \"marketplace\": \"aaa\",\n               \"reason\": \"aaa\",\n               \"slug\": \"aa\"\n            },\n            {\n               \"marketplace\": \"aaa\",\n               \"reason\": \"aaa\",\n               \"slug\": \"aa\"\n            },\n            {\n               \"marketplace\": \"aaa\",\n               \"reason\": \"aaa\",\n               \"slug\": \"aa\"\n            }\n         ]\n      },\n      \"schema_version\": 2,\n      \"tools\": [\n         {\n            \"action_required\": false,\n            \"drift_corrections\": 1,\n            \"error_kind\": \"aaa\",\n            \"layer\": \"aaa\",\n            \"outcome\": \"aaa\",\n            \"pending_reason\": \"aaa\",\n            \"restart_required\": false,\n            \"tool\": \"aa\"\n         },\n         {\n            \"action_required\": false,\n            \"drift_corrections\": 1,\n            \"error_kind\": \"aaa\",\n            \"layer\": \"aaa\",\n            \"outcome\": \"aaa\",\n            \"pending_reason\": \"aaa\",\n            \"restart_required\": false,\n            \"tool\": \"aa\"\n         },\n         {\n            \"action_required\": false,\n            \"drift_corrections\": 1,\n            \"error_kind\": \"aaa\",\n            \"layer\": \"aaa\",\n            \"outcome\": \"aaa\",\n            \"pending_reason\": \"aaa\",\n            \"restart_required\": false,\n            \"tool\": \"aa\"\n         }\n      ],\n      \"update\": {\n         \"auto_update\": \"aaa\",\n         \"channel\": \"aaa\",\n         \"current_blocked\": false,\n         \"last_rollback\": {\n            \"at\": \"1970-01-01T00:00:01Z\",\n            \"from\": \"aaa\",\n            \"to\": \"aaa\"\n         },\n         \"pinned_target\": \"aaa\"\n      }\n   }' --apikey-token \"abc123\" --email \"abc123\" --serial-number \"abc123\" --hostname \"abc123\" --environment \"abc123\"")
+}
+
+func agentReportCrashUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] agent report-crash", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -device-agent-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -email STRING")
+	fmt.Fprint(os.Stderr, " -serial-number STRING")
+	fmt.Fprint(os.Stderr, " -environment STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Report device agent crashes: fatal crashes, recovered panics and self-rollbacks (device-agent ADR-0030). Forwarded to Speakeasy's monitoring and not stored. Accepts the credentials getPlugins accepts: the per-user key, the org install key (with a vouched email), and, with the device-sync grant, agent keys and device-agent tokens. The agent scrubs every report before sending it; the server accepts only reports shaped like a Go crash and scrubs them again.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -device-agent-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -email STRING: `)
+	fmt.Fprintln(os.Stderr, `    -serial-number STRING: `)
+	fmt.Fprintln(os.Stderr, `    -environment STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "agent report-crash --body '{\n      \"reports\": [\n         {\n            \"build\": {\n               \"arch\": \"aaa\",\n               \"binary\": \"aaa\",\n               \"channel\": \"aaa\",\n               \"os\": \"aaa\",\n               \"version\": \"aaa\"\n            },\n            \"component\": \"aaa\",\n            \"count\": 2,\n            \"id\": \"aa\",\n            \"kind\": \"aaa\",\n            \"message\": \"aaa\",\n            \"occurred_at\": \"1970-01-01T00:00:01Z\",\n            \"other_goroutines\": 1,\n            \"panic_type\": \"aaa\",\n            \"rollback\": {\n               \"from\": \"aaa\",\n               \"to\": \"aaa\"\n            },\n            \"schema_version\": 2,\n            \"stack\": [\n               {\n                  \"file\": \"aaa\",\n                  \"function\": \"aaa\",\n                  \"line\": 1\n               },\n               {\n                  \"file\": \"aaa\",\n                  \"function\": \"aaa\",\n                  \"line\": 1\n               },\n               {\n                  \"file\": \"aaa\",\n                  \"function\": \"aaa\",\n                  \"line\": 1\n               }\n            ]\n         },\n         {\n            \"build\": {\n               \"arch\": \"aaa\",\n               \"binary\": \"aaa\",\n               \"channel\": \"aaa\",\n               \"os\": \"aaa\",\n               \"version\": \"aaa\"\n            },\n            \"component\": \"aaa\",\n            \"count\": 2,\n            \"id\": \"aa\",\n            \"kind\": \"aaa\",\n            \"message\": \"aaa\",\n            \"occurred_at\": \"1970-01-01T00:00:01Z\",\n            \"other_goroutines\": 1,\n            \"panic_type\": \"aaa\",\n            \"rollback\": {\n               \"from\": \"aaa\",\n               \"to\": \"aaa\"\n            },\n            \"schema_version\": 2,\n            \"stack\": [\n               {\n                  \"file\": \"aaa\",\n                  \"function\": \"aaa\",\n                  \"line\": 1\n               },\n               {\n                  \"file\": \"aaa\",\n                  \"function\": \"aaa\",\n                  \"line\": 1\n               },\n               {\n                  \"file\": \"aaa\",\n                  \"function\": \"aaa\",\n                  \"line\": 1\n               }\n            ]\n         }\n      ]\n   }' --device-agent-token \"abc123\" --apikey-token \"abc123\" --email \"abc123\" --serial-number \"abc123\" --environment \"abc123\"")
 }
 
 func agentCreateSessionHandoffUsage() {
@@ -22059,6 +22116,7 @@ func mcpServersUsage() {
 	fmt.Fprintln(os.Stderr, `    set-tool-metadata: Set the annotation hints of a single tool metadata entry (manual override). This is a full-record replace: omitted hints become unset on the stored record.`)
 	fmt.Fprintln(os.Stderr, `    delete-tool-metadata: Soft-delete a single tool metadata entry.`)
 	fmt.Fprintln(os.Stderr, `    delete-mcp-server: Delete an MCP server. A toolset's own hosted server (its id equals the toolset id) is disabled instead, as turning MCP off on the toolset does, and stays listed with visibility disabled. Other servers, including other toolset-backed ones, are deleted.`)
+	fmt.Fprintln(os.Stderr, `    get-mcp-server-usage-impact: Preview who a breaking change to an MCP server affects: the server's active signed-in connections and when each subject last used them. Authorizes the caller as updateMcpServer does. Only sessions issued by the server's user session issuer are counted, so servers without sign-in report sign_in_required=false and no subjects.`)
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Additional help:")
 	fmt.Fprintf(os.Stderr, "    %s mcp-servers COMMAND --help\n", os.Args[0])
@@ -22359,6 +22417,30 @@ func mcpServersDeleteMcpServerUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers delete-mcp-server --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func mcpServersGetMcpServerUsageImpactUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] mcp-servers get-mcp-server-usage-impact", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -apikey-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Preview who a breaking change to an MCP server affects: the server's active signed-in connections and when each subject last used them. Authorizes the caller as updateMcpServer does. Only sessions issued by the server's user session issuer are counted, so servers without sign-in report sign_in_required=false and no subjects.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "mcp-servers get-mcp-server-usage-impact --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --apikey-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 // metaMcpUsage displays the usage of the meta-mcp command and its subcommands.
@@ -33258,8 +33340,8 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    list-signup-offers: List staff-managed signup offers. Stripe owns all promotion terms.`)
 	fmt.Fprintln(os.Stderr, `    create-signup-offer: Create a disabled signup offer mapped to an exact Stripe promotion code ID.`)
 	fmt.Fprintln(os.Stderr, `    update-signup-offer: Edit, enable or disable a signup offer. Existing accepted promotion applications are unchanged.`)
-	fmt.Fprintln(os.Stderr, `    get-stripe-subscription-candidate: Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.`)
-	fmt.Fprintln(os.Stderr, `    set-stripe-subscription: Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.`)
+	fmt.Fprintln(os.Stderr, `    get-stripe-subscription-candidate: Returns eligible live Stripe subscription details before linking it to a free, PAYG, or unconverted enterprise trial organization with a matching Stripe customer.`)
+	fmt.Fprintln(os.Stderr, `    set-stripe-subscription: Links an eligible existing Stripe subscription and atomically activates PAYG for free organizations or unconverted enterprise trials. Existing PAYG organizations retain their access policy. Verifies customer ownership, preserves existing subscription links and redeemed partner anchors, and accepts same-subscription retries.`)
 	fmt.Fprintln(os.Stderr, `    list-customer-usage: Returns estimated usage at current PAYG list prices for every active paying organization: enterprise organizations not on a running or ending trial, and pro or payg organizations that never trialled.`)
 	fmt.Fprintln(os.Stderr, `    list-upstreamoauth-migration-organizations: Lists every organization the upstream OAuth migration applies to, so staff can check and migrate them one by one.`)
 	fmt.Fprintln(os.Stderr, `    get-upstreamoauth-migration-status: Reports where one organization stands in the upstream OAuth migration from a dry run that writes nothing.`)
@@ -35257,7 +35339,7 @@ func adminGetStripeSubscriptionCandidateUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.`)
+	fmt.Fprintln(os.Stderr, `Returns eligible live Stripe subscription details before linking it to a free, PAYG, or unconverted enterprise trial organization with a matching Stripe customer.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
@@ -35278,7 +35360,7 @@ func adminSetStripeSubscriptionUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.`)
+	fmt.Fprintln(os.Stderr, `Links an eligible existing Stripe subscription and atomically activates PAYG for free organizations or unconverted enterprise trials. Existing PAYG organizations retain their access policy. Verifies customer ownership, preserves existing subscription links and redeemed partner anchors, and accepts same-subscription retries.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)

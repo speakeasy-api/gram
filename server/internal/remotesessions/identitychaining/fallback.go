@@ -101,7 +101,7 @@ func (c *Chainer) tryProvider(ctx context.Context, logger *slog.Logger, p remote
 	retries := 0
 	for {
 		token, outcome := try(ctx, logger, p)
-		if !retryable(outcome) || retries+1 >= maxProviderAttempts {
+		if !outcome.SafeToRepeat() || retries+1 >= maxProviderAttempts {
 			return token, outcome, retries
 		}
 		pause := jitter(retryBackoff)
@@ -122,16 +122,6 @@ func (c *Chainer) tryProvider(ctx context.Context, logger *slog.Logger, p remote
 		case <-timer.C:
 		}
 	}
-}
-
-// retryable reports a transient failure that is safe to repeat: one that
-// happened before any token request could have reached the provider. A
-// failure after submission is ambiguous, and repeating it could mint a
-// duplicate grant against the provider's quota, so it, a shared failure
-// answered from the cache, stale configuration and every provider rejection
-// move to the next provider instead.
-func retryable(o Outcome) bool {
-	return o.Reason == ReasonTransientFailure && o.Retryable && !o.Cached && !o.Submitted
 }
 
 // jitter spreads retries between half and one and a half times d.

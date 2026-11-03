@@ -11,6 +11,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
+	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -65,7 +66,7 @@ func (b *metaCodeBackend) knownConnectionState(ctx context.Context, gate *metaGa
 		state.Consent = "required"
 	}
 	if state.Consent == "required" {
-		state.Instructions = "Call tools.connect(server=...) and show its URL and instructions. The user must also reconnect this gateway in their MCP client and approve the server; browser sign-in alone does not renew catalogue consent."
+		state.Instructions = "Call tools.connect(server=...) and follow its URL and instructions to approve this server for the connection."
 	}
 	return state
 }
@@ -104,7 +105,14 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 	ticket := AuthnChallengeState{ //nolint:exhaustruct // The entry ticket carries only routing and identity binding; browser login supplies consent state.
 		ID: uuid.NewString(), UserSessionIssuerID: gate.userSessionIssuerID,
 		Endpoint: ref, CreatedAt: now, FirstParty: true,
-		CodeReconnect: &CodeReconnectBinding{UserID: gate.authentication.subject.ID, Server: member.slug, ServerID: member.serverID, ExpiresAt: expires, Ticket: true},
+		CodeReconnect: &CodeReconnectBinding{UserID: gate.authentication.subject.ID, Server: member.slug, ServerID: member.serverID, ExpiresAt: expires, Ticket: true, CatalogID: uuid.Nil, CredentialID: uuid.Nil, ClientID: "", CatalogComplete: false, ReviewReady: false},
+	}
+	if gate.catalog != nil && gate.catalogRef != nil && gate.catalogRef.Mode == toolfilter.CatalogModeCached &&
+		member.backend == metaMemberBackendProxied {
+		if err := b.bindReconnectCatalog(ctx, gate, member, &ticket); err != nil {
+			b.service.logger.WarnContext(ctx, "catalogue reconnect unavailable; using full gateway reconnect", attr.SlogError(err))
+			needsConsent = true
+		}
 	}
 	if err := b.service.authnChallengeCache.Store(ctx, ticket); err != nil {
 		return nil, fmt.Errorf("store connection request: %w", err)
@@ -117,11 +125,16 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 	link.RawQuery = url.Values{"code_reconnect": {ticket.ID}}.Encode()
 	instructions := "Open authorization_url and complete sign-in in your browser. Then tell the assistant to start a fresh execution and check access. No tool operation has been retried."
 	reason := "upstream_sign_in"
-	if needsConsent {
+	if ticket.CodeReconnect.CatalogID != uuid.Nil {
+		if needsConsent {
+			reason = "consent_required"
+		}
+		instructions = "Open authorization_url to connect this service, then review and approve the refreshed gateway tools. Then start a fresh execution and check access; do not replay an earlier program."
+	} else if needsConsent {
 		reason = "consent_required"
 		instructions = "Open authorization_url to connect the upstream service. Then reconnect this gateway in your MCP client and approve this server. Browser sign-in alone does not renew the client's catalogue consent. Start a fresh execution after reconnecting; do not replay an earlier program."
 	}
-	action := &codemode.ConnectionAction{Server: server, Status: "authorization_required", Reason: reason, AuthorizationURL: link.String(), ExpiresAt: &expires, ClientReconnectRequired: needsConsent, Instructions: instructions}
+	action := &codemode.ConnectionAction{Server: server, Status: "authorization_required", Reason: reason, AuthorizationURL: link.String(), ExpiresAt: &expires, ClientReconnectRequired: needsConsent && ticket.CodeReconnect.CatalogID == uuid.Nil, Instructions: instructions}
 	if b.connections.actions == nil {
 		b.connections.actions = make(map[string]*codemode.ConnectionAction)
 	}
@@ -222,4 +235,27 @@ func (b *metaCodeBackend) verifyConnection(ctx context.Context, gate *metaGateCo
 		state.Instructions = "The upstream could not be verified; try again later."
 	}
 	return state
+}
+
+func (b *metaCodeBackend) bindReconnectCatalog(ctx context.Context, gate *metaGateContext, member metaMember, ticket *AuthnChallengeState) error {
+	endpoint := gate.authentication.endpoint
+	selector, err := b.service.upstreamSelectorFor(ctx, endpoint)
+	if err != nil {
+		return fmt.Errorf("bind reconnect to session: %w", err)
+	}
+	consent := *ticket
+	consent.Subject = &gate.authentication.subject
+	consent.FocusServer = member.slug
+	clients, err := b.service.listEndpointClients(ctx, endpoint, consent)
+	if err != nil {
+		return fmt.Errorf("resolve reconnect clients: %w", err)
+	}
+	// Non-OAuth members still use full gateway consent: there is no provider
+	// approval callback in which to update their catalogue.
+	if selector != nil && len(subjectConnectedClients(clients)) > 0 {
+		ticket.CodeReconnect.CatalogID = gate.catalog.ID
+		ticket.CodeReconnect.ClientID = gate.catalog.ClientID
+		ticket.CodeReconnect.CredentialID = selector.credentialID
+	}
+	return nil
 }

@@ -50,8 +50,7 @@ func TestPluginsService_PublishPlugins_HostedEntryPublishesDomainAndUserHeaders(
 		OrganizationID: ac.ActiveOrganizationID, Domain: "hosted-" + uuid.NewString()[:8] + ".example.test", ProvisionerKind: "ingress", IpAllowlist: []string{},
 	})
 	require.NoError(t, err)
-	//nolint:glint // notestingrawsql: an addressable domain without exercising domain provisioning.
-	_, err = ti.conn.Exec(ctx, `UPDATE custom_domains SET verified = TRUE, activated = TRUE WHERE id = $1`, domain.ID)
+	err = pluginsrepo.New(ti.conn).ActivateCustomDomainFixture(ctx, domain.ID)
 	require.NoError(t, err)
 	createCanonicalWrapper(t, ctx, ti, toolset, "public", uuid.NullUUID{UUID: domain.ID, Valid: true}, toolset.Slug)
 

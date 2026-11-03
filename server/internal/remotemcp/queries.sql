@@ -415,3 +415,11 @@ FROM remote_protected_resources
 WHERE project_id = @project_id
     AND resource_identifier = @resource_identifier::text
     AND deleted IS FALSE;
+
+-- name: LockLiveProjectForRemoteMCPProvisioning :one
+SELECT id
+FROM projects
+WHERE id = @project_id
+  AND organization_id = @organization_id
+  AND deleted IS FALSE
+FOR UPDATE;

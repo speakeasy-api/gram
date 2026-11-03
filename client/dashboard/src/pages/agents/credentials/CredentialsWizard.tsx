@@ -81,6 +81,7 @@ import { invalidateAllListAPIKeys } from "@gram/client/react-query/listAPIKeys.j
 import type { ExtendAgentKeyGrantForm } from "@gram/client/models/components/extendagentkeygrantform.js";
 import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js";
 import { useAgents } from "@gram/client/react-query/agents.js";
+import { useUpstreamAuthEnforcement } from "@/hooks/useUpstreamAuthEnforcement";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
 import type { AgentPolicyGrantCheck } from "@gram/client/models/components/agentpolicygrantcheck.js";
 import { useAgentAdmissions } from "@/pages/agents/agentAdmissions";
@@ -802,6 +803,59 @@ export function CredentialsWizard({
             ? "Could not check that you can reach the servers you chose. Check again above the list."
             : "Checking that you can reach the servers you chose…"
           : null;
+  // The blanket sign-in grant is written only for an agent that reaches a
+  // server: one that reaches nothing has no auth client to use. A new agent
+  // gets it when created, an edited one when it holds no mcp:auth yet.
+  // Whether the person saving may give it is asked as soon as the first
+  // server is chosen, so a refusal stops the flow on the server step.
+  const reachesServers = allServers || selected.length > 0;
+  const writesAuthGrant =
+    reachesServers &&
+    (editing
+      ? (grants ?? []).every((grant) => grant.scope !== AUTH_GRANT.scope)
+      : !existing);
+  const enforcement = useUpstreamAuthEnforcement();
+  const authCheck = useQuery({
+    queryKey: ["agent-auth-check", organization.id, user.id, agentId ?? null],
+    queryFn: async ({ signal }) => {
+      const { results } = await sdk.agents.checkPolicyGrants(
+        {
+          checkAgentPolicyGrantsForm: {
+            ...(agentId ? { agentId } : {}),
+            policyGrants: [AUTH_GRANT],
+          },
+        },
+        undefined,
+        { signal },
+      );
+      return results[0];
+    },
+    enabled: writesAuthGrant,
+    retry: false,
+    throwOnError: false,
+  });
+  const authRefused = writesAuthGrant && authCheck.data?.allowed === false;
+  // An edit writes grants one by one, so saving while the check is still out
+  // could write the servers and then be refused the sign-in grant. Creating
+  // sends every grant in one request, which the server accepts or refuses
+  // whole, so it does not wait.
+  const authPending = editing && writesAuthGrant && authCheck.isLoading;
+  const authPendingNote = `Checking that you can give this agent ${AUTH_GRANT.scope}…`;
+  // Where the organization enforces mcp:auth, an agent without it cannot sign
+  // in to any upstream, so a refused grant stops the flow before anything is
+  // written. Elsewhere sign-in does not need it yet, so the grant is left out
+  // instead of failing the save. An unknown answer keeps the grant, and the
+  // server decides.
+  const authStop = !authRefused
+    ? null
+    : enforcement === "loading"
+      ? "Checking whether this organization requires sign-in permission…"
+      : enforcement !== "enforced"
+        ? null
+        : authCheck.data?.limitedBy === "owner"
+          ? `This agent's owner cannot give it ${AUTH_GRANT.scope}, which this organization requires to sign in to any server. Ask an administrator to review the owner's access.`
+          : `You cannot give this agent ${AUTH_GRANT.scope}, which this organization requires to sign in to any server. Ask an administrator for access.`;
+  const includeAuthGrant = !(authRefused && enforcement === "legacy");
   // The rows the picker offers. Under "All servers" they are the ones those
   // wildcards reach, so an organization-wide one shows every project's;
   // otherwise it is the project the agent is bound to.
@@ -966,6 +1020,7 @@ export function CredentialsWizard({
     if (!projectID) {
       throw new Error("This project is still loading. Try again in a moment.");
     }
+    if (authStop) throw new Error(authStop);
     if (refusedChoice) throw new Error(refusedChoice);
     // Whether the agent sends hook events is read from the caller's grants,
     // so it is not decided while they are still loading.
@@ -1003,7 +1058,7 @@ export function CredentialsWizard({
         // the server refuses a request that names a grant twice.
         policyGrants: uniqueGrants([
           ...agentPolicyGrantsFromDraft(draft),
-          AUTH_GRANT,
+          ...(includeAuthGrant && reachesServers ? [AUTH_GRANT] : []),
           ...(hookEvents
             ? [hooksIngestPolicyGrant(organization.id, projectID)]
             : []),
@@ -1062,7 +1117,11 @@ export function CredentialsWizard({
     if (agent === undefined || grants === undefined) return;
     // The selection is only the agent's reach once the grants have been
     // reconciled into it; before that every grant would read as withdrawn.
-    if (!reconciled || saving) return;
+    if (!reconciled || saving || authPending) return;
+    if (authStop) {
+      setError(authStop);
+      return;
+    }
     if (refusedChoice) {
       setError(refusedChoice);
       return;
@@ -1152,6 +1211,8 @@ export function CredentialsWizard({
         });
       }
       if (
+        includeAuthGrant &&
+        reachesServers &&
         ![...appliedPolicies.current.values()].some(
           (grant) => grant.scope === AUTH_GRANT.scope,
         )
@@ -1628,7 +1689,9 @@ export function CredentialsWizard({
                         allServers
                           ? `${CONNECT_SCOPE} on all servers in the project`
                           : `${CONNECT_SCOPE} on the selected servers`,
-                        `${AUTH_GRANT.scope} on all auth clients`,
+                        ...(includeAuthGrant
+                          ? [`${AUTH_GRANT.scope} on all auth clients`]
+                          : []),
                         ...(recordsSessions ? [HOOKS_INGEST_SCOPE] : []),
                         // What the platform's runtime needs beyond the
                         // servers, such as a device agent's plugin sync.
@@ -1941,8 +2004,9 @@ export function CredentialsWizard({
     }
   };
 
-  const blocked =
-    step === 0
+  const blocked = authStop
+    ? authStop
+    : step === 0
       ? !name.trim()
         ? "Name this agent."
         : nameState === "taken"
@@ -1981,13 +2045,14 @@ export function CredentialsWizard({
             step === 0
               ? (blocked ??
                 "Renaming an agent is recorded in the organization audit log.")
-              : refusedChoice
-                ? refusedChoice
-                : reconciled
+              : (authStop ??
+                (authPending ? authPendingNote : null) ??
+                refusedChoice ??
+                (reconciled
                   ? "Changing what an agent reaches is recorded in the organization audit log."
                   : inventory.isError
                     ? "The server list could not be loaded, so the servers this agent reaches are not known. Retry the list before saving."
-                    : "Reading the servers this agent reaches…"
+                    : "Reading the servers this agent reaches…"))
           }
           onBack={step === 0 ? undefined : () => setStep(step - 1)}
           primary={
@@ -1999,7 +2064,13 @@ export function CredentialsWizard({
               <Button
                 // Nothing may be written until the stored grants are in the
                 // selection: the diff against an empty one withdraws them all.
-                disabled={saving || !reconciled || refusedChoice !== null}
+                disabled={
+                  saving ||
+                  !reconciled ||
+                  refusedChoice !== null ||
+                  authStop !== null ||
+                  authPending
+                }
                 onClick={() => void save()}
               >
                 {saving ? "Saving…" : "Save changes and exit"}

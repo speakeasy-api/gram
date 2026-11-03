@@ -64,8 +64,7 @@ func TestPlatformToolsetAutomaticDistribution(t *testing.T) {
 						require.NoError(t, err)
 					}
 					if tc.deleteHighest {
-						//nolint:glint // notestingrawsql: No production API soft-deletes an individual historical version.
-						_, err := ti.conn.Exec(ctx, "UPDATE toolset_versions SET deleted_at = clock_timestamp() WHERE toolset_id = $1 AND version = $2", toolsetID, len(tc.versions))
+						err := pluginsrepo.New(ti.conn).SoftDeleteToolsetVersionFixture(ctx, pluginsrepo.SoftDeleteToolsetVersionFixtureParams{ToolsetID: toolsetID, Version: int64(len(tc.versions))})
 						require.NoError(t, err)
 					}
 					inventory, err := pluginsrepo.New(ti.conn).ListRoleDeliveryServers(ctx, pluginsrepo.ListRoleDeliveryServersParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID})
