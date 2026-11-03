@@ -46052,6 +46052,119 @@ paths:
             x-speakeasy-name-override: get
             x-speakeasy-react-hook:
                 name: GetMcpServer
+    /rpc/mcpServers.getUsageImpact:
+        get:
+            description: 'Preview who a breaking change to an MCP server affects: the server''s active signed-in connections and when each subject last used them. Authorizes the caller as updateMcpServer does. Only sessions issued by the server''s user session issuer are counted, so servers without sign-in report sign_in_required=false and no subjects.'
+            operationId: getMcpServerUsageImpact
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the MCP server
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the MCP server
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: API Key header
+                  in: header
+                  name: Gram-Key
+                  schema:
+                    description: API Key header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/McpServerUsageImpact'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+                "503":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unavailable: service temporarily unavailable'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+                - apikey_header_Gram-Key: []
+                  project_slug_header_Gram-Project: []
+            summary: getMcpServerUsageImpact mcpServers
+            tags:
+                - mcpServers
+            x-speakeasy-name-override: getUsageImpact
+            x-speakeasy-react-hook:
+                name: McpServerUsageImpact
     /rpc/mcpServers.list:
         get:
             description: List MCP servers for a project. Accepts optional remote_mcp_server_id, tunneled_mcp_server_id, toolset_id, or unproxied_mcp_server_id filters to scope the result to a single backend; at most one filter may be supplied since the backends are mutually exclusive.
@@ -116453,6 +116566,93 @@ components:
                 - tool_selection_mode
                 - external_mcp_slugs
                 - external_mcp_proxy_only
+        McpServerUsageImpact:
+            type: object
+            properties:
+                active_connection_count:
+                    type: integer
+                    description: Unexpired, unrevoked sessions that can reach this server.
+                    format: int64
+                active_subject_count:
+                    type: integer
+                    description: Distinct subjects (people, API keys, agents, workloads, anonymous callers) holding those sessions.
+                    format: int64
+                last_used_at:
+                    type: string
+                    description: Most recent use across all those sessions, accurate to within five minutes. Absent when none has a recorded use.
+                    format: date-time
+                server_name:
+                    type: string
+                    description: The server's display name, which confirmations ask the operator to type.
+                shared_connection_count:
+                    type: integer
+                    description: Of active_connection_count, the sessions issued for the whole shared sign-in rather than this server's address. Always zero when shared_sign_in is false.
+                    format: int64
+                shared_sign_in:
+                    type: boolean
+                    description: Whether the server's user session issuer also serves other MCP servers or gateways. Connections not bound to this server's address may then be using one of those instead.
+                sign_in_required:
+                    type: boolean
+                    description: 'Whether the server has a user session issuer. When false nothing is counted: callers are not signed in, so their usage is unknown.'
+                subjects:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/McpServerUsageSubject'
+                    description: Subjects holding active sessions, most recently used first.
+                subjects_truncated:
+                    type: boolean
+                    description: Whether more subjects exist than are listed.
+            description: Active signed-in usage of an MCP server, for confirming a breaking change.
+            required:
+                - server_name
+                - sign_in_required
+                - shared_sign_in
+                - active_connection_count
+                - active_subject_count
+                - shared_connection_count
+                - subjects
+                - subjects_truncated
+        McpServerUsageSubject:
+            type: object
+            properties:
+                client_names:
+                    type: array
+                    items:
+                        type: string
+                    description: Self-reported names of the MCP clients behind the sessions. Unverified.
+                connection_count:
+                    type: integer
+                    description: Active sessions this subject holds.
+                    format: int64
+                display_name:
+                    type: string
+                    description: Resolved human-readable name of the subject, if known.
+                email:
+                    type: string
+                    description: Email of the subject when it is a Speakeasy user.
+                last_used_at:
+                    type: string
+                    description: Most recent use across this subject's sessions, accurate to within five minutes. Absent when unknown.
+                    format: date-time
+                photo_url:
+                    type: string
+                    description: Avatar URL of the subject when it is a Speakeasy user with one.
+                shared_sign_in:
+                    type: boolean
+                    description: Whether every one of this subject's sessions was issued for the whole shared sign-in rather than this server, so the subject may be using another server instead.
+                subject_type:
+                    type: string
+                    description: 'Subject kind: ''user'', ''apikey'', ''agent'', ''anonymous'', or ''workload''.'
+                subject_urn:
+                    type: string
+                    description: The subject URN (user:<id> | apikey:<uuid> | agent:<uuid> | anonymous:<id> | workload:<issuer-id>:<external-subject>).
+            description: One subject's active connections to an MCP server.
+            required:
+                - subject_urn
+                - subject_type
+                - connection_count
+                - client_names
+                - shared_sign_in
         MetaMcpDiscoveryFunnel:
             type: object
             properties:

@@ -1,4 +1,5 @@
 import { Input } from "@/components/ui/Input";
+import { ServerUsageImpactById } from "@/components/mcp-server-usage/ServerUsageConfirmation";
 import { Text } from "@/components/ui/Text";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
@@ -19,6 +20,7 @@ export function DeleteRemoteIdentityProviderDialog({
   onOpenChange,
   userSessionIssuerId,
   issuer,
+  mcpServerId,
 }: {
   open: boolean;
   onOpenChange: (open: boolean) => void;
@@ -28,14 +30,17 @@ export function DeleteRemoteIdentityProviderDialog({
   // remote_session_issuer record alone so other servers can still use it.
   userSessionIssuerId: string;
   issuer: RemoteSessionIssuer;
+  /** The MCP server the provider is removed from, for the usage preview. */
+  mcpServerId?: string;
 }): JSX.Element {
   return (
     <Dialog open={open} onOpenChange={onOpenChange}>
-      <Dialog.Content>
+      <Dialog.Content className="max-w-2xl!">
         {open && (
           <DeleteRemoteIdentityProviderDialogBody
             userSessionIssuerId={userSessionIssuerId}
             issuer={issuer}
+            mcpServerId={mcpServerId}
             onClose={() => onOpenChange(false)}
           />
         )}
@@ -47,10 +52,12 @@ export function DeleteRemoteIdentityProviderDialog({
 function DeleteRemoteIdentityProviderDialogBody({
   userSessionIssuerId,
   issuer,
+  mcpServerId,
   onClose,
 }: {
   userSessionIssuerId: string;
   issuer: RemoteSessionIssuer;
+  mcpServerId?: string;
   onClose: () => void;
 }) {
   const client = useSdkClient();
@@ -131,6 +138,8 @@ function DeleteRemoteIdentityProviderDialogBody({
           and can be re-attached later or used by other servers.
         </Dialog.Description>
       </Dialog.Header>
+
+      {mcpServerId && <ServerUsageImpactById mcpServerId={mcpServerId} />}
 
       <div className="grid gap-2">
         <Text small>

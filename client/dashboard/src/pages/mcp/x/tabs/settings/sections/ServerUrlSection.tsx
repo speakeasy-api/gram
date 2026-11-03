@@ -24,6 +24,8 @@ import {
   useRootMcpEndpointMutation,
 } from "@/hooks/useRootMcpEndpoint";
 import { useCallback, useEffect, useMemo, useState } from "react";
+import { ServerUsageConfirmation } from "@/components/mcp-server-usage/ServerUsageConfirmation";
+import { useServerUsageConfirmation } from "@/components/mcp-server-usage/useServerUsageConfirmation";
 import { useSdkClient, useSlugs } from "@/contexts/Sdk";
 
 import { Badge } from "@/components/ui/Badge";
@@ -286,6 +288,7 @@ export function ServerUrlSection({
                     backend={backend}
                     endpoint={endpoint}
                     isLastEndpoint={isLast(endpoint)}
+                    servable={servableIds.has(endpoint.id)}
                     mustDisableFirst={mustDisableBeforeLastRemoval}
                     onSaved={followHostedServer}
                   />
@@ -355,6 +358,7 @@ export function ServerUrlSection({
                     endpoint={endpoint}
                     domains={availableDomains}
                     isLastEndpoint={isLast(endpoint)}
+                    servable={servableIds.has(endpoint.id)}
                     mustDisableFirst={mustDisableBeforeLastRemoval}
                     canManageDomainRoot={canManageDomains}
                     hosted={!!hostedServerId}
@@ -466,6 +470,7 @@ function AddressRow({
   endpoint,
   domains,
   isLastEndpoint,
+  servable = true,
   mustDisableFirst = false,
   canManageDomainRoot = false,
   hosted = false,
@@ -475,6 +480,9 @@ function AddressRow({
   endpoint: McpEndpoint;
   domains?: CustomDomain[];
   isLastEndpoint: boolean;
+  /** Whether clients can reach the server on this address at all; changing
+   * one that cannot serve cuts nobody off, so it skips the usage check. */
+  servable?: boolean;
   mustDisableFirst?: boolean;
   canManageDomainRoot?: boolean;
   hosted?: boolean;
@@ -502,14 +510,22 @@ function AddressRow({
   const fullSlug = `${slugPrefix}${suffix.trim()}`;
 
   const queryClient = useQueryClient();
+  // Set while a rename or removal waits for the usage confirmation. Only MCP
+  // servers have a usage preview; gateway addresses change directly.
+  const [pendingChange, setPendingChange] = useState<
+    "rename" | "remove" | null
+  >(null);
+  const usageServerId = servable ? backendServerId(backend) : undefined;
   const update = useUpdateMcpEndpointMutation({
     onSuccess: async (updated) => {
+      setPendingChange(null);
       patchMcpEndpointInCache(queryClient, updated);
       await onSaved?.();
       await invalidateRootMcpEndpointQueries(queryClient);
       toast.success("Address updated");
     },
     onError: (error) => {
+      setPendingChange(null);
       toast.error(
         error instanceof Error ? error.message : "Failed to update address",
       );
@@ -519,11 +535,13 @@ function AddressRow({
   const remove = useDeleteMcpEndpointMutation({
     onSuccess: async () => {
       setConfirmRemoveOpen(false);
+      setPendingChange(null);
       await invalidateRootMcpEndpointQueries(queryClient);
       toast.success("Address removed");
     },
     onError: (error) => {
       setConfirmRemoveOpen(false);
+      setPendingChange(null);
       toast.error(
         error instanceof Error ? error.message : "Failed to remove address",
       );
@@ -581,7 +599,13 @@ function AddressRow({
             size="md"
             variant="primary"
             disabled={!dirty || !!slugError || update.isPending}
-            onClick={handleSave}
+            onClick={() => {
+              if (usageServerId) {
+                setPendingChange("rename");
+                return;
+              }
+              handleSave();
+            }}
             aria-label={update.isPending ? "Saving address" : "Save address"}
           >
             <Button.Icon>
@@ -598,6 +622,11 @@ function AddressRow({
             disabled={remove.isPending}
             aria-label="Remove address"
             onClick={() => {
+              // Disable-first refusals keep their own dialog.
+              if (usageServerId && !(isLastEndpoint && mustDisableFirst)) {
+                setPendingChange("remove");
+                return;
+              }
               if (isLastEndpoint) {
                 setConfirmRemoveOpen(true);
                 return;
@@ -659,7 +688,114 @@ function AddressRow({
         onClose={() => setConfirmRemoveOpen(false)}
         onConfirm={() => remove.mutate({ request: { id: endpoint.id } })}
       />
+      {usageServerId && (
+        <AddressChangeDialog
+          change={pendingChange}
+          mcpServerId={usageServerId}
+          currentUrl={`${baseUrlPrefix}${endpoint.slug}`}
+          nextUrl={`${baseUrlPrefix}${fullSlug}`}
+          isLastEndpoint={isLastEndpoint}
+          isLoading={update.isPending || remove.isPending}
+          onClose={() => setPendingChange(null)}
+          onConfirm={() => {
+            if (pendingChange === "rename") handleSave();
+            else remove.mutate({ request: { id: endpoint.id } });
+          }}
+        />
+      )}
     </Field>
+  );
+}
+
+// Renaming or removing an address cuts off every client configured with it,
+// so both wait for the operator to see who is connected and type the
+// server's name.
+function AddressChangeDialog({
+  change,
+  mcpServerId,
+  currentUrl,
+  nextUrl,
+  isLastEndpoint,
+  isLoading,
+  onClose,
+  onConfirm,
+}: {
+  change: "rename" | "remove" | null;
+  mcpServerId: string;
+  currentUrl: string;
+  nextUrl: string;
+  isLastEndpoint: boolean;
+  isLoading: boolean;
+  onClose: () => void;
+  onConfirm: () => void;
+}) {
+  const isOpen = change !== null;
+  const usage = useServerUsageConfirmation({ mcpServerId, open: isOpen });
+  const renaming = change === "rename";
+  let title = "Remove this address?";
+  if (renaming) title = "Change this address?";
+  else if (isLastEndpoint) title = "Remove this server's only address?";
+
+  return (
+    <Dialog
+      open={isOpen}
+      onOpenChange={(open) => {
+        if (!open) onClose();
+      }}
+    >
+      <Dialog.Content className="max-w-2xl!">
+        <Dialog.Header>
+          <Dialog.Title>{title}</Dialog.Title>
+          <Dialog.Description>
+            {renaming ? (
+              <>
+                Clients configured with{" "}
+                <span className="font-mono break-all">{currentUrl}</span> will
+                stop connecting until they are updated to{" "}
+                <span className="font-mono break-all">{nextUrl}</span>.
+              </>
+            ) : (
+              <>
+                Clients configured with{" "}
+                <span className="font-mono break-all">{currentUrl}</span> will
+                no longer be able to connect.
+                {isLastEndpoint &&
+                  " This is the server's last address, so it can't be added to plugins until you create a new one."}
+              </>
+            )}
+          </Dialog.Description>
+        </Dialog.Header>
+        <ServerUsageConfirmation state={usage} disabled={isLoading} />
+        <Text small muted>
+          Connection counts cover every address of this server.
+        </Text>
+        <Dialog.Footer>
+          <Button variant="secondary" disabled={isLoading} onClick={onClose}>
+            <Button.Text>Cancel</Button.Text>
+          </Button>
+          <Button
+            variant="destructive-primary"
+            disabled={isLoading || !usage.canConfirm}
+            onClick={onConfirm}
+          >
+            {isLoading && (
+              <Button.LeftIcon>
+                <Loader2 aria-hidden="true" className="size-4 animate-spin" />
+              </Button.LeftIcon>
+            )}
+            <Button.Text>
+              {renaming
+                ? isLoading
+                  ? "Saving"
+                  : "Change address"
+                : isLoading
+                  ? "Removing"
+                  : "Remove address"}
+            </Button.Text>
+          </Button>
+        </Dialog.Footer>
+      </Dialog.Content>
+    </Dialog>
   );
 }
 

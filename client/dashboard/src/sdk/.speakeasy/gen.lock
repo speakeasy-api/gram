@@ -416,6 +416,7 @@ trackedFiles:
   src/funcs/mcpServersDelete.ts: {}
   src/funcs/mcpServersDeleteToolMetadata.ts: {}
   src/funcs/mcpServersGet.ts: {}
+  src/funcs/mcpServersGetUsageImpact.ts: {}
   src/funcs/mcpServersList.ts: {}
   src/funcs/mcpServersListForOrg.ts: {}
   src/funcs/mcpServersListToolFilters.ts: {}
@@ -1631,6 +1632,8 @@ trackedFiles:
   src/models/components/mcpserveractivity.ts: {}
   src/models/components/mcpserverauthentication.ts: {}
   src/models/components/mcpservertoolsetsummary.ts: {}
+  src/models/components/mcpserverusageimpact.ts: {}
+  src/models/components/mcpserverusagesubject.ts: {}
   src/models/components/mcpsetupguide.ts: {}
   src/models/components/mcpsetupguideremote.ts: {}
   src/models/components/metamcpdiscoveryfunnel.ts: {}
@@ -2541,6 +2544,7 @@ trackedFiles:
   src/models/operations/getmcpserveractivity.ts: {}
   src/models/operations/getmcpserverauthentication.ts: {}
   src/models/operations/getmcpserverdetails.ts: {}
+  src/models/operations/getmcpserverusageimpact.ts: {}
   src/models/operations/getmcpsetupdocs.ts: {}
   src/models/operations/getmetamcpserver.ts: {}
   src/models/operations/getmetamcpserverusage.ts: {}
@@ -3756,6 +3760,8 @@ trackedFiles:
   src/react-query/mcpServerAuthClientChoices.ts: {}
   src/react-query/mcpServerAuthentication.core.ts: {}
   src/react-query/mcpServerAuthentication.ts: {}
+  src/react-query/mcpServerUsageImpact.core.ts: {}
+  src/react-query/mcpServerUsageImpact.ts: {}
   src/react-query/mcpServers.core.ts: {}
   src/react-query/mcpServers.ts: {}
   src/react-query/members.core.ts: {}
@@ -7930,6 +7936,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getMcpServerUsageImpact:
+    speakeasy-default-get-mcp-server-usage-impact:
+      parameters:
+        query:
+          id: "1e4d4229-9b89-4fea-9f40-dd22a7df14d4"
+      responses:
+        "200":
+          application/json: {"active_connection_count": 140209, "active_subject_count": 308901, "server_name": "<value>", "shared_connection_count": 676322, "shared_sign_in": false, "sign_in_required": true, "subjects": [], "subjects_truncated": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getMetaMcpServer:
     speakeasy-default-get-meta-mcp-server:
       parameters:
