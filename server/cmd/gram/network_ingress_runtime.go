@@ -30,32 +30,36 @@ func newNetworkIngressExecutor(logger *slog.Logger, meterProvider metric.MeterPr
 		}
 		operator = provider
 	}
-	switch {
-	case config.Gateway.Enabled:
-		// A missing encryption key only disables Apply; observation and
-		// teardown still run, and the executor's gate reports the gap.
-		api, err := tailscaleapi.New(guardian.NewDefaultPolicy(otel.GetTracerProvider()), config.Gateway.APIURL)
-		if err != nil {
-			return nil, fmt.Errorf("configure Tailscale API client: %w", err)
-		}
-		gateway, err := tailnetgateway.NewProvisioner(db, enc, api, tailnetgateway.ProvisionerConfig{
-			Tag: config.Gateway.Tag, Slots: config.Gateway.Slots, AuthKeyTTL: 0, StaleAfter: 0, Now: nil,
-		})
-		if err != nil {
-			return nil, fmt.Errorf("configure tailnet gateway provider: %w", err)
-		}
-		var operatorProvider tailnetgateway.OperatorProvisioner
-		if operator != nil {
-			operatorProvider = operator
-		}
-		composite, err := tailnetgateway.NewCompositeProvisioner(operatorProvider, gateway)
-		if err != nil {
-			return nil, fmt.Errorf("configure network ingress provider: %w", err)
-		}
-		providers[networkingress.ProviderTailscale] = composite
-	case operator != nil:
-		providers[networkingress.ProviderTailscale] = operator
+	// The composite always routes by the ingress's runtime column. A missing
+	// encryption key only disables Apply; observation and teardown still run,
+	// and the executor's gate reports the gap.
+	api, err := tailscaleapi.New(guardian.NewDefaultPolicy(otel.GetTracerProvider()), config.Gateway.APIURL)
+	if err != nil {
+		return nil, fmt.Errorf("configure Tailscale API client: %w", err)
 	}
+	tag := config.Gateway.Tag
+	if tag == "" {
+		tag = tailnetgateway.DefaultTag
+	}
+	slots := config.Gateway.Slots
+	if slots <= 0 {
+		slots = tailnetgateway.DefaultSlots
+	}
+	gateway, err := tailnetgateway.NewProvisioner(db, enc, api, tailnetgateway.ProvisionerConfig{
+		Tag: tag, Slots: slots, AuthKeyTTL: 0, StaleAfter: 0, Now: nil,
+	})
+	if err != nil {
+		return nil, fmt.Errorf("configure tailnet gateway provider: %w", err)
+	}
+	var operatorProvider tailnetgateway.OperatorProvisioner
+	if operator != nil {
+		operatorProvider = operator
+	}
+	composite, err := tailnetgateway.NewCompositeProvisioner(operatorProvider, gateway, config.Gateway.Enabled)
+	if err != nil {
+		return nil, fmt.Errorf("configure network ingress provider: %w", err)
+	}
+	providers[networkingress.ProviderTailscale] = composite
 	registry, err := k8s.NewNetworkIngressProvisionerRegistry(providers, logger, k8s.NewNetworkIngressMetrics(logger, meterProvider))
 	if err != nil {
 		return nil, fmt.Errorf("configure network ingress registry: %w", err)

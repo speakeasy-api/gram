@@ -59,22 +59,10 @@ type Service struct {
 	requester            ReconcileRequester
 	publicationRequester PublicationRequester
 	health               HealthRefresher
-
-	// newIngressRuntime is recorded on ingresses this service creates. Empty
-	// leaves new ingresses on the operator.
-	newIngressRuntime string
 }
 
 var _ gen.Service = (*Service)(nil)
 var _ gen.Auther = (*Service)(nil)
-
-// HostNewIngressesOnGateway makes ingresses created from now on start on the
-// tailnet gateway. Existing ingresses keep their runtime; moving one is a
-// separate, per-organization staff action.
-func (s *Service) HostNewIngressesOnGateway() *Service {
-	s.newIngressRuntime = RuntimeGateway
-	return s
-}
 
 func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, auditLogger *audit.Logger, admission *ExpansionAdmission, requester ReconcileRequester, health HealthRefresher) *Service {
 	return NewServiceWithPublication(logger, tracerProvider, db, sessions, authzEngine, enc, auditLogger, admission, requester, nil, health)
@@ -96,7 +84,6 @@ func NewServiceWithPublication(logger *slog.Logger, tracerProvider trace.TracerP
 		requester:            requester,
 		publicationRequester: publicationRequester,
 		health:               health,
-		newIngressRuntime:    "",
 	}
 }
 
@@ -260,7 +247,9 @@ func (s *Service) CreateIngress(ctx context.Context, payload *gen.CreateIngressP
 		Hostname: hostname, EndpointNamespaceKind: namespaceKind, CustomDomainID: customDomainID,
 		Enabled: true, IdentityRequired: conv.PtrValOr(payload.IdentityRequired, false), CredentialsEncrypted: credentials,
 		AttestorNamespace: resources.Namespace, AttestorServiceAccount: resources.AttestorServiceAccount, ProviderResources: providerResources,
-		Runtime: conv.ToPGTextEmpty(s.newIngressRuntime),
+		// Every new connection is hosted by the tailnet gateway; only ingresses
+		// created before it existed stay on the operator until staff move them.
+		Runtime: conv.ToPGText(RuntimeGateway),
 	})
 	if err != nil {
 		var pgErr *pgconn.PgError
