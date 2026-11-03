@@ -30,6 +30,12 @@ const (
 	// abandonedOneIn makes one attempt in this many stop with no final row.
 	abandonedOneIn = 10
 
+	// repeatedOneIn makes one failed attempt in this many stand for repeated failures.
+	repeatedOneIn = 4
+
+	// maxSeededRepeats is the most held-back rows one seeded row stands for.
+	maxSeededRepeats = 40
+
 	// demoConnectionProvider and demoConnectionApp are fictional example hosts.
 	demoConnectionProvider = "https://auth.provider.example.com/oauth"
 	demoConnectionApp      = "https://client.example.com/oauth/metadata.json"
@@ -39,6 +45,16 @@ const (
 type connectionEnding struct {
 	step mcpconnectionattempts.Step
 	what mcpconnectionattempts.Happened
+}
+
+// connectionClients is the clients seeded attempts come from.
+var connectionClients = []struct{ family, version string }{
+	{mcpconnectionattempts.FamilyCodexCLI, "0.77.0"},
+	{mcpconnectionattempts.FamilyClaudeCode, "2.0.14"},
+	{mcpconnectionattempts.FamilyCursor, "2.0.77"},
+	{mcpconnectionattempts.FamilyVSCode, "1.105.1"},
+	{mcpconnectionattempts.FamilyOpenAIConnector, "1.0.0"},
+	{mcpconnectionattempts.FamilyScript, "0.28.1"},
 }
 
 var connectionEndings = []connectionEnding{
@@ -103,6 +119,11 @@ func (s *seeder) chConnectionEvents(ctx context.Context, ch driver.Conn) error {
 			settings: "",
 			msg:      "demo seed postflight: connection attempt rollup is empty",
 		},
+		{
+			cond:     `(SELECT uniqExact(client_family) FROM mcp_connection_attempt_summaries WHERE organization_id = @org) < 2 OR (SELECT sum(repeats) FROM mcp_connection_attempt_summaries WHERE organization_id = @org) = 0`,
+			settings: "",
+			msg:      "demo seed postflight: connection attempts must cover several clients and some repeats",
+		},
 	})
 }
 
@@ -114,6 +135,8 @@ func (s *seeder) connectionAttemptRows(attempt mcpconnectionattempts.Attempt, ke
 		return nil, fmt.Errorf("build connection event: %w", err)
 	}
 	first.TraceID = md5Hex(s.name(key + "-authorize"))
+	client := connectionClients[hash64(s.name(key), "client")%uint64(len(connectionClients))]
+	first.ClientFamily, first.ClientVersion = client.family, client.version
 	if abandoned {
 		return []mcpconnectionattempts.Row{first}, nil
 	}
@@ -137,5 +160,9 @@ func (s *seeder) connectionAttemptRows(attempt mcpconnectionattempts.Attempt, ke
 		return nil, fmt.Errorf("build connection event: %w", err)
 	}
 	last.TraceID = md5Hex(s.name(key + "-ending"))
+	last.ClientFamily, last.ClientVersion = client.family, client.version
+	if ending.what != mcpconnectionattempts.ResultCodeIssued && hash64(s.name(key), "repeats")%repeatedOneIn == 0 {
+		last.Repeats = uint32(hash64(s.name(key), "repeat-count")%maxSeededRepeats) + 1
+	}
 	return append(rows, last), nil
 }
