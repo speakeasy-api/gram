@@ -428,6 +428,7 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 	for _, name := range []string{
 		upgradeAssistantIdentityToolName,
 		"get_network_ingress",
+		"get_custom_domain_status",
 		"get_xaa_readiness",
 		"distribute_mcp_to_plugin",
 		"remove_mcp_from_plugin",

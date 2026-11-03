@@ -24,6 +24,12 @@ func BuildCustomDomainView(domain customdomainsrepo.CustomDomain, isUpdating boo
 		value := rootMcpEndpointID.String()
 		rootMcpEndpointIDString = &value
 	}
+	healthStatus := conv.FromPGText[string](domain.HealthStatus)
+	// Compare database timestamps before formatting drops subsecond precision.
+	// An older worker can overwrite health without refreshing DNS.
+	if domain.DnsCheckedAt.Valid && (!domain.HealthCheckedAt.Valid || !domain.DnsCheckedAt.Time.Equal(domain.HealthCheckedAt.Time)) {
+		healthStatus = new("unknown")
+	}
 	return &domains.CustomDomain{
 		ID:                       domain.ID.String(),
 		OrganizationID:           domain.OrganizationID,
@@ -34,7 +40,7 @@ func BuildCustomDomainView(domain customdomainsrepo.CustomDomain, isUpdating boo
 		UpdatedAt:                domain.UpdatedAt.Time.Format(time.RFC3339),
 		IsUpdating:               isUpdating,
 		IPAllowlist:              ipAllowlist,
-		HealthStatus:             conv.FromPGText[string](domain.HealthStatus),
+		HealthStatus:             healthStatus,
 		HealthIssue:              conv.FromPGText[string](domain.HealthIssue),
 		HealthCheckedAt:          conv.PtrEmpty(conv.FromPGTimestamptz(domain.HealthCheckedAt)),
 		UnhealthySince:           conv.PtrEmpty(conv.FromPGTimestamptz(domain.UnhealthySince)),

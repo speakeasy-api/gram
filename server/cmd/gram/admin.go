@@ -340,6 +340,7 @@ func newAdminCommand() *cli.Command {
 	flags = append(flags, orgDefaultHostFlags()...)
 	flags = append(flags, pluginPublicationEmitFlag())
 	flags = append(flags, posthogFlags()...)
+	flags = append(flags, customDomainTargetSuffixFlag())
 
 	return &cli.Command{
 		Name:  "admin",
@@ -539,6 +540,11 @@ func newAdminCommand() *cli.Command {
 			adminService.SetNewOrganizationDefaultHost(orgHosts.NewOrganizationDefaultHost())
 			adminService.SetWorkOSEnvironmentID(c.String("workos-environment-id"))
 			adminService.SetStripeDashboardMode(c.String("stripe-api-key"))
+			customDomainTargetSuffix, err := customDomainTargetSuffixFromCLI(c)
+			if err != nil {
+				return err
+			}
+			adminService.SetCustomDomainTargetSuffix(customDomainTargetSuffix)
 			applicationEncryption, err := newAdminIssuerEncryption(c.String("encryption-key"))
 			if err != nil {
 				return err

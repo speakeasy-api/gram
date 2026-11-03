@@ -317,6 +317,11 @@ func GetHookClientsAdminPath() string {
 	return "/admin/hookClients.get"
 }
 
+// ListCustomDomainsAdminPath returns the URL path to the admin service listCustomDomains HTTP endpoint.
+func ListCustomDomainsAdminPath() string {
+	return "/admin/customDomains.list"
+}
+
 // ListExternalMcpMigrationCandidatesAdminPath returns the URL path to the admin service listExternalMcpMigrationCandidates HTTP endpoint.
 func ListExternalMcpMigrationCandidatesAdminPath() string {
 	return "/admin/externalMcpMigration.listCandidates"

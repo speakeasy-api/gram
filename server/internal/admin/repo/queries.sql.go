@@ -776,6 +776,95 @@ func (q *Queries) AdminGetUserSessionIssuer(ctx context.Context, arg AdminGetUse
 	return i, err
 }
 
+const adminListCustomDomains = `-- name: AdminListCustomDomains :many
+SELECT
+    d.id,
+    d.organization_id,
+    om.name AS organization_name,
+    om.slug AS organization_slug,
+    d.domain,
+    d.verified,
+    d.activated,
+    d.dns_target_token,
+    d.dns_routing_method,
+    d.dns_configuration_status,
+    d.dns_checked_at,
+    d.health_status,
+    d.health_issue,
+    d.health_checked_at,
+    d.created_at
+FROM custom_domains d
+JOIN organization_metadata om ON om.id = d.organization_id
+WHERE d.deleted IS FALSE
+  AND ($1::text IS NULL OR d.organization_id = $1::text)
+  AND (
+    $2::text IS NULL
+    OR COALESCE(d.dns_routing_method, 'unknown') = $2::text
+  )
+ORDER BY d.domain, d.id
+`
+
+type AdminListCustomDomainsParams struct {
+	OrganizationID   pgtype.Text
+	DnsRoutingMethod pgtype.Text
+}
+
+type AdminListCustomDomainsRow struct {
+	ID                     uuid.UUID
+	OrganizationID         string
+	OrganizationName       string
+	OrganizationSlug       string
+	Domain                 string
+	Verified               bool
+	Activated              bool
+	DnsTargetToken         pgtype.Text
+	DnsRoutingMethod       pgtype.Text
+	DnsConfigurationStatus pgtype.Text
+	DnsCheckedAt           pgtype.Timestamptz
+	HealthStatus           pgtype.Text
+	HealthIssue            pgtype.Text
+	HealthCheckedAt        pgtype.Timestamptz
+	CreatedAt              pgtype.Timestamptz
+}
+
+// Staff-wide read across organizations. A domain with no observed routing
+// method matches the unknown filter, since no supported method was observed.
+func (q *Queries) AdminListCustomDomains(ctx context.Context, arg AdminListCustomDomainsParams) ([]AdminListCustomDomainsRow, error) {
+	rows, err := q.db.Query(ctx, adminListCustomDomains, arg.OrganizationID, arg.DnsRoutingMethod)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []AdminListCustomDomainsRow
+	for rows.Next() {
+		var i AdminListCustomDomainsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.OrganizationName,
+			&i.OrganizationSlug,
+			&i.Domain,
+			&i.Verified,
+			&i.Activated,
+			&i.DnsTargetToken,
+			&i.DnsRoutingMethod,
+			&i.DnsConfigurationStatus,
+			&i.DnsCheckedAt,
+			&i.HealthStatus,
+			&i.HealthIssue,
+			&i.HealthCheckedAt,
+			&i.CreatedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const adminListCustomerUsageOrganizations = `-- name: AdminListCustomerUsageOrganizations :many
 WITH organizations AS (
     SELECT

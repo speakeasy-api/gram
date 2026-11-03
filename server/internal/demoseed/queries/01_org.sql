@@ -412,3 +412,16 @@ DELETE FROM organization_role_assignments WHERE organization_id = @org_id::text;
 INSERT INTO organization_role_assignments
   (organization_id, workos_user_id, user_id, role_urn, workos_updated_at)
 VALUES (@org_id::text, @workos_user_id::text, @user_id::text, @role_urn::text, now());
+
+-- name: OrgSeedCustomDomain :exec
+INSERT INTO custom_domains (id, organization_id, domain, verified, activated, provisioner_kind,
+ dns_target_token, dns_configuration_status, dns_routing_method, dns_checked_at, health_status, health_checked_at)
+VALUES (@id, @org_id, @domain, TRUE, FALSE, 'local', @dns_target_token, 'unconfirmed', 'unknown', statement_timestamp(), 'healthy', statement_timestamp());
+
+-- name: OrgDeleteCustomDomains :exec
+DELETE FROM custom_domains WHERE organization_id = @org_id;
+
+-- name: OrgCountCustomDomainDiagnostics :one
+SELECT count(*) FROM custom_domains WHERE organization_id = @org_id
+ AND domain = @domain AND dns_configuration_status = 'unconfirmed' AND health_status = 'healthy'
+ AND dns_target_token IS NOT NULL AND dns_checked_at = health_checked_at;

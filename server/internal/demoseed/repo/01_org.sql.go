@@ -12,6 +12,24 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const orgCountCustomDomainDiagnostics = `-- name: OrgCountCustomDomainDiagnostics :one
+SELECT count(*) FROM custom_domains WHERE organization_id = $1
+ AND domain = $2 AND dns_configuration_status = 'unconfirmed' AND health_status = 'healthy'
+ AND dns_target_token IS NOT NULL AND dns_checked_at = health_checked_at
+`
+
+type OrgCountCustomDomainDiagnosticsParams struct {
+	OrgID  string
+	Domain string
+}
+
+func (q *Queries) OrgCountCustomDomainDiagnostics(ctx context.Context, arg OrgCountCustomDomainDiagnosticsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, orgCountCustomDomainDiagnostics, arg.OrgID, arg.Domain)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const orgCountSigintDefinitionSnapshots = `-- name: OrgCountSigintDefinitionSnapshots :one
 SELECT count(*) FROM sigint_definition_snapshots WHERE project_id = $1::uuid
 `
@@ -120,6 +138,15 @@ DELETE FROM chat_message_participants WHERE project_id IN (SELECT id FROM projec
 
 func (q *Queries) OrgDeleteChatMessageParticipants(ctx context.Context, orgID string) error {
 	_, err := q.db.Exec(ctx, orgDeleteChatMessageParticipants, orgID)
+	return err
+}
+
+const orgDeleteCustomDomains = `-- name: OrgDeleteCustomDomains :exec
+DELETE FROM custom_domains WHERE organization_id = $1
+`
+
+func (q *Queries) OrgDeleteCustomDomains(ctx context.Context, orgID string) error {
+	_, err := q.db.Exec(ctx, orgDeleteCustomDomains, orgID)
 	return err
 }
 
@@ -1038,6 +1065,29 @@ func (q *Queries) OrgInsertSigintSensorSignal(ctx context.Context, arg OrgInsert
 		arg.SensorID,
 		arg.SignalID,
 		arg.SortOrder,
+	)
+	return err
+}
+
+const orgSeedCustomDomain = `-- name: OrgSeedCustomDomain :exec
+INSERT INTO custom_domains (id, organization_id, domain, verified, activated, provisioner_kind,
+ dns_target_token, dns_configuration_status, dns_routing_method, dns_checked_at, health_status, health_checked_at)
+VALUES ($1, $2, $3, TRUE, FALSE, 'local', $4, 'unconfirmed', 'unknown', statement_timestamp(), 'healthy', statement_timestamp())
+`
+
+type OrgSeedCustomDomainParams struct {
+	ID             uuid.UUID
+	OrgID          string
+	Domain         string
+	DnsTargetToken pgtype.Text
+}
+
+func (q *Queries) OrgSeedCustomDomain(ctx context.Context, arg OrgSeedCustomDomainParams) error {
+	_, err := q.db.Exec(ctx, orgSeedCustomDomain,
+		arg.ID,
+		arg.OrgID,
+		arg.Domain,
+		arg.DnsTargetToken,
 	)
 	return err
 }

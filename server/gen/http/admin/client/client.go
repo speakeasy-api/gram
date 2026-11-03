@@ -264,6 +264,10 @@ type Client struct {
 	// getHookClients endpoint.
 	GetHookClientsDoer goahttp.Doer
 
+	// ListCustomDomains Doer is the HTTP client used to make requests to the
+	// listCustomDomains endpoint.
+	ListCustomDomainsDoer goahttp.Doer
+
 	// ListExternalMcpMigrationCandidates Doer is the HTTP client used to make
 	// requests to the listExternalMcpMigrationCandidates endpoint.
 	ListExternalMcpMigrationCandidatesDoer goahttp.Doer
@@ -514,6 +518,7 @@ func NewClient(
 		DescribeMcpServerHealthDoer:                 doer,
 		GetMcpServerToolCallsDoer:                   doer,
 		GetHookClientsDoer:                          doer,
+		ListCustomDomainsDoer:                       doer,
 		ListExternalMcpMigrationCandidatesDoer:      doer,
 		PreviewExternalMcpMigrationDoer:             doer,
 		MigrateExternalMcpServersDoer:               doer,
@@ -2052,6 +2057,30 @@ func (c *Client) GetHookClients() goa.Endpoint {
 		resp, err := c.GetHookClientsDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "getHookClients", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// ListCustomDomains returns an endpoint that makes HTTP requests to the admin
+// service listCustomDomains server.
+func (c *Client) ListCustomDomains() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeListCustomDomainsRequest(c.encoder)
+		decodeResponse = DecodeListCustomDomainsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildListCustomDomainsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.ListCustomDomainsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "listCustomDomains", err)
 		}
 		return decodeResponse(resp)
 	}

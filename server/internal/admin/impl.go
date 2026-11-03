@@ -126,6 +126,10 @@ type Service struct {
 	// externalMCPMigrator lists and migrates external-MCP-backed servers. Nil
 	// leaves those methods unavailable.
 	externalMCPMigrator *migration.Migrator
+
+	// customDomainTargetSuffix is the normalized parent DNS name of per-domain
+	// CNAME targets. Empty leaves targets out of listCustomDomains.
+	customDomainTargetSuffix string
 }
 
 type BillingOperations interface {
@@ -292,7 +296,8 @@ func NewService(
 			cache.SuffixNone,
 		),
 
-		externalMCPMigrator: nil,
+		externalMCPMigrator:      nil,
+		customDomainTargetSuffix: "",
 	}
 }
 
