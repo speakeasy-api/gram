@@ -69,11 +69,17 @@ type routingTestDNS struct {
 	// DomainErr fails resolution of the domain's addresses with an error other
 	// than not found.
 	DomainErr error
+
+	// CNAMEErr fails the domain's CNAME lookup.
+	CNAMEErr error
 }
 
 func routingTestResolver(domain string, cfg routingTestDNS) dns.Resolver {
 	return dns.NewMockResolver(dns.MockResolverConfig{
 		LookupCNAMEFunc: func(_ context.Context, host string) (string, error) {
+			if host == domain && cfg.CNAMEErr != nil {
+				return "", cfg.CNAMEErr
+			}
 			if host == domain && cfg.CNAME != "" {
 				return cfg.CNAME, nil
 			}
@@ -257,6 +263,15 @@ func TestCustomDomainHealthCheckRoutingMethods(t *testing.T) {
 			wantStatus: customdomains.HealthStatusHealthy,
 			wantIssue:  "",
 			wantMethod: customdomains.DNSRoutingMethodARecord,
+		},
+		{
+			name:       "a records after a failed cname lookup are not classified",
+			suffix:     routingTestSuffix,
+			dns:        routingTestDNS{CNAME: "", Addrs: []netip.Addr{routingTestIngressIP}, DomainTargetAddrs: nil, CNAMEErr: errors.New("dns timeout")},
+			probeErr:   errors.New("connection refused"),
+			wantStatus: customdomains.HealthStatusHealthy,
+			wantIssue:  "",
+			wantMethod: customdomains.DNSRoutingMethodUnknown,
 		},
 		{
 			name:       "proxied domain rescued by the probe",
@@ -454,7 +469,7 @@ func TestCustomDomainNotifyOrgAdminsNamesPerDomainTarget(t *testing.T) {
 			name:           "another domain's target",
 			dnsTarget:      routingTestDomainTarget,
 			otherDNSTarget: true,
-			wantMessage:    "The domain's CNAME record points at a Speakeasy routing target that belongs to another domain or is no longer in use. Create a CNAME record pointing the domain at " + routingTestDomainTarget + " instead.",
+			wantMessage:    "The domain's CNAME record points at a routing target that belongs to another domain or is no longer in use. Create a CNAME record pointing the domain at " + routingTestDomainTarget + " instead.",
 		},
 		{
 			name:           "no per-domain target",
@@ -561,4 +576,33 @@ func TestVerifyCustomDomain_RecordsRoutingMethod(t *testing.T) {
 			require.Equal(t, string(tc.wantMethod), domain.DnsRoutingMethod.String)
 		})
 	}
+}
+
+func TestVerifyCustomDomain_RoutingErrorRecordsUnknown(t *testing.T) {
+	t.Parallel()
+
+	orgID := "org-verify-routing-error"
+	domainName := "verify-routing-error.example.com"
+	ctx, ti := newTestInstance(t, orgID, domainName)
+	row := createDomainRow(t, ctx, ti, orgID, domainName)
+	txt := func(context.Context, string) ([]string, error) {
+		return []string{"gram-domain-verify=" + domainName + "," + orgID}, nil
+	}
+
+	activity := activities.NewVerifyCustomDomain(testenv.NewLogger(t), ti.conn, audit.NewLogger(), routingTestSharedTarget, []netip.Addr{routingTestIngressIP}, routingTestSuffix)
+	passing := routingTestResolver(domainName, routingTestDNS{CNAME: routingTestSharedTarget + ".", Addrs: []netip.Addr{routingTestIngressIP}, DomainTargetAddrs: nil})
+	activity.SetResolver(dns.NewMockResolver(dns.MockResolverConfig{LookupCNAMEFunc: passing.LookupCNAME, LookupNetIPFunc: passing.LookupNetIP, LookupTXTFunc: txt}))
+	args := activities.VerifyCustomDomainArgs{OrgID: orgID, Domain: domainName, CustomDomainID: row.ID}
+	_, err := activity.Do(ctx, args)
+	require.NoError(t, err)
+
+	// A routing error on a later pass replaces the earlier observation.
+	failing := routingTestResolver(domainName, routingTestDNS{CNAME: "", Addrs: nil, DomainTargetAddrs: nil, DomainErr: errors.New("dns timeout")})
+	activity.SetResolver(dns.NewMockResolver(dns.MockResolverConfig{LookupCNAMEFunc: failing.LookupCNAME, LookupNetIPFunc: failing.LookupNetIP, LookupTXTFunc: txt}))
+	_, err = activity.Do(ctx, args)
+	require.Error(t, err)
+
+	domain, err := ti.repo.GetCustomDomainByID(ctx, row.ID)
+	require.NoError(t, err)
+	require.Equal(t, string(customdomains.DNSRoutingMethodUnknown), domain.DnsRoutingMethod.String)
 }

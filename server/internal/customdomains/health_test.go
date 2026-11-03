@@ -294,7 +294,7 @@ func TestHealthIssueMessageOtherDNSTarget(t *testing.T) {
 
 	other := DNSRemediation{Domain: "chat.example.com", ExpectedCNAME: "abcde23456.domains.example.net", ExpectedARecords: nil, OtherDNSTarget: true}
 	require.Equal(t,
-		"The domain's CNAME record points at a Speakeasy routing target that belongs to another domain or is no longer in use. Create a CNAME record pointing the domain at abcde23456.domains.example.net instead.",
+		"The domain's CNAME record points at a routing target that belongs to another domain or is no longer in use. Create a CNAME record pointing the domain at abcde23456.domains.example.net instead.",
 		HealthIssueMessage(HealthIssueDNSTargetMismatch, other),
 	)
 
@@ -306,7 +306,7 @@ func TestHealthIssueMessageOtherDNSTarget(t *testing.T) {
 
 	otherWithoutTarget := DNSRemediation{Domain: "chat.example.com", ExpectedCNAME: "", ExpectedARecords: nil, OtherDNSTarget: true}
 	require.Equal(t,
-		"The domain's CNAME record points at a Speakeasy routing target that belongs to another domain or is no longer in use.",
+		"The domain's CNAME record points at a routing target that belongs to another domain or is no longer in use.",
 		HealthIssueMessage(HealthIssueDNSTargetMismatch, otherWithoutTarget),
 	)
 }
