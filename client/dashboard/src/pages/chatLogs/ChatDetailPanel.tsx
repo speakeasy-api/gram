@@ -46,6 +46,7 @@ import { useChatSetPinnedMutation } from "@gram/client/react-query/chatSetPinned
 import { invalidateAllListChats } from "@gram/client/react-query/listChats.js";
 import { useListChatSessionLinks } from "@gram/client/react-query/listChatSessionLinks.js";
 import { useSummarizeChatMutation } from "@gram/client/react-query/summarizeChat.js";
+import { SessionMemorySection } from "@/pages/orgMemory/SessionMemorySection";
 import { QueryErrorResetBoundary, useQueryClient } from "@tanstack/react-query";
 import { ErrorBoundary, type FallbackProps } from "react-error-boundary";
 import { toast } from "sonner";
@@ -1863,6 +1864,9 @@ function ChatDetailPanel({
           setLocalSummaryGeneratedAt(generatedAt);
         }}
       />
+
+      {/* Hides itself while memory is off: the server answers 404. */}
+      <SessionMemorySection key={`memory-${chatId}`} chatId={chatId} />
 
       <SessionLinksSection
         key={`links-${chatId}`}

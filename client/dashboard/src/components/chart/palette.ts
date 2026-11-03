@@ -14,10 +14,6 @@
 // risk / error / attention; never a generic series hue.
 export const ACCENT_RED = "hsl(4, 67%, 47%)";
 
-// Muted green — base.css `--color-brand-green-600` hsl(107, 24%, 34%).
-// "Good": costs trending down, successful outcomes.
-export const GOOD_GREEN = "hsl(107, 24%, 34%)";
-
 // Categorical series ramp, in fixed slot order — a series takes the slot its
 // rank gives it and keeps that color; the ramp is never cycled or regenerated.
 // Three constraints shaped it:
@@ -78,7 +74,7 @@ export function seriesForTheme(isDark: boolean): string[] {
 
 // Light neutral for top-N "Other" rollup series — legible against the white
 // canvas but still receding behind the named series.
-export const OTHER_SERIES = "hsl(0, 0%, 78%)";
+const OTHER_SERIES = "hsl(0, 0%, 78%)";
 
 // Dark-surface counterpart: a mid-gray that recedes on a dark canvas the way
 // OTHER_SERIES does on light.

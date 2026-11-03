@@ -637,12 +637,21 @@ const ROUTE_STRUCTURE = {
     title: "Agent Sessions",
     url: "agent-sessions",
     icon: "message-square",
+    subPages: {
+      memory: {
+        title: "Organizational Memory",
+        url: "memory",
+        icon: "brain",
+        stage: "preview",
+      },
+    },
   },
-  orgMemory: {
+  // Retired page: Org Memory moved into Agent Sessions as its Organizational
+  // Memory tab. Old links and bookmarks land there.
+  legacyOrgMemory: {
     title: "Org Memory",
     url: "org-memory",
-    icon: "brain",
-    stage: "preview",
+    legacyRedirect: true,
   },
   watchdog: {
     title: "Watchdog",

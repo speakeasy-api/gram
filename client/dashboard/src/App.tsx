@@ -31,8 +31,9 @@ import {
   removeVisitsMatching,
   shouldRemoveRestrictedRecents,
 } from "./components/command-palette/recentlyVisited";
-import { useIsPlatformAdmin, useUser } from "./contexts/Auth";
+import { useIsPlatformAdmin, useProject, useUser } from "./contexts/Auth";
 import { useProjectNavRoutes } from "./hooks/useProjectNavRoutes";
+import { useOrgMemoryEnabled } from "./pages/orgMemory/useOrgMemoryEnabled";
 import { useRBAC } from "./hooks/useRBAC";
 import { useKillswitchAccess } from "./hooks/useKillswitchAccess";
 import { AuthProvider, ProjectProvider } from "./contexts/AuthProvider.tsx";
@@ -168,6 +169,8 @@ const RouteProvider = () => {
   const { orgSlug, projectSlug } = useSlugs();
   const location = useLocation();
   const projectNavRoutes = useProjectNavRoutes();
+  const orgMemoryEnabled = useOrgMemoryEnabled();
+  const { id: projectId } = useProject();
   const { hasAnyScope } = useRBAC();
   const killswitchAccess = useKillswitchAccess();
   // RouteProvider is inside AuthProvider, so reuse the already-fetched session
@@ -323,6 +326,23 @@ const RouteProvider = () => {
             routeToNavAction(route, "Pages", `nav-page-${route.url || "home"}`),
           )
       : [];
+    // Organizational Memory is a tab of Agent Sessions, not a sidebar page,
+    // so it registers on its own: only while memory is on for the
+    // organization and the reader holds memory:read on this project.
+    if (
+      projectSlug &&
+      projectId &&
+      orgMemoryEnabled &&
+      hasAnyScope(["memory:read"], projectId)
+    ) {
+      projectActions.push(
+        routeToNavAction(
+          routes.agentSessions.memory,
+          "Pages",
+          "nav-page-agent-sessions-memory",
+        ),
+      );
+    }
     // Platform admin surfaces (platform-admin/* and the platform RIP catalog)
     // follow the sidebar's audience rule: platform admins, or anyone in local
     // dev. Filtering here keeps them out of the palette for regular users.
@@ -343,6 +363,9 @@ const RouteProvider = () => {
     projectNavRoutes,
     pagedRoutes,
     pagedOrgRoutes,
+    orgMemoryEnabled,
+    projectId,
+    routes,
     projectSlug,
     hasAnyScope,
     isPlatformAdmin,

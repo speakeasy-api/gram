@@ -8,7 +8,6 @@ import { useProjectNavRoutes } from "./useProjectNavRoutes";
 
 const testState = vi.hoisted(() => ({
   projectId: "project_a",
-  orgMemoryEnabled: false,
   featureFlags: {} as Record<string, FeatureFlagResult>,
   productFeatures: {
     isSuccess: true,
@@ -29,10 +28,6 @@ vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "organization_a" }),
 }));
 
-vi.mock("./useOrgMemoryDeveloperToggle", () => ({
-  useOrgMemoryDeveloperToggle: () => [testState.orgMemoryEnabled, vi.fn()],
-}));
-
 vi.mock("@gram/client/react-query/productFeatures.js", () => ({
   useProductFeatures: () => testState.productFeatures,
 }));
@@ -45,7 +40,6 @@ function unavailableFeatureFlag(
 
 beforeEach(() => {
   testState.projectId = "project_a";
-  testState.orgMemoryEnabled = false;
   testState.productFeatures = {
     isSuccess: true,
     data: { signalsIntelligenceEnabled: false },
@@ -182,26 +176,6 @@ describe("useProjectNavRoutes", () => {
 
     expect(skills?.scope).toEqual(["skill:read"]);
     expect(skills?.resourceId).toBe("project_a");
-  });
-
-  it("only includes Org Memory when its session toggle is enabled", () => {
-    testState.orgMemoryEnabled = false;
-    const { result, rerender } = renderNav();
-
-    expect(
-      result.current.some(
-        (entry) => entry.route.href() === routes.orgMemory.href(),
-      ),
-    ).toBe(false);
-
-    testState.orgMemoryEnabled = true;
-    rerender();
-
-    expect(
-      result.current.some(
-        (entry) => entry.route.href() === routes.orgMemory.href(),
-      ),
-    ).toBe(true);
   });
 
   it.each(["loading", "missing", "error"] as const)(

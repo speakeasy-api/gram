@@ -84,6 +84,7 @@ func (s *seeder) runPostgres(ctx context.Context) error {
 		{"risk and chats", s.seedRiskAndChats},
 		{"activity and billing", s.seedActivity},
 		{"signal conversations", s.seedSignalConversations},
+		{"organizational memory", s.seedMemory},
 		{"postflight", s.postflight},
 	}
 	for _, p := range phases {

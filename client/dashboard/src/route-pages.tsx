@@ -19,7 +19,11 @@ import CatalogDetail, {
   CatalogDetailRoot,
 } from "./pages/catalog/CatalogDetail";
 import ChatSessions from "./pages/chatLogs/ChatLogs";
-import OrgMemory from "./components/observe/OrgMemory";
+import {
+  AgentSessionsRoot,
+  OrgMemoryPage,
+  OrgMemoryRedirect,
+} from "./pages/orgMemory/OrgMemoryPage";
 import { ChatConversation, ChatHome, ChatRoot } from "./pages/chat/Chat";
 import Skills from "./pages/Skills";
 import SkillsList from "./pages/skills/SkillsList";
@@ -540,10 +544,16 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
     component: LogsRoot,
   },
   agentSessions: {
-    component: ChatSessions,
+    component: AgentSessionsRoot,
+    indexComponent: ChatSessions,
+    subPages: {
+      memory: {
+        component: OrgMemoryPage,
+      },
+    },
   },
-  orgMemory: {
-    component: OrgMemory,
+  legacyOrgMemory: {
+    component: OrgMemoryRedirect,
   },
   watchdog: {
     component: Watchdog,

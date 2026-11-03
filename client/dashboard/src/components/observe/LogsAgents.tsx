@@ -43,6 +43,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useOrgRoutes } from "@/routes";
 import { ChatDetailSheet } from "@/pages/chatLogs/ChatDetailPanel";
 import { ChatLogsTable } from "@/pages/chatLogs/ChatLogsTable";
+import { AgentSessionsTabs } from "@/pages/orgMemory/AgentSessionsTabs";
 import type { SortDescriptor } from "@/components/ui/Table";
 import {
   defineFilters,
@@ -919,24 +920,27 @@ function AgentSessionsPageContent({
       // below are narrowing. Suppressed with the rest of the list while
       // logging is off, where it would describe a filter on nothing.
       belowHeader={
-        (hasAssistantFilter || hasAgentFilter) && !isLogsDisabled ? (
-          <div className="mb-4 flex flex-wrap gap-2">
-            {hasAssistantFilter && (
-              <ScopeChip
-                label="Assistant"
-                name={assistantName ?? "Loading…"}
-                onClear={clearAssistantFilter}
-              />
-            )}
-            {hasAgentFilter && (
-              <ScopeChip
-                label="Agent"
-                name={agentName ?? "Unknown agent"}
-                onClear={clearAgentFilter}
-              />
-            )}
-          </div>
-        ) : null
+        <>
+          <AgentSessionsTabs active="sessions" />
+          {(hasAssistantFilter || hasAgentFilter) && !isLogsDisabled ? (
+            <div className="mb-4 flex flex-wrap gap-2">
+              {hasAssistantFilter && (
+                <ScopeChip
+                  label="Assistant"
+                  name={assistantName ?? "Loading…"}
+                  onClear={clearAssistantFilter}
+                />
+              )}
+              {hasAgentFilter && (
+                <ScopeChip
+                  label="Agent"
+                  name={agentName ?? "Unknown agent"}
+                  onClear={clearAgentFilter}
+                />
+              )}
+            </div>
+          ) : null}
+        </>
       }
       search={{
         value: searchQuery,
