@@ -68,17 +68,40 @@ func (c *Client) legacyFormFor(op Operation) (legacyForm, bool) {
 	return form, true
 }
 
-// legacyChecksFor returns one check per operation for challenge records: the
-// operation's own check, or its first option's for alternatives.
-func (c *Client) legacyChecksFor(ops []Operation) []Check {
-	checks := make([]Check, len(ops))
+// challengeChecks are the engine checks a call records: every requested
+// check, alternatives' options included, and each operation's own checks for
+// choosing the focus.
+type challengeChecks struct {
+	requested []Check
+	perOp     [][]Check
+}
+
+// legacyChecksFor returns the checks a challenge records for ops.
+func (c *Client) legacyChecksFor(ops []Operation) challengeChecks {
+	out := challengeChecks{requested: make([]Check, 0, len(ops)), perOp: make([][]Check, len(ops))}
 	for i, op := range ops {
+		parts := []Operation{op}
 		if op.alternatives && len(op.options) > 0 {
-			op = op.options[0]
+			parts = op.options
 		}
-		checks[i], _ = c.legacyCheck(op)
+		for _, part := range parts {
+			check, _ := c.legacyCheck(part)
+			out.perOp[i] = append(out.perOp[i], check)
+			out.requested = append(out.requested, check)
+		}
 	}
-	return checks
+	return out
+}
+
+// focus is the check a decision on operation i is attributed to: the
+// alternative that decided it when the decision names one, otherwise the
+// operation's first check.
+func (cc challengeChecks) focus(i, option int) *Check {
+	checks := cc.perOp[i]
+	if option < 0 || option >= len(checks) {
+		option = 0
+	}
+	return &checks[option]
 }
 
 // operationForCheck is the typed operation that answers an engine check, for

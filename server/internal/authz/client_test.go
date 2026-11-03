@@ -5,7 +5,6 @@ import (
 	"encoding/json"
 	"os"
 	"path/filepath"
-	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -232,6 +231,33 @@ func TestClientTypedOperations(t *testing.T) {
 		require.Error(t, ignoreForbidden(err))
 	})
 
+	t.Run("the zero operation errors even where RBAC is not enforced", func(t *testing.T) {
+		t.Parallel()
+		ctx := humanClientContext(t)
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		unenforced := *authCtx
+		unenforced.SessionID = nil
+		ctx = contextvalues.SetAuthContext(ctx, &unenforced)
+		enforce, err := client.engine.ShouldEnforce(ctx)
+		require.NoError(t, err)
+		require.False(t, enforce)
+
+		require.NoError(t, client.Require(ctx, project.Read()), "valid operations pass where RBAC is not enforced")
+		require.Error(t, ignoreForbidden(client.Require(ctx, Operation{})))
+		_, err = client.Evaluate(ctx, Operation{})
+		require.Error(t, err)
+		_, err = client.MatchMany(ctx, []Operation{{}})
+		require.Error(t, err)
+	})
+
+	t.Run("match many rejects alternatives", func(t *testing.T) {
+		t.Parallel()
+		ctx := humanClientContext(t, grantOf(role, string(ScopeOrgAdmin), ResourceKindOrg, fixtureOrgID))
+		_, err := client.MatchMany(ctx, []Operation{project.PublishPlugin()})
+		require.Error(t, ignoreForbidden(err))
+	})
+
 	t.Run("the zero operation and no operations error", func(t *testing.T) {
 		t.Parallel()
 		ctx := humanClientContext(t, grantOf(role, string(ScopeProjectRead), ResourceKindProject, "*"))
@@ -270,14 +296,37 @@ func TestLegacyFormMatchesTypedOperations(t *testing.T) {
 		form, ok := client.legacyFormFor(op)
 		require.True(t, ok, "%s has no engine form", op)
 		require.Len(t, form.checks, max(1, len(op.options)), op.String())
-		for _, check := range form.checks {
+		parts := []Operation{op}
+		if op.alternatives {
+			parts = op.options
+		}
+		for i, check := range form.checks {
 			back, err := operationForCheck(client.registry, check)
 			require.NoError(t, err)
-			require.True(t, strings.HasPrefix(back.String(), back.permission.Type+"."), op.String())
+			require.Equal(t, parts[i].permission, back.permission, "%s option %d maps back to another permission", op, i)
+			require.Equal(t, parts[i].instance.resourceID, back.instance.resourceID, op.String())
+			require.Equal(t, parts[i].instance.strict, back.instance.strict, op.String())
 		}
 	}
 	form, ok := client.legacyFormFor(Project(fixtureOrgID, "proj_1").PublishPlugin())
 	require.True(t, ok)
 	require.True(t, form.anyUnblocked, "plugin publication vetoes blocks like RequireAnyUnblocked")
 	require.Equal(t, []Scope{ScopePluginWrite, ScopeOrgAdmin}, []Scope{form.checks[0].Scope, form.checks[1].Scope})
+}
+
+func TestChallengeChecksRecordEveryAlternative(t *testing.T) {
+	t.Parallel()
+
+	client, _ := newTestClient(t)
+	project := Project(fixtureOrgID, "proj_1")
+	checks := client.legacyChecksFor([]Operation{project.Read(), project.PublishPlugin()})
+
+	scopes := make([]Scope, len(checks.requested))
+	for i, check := range checks.requested {
+		scopes[i] = check.Scope
+	}
+	require.Equal(t, []Scope{ScopeProjectRead, ScopePluginWrite, ScopeOrgAdmin}, scopes, "every option is a requested check")
+	require.Equal(t, ScopeOrgAdmin, checks.focus(1, 1).Scope, "the deciding option is the focus")
+	require.Equal(t, ScopePluginWrite, checks.focus(1, -1).Scope, "without a deciding option the first option is the focus")
+	require.Equal(t, ScopeProjectRead, checks.focus(0, -1).Scope)
 }

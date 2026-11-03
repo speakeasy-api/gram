@@ -103,6 +103,9 @@ func (c *Client) CaptureAdmissionBoundary(ctx context.Context) (AdmissionBoundar
 // does. A denial maps to forbidden; an invalid operation or missing prepared
 // policies map to unexpected.
 func (c *Client) Require(ctx context.Context, ops ...Operation) error {
+	if err := c.validate(ops); err != nil {
+		return c.engine.mapError(ctx, err)
+	}
 	enforce, err := c.engine.ShouldEnforce(ctx)
 	if err != nil {
 		return err
@@ -126,18 +129,19 @@ func (c *Client) Require(ctx context.Context, ops ...Operation) error {
 	for i, op := range ops {
 		decision, err := c.decide(set, op)
 		if err != nil {
-			c.log(ctx, authzrepo.OperationRequire, authzrepo.OutcomeError, authzrepo.ReasonInvalidCheck, set, checks, &checks[i], nil)
+			c.log(ctx, authzrepo.OperationRequire, authzrepo.OutcomeError, authzrepo.ReasonInvalidCheck, set, checks.requested, checks.focus(i, -1), nil)
 			return c.engine.mapError(ctx, err)
 		}
 		if !decision.Allowed {
-			c.log(ctx, authzrepo.OperationRequire, authzrepo.OutcomeDeny, denialReason(decision, set), set, checks, &checks[i], nil)
-			return c.engine.mapError(ctx, Denied(checks[i].Scope, checks[i].selector()))
+			focus := checks.focus(i, decision.Option)
+			c.log(ctx, authzrepo.OperationRequire, authzrepo.OutcomeDeny, denialReason(decision, set), set, checks.requested, focus, nil)
+			return c.engine.mapError(ctx, Denied(focus.Scope, focus.selector()))
 		}
 		if decision.Grant != nil {
-			matches = append(matches, grantMatch{Grant: *decision.Grant, ViaCheck: checks[i]})
+			matches = append(matches, grantMatch{Grant: *decision.Grant, ViaCheck: *checks.focus(i, decision.Option)})
 		}
 	}
-	c.log(ctx, authzrepo.OperationRequire, authzrepo.OutcomeAllow, authzrepo.ReasonGrantMatched, set, checks, &checks[0], matches)
+	c.log(ctx, authzrepo.OperationRequire, authzrepo.OutcomeAllow, authzrepo.ReasonGrantMatched, set, checks.requested, checks.focus(0, -1), matches)
 	return nil
 }
 
@@ -145,6 +149,9 @@ func (c *Client) Require(ctx context.Context, ops ...Operation) error {
 // challenge. Use it where a negative answer is a routine branch rather than a
 // denial. It errors only when an operation cannot be decided.
 func (c *Client) Evaluate(ctx context.Context, ops ...Operation) (bool, error) {
+	if err := c.validate(ops); err != nil {
+		return false, c.engine.mapError(ctx, err)
+	}
 	enforce, err := c.engine.ShouldEnforce(ctx)
 	if err != nil {
 		return false, err
@@ -174,8 +181,17 @@ func (c *Client) Evaluate(ctx context.Context, ops ...Operation) (bool, error) {
 // MatchMany decides each operation independently and returns the results in
 // input order. Repeated resource IDs are separate inputs, so operations that
 // differ only in dimensions, such as two tools on one server, keep their own
-// answers. One challenge is recorded for the batch.
+// answers. One challenge is recorded for the batch. Alternatives cannot be
+// batch-matched; decide them with Require or Evaluate.
 func (c *Client) MatchMany(ctx context.Context, ops []Operation) ([]bool, error) {
+	if err := c.validate(ops); err != nil {
+		return nil, c.engine.mapError(ctx, err)
+	}
+	for _, op := range ops {
+		if op.alternatives {
+			return nil, c.engine.mapError(ctx, fmt.Errorf("%w: alternatives %s cannot be batch-matched", ErrInvalidCheck, op))
+		}
+	}
 	enforce, err := c.engine.ShouldEnforce(ctx)
 	if err != nil {
 		return nil, err
@@ -199,7 +215,7 @@ func (c *Client) MatchMany(ctx context.Context, ops []Operation) ([]bool, error)
 	for i, op := range ops {
 		decision, err := c.decide(set, op)
 		if err != nil {
-			c.logBatch(ctx, authzrepo.OutcomeError, authzrepo.ReasonInvalidCheck, set, checks, &checks[i], nil, 0)
+			c.logBatch(ctx, authzrepo.OutcomeError, authzrepo.ReasonInvalidCheck, set, checks.requested, checks.focus(i, -1), nil, 0)
 			return nil, c.engine.mapError(ctx, err)
 		}
 		if decision.Reason == PermissionReasonExcluded {
@@ -209,7 +225,7 @@ func (c *Client) MatchMany(ctx context.Context, ops []Operation) ([]bool, error)
 			matched[i] = true
 			allowed++
 			if decision.Grant != nil {
-				matches = append(matches, grantMatch{Grant: *decision.Grant, ViaCheck: checks[i]})
+				matches = append(matches, grantMatch{Grant: *decision.Grant, ViaCheck: *checks.focus(i, decision.Option)})
 			}
 		}
 	}
@@ -223,9 +239,23 @@ func (c *Client) MatchMany(ctx context.Context, ops []Operation) ([]bool, error)
 		case set.grantCount() == 0:
 			reason = authzrepo.ReasonNoGrants
 		}
-		c.logBatch(ctx, outcome, reason, set, checks, nil, matches, allowed)
+		c.logBatch(ctx, outcome, reason, set, checks.requested, nil, matches, allowed)
 	}
 	return matched, nil
+}
+
+// validate rejects operations no typed constructor built, such as the zero
+// Operation, before any enforcement shortcut can let them through.
+func (c *Client) validate(ops []Operation) error {
+	for _, op := range ops {
+		if op.permission.Type == "" {
+			return fmt.Errorf("%w: empty operation", ErrInvalidCheck)
+		}
+		if err := c.checkDeclared(op); err != nil {
+			return fmt.Errorf("%w: %w", ErrInvalidCheck, err)
+		}
+	}
+	return nil
 }
 
 // deniedUnenforced reports whether op is refused where RBAC is not enforced.
@@ -326,10 +356,14 @@ func requestActor(ctx context.Context) urn.Principal {
 	return urn.NewPrincipal(urn.PrincipalTypeSystem, "unattributed")
 }
 
+// grantCount is the number of grants the decision read in the live and
+// captured policies.
 func (set PolicySet) grantCount() int {
 	total := 0
-	for _, policy := range set.Policies {
-		total += len(policy.Grants)
+	for _, policies := range [][]Policy{set.Policies, set.Captured} {
+		for _, policy := range policies {
+			total += len(policy.Grants)
+		}
 	}
 	return total
 }
