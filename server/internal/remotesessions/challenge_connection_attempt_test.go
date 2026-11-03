@@ -108,6 +108,7 @@ func TestCompleteRemoteLogin_StateWithoutAnAttemptStillWorks(t *testing.T) {
 	var spy upstreamSpy
 	ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-old", &spy)
 	rec := mcpconnectionattemptstest.New(t)
+	t.Cleanup(rec.RequireNoUnclassifiedExit)
 	remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
 
 	authURL, err := fx.mgr.BuildAuthorizationUrl(ctx, fx.parent, fx.clients[0])
@@ -153,6 +154,7 @@ func TestCompleteRemoteLogin_RecordsTheGatewayMember(t *testing.T) {
 	var spy upstreamSpy
 	ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-member", &spy)
 	rec := mcpconnectionattemptstest.New(t)
+	t.Cleanup(rec.RequireNoUnclassifiedExit)
 	remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
 	member := uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	parent := fx.parent
@@ -195,6 +197,7 @@ func TestCompleteRemoteLogin_CancelReturningToConsentDoesNotEndTheAttempt(t *tes
 	var spy upstreamSpy
 	ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-cancel", &spy)
 	rec := mcpconnectionattemptstest.New(t)
+	t.Cleanup(rec.RequireNoUnclassifiedExit)
 	remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
 
 	parent := fx.parent
@@ -217,6 +220,7 @@ func TestCompleteRemoteLogin_CancelWithAFinalDestinationEndsTheAttempt(t *testin
 	var spy upstreamSpy
 	ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-cancel-final", &spy)
 	rec := mcpconnectionattemptstest.New(t)
+	t.Cleanup(rec.RequireNoUnclassifiedExit)
 	remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
 	parent := fx.parent
 	parent.FinalRedirectURI = "https://app.example.com/done"
@@ -239,6 +243,7 @@ func TestBuildAuthorizationUrl_RecordsReachingTheProvider(t *testing.T) {
 	var spy upstreamSpy
 	ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-accepted", &spy)
 	rec := mcpconnectionattemptstest.New(t)
+	t.Cleanup(rec.RequireNoUnclassifiedExit)
 	remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
 	parent := fx.parent
 	parent.Attempt = mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope(fx.parent.OrganizationID, fx.parent.ProjectID, uuid.New(), mcpconnectionattempts.AppRecoveryLink))
@@ -264,6 +269,7 @@ func TestCompleteRemoteLogin_ProviderErrorsAreRecorded(t *testing.T) {
 			var spy upstreamSpy
 			ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-provider-error", &spy)
 			rec := mcpconnectionattemptstest.New(t)
+			t.Cleanup(rec.RequireNoUnclassifiedExit)
 			remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
 			parent := fx.parent
 			parent.FinalRedirectURI = final
@@ -289,6 +295,7 @@ func TestCompleteRemoteLogin_UnregisteredProviderErrorIsNotStored(t *testing.T) 
 	var spy upstreamSpy
 	ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-unregistered", &spy)
 	rec := mcpconnectionattemptstest.New(t)
+	t.Cleanup(rec.RequireNoUnclassifiedExit)
 	remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
 	parent := fx.parent
 	parent.Attempt = mcpconnectionattempts.Begin(mcpconnectionattempts.ServerScope(fx.parent.OrganizationID, fx.parent.ProjectID, uuid.New(), mcpconnectionattempts.AppDCR))
@@ -319,6 +326,7 @@ func TestCompleteRemoteLogin_SignInWithAFinalDestinationEndsConnected(t *testing
 	var spy upstreamSpy
 	ctx, fx := setupResourceDanceFixture(t, "https://mcp.example.com/mcp", "attempt-final", &spy)
 	rec := mcpconnectionattemptstest.New(t)
+	t.Cleanup(rec.RequireNoUnclassifiedExit)
 	remotesessions.WithConnectionRecorder(rec.Recorder)(fx.mgr)
 	parent := fx.parent
 	parent.FinalRedirectURI = "https://app.example.com/done"

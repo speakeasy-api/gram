@@ -474,9 +474,6 @@ func TestConnectionOutcome_AnonymousRequestsWriteNothing(t *testing.T) {
 		"unknown client at authorize": func(slug, _, redirect string) *http.Request {
 			return get("/mcp/" + slug + "/authorize?" + url.Values{"response_type": {"code"}, "client_id": {"client_missing"}, "redirect_uri": {redirect}, "code_challenge": {"c"}, "code_challenge_method": {"S256"}}.Encode())
 		},
-		"unreachable metadata document at authorize": func(slug, _, redirect string) *http.Request {
-			return get("/mcp/" + slug + "/authorize?" + url.Values{"response_type": {"code"}, "client_id": {"https://nothing.invalid/client.json"}, "redirect_uri": {redirect}, "code_challenge": {"c"}, "code_challenge_method": {"S256"}}.Encode())
-		},
 		"code mode ticket that never existed": func(slug, _, _ string) *http.Request {
 			return get("/mcp/" + slug + "/connect/first-party?code_reconnect=" + uuid.NewString())
 		},
@@ -854,5 +851,38 @@ func TestConnectionOutcome_ConsentCaptureRecordsMembers(t *testing.T) {
 	rec.RequireNotEnded()
 	for _, got := range rec.Rows() {
 		require.NotEqual(t, mcpconnectionattempts.StepDiscoveryListing.String(), got.Step)
+	}
+}
+
+// A real app with broken metadata is a connection problem for an admin to see. Only the host is stored.
+func TestConnectionOutcome_AuthorizeClientMetadataFailures(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		mutate func(ds *cimdDocServer)
+		what   mcpconnectionattempts.Code
+	}{
+		"metadata invalid": {func(ds *cimdDocServer) { ds.doc["client_id"] = ds.srv.URL + "/oauth/other.json" }, mcpconnectionattempts.CodeCIMDMetadataInvalid},
+		"fetch failed":     {func(ds *cimdDocServer) { ds.status = http.StatusInternalServerError }, mcpconnectionattempts.CodeCIMDFetchFailed},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			ctx, ti, ds, toolset := newTestCIMDService(t)
+			rec := recordConnections(t, ti)
+			ds.set(t, tc.mutate)
+			router := goahttp.NewMuxer()
+			mcp.Attach(router, ti.service.Service, nil)
+			q := url.Values{"response_type": {"code"}, "client_id": {ds.clientID}, "redirect_uri": {ds.srv.URL + "/callback"}, "state": {"s"}, "code_challenge": {"challenge"}, "code_challenge_method": {"S256"}}
+			w := httptest.NewRecorder()
+			router.ServeHTTP(w, httptest.NewRequestWithContext(ctx, http.MethodGet, "/mcp/"+toolset.McpSlug.String+"/authorize?"+q.Encode(), nil))
+			require.Contains(t, []int{http.StatusBadRequest, http.StatusServiceUnavailable}, w.Code, w.Body.String())
+
+			row := rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, tc.what)
+			require.Equal(t, string(mcpconnectionattempts.WhoApp), row.WhoFixes)
+			require.Equal(t, mcpconnectionattempts.AppOf(ds.clientID).String(), row.AppKey)
+			require.NotContains(t, row.AppKey, "/", "host only")
+			require.Len(t, rec.Rows(), 1)
+		})
 	}
 }

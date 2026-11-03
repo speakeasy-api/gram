@@ -120,6 +120,7 @@ func TestTokenClientRefusal(t *testing.T) {
 	for reason, what := range map[string]mcpconnectionattempts.Code{
 		"cimd_admission_denied":               mcpconnectionattempts.CodeCIMDAdmissionDenied,
 		"cimd_admission_disabled":             mcpconnectionattempts.CodeCIMDAdmissionDenied,
+		"cimd_metadata_invalid":               mcpconnectionattempts.CodeCIMDMetadataInvalid,
 		"ai_tool_blocked":                     mcpconnectionattempts.CodeAIToolBlocked,
 		"client_secret_mismatch":              mcpconnectionattempts.CodeClientAuthFailed,
 		"public_client_presented_credentials": mcpconnectionattempts.CodeClientAuthFailed,
@@ -138,17 +139,18 @@ func TestTokenClientRefusal(t *testing.T) {
 	rec := mcpconnectionattemptstest.New(t)
 	service := &Service{connections: rec.Recorder}
 	code := oauthwire.GrantTypeAuthorizationCode
-	for _, reason := range []string{"missing_client_id", "unknown_client_id", "cimd_metadata_invalid", clientIDNamesEndpointReason} {
+	for _, reason := range []string{"missing_client_id", "unknown_client_id", clientIDNamesEndpointReason} {
 		service.recordTokenClientRefusal(t.Context(), directEndpoint(), code, "client", reason)
 	}
 	service.recordTokenClientRefusal(t.Context(), directEndpoint(), code, "", "assertion_malformed")
 	service.recordTokenClientRefusal(t.Context(), directEndpoint(), oauthwire.GrantTypeRefreshToken, "client", "client_secret_mismatch")
-	service.recordTokenClientFailure(t.Context(), directEndpoint(), code, mcpmetrics.IDJAGRejectionClientMetadataUnavailable)
-	service.recordTokenClientFailure(t.Context(), directEndpoint(), oauthwire.GrantTypeRefreshToken, mcpmetrics.IDJAGRejectionClientCheckUnavailable)
+	service.recordTokenClientFailure(t.Context(), directEndpoint(), oauthwire.GrantTypeRefreshToken, "https://client.example.com/app.json", mcpmetrics.IDJAGRejectionClientCheckUnavailable)
 	rec.RequireNothing()
 
-	service.recordTokenClientFailure(t.Context(), directEndpoint(), code, mcpmetrics.IDJAGRejectionClientCheckUnavailable)
+	service.recordTokenClientFailure(t.Context(), directEndpoint(), code, "https://client.example.com/app.json", mcpmetrics.IDJAGRejectionClientCheckUnavailable)
 	rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeAIToolCheckUnavailable)
+	service.recordTokenClientFailure(t.Context(), directEndpoint(), code, "https://client.example.com/app.json", mcpmetrics.IDJAGRejectionClientMetadataUnavailable)
+	require.Equal(t, "client.example.com", rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeCIMDFetchFailed).AppKey)
 }
 
 func TestRecordListingFailures(t *testing.T) {

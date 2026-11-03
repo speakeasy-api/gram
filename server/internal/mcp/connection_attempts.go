@@ -297,7 +297,7 @@ func (s *Service) recordTokenClientRefusal(ctx context.Context, endpoint *Resolv
 		return
 	}
 	app := mcpconnectionattempts.AppUnverified
-	if reason == "ai_tool_blocked" {
+	if reason == "ai_tool_blocked" || reason == "cimd_metadata_invalid" {
 		app = mcpconnectionattempts.AppOf(clientID)
 	}
 	s.connections.Once(ctx, connectionScope(endpoint, app), mcpconnectionattempts.StepInboundToken, what, mcpconnectionattempts.Grant(grantType), mcpconnectionattempts.Detail(reason))
@@ -305,8 +305,10 @@ func (s *Service) recordTokenClientRefusal(ctx context.Context, endpoint *Resolv
 
 func tokenClientRefusalHappened(reason string) (mcpconnectionattempts.Code, bool) {
 	switch reason {
-	case "missing_client_id", "unknown_client_id", "cimd_metadata_invalid", clientIDNamesEndpointReason:
+	case "missing_client_id", "unknown_client_id", clientIDNamesEndpointReason:
 		return mcpconnectionattempts.Code{}, false
+	case "cimd_metadata_invalid":
+		return mcpconnectionattempts.CodeCIMDMetadataInvalid, true
 	case "cimd_admission_denied", "cimd_admission_disabled":
 		return mcpconnectionattempts.CodeCIMDAdmissionDenied, true
 	case "ai_tool_blocked":
@@ -325,11 +327,15 @@ func tokenClientRefusalHappened(reason string) (mcpconnectionattempts.Code, bool
 }
 
 // recordTokenClientFailure records /token unable to check an authorization code's client.
-func (s *Service) recordTokenClientFailure(ctx context.Context, endpoint *ResolvedMcpEndpoint, grantType string, reason mcpmetrics.IDJAGRejectionReason) {
-	if grantType != oauthwire.GrantTypeAuthorizationCode || reason != mcpmetrics.IDJAGRejectionClientCheckUnavailable {
+func (s *Service) recordTokenClientFailure(ctx context.Context, endpoint *ResolvedMcpEndpoint, grantType, clientID string, reason mcpmetrics.IDJAGRejectionReason) {
+	if grantType != oauthwire.GrantTypeAuthorizationCode {
 		return
 	}
-	s.connections.Once(ctx, connectionScope(endpoint, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeAIToolCheckUnavailable, mcpconnectionattempts.Grant(grantType))
+	what := mcpconnectionattempts.CodeAIToolCheckUnavailable
+	if reason == mcpmetrics.IDJAGRejectionClientMetadataUnavailable {
+		what = mcpconnectionattempts.CodeCIMDFetchFailed
+	}
+	s.connections.Once(ctx, connectionScope(endpoint, mcpconnectionattempts.AppOf(clientID)), mcpconnectionattempts.StepInboundToken, what, mcpconnectionattempts.Grant(grantType))
 }
 
 // recordRemoteSessionVerdict records the check of a provider sign-in on its

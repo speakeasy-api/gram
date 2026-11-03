@@ -119,9 +119,9 @@ func (s *Service) rejectTokenClient(ctx context.Context, logger *slog.Logger, r 
 
 // failTokenClient counts an ID-JAG exchange that failed while checking its
 // client as a failed exchange under reason. Other grants are not counted.
-func (s *Service) failTokenClient(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, grantType string, reason mcpmetrics.IDJAGRejectionReason, err error) {
+func (s *Service) failTokenClient(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, grantType, clientID string, reason mcpmetrics.IDJAGRejectionReason, err error) {
 	if grantType != oauthwire.GrantTypeJWTBearer {
-		s.recordTokenClientFailure(ctx, endpoint, grantType, reason)
+		s.recordTokenClientFailure(ctx, endpoint, grantType, clientID, reason)
 		return
 	}
 	issuerID := endpoint.UserSessionIssuerID.String()

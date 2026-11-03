@@ -135,7 +135,8 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			return writeAuthorizeError(ctx, w, logger, http.StatusBadRequest, page, oautherr.CodeInvalidClient, admissionErr.Description())
 		}
 		if oauthErr, ok := errors.AsType[*oauthwire.Error](err); ok {
-			s.refusedWithoutRow(ctx, t, "authorize_cimd_metadata_invalid")
+			t.Scope(connectionScope(endpoint, mcpconnectionattempts.AppOf(req.ClientID)))
+			t.Refuse(ctx, mcpconnectionattempts.CodeCIMDMetadataInvalid)
 			code := oauthErr.Code
 			if code == oautherr.CodeInvalidClientMetadata || code == oautherr.CodeInvalidRedirectURI {
 				code = oautherr.CodeInvalidClient
@@ -151,7 +152,8 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 			// rather than a permanent invalid_client that would make SDKs
 			// stop retrying.
 			logger.InfoContext(ctx, "cimd document fetch failed", attr.SlogError(err))
-			s.refusedWithoutRow(ctx, t, "authorize_cimd_fetch_failed")
+			t.Scope(connectionScope(endpoint, mcpconnectionattempts.AppOf(req.ClientID)))
+			t.Refuse(ctx, mcpconnectionattempts.CodeCIMDFetchFailed)
 			return writeAuthorizeError(ctx, w, logger, http.StatusServiceUnavailable, page, "temporarily_unavailable", "failed to fetch client metadata document")
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
