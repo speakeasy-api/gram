@@ -355,11 +355,11 @@ and `not_admitted`. The message always says no program was submitted.
 
 Every execute result, including a refusal, carries the gateway's timing in
 `_meta["com.speakeasy.ai/timing"]`: `server_ms`, plus `admission_ms` and
-`run_ms`. Run time covers submission through the result, before callback and
-stream cleanup. Admission is the coordinator's remaining elapsed time, so it
-includes capacity, allocation and connection setup as well as runner cleanup;
-it is not solely a pre-submission wait. Inspect shows these values beside the
-browser's round trip.
+`run_ms`. Run time covers submission through the result, including tool
+callbacks, but excludes subsequent callback and stream cleanup. Admission is
+the coordinator's remaining elapsed time, so it includes capacity, allocation
+and connection setup as well as runner cleanup; it is not solely a
+pre-submission wait. Inspect shows these values beside the browser's round trip.
 
 Those same values appear on the request's wide log event and the
 `gateway.code.execute` span as `gram.code.server_ms`,
