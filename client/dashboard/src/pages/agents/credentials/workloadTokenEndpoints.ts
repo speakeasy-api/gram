@@ -133,7 +133,7 @@ function unavailableReason(
     return "No shared Speakeasy authorization server is available for this project or organization.";
   }
   if (count === 0) {
-    return "No user session issuer serves a shared token endpoint yet. Ask your Speakeasy contact to enable one for your organization or a project.";
+    return "No usable shared Speakeasy authorization server is available for this organization yet, so Speakeasy can't fill in these values. Ask your Speakeasy contact to set one up for your organization or a project.";
   }
   return null;
 }

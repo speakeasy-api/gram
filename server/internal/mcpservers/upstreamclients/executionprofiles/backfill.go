@@ -31,7 +31,7 @@ type Report struct {
 // for that profile. It is idempotent: a rerun only adds choices for servers
 // that had none and can now be decided.
 func Backfill(ctx context.Context, db TxStarter, organizationID string, apply bool) (Report, error) {
-	report := Report{Mode: "dry_run", Targets: 0, VersionsWritten: 0, Gaps: map[Context]map[GapReason]int{}}
+	report := Report{Mode: "dry_run", Targets: 0, VersionsWritten: 0, Gaps: make(map[Context]map[GapReason]int)}
 	if apply {
 		report.Mode = "apply"
 	}
@@ -69,7 +69,7 @@ func Backfill(ctx context.Context, db TxStarter, organizationID string, apply bo
 			}
 			for _, gap := range gaps {
 				if report.Gaps[execCtx] == nil {
-					report.Gaps[execCtx] = map[GapReason]int{}
+					report.Gaps[execCtx] = make(map[GapReason]int)
 				}
 				report.Gaps[execCtx][gap.Reason]++
 			}

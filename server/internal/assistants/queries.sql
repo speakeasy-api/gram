@@ -121,6 +121,8 @@ LIMIT 1;
 -- name: ResolveToolsetsForWrite :many
 -- Also locks the toolsets behind canonical wrappers named by slug, so server
 -- attachments take the toolset lock before the server lock, as deletion does.
+-- enables_mcp needs an endpoint; disabled_wrapper lets the caller count the legacy alias instead.
+-- legacyalias: drop disabled_wrapper with AIM-670.
 SELECT t.id, t.slug, EXISTS (
   SELECT 1
   FROM mcp_servers w
@@ -129,11 +131,16 @@ SELECT t.id, t.slug, EXISTS (
     AND w.project_id = t.project_id
     AND w.visibility = 'disabled'
     AND w.deleted IS FALSE
-    AND (
-      t.mcp_slug IS NOT NULL
-      OR EXISTS (SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = w.id AND e.project_id = w.project_id AND e.deleted IS FALSE)
-    )
-)::bool AS enables_mcp
+    AND EXISTS (SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = w.id AND e.project_id = w.project_id AND e.deleted IS FALSE)
+)::bool AS enables_mcp, EXISTS (
+  SELECT 1
+  FROM mcp_servers w
+  WHERE w.id = t.id
+    AND w.toolset_id = t.id
+    AND w.project_id = t.project_id
+    AND w.visibility = 'disabled'
+    AND w.deleted IS FALSE
+)::bool AS disabled_wrapper
 FROM toolsets t
 WHERE t.project_id = @project_id
   AND t.deleted IS FALSE
@@ -345,15 +352,17 @@ LIMIT 1;
 -- default environment, and sort first so they win runtime id
 -- collisions. The address is the server's own endpoint: platform first, else
 -- one on a verified, activated custom domain (ListAddressableMCPEndpointsByMCPServerIDs).
--- A hosted row with neither keeps its legacy /mcp/{mcp_slug} alias until the
--- toolset slug fallback is removed.
+-- A hosted row with neither keeps its legacy /mcp/{mcp_slug} alias, which the
+-- caller fills in from legacyalias until the toolset slug fallback is removed.
 SELECT
   ams.assistant_id,
   ams.mcp_server_id,
   ms.slug AS server_slug,
   t.slug AS toolset_slug,
   ms.visibility::text AS visibility,
-  COALESCE(ep.slug, t.mcp_slug, '')::text AS endpoint_slug,
+  COALESCE(ep.slug, '')::text AS endpoint_slug,
+  -- legacyalias: drop with AIM-670.
+  (t.id IS NOT NULL)::bool AS hosted_toolset,
   COALESCE(ep.domain, '')::text AS endpoint_domain,
   t.default_environment_slug,
   ams.environment_id,

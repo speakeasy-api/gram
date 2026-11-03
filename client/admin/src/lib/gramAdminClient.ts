@@ -25,6 +25,8 @@ import { buildAdminGetUpstreamOAuthMigrationStatusQuery } from "@gram/admin-clie
 import { buildAdminListUpstreamOAuthMigrationOrganizationsQuery } from "@gram/admin-client/react-query/adminListUpstreamOAuthMigrationOrganizations.core";
 import { buildAdminRunUpstreamOAuthMigrationMutation } from "@gram/admin-client/react-query/adminRunUpstreamOAuthMigration";
 import { buildAdminEnableUpstreamAuthEnforcementMutation } from "@gram/admin-client/react-query/adminEnableUpstreamAuthEnforcement";
+import { buildAdminBackfillMcpAuthGrantsMutation } from "@gram/admin-client/react-query/adminBackfillMcpAuthGrants";
+import type { AdminBackfillMCPAuthGrantsResult } from "@gram/admin-client/models/components/adminbackfillmcpauthgrantsresult";
 import { buildAdminDisableUpstreamAuthEnforcementMutation } from "@gram/admin-client/react-query/adminDisableUpstreamAuthEnforcement";
 import type { AdminUpstreamOAuthMigrationOrganizations } from "@gram/admin-client/models/components/adminupstreamoauthmigrationorganizations";
 import type { AdminUpstreamOAuthMigrationRun } from "@gram/admin-client/models/components/adminupstreamoauthmigrationrun";
@@ -54,6 +56,10 @@ import { buildAdminGetRegistryEntryQuery } from "@gram/admin-client/react-query/
 import { buildAdminGetRegistryOktaCandidatesQuery } from "@gram/admin-client/react-query/adminGetRegistryOktaCandidates.core";
 import { buildAdminListRegistryOktaUnmappedQuery } from "@gram/admin-client/react-query/adminListRegistryOktaUnmapped.core";
 import { buildAdminCreateRegistryEntryMutation } from "@gram/admin-client/react-query/adminCreateRegistryEntry";
+import {
+  registryEntryName,
+  registryEntryNameKey,
+} from "@/lib/registryEntryName";
 import { buildAdminSaveRegistryEntryMutation } from "@gram/admin-client/react-query/adminSaveRegistryEntry";
 import { buildAdminSetRegistryEntryPublishedMutation } from "@gram/admin-client/react-query/adminSetRegistryEntryPublished";
 import type { UseQueryOptions } from "@tanstack/react-query";
@@ -996,7 +1002,12 @@ function createRegistryEntryQuery(id: string) {
   const generated = buildAdminGetRegistryEntryQuery(redirectingClient, { id });
   return queryOptions({
     ...generated,
-    queryFn: (context) => redirecting(generated.queryFn(context)),
+    queryFn: async (context) => {
+      const entry = await redirecting(generated.queryFn(context));
+      const name = registryEntryName(entry.dataJson);
+      context.client.setQueryData(registryEntryNameKey(id), { name });
+      return entry;
+    },
     enabled: id !== "",
   });
 }
@@ -1305,4 +1316,13 @@ export function useCurateRegistryPromotionCandidateMutation(): UseMutationResult
     }),
     retry: false,
   });
+}
+
+const generatedBackfillMcpAuthGrantsMutation =
+  buildAdminBackfillMcpAuthGrantsMutation(redirectingClient, {
+    retries: { strategy: "none" },
+  });
+
+export function backfillMcpAuthGrants(): Promise<AdminBackfillMCPAuthGrantsResult> {
+  return redirecting(generatedBackfillMcpAuthGrantsMutation.mutationFn({}));
 }

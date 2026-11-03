@@ -59,54 +59,54 @@ var keyStrIndexSkip = map[protoreflect.FieldNumber]string{
 func messagePairs() []messagePair {
 	var pairs []messagePair
 
-	for _, copy := range logCopies() {
+	for _, schemaCopy := range logCopies() {
 		pairs = append(pairs,
-			messagePair{name: fmt.Sprintf("logs.v1.LogRecord (%s)", copy.name), upstream: &otlplogs.LogRecord{}, ours: copy.newRecord()},
-			messagePair{name: fmt.Sprintf("resource.v1.Resource (%s)", copy.name), upstream: &otlpresource.Resource{}, ours: copy.resource, skip: entityRefsSkip},
-			messagePair{name: fmt.Sprintf("common.v1.InstrumentationScope (%s)", copy.name), upstream: &otlpcommon.InstrumentationScope{}, ours: copy.instrumentationScope},
-			messagePair{name: fmt.Sprintf("common.v1.AnyValue (%s)", copy.name), upstream: &otlpcommon.AnyValue{}, ours: copy.anyValue, skip: strIndexSkip},
-			messagePair{name: fmt.Sprintf("common.v1.ArrayValue (%s)", copy.name), upstream: &otlpcommon.ArrayValue{}, ours: copy.arrayValue},
-			messagePair{name: fmt.Sprintf("common.v1.KeyValueList (%s)", copy.name), upstream: &otlpcommon.KeyValueList{}, ours: copy.keyValueList},
-			messagePair{name: fmt.Sprintf("common.v1.KeyValue (%s)", copy.name), upstream: &otlpcommon.KeyValue{}, ours: copy.keyValue, skip: keyStrIndexSkip},
+			messagePair{name: fmt.Sprintf("logs.v1.LogRecord (%s)", schemaCopy.name), upstream: &otlplogs.LogRecord{}, ours: schemaCopy.newRecord()},
+			messagePair{name: fmt.Sprintf("resource.v1.Resource (%s)", schemaCopy.name), upstream: &otlpresource.Resource{}, ours: schemaCopy.resource, skip: entityRefsSkip},
+			messagePair{name: fmt.Sprintf("common.v1.InstrumentationScope (%s)", schemaCopy.name), upstream: &otlpcommon.InstrumentationScope{}, ours: schemaCopy.instrumentationScope},
+			messagePair{name: fmt.Sprintf("common.v1.AnyValue (%s)", schemaCopy.name), upstream: &otlpcommon.AnyValue{}, ours: schemaCopy.anyValue, skip: strIndexSkip},
+			messagePair{name: fmt.Sprintf("common.v1.ArrayValue (%s)", schemaCopy.name), upstream: &otlpcommon.ArrayValue{}, ours: schemaCopy.arrayValue},
+			messagePair{name: fmt.Sprintf("common.v1.KeyValueList (%s)", schemaCopy.name), upstream: &otlpcommon.KeyValueList{}, ours: schemaCopy.keyValueList},
+			messagePair{name: fmt.Sprintf("common.v1.KeyValue (%s)", schemaCopy.name), upstream: &otlpcommon.KeyValue{}, ours: schemaCopy.keyValue, skip: keyStrIndexSkip},
 		)
 	}
 
-	for _, copy := range metricCopies() {
+	for _, schemaCopy := range metricCopies() {
 		pairs = append(pairs,
-			messagePair{name: fmt.Sprintf("metrics.v1.Metric (%s)", copy.name), upstream: new(otlpmetrics.Metric), ours: copy.newMetric()},
-			messagePair{name: fmt.Sprintf("metrics.v1.Gauge (%s)", copy.name), upstream: new(otlpmetrics.Gauge), ours: copy.gauge},
-			messagePair{name: fmt.Sprintf("metrics.v1.Sum (%s)", copy.name), upstream: new(otlpmetrics.Sum), ours: copy.sum},
-			messagePair{name: fmt.Sprintf("metrics.v1.Histogram (%s)", copy.name), upstream: new(otlpmetrics.Histogram), ours: copy.histogram},
-			messagePair{name: fmt.Sprintf("metrics.v1.ExponentialHistogram (%s)", copy.name), upstream: new(otlpmetrics.ExponentialHistogram), ours: copy.exponentialHistogram},
-			messagePair{name: fmt.Sprintf("metrics.v1.Summary (%s)", copy.name), upstream: new(otlpmetrics.Summary), ours: copy.summary},
-			messagePair{name: fmt.Sprintf("metrics.v1.NumberDataPoint (%s)", copy.name), upstream: new(otlpmetrics.NumberDataPoint), ours: copy.numberDataPoint},
-			messagePair{name: fmt.Sprintf("metrics.v1.HistogramDataPoint (%s)", copy.name), upstream: new(otlpmetrics.HistogramDataPoint), ours: copy.histogramDataPoint},
-			messagePair{name: fmt.Sprintf("metrics.v1.ExponentialHistogramDataPoint (%s)", copy.name), upstream: new(otlpmetrics.ExponentialHistogramDataPoint), ours: copy.exponentialHistogramPoint},
-			messagePair{name: fmt.Sprintf("metrics.v1.ExponentialHistogramDataPoint.Buckets (%s)", copy.name), upstream: new(otlpmetrics.ExponentialHistogramDataPoint_Buckets), ours: copy.exponentialHistogramBuckets},
-			messagePair{name: fmt.Sprintf("metrics.v1.SummaryDataPoint (%s)", copy.name), upstream: new(otlpmetrics.SummaryDataPoint), ours: copy.summaryDataPoint},
-			messagePair{name: fmt.Sprintf("metrics.v1.SummaryDataPoint.ValueAtQuantile (%s)", copy.name), upstream: new(otlpmetrics.SummaryDataPoint_ValueAtQuantile), ours: copy.valueAtQuantile},
-			messagePair{name: fmt.Sprintf("metrics.v1.Exemplar (%s)", copy.name), upstream: new(otlpmetrics.Exemplar), ours: copy.exemplar},
-			messagePair{name: fmt.Sprintf("resource.v1.Resource (%s)", copy.name), upstream: new(otlpresource.Resource), ours: copy.resource, skip: entityRefsSkip},
-			messagePair{name: fmt.Sprintf("common.v1.InstrumentationScope (%s)", copy.name), upstream: new(otlpcommon.InstrumentationScope), ours: copy.instrumentationScope},
-			messagePair{name: fmt.Sprintf("common.v1.AnyValue (%s)", copy.name), upstream: new(otlpcommon.AnyValue), ours: copy.anyValue, skip: strIndexSkip},
-			messagePair{name: fmt.Sprintf("common.v1.ArrayValue (%s)", copy.name), upstream: new(otlpcommon.ArrayValue), ours: copy.arrayValue},
-			messagePair{name: fmt.Sprintf("common.v1.KeyValueList (%s)", copy.name), upstream: new(otlpcommon.KeyValueList), ours: copy.keyValueList},
-			messagePair{name: fmt.Sprintf("common.v1.KeyValue (%s)", copy.name), upstream: new(otlpcommon.KeyValue), ours: copy.keyValue, skip: keyStrIndexSkip},
+			messagePair{name: fmt.Sprintf("metrics.v1.Metric (%s)", schemaCopy.name), upstream: new(otlpmetrics.Metric), ours: schemaCopy.newMetric()},
+			messagePair{name: fmt.Sprintf("metrics.v1.Gauge (%s)", schemaCopy.name), upstream: new(otlpmetrics.Gauge), ours: schemaCopy.gauge},
+			messagePair{name: fmt.Sprintf("metrics.v1.Sum (%s)", schemaCopy.name), upstream: new(otlpmetrics.Sum), ours: schemaCopy.sum},
+			messagePair{name: fmt.Sprintf("metrics.v1.Histogram (%s)", schemaCopy.name), upstream: new(otlpmetrics.Histogram), ours: schemaCopy.histogram},
+			messagePair{name: fmt.Sprintf("metrics.v1.ExponentialHistogram (%s)", schemaCopy.name), upstream: new(otlpmetrics.ExponentialHistogram), ours: schemaCopy.exponentialHistogram},
+			messagePair{name: fmt.Sprintf("metrics.v1.Summary (%s)", schemaCopy.name), upstream: new(otlpmetrics.Summary), ours: schemaCopy.summary},
+			messagePair{name: fmt.Sprintf("metrics.v1.NumberDataPoint (%s)", schemaCopy.name), upstream: new(otlpmetrics.NumberDataPoint), ours: schemaCopy.numberDataPoint},
+			messagePair{name: fmt.Sprintf("metrics.v1.HistogramDataPoint (%s)", schemaCopy.name), upstream: new(otlpmetrics.HistogramDataPoint), ours: schemaCopy.histogramDataPoint},
+			messagePair{name: fmt.Sprintf("metrics.v1.ExponentialHistogramDataPoint (%s)", schemaCopy.name), upstream: new(otlpmetrics.ExponentialHistogramDataPoint), ours: schemaCopy.exponentialHistogramPoint},
+			messagePair{name: fmt.Sprintf("metrics.v1.ExponentialHistogramDataPoint.Buckets (%s)", schemaCopy.name), upstream: new(otlpmetrics.ExponentialHistogramDataPoint_Buckets), ours: schemaCopy.exponentialHistogramBuckets},
+			messagePair{name: fmt.Sprintf("metrics.v1.SummaryDataPoint (%s)", schemaCopy.name), upstream: new(otlpmetrics.SummaryDataPoint), ours: schemaCopy.summaryDataPoint},
+			messagePair{name: fmt.Sprintf("metrics.v1.SummaryDataPoint.ValueAtQuantile (%s)", schemaCopy.name), upstream: new(otlpmetrics.SummaryDataPoint_ValueAtQuantile), ours: schemaCopy.valueAtQuantile},
+			messagePair{name: fmt.Sprintf("metrics.v1.Exemplar (%s)", schemaCopy.name), upstream: new(otlpmetrics.Exemplar), ours: schemaCopy.exemplar},
+			messagePair{name: fmt.Sprintf("resource.v1.Resource (%s)", schemaCopy.name), upstream: new(otlpresource.Resource), ours: schemaCopy.resource, skip: entityRefsSkip},
+			messagePair{name: fmt.Sprintf("common.v1.InstrumentationScope (%s)", schemaCopy.name), upstream: new(otlpcommon.InstrumentationScope), ours: schemaCopy.instrumentationScope},
+			messagePair{name: fmt.Sprintf("common.v1.AnyValue (%s)", schemaCopy.name), upstream: new(otlpcommon.AnyValue), ours: schemaCopy.anyValue, skip: strIndexSkip},
+			messagePair{name: fmt.Sprintf("common.v1.ArrayValue (%s)", schemaCopy.name), upstream: new(otlpcommon.ArrayValue), ours: schemaCopy.arrayValue},
+			messagePair{name: fmt.Sprintf("common.v1.KeyValueList (%s)", schemaCopy.name), upstream: new(otlpcommon.KeyValueList), ours: schemaCopy.keyValueList},
+			messagePair{name: fmt.Sprintf("common.v1.KeyValue (%s)", schemaCopy.name), upstream: new(otlpcommon.KeyValue), ours: schemaCopy.keyValue, skip: keyStrIndexSkip},
 		)
 	}
 
-	for _, copy := range spanCopies() {
+	for _, schemaCopy := range spanCopies() {
 		pairs = append(pairs,
-			messagePair{name: fmt.Sprintf("trace.v1.Span (%s)", copy.name), upstream: &otlptrace.Span{}, ours: copy.newSpan()},
-			messagePair{name: fmt.Sprintf("trace.v1.Span.Event (%s)", copy.name), upstream: &otlptrace.Span_Event{}, ours: copy.event},
-			messagePair{name: fmt.Sprintf("trace.v1.Span.Link (%s)", copy.name), upstream: &otlptrace.Span_Link{}, ours: copy.link},
-			messagePair{name: fmt.Sprintf("trace.v1.Status (%s)", copy.name), upstream: &otlptrace.Status{}, ours: copy.status},
-			messagePair{name: fmt.Sprintf("resource.v1.Resource (%s)", copy.name), upstream: &otlpresource.Resource{}, ours: copy.resource, skip: entityRefsSkip},
-			messagePair{name: fmt.Sprintf("common.v1.InstrumentationScope (%s)", copy.name), upstream: &otlpcommon.InstrumentationScope{}, ours: copy.instrumentationScope},
-			messagePair{name: fmt.Sprintf("common.v1.AnyValue (%s)", copy.name), upstream: &otlpcommon.AnyValue{}, ours: copy.anyValue, skip: strIndexSkip},
-			messagePair{name: fmt.Sprintf("common.v1.ArrayValue (%s)", copy.name), upstream: &otlpcommon.ArrayValue{}, ours: copy.arrayValue},
-			messagePair{name: fmt.Sprintf("common.v1.KeyValueList (%s)", copy.name), upstream: &otlpcommon.KeyValueList{}, ours: copy.keyValueList},
-			messagePair{name: fmt.Sprintf("common.v1.KeyValue (%s)", copy.name), upstream: &otlpcommon.KeyValue{}, ours: copy.keyValue, skip: keyStrIndexSkip},
+			messagePair{name: fmt.Sprintf("trace.v1.Span (%s)", schemaCopy.name), upstream: &otlptrace.Span{}, ours: schemaCopy.newSpan()},
+			messagePair{name: fmt.Sprintf("trace.v1.Span.Event (%s)", schemaCopy.name), upstream: &otlptrace.Span_Event{}, ours: schemaCopy.event},
+			messagePair{name: fmt.Sprintf("trace.v1.Span.Link (%s)", schemaCopy.name), upstream: &otlptrace.Span_Link{}, ours: schemaCopy.link},
+			messagePair{name: fmt.Sprintf("trace.v1.Status (%s)", schemaCopy.name), upstream: &otlptrace.Status{}, ours: schemaCopy.status},
+			messagePair{name: fmt.Sprintf("resource.v1.Resource (%s)", schemaCopy.name), upstream: &otlpresource.Resource{}, ours: schemaCopy.resource, skip: entityRefsSkip},
+			messagePair{name: fmt.Sprintf("common.v1.InstrumentationScope (%s)", schemaCopy.name), upstream: &otlpcommon.InstrumentationScope{}, ours: schemaCopy.instrumentationScope},
+			messagePair{name: fmt.Sprintf("common.v1.AnyValue (%s)", schemaCopy.name), upstream: &otlpcommon.AnyValue{}, ours: schemaCopy.anyValue, skip: strIndexSkip},
+			messagePair{name: fmt.Sprintf("common.v1.ArrayValue (%s)", schemaCopy.name), upstream: &otlpcommon.ArrayValue{}, ours: schemaCopy.arrayValue},
+			messagePair{name: fmt.Sprintf("common.v1.KeyValueList (%s)", schemaCopy.name), upstream: &otlpcommon.KeyValueList{}, ours: schemaCopy.keyValueList},
+			messagePair{name: fmt.Sprintf("common.v1.KeyValue (%s)", schemaCopy.name), upstream: &otlpcommon.KeyValue{}, ours: schemaCopy.keyValue, skip: keyStrIndexSkip},
 		)
 	}
 
@@ -220,40 +220,40 @@ func TestUpstreamEnumsMatch(t *testing.T) {
 	}
 
 	var enumPairs []enumPair
-	for _, copy := range logCopies() {
+	for _, schemaCopy := range logCopies() {
 		enumPairs = append(enumPairs, enumPair{
-			name:     fmt.Sprintf("logs.v1.SeverityNumber (%s)", copy.name),
+			name:     fmt.Sprintf("logs.v1.SeverityNumber (%s)", schemaCopy.name),
 			upstream: otlplogs.SeverityNumber(0).Descriptor(),
-			ours:     copy.severityNumber,
+			ours:     schemaCopy.severityNumber,
 		})
 	}
 
-	for _, copy := range metricCopies() {
+	for _, schemaCopy := range metricCopies() {
 		enumPairs = append(enumPairs,
 			enumPair{
-				name:     fmt.Sprintf("metrics.v1.AggregationTemporality (%s)", copy.name),
+				name:     fmt.Sprintf("metrics.v1.AggregationTemporality (%s)", schemaCopy.name),
 				upstream: otlpmetrics.AggregationTemporality_AGGREGATION_TEMPORALITY_UNSPECIFIED.Descriptor(),
-				ours:     copy.aggregationTemporality,
+				ours:     schemaCopy.aggregationTemporality,
 			},
 			enumPair{
-				name:     fmt.Sprintf("metrics.v1.DataPointFlags (%s)", copy.name),
+				name:     fmt.Sprintf("metrics.v1.DataPointFlags (%s)", schemaCopy.name),
 				upstream: otlpmetrics.DataPointFlags_DATA_POINT_FLAGS_DO_NOT_USE.Descriptor(),
-				ours:     copy.dataPointFlags,
+				ours:     schemaCopy.dataPointFlags,
 			},
 		)
 	}
 
-	for _, copy := range spanCopies() {
+	for _, schemaCopy := range spanCopies() {
 		enumPairs = append(enumPairs,
 			enumPair{
-				name:     fmt.Sprintf("trace.v1.Span.SpanKind (%s)", copy.name),
+				name:     fmt.Sprintf("trace.v1.Span.SpanKind (%s)", schemaCopy.name),
 				upstream: otlptrace.Span_SPAN_KIND_UNSPECIFIED.Descriptor(),
-				ours:     copy.spanKind,
+				ours:     schemaCopy.spanKind,
 			},
 			enumPair{
-				name:     fmt.Sprintf("trace.v1.Status.StatusCode (%s)", copy.name),
+				name:     fmt.Sprintf("trace.v1.Status.StatusCode (%s)", schemaCopy.name),
 				upstream: otlptrace.Status_STATUS_CODE_UNSET.Descriptor(),
-				ours:     copy.statusCode,
+				ours:     schemaCopy.statusCode,
 			},
 		)
 	}

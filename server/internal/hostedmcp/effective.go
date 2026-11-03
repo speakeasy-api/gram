@@ -10,7 +10,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -19,63 +18,27 @@ func IsCanonical(server *mcpserversrepo.McpServer, toolsetID uuid.UUID) bool {
 	return server != nil && server.ID == toolsetID && server.ToolsetID.Valid && server.ToolsetID.UUID == toolsetID
 }
 
-// WithServerState returns toolset with its hosting state (enabled, public, session issuer) read from its
-// canonical wrapper, which owns that state; without a canonical wrapper the toolset columns stand.
-func WithServerState(toolset toolsetsrepo.Toolset, wrapper *mcpserversrepo.McpServer) toolsetsrepo.Toolset {
+// ServerHosting is toolset's hosting state (enabled, public, session issuer) read from its canonical
+// wrapper, which owns that state; a toolset without one is not hosted.
+func ServerHosting(toolset toolsetsrepo.Toolset, wrapper *mcpserversrepo.McpServer) hostingstate.Hosting {
 	if !IsCanonical(wrapper, toolset.ID) {
-		return toolset
+		return hostingstate.NotHosted()
 	}
-	return hostingstate.ApplyServer(toolset, wrapper.Visibility, wrapper.UserSessionIssuerID)
+	return hostingstate.FromServer(toolset.ExternalOauthServerID, wrapper.Visibility, wrapper.UserSessionIssuerID)
 }
 
-// InSync reports whether a canonical wrapper matches its toolset's mirrored hosting columns. Serving denies a
-// drifted pair, as pods that read the columns do, so old and new pods answer alike while both run.
-func InSync(toolset toolsetsrepo.Toolset, wrapper *mcpserversrepo.McpServer) bool {
-	return IsCanonical(wrapper, toolset.ID) && wrapper.Visibility == columnVisibility(toolset) && wrapper.UserSessionIssuerID == toolset.UserSessionIssuerID
-}
-
-// columnVisibility maps a toolset's (mcp_enabled, mcp_is_public) columns onto mcp_servers.visibility.
-func columnVisibility(toolset toolsetsrepo.Toolset) string {
-	switch {
-	case !toolset.McpEnabled:
-		return visibility.Disabled
-	case toolset.McpIsPublic:
-		return visibility.Public
-	default:
-		return visibility.Private
-	}
-}
-
-// LoadServerState loads toolset's canonical wrapper and applies WithServerState; wrapper is nil when there is none.
-// The toolset keeps its mirrored address, which the slug fallback serves. A server that kept the toolset's id but
-// no longer serves it leaves the toolset disabled.
-func LoadServerState(ctx context.Context, db toolsetsrepo.DBTX, toolset toolsetsrepo.Toolset) (toolsetsrepo.Toolset, *mcpserversrepo.McpServer, error) {
+// LoadServerState loads toolset's canonical wrapper and returns its ServerHosting hosting; wrapper is nil when
+// there is none, and the toolset is then not hosted. That includes a server that kept the toolset's id but left it.
+func LoadServerState(ctx context.Context, db toolsetsrepo.DBTX, toolset toolsetsrepo.Toolset) (hostingstate.Hosting, *mcpserversrepo.McpServer, error) {
 	wrapper, err := mcpserversrepo.New(db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: toolset.ProjectID})
 	switch {
 	case errors.Is(err, pgx.ErrNoRows):
-		return toolset, nil, nil
+		return hostingstate.NotHosted(), nil, nil
 	case err != nil:
-		return toolset, nil, fmt.Errorf("load canonical hosted MCP server: %w", err)
+		return hostingstate.NotHosted(), nil, fmt.Errorf("load canonical hosted MCP server: %w", err)
 	}
 	if !IsCanonical(&wrapper, toolset.ID) {
-		return hostingstate.ApplyKept(toolset), nil, nil
+		return hostingstate.NotHosted(), nil, nil
 	}
-	return WithServerState(toolset, &wrapper), &wrapper, nil
-}
-
-// WithServerStates applies each toolset's hosting state and preferred address in one query (hostingstate.Apply).
-func WithServerStates(ctx context.Context, db toolsetsrepo.DBTX, organizationID string, toolsets []toolsetsrepo.Toolset) ([]toolsetsrepo.Toolset, error) {
-	ids := make([]uuid.UUID, len(toolsets))
-	for i, toolset := range toolsets {
-		ids[i] = toolset.ID
-	}
-	byID, err := hostingstate.Load(ctx, db, organizationID, ids)
-	if err != nil {
-		return nil, err //nolint:wrapcheck // hostingstate names the failing query.
-	}
-	result := make([]toolsetsrepo.Toolset, len(toolsets))
-	for i, toolset := range toolsets {
-		result[i] = hostingstate.Apply(toolset, hostingstate.For(byID, toolset.ID))
-	}
-	return result, nil
+	return ServerHosting(toolset, &wrapper), &wrapper, nil
 }

@@ -35,7 +35,7 @@ func TestServePublicOAuth_ExternalNoSecurityDefs_ValidToken_Succeeds(t *testing.
 		IsPublic: true,
 	})
 
-	mcpSlug := result.Toolset.McpSlug.String
+	mcpSlug := result.McpSlug
 	// External OAuth flow passes the bearer token through without Speakeasy-level
 	// validation — it's collected as-is in tokenInputs.
 	w, err := servePublicHTTP(t, context.Background(), ti, mcpSlug, makeInitializeBody(), "some-external-token", nil)
@@ -54,17 +54,16 @@ func TestServePublic_PrivateWithoutOAuth_ValidAPIKey_Succeeds(t *testing.T) {
 
 	// Create private toolset WITHOUT OAuth proxy server
 	toolsetsRepo := toolsets_repo.New(ti.conn)
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Private No-OAuth MCP",
 		Slug:                   "private-no-oauth-mcp-" + uuid.New().String()[:8],
 		Description:            conv.ToPGText("A private MCP server without OAuth"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("private-no-oauth-mcp-" + uuid.New().String()[:8]),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "private-no-oauth-mcp-"+uuid.New().String()[:8], "private", noIssuer())
 
 	// Create API key
 	apiKey := ti.createTestAPIKey(ctx, t)

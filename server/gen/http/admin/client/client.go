@@ -152,6 +152,10 @@ type Client struct {
 	// setStripeCustomer endpoint.
 	SetStripeCustomerDoer goahttp.Doer
 
+	// SetAdoptionDashboardURL Doer is the HTTP client used to make requests to the
+	// setAdoptionDashboardUrl endpoint.
+	SetAdoptionDashboardURLDoer goahttp.Doer
+
 	// GetStripeSubscription Doer is the HTTP client used to make requests to the
 	// getStripeSubscription endpoint.
 	GetStripeSubscriptionDoer goahttp.Doer
@@ -424,6 +428,10 @@ type Client struct {
 	// to the disableUpstreamAuthEnforcement endpoint.
 	DisableUpstreamAuthEnforcementDoer goahttp.Doer
 
+	// BackfillMcpAuthGrants Doer is the HTTP client used to make requests to the
+	// backfillMcpAuthGrants endpoint.
+	BackfillMcpAuthGrantsDoer goahttp.Doer
+
 	// RestoreResponseBody controls whether the response bodies are reset after
 	// decoding so they can be read again.
 	RestoreResponseBody bool
@@ -478,6 +486,7 @@ func NewClient(
 		GetPaygBillingSummaryDoer:                   doer,
 		GetStripeCustomerDoer:                       doer,
 		SetStripeCustomerDoer:                       doer,
+		SetAdoptionDashboardURLDoer:                 doer,
 		GetStripeSubscriptionDoer:                   doer,
 		CancelStripeSubscriptionDoer:                doer,
 		ResumeStripeSubscriptionDoer:                doer,
@@ -546,6 +555,7 @@ func NewClient(
 		RunUpstreamOAuthMigrationDoer:               doer,
 		EnableUpstreamAuthEnforcementDoer:           doer,
 		DisableUpstreamAuthEnforcementDoer:          doer,
+		BackfillMcpAuthGrantsDoer:                   doer,
 		RestoreResponseBody:                         restoreBody,
 		scheme:                                      scheme,
 		host:                                        host,
@@ -1365,6 +1375,30 @@ func (c *Client) SetStripeCustomer() goa.Endpoint {
 		resp, err := c.SetStripeCustomerDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "setStripeCustomer", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetAdoptionDashboardURL returns an endpoint that makes HTTP requests to the
+// admin service setAdoptionDashboardUrl server.
+func (c *Client) SetAdoptionDashboardURL() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetAdoptionDashboardURLRequest(c.encoder)
+		decodeResponse = DecodeSetAdoptionDashboardURLResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetAdoptionDashboardURLRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetAdoptionDashboardURLDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setAdoptionDashboardUrl", err)
 		}
 		return decodeResponse(resp)
 	}
@@ -3002,6 +3036,30 @@ func (c *Client) DisableUpstreamAuthEnforcement() goa.Endpoint {
 		resp, err := c.DisableUpstreamAuthEnforcementDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "disableUpstreamAuthEnforcement", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// BackfillMcpAuthGrants returns an endpoint that makes HTTP requests to the
+// admin service backfillMcpAuthGrants server.
+func (c *Client) BackfillMcpAuthGrants() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeBackfillMcpAuthGrantsRequest(c.encoder)
+		decodeResponse = DecodeBackfillMcpAuthGrantsResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildBackfillMcpAuthGrantsRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.BackfillMcpAuthGrantsDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "backfillMcpAuthGrants", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -149,6 +149,11 @@ vi.mock("@/components/ui/Tooltip", () => ({
   SimpleTooltip: ({ children }: { children: React.ReactNode }) => (
     <>{children}</>
   ),
+  Tooltip: ({ children }: { children: React.ReactNode }) => <>{children}</>,
+  TooltipTrigger: ({ children }: { children: React.ReactNode }) => (
+    <>{children}</>
+  ),
+  TooltipContent: () => null,
 }));
 
 // Layout has no viewport in happy-dom: make every virtual row visible.
@@ -248,6 +253,25 @@ describe("ChatDetailSheet session actor", () => {
   afterEach(() => {
     cleanup();
     state.chat = undefined;
+  });
+
+  it("shows the full chat id with a copy button at the top", () => {
+    const writeText = vi.fn();
+    const original = Object.getOwnPropertyDescriptor(navigator, "clipboard");
+    Object.defineProperty(navigator, "clipboard", {
+      configurable: true,
+      value: { writeText },
+    });
+    try {
+      renderPanel(makeChat({ id: "chat_01HXQ1P84WV3S9J7Z52DKVE7NE" }));
+
+      expect(screen.getByText("chat_01HXQ1P84WV3S9J7Z52DKVE7NE")).toBeTruthy();
+      fireEvent.click(screen.getByRole("button", { name: "Copy chat ID" }));
+      expect(writeText).toHaveBeenCalledWith("chat_01HXQ1P84WV3S9J7Z52DKVE7NE");
+    } finally {
+      if (original) Object.defineProperty(navigator, "clipboard", original);
+      else Reflect.deleteProperty(navigator, "clipboard");
+    }
   });
 
   it("names the agent and no person on an agent session that reports nobody", () => {

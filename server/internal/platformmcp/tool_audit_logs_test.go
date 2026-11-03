@@ -73,7 +73,7 @@ func TestCustomerAuditToolTransport(t *testing.T) {
 	reader := &customerAuditStub{page: &auditapi.PlatformMCPAuditPage{Visibility: "self", Logs: []*gen.AuditLog{{
 		ID: "event", ActorID: "actor", ActorType: "user", Action: "project:update", ActingSurface: "platform_mcp", SubjectID: "subject", SubjectType: "project",
 		BeforeSnapshot: json.RawMessage(`{"name":"before"}`), AfterSnapshot: json.RawMessage(`[true,"after"]`), Metadata: map[string]any{"nested": map[string]any{"value": true}},
-	}}, NextCursor: new(audit.EncodeCursor(10, "event"))}}
+	}}, NextCursor: new(audit.EncodeCursor(audit.CategoryConfiguration, 10, "event"))}}
 	registerAuditLogTools(reg, reader)
 	stub := newRegistrar(newTestMCPServer())
 	registerAuditLogTools(stub, nil)
@@ -103,7 +103,7 @@ func TestCustomerAuditToolTransport(t *testing.T) {
 	require.Len(t, reader.requests, 1)
 	require.Equal(t, testPrincipal().OrganizationID, reader.requests[0].OrganizationID)
 	require.Equal(t, testPrincipal().UserID, reader.requests[0].UserID)
-	for _, cursor := range []string{" ", "not-a-cursor", strings.Repeat("a", 129), " " + audit.EncodeCursor(10, "event")} {
+	for _, cursor := range []string{" ", "not-a-cursor", strings.Repeat("a", 129), " " + audit.EncodeCursor(audit.CategoryConfiguration, 10, "event")} {
 		result, err = session.CallTool(t.Context(), &mcp.CallToolParams{Name: live.Name, Arguments: map[string]any{"cursor": cursor}})
 		require.NoError(t, err)
 		require.True(t, result.IsError)
@@ -132,7 +132,7 @@ func TestCustomerAuditToolTransport(t *testing.T) {
 		require.NoError(t, err)
 		require.False(t, result.IsError)
 	}
-	reader.page = &auditapi.PlatformMCPAuditPage{Visibility: "self", Logs: []*gen.AuditLog{{}}, NextCursor: new(audit.EncodeCursor(10, "event"))}
+	reader.page = &auditapi.PlatformMCPAuditPage{Visibility: "self", Logs: []*gen.AuditLog{{}}, NextCursor: new(audit.EncodeCursor(audit.CategoryConfiguration, 10, "event"))}
 	bounded, err := customerAuditOutput(testPrincipal().OrganizationID, reader.page)
 	require.NoError(t, err)
 	encoded, err = json.Marshal(bounded)
@@ -185,7 +185,7 @@ func TestCustomerAuditCompletePageValidation(t *testing.T) {
 		require.NoError(t, err)
 		require.Len(t, output.Entries, count)
 	}
-	page := &auditapi.PlatformMCPAuditPage{Visibility: "self", Logs: []*gen.AuditLog{{SubjectID: ""}}, NextCursor: new(audit.EncodeCursor(10, "event"))}
+	page := &auditapi.PlatformMCPAuditPage{Visibility: "self", Logs: []*gen.AuditLog{{SubjectID: ""}}, NextCursor: new(audit.EncodeCursor(audit.CategoryConfiguration, 10, "event"))}
 	output, err := customerAuditOutput("organization", page)
 	require.NoError(t, err)
 	encoded, err := json.Marshal(output)
@@ -248,7 +248,7 @@ func TestCustomerAuditTransportTypedFilters(t *testing.T) {
 	registerAuditLogTools(reg, reader)
 	session := connectTestClient(t, server)
 	project := uuid.New()
-	cursor := audit.EncodeCursor(123, "event")
+	cursor := audit.EncodeCursor(audit.CategoryConfiguration, 123, "event")
 	result, err := session.CallTool(t.Context(), &mcp.CallToolParams{Name: "list_audit_log_entries", Arguments: map[string]any{
 		"cursor": cursor, "project_id": project.String(), "actor_id": testPrincipal().UserID,
 		"action": "future:action", "subject_type": "assistant", "subject_id": "subject", "acting_surface": "future_surface",
@@ -285,9 +285,10 @@ func TestCustomerAuditTransportFilterGuards(t *testing.T) {
 		{"equal times", map[string]any{"from": "2026-01-01T00:00:00Z", "to": "2026-01-01T00:00:00Z"}, false},
 		{"inverted times", map[string]any{"from": "2026-01-02T00:00:00Z", "to": "2026-01-01T00:00:00Z"}, false},
 		{"invalid cursor", map[string]any{"cursor": "invalid"}, false},
-		{"cursor byte boundary", map[string]any{"cursor": audit.EncodeCursor(1, strings.Repeat("x", 94))}, true},
-		{"cursor overflow", map[string]any{"cursor": audit.EncodeCursor(1, strings.Repeat("x", 95))}, false},
-		{"padded cursor", map[string]any{"cursor": audit.EncodeCursor(1, "event") + " "}, false},
+		{"cursor byte boundary", map[string]any{"cursor": audit.EncodeCursor(audit.CategoryConfiguration, 1, strings.Repeat("x", 94))}, true},
+		{"cursor overflow", map[string]any{"cursor": audit.EncodeCursor(audit.CategoryConfiguration, 1, strings.Repeat("x", 95))}, false},
+		{"security cursor", map[string]any{"cursor": audit.EncodeCursor(audit.CategorySecurity, 1, "event")}, false},
+		{"padded cursor", map[string]any{"cursor": audit.EncodeCursor(audit.CategoryConfiguration, 1, "event") + " "}, false},
 	}
 	for _, field := range []string{"actor_id", "action", "subject_type", "subject_id", "acting_surface"} {
 		for _, value := range []struct {

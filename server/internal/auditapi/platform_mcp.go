@@ -113,11 +113,14 @@ func (s *Service) ListPlatformMCPAuditLogs(ctx context.Context, request Platform
 		params.ActorType = pgtype.Text{String: "", Valid: false}
 	}
 	if request.Cursor != "" {
-		seq, err := audit.DecodeCursor(request.Cursor)
+		cursor, err := audit.DecodeCursor(request.Cursor)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogWarn(ctx, s.logger)
 		}
-		params.CursorSeq = pgtype.Int8{Int64: seq, Valid: true}
+		if cursor.Category != audit.CategoryConfiguration {
+			return nil, oops.E(oops.CodeBadRequest, nil, "cursor was issued for the %s log, not the %s log", cursor.Category, audit.CategoryConfiguration).LogWarn(ctx, s.logger)
+		}
+		params.CursorSeq = pgtype.Int8{Int64: cursor.Seq, Valid: true}
 	}
 	if request.ProjectID.Valid {
 		belongs, err := repo.New(s.db).AuditProjectBelongsToOrganization(ctx, repo.AuditProjectBelongsToOrganizationParams{
@@ -134,7 +137,7 @@ func (s *Service) ListPlatformMCPAuditLogs(ctx context.Context, request Platform
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "error listing audit logs").LogError(ctx, s.logger)
 	}
-	page, err := s.customerPage(ctx, request.OrganizationID, rows)
+	page, err := s.customerPage(ctx, request.OrganizationID, audit.CategoryConfiguration, rows)
 	if err != nil {
 		return nil, err
 	}

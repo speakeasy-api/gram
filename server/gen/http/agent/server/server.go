@@ -21,6 +21,8 @@ type Server struct {
 	Mounts               []*MountPoint
 	GetPlugins           http.Handler
 	GetMyConnections     http.Handler
+	HideMcpServer        http.Handler
+	UnhideMcpServer      http.Handler
 	ListSyncedUsers      http.Handler
 	GetConfiguration     http.Handler
 	UpdateConfiguration  http.Handler
@@ -30,6 +32,7 @@ type Server struct {
 	GetSessionMeta       http.Handler
 	ReportSessionMoved   http.Handler
 	ReportAIScan         http.Handler
+	ReportState          http.Handler
 	CreateSessionHandoff http.Handler
 }
 
@@ -62,6 +65,8 @@ func New(
 		Mounts: []*MountPoint{
 			{"GetPlugins", "GET", "/rpc/agent.getPlugins"},
 			{"GetMyConnections", "GET", "/rpc/agent.getMyConnections"},
+			{"HideMcpServer", "POST", "/rpc/agent.hideMcpServer"},
+			{"UnhideMcpServer", "POST", "/rpc/agent.unhideMcpServer"},
 			{"ListSyncedUsers", "GET", "/rpc/agent.listSyncedUsers"},
 			{"GetConfiguration", "GET", "/rpc/agent.getConfiguration"},
 			{"UpdateConfiguration", "POST", "/rpc/agent.updateConfiguration"},
@@ -71,10 +76,13 @@ func New(
 			{"GetSessionMeta", "GET", "/rpc/agent.getSessionMeta"},
 			{"ReportSessionMoved", "POST", "/rpc/agent.reportSessionMoved"},
 			{"ReportAIScan", "POST", "/rpc/agent.reportAIScan"},
+			{"ReportState", "POST", "/rpc/agent.reportState"},
 			{"CreateSessionHandoff", "POST", "/rpc/agent.createSessionHandoff"},
 		},
 		GetPlugins:           NewGetPluginsHandler(e.GetPlugins, mux, decoder, encoder, errhandler, formatter),
 		GetMyConnections:     NewGetMyConnectionsHandler(e.GetMyConnections, mux, decoder, encoder, errhandler, formatter),
+		HideMcpServer:        NewHideMcpServerHandler(e.HideMcpServer, mux, decoder, encoder, errhandler, formatter),
+		UnhideMcpServer:      NewUnhideMcpServerHandler(e.UnhideMcpServer, mux, decoder, encoder, errhandler, formatter),
 		ListSyncedUsers:      NewListSyncedUsersHandler(e.ListSyncedUsers, mux, decoder, encoder, errhandler, formatter),
 		GetConfiguration:     NewGetConfigurationHandler(e.GetConfiguration, mux, decoder, encoder, errhandler, formatter),
 		UpdateConfiguration:  NewUpdateConfigurationHandler(e.UpdateConfiguration, mux, decoder, encoder, errhandler, formatter),
@@ -84,6 +92,7 @@ func New(
 		GetSessionMeta:       NewGetSessionMetaHandler(e.GetSessionMeta, mux, decoder, encoder, errhandler, formatter),
 		ReportSessionMoved:   NewReportSessionMovedHandler(e.ReportSessionMoved, mux, decoder, encoder, errhandler, formatter),
 		ReportAIScan:         NewReportAIScanHandler(e.ReportAIScan, mux, decoder, encoder, errhandler, formatter),
+		ReportState:          NewReportStateHandler(e.ReportState, mux, decoder, encoder, errhandler, formatter),
 		CreateSessionHandoff: NewCreateSessionHandoffHandler(e.CreateSessionHandoff, mux, decoder, encoder, errhandler, formatter),
 	}
 }
@@ -95,6 +104,8 @@ func (s *Server) Service() string { return "agent" }
 func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetPlugins = m(s.GetPlugins)
 	s.GetMyConnections = m(s.GetMyConnections)
+	s.HideMcpServer = m(s.HideMcpServer)
+	s.UnhideMcpServer = m(s.UnhideMcpServer)
 	s.ListSyncedUsers = m(s.ListSyncedUsers)
 	s.GetConfiguration = m(s.GetConfiguration)
 	s.UpdateConfiguration = m(s.UpdateConfiguration)
@@ -104,6 +115,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.GetSessionMeta = m(s.GetSessionMeta)
 	s.ReportSessionMoved = m(s.ReportSessionMoved)
 	s.ReportAIScan = m(s.ReportAIScan)
+	s.ReportState = m(s.ReportState)
 	s.CreateSessionHandoff = m(s.CreateSessionHandoff)
 }
 
@@ -114,6 +126,8 @@ func (s *Server) MethodNames() []string { return agent.MethodNames[:] }
 func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetPluginsHandler(mux, h.GetPlugins)
 	MountGetMyConnectionsHandler(mux, h.GetMyConnections)
+	MountHideMcpServerHandler(mux, h.HideMcpServer)
+	MountUnhideMcpServerHandler(mux, h.UnhideMcpServer)
 	MountListSyncedUsersHandler(mux, h.ListSyncedUsers)
 	MountGetConfigurationHandler(mux, h.GetConfiguration)
 	MountUpdateConfigurationHandler(mux, h.UpdateConfiguration)
@@ -123,6 +137,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountGetSessionMetaHandler(mux, h.GetSessionMeta)
 	MountReportSessionMovedHandler(mux, h.ReportSessionMoved)
 	MountReportAIScanHandler(mux, h.ReportAIScan)
+	MountReportStateHandler(mux, h.ReportState)
 	MountCreateSessionHandoffHandler(mux, h.CreateSessionHandoff)
 }
 
@@ -214,6 +229,112 @@ func NewGetMyConnectionsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "getMyConnections")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountHideMcpServerHandler configures the mux to serve the "agent" service
+// "hideMcpServer" endpoint.
+func MountHideMcpServerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/agent.hideMcpServer", f)
+}
+
+// NewHideMcpServerHandler creates a HTTP handler which loads the HTTP request
+// and calls the "agent" service "hideMcpServer" endpoint.
+func NewHideMcpServerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeHideMcpServerRequest(mux, decoder)
+		encodeResponse = EncodeHideMcpServerResponse(encoder)
+		encodeError    = EncodeHideMcpServerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "hideMcpServer")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountUnhideMcpServerHandler configures the mux to serve the "agent" service
+// "unhideMcpServer" endpoint.
+func MountUnhideMcpServerHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/agent.unhideMcpServer", f)
+}
+
+// NewUnhideMcpServerHandler creates a HTTP handler which loads the HTTP
+// request and calls the "agent" service "unhideMcpServer" endpoint.
+func NewUnhideMcpServerHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeUnhideMcpServerRequest(mux, decoder)
+		encodeResponse = EncodeUnhideMcpServerResponse(encoder)
+		encodeError    = EncodeUnhideMcpServerError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "unhideMcpServer")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
 		payload, err := decodeRequest(r)
 		if err != nil {
@@ -691,6 +812,59 @@ func NewReportAIScanHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "reportAIScan")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountReportStateHandler configures the mux to serve the "agent" service
+// "reportState" endpoint.
+func MountReportStateHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/agent.reportState", f)
+}
+
+// NewReportStateHandler creates a HTTP handler which loads the HTTP request
+// and calls the "agent" service "reportState" endpoint.
+func NewReportStateHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeReportStateRequest(mux, decoder)
+		encodeResponse = EncodeReportStateResponse(encoder)
+		encodeError    = EncodeReportStateError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "reportState")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "agent")
 		payload, err := decodeRequest(r)
 		if err != nil {

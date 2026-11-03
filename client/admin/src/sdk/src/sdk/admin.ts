@@ -3,6 +3,7 @@
  */
 
 import { adminAssignOrganizationOnboardingPlaybook } from "../funcs/adminAssignOrganizationOnboardingPlaybook.js";
+import { adminBackfillMcpAuthGrants } from "../funcs/adminBackfillMcpAuthGrants.js";
 import { adminBulkUpdateAccountType } from "../funcs/adminBulkUpdateAccountType.js";
 import { adminCancelStripeSubscription } from "../funcs/adminCancelStripeSubscription.js";
 import { adminChangeTrialEndDate } from "../funcs/adminChangeTrialEndDate.js";
@@ -85,6 +86,7 @@ import { adminRetryRegistryPromotionDocs } from "../funcs/adminRetryRegistryProm
 import { adminRunUpstreamOAuthMigration } from "../funcs/adminRunUpstreamOAuthMigration.js";
 import { adminSaveRegistryEntry } from "../funcs/adminSaveRegistryEntry.js";
 import { adminServeImage } from "../funcs/adminServeImage.js";
+import { adminSetAdoptionDashboardUrl } from "../funcs/adminSetAdoptionDashboardUrl.js";
 import { adminSetInferenceKeyMonthlyLimit } from "../funcs/adminSetInferenceKeyMonthlyLimit.js";
 import { adminSetOrganizationChatAnalysisSettings } from "../funcs/adminSetOrganizationChatAnalysisSettings.js";
 import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
@@ -102,6 +104,7 @@ import { adminUpdateSignupOffer } from "../funcs/adminUpdateSignupOffer.js";
 import { adminUpdateSupportMatrix } from "../funcs/adminUpdateSupportMatrix.js";
 import { adminUploadPlatformImage } from "../funcs/adminUploadPlatformImage.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
+import { AdminBackfillMCPAuthGrantsResult } from "../models/components/adminbackfillmcpauthgrantsresult.js";
 import { AdminBulkUpdateAccountTypeResult } from "../models/components/adminbulkupdateaccounttyperesult.js";
 import { AdminChatAnalysisSettings } from "../models/components/adminchatanalysissettings.js";
 import { AdminChatAnalysisTriggerResult } from "../models/components/adminchatanalysistriggerresult.js";
@@ -145,6 +148,7 @@ import { AdminSpendBreakdownResponse } from "../models/components/adminspendbrea
 import { AdminStripeCustomer } from "../models/components/adminstripecustomer.js";
 import { AdminStripeSubscription } from "../models/components/adminstripesubscription.js";
 import { AdminStripeSubscriptionCandidate } from "../models/components/adminstripesubscriptioncandidate.js";
+import { AdminUploadImageResult } from "../models/components/adminuploadimageresult.js";
 import { AdminUpstreamOAuthMigrationOrganizations } from "../models/components/adminupstreamoauthmigrationorganizations.js";
 import { AdminUpstreamOAuthMigrationRun } from "../models/components/adminupstreamoauthmigrationrun.js";
 import { AdminUpstreamOAuthMigrationStatus } from "../models/components/adminupstreamoauthmigrationstatus.js";
@@ -191,6 +195,7 @@ import { RetryRegistryPromotionDocsRequestBody } from "../models/components/retr
 import { RiskIDRequestBody } from "../models/components/riskidrequestbody.js";
 import { RunUpstreamOAuthMigrationRequestBody } from "../models/components/runupstreamoauthmigrationrequestbody.js";
 import { SaveRegistryEntryRequestBody } from "../models/components/saveregistryentryrequestbody.js";
+import { SetAdoptionDashboardURLRequestBody } from "../models/components/setadoptiondashboardurlrequestbody.js";
 import { SetInferenceKeyMonthlyLimitRequestBody } from "../models/components/setinferencekeymonthlylimitrequestbody.js";
 import { SetOrganizationChatAnalysisSettingsRequestBody } from "../models/components/setorganizationchatanalysissettingsrequestbody.js";
 import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
@@ -208,7 +213,6 @@ import { UpdateOrganizationRequestBody } from "../models/components/updateorgani
 import { UpdateRemoteSessionIssuerForm } from "../models/components/updateremotesessionissuerform.js";
 import { UpdateSignupOfferRequestBody } from "../models/components/updatesignupofferrequestbody.js";
 import { UpdateSupportMatrixRequestBody } from "../models/components/updatesupportmatrixrequestbody.js";
-import { UploadImageResult } from "../models/components/uploadimageresult.js";
 import { AdminDeleteGlobalIssuerRequest } from "../models/operations/admindeleteglobalissuer.js";
 import { AdminDescribeMcpServerHealthRequest } from "../models/operations/admindescribemcpserverhealth.js";
 import { AdminGetGlobalIssuerRequest } from "../models/operations/admingetglobalissuer.js";
@@ -288,12 +292,12 @@ export class Admin extends ClientSDK {
    * uploadPlatformImage admin
    *
    * @remarks
-   * Upload a global issuer logo, limited to 4 MiB and PNG, JPEG, GIF or WebP.
+   * Upload a platform logo, limited to 4 MiB and PNG, JPEG, GIF, WebP or static SVG with local clip paths. This is a direct upload, not a staged proposal: successful uploads are publicly served immediately and remain stored.
    */
   async uploadPlatformImage(
     request: ReadableStream<Uint8Array> | Blob | ArrayBuffer | Uint8Array,
     options?: RequestOptions,
-  ): Promise<UploadImageResult> {
+  ): Promise<AdminUploadImageResult> {
     return unwrapAsync(adminUploadPlatformImage(
       this,
       request,
@@ -375,6 +379,21 @@ export class Admin extends ClientSDK {
     return unwrapAsync(adminGetHookClients(
       this,
       request,
+      options,
+    ));
+  }
+
+  /**
+   * backfillMcpAuthGrants admin
+   *
+   * @remarks
+   * Grants unrestricted mcp:auth to every principal that holds any mcp:connect grant, in every organization. The connect grant's selectors are ignored. Safe to run more than once.
+   */
+  async backfillMcpAuthGrants(
+    options?: RequestOptions,
+  ): Promise<AdminBackfillMCPAuthGrantsResult> {
+    return unwrapAsync(adminBackfillMcpAuthGrants(
+      this,
       options,
     ));
   }
@@ -915,6 +934,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminStripeSubscription> {
     return unwrapAsync(adminResumeStripeSubscription(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * setAdoptionDashboardUrl admin
+   *
+   * @remarks
+   * Sets or clears the link to an organization's adoption dashboard shown on the admin overview. An empty or absent URL clears it.
+   */
+  async setAdoptionDashboardUrl(
+    request: SetAdoptionDashboardURLRequestBody,
+    options?: RequestOptions,
+  ): Promise<AdminOrganization> {
+    return unwrapAsync(adminSetAdoptionDashboardUrl(
       this,
       request,
       options,

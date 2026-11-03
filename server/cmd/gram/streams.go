@@ -848,7 +848,7 @@ func newStreamsCommand() *cli.Command {
 				})
 				mustReceive(rg, &roledistributionv1.RoleDistributionSetupRequestedV1{}, &roledistributionv1.RoleDistributionSetupHandler{}, streams.HandlerFunc[*roledistributionv1.RoleDistributionSetupRequestedV1](roleDistributionHandler.HandleRoleDistributionSetupRequested))
 				if c.Bool(pluginPublicationConsumeFlagName) {
-					publicationHandler := plugins.NewPublicationHandler(logger, db, (&background.TemporalPluginPublisher{TemporalEnv: temporalEnv}).SignalPluginPublish)
+					publicationHandler := plugins.NewPublicationHandler(logger, db, &background.TemporalPluginPublisher{TemporalEnv: temporalEnv})
 					organizationPublicationHandler := plugins.NewOrganizationPublicationHandler(logger, db)
 					settings := gcp.BatchReceiveSettings{MaxMessages: 1000, MaxBytes: 10 * constants.MiB, MaxLatency: time.Second, MaxBufferedMessages: 0, MaxBufferedBytes: 0}
 					mustReceiveBatchWithResult(rg, &pluginsv1.PublicationRequested{}, &pluginsv1.PublicationScheduler{}, publicationHandler, settings)

@@ -7,7 +7,6 @@ import (
 	"context"
 	"errors"
 	"fmt"
-	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgerrcode"
@@ -19,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/tombstone"
@@ -27,7 +27,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
-	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -194,9 +193,6 @@ func CreateCanonical(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, 
 	}); err != nil {
 		return mcpserversrepo.McpServer{}, oops.E(oops.CodeUnexpected, err, "audit hosted MCP endpoint")
 	}
-	if err := hostingstate.MirrorToToolset(ctx, tx, toolset.ProjectID, toolset.ID); err != nil {
-		return mcpserversrepo.McpServer{}, err //nolint:wrapcheck // oops errors pass through.
-	}
 	return server, nil
 }
 
@@ -237,19 +233,28 @@ func LockServer(ctx context.Context, tx pgx.Tx, organizationID string, projectID
 	return endpoints, server, nil
 }
 
-// RequireLiveAddress rejects enabling a hosted server with no endpoint that can serve; an address on a deleted
-// domain does not count.
+// RequireLiveAddress rejects enabling a hosted server with no endpoint that can serve: one on the platform or on
+// a live, verified and activated custom domain. A canonical server's legacy toolset alias also serves while it lasts.
 func RequireLiveAddress(ctx context.Context, tx pgx.Tx, organizationID string, server mcpserversrepo.McpServer) error {
-	live, err := mcpendpointsrepo.New(tx).ListMCPEndpointsOnLiveDomainsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsOnLiveDomainsByMCPServerIDParams{
+	live, err := mcpendpointsrepo.New(tx).ListServableMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListServableMCPEndpointsByMCPServerIDParams{
 		OrganizationID: organizationID, ProjectID: server.ProjectID, McpServerID: server.ID,
 	})
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "list hosted MCP addresses")
 	}
-	if len(live) == 0 {
-		return oops.E(oops.CodeInvalid, nil, "hosted MCP server has no address; add one before enabling it")
+	if len(live) > 0 {
+		return nil
 	}
-	return nil
+	if IsCanonical(&server, server.ID) {
+		alias, err := legacyalias.Get(ctx, tx, server.ProjectID, server.ID)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "load hosted MCP legacy alias")
+		}
+		if alias.Slug.Valid && alias.Slug.String != "" {
+			return nil
+		}
+	}
+	return oops.E(oops.CodeInvalid, nil, "hosted MCP server has no address; add one before enabling it")
 }
 
 // Enable re-enables a toolset's disabled canonical wrapper with hostingstate.ReEnableVisibility: public only with
@@ -288,9 +293,6 @@ func Enable(ctx context.Context, tx pgx.Tx, auditLogger *audit.Logger, actor Act
 	}
 	if err := LogUpdate(ctx, tx, auditLogger, actor, toolset.OrganizationID, canonical, updated); err != nil {
 		return false, err
-	}
-	if err := hostingstate.MirrorToToolset(ctx, tx, toolset.ProjectID, toolset.ID); err != nil {
-		return false, err //nolint:wrapcheck // oops errors pass through.
 	}
 	return true, nil
 }
@@ -356,28 +358,15 @@ func displayName(server mcpserversrepo.McpServer) string {
 	}
 }
 
-func isRoot(endpoint mcpendpointsrepo.McpEndpoint) bool {
-	return endpoint.IsDomainRoot.Valid && endpoint.IsDomainRoot.Bool
-}
-
-// resyncIssuers recomputes the derived remote_session_issuer_id for each issuer touched.
-func resyncIssuers(ctx context.Context, tx pgx.Tx, toolset toolsetsrepo.Toolset, issuers ...uuid.NullUUID) error {
-	ids := make([]uuid.UUID, 0, len(issuers))
-	for _, id := range issuers {
-		if id.Valid && !slices.Contains(ids, id.UUID) {
-			ids = append(ids, id.UUID)
-		}
-	}
-	if len(ids) == 0 {
-		return nil
-	}
-	if err := remotesessions.ResyncMCPServerRemoteSessionIssuers(ctx, tx, toolset.OrganizationID, toolset.ProjectID, ids); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "resync hosted MCP remote session issuer")
-	}
-	return nil
-}
-
 func isUniqueViolation(err error) bool {
 	var pgErr *pgconn.PgError
 	return errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation
+}
+
+func createServerError(err error) error {
+	var pgErr *pgconn.PgError
+	if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.UniqueViolation && pgErr.ConstraintName == "mcp_servers_project_id_slug_key" {
+		return oops.E(oops.CodeConflict, errors.Join(ErrAddressInUse, err), "hosted MCP project server slug is already in use")
+	}
+	return oops.E(oops.CodeConflict, err, "create hosted MCP server")
 }

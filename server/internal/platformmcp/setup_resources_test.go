@@ -55,7 +55,7 @@ func TestSetupResourceValidation(t *testing.T) {
 	undated.ObservedAt = time.Time{}
 
 	for name, resource := range map[string]SetupResource{
-		"unparseable provider": withURI("gram://platform-mcp/setup/%zz/provider_setup"),
+		"unparseable provider": withURI("speakeasy://platform-mcp/setup/%zz/provider_setup"),
 		"foreign scheme":       withURI("https://example.test/setup"),
 		"extra path segment":   withURI(SetupResourceURI("fixture", "provider_setup/extra")),
 		"oversized":            oversized,

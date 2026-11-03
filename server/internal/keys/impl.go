@@ -114,6 +114,9 @@ func (s *Service) CreateKey(ctx context.Context, payload *gen.CreateKeyPayload) 
 		}
 		return s.createAgentKey(ctx, payload)
 	}
+	if len(payload.AuthClientChoices) > 0 {
+		return nil, oops.E(oops.CodeBadRequest, nil, "auth_client_choices apply to agent keys")
+	}
 	scopes := map[string]struct{}{}
 	for _, rawscope := range payload.Scopes {
 		scope, ok := auth.APIKeyScopes[rawscope]

@@ -7,7 +7,7 @@
     },
     "pitchfork": {
       "type": "local",
-      "command": ["pitchfork", "mcp"]
+      "command": ["pitchfork", "mcp", "--local"]
     },
     "mise": {
       "type": "local",

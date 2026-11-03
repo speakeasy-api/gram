@@ -82,16 +82,16 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 	}
 	outcome.Action = candidate.Action
 	if candidate.Action == ActionDelete {
-		outcome.McpSlug = toolset.McpSlug.String
-		err := m.deleteInTx(ctx, tx, actor, toolset, &outcome)
+		outcome.McpSlug = candidate.Alias.Slug.String
+		err := m.deleteInTx(ctx, tx, actor, toolset, candidate.Alias.Slug, &outcome)
 		return outcome, err
 	}
-	outcome.McpSlug = toolset.McpSlug.String
+	outcome.McpSlug = candidate.Alias.Slug.String
 	outcome.Warnings = append(outcome.Warnings, candidate.Warnings...)
 
 	// Lock order matches hostedmcp: custom domains, then the server's
 	// endpoints, then the server row, which the switch locks as it updates it.
-	if _, err := hostedmcp.LockDomains(ctx, tx, organizationID, toolset.CustomDomainID); err != nil {
+	if _, err := hostedmcp.LockDomains(ctx, tx, organizationID, candidate.Alias.CustomDomainID); err != nil {
 		return outcome, fmt.Errorf("lock custom domain: %w", err)
 	}
 	serverID, err := queries.GetToolsetServerID(ctx, repo.GetToolsetServerIDParams{ToolsetID: conv.ToNullUUID(toolset.ID), ProjectID: projectID})
@@ -154,15 +154,6 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 			outcome.Actions = append(outcome.Actions, fmt.Sprintf("Record the upstream URL on %d signed-in sessions", filled))
 		}
 	}
-
-	disabled, err := queries.DisableToolset(ctx, repo.DisableToolsetParams{ID: toolset.ID, ProjectID: projectID})
-	if err != nil {
-		return outcome, fmt.Errorf("disable toolset: %w", err)
-	}
-	if disabled != 1 {
-		return outcome, errNotCandidate
-	}
-	outcome.Actions = append(outcome.Actions, "Disable the old toolset")
 
 	entries, err := queries.CountServerPluginEntries(ctx, repo.CountServerPluginEntriesParams{ProjectID: projectID, McpServerID: conv.ToNullUUID(serverID)})
 	if err != nil {

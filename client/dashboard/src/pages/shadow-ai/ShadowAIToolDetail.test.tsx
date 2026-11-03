@@ -1,5 +1,11 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
+import {
+  cleanup,
+  fireEvent,
+  render as renderView,
+  screen,
+} from "@testing-library/react";
+import type { ReactElement, ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { AIDetection } from "@gram/client/models/components/aidetection.js";
 import type { ListAIDetectionUsersResult } from "@gram/client/models/components/listaidetectionusersresult.js";
@@ -10,27 +16,9 @@ const mocks = vi.hoisted(() => ({
   useParams: vi.fn(),
 }));
 
-vi.mock("react-router", () => ({
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
   useParams: mocks.useParams,
-  Link: ({ to, children }: { to: string; children: ReactNode }) => (
-    <a href={to}>{children}</a>
-  ),
-  // The user column links to the identity page, which reads the location to
-  // carry the reader's window across.
-  useLocation: () => ({
-    pathname: "/org/projects/project/shadow-ai/harnesses/cursor",
-    search: "",
-  }),
-}));
-
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    identities: {
-      detail: {
-        overview: { href: (urn: string) => `/identities/${urn}/overview` },
-      },
-    },
-  }),
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
@@ -156,6 +144,19 @@ function loaded(data: ListAIDetectionUsersResult) {
   return { data, error: null, isError: false, isPending: false };
 }
 
+// The user column links to the identity page, which reads the location to
+// carry the reader's window across.
+const render = (ui: ReactElement) =>
+  renderView(ui, {
+    wrapper: ({ children }) => (
+      <MemoryRouter
+        initialEntries={["/org/projects/project/shadow-ai/harnesses/cursor"]}
+      >
+        {children}
+      </MemoryRouter>
+    ),
+  });
+
 describe("ShadowAIToolDetail", () => {
   beforeEach(() => {
     mocks.useParams.mockReturnValue({ targetId: "cursor" });
@@ -181,7 +182,9 @@ describe("ShadowAIToolDetail", () => {
       screen
         .getByRole("link", { name: "sam@example.com" })
         .getAttribute("href"),
-    ).toBe("/identities/email%3Asam%40example.com/overview");
+    ).toBe(
+      "/org/projects/project/identities/email%3Asam%40example.com/overview",
+    );
     // The identity page's own evidence columns, per person instead of per tool.
     expect(screen.getByText("2 devices")).toBeTruthy();
     expect(screen.getByText("1 device")).toBeTruthy();

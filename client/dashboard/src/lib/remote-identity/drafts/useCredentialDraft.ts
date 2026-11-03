@@ -222,13 +222,13 @@ export function useAgentCredentialDraft({
         return true;
       }
       clear();
-      toast.success("Service Account updated");
+      toast.success("Shared credential updated");
       return true;
     } catch (error) {
       toast.error(
         error instanceof Error
           ? error.message
-          : "Failed to update Service Account",
+          : "Failed to update shared credential",
       );
       return false;
     }

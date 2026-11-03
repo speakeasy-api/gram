@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
+	"github.com/speakeasy-api/gram/server/internal/audit/securityevent"
 	"github.com/speakeasy-api/gram/server/internal/auth/orgslug"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -321,6 +322,8 @@ func productFeaturesResult(snapshot productfeatures.ProductFeaturesSnapshot) *ge
 		NetworkIngressEnabled:                   snapshot.NetworkIngressEnabled, SessionPortabilityEnabled: snapshot.SessionPortabilityEnabled,
 		SignalsIntelligenceEnabled: snapshot.SignalsIntelligenceEnabled, OrganizationGatewayDisabled: snapshot.OrganizationGatewayDisabled,
 		CodeModeEnabled: snapshot.CodeModeEnabled, DeviceAgent: snapshot.DeviceAgent,
+		// Staff read enforcement through the upstream auth enforcement status.
+		UpstreamAuthEnforced: nil,
 	}
 }
 
@@ -477,6 +480,7 @@ func Attach(mux goahttp.Muxer, service *Service) {
 	server.SetOrganizationFeature = service.strictAdminJSON(server.SetOrganizationFeature, func() any { return new(adminserver.SetOrganizationFeatureRequestBody) })
 	server.SetOrganizationChatAnalysisSettings = service.strictAdminJSON(server.SetOrganizationChatAnalysisSettings, func() any { return new(adminserver.SetOrganizationChatAnalysisSettingsRequestBody) })
 	server.SetStripeCustomer = service.strictAdminJSON(server.SetStripeCustomer, func() any { return new(adminserver.SetStripeCustomerRequestBody) })
+	server.SetAdoptionDashboardURL = service.strictAdminJSON(server.SetAdoptionDashboardURL, func() any { return new(adminserver.SetAdoptionDashboardURLRequestBody) })
 	server.GetStripeSubscriptionCandidate = service.preauthorizeAdmin(server.GetStripeSubscriptionCandidate)
 	server.SetStripeSubscription = service.strictAdminJSON(server.SetStripeSubscription, func() any { return new(adminserver.SetStripeSubscriptionRequestBody) })
 	server.TriggerOrganizationChatAnalysis = service.strictAdminJSON(server.TriggerOrganizationChatAnalysis, func() any { return new(adminserver.TriggerOrganizationChatAnalysisRequestBody) })
@@ -1128,23 +1132,37 @@ func (s *Service) ListOrganizationActivityFiltered(ctx context.Context, filter O
 		CreatedFrom:            conv.PtrToPGTimestamptz(filter.From),
 		CreatedTo:              conv.PtrToPGTimestamptz(filter.To),
 	}
+	var cursor activityCursor
 	if filter.Cursor != nil && *filter.Cursor != "" {
-		seq, err := audit.DecodeCursor(*filter.Cursor)
+		cursor, err = decodeActivityCursor(*filter.Cursor)
 		if err != nil {
 			return nil, oops.E(oops.CodeBadRequest, err, "invalid cursor").LogWarn(ctx, s.logger)
 		}
-		params.CursorSeq = pgtype.Int8{Int64: seq, Valid: true}
 	}
 
-	rows, err := auditrepo.New(s.db).ListAuditLogs(ctx, params)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list organization activity").LogError(ctx, s.logger, attr.SlogOrganizationID(filter.OrganizationID))
+	// Staff read the configuration and security logs as one timeline. Each log
+	// pages by its own seq, so the cursor carries a position in each.
+	var configuration, security []auditrepo.ListAuditLogsRow
+	if !cursor.configuration.done {
+		params.CursorSeq = cursor.configuration.seq
+		configuration, err = auditrepo.New(s.db).ListAuditLogs(ctx, params)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list organization activity").LogError(ctx, s.logger, attr.SlogOrganizationID(filter.OrganizationID))
+		}
+	}
+	if !cursor.security.done {
+		params.CursorSeq = cursor.security.seq
+		security, err = securityevent.List(ctx, s.db, params)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list organization security activity").LogError(ctx, s.logger, attr.SlogOrganizationID(filter.OrganizationID))
+		}
 	}
 
 	const pageSize = 50
-	logs := make([]*gen.AuditLog, 0, min(len(rows), pageSize))
-	for _, row := range rows[:min(len(rows), pageSize)] {
-		log, err := adminActivityLog(row)
+	page, next := mergeActivity(configuration, security, cursor, pageSize)
+	logs := make([]*gen.AuditLog, 0, len(page))
+	for _, entry := range page {
+		log, err := adminActivityLog(entry.row, entry.category)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "build organization activity response").LogError(ctx, s.logger)
 		}
@@ -1152,15 +1170,14 @@ func (s *Service) ListOrganizationActivityFiltered(ctx context.Context, filter O
 	}
 
 	var nextCursor *string
-	if len(rows) > pageSize {
-		cursor := audit.EncodeCursor(rows[pageSize-1].Seq, rows[pageSize-1].ID.String())
-		nextCursor = &cursor
+	if next != nil {
+		nextCursor = new(next.encode())
 	}
 
 	return &gen.AdminListOrganizationActivityResult{Logs: logs, NextCursor: nextCursor}, nil
 }
 
-func adminActivityLog(row auditrepo.ListAuditLogsRow) (*gen.AuditLog, error) {
+func adminActivityLog(row auditrepo.ListAuditLogsRow, category audit.Category) (*gen.AuditLog, error) {
 	var metadata map[string]any
 	if len(row.Metadata) > 0 {
 		var decoded any
@@ -1188,7 +1205,7 @@ func adminActivityLog(row auditrepo.ListAuditLogsRow) (*gen.AuditLog, error) {
 	return &gen.AuditLog{
 		ID: row.ID.String(), ProjectID: conv.FromNullableUUID(row.ProjectID), ProjectSlug: conv.FromPGText[string](row.ProjectSlug),
 		ActorID: row.ActorID, ActorType: row.ActorType, ActorDisplayName: actorDisplayName, ActorSlug: conv.FromPGText[string](row.ActorSlug),
-		Action: row.Action, ActingSurface: actingSurface, ActingClientID: conv.FromPGText[string](row.ActingClientID),
+		Action: row.Action, ActingSurface: actingSurface, ActingClientID: conv.FromPGText[string](row.ActingClientID), Category: new(string(category)),
 		SubjectID: row.SubjectID, SubjectType: row.SubjectType, SubjectDisplayName: conv.FromPGText[string](row.SubjectDisplayName), SubjectSlug: conv.FromPGText[string](row.SubjectSlug),
 		BeforeSnapshot: row.BeforeSnapshot, AfterSnapshot: row.AfterSnapshot, Metadata: metadata, CreatedAt: row.CreatedAt.Time.Format(time.RFC3339),
 	}, nil
@@ -1532,9 +1549,21 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 		return nil, err
 	}
 
-	name, err := orgprovision.ValidateName(orgprovision.NameFromHostname(hostname))
+	requestedName := orgprovision.NameFromHostname(hostname)
+	if payload.Name != nil {
+		requestedName = *payload.Name
+	}
+	name, err := orgprovision.ValidateName(requestedName)
 	if err != nil {
 		return nil, err
+	}
+
+	requestedSlug := ""
+	if payload.Slug != nil {
+		requestedSlug, err = validateOrganizationSlug(*payload.Slug)
+		if err != nil {
+			return nil, err
+		}
 	}
 
 	created, err := orgprovision.CreateInWorkOSWithVerifiedDomain(ctx, s.workos, name, hostname)
@@ -1568,14 +1597,43 @@ func (s *Service) CreateOrganization(ctx context.Context, payload *gen.CreateOrg
 
 	// A row can already exist under the derived ID: WorkOS fires
 	// organization.created the moment the call above returns, so the sync
-	// activity can win the race to insert it. That row's slug is already in the
-	// organization's URL, and re-deriving one would find the base taken by that
-	// very row and write a suffixed variant over it.
+	// activity can win the race to insert it. Without an explicit slug, that
+	// row's slug is kept: re-deriving one would find the base taken by that very
+	// row and write a suffixed variant over it.
 	uniqueSlug := ""
+	if requestedSlug != "" {
+		if lockErr := queries.LockOrganizationSlug(ctx, requestedSlug); lockErr != nil {
+			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("lock requested organization slug: %w", lockErr), organizationCreationUncertain).LogError(ctx, logger)
+		}
+
+		atRequestedSlug, lookupErr := queries.GetOrganizationMetadataBySlug(ctx, requestedSlug)
+		switch {
+		case errors.Is(lookupErr, pgx.ErrNoRows):
+			uniqueSlug = requestedSlug
+		case lookupErr == nil && atRequestedSlug.ID == created.GramOrganizationID:
+			// The webhook can have inserted this same organization while the
+			// WorkOS request was in flight. In that case the requested slug is
+			// already ours, not a collision that needs a suffix.
+			uniqueSlug = requestedSlug
+		case lookupErr == nil:
+			found, findErr := orgslug.FindUnique(ctx, queries, requestedSlug)
+			if findErr != nil {
+				return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("find unique requested organization slug: %w", findErr), organizationCreationUncertain).LogError(ctx, logger)
+			}
+			uniqueSlug = found
+		default:
+			return nil, oops.E(oops.CodeUnexpected, fmt.Errorf("look up requested organization slug: %w", lookupErr), organizationCreationUncertain).LogError(ctx, logger)
+		}
+	}
+
 	existing, err := queries.GetOrganizationMetadata(ctx, created.GramOrganizationID)
 	switch {
-	case err == nil:
+	case err == nil && uniqueSlug == "":
 		uniqueSlug = existing.Slug
+	case (err == nil || errors.Is(err, pgx.ErrNoRows)) && uniqueSlug != "":
+		// The explicit slug wins over a row inserted by the WorkOS webhook for
+		// this same create. That row derived its slug from the display name and
+		// has not represented an operator choice yet.
 	case errors.Is(err, pgx.ErrNoRows):
 		// Seeded with the WorkOS organization ID rather than randomness so a
 		// retry of the same create competes for one advisory-lock key instead
@@ -2002,6 +2060,7 @@ func (s *Service) adminOrganizationFromGetRow(row repo.AdminGetOrganizationRow) 
 		TrialConvertedAt:               pgTimestampPtr(row.TrialConvertedAt),
 		TrialDemotedAt:                 pgTimestampPtr(row.TrialDemotedAt),
 		CreationSource:                 conv.FromPGText[string](row.CreationSource),
+		AdoptionDashboardURL:           conv.FromPGText[string](row.AdoptionDashboardUrl),
 		MemberCount:                    int(row.MemberCount),
 		CreatedAt:                      row.CreatedAt.Time.Format(time.RFC3339),
 		UpdatedAt:                      row.UpdatedAt.Time.Format(time.RFC3339),
@@ -2029,10 +2088,11 @@ func (s *Service) adminOrganizationFromRow(row repo.AdminListOrganizationsRow) *
 		TrialDemotedAt:                 nil,
 		// The list does not select it. The record view asks for one organization
 		// and reads it there, like trial_tier above.
-		CreationSource: nil,
-		MemberCount:    int(row.MemberCount),
-		CreatedAt:      row.CreatedAt.Time.Format(time.RFC3339),
-		UpdatedAt:      row.UpdatedAt.Time.Format(time.RFC3339),
+		CreationSource:       nil,
+		AdoptionDashboardURL: nil,
+		MemberCount:          int(row.MemberCount),
+		CreatedAt:            row.CreatedAt.Time.Format(time.RFC3339),
+		UpdatedAt:            row.UpdatedAt.Time.Format(time.RFC3339),
 	}
 }
 

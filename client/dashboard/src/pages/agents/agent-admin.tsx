@@ -27,7 +27,8 @@ import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js"
 import { useState, type JSX } from "react";
 import { Link } from "react-router";
 import { useRoutes } from "@/routes";
-import { AlertTriangle } from "lucide-react";
+import { AlertTriangle, Pencil } from "lucide-react";
+import { cn } from "@/lib/utils";
 import { toast } from "sonner";
 
 function AgentScopeLabel({ agent }: { agent: ManagedAgent }) {
@@ -164,11 +165,16 @@ export function RenameAgentButton({
   refresh,
   variant = "secondary",
   size,
+  iconOnly = false,
+  className,
 }: {
   agent: ManagedAgent;
   refresh: () => void;
   variant?: ButtonProps["variant"];
   size?: ButtonProps["size"];
+  /** A pencil beside the name rather than a labelled button. */
+  iconOnly?: boolean;
+  className?: string;
   // Null when the reader may not rename: the control is the whole output.
 }): JSX.Element | null {
   const [open, setOpen] = useState(false);
@@ -193,9 +199,21 @@ export function RenameAgentButton({
       }}
     >
       <Dialog.Trigger asChild>
-        <Button variant={variant} size={size}>
-          Rename
-        </Button>
+        {iconOnly ? (
+          <Button
+            variant="tertiary"
+            size="xs"
+            aria-label="Rename agent"
+            title="Rename agent"
+            className={cn("size-7 p-0", className)}
+          >
+            <Pencil aria-hidden="true" />
+          </Button>
+        ) : (
+          <Button variant={variant} size={size} className={className}>
+            Rename
+          </Button>
+        )}
       </Dialog.Trigger>
       <Dialog.Content>
         <Dialog.Header>

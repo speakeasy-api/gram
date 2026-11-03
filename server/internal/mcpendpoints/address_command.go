@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -55,12 +56,19 @@ func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx,
 	if err := lockEndpointMutationScope(ctx, tx, authCtx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock endpoint mutation scope")
 	}
+	// Hosted writes lock the toolset before domains and the server, as the dashboard's create does.
+	if input.McpServerID.Valid {
+		if err := lockHostedToolset(ctx, tx, *authCtx.ProjectID, input.McpServerID.UUID); err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "lock hosted toolset")
+		}
+	}
 	if err := lockCustomDomainsForOrganization(ctx, tx, authCtx.ActiveOrganizationID, uniqueIDs(input.CustomDomainID)); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, oops.E(oops.CodeInvalid, err, "custom_domain_id does not reference a live custom domain")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "lock custom domain")
 	}
+	var hostedServer *mcpserversrepo.McpServer
 	if input.McpServerID.Valid {
 		servers, err := mcpserversrepo.New(tx).LockMCPServersByIDs(ctx, mcpserversrepo.LockMCPServersByIDsParams{ProjectID: *authCtx.ProjectID, Ids: []uuid.UUID{input.McpServerID.UUID}})
 		if err != nil {
@@ -69,9 +77,8 @@ func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx,
 		if len(servers) != 1 {
 			return nil, oops.E(oops.CodeInvalid, nil, "mcp_server_id does not reference a resource in this project")
 		}
-		// TODO(AIM-707): let the Platform MCP address tools manage hosted endpoints.
-		if servers[0].ToolsetID.Valid && servers[0].ToolsetID.UUID == servers[0].ID {
-			return nil, oops.E(oops.CodeInvalid, nil, "a hosted MCP server's address is managed in the dashboard")
+		if isCanonicalHosted(servers[0]) {
+			hostedServer = &servers[0]
 		}
 	}
 	if err := s.lockMetaMcpServers(ctx, tx, authCtx, uniqueIDs(input.MetaMcpServerID), input.MetaMcpServerID); err != nil {
@@ -79,6 +86,14 @@ func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx,
 	}
 	if err := verifyEndpointReferenceOwnership(ctx, tx, *authCtx.ProjectID, authCtx.ActiveOrganizationID, input.McpServerID, input.MetaMcpServerID, input.CustomDomainID); err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp endpoint")
+	}
+	if hostedServer != nil {
+		if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, hostedServer.ID.String(), authCtx.ProjectID.String())); err != nil {
+			return nil, err
+		}
+		if err := checkHostedNewAddress(ctx, tx, s.logger, authCtx, *hostedServer, input.Slug, input.CustomDomainID); err != nil {
+			return nil, err
+		}
 	}
 	if err := LockSlugScope(ctx, tx, input.CustomDomainID, input.Slug); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock mcp endpoint slug scope")
@@ -110,6 +125,11 @@ func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx,
 		ActorSlug: nil, McpEndpointURN: urn.NewMcpEndpoint(created.ID), Slug: created.Slug,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "log mcp endpoint creation")
+	}
+	if hostedServer != nil {
+		if err := legacyalias.FollowAlias(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, hostedServer.ID); err != nil {
+			return nil, err //nolint:wrapcheck // oops errors pass through.
+		}
 	}
 	return mv.BuildMcpEndpointView(created), nil
 }
@@ -166,6 +186,16 @@ func (s *Service) UpdateMcpEndpointAddressInTransaction(ctx context.Context, tx 
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "get mcp endpoint")
 	}
+	// A hosted endpoint takes the dashboard's hosted update path, with its server-scoped check and address rules.
+	if preexisting.McpServerID.Valid {
+		server, err := mcpserversrepo.New(tx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: preexisting.McpServerID.UUID, ProjectID: *authCtx.ProjectID})
+		switch {
+		case err == nil && isCanonicalHosted(server):
+			return s.updateHostedEndpointInTx(ctx, tx, s.logger, authCtx, preexisting, input.CustomDomainID, input.Slug)
+		case err != nil && !errors.Is(err, pgx.ErrNoRows):
+			return nil, nil, oops.E(oops.CodeUnexpected, err, "get endpoint backing server")
+		}
+	}
 	if err := lockCustomDomainsForOrganization(ctx, tx, authCtx.ActiveOrganizationID, uniqueIDs(preexisting.CustomDomainID, input.CustomDomainID)); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
 			return nil, nil, oops.E(oops.CodeInvalid, err, "custom_domain_id does not reference a live custom domain")
@@ -195,9 +225,8 @@ func (s *Service) UpdateMcpEndpointAddressInTransaction(ctx context.Context, tx 
 			return nil, nil, oops.E(oops.CodeInvalid, nil, "mcp_server_id does not reference a resource in this project")
 		}
 		targetServer = &servers[0]
-		// TODO(AIM-707): let the Platform MCP address tools manage hosted endpoints.
-		if targetServer.ToolsetID.Valid && targetServer.ToolsetID.UUID == targetServer.ID {
-			return nil, nil, oops.E(oops.CodeInvalid, nil, "a hosted MCP server's address is managed in the dashboard")
+		if isCanonicalHosted(*targetServer) {
+			return nil, nil, oops.E(oops.CodeConflict, nil, "mcp server changed concurrently; retry the request")
 		}
 	}
 	if err := s.lockMetaMcpServers(ctx, tx, authCtx, uniqueIDs(existing.MetaMcpServerID), existing.MetaMcpServerID); err != nil {

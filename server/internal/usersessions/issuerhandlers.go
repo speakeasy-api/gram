@@ -174,17 +174,6 @@ func (s *Service) UpdateUserSessionIssuer(ctx context.Context, payload *gen.Upda
 		return nil, oops.E(oops.CodeUnexpected, err, "get user session issuer").LogError(ctx, logger)
 	}
 
-	// Compare under the issuer row lock, which also serializes binding
-	// preparation. Slug-only and no-op patches do not reconfigure bindings.
-	bindingSensitive := (payload.AuthnChallengeMode != nil && *payload.AuthnChallengeMode != existing.AuthnChallengeMode) ||
-		(durPtr != nil && conv.PtrToPGInterval(durPtr) != existing.SessionDuration) ||
-		(payload.ClientIDMetadataAdmissionMode != nil && *payload.ClientIDMetadataAdmissionMode != existing.ClientIDMetadataAdmissionMode.String)
-	if bindingSensitive {
-		if err := guardScopedUserIssuerEMABindings(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, id); err != nil {
-			return nil, err
-		}
-	}
-
 	beforeView := UserSessionIssuerView(existing)
 
 	updated, err := txRepo.UpdateUserSessionIssuer(ctx, repo.UpdateUserSessionIssuerParams{

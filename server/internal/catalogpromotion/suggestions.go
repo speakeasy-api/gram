@@ -22,7 +22,7 @@ func suggestedMetadata(source repo.GetSourceRow) *PublicMetadata {
 	result := &PublicMetadata{Name: "", Title: title, Description: "", URL: "", DocumentationURL: "", DocsSlug: "", AuthMode: ""}
 	if source.RemoteSessionIssuerID.Valid {
 		result.AuthMode = "oauth"
-	} else if source.UpstreamAuthKnown && !source.RequiresUpstreamAuth {
+	} else if !source.RequiresUpstreamAuth && !source.UpstreamAuthPending {
 		result.AuthMode = "none"
 	}
 	parsed, err := publicURL(source.Url)

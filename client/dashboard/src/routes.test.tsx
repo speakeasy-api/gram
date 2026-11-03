@@ -26,7 +26,11 @@ function ProjectRouteHrefs(): JSX.Element {
   return (
     <output data-testid="project-route-hrefs">
       {Object.values(routes)
-        .map((route) => route.href())
+        .map((route) =>
+          route === routes.toolset
+            ? route.href("example-toolset")
+            : route.href(),
+        )
         .join("\n")}
     </output>
   );

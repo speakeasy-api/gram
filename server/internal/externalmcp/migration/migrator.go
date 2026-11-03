@@ -15,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/plugins"
 )
@@ -215,6 +216,10 @@ func (m *Migrator) migrate(ctx context.Context, actor Actor, request Request, dr
 // lockScope takes the organization and project locks every hosted MCP write
 // takes, in the same order, before the toolset itself.
 func lockScope(ctx context.Context, tx pgx.Tx, organizationID string, projectID uuid.UUID) error {
+	if err := authclientbackfill.LockEMAWriterScope(ctx, tx, organizationID, []uuid.UUID{projectID}); err != nil {
+		return fmt.Errorf("lock migrated association writer scope: %w", err)
+	}
+
 	if err := lockNetworkIngress(ctx, tx, organizationID); err != nil {
 		return err
 	}

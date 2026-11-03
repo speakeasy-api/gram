@@ -3,6 +3,7 @@ import { Button } from "@/components/ui/Button";
 import { Input } from "@/components/ui/Input";
 import { Label } from "@/components/ui/Label";
 import { Text } from "@/components/ui/Text";
+import { SimpleTooltip, TooltipProvider } from "@/components/ui/Tooltip";
 import { useOrganization, useProject, useSession } from "@/contexts/Auth";
 import { useSdkClient } from "@/contexts/Sdk";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
@@ -15,6 +16,7 @@ import {
   useRef,
   useState,
   type JSX,
+  type ReactNode,
 } from "react";
 import { useSearchParams } from "react-router";
 import {
@@ -22,8 +24,21 @@ import {
   invalidateAgentPolicy,
   type AgentPolicyDraft,
 } from "../agent-policy-grants";
-import { buildRequestedGrants } from "../agent-api-key-grants";
-import { discoverKeyServerGrants } from "../agent-key-discovery";
+import {
+  buildRequestedGrants,
+  delegableGrantKey,
+  requestNarrowsPolicy,
+} from "../agent-api-key-grants";
+import {
+  discoverKeyServerGrants,
+  discoverWildcardKeyGrants,
+} from "../agent-key-discovery";
+import {
+  discoverUnscopedGrants,
+  HOOKS_INGEST_SCOPE,
+  hooksIngestKeyGrants,
+  hooksIngestPolicyGrant,
+} from "../agent-hook-events";
 import {
   agentGatewayURL,
   isCredentialSafe,
@@ -35,10 +50,21 @@ import {
   type AllServersRefusal,
   type ServerSelection,
 } from "./StepServers";
+import { keyCredentialChoices } from "./keyCredentialChoices";
 import { StepVerify, type VerifyState } from "./StepVerify";
 import { CredentialPicker } from "./CredentialPicker";
+import { SignInPath } from "./SignInPath";
 import { StepWorkload } from "./StepWorkload";
 import { useWorkloadSetup } from "./useWorkloadSetup";
+import { hasPlatformSetup, platformSetup } from "./platformSetups";
+import {
+  DEVICE_AGENT_SYNC_SCOPE,
+  GITHUB_ACTIONS_KEY,
+  jobScope,
+  repositoryName,
+  type JobScope,
+} from "./githubActions";
+import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
 import { CUSTOM_PLATFORM_KEY } from "./CustomSetupInstructions";
 import {
   CONNECT_SCOPE,
@@ -51,6 +77,8 @@ import {
 } from "@/pages/agents/agentPolicyEdit";
 import { useAgentsCreatePolicyGrantMutation } from "@gram/client/react-query/agentsCreatePolicyGrant.js";
 import { useAgentsDeletePolicyGrantMutation } from "@gram/client/react-query/agentsDeletePolicyGrant.js";
+import { invalidateAllListAPIKeys } from "@gram/client/react-query/listAPIKeys.js";
+import type { ExtendAgentKeyGrantForm } from "@gram/client/models/components/extendagentkeygrantform.js";
 import { useRenameAgentMutation } from "@gram/client/react-query/renameAgent.js";
 import { useAgents } from "@gram/client/react-query/agents.js";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
@@ -63,6 +91,7 @@ import {
   valuesFromSubject,
 } from "./workloadCatalog";
 import { useRBAC } from "@/hooks/useRBAC";
+import { useDebouncedValue } from "@/hooks/useDebouncedValue";
 import { useServerInventory, type InventoryServer } from "./useServerInventory";
 import { useOwnerConnections } from "./useOwnerConnections";
 import { StepAuthentication } from "./StepAuthentication";
@@ -89,9 +118,9 @@ import {
 /** Each step's name, and the one or two words it shrinks to in a full row. */
 const STEPS = [
   { label: "Name", short: "Name" },
-  { label: "MCP selection", short: "MCPs" },
-  { label: "MCP authentication", short: "Authentication" },
-  { label: "Credential", short: "Credential" },
+  { label: "MCP Selection", short: "MCPs" },
+  { label: "MCP sign-in", short: "MCP sign-in" },
+  { label: "Agent sign-in", short: "Agent sign-in" },
   { label: "Install", short: "Install" },
   { label: "Verify", short: "Verify" },
 ];
@@ -102,6 +131,17 @@ type Credential = "api-key" | "workload";
 /** Keys live 90 days unless the agent page rotates them sooner. */
 const KEY_LIFETIME_DAYS = 90;
 
+// Stopgap (AIM-862): an agent that may connect to servers cannot sign in to
+// them without mcp:auth, and nothing here can choose auth clients yet, so it is
+// given all of them. Replace this with an auth client selector, made an
+// explicit choice when the agent is created, and grant only the clients chosen
+// there.
+const AUTH_GRANT = {
+  effect: "allow",
+  scope: "mcp:auth",
+  selector: { resourceKind: "mcp_auth_client", resourceId: "*" },
+} as const;
+
 /** The most grants agents.checkPolicyGrants answers in one request. */
 const CHECK_BATCH_SIZE = 100;
 
@@ -111,6 +151,9 @@ const CHECK_BATCH_SIZE = 100;
  * refused on submit with nothing on screen to explain why.
  */
 const NAME_LIMIT = 120;
+
+/** As many grants as one request may add to an agent's keys. */
+const EXTEND_KEYS_BATCH = 100;
 
 /**
  * The preset name, with a number appended while the organization already
@@ -130,6 +173,120 @@ function freeName(base: string, taken: Set<string>): string {
   let suffix = 2;
   while (taken.has(numbered(suffix))) suffix++;
   return numbered(suffix);
+}
+
+/**
+ * Why some of these grants cannot be written, from checkPolicyGrants' answers
+ * in the same order, or null when every one can.
+ */
+function grantRefusal(
+  grants: AgentPolicyGrantForm[],
+  answers: AgentPolicyGrantCheck[],
+): string | null {
+  const refused = grants.filter((_, index) => answers[index]?.allowed !== true);
+  if (refused.length === 0) return null;
+  const scopes = [...new Set(refused.map((grant) => grant.scope))].join(
+    " and ",
+  );
+  return answers.some(
+    (answer) => answer.allowed !== true && answer.limitedBy === "owner",
+  )
+    ? `This agent's owner does not hold ${scopes}, so the agent cannot be given it. Ask an organization administrator to give the owner that permission, or to run this setup.`
+    : `You do not hold ${scopes}, so you cannot give it to this agent. Ask an organization administrator to run this setup.`;
+}
+
+/**
+ * The summary row a platform's field fills in, so typing into the field lights
+ * up the row it changes. Fields with no row of their own light nothing.
+ */
+const SUMMARY_ROW_FOR_FIELD = new Map<string, string>([
+  ["org_id", "Anthropic organization"],
+  ["owner", "Repository"],
+  ["repo", "Repository"],
+  ["branch", "Branch"],
+  ["environment", "Environment"],
+  ["project", "Cluster"],
+  ["location", "Cluster"],
+  ["cluster", "Cluster"],
+  ["namespace", "Service account"],
+  ["service_account", "Service account"],
+  ["name", "Platform"],
+  ["issuer", "Issuer"],
+]);
+
+/**
+ * The rail's row for the branch or environment a GitHub Actions rule is
+ * narrowed to, once it is named. None for the whole repository.
+ */
+function githubActionsScopeRow(
+  scope: JobScope,
+): { label: string; value: ReactNode }[] {
+  if (scope.kind === "repository" || scope.name === "") return [];
+  return [
+    {
+      label: scope.kind === "branch" ? "Branch" : "Environment",
+      value: <code className="text-xs break-all">{scope.name}</code>,
+    },
+  ];
+}
+
+/**
+ * Whether a grant the agent holds already covers one it would be given, by
+ * the rule the server's selector matching applies.
+ */
+function grantCovers(
+  held: AgentPolicyGrant,
+  wanted: AgentPolicyGrantForm,
+): boolean {
+  return (
+    held.effect === "allow" &&
+    held.scope === wanted.scope &&
+    requestNarrowsPolicy(held.selector, wanted.selector)
+  );
+}
+
+/** Grants with each one kept once, in their first order. */
+function uniqueGrants(grants: AgentPolicyGrantForm[]): AgentPolicyGrantForm[] {
+  return [
+    ...new Map(
+      grants.map((grant) => [delegableGrantKey(grant), grant]),
+    ).values(),
+  ];
+}
+
+/**
+ * What the agent can do, in words, with the scopes it will be granted one
+ * hover or focus away for the reader who needs to match them to a policy.
+ */
+function GrantedScopes({
+  scopes,
+  children,
+}: {
+  scopes: string[];
+  children: ReactNode;
+}): JSX.Element {
+  // Its own provider: the summary is rendered on its own in tests, and a
+  // tooltip without one throws rather than degrades.
+  return (
+    <TooltipProvider>
+      <SimpleTooltip
+        tooltip={
+          <ul className="space-y-0.5 text-left font-mono text-xs">
+            {scopes.map((scope) => (
+              <li key={scope}>{scope}</li>
+            ))}
+          </ul>
+        }
+      >
+        <span
+          tabIndex={0}
+          className="cursor-default underline decoration-dotted underline-offset-4"
+        >
+          {children}
+        </span>
+      </SimpleTooltip>
+    </TooltipProvider>
+  );
 }
 
 export function CredentialsWizard({
@@ -179,8 +336,19 @@ export function CredentialsWizard({
   // Trusting a platform and admitting a subject are both writes against the
   // organization's workload identities, so the choice is offered only to
   // someone who could carry it out.
-  const { hasAllScopes, hasAnyScope } = useRBAC();
+  const {
+    hasAllScopes,
+    hasAnyScope,
+    isLoading: rbacLoading,
+    error: rbacError,
+  } = useRBAC();
   const canFederate = hasAllScopes(["workload:write"]);
+  // A new agent sends hook events from the observability plugin when its
+  // creator may grant that. Only confirmed permissions count: a failed grants
+  // read must not add a grant that would refuse the whole creation.
+  const canGrantHookEvents =
+    !rbacError &&
+    hasAllScopes([HOOKS_INGEST_SCOPE], organization.id, project.id);
   // The catalog itself needs workload read access. Without it the request is
   // refused, so it is not made, and the step shows the API key alone rather
   // than an error. Write satisfies read on the server, so either scope counts.
@@ -241,6 +409,51 @@ export function CredentialsWizard({
     [setParams],
   );
   const [name, setName] = useState(agent?.name ?? "");
+  // Names are unique in the organization, case aside. Asking once typing
+  // pauses catches a taken name here instead of on Create agent, which still
+  // refuses one another agent takes in between. A name the agent already has
+  // is its own, and a failed check lets the server decide.
+  const typedName = name.trim();
+  const checksName =
+    (!existing || editing) &&
+    typedName !== "" &&
+    typedName.toLowerCase() !== (agent?.name ?? "").trim().toLowerCase();
+  const nameToCheck = useDebouncedValue(typedName, 400);
+  const nameCheck = useQuery({
+    queryKey: [
+      "agent-name-available",
+      organization.id,
+      nameToCheck.toLowerCase(),
+    ],
+    // One page of the agents whose names contain it. A name in more than 200
+    // of them that this page misses is left to the server to refuse.
+    queryFn: async ({ signal }) => {
+      const page = await sdk.agents.list(
+        { search: nameToCheck, limit: 200 },
+        undefined,
+        { signal },
+      );
+      return !page.result.items.some(
+        (match) =>
+          match.id !== agent?.id &&
+          match.name.trim().toLowerCase() === nameToCheck.toLowerCase(),
+      );
+    },
+    enabled: checksName && nameToCheck === typedName,
+    retry: false,
+  });
+  const nameState: "free" | "checking" | "taken" = !checksName
+    ? "free"
+    : // A cached answer is shown while it is asked again, and it may be out
+      // of date by then.
+      // A failed check answers only for the name it asked about.
+      nameToCheck !== typedName || nameCheck.isPending || nameCheck.isFetching
+      ? "checking"
+      : nameCheck.isError
+        ? "free"
+        : nameCheck.data === false
+          ? "taken"
+          : "free";
   // null until the person picks, so the default can follow the project as it
 
   const [selected, setSelected] = useState<ServerSelection[]>([]);
@@ -250,10 +463,15 @@ export function CredentialsWizard({
   // The credential the agent already holds, when one is being edited: an
   // agent that signs in with a platform's tokens must not open on "API key".
   const admitted = useAgentAdmissions(agent?.id ?? "").admissions[0];
+  // An issuer whose catalog entry this wizard cannot set up, such as one not
+  // offered yet, is edited as the custom issuer it would otherwise be.
   const admittedEntry =
     admitted === undefined
       ? undefined
-      : catalogEntryForIssuer(catalog.entries, admitted.issuer);
+      : catalogEntryForIssuer(
+          catalog.entries.filter(hasPlatformSetup),
+          admitted.issuer,
+        );
   const [credential, setCredential] = useState<Credential>(
     initialPlatformKey === undefined ? "api-key" : "workload",
   );
@@ -303,6 +521,11 @@ export function CredentialsWizard({
   // the answer the query gave before the save started, so a retry reading it
   // would create a second wildcard or ask for an id that is already gone.
   const appliedWildcard = useRef<WildcardConnectGrant | undefined>(undefined);
+  // Server grants this edit gave the agent that its keys do not hold yet. A
+  // key stores the grants it was issued with, so without passing these on the
+  // agent's gateway never lists the servers just added. Kept across a retry,
+  // because the grants a failed save already wrote are not in the next diff.
+  const keysMissing = useRef<ExtendAgentKeyGrantForm[]>([]);
   useEffect(() => {
     if (reconciled || grants === undefined) return;
     if (inventory.isLoading || inventory.isError) return;
@@ -342,6 +565,14 @@ export function CredentialsWizard({
   // What provisioning produced. The secret is held only while this page is
   // open; nothing writes it to storage or to the query cache.
   const [agentID, setAgentID] = useState<string | null>(agent?.id ?? null);
+  // Whether the agent this flow created was given hook ingestion. Once it is
+  // created its policy is settled, so that choice holds even if the caller's
+  // permissions change afterwards. An agent that exists keeps the policy it
+  // has, and its keys are not asked for hook ingestion here.
+  const [createdHookEvents, setCreatedHookEvents] = useState<boolean | null>(
+    null,
+  );
+  const hookEvents = !existing && (createdHookEvents ?? canGrantHookEvents);
   const [secret, setSecret] = useState<string | null>(null);
   const [command, setCommand] = useState<string | null>(null);
   const [commandError, setCommandError] = useState<string | null>(null);
@@ -592,6 +823,77 @@ export function CredentialsWizard({
 
   const gatewayURL = agentID ? agentGatewayURL(agentID) : "";
   const platform = catalog.entries.find((entry) => entry.key === platformKey);
+  // What the platform's runtime needs beyond the servers, such as a device
+  // agent's polling and hook events. Empty for an API key and for platforms
+  // that only call MCP.
+  const platformGrants = useMemo<AgentPolicyGrantForm[]>(
+    () =>
+      credential === "workload" && platform !== undefined && project.id
+        ? (platformSetup(platform)?.agentGrants?.(
+            organization.id,
+            project.id,
+          ) ?? [])
+        : [],
+    [credential, platform, organization.id, project.id],
+  );
+  // The platform grants the agent still lacks, each checked by the rule
+  // agents.create and agents.createPolicyGrant apply, so a grant the caller or
+  // the owner could not give is named before anything is written. A new agent
+  // lacks them all; one that exists is asked only for what it does not hold.
+  const platformGrantCheck = useQuery({
+    queryKey: [
+      "agent-platform-grant-check",
+      organization.id,
+      user.id,
+      agent?.id ?? null,
+      platformGrants,
+    ],
+    queryFn: async ({ signal }) => {
+      const held = agent
+        ? await sdk.agents.listPolicyGrants({ agentId: agent.id }, undefined, {
+            signal,
+          })
+        : [];
+      const missing = platformGrants.filter(
+        (grant) => !held.some((existing) => grantCovers(existing, grant)),
+      );
+      if (missing.length === 0) return { missing, refusal: null };
+      const { results } = await sdk.agents.checkPolicyGrants(
+        {
+          checkAgentPolicyGrantsForm: {
+            ...(agent ? { agentId: agent.id } : {}),
+            policyGrants: missing,
+          },
+        },
+        undefined,
+        { signal },
+      );
+      return { missing, refusal: grantRefusal(missing, results) };
+    },
+    enabled: platformGrants.length > 0 && !editing,
+    retry: false,
+    throwOnError: false,
+  });
+  /**
+   * The platform grants to write, once every one has been checked; throws
+   * with the reason when one would be refused or the check could not run.
+   */
+  const checkedPlatformGrants = async (): Promise<AgentPolicyGrantForm[]> => {
+    if (platformGrants.length === 0 || editing) return [];
+    // Asked again rather than read from the cache: the answer shown while the
+    // wizard was open may predate a grant written or withdrawn since, and a
+    // stale list of what is missing is the partial write this check prevents.
+    // A failed refetch keeps the last data, so the error is checked first.
+    const result = await platformGrantCheck.refetch();
+    const answer = result.isError ? undefined : result.data;
+    if (answer === undefined) {
+      throw new Error(
+        "Could not check that this agent can be given the permissions its platform needs. Try again.",
+      );
+    }
+    if (answer.refusal !== null) throw new Error(answer.refusal);
+    return answer.missing;
+  };
 
   // The verify step reads the key itself: a key with an access time is a
   // runtime that reached the gateway and was admitted.
@@ -665,6 +967,13 @@ export function CredentialsWizard({
       throw new Error("This project is still loading. Try again in a moment.");
     }
     if (refusedChoice) throw new Error(refusedChoice);
+    // Whether the agent sends hook events is read from the caller's grants,
+    // so it is not decided while they are still loading.
+    if (rbacLoading) {
+      throw new Error(
+        "Your permissions are still loading. Try again in a moment.",
+      );
+    }
     // "All servers" is one wildcard selector rather than today's inventory
     // listed out, so it covers the servers added after this is saved. Scoped
     // to the project, never the draft's bare `null`: `null` means
@@ -689,10 +998,21 @@ export function CredentialsWizard({
       createAgentForm: {
         name: name.trim(),
         projectId: projectID,
-        policyGrants: agentPolicyGrantsFromDraft(draft),
+        // Hook ingestion is bounded to the agent's project, the only one its
+        // hook events may name. A platform's own grants may repeat it, and
+        // the server refuses a request that names a grant twice.
+        policyGrants: uniqueGrants([
+          ...agentPolicyGrantsFromDraft(draft),
+          AUTH_GRANT,
+          ...(hookEvents
+            ? [hooksIngestPolicyGrant(organization.id, projectID)]
+            : []),
+          ...platformGrants,
+        ]),
       },
     });
     setAgentID(created.id);
+    setCreatedHookEvents(hookEvents);
     void invalidateAgentPolicy(
       queryClient,
       organization.id,
@@ -703,6 +1023,31 @@ export function CredentialsWizard({
       queryKey: ["managed-agents", organization.id],
     });
     return created.id;
+  };
+
+  /**
+   * Gives an agent that already exists the platform grants it lacks, already
+   * checked by checkedPlatformGrants: each is its own write, so all are
+   * checked before the first is made.
+   */
+  const addPlatformGrants = async (
+    agentId: string,
+    missing: AgentPolicyGrantForm[],
+  ): Promise<void> => {
+    if (missing.length === 0) return;
+    for (const grant of missing) {
+      await createGrant.mutateAsync({
+        request: {
+          createAgentPolicyGrantForm: {
+            agentId,
+            effect: "allow",
+            scope: grant.scope,
+            selector: grant.selector,
+          },
+        },
+      });
+    }
+    void invalidateAgentPolicy(queryClient, organization.id, user.id, agentId);
   };
 
   /**
@@ -755,54 +1100,131 @@ export function CredentialsWizard({
       // so no moment of this save leaves the agent reaching less than both the
       // old policy and the new one allow.
       if (allServers && appliedWildcard.current === undefined) {
+        const form = {
+          effect: "allow" as const,
+          scope: "mcp:connect" as const,
+          selector: {
+            resourceKind: "mcp" as const,
+            resourceId: "*",
+            // Scoped where the agent is, so "all servers" means all the
+            // ones this agent could ever be pointed at, not the whole
+            // organization's.
+            ...(scopedProjectID ? { projectId: scopedProjectID } : {}),
+          },
+        };
         const created = await createGrant.mutateAsync({
           request: {
-            createAgentPolicyGrantForm: {
-              agentId: agent.id,
-              effect: "allow",
-              scope: CONNECT_SCOPE,
-              selector: {
-                resourceKind: "mcp",
-                resourceId: "*",
-                // Scoped where the agent is, so "all servers" means all the
-                // ones this agent could ever be pointed at, not the whole
-                // organization's.
-                ...(scopedProjectID ? { projectId: scopedProjectID } : {}),
-              },
-            },
+            createAgentPolicyGrantForm: { agentId: agent.id, ...form },
           },
         });
         // Recorded as the write lands, so a failure further down this save
         // does not make the next attempt create a second wildcard.
         appliedPolicies.current.set(created.id, created);
+        keysMissing.current.push(form);
         appliedWildcard.current = {
           projectIds: scopedProjectID ? [scopedProjectID] : [],
           grantIds: [created.id],
         };
       }
       for (const server of changes.add) {
+        const form = {
+          effect: "allow" as const,
+          scope: "mcp:connect" as const,
+          selector: {
+            resourceKind: "mcp" as const,
+            resourceId: server.resourceId,
+            projectId: server.projectId,
+          },
+        };
         const created = await createGrant.mutateAsync({
           request: {
-            createAgentPolicyGrantForm: {
-              agentId: agent.id,
-              effect: "allow",
-              scope: CONNECT_SCOPE,
-              selector: {
-                resourceKind: "mcp",
-                resourceId: server.resourceId,
-                projectId: server.projectId,
-              },
-            },
+            createAgentPolicyGrantForm: { agentId: agent.id, ...form },
           },
         });
         // Recorded as each write lands, so a later failure does not send the
         // whole diff again on the next attempt.
         appliedPolicies.current.set(created.id, created);
+        keysMissing.current.push(form);
         applied.current.set(server.resourceId, {
           grantIds: [created.id],
           resourceId: server.resourceId,
           projectId: server.projectId,
         });
+      }
+      if (
+        ![...appliedPolicies.current.values()].some(
+          (grant) => grant.scope === AUTH_GRANT.scope,
+        )
+      ) {
+        const created = await createGrant.mutateAsync({
+          request: {
+            createAgentPolicyGrantForm: { agentId: agent.id, ...AUTH_GRANT },
+          },
+        });
+        appliedPolicies.current.set(created.id, created);
+      }
+      // Once the agent holds every grant its keys are given, and before the
+      // removals, so a removal that fails cannot keep the new servers from the
+      // keys. Removals need nothing here: a key only ever reaches what the
+      // agent still allows. The grants are saved by now, so a key that could
+      // not follow is reported rather than undoing them.
+      //
+      // Only what this save still chooses: a server added by an earlier
+      // attempt and unticked since is no longer the agent's to pass on.
+      keysMissing.current = keysMissing.current.filter((form) =>
+        form.selector.resourceId === "*"
+          ? allServers
+          : !allServers &&
+            selected.some(
+              (entry) => entry.server.resourceId === form.selector.resourceId,
+            ),
+      );
+      if (keysMissing.current.length > 0) {
+        try {
+          // The credential picked on MCP sign-in for each added server, as a
+          // key issued now would carry it.
+          const choices = await keyCredentialChoices(
+            sdk,
+            selected
+              .filter((entry) =>
+                keysMissing.current.some(
+                  (form) =>
+                    form.selector.resourceId === entry.server.resourceId,
+                ),
+              )
+              .map((entry) => ({
+                ...entry.server,
+                authClientId: entry.authClientId,
+              })),
+          );
+          for (
+            let start = 0;
+            start < keysMissing.current.length;
+            start += EXTEND_KEYS_BATCH
+          ) {
+            const batch = keysMissing.current.slice(
+              start,
+              start + EXTEND_KEYS_BATCH,
+            );
+            await sdk.keys.extendAgentKeys({
+              extendAgentKeysForm: {
+                agentId: agent.id,
+                requestedGrants: batch,
+                authClientChoices: choices.filter((choice) =>
+                  batch.some(
+                    (form) => form.selector.resourceId === choice.mcpServerId,
+                  ),
+                ),
+              },
+            });
+          }
+          keysMissing.current = [];
+          void invalidateAllListAPIKeys(queryClient);
+        } catch (failure) {
+          toast.warning(
+            `Saved, but the agent's existing keys still reach only their old servers: ${failure instanceof Error ? failure.message : String(failure)}. Issue a new key from the agent's page to use the new ones.`,
+          );
+        }
       }
       // Last, so a failure part-way through leaves the agent reaching more
       // than intended rather than less: the servers it is meant to keep are
@@ -853,25 +1275,27 @@ export function CredentialsWizard({
         user.id,
         agent.id,
       );
-      if (allServers) {
-        const missing = await attachOwnerConnections(
-          sdk,
-          agent.id,
-          listedServers,
-          undefined,
-          true,
+      // As when creating: the editor's usable connection is assigned to every
+      // server that needs one. Valid assignments, someone else's included,
+      // are kept; only ended or unavailable ones are replaced.
+      const missing = await attachOwnerConnections(
+        sdk,
+        agent.id,
+        allServers ? listedServers : selected.map((entry) => entry.server),
+        undefined,
+        true,
+      );
+      if (missing.length)
+        toast.warning(
+          `No connection assigned for: ${missing.join(", ")}. Connect these servers to finish setup.`,
         );
-        if (missing.length)
-          toast.warning(
-            `No connection assigned for: ${missing.join(", ")}. Connect these servers to finish setup.`,
-          );
-        await queryClient.invalidateQueries({
-          queryKey: ["owner-connections"],
-        });
-      }
+      await queryClient.invalidateQueries({
+        queryKey: ["owner-connections"],
+      });
       // Saving is the end of editing: what follows are the platform's own
-      // settings, which this flow only describes.
-      onDone();
+      // settings, which this flow only describes. It returns to the agent's
+      // own page, where the change shows.
+      onDone(agent.id);
     } catch (failure) {
       setError(
         failure instanceof Error
@@ -926,41 +1350,56 @@ export function CredentialsWizard({
     entry: credential === "workload" ? platform : undefined,
     platformKey: credential === "workload" ? platformKey : null,
     agentName: name.trim(),
+    servers: connectionReach().flatMap((server) =>
+      server.mcpUrl
+        ? [
+            {
+              id: server.id,
+              resourceId: server.resourceId,
+              name: server.name,
+              mcpUrl: server.mcpUrl,
+            },
+          ]
+        : [],
+    ),
     ensureAgent: async () => {
+      // Editing an agent's rule leaves its policy as it is; otherwise every
+      // grant the platform needs is checked before anything is written.
+      const missing = await checkedPlatformGrants();
       const targetId = await ensureAgent();
+      // A new agent was created with them; one that exists gets what it lacks.
+      if (agent !== undefined) await addPlatformGrants(agent.id, missing);
       await attachSelectedConnections(targetId, connectionReach());
       return targetId;
     },
     onConnected: setAgentID,
-    // The rule this agent already holds: its own rule is not a duplicate of
-    // itself, and the create step has nothing left to write.
-    connectedSubject: admitted?.subject,
-    // Editing never writes a rule: the agent already holds one, and the
-    // steps after this are the platform's own settings to read.
-    settled: editing,
+    // The rule this agent already holds. Editing its values replaces it.
+    replacing: editing ? admitted : undefined,
+    // Editing without permission to manage workload identities shows the
+    // rule without letting it be changed.
+    readOnly: editing && !canFederate,
     // What the rule already says, so editing shows it rather than an empty
     // field that would write a second rule.
     initialValues:
-      admitted !== undefined && admittedEntry !== undefined
-        ? {
-            ...valuesFromIssuer(admittedEntry, admitted.issuer),
-            ...valuesFromSubject(admittedEntry, admitted.subject),
-          }
-        : undefined,
+      admitted === undefined
+        ? undefined
+        : admittedEntry !== undefined
+          ? {
+              ...valuesFromIssuer(admittedEntry, admitted.issuer),
+              ...valuesFromSubject(admittedEntry, admitted),
+            }
+          : // A custom issuer: the issuer picked from the trusted list, and
+            // the subject as typed, without the `*` the match kind adds.
+            {
+              issuer_id: admitted.workloadIssuerId,
+              subject:
+                admitted.matchKind === "wildcard"
+                  ? admitted.subject.replace(/\*$/, "")
+                  : admitted.subject,
+              match_kind: admitted.matchKind,
+            },
     onValueChange: (key) =>
-      setHighlight(
-        key === "org_id"
-          ? "Anthropic organization"
-          : ["project", "location", "cluster"].includes(key)
-            ? "Cluster"
-            : ["namespace", "service_account"].includes(key)
-              ? "Service account"
-              : key === "name"
-                ? "Platform"
-                : key === "issuer"
-                  ? "Issuer"
-                  : null,
-      ),
+      setHighlight(SUMMARY_ROW_FOR_FIELD.get(key) ?? null),
   });
   // A platform's own setup steps are steps of this wizard, not a wizard of
   // their own: one stepper, one Back and one Continue throughout.
@@ -1012,26 +1451,42 @@ export function CredentialsWizard({
       const target = { id: await ensureAgent() };
 
       const controller = new AbortController();
-      // A key names servers one by one — there is no wildcard in a key, only
-      // in the agent's policy. So "all servers" is issued as every server in
-      // the agent's reach today, and the agent's own wildcard grant is what
-      // carries the ones added after this key was cut.
+      // A key reaches only what it stores, whatever the agent's policy says
+      // later. So "All servers" asks for the agent's wildcard itself, with the
+      // exclusions that narrow it, and the key reaches servers added after it
+      // is issued.
+      const wildcard = allServers
+        ? await discoverWildcardKeyGrants(
+            sdk.agents,
+            target.id,
+            allServersProjectIDs,
+            controller.signal,
+          )
+        : [];
+      // Otherwise the key names servers one by one: the ones selected, or,
+      // when the wildcard cannot be delegated (an owner granted servers one
+      // by one), every server in the agent's reach today. That key does not
+      // reach servers added later; issuing a new key picks them up.
       //
       // Without this the key asks for nothing: `selected` is empty under
       // "all servers", and discovery rightly answers that nothing can be
       // delegated.
       const reach = connectionReach();
       await attachSelectedConnections(target.id, reach, controller.signal);
-      const delegable = await discoverKeyServerGrants(
-        sdk.agents,
-        target.id,
-        reach.map((server) => ({
-          resourceId: server.resourceId,
-          projectId: server.projectId,
-          kind: server.kind,
-        })),
-        controller.signal,
-      );
+      const listed = wildcard.length > 0 ? [] : reach;
+      const delegable =
+        wildcard.length > 0
+          ? wildcard
+          : await discoverKeyServerGrants(
+              sdk.agents,
+              target.id,
+              listed.map((server) => ({
+                resourceId: server.resourceId,
+                projectId: server.projectId,
+                kind: server.kind,
+              })),
+              controller.signal,
+            );
       const requestedGrants = buildRequestedGrants(
         delegable.map((grant) => ({ grant, narrowing: {} })),
       );
@@ -1046,7 +1501,7 @@ export function CredentialsWizard({
             `${grant.selector.projectId ?? ""}:${grant.selector.resourceId}`,
         ),
       );
-      const excluded = reach.filter(
+      const excluded = listed.filter(
         (server) => !reachable.has(`${server.projectId}:${server.resourceId}`),
       );
       if (excluded.length > 0 || requestedGrants.length === 0) {
@@ -1064,13 +1519,37 @@ export function CredentialsWizard({
             ? " You do not own this agent, so it is limited by your own access too."
             : "");
         throw new Error(
-          excluded.length === reach.length
+          excluded.length === listed.length
             ? existing
               ? `This key would reach none of these servers. ${because}`
               : `The agent was created, but a key for it would reach none of these servers. ${because}`
             : `This key would not reach ${excluded.map((server) => server.name).join(", ")}. ${because} Deselect ${excluded.length === 1 ? "that server" : "those servers"} to issue a key for the rest.`,
         );
       }
+
+      const authClientChoices = await keyCredentialChoices(
+        sdk,
+        allServers
+          ? []
+          : selected.map((entry) => ({
+              ...entry.server,
+              authClientId: entry.authClientId,
+            })),
+      );
+      // Hook ingestion names the organization rather than a server, so only
+      // discovery that names no server returns it. Asked for only when the
+      // agent was created with it, and bounded to the agent's project.
+      const hookGrants =
+        hookEvents && scopedProjectID
+          ? hooksIngestKeyGrants(
+              await discoverUnscopedGrants(
+                sdk.agents,
+                target.id,
+                controller.signal,
+              ),
+              scopedProjectID,
+            )
+          : [];
 
       const expiresAt = new Date(Date.now() + KEY_LIFETIME_DAYS * 86_400_000);
       const issued = await sdk.keys.create({
@@ -1081,9 +1560,12 @@ export function CredentialsWizard({
           // collide and the issue fail with a 409.
           name: `${name.trim()} key ${new Date().toISOString().replace(/[:.]/g, "-")}`,
           expiresAt,
-          delegatedGrantsVersion: 2,
-          requestedGrants,
+          // A carried exclusion is a blocklist scope, which a key can store
+          // from version 4.
+          delegatedGrantsVersion: wildcard.length > 0 ? 4 : 2,
+          requestedGrants: [...requestedGrants, ...hookGrants],
           scopes: [],
+          authClientChoices,
         },
       });
       keyID.current = issued.id;
@@ -1106,6 +1588,14 @@ export function CredentialsWizard({
     }
   };
 
+  // A platform's own grants can add hook events, and a device agent's plugin
+  // sync, to what the agent can do.
+  const recordsSessions =
+    hookEvents ||
+    platformGrants.some((grant) => grant.scope === HOOKS_INGEST_SCOPE);
+  const fetchesPlugins = platformGrants.some(
+    (grant) => grant.scope === DEVICE_AGENT_SYNC_SCOPE,
+  );
   const summary = (
     <WizardSummary
       step={step + 1}
@@ -1123,12 +1613,40 @@ export function CredentialsWizard({
           label: "Project",
           value: scopeName,
         },
+        // What creating grants, in words. Editing leaves the hooks grant as it
+        // is and does not read it, so the row would only guess. Before any
+        // server is chosen there is nothing to call yet.
+        ...(existing || (!allServers && selected.length === 0)
+          ? []
+          : [
+              {
+                label: "Can",
+                value: (
+                  <GrantedScopes
+                    scopes={[
+                      ...new Set([
+                        allServers
+                          ? `${CONNECT_SCOPE} on all servers in the project`
+                          : `${CONNECT_SCOPE} on the selected servers`,
+                        `${AUTH_GRANT.scope} on all auth clients`,
+                        ...(recordsSessions ? [HOOKS_INGEST_SCOPE] : []),
+                        // What the platform's runtime needs beyond the
+                        // servers, such as a device agent's plugin sync.
+                        ...platformGrants.map((grant) => grant.scope),
+                      ]),
+                    ]}
+                  >
+                    {[
+                      "Call its servers",
+                      ...(fetchesPlugins ? ["fetch its plugins"] : []),
+                      ...(recordsSessions ? ["record its sessions"] : []),
+                    ].join(", ")}
+                  </GrantedScopes>
+                ),
+              },
+            ]),
         {
-          label: "Grants",
-          value: <code className="text-xs">mcp:connect</code>,
-        },
-        {
-          label: "Credential",
+          label: "Agent sign-in",
           value: credential === "api-key" ? "API key" : "Workload identity",
         },
         // The platform, and what it was pinned to, are decisions like the
@@ -1157,6 +1675,25 @@ export function CredentialsWizard({
                 ),
               },
             ]
+          : []),
+        ...(credential === "workload" &&
+        platformKey === GITHUB_ACTIONS_KEY &&
+        (workload.values["owner"] ?? "").trim() !== "" &&
+        (workload.values["repo"] ?? "").trim() !== ""
+          ? [
+              {
+                label: "Repository",
+                value: (
+                  <code className="text-xs break-all">
+                    {repositoryName(workload.values)}
+                  </code>
+                ),
+              },
+            ]
+          : []),
+        // The one branch or environment the rule narrows the repository to.
+        ...(credential === "workload" && platformKey === GITHUB_ACTIONS_KEY
+          ? githubActionsScopeRow(jobScope(workload.values))
           : []),
         // A GKE cluster by its name alone: the project and location are on
         // the step that asked for them, and the rail is too narrow for all
@@ -1219,9 +1756,13 @@ export function CredentialsWizard({
           : selected.map((entry) => ({
               id: entry.server.id,
               name: entry.server.name,
-              detail: entry.server.issuerId
-                ? "all tools, using an assigned connection"
-                : "all tools",
+              // A server with an issuer can still use a shared credential.
+              detail:
+                entry.server.issuerId &&
+                connections.byServer.get(entry.server.id)?.status !==
+                  "not-required"
+                  ? "all tools, using an assigned connection"
+                  : "all tools",
             }))
       }
     />
@@ -1264,13 +1805,20 @@ export function CredentialsWizard({
                 disabled={existing && !editing}
                 autoFocus={!existing}
               />
-              <Text muted small>
-                {existing
-                  ? editing
-                    ? "Shown in audit logs and session lists."
-                    : "Rename this agent from its own page."
-                  : "Shown in audit logs and session lists. You can rename it later."}
-              </Text>
+              {nameState === "taken" ? (
+                <Text role="alert" warning small>
+                  An agent named “{typedName}” already exists. Pick another
+                  name.
+                </Text>
+              ) : (
+                <Text muted small>
+                  {existing
+                    ? editing
+                      ? "Shown in audit logs and session lists."
+                      : "Rename this agent from its own page."
+                    : "Shown in audit logs and session lists. You can rename it later."}
+                </Text>
+              )}
             </div>
           </div>
         );
@@ -1318,7 +1866,6 @@ export function CredentialsWizard({
               allServers ? listedServers : selected.map((entry) => entry.server)
             }
             connections={connections}
-            agent={agent}
             allServers={allServers}
             onRemove={(id) => {
               if (allServers) {
@@ -1337,9 +1884,10 @@ export function CredentialsWizard({
         return (
           <div className="space-y-6">
             <WizardStepHeader
-              title="Credential"
-              description="How the agent proves who it is when it connects."
+              title="Agent sign-in"
+              description="Pick how the agent proves who it is to Speakeasy."
             />
+            <SignInPath hop="agent" />
             <CredentialPicker
               credential={credential}
               platformKey={platformKey}
@@ -1356,7 +1904,7 @@ export function CredentialsWizard({
               disabled={editing}
               onChooseApiKey={() => {
                 setCredential("api-key");
-                setHighlight("Credential");
+                setHighlight("Agent sign-in");
               }}
               onChoosePlatform={(key) => {
                 setCredential("workload");
@@ -1397,7 +1945,11 @@ export function CredentialsWizard({
     step === 0
       ? !name.trim()
         ? "Name this agent."
-        : null
+        : nameState === "taken"
+          ? "Pick a name no other agent has."
+          : nameState === "checking"
+            ? "Checking the name is free…"
+            : null
       : step === 1
         ? !editing && !allServers && selected.length === 0
           ? "Select at least one MCP server."
@@ -1427,7 +1979,8 @@ export function CredentialsWizard({
         <WizardFooter
           note={
             step === 0
-              ? "Renaming an agent is recorded in the organization audit log."
+              ? (blocked ??
+                "Renaming an agent is recorded in the organization audit log.")
               : refusedChoice
                 ? refusedChoice
                 : reconciled
@@ -1472,8 +2025,9 @@ export function CredentialsWizard({
           primary={
             workloadStep.phase === "create" ? (
               // Already connected under this very rule: there is nothing to
-              // write, so the step is a page to read and move past.
-              workload.connected || editing ? (
+              // write, so the step is a page to read and move past. Someone
+              // who cannot manage workload identities only reads it.
+              workload.connected || (editing && !canFederate) ? (
                 <Button onClick={() => setStep(step + 1)}>Continue</Button>
               ) : (
                 <Button
@@ -1487,8 +2041,12 @@ export function CredentialsWizard({
                   }}
                 >
                   {workload.connecting
-                    ? "Connecting…"
-                    : `Connect ${platform?.displayName ?? "platform"}`}
+                    ? editing
+                      ? "Saving…"
+                      : "Connecting…"
+                    : editing
+                      ? "Save changes"
+                      : `Connect ${platform?.displayName ?? "platform"}`}
                 </Button>
               )
             ) : last ? (

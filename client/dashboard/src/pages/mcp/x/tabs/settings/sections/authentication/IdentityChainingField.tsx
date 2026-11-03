@@ -505,7 +505,12 @@ export function IdentityChainingField({
   const usable = listed.filter(
     (provider) => supportsProvider(provider) && !provider.unavailableReason,
   );
-  const trustedIssuerId = userSessionIssuer.trustedRemoteSessionIssuerId;
+  // Sign-in is federated, and the issuer vouches through an external
+  // provider, only when both the provider and its sign-in client are linked,
+  // as the server reads it. A provider linked alone accepts inbound ID-JAGs only.
+  const trustedIssuerId = userSessionIssuer.trustedRemoteSessionClientId
+    ? userSessionIssuer.trustedRemoteSessionIssuerId
+    : undefined;
   const issuers = useRemoteSessionIssuersByIds([
     ...(trustedIssuerId ? [trustedIssuerId] : []),
     ...listed.flatMap((provider) =>

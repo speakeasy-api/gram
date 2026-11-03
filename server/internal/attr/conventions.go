@@ -54,6 +54,10 @@ const (
 	// AuthClientTypeKey is the type of the typed auth client a request resolved through.
 	AuthClientTypeKey = attribute.Key("gram.auth_client.type")
 
+	// AuthClientConnectionOwnerUserIDKey is the user whose personal connection a
+	// typed auth client served a request with. Absent for a shared credential.
+	AuthClientConnectionOwnerUserIDKey = attribute.Key("gram.auth_client.connection_owner_user_id")
+
 	// AuthClientOutcomeKey is the outcome of resolving a request's typed auth client.
 	AuthClientOutcomeKey = attribute.Key("gram.auth_client.outcome")
 
@@ -482,6 +486,29 @@ const (
 	// (whose detail stays on gram.oauth.failure_reason), or the request
 	// validation failure class such as "header_mismatch".
 	McpRejectionReasonKey = attribute.Key("gram.mcp.rejection_reason")
+	// McpSkillOriginKey is the bounded origin of a skill served over MCP:
+	// "distribution" for a managed skill linked to the MCP surface, or
+	// "embedded" for a reviewed skill compiled into the platform toolset.
+	// Never a skill name or identifier.
+	McpSkillOriginKey = attribute.Key("gram.mcp.skill.origin")
+	// McpSkillPinConflictCountKey is how many pinned skill links lost to a
+	// different pinned version when one MCP surface resolved a skill linked
+	// several times.
+	McpSkillPinConflictCountKey = attribute.Key("gram.mcp.skill.pin_conflict_count")
+	// McpSkillIDKey is the managed skill a skill:// resources/read served.
+	McpSkillIDKey = attribute.Key("gram.mcp.skill.id")
+	// McpSkillVersionIDKey is the skill version whose content a skill://
+	// resources/read served.
+	McpSkillVersionIDKey = attribute.Key("gram.mcp.skill.version_id")
+	// McpSkillDigestKey is the SEP-2640 digest ("sha256:<hex>") of the
+	// content a skill:// resources/read served.
+	McpSkillDigestKey = attribute.Key("gram.mcp.skill.digest")
+	// McpSkillTargetKindKey is the kind of MCP surface a skill resolution
+	// served: "mcp_server", "meta_mcp_server" or "organization_gateway".
+	McpSkillTargetKindKey = attribute.Key("gram.mcp.skill.target_kind")
+	// McpSkillTargetIDKey is the id of the stored MCP surface a skill
+	// resolution served, or the nil UUID for a row-less surface.
+	McpSkillTargetIDKey = attribute.Key("gram.mcp.skill.target_id")
 	// McpKillswitchSurfaceKey is the kill-switch enforcement surface a covered
 	// MCP tools/call reached: "hosted" or "private_proxy".
 	McpKillswitchSurfaceKey = attribute.Key("gram.mcp.killswitch.surface")
@@ -505,6 +532,16 @@ const (
 	MetaMemberBackendKey   = attribute.Key("gram.meta.member.backend")
 	MetaDispatchOutcomeKey = attribute.Key("gram.meta.dispatch.outcome")
 	McpURLKey              = attribute.Key("gram.mcp.url")
+
+	// Gateway consent diagnostics contain IDs and comparison results only,
+	// never credentials, configuration hashes, or captured tool definitions.
+	McpConsentMemberProjectIDKey = attribute.Key("gram.mcp.consent.member_project_id")
+	McpConsentCatalogIDKey       = attribute.Key("gram.mcp.consent.catalog_id")
+	McpConsentDiscoveryModeKey   = attribute.Key("gram.mcp.consent.discovery_mode")
+	McpConsentCatalogModeKey     = attribute.Key("gram.mcp.consent.catalog_mode")
+	McpConsentExecuteKey         = attribute.Key("gram.mcp.consent.execute")
+	McpConsentComparisonsKey     = attribute.Key("gram.mcp.consent.comparisons")
+	McpConsentExpiresAtKey       = attribute.Key("gram.mcp.consent.expires_at")
 
 	// Legacy toolsets.mcp_slug fallback attribution; logs only, never metric dimensions.
 	McpFallbackRequestHostKey         = attribute.Key("gram.mcp.fallback.request_host")
@@ -544,6 +581,15 @@ const (
 	OAuthFlowStageKey = attribute.Key("gram.oauth.flow_stage")
 	OAuthGrantKey     = attribute.Key("gram.oauth.grant")
 	OAuthIssuerKey    = attribute.Key("gram.oauth.issuer")
+
+	// OAuthIDJAGOutcomeKey is an ID-JAG token exchange's outcome: accepted, rejected, or error for an unexpected server failure.
+	OAuthIDJAGOutcomeKey = attribute.Key("gram.oauth.id_jag.outcome")
+
+	// OAuthIDJAGRejectionReasonKey is the bounded reason an ID-JAG token exchange was rejected.
+	OAuthIDJAGRejectionReasonKey = attribute.Key("gram.oauth.id_jag.rejection_reason")
+
+	// OAuthIDJAGResourceSourceKey is where a shared token endpoint took an ID-JAG exchange's target MCP server from when neither the request nor the assertion named it.
+	OAuthIDJAGResourceSourceKey = attribute.Key("gram.oauth.id_jag.resource_source")
 
 	// OAuthAssertionAudienceKey records which accepted audience form a verified client assertion carried.
 	OAuthAssertionAudienceKey = attribute.Key("gram.oauth.assertion_audience")
@@ -2375,6 +2421,26 @@ func SlogOAuthFailureReason(v string) slog.Attr {
 	return slog.String(string(OAuthFailureReasonKey), v)
 }
 
+func OAuthIDJAGOutcome(v string) attribute.KeyValue { return OAuthIDJAGOutcomeKey.String(v) }
+func SlogOAuthIDJAGOutcome(v string) slog.Attr {
+	return slog.String(string(OAuthIDJAGOutcomeKey), v)
+}
+
+func OAuthIDJAGRejectionReason[V ~string](v V) attribute.KeyValue {
+	return OAuthIDJAGRejectionReasonKey.String(string(v))
+}
+
+func SlogOAuthIDJAGRejectionReason[V ~string](v V) slog.Attr {
+	return slog.String(string(OAuthIDJAGRejectionReasonKey), string(v))
+}
+
+func OAuthIDJAGResourceSource(v string) attribute.KeyValue {
+	return OAuthIDJAGResourceSourceKey.String(v)
+}
+func SlogOAuthIDJAGResourceSource(v string) slog.Attr {
+	return slog.String(string(OAuthIDJAGResourceSourceKey), v)
+}
+
 func OAuthGrant(v string) attribute.KeyValue { return OAuthGrantKey.String(v) }
 func SlogOAuthGrant(v string) slog.Attr      { return slog.String(string(OAuthGrantKey), v) }
 
@@ -3330,6 +3396,26 @@ func MetaDispatchOutcome[V ~string](v V) attribute.KeyValue {
 	return MetaDispatchOutcomeKey.String(string(v))
 }
 
+func SlogMcpConsentMemberProjectID(v string) slog.Attr {
+	return slog.String(string(McpConsentMemberProjectIDKey), v)
+}
+func SlogMcpConsentCatalogID(v string) slog.Attr {
+	return slog.String(string(McpConsentCatalogIDKey), v)
+}
+func SlogMcpConsentDiscoveryMode(v string) slog.Attr {
+	return slog.String(string(McpConsentDiscoveryModeKey), v)
+}
+func SlogMcpConsentCatalogMode(v string) slog.Attr {
+	return slog.String(string(McpConsentCatalogModeKey), v)
+}
+func SlogMcpConsentExecute(v bool) slog.Attr { return slog.Bool(string(McpConsentExecuteKey), v) }
+func SlogMcpConsentComparisons(v map[string]bool) slog.Attr {
+	return slog.Any(string(McpConsentComparisonsKey), v)
+}
+func SlogMcpConsentExpiresAt(v time.Time) slog.Attr {
+	return slog.Time(string(McpConsentExpiresAtKey), v)
+}
+
 func ToolsetID(v string) attribute.KeyValue { return ToolsetIDKey.String(v) }
 func SlogToolsetID(v string) slog.Attr      { return slog.String(string(ToolsetIDKey), v) }
 
@@ -3367,6 +3453,39 @@ func McpRejectionReason[V ~string](v V) attribute.KeyValue {
 }
 func SlogMcpRejectionReason[V ~string](v V) slog.Attr {
 	return slog.String(string(McpRejectionReasonKey), string(v))
+}
+
+func McpSkillOrigin[V ~string](v V) attribute.KeyValue { return McpSkillOriginKey.String(string(v)) }
+func SlogMcpSkillOrigin[V ~string](v V) slog.Attr {
+	return slog.String(string(McpSkillOriginKey), string(v))
+}
+
+func McpSkillPinConflictCount(v int) attribute.KeyValue { return McpSkillPinConflictCountKey.Int(v) }
+func SlogMcpSkillPinConflictCount(v int) slog.Attr {
+	return slog.Int(string(McpSkillPinConflictCountKey), v)
+}
+
+func McpSkillID(v string) attribute.KeyValue { return McpSkillIDKey.String(v) }
+func SlogMcpSkillID(v string) slog.Attr      { return slog.String(string(McpSkillIDKey), v) }
+
+func McpSkillVersionID(v string) attribute.KeyValue { return McpSkillVersionIDKey.String(v) }
+func SlogMcpSkillVersionID(v string) slog.Attr {
+	return slog.String(string(McpSkillVersionIDKey), v)
+}
+
+func McpSkillDigest(v string) attribute.KeyValue { return McpSkillDigestKey.String(v) }
+func SlogMcpSkillDigest(v string) slog.Attr      { return slog.String(string(McpSkillDigestKey), v) }
+
+func McpSkillTargetKind[V ~string](v V) attribute.KeyValue {
+	return McpSkillTargetKindKey.String(string(v))
+}
+func SlogMcpSkillTargetKind[V ~string](v V) slog.Attr {
+	return slog.String(string(McpSkillTargetKindKey), string(v))
+}
+
+func McpSkillTargetID(v string) attribute.KeyValue { return McpSkillTargetIDKey.String(v) }
+func SlogMcpSkillTargetID(v string) slog.Attr {
+	return slog.String(string(McpSkillTargetIDKey), v)
 }
 
 func McpEntryPoint[V ~string](v V) attribute.KeyValue { return McpEntryPointKey.String(string(v)) }

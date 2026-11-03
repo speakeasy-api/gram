@@ -97,8 +97,8 @@ func validAuditCursor(cursor string) bool {
 	if cursor == "" {
 		return true
 	}
-	_, err := audit.DecodeCursor(cursor)
-	return err == nil
+	decoded, err := audit.DecodeCursor(cursor)
+	return err == nil && decoded.Category == audit.CategoryConfiguration
 }
 
 func registerAuditLogTools(reg *Registrar, reader CustomerAuditReader) {

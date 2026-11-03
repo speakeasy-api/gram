@@ -8,21 +8,24 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/agents"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	remoterepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/stretchr/testify/require"
 )
 
 func TestAgentConnectionHealth(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name           string
-		refresh        bool
-		refreshExpired bool
-		missingLink    bool
-		deletedClient  bool
-		want           bool
+		name            string
+		refresh         bool
+		reauthenticated bool
+		refreshExpired  bool
+		missingLink     bool
+		deletedClient   bool
+		want            bool
 	}{
 		{name: "expired access without refresh", want: true},
 		{name: "expired access can refresh", refresh: true},
+		{name: "same connection reauthenticated", refresh: true, reauthenticated: true},
 		{name: "expired refresh and access", refresh: true, refreshExpired: true, want: true},
 		{name: "removed issuer association removes attachment", refresh: true, missingLink: true},
 		{name: "deleted client needs refresh", refresh: true, deletedClient: true, want: true},
@@ -49,6 +52,10 @@ func TestAgentConnectionHealth(t *testing.T) {
 			require.NoError(t, q.AttachRemoteSessionClientToUserSessionIssuer(t.Context(), remoterepo.AttachRemoteSessionClientToUserSessionIssuerParams{RemoteSessionClientID: session.RemoteSessionClientID, UserSessionIssuerID: issuer}))
 			_, err := q.AttachPrincipalRemoteSessionBinding(t.Context(), remoterepo.AttachPrincipalRemoteSessionBindingParams{ProjectID: project.ID, OrganizationID: "org-a", PrincipalID: agent.ID, UserSessionIssuerID: issuer, SubjectUrn: "user:owner", RemoteSessionID: session.ID})
 			require.NoError(t, err)
+			if tc.reauthenticated {
+				_, err := testrepo.New(db).MutateAttachmentSupersededGrantGenerationFixture(t.Context(), session.ID)
+				require.NoError(t, err)
+			}
 			if tc.missingLink {
 				removed, err := q.DetachOrganizationRemoteSessionClientFromUserSessionIssuer(t.Context(), remoterepo.DetachOrganizationRemoteSessionClientFromUserSessionIssuerParams{OrganizationID: "org-a", RemoteSessionClientID: session.RemoteSessionClientID, UserSessionIssuerID: issuer})
 				require.NoError(t, err)

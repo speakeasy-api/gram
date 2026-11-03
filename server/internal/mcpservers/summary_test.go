@@ -44,7 +44,7 @@ func seedSummaryToolset(t *testing.T, ctx context.Context, ti *testInstance, org
 	toolsets := toolsetsrepo.New(ti.conn)
 	slug := "summary-" + uuid.NewString()[:8]
 	toolset, err := toolsets.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
-		OrganizationID: organizationID, ProjectID: projectID, Name: slug, Slug: slug, McpEnabled: true,
+		OrganizationID: organizationID, ProjectID: projectID, Name: slug, Slug: slug,
 	})
 	require.NoError(t, err)
 	predecessor := uuid.NullUUID{}
@@ -322,7 +322,7 @@ func TestMcpServerSummary_CarriesToolsetDescription(t *testing.T) {
 	toolsets := toolsetsrepo.New(ti.conn)
 	slug := "summary-" + uuid.NewString()[:8]
 	described, err := toolsets.CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
-		OrganizationID: orgID, ProjectID: projectID, Name: slug, Slug: slug, McpEnabled: true,
+		OrganizationID: orgID, ProjectID: projectID, Name: slug, Slug: slug,
 		Description: conv.ToPGText("Answers support questions"),
 	})
 	require.NoError(t, err)

@@ -115,12 +115,11 @@ func TestShadowMemberToolsetKeepsPrivateBoundary(t *testing.T) {
 	h := newShadowHarness(t, true)
 	ctx := t.Context()
 	shadow := h.service.newMandatoryShadow(ctx, shadowOrg)
-	toolset := &toolsetsrepo.Toolset{ID: uuid.New(), ProjectID: uuid.New(), McpIsPublic: true}
-	allowed, err := h.service.memberToolsetConnectAllowed(ctx, shadow, mandatorySurfaceConsent, false, toolset)
+	toolset := &toolsetsrepo.Toolset{ID: uuid.New(), ProjectID: uuid.New()}
+	allowed, err := h.service.memberToolsetConnectAllowed(ctx, shadow, mandatorySurfaceConsent, false, toolset, true)
 	require.NoError(t, err)
 	require.True(t, allowed)
-	toolset.McpIsPublic = false
-	allowed, err = h.service.memberToolsetConnectAllowed(ctx, shadow, mandatorySurfaceConsent, false, toolset)
+	allowed, err = h.service.memberToolsetConnectAllowed(ctx, shadow, mandatorySurfaceConsent, false, toolset, false)
 	require.NoError(t, err)
 	require.False(t, allowed, "public member admission never bypasses a private underlying toolset")
 	require.Equal(t, map[attribute.Set]int64{

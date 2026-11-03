@@ -442,8 +442,27 @@ type WorkloadPlatformConstant struct {
 	Visibility string
 }
 
-// The access rule a catalog platform produces.
+// The access rule a catalog platform produces by default, and the others the
+// operator may choose instead.
 type WorkloadPlatformSubject struct {
+	// The subject with {key} placeholders for rule-tier variables; the stem, for a
+	// wildcard rule.
+	Template string
+	// Whether the rule is the filled template followed by *.
+	Wildcard bool
+	// Names the default rule beside its alternatives. Empty where there are none.
+	Label string
+	// Other rules the operator may choose instead, in the order they are offered.
+	// Absent where there are none.
+	Alternatives []*WorkloadPlatformSubjectAlternative
+}
+
+// An access rule a catalog platform offers in place of its default.
+type WorkloadPlatformSubjectAlternative struct {
+	// Identifies the choice within the platform.
+	Key string
+	// What the operator chooses it by.
+	Label string
 	// The subject with {key} placeholders for rule-tier variables; the stem, for a
 	// wildcard rule.
 	Template string

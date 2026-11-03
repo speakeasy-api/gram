@@ -130,6 +130,30 @@ export function clientTypeGrantChanges(
   return { addGrants: group(add), removeGrants: group(remove) };
 }
 
+/**
+ * The form's credential rules after the role was read again. A type the person
+ * changed keeps their choice; every other type follows the role as stored.
+ *
+ * The editor fills its form in from one read of the role and a save removes
+ * the stored rule for every type whose choice differs from it, so a type the
+ * role gained since the form was filled in would otherwise sit in the form as
+ * "Not set" and be taken away by the next save.
+ */
+export function rebaseClientTypeRules(args: {
+  current: ClientTypeRules;
+  baseline: ClientTypeRules;
+  stored: ClientTypeRules;
+}): ClientTypeRules {
+  const { current, baseline, stored } = args;
+  const next: ClientTypeRules = { ...current };
+  for (const type of CLIENT_TYPES) {
+    if ((current[type] ?? "unset") === (baseline[type] ?? "unset")) {
+      next[type] = stored[type] ?? "unset";
+    }
+  }
+  return next;
+}
+
 export function clientTypeRulesKey(rules: ClientTypeRules): string {
   return CLIENT_TYPES.map((type) => `${type}=${rules[type] ?? "unset"}`).join(
     ",",

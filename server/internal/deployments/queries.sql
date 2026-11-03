@@ -819,17 +819,10 @@ SELECT
     t.id
   , t.name
   , t.slug
-  , COALESCE((
-      SELECT e.slug
-      FROM mcp_endpoints e
-      LEFT JOIN custom_domains cd ON cd.id = e.custom_domain_id AND cd.organization_id = t.organization_id
-        AND cd.activated IS TRUE AND cd.verified IS TRUE AND cd.deleted IS FALSE
-      WHERE e.mcp_server_id = cw.id AND e.project_id = t.project_id AND e.deleted IS FALSE
-        AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
-      ORDER BY (e.custom_domain_id IS NOT NULL), e.created_at, e.id
-      LIMIT 1
-    ), t.mcp_slug) AS mcp_slug
-  , (CASE WHEN cw.id IS NOT NULL THEN cw.visibility <> 'disabled' ELSE t.mcp_enabled END)::BOOLEAN AS mcp_enabled
+  , COALESCE(addr.slug, '')::text AS mcp_slug
+  -- legacyalias: a hosted toolset without a servable endpoint takes its legacy alias as its address; drop with AIM-670.
+  , (cw.id IS NOT NULL)::BOOLEAN AS hosted
+  , (cw.id IS NOT NULL AND cw.visibility <> 'disabled')::BOOLEAN AS mcp_enabled
   , (t.external_oauth_server_id IS NOT NULL)::BOOLEAN AS oauth_configured
   , ARRAY(
       SELECT u FROM unnest(tv.tool_urns) AS u
@@ -837,6 +830,16 @@ SELECT
     )::TEXT[] AS source_tool_urns
 FROM toolsets t
 LEFT JOIN mcp_servers cw ON cw.id = t.id AND cw.toolset_id = t.id AND cw.project_id = t.project_id AND cw.deleted IS FALSE
+LEFT JOIN LATERAL (
+  SELECT e.slug
+  FROM mcp_endpoints e
+  LEFT JOIN custom_domains cd ON cd.id = e.custom_domain_id AND cd.organization_id = t.organization_id
+    AND cd.activated IS TRUE AND cd.verified IS TRUE AND cd.deleted IS FALSE
+  WHERE e.mcp_server_id = cw.id AND e.project_id = t.project_id AND e.deleted IS FALSE
+    AND (e.custom_domain_id IS NULL OR cd.id IS NOT NULL)
+  ORDER BY (e.custom_domain_id IS NOT NULL), e.created_at, e.id
+  LIMIT 1
+) addr ON TRUE
 JOIN LATERAL (
   SELECT tool_urns
   FROM toolset_versions

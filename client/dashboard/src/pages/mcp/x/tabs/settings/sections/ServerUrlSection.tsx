@@ -71,6 +71,10 @@ export type EndpointBackendRef =
   | { mcpServerId: string }
   | { metaMcpServerId: string };
 
+function backendServerId(backend: EndpointBackendRef): string | undefined {
+  return "mcpServerId" in backend ? backend.mcpServerId : undefined;
+}
+
 function generateAddressSuffix() {
   let suffix = "";
   for (let i = 0; i < ADDRESS_RANDOM_SUFFIX_LENGTH; i += 1) {
@@ -96,19 +100,20 @@ export function ServerUrlSection({
   subject?: "server" | "gateway";
   mcpServer?: McpServer | MetaMcpServer;
 }): JSX.Element {
-  const { domains, isLoading: isLoadingDomains } = useCustomDomains();
+  const {
+    domains,
+    isLoading: isLoadingDomains,
+    isError: domainsError,
+  } = useCustomDomains();
   const orgRoutes = useOrgRoutes();
   const { hasScope } = useRBAC();
   const canManageDomains = hasScope("org:admin");
-  // A hosted server keeps one address: edit it, or add one only when it has none.
-  const singleAddress =
-    !!mcpServer && isCanonicalHostedWrapper(mcpServer) && endpoints.length > 0;
   const privateMode =
     mcpServer?.networkAccessMode === McpServerNetworkAccessMode.Dual ||
     mcpServer?.networkAccessMode === McpServerNetworkAccessMode.PrivateOnly;
-  // A hosted server's slug follows its address, so the settings route follows the server after an address write.
   const hostedServerId =
     mcpServer && isCanonicalHostedWrapper(mcpServer) ? mcpServer.id : undefined;
+  // Older servers rename a hosted server to its address, so the settings route follows the server after a write.
   const client = useSdkClient();
   const serverQueryClient = useQueryClient();
   const followRenamedServer = useFollowRenamedServer();
@@ -124,23 +129,24 @@ export function ServerUrlSection({
       invalidateAllMcpServers(serverQueryClient, { refetchType: "all" }),
     ]);
   }, [client, followRenamedServer, hostedServerId, serverQueryClient]);
-  // A private hosted address only moves within the private ingress namespace, which the server enforces.
+  // A private hosted server only takes addresses in its ingress namespace, which the server enforces.
   const { canManageIngress } = useNetworkIngressRollout();
+  const hostedPrivate = !!hostedServerId && privateMode;
   const ingressQuery = useNetworkIngress(undefined, undefined, {
-    enabled: singleAddress && privateMode && canManageIngress,
+    enabled: hostedPrivate && canManageIngress,
     retry: false,
     throwOnError: false,
   });
   const ingress = ingressQuery.data?.ingress;
-  const canMoveTo = useCallback(
+  const canAddAt = useCallback(
     (customDomainId: string | undefined) => {
-      if (!privateMode) return true;
+      if (!hostedPrivate) return true;
       if (!ingress) return false;
       return ingress.endpointNamespaceKind === "platform"
         ? !customDomainId
         : customDomainId === ingress.customDomainId;
     },
-    [privateMode, ingress],
+    [hostedPrivate, ingress],
   );
   const {
     privateMcpUrls,
@@ -149,8 +155,13 @@ export function ServerUrlSection({
     isError: privateUrlsError,
   } = usePrivateMcpServerUrls(mcpServer, endpoints);
 
-  const platformEndpoint = useMemo(
-    () => endpoints.find((e) => !e.customDomainId),
+  // A custom-domain alias the Speakeasy domain still serves for existing clients.
+  const legacyPlatformSlug =
+    hostedServerId && mcpServer && "legacyPlatformSlug" in mcpServer
+      ? mcpServer.legacyPlatformSlug
+      : undefined;
+  const platformEndpoints = useMemo(
+    () => endpoints.filter((e) => !e.customDomainId),
     [endpoints],
   );
   const customDomainEndpoints = useMemo(
@@ -161,12 +172,44 @@ export function ServerUrlSection({
     () => domains.filter((d): d is CustomDomain => d != null),
     [domains],
   );
+  // New addresses go only on a verified, activated domain; existing rows on any domain stay listed.
+  const addableDomains = useMemo(
+    () =>
+      availableDomains.filter(
+        (d) => d.verified && d.activated && canAddAt(d.id),
+      ),
+    [availableDomains, canAddAt],
+  );
+  // An enabled hosted server cannot lose its last address that can serve; it must be disabled first.
+  const mustDisableBeforeLastRemoval =
+    !!hostedServerId && mcpServer?.visibility !== "disabled";
+  // Only addresses that can serve count toward the last one: the platform, or a verified, activated domain.
+  // Every address counts while domains load or fail to load, so a removal is never left unconfirmed.
+  const servableIds = useMemo(
+    () =>
+      new Set(
+        endpoints
+          .filter(
+            (e) =>
+              isLoadingDomains ||
+              domainsError ||
+              !e.customDomainId ||
+              availableDomains.some(
+                (d) => d.id === e.customDomainId && d.verified && d.activated,
+              ),
+          )
+          .map((e) => e.id),
+      ),
+    [endpoints, availableDomains, isLoadingDomains, domainsError],
+  );
+  const isLast = (endpoint: McpEndpoint) =>
+    servableIds.size === 1 && servableIds.has(endpoint.id);
 
   const [addingPlatform, setAddingPlatform] = useState(false);
   const [addingCustom, setAddingCustom] = useState(false);
 
   let customAddressEmptyState: React.ReactNode = null;
-  if (!singleAddress && !addingCustom && customDomainEndpoints.length === 0) {
+  if (!addingCustom && customDomainEndpoints.length === 0) {
     if (availableDomains.length === 0) {
       let description =
         "Ask an organization administrator to add and verify a custom domain.";
@@ -186,6 +229,17 @@ export function ServerUrlSection({
           description={description}
           actionLabel={actionLabel}
           onAction={onAction}
+        />
+      );
+    } else if (addableDomains.length === 0) {
+      customAddressEmptyState = (
+        <SettingsInlineEmptyState
+          title="No custom address"
+          description={
+            hostedPrivate
+              ? "Private network access keeps this server's addresses on its ingress namespace."
+              : "No verified, activated custom domain is available."
+          }
         />
       );
     } else {
@@ -220,84 +274,38 @@ export function ServerUrlSection({
             </Text>
           ) : (
             <FieldGroup className="gap-6">
-              {/* Hosted (platform) address: at most one. */}
-              {(!singleAddress || platformEndpoint) && (
-                <Field>
-                  <FieldLabel>Hosted Address</FieldLabel>
-                  {platformEndpoint ? (
-                    <AddressRow
-                      backend={backend}
-                      endpoint={platformEndpoint}
-                      domains={availableDomains}
-                      isLastEndpoint={endpoints.length === 1}
-                      canRemove={!singleAddress}
-                      movesInPlace={singleAddress}
-                      isLoadingDomains={isLoadingDomains}
-                      canMoveTo={canMoveTo}
-                      onSaved={followHostedServer}
-                    />
-                  ) : addingPlatform ? (
+              {/* Hosted (platform) addresses. */}
+              <Field>
+                <FieldLabel>Hosted Address</FieldLabel>
+                {legacyPlatformSlug && (
+                  <LegacyAddressRow slug={legacyPlatformSlug} />
+                )}
+                {platformEndpoints.map((endpoint) => (
+                  <AddressRow
+                    key={endpoint.id}
+                    backend={backend}
+                    endpoint={endpoint}
+                    isLastEndpoint={isLast(endpoint)}
+                    mustDisableFirst={mustDisableBeforeLastRemoval}
+                    onSaved={followHostedServer}
+                  />
+                ))}
+                {platformEndpoints.length > 0 || legacyPlatformSlug ? (
+                  addingPlatform ? (
                     <NewPlatformAddressRow
                       backend={backend}
                       onCreated={followHostedServer}
                       onClose={() => setAddingPlatform(false)}
                     />
                   ) : (
-                    <RequireScope scope="mcp:write" level="component">
-                      <SettingsInlineEmptyState
-                        title="No hosted address"
-                        description={`Create the default Speakeasy-hosted URL for this ${subject}.`}
-                        actionLabel="Add"
-                        onAction={() => setAddingPlatform(true)}
-                      />
-                    </RequireScope>
-                  )}
-                  <FieldDescription>
-                    Hosted under a Speakeasy domain. Configured here even when
-                    private-only access stops it from serving clients.
-                  </FieldDescription>
-                </Field>
-              )}
-
-              {/* Custom-domain addresses: zero or more. */}
-              {(!singleAddress || customDomainEndpoints.length > 0) && (
-                <Field>
-                  <div className="flex items-center gap-2">
-                    <FieldLabel>Custom Address</FieldLabel>
-                  </div>
-                  {customDomainEndpoints.map((endpoint) => (
-                    <AddressRow
-                      key={endpoint.id}
-                      backend={backend}
-                      endpoint={endpoint}
-                      domains={availableDomains}
-                      isLastEndpoint={endpoints.length === 1}
-                      canManageDomainRoot={canManageDomains}
-                      canRemove={!singleAddress}
-                      movesInPlace={singleAddress}
-                      isLoadingDomains={isLoadingDomains}
-                      canMoveTo={canMoveTo}
-                      onSaved={followHostedServer}
-                    />
-                  ))}
-                  {addingCustom && (
-                    <NewCustomAddressRow
-                      backend={backend}
-                      domains={availableDomains}
-                      onCreated={followHostedServer}
-                      onClose={() => setAddingCustom(false)}
-                    />
-                  )}
-                  {customAddressEmptyState}
-                  {!singleAddress &&
-                    !addingCustom &&
-                    customDomainEndpoints.length > 0 &&
-                    availableDomains.length > 0 && (
+                    hostedServerId &&
+                    canAddAt(undefined) && (
                       <RequireScope scope="mcp:write" level="component">
                         <div>
                           <Button
                             variant="secondary"
-                            onClick={() => setAddingCustom(true)}
+                            aria-label="Add hosted address"
+                            onClick={() => setAddingPlatform(true)}
                           >
                             <Button.LeftIcon>
                               <Plus className="size-4" />
@@ -306,9 +314,81 @@ export function ServerUrlSection({
                           </Button>
                         </div>
                       </RequireScope>
-                    )}
-                </Field>
-              )}
+                    )
+                  )
+                ) : addingPlatform ? (
+                  <NewPlatformAddressRow
+                    backend={backend}
+                    onCreated={followHostedServer}
+                    onClose={() => setAddingPlatform(false)}
+                  />
+                ) : canAddAt(undefined) ? (
+                  <RequireScope scope="mcp:write" level="component">
+                    <SettingsInlineEmptyState
+                      title="No hosted address"
+                      description={`Create the default Speakeasy-hosted URL for this ${subject}.`}
+                      actionLabel="Add"
+                      onAction={() => setAddingPlatform(true)}
+                    />
+                  </RequireScope>
+                ) : (
+                  <SettingsInlineEmptyState
+                    title="No hosted address"
+                    description="Private network access keeps this server's addresses on its ingress namespace."
+                  />
+                )}
+                <FieldDescription>
+                  Hosted under a Speakeasy domain. Configured here even when
+                  private-only access stops it from serving clients.
+                </FieldDescription>
+              </Field>
+
+              {/* Custom-domain addresses: zero or more. */}
+              <Field>
+                <div className="flex items-center gap-2">
+                  <FieldLabel>Custom Address</FieldLabel>
+                </div>
+                {customDomainEndpoints.map((endpoint) => (
+                  <AddressRow
+                    key={endpoint.id}
+                    backend={backend}
+                    endpoint={endpoint}
+                    domains={availableDomains}
+                    isLastEndpoint={isLast(endpoint)}
+                    mustDisableFirst={mustDisableBeforeLastRemoval}
+                    canManageDomainRoot={canManageDomains}
+                    hosted={!!hostedServerId}
+                    onSaved={followHostedServer}
+                  />
+                ))}
+                {addingCustom && (
+                  <NewCustomAddressRow
+                    backend={backend}
+                    domains={addableDomains}
+                    hosted={!!hostedServerId}
+                    onCreated={followHostedServer}
+                    onClose={() => setAddingCustom(false)}
+                  />
+                )}
+                {customAddressEmptyState}
+                {!addingCustom &&
+                  customDomainEndpoints.length > 0 &&
+                  addableDomains.length > 0 && (
+                    <RequireScope scope="mcp:write" level="component">
+                      <div>
+                        <Button
+                          variant="secondary"
+                          onClick={() => setAddingCustom(true)}
+                        >
+                          <Button.LeftIcon>
+                            <Plus className="size-4" />
+                          </Button.LeftIcon>
+                          <Button.Text>Add</Button.Text>
+                        </Button>
+                      </div>
+                    </RequireScope>
+                  )}
+              </Field>
 
               {mcpServer &&
                 canManageDomains &&
@@ -386,23 +466,18 @@ function AddressRow({
   endpoint,
   domains,
   isLastEndpoint,
+  mustDisableFirst = false,
   canManageDomainRoot = false,
-  canRemove = true,
-  movesInPlace = false,
-  isLoadingDomains = false,
-  canMoveTo = () => true,
+  hosted = false,
   onSaved,
 }: {
   backend: EndpointBackendRef;
   endpoint: McpEndpoint;
   domains?: CustomDomain[];
   isLastEndpoint: boolean;
+  mustDisableFirst?: boolean;
   canManageDomainRoot?: boolean;
-  canRemove?: boolean;
-  // A hosted server's one address moves between the platform and the custom domain in place.
-  movesInPlace?: boolean;
-  isLoadingDomains?: boolean;
-  canMoveTo?: (customDomainId: string | undefined) => boolean;
+  hosted?: boolean;
   onSaved?: () => Promise<void>;
 }) {
   const { orgSlug } = useSlugs();
@@ -458,6 +533,8 @@ function AddressRow({
     fullSlug,
     endpoint.customDomainId ?? null,
     endpoint.slug,
+    hosted,
+    backendServerId(backend),
   );
 
   const dirty = fullSlug !== endpoint.slug;
@@ -478,40 +555,6 @@ function AddressRow({
           ...backend,
           slug: fullSlug,
           customDomainId: endpoint.customDomainId ?? undefined,
-        },
-      },
-    });
-  };
-  const currentDomain = endpoint.customDomainId
-    ? domains?.find((d) => d.id === endpoint.customDomainId)
-    : undefined;
-  // A hosted address moves onto the verified domain, and back only once its domain can no longer serve.
-  const moveTarget = !movesInPlace
-    ? undefined
-    : endpoint.customDomainId
-      ? !isLoadingDomains &&
-        canMoveTo(undefined) &&
-        (!currentDomain ||
-          (!(currentDomain.verified && currentDomain.activated) &&
-            !currentDomain.healthCheckedAt))
-        ? { label: "Move to Speakeasy domain", customDomainId: undefined }
-        : undefined
-      : domains
-          ?.filter((d) => d.verified && d.activated && canMoveTo(d.id))
-          .map((d) => ({ label: `Move to ${d.domain}`, customDomainId: d.id }))
-          .at(0);
-  const handleMove = (customDomainId: string | undefined) => {
-    const platformSlug =
-      orgSlug && !endpoint.slug.startsWith(`${orgSlug}-`)
-        ? `${orgSlug}-${endpoint.slug}`
-        : endpoint.slug;
-    update.mutate({
-      request: {
-        updateMcpEndpointForm: {
-          id: endpoint.id,
-          ...backend,
-          slug: customDomainId ? endpoint.slug : platformSlug,
-          customDomainId,
         },
       },
     });
@@ -549,43 +592,27 @@ function AddressRow({
               )}
             </Button.Icon>
           </Button>
-          {canRemove && (
-            <Button
-              variant="destructive-secondary"
-              className="border border-destructive/40 bg-transparent hover:border-destructive"
-              disabled={remove.isPending}
-              aria-label="Remove address"
-              onClick={() => {
-                if (isLastEndpoint) {
-                  setConfirmRemoveOpen(true);
-                  return;
-                }
-                remove.mutate({ request: { id: endpoint.id } });
-              }}
-            >
-              <Button.LeftIcon>
-                <Trash2 className="size-4" />
-              </Button.LeftIcon>
-            </Button>
-          )}
+          <Button
+            variant="destructive-secondary"
+            className="border border-destructive/40 bg-transparent hover:border-destructive"
+            disabled={remove.isPending}
+            aria-label="Remove address"
+            onClick={() => {
+              if (isLastEndpoint) {
+                setConfirmRemoveOpen(true);
+                return;
+              }
+              remove.mutate({ request: { id: endpoint.id } });
+            }}
+          >
+            <Button.LeftIcon>
+              <Trash2 className="size-4" />
+            </Button.LeftIcon>
+          </Button>
         </RequireScope>
       </Stack>
       {slugError && <FieldError className="text-xs">{slugError}</FieldError>}
       {update.isError && <FieldError>{update.error.message}</FieldError>}
-      {moveTarget && (
-        <RequireScope scope="mcp:write" level="component">
-          <div>
-            <Button
-              variant="secondary"
-              size="sm"
-              disabled={update.isPending}
-              onClick={() => handleMove(moveTarget.customDomainId)}
-            >
-              <Button.Text>{moveTarget.label}</Button.Text>
-            </Button>
-          </div>
-        </RequireScope>
-      )}
       {endpoint.customDomainId && (
         <div className="flex flex-wrap items-center gap-2">
           {endpoint.isDomainRoot && (
@@ -625,14 +652,32 @@ function AddressRow({
           }
         }}
       />
-      {canRemove && (
-        <RemoveLastAddressDialog
-          isOpen={confirmRemoveOpen}
-          isLoading={remove.isPending}
-          onClose={() => setConfirmRemoveOpen(false)}
-          onConfirm={() => remove.mutate({ request: { id: endpoint.id } })}
-        />
-      )}
+      <RemoveLastAddressDialog
+        isOpen={confirmRemoveOpen}
+        isLoading={remove.isPending}
+        mustDisableFirst={mustDisableFirst}
+        onClose={() => setConfirmRemoveOpen(false)}
+        onConfirm={() => remove.mutate({ request: { id: endpoint.id } })}
+      />
+    </Field>
+  );
+}
+
+function LegacyAddressRow({ slug }: { slug: string }): JSX.Element {
+  const url = `${getServerURL()}/mcp/${slug}`;
+  return (
+    <Field className="gap-2">
+      <div className="border-border flex items-center gap-2 border px-3 py-2">
+        <Text className="min-w-0 flex-1 break-all font-mono text-sm">
+          {url}
+        </Text>
+        <CopyButton text={url} size="xs" tooltip="Copy hosted address" />
+      </div>
+      <Text muted small>
+        An older Speakeasy address with the same name as your custom address.
+        Clients that already use it connect here while this server is enabled
+        and public access is on.
+      </Text>
     </Field>
   );
 }
@@ -690,14 +735,36 @@ function ConfirmDomainRootDialog({
 function RemoveLastAddressDialog({
   isOpen,
   isLoading,
+  mustDisableFirst,
   onClose,
   onConfirm,
 }: {
   isOpen: boolean;
   isLoading: boolean;
+  mustDisableFirst: boolean;
   onClose: () => void;
   onConfirm: () => void;
 }) {
+  if (mustDisableFirst) {
+    return (
+      <Dialog open={isOpen} onOpenChange={onClose}>
+        <Dialog.Content className="max-w-md">
+          <Dialog.Header>
+            <Dialog.Title>Disable this server first</Dialog.Title>
+            <Dialog.Description>
+              This is the last address clients can reach this server on. Disable
+              the server before you remove it, or add another address first.
+            </Dialog.Description>
+          </Dialog.Header>
+          <Dialog.Footer>
+            <Button variant="secondary" onClick={onClose}>
+              <Button.Text>Close</Button.Text>
+            </Button>
+          </Dialog.Footer>
+        </Dialog.Content>
+      </Dialog>
+    );
+  }
   return (
     <Dialog open={isOpen} onOpenChange={onClose}>
       <Dialog.Content className="max-w-md">
@@ -748,7 +815,13 @@ function NewPlatformAddressRow({
   const { orgSlug } = useSlugs();
   const slugPrefix = orgSlug ? `${orgSlug}-` : "";
   const fullSlug = `${slugPrefix}${suffix.trim()}`;
-  const slugError = useMcpEndpointSlugValidation(fullSlug, null);
+  const slugError = useMcpEndpointSlugValidation(
+    fullSlug,
+    null,
+    undefined,
+    false,
+    backendServerId(backend),
+  );
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);
@@ -834,11 +907,13 @@ function NewPlatformAddressRow({
 function NewCustomAddressRow({
   backend,
   domains,
+  hosted = false,
   onCreated,
   onClose,
 }: {
   backend: EndpointBackendRef;
   domains: CustomDomain[];
+  hosted?: boolean;
   onCreated?: () => Promise<void>;
   onClose: () => void;
 }) {
@@ -847,7 +922,13 @@ function NewCustomAddressRow({
   const [slug, setSlug] = useState("");
   const queryClient = useQueryClient();
   const client = useSdkClient();
-  const slugError = useMcpEndpointSlugValidation(slug.trim(), domainId || null);
+  const slugError = useMcpEndpointSlugValidation(
+    slug.trim(),
+    domainId || null,
+    undefined,
+    hosted,
+    backendServerId(backend),
+  );
 
   const [submitting, setSubmitting] = useState(false);
   const [errorMsg, setErrorMsg] = useState<string | null>(null);

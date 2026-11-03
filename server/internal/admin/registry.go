@@ -125,3 +125,8 @@ func (s *Service) SetRegistryEntryPublished(ctx context.Context, p *gen.SetRegis
 	e, err := s.registry.SetPublished(ctx, id, p.UpdatedAt, p.Published)
 	return s.registryMutationResult(ctx, "set_published", e, err)
 }
+
+// IsPublicCatalogIcon validates the restricted staff-agent icon projection.
+func (s *Service) IsPublicCatalogIcon(ctx context.Context, icon *mcpregistry.CatalogIcon) bool {
+	return s.registry.IsPublicCatalogIcon(ctx, icon)
+}

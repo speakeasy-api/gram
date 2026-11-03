@@ -19,7 +19,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostedmcptest"
 	mcpendpointsRepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversRepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	oauthRepo "github.com/speakeasy-api/gram/server/internal/oauth/repo"
@@ -28,7 +27,6 @@ import (
 	remotemcpRepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
-	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	usersessionsRepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -233,20 +231,9 @@ func TestServiceCreateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 		Slug:                   "slack",
 		Description:            pgtype.Text{},
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                pgtype.Text{String: "org-test-slack-xyz", Valid: true},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
-	require.False(t, ts.McpEnabled)
-	_, err = mcpserversRepo.New(conn).CreateMCPServer(t.Context(), mcpserversRepo.CreateMCPServerParams{
-		ID: ts.ID, ProjectID: projectID, Name: pgtype.Text{String: ts.Name, Valid: true},
-		Slug: ts.McpSlug, ToolsetID: uuid.NullUUID{UUID: ts.ID, Valid: true}, Visibility: "disabled",
-	})
-	require.NoError(t, err)
-	_, err = mcpendpointsRepo.New(conn).CreateMCPEndpoint(t.Context(), mcpendpointsRepo.CreateMCPEndpointParams{
-		ProjectID: projectID, McpServerID: uuid.NullUUID{UUID: ts.ID, Valid: true}, Slug: ts.McpSlug.String,
-	})
-	require.NoError(t, err)
+	createCanonicalWrapper(t, conn, ts, "org-test-slack-xyz", "disabled")
 
 	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant(), mcpWriteGrant(ts.ID))
 	_, err = svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{
@@ -264,12 +251,6 @@ func TestServiceCreateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	reloaded, err := toolsetsQ.GetToolset(t.Context(), toolsetsRepo.GetToolsetParams{
-		Slug:      ts.Slug,
-		ProjectID: projectID,
-	})
-	require.NoError(t, err)
-	require.True(t, reloaded.McpEnabled, "the toolset column mirrors the wrapper")
 	server, err := mcpserversRepo.New(conn).GetMCPServerByIDAndProjectID(t.Context(), mcpserversRepo.GetMCPServerByIDAndProjectIDParams{ID: ts.ID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.Equal(t, "private", server.Visibility, "assistant attachment must also enable the hosted wrapper")
@@ -284,11 +265,9 @@ func TestServiceAttachingRequiresMCPConnect(t *testing.T) {
 		ProjectID:      projectID,
 		Name:           "Slack",
 		Slug:           "slack",
-		McpSlug:        pgtype.Text{String: "org-test-slack-connect", Valid: true},
-		McpEnabled:     true,
 	})
 	require.NoError(t, err)
-	syncCanonicalWrapper(t, conn, ts)
+	createCanonicalWrapper(t, conn, ts, "org-test-slack-connect", "private")
 	toolsets := []*types.AssistantToolsetRef{{ToolsetSlug: ts.Slug, EnvironmentSlug: nil}}
 
 	writerCtx := authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID))
@@ -321,29 +300,17 @@ func newMCPEnableFixture(t *testing.T, dbName string) (mcpEnableFixture, context
 		ProjectID:      projectID,
 		Name:           "Disabled",
 		Slug:           "disabled",
-		McpSlug:        pgtype.Text{String: "org-test-disabled-write", Valid: true},
-		McpEnabled:     false,
 	})
 	require.NoError(t, err)
-	_, err = mcpserversRepo.New(conn).CreateMCPServer(t.Context(), mcpserversRepo.CreateMCPServerParams{
-		ID: disabled.ID, ProjectID: projectID, Name: pgtype.Text{String: disabled.Name, Valid: true},
-		Slug: disabled.McpSlug, ToolsetID: uuid.NullUUID{UUID: disabled.ID, Valid: true}, Visibility: "disabled",
-	})
-	require.NoError(t, err)
-	_, err = mcpendpointsRepo.New(conn).CreateMCPEndpoint(t.Context(), mcpendpointsRepo.CreateMCPEndpointParams{
-		ProjectID: projectID, McpServerID: uuid.NullUUID{UUID: disabled.ID, Valid: true}, Slug: disabled.McpSlug.String,
-	})
-	require.NoError(t, err)
+	createCanonicalWrapper(t, conn, disabled, "org-test-disabled-write", "disabled")
 	enabled, err := toolsetsQ.CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
 		OrganizationID: "org-test",
 		ProjectID:      projectID,
 		Name:           "Enabled",
 		Slug:           "enabled",
-		McpSlug:        pgtype.Text{String: "org-test-enabled-write", Valid: true},
-		McpEnabled:     true,
 	})
 	require.NoError(t, err)
-	syncCanonicalWrapper(t, conn, enabled)
+	createCanonicalWrapper(t, conn, enabled, "org-test-enabled-write", "private")
 	return mcpEnableFixture{svc: svc, projectID: projectID, conn: conn, disabled: disabled, enabled: enabled}, ctx
 }
 
@@ -359,7 +326,7 @@ func (f mcpEnableFixture) writerCtx(t *testing.T, ctx context.Context, toolsetID
 
 func (f mcpEnableFixture) disable(t *testing.T, toolsetID uuid.UUID) {
 	t.Helper()
-	require.NoError(t, testrepo.New(f.conn).SetToolsetMCPEnabledByID(t.Context(), testrepo.SetToolsetMCPEnabledByIDParams{McpEnabled: false, ID: toolsetID, ProjectID: f.projectID}))
+	testenv.SetHostedMCP(t, t.Context(), f.conn, f.projectID, toolsetID, testenv.HostedMCP{Visibility: "disabled"})
 }
 
 func (f mcpEnableFixture) requireMCPEnabled(t *testing.T, toolsetID uuid.UUID, want bool) {
@@ -368,7 +335,7 @@ func (f mcpEnableFixture) requireMCPEnabled(t *testing.T, toolsetID uuid.UUID, w
 	require.NoError(t, err)
 	served, _, err := hostedmcp.LoadServerState(t.Context(), f.conn, reloaded)
 	require.NoError(t, err)
-	require.Equal(t, want, served.McpEnabled)
+	require.Equal(t, want, served.Enabled)
 }
 
 func requireMCPEnableForbidden(t *testing.T, err error) {
@@ -478,7 +445,7 @@ func TestServiceDisabledHostedServerRefIsRejected(t *testing.T) {
 	f, ctx := newMCPEnableFixture(t, "assistants_attach_disabled_server_ref")
 	_, err := f.svc.CreateAssistant(f.writerCtx(t, ctx, f.disabled.ID), &gen.CreateAssistantPayload{
 		Name: "Server ref", Model: "openai/gpt-4o-mini",
-		McpServers: []*types.AssistantMCPServerRef{{McpServerSlug: f.disabled.McpSlug.String, EnvironmentSlug: nil}},
+		McpServers: []*types.AssistantMCPServerRef{{McpServerSlug: "org-test-disabled-write", EnvironmentSlug: nil}},
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
 	f.requireMCPEnabled(t, f.disabled.ID, false)
@@ -497,19 +464,9 @@ func TestServiceUpdateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 		Slug:                   "slack",
 		Description:            pgtype.Text{},
 		DefaultEnvironmentSlug: pgtype.Text{},
-		McpSlug:                pgtype.Text{String: "org-test-slack-xyz", Valid: true},
-		McpEnabled:             false,
 	})
 	require.NoError(t, err)
-	_, err = mcpserversRepo.New(conn).CreateMCPServer(t.Context(), mcpserversRepo.CreateMCPServerParams{
-		ID: ts.ID, ProjectID: projectID, Name: pgtype.Text{String: ts.Name, Valid: true},
-		Slug: ts.McpSlug, ToolsetID: uuid.NullUUID{UUID: ts.ID, Valid: true}, Visibility: "disabled",
-	})
-	require.NoError(t, err)
-	_, err = mcpendpointsRepo.New(conn).CreateMCPEndpoint(t.Context(), mcpendpointsRepo.CreateMCPEndpointParams{
-		ProjectID: projectID, McpServerID: uuid.NullUUID{UUID: ts.ID, Valid: true}, Slug: ts.McpSlug.String,
-	})
-	require.NoError(t, err)
+	createCanonicalWrapper(t, conn, ts, "org-test-slack-xyz", "disabled")
 
 	ctx = authztest.WithExactGrants(t, ctx, assistantWriteGrant(projectID), mcpConnectGrant(), mcpWriteGrant(ts.ID))
 	created, err := svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{
@@ -541,12 +498,6 @@ func TestServiceUpdateAssistantAutoEnablesMCPOnAttachedToolsets(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	reloaded, err := toolsetsQ.GetToolset(t.Context(), toolsetsRepo.GetToolsetParams{
-		Slug:      ts.Slug,
-		ProjectID: projectID,
-	})
-	require.NoError(t, err)
-	require.True(t, reloaded.McpEnabled, "the toolset column mirrors the wrapper")
 	server, err := mcpserversRepo.New(conn).GetMCPServerByIDAndProjectID(t.Context(), mcpserversRepo.GetMCPServerByIDAndProjectIDParams{ID: ts.ID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.Equal(t, "private", server.Visibility, "updating assistant toolsets must also enable the hosted wrapper")
@@ -558,10 +509,9 @@ func TestServiceAssistantEnableTurnsCanonicalWrapperPrivate(t *testing.T) {
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_mcp_autoenable_canonical")
 	ts, err := toolsetsRepo.New(conn).CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
 		OrganizationID: "org-test", ProjectID: projectID, Name: "Linear", Slug: "linear",
-		McpSlug: pgtype.Text{String: "org-test-linear-canonical", Valid: true}, McpEnabled: false,
 	})
 	require.NoError(t, err)
-	syncCanonicalWrapper(t, conn, ts)
+	createCanonicalWrapper(t, conn, ts, "org-test-linear-canonical", "disabled")
 	before, err := mcpserversRepo.New(conn).GetMCPServerByIDAndProjectID(t.Context(), mcpserversRepo.GetMCPServerByIDAndProjectIDParams{ID: ts.ID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.Equal(t, "disabled", before.Visibility)
@@ -582,10 +532,6 @@ func TestServiceAssistantEnableTurnsCanonicalWrapperPrivate(t *testing.T) {
 	record, err := audittest.LatestAuditLogByActionAndSubject(t.Context(), conn, audit.ActionMcpServerUpdate, ts.ID.String())
 	require.NoError(t, err)
 	require.Contains(t, string(record.AfterSnapshot), `"private"`)
-	reloaded, err := toolsetsRepo.New(conn).GetToolsetByIDAndProject(t.Context(), toolsetsRepo.GetToolsetByIDAndProjectParams{ID: ts.ID, ProjectID: projectID})
-	require.NoError(t, err)
-	require.True(t, reloaded.McpEnabled, "the toolset column mirrors the wrapper")
-	hostedmcptest.RequireMirrored(t, t.Context(), conn, projectID, ts.ID)
 }
 
 func TestServiceAssistantEnableRestoresPublicAndChecksIngress(t *testing.T) {
@@ -594,17 +540,14 @@ func TestServiceAssistantEnableRestoresPublicAndChecksIngress(t *testing.T) {
 	svc, ctx, projectID, conn := newRBACServiceWithConn(t, "assistants_mcp_autoenable_public")
 	ts, err := toolsetsRepo.New(conn).CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
 		OrganizationID: "org-test", ProjectID: projectID, Name: "Public", Slug: "public",
-		McpSlug: pgtype.Text{String: "org-test-public-canonical", Valid: true}, McpEnabled: false,
 	})
 	require.NoError(t, err)
-	syncCanonicalWrapper(t, conn, ts)
-	require.NoError(t, testrepo.New(conn).SetToolsetMCPPublicByID(t.Context(), testrepo.SetToolsetMCPPublicByIDParams{McpIsPublic: true, ID: ts.ID, ProjectID: projectID}))
+	createCanonicalWrapper(t, conn, ts, "org-test-public-canonical", "disabled")
 	private, err := toolsetsRepo.New(conn).CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
 		OrganizationID: "org-test", ProjectID: projectID, Name: "Private Network", Slug: "private-network",
-		McpSlug: pgtype.Text{String: "org-test-private-network", Valid: true}, McpEnabled: false,
 	})
 	require.NoError(t, err)
-	syncCanonicalWrapper(t, conn, private)
+	createCanonicalWrapper(t, conn, private, "org-test-private-network", "disabled")
 	servers := mcpserversRepo.New(conn)
 	wrapper, err := servers.GetMCPServerByIDAndProjectID(t.Context(), mcpserversRepo.GetMCPServerByIDAndProjectIDParams{ID: private.ID, ProjectID: projectID})
 	require.NoError(t, err)
@@ -622,15 +565,13 @@ func TestServiceAssistantEnableRestoresPublicAndChecksIngress(t *testing.T) {
 	require.NoError(t, err)
 	server, err := servers.GetMCPServerByIDAndProjectID(t.Context(), mcpserversRepo.GetMCPServerByIDAndProjectIDParams{ID: ts.ID, ProjectID: projectID})
 	require.NoError(t, err)
-	require.Equal(t, "private", server.Visibility, "a public flag without OAuth comes back private")
-	hostedmcptest.RequireMirrored(t, t.Context(), conn, projectID, ts.ID)
+	require.Equal(t, "private", server.Visibility, "a disabled wrapper without OAuth comes back private")
 
 	withOAuth, err := toolsetsRepo.New(conn).CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
 		OrganizationID: "org-test", ProjectID: projectID, Name: "OAuth", Slug: "oauth",
-		McpSlug: pgtype.Text{String: "org-test-oauth-canonical", Valid: true}, McpEnabled: false,
 	})
 	require.NoError(t, err)
-	syncCanonicalWrapper(t, conn, withOAuth)
+	createCanonicalWrapper(t, conn, withOAuth, "org-test-oauth-canonical", "disabled")
 	metadata, err := oauthRepo.New(conn).CreateExternalOAuthServerMetadata(t.Context(), oauthRepo.CreateExternalOAuthServerMetadataParams{
 		ProjectID: projectID, Slug: "oauth-reenable", Metadata: []byte(`{}`), AuthorizationServerIssuer: pgtype.Text{},
 	})
@@ -648,7 +589,6 @@ func TestServiceAssistantEnableRestoresPublicAndChecksIngress(t *testing.T) {
 	server, err = servers.GetMCPServerByIDAndProjectID(t.Context(), mcpserversRepo.GetMCPServerByIDAndProjectIDParams{ID: withOAuth.ID, ProjectID: projectID})
 	require.NoError(t, err)
 	require.Equal(t, "public", server.Visibility, "external OAuth comes back public")
-	hostedmcptest.RequireMirrored(t, t.Context(), conn, projectID, withOAuth.ID)
 
 	_, err = svc.CreateAssistant(ctx, &gen.CreateAssistantPayload{
 		Name: "Private Network", Model: "openai/gpt-4o-mini",
@@ -913,7 +853,6 @@ func TestEnableAssistantToolsetsRefusesServerWithoutAddress(t *testing.T) {
 	projectID := newProvisioningProject(t, db, "enable-no-address")
 	ts, err := toolsetsRepo.New(db).CreateToolset(t.Context(), toolsetsRepo.CreateToolsetParams{
 		OrganizationID: "org-test", ProjectID: projectID, Name: "Addressless", Slug: "addressless",
-		McpSlug: pgtype.Text{}, McpEnabled: false,
 	})
 	require.NoError(t, err)
 	_, err = mcpserversRepo.New(db).CreateMCPServer(t.Context(), mcpserversRepo.CreateMCPServerParams{

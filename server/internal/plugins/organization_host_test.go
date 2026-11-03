@@ -104,7 +104,7 @@ func downloadPluginServerPackage(t *testing.T, ctx context.Context, ti *testInst
 
 	_, body, err := svc.DownloadPluginPackage(ctx, &gen.DownloadPluginPackagePayload{PluginID: plugin.ID, Platform: "claude"})
 	require.NoError(t, err)
-	return toolset.McpSlug.String, readZipFiles(t, body)
+	return toolset.Slug, readZipFiles(t, body)
 }
 
 func downloadObservabilityServerURL(t *testing.T, ctx context.Context, svc *plugins.Service) string {
@@ -202,7 +202,7 @@ func TestPublishedServerURLMatchesMCPAddressHost(t *testing.T) {
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.NoError(t, err)
 
-	require.Contains(t, string(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"]), "https://platform.example.test/mcp/"+toolset.McpSlug.String)
+	require.Contains(t, string(mock.lastPushedFiles[plugin.Slug+"/.mcp.json"]), "https://platform.example.test/mcp/"+toolset.Slug)
 	var serverURLs []string
 	for name, content := range mock.lastPushedFiles {
 		if path.Base(name) != "speakeasy.json" {

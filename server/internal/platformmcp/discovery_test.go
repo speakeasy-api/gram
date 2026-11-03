@@ -124,7 +124,7 @@ func TestRuntimeServesDiscoverySurfaceToFlaggedHarness(t *testing.T) {
 		allowlistRPC(t, handler, runtime, clientID, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, &list)
 		return toolNames(list.Tools)
 	}
-	require.ElementsMatch(t, []string{searchPlatformToolsName, describePlatformToolName, callPlatformToolName}, toolsList(testCodexClientID))
+	require.ElementsMatch(t, append([]string{searchPlatformToolsName, describePlatformToolName, callPlatformToolName}, firstRunTools...), toolsList(testCodexClientID), "the small surface lists the first-run tools next to the meta-tools")
 	require.ElementsMatch(t, names(runtime.registrar.For(AudienceExternal)), toolsList(testOtherClientID), "other clients keep the full catalogue")
 
 	initialize := `{"jsonrpc":"2.0","id":1,"method":"initialize","params":{"protocolVersion":"2025-06-18","capabilities":{},"clientInfo":{"name":"test","version":"1"}}}`
@@ -533,4 +533,68 @@ func discoveryToolError(t *testing.T, runtime *Runtime, name string, arguments m
 	var result mcp.CallToolResult
 	require.NoError(t, json.Unmarshal(response.Result, &result))
 	return result.IsError
+}
+
+// The real first-run tool specs, listed without output schemas, must fit next
+// to the meta-tools inside the host budget. This registers the live tools, not
+// the unavailable placeholders the test runtime uses, so the sizes are real.
+func TestFirstRunToolsFitHostBudget(t *testing.T) {
+	t.Parallel()
+
+	reg := newRegistrar(mcp.NewServer(&mcp.Implementation{Name: "first-run-budget"}, nil))
+	registerCatalogTools(reg, nil, OperationBudget{}, nil, nil)
+	registerCandidateInspectionTool(reg, nil, nil, nil, OperationBudget{})
+	registerCatalogRegistrationTool(reg, &RegistrationService{}, nil)
+	registerRemoteRegistrationTool(reg, &RegistrationService{}, nil)
+	registerFindMCPTool(reg, nil, "first-run-budget")
+	registerReadinessTools(reg, &ReadinessService{})
+	registerPluginTools(reg, &PluginsService{})
+	registerSearchDocsTool(reg, nil, OperationBudget{})
+	catalogue, err := connectTestClient(t, reg.server).ListTools(t.Context(), nil)
+	require.NoError(t, err)
+
+	for _, mode := range []discoveryMode{discoveryProgressive, discoveryCode} {
+		firstRun, err := firstRunToolsFor(t.Context(), func(context.Context, string, mcp.Request) (mcp.Result, error) {
+			return catalogue, nil
+		}, "tools/list", nil)
+		require.NoError(t, err)
+		require.ElementsMatch(t, firstRunTools, toolNames(firstRun), "every first-run tool is registered")
+
+		listed := append(discoveryTools(mode), firstRun...)
+		raw, err := json.Marshal(&mcp.ListToolsResult{Tools: listed})
+		require.NoError(t, err)
+		t.Logf("%s: tools/list %d bytes", mode, len(raw))
+		require.Less(t, len(raw), hostTotalToolBudget/4, mode)
+		for _, tool := range firstRun {
+			require.Nil(t, tool.OutputSchema, tool.Name)
+			spec, err := json.Marshal(tool)
+			require.NoError(t, err)
+			require.Less(t, len(spec), hostToolSpecBudget, tool.Name)
+		}
+	}
+}
+
+// ChatGPT on the small surface sees every first-run tool it may use, including
+// ones outside its full-catalogue allowlist, and a member does not see the
+// administrator-only ones.
+func TestDiscoverySurfaceListsFirstRunToolsTheCallerMayUse(t *testing.T) {
+	t.Parallel()
+
+	flags := harnessFlags{"chatgpt": feature.VariantPlatformMCPDiscoveryProgressive}
+	toolsList := func(grants []authz.Grant) []string {
+		runtime := newAllowlistTestRuntime(t, grants).WithDiscovery(DiscoveryConfig{Flags: flags, CodeExecutor: nil, CodeModeAvailable: nil})
+		var list struct {
+			Tools []*mcp.Tool `json:"tools"`
+		}
+		allowlistRPC(t, runtime.Handler(), runtime, testChatGPTConnectorClientID, `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, &list)
+		return toolNames(list.Tools)
+	}
+
+	admin := toolsList([]authz.Grant{authz.NewGrant(authz.ScopeRoot, authz.WildcardResource)})
+	require.Contains(t, admin, "find_mcp", "the full-catalogue allowlist does not narrow the small surface")
+	require.Contains(t, admin, "register_catalog_mcp")
+
+	member := toolsList([]authz.Grant{authz.NewGrant(authz.ScopeProjectRead, "project-1")})
+	require.NotContains(t, member, "register_catalog_mcp", "discovery rules still hide administrator tools")
+	require.Contains(t, member, searchPlatformToolsName)
 }

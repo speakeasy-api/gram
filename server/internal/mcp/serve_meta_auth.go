@@ -54,16 +54,16 @@ func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow
 	case err != nil:
 		return false, false, fmt.Errorf("load member auth toolset: %w", err)
 	}
-	toolset, _, err = hostedmcp.LoadServerState(ctx, s.db, toolset)
+	hosting, _, err := hostedmcp.LoadServerState(ctx, s.db, toolset)
 	if err != nil {
 		return false, false, fmt.Errorf("load member auth hosting state: %w", err)
 	}
 	// Same rules as loadMemberToolset. Derived gateways always have a
 	// signed-in caller.
-	if member.serverID == toolset.ID && !toolset.McpEnabled {
+	if member.serverID == toolset.ID && !hosting.Enabled {
 		return false, false, nil
 	}
-	allowed, err := s.memberToolsetConnectAllowed(ctx, shadow, shadowSurface, true, &toolset)
+	allowed, err := s.memberToolsetConnectAllowed(ctx, shadow, shadowSurface, true, &toolset, hosting.Public)
 	if err != nil || !allowed {
 		return false, false, err
 	}
@@ -91,7 +91,7 @@ func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow
 	inputs.toolset = toolset.Slug
 	inputs.environment = environment
 	inputs.authenticated = true
-	satisfied, err := s.checkToolsetSecurity(ctx, &toolset, toolset.McpIsPublic, &inputs)
+	satisfied, err := s.checkToolsetSecurity(ctx, &toolset, hosting.Public, &inputs)
 	if err != nil || satisfied || !oauth {
 		return satisfied, false, err
 	}
@@ -101,7 +101,7 @@ func (s *Service) derivedMemberAuth(ctx context.Context, shadow *mandatoryShadow
 		securityKeys:          nil,
 		Token:                 "gateway-oauth-capability",
 	}}
-	satisfied, err = s.checkToolsetSecurity(ctx, &toolset, toolset.McpIsPublic, &inputs)
+	satisfied, err = s.checkToolsetSecurity(ctx, &toolset, hosting.Public, &inputs)
 	return satisfied, satisfied, err
 }
 

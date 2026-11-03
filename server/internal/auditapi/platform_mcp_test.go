@@ -8,12 +8,14 @@ import (
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auditlogs"
+	"github.com/speakeasy-api/gram/server/internal/audit"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/auditapi"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -372,4 +374,21 @@ func TestPlatformMCPAuditUnsupportedMetadataRefusesWholePage(t *testing.T) {
 	page, err := ti.service.ListPlatformMCPAuditLogs(ctx, auditapi.PlatformMCPAuditRequest{OrganizationID: auth.ActiveOrganizationID, UserID: auth.UserID, Cursor: ""})
 	require.Error(t, err)
 	require.Nil(t, page, "a valid first row must not escape before an unsupported metadata row")
+}
+
+func TestPlatformMCPAuditRejectsSecurityCursor(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAuditService(t)
+	auth := testAuthContext(t, ctx)
+	ctx = contextvalues.WithAuthenticatedActor(ctx, auth, urn.NewPrincipal(urn.PrincipalTypeUser, auth.UserID))
+	ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeOrgRead, auth.ActiveOrganizationID))
+	page, err := ti.service.ListPlatformMCPAuditLogs(ctx, auditapi.PlatformMCPAuditRequest{
+		OrganizationID: auth.ActiveOrganizationID,
+		UserID:         auth.UserID,
+		Cursor:         audit.EncodeCursor(audit.CategorySecurity, 42, uuid.NewString()),
+	})
+	require.Nil(t, page)
+	var oopsErr *oops.ShareableError
+	require.ErrorAs(t, err, &oopsErr)
+	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
 }

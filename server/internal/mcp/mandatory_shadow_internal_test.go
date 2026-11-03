@@ -175,13 +175,13 @@ func TestShadowMandatoryAuthClientChecksTheStoredOwner(t *testing.T) {
 	})
 
 	h := newShadowHarness(t, true)
-	record := func(ctx context.Context, clientType string, subject urn.SessionSubject) {
-		h.service.shadowMandatory(ctx, mandatorySurfaceAuthClient, shadowOrg, true, mandatoryAuthClientCheck(project, client, registration, clientType, subject))
+	record := func(ctx context.Context, clientType string, owner string) {
+		h.service.shadowMandatory(ctx, mandatorySurfaceAuthClient, shadowOrg, true, mandatoryAuthClientCheck(project, client, registration, clientType, owner))
 	}
-	record(sessionContext(t, shadowOrg, shared), authClientTypeServiceAccount, urn.NewUserSubject("user_1"))
-	record(sessionContext(t, shadowOrg, personal), authClientTypeRemoteSession, urn.NewUserSubject("user_1"))
-	record(sessionContext(t, shadowOrg, personal), authClientTypeRemoteSession, urn.NewUserSubject("user_2"))
-	record(sessionContext(t, shadowOrg), authClientTypeServiceAccount, urn.NewUserSubject("user_1"))
+	record(sessionContext(t, shadowOrg, shared), authClientTypeServiceAccount, "")
+	record(sessionContext(t, shadowOrg, personal), authClientTypeRemoteSession, "user_1")
+	record(sessionContext(t, shadowOrg, personal), authClientTypeRemoteSession, "user_2")
+	record(sessionContext(t, shadowOrg), authClientTypeServiceAccount, "")
 	require.Equal(t, map[attribute.Set]int64{
 		shadowKey(mandatorySurfaceAuthClient, mandatoryCallerRepresented, "user", true, "allow", "request", "none"):       2,
 		shadowKey(mandatorySurfaceAuthClient, mandatoryCallerRepresented, "user", true, "deny", "request", "not_granted"): 1,
@@ -304,8 +304,8 @@ func TestShadowAuthClientUseSkipsPersonalClientsWithoutAUser(t *testing.T) {
 
 	h := newShadowHarness(t, true)
 	project, client := uuid.New(), uuid.New()
-	h.service.shadowAuthClientUse(sessionContext(t, shadowOrg), shadowOrg, true, project, client, uuid.NullUUID{}, authClientTypeRemoteSession, urn.NewAgentSubject(uuid.New()))
-	h.service.shadowAuthClientUse(sessionContext(t, shadowOrg), shadowOrg, false, project, client, uuid.NullUUID{}, authClientTypeRemoteSession, urn.NewAgentSubject(uuid.New()))
+	h.service.shadowAuthClientUse(sessionContext(t, shadowOrg), shadowOrg, true, project, client, uuid.NullUUID{}, authClientTypeRemoteSession, "")
+	h.service.shadowAuthClientUse(sessionContext(t, shadowOrg), shadowOrg, false, project, client, uuid.NullUUID{}, authClientTypeRemoteSession, "")
 	require.Equal(t, map[attribute.Set]int64{
 		shadowKey(mandatorySurfaceAuthClient, mandatoryCallerRepresented, "user", true, "skipped", "none", mandatoryReasonNoConnectionOwner):  1,
 		shadowKey(mandatorySurfaceAuthClient, mandatoryCallerRepresented, "user", false, "skipped", "none", mandatoryReasonNoConnectionOwner): 1,

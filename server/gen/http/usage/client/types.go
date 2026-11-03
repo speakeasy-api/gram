@@ -189,6 +189,25 @@ type GetUsageTiersResponseBody struct {
 	Enterprise *TierLimitsResponseBody `form:"enterprise,omitempty" json:"enterprise,omitempty" xml:"enterprise,omitempty"`
 }
 
+// GetStripeCheckoutStatusResponseBody is the type of the "usage" service
+// "getStripeCheckoutStatus" endpoint HTTP response body.
+type GetStripeCheckoutStatusResponseBody struct {
+	Status        *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
+	PaymentStatus *string `form:"payment_status,omitempty" json:"payment_status,omitempty" xml:"payment_status,omitempty"`
+	// Whether this completed session and its own subscription are ready for
+	// billing activation; local webhook persistence is still required
+	BillingReady *bool `form:"billing_ready,omitempty" json:"billing_ready,omitempty" xml:"billing_ready,omitempty"`
+}
+
+// CreateStripeCheckoutResponseBody is the type of the "usage" service
+// "createStripeCheckout" endpoint HTTP response body.
+type CreateStripeCheckoutResponseBody struct {
+	// Client secret Stripe.js uses to mount embedded Checkout
+	ClientSecret *string `form:"client_secret,omitempty" json:"client_secret,omitempty" xml:"client_secret,omitempty"`
+	// Stripe publishable key used to load Stripe.js
+	PublishableKey *string `form:"publishable_key,omitempty" json:"publishable_key,omitempty" xml:"publishable_key,omitempty"`
+}
+
 // GetStripeSubscriptionResponseBody is the type of the "usage" service
 // "getStripeSubscription" endpoint HTTP response body.
 type GetStripeSubscriptionResponseBody struct {
@@ -2498,6 +2517,196 @@ type CreateCheckoutUnexpectedResponseBody struct {
 // CreateCheckoutGatewayErrorResponseBody is the type of the "usage" service
 // "createCheckout" endpoint HTTP response body for the "gateway_error" error.
 type CreateCheckoutGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetStripeCheckoutStatusUnauthorizedResponseBody is the type of the "usage"
+// service "getStripeCheckoutStatus" endpoint HTTP response body for the
+// "unauthorized" error.
+type GetStripeCheckoutStatusUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetStripeCheckoutStatusForbiddenResponseBody is the type of the "usage"
+// service "getStripeCheckoutStatus" endpoint HTTP response body for the
+// "forbidden" error.
+type GetStripeCheckoutStatusForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetStripeCheckoutStatusBadRequestResponseBody is the type of the "usage"
+// service "getStripeCheckoutStatus" endpoint HTTP response body for the
+// "bad_request" error.
+type GetStripeCheckoutStatusBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetStripeCheckoutStatusNotFoundResponseBody is the type of the "usage"
+// service "getStripeCheckoutStatus" endpoint HTTP response body for the
+// "not_found" error.
+type GetStripeCheckoutStatusNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetStripeCheckoutStatusConflictResponseBody is the type of the "usage"
+// service "getStripeCheckoutStatus" endpoint HTTP response body for the
+// "conflict" error.
+type GetStripeCheckoutStatusConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetStripeCheckoutStatusUnsupportedMediaResponseBody is the type of the
+// "usage" service "getStripeCheckoutStatus" endpoint HTTP response body for
+// the "unsupported_media" error.
+type GetStripeCheckoutStatusUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetStripeCheckoutStatusInvalidResponseBody is the type of the "usage"
+// service "getStripeCheckoutStatus" endpoint HTTP response body for the
+// "invalid" error.
+type GetStripeCheckoutStatusInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetStripeCheckoutStatusInvariantViolationResponseBody is the type of the
+// "usage" service "getStripeCheckoutStatus" endpoint HTTP response body for
+// the "invariant_violation" error.
+type GetStripeCheckoutStatusInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetStripeCheckoutStatusUnexpectedResponseBody is the type of the "usage"
+// service "getStripeCheckoutStatus" endpoint HTTP response body for the
+// "unexpected" error.
+type GetStripeCheckoutStatusUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetStripeCheckoutStatusGatewayErrorResponseBody is the type of the "usage"
+// service "getStripeCheckoutStatus" endpoint HTTP response body for the
+// "gateway_error" error.
+type GetStripeCheckoutStatusGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -5979,6 +6188,179 @@ func NewCreateCheckoutGatewayError(body *CreateCheckoutGatewayErrorResponseBody)
 	return v
 }
 
+// NewGetStripeCheckoutStatusResultOK builds a "usage" service
+// "getStripeCheckoutStatus" endpoint result from a HTTP "OK" response.
+func NewGetStripeCheckoutStatusResultOK(body *GetStripeCheckoutStatusResponseBody) *usage.GetStripeCheckoutStatusResult {
+	v := &usage.GetStripeCheckoutStatusResult{
+		Status:        *body.Status,
+		PaymentStatus: *body.PaymentStatus,
+		BillingReady:  *body.BillingReady,
+	}
+
+	return v
+}
+
+// NewGetStripeCheckoutStatusUnauthorized builds a usage service
+// getStripeCheckoutStatus endpoint unauthorized error.
+func NewGetStripeCheckoutStatusUnauthorized(body *GetStripeCheckoutStatusUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetStripeCheckoutStatusForbidden builds a usage service
+// getStripeCheckoutStatus endpoint forbidden error.
+func NewGetStripeCheckoutStatusForbidden(body *GetStripeCheckoutStatusForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetStripeCheckoutStatusBadRequest builds a usage service
+// getStripeCheckoutStatus endpoint bad_request error.
+func NewGetStripeCheckoutStatusBadRequest(body *GetStripeCheckoutStatusBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetStripeCheckoutStatusNotFound builds a usage service
+// getStripeCheckoutStatus endpoint not_found error.
+func NewGetStripeCheckoutStatusNotFound(body *GetStripeCheckoutStatusNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetStripeCheckoutStatusConflict builds a usage service
+// getStripeCheckoutStatus endpoint conflict error.
+func NewGetStripeCheckoutStatusConflict(body *GetStripeCheckoutStatusConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetStripeCheckoutStatusUnsupportedMedia builds a usage service
+// getStripeCheckoutStatus endpoint unsupported_media error.
+func NewGetStripeCheckoutStatusUnsupportedMedia(body *GetStripeCheckoutStatusUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetStripeCheckoutStatusInvalid builds a usage service
+// getStripeCheckoutStatus endpoint invalid error.
+func NewGetStripeCheckoutStatusInvalid(body *GetStripeCheckoutStatusInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetStripeCheckoutStatusInvariantViolation builds a usage service
+// getStripeCheckoutStatus endpoint invariant_violation error.
+func NewGetStripeCheckoutStatusInvariantViolation(body *GetStripeCheckoutStatusInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetStripeCheckoutStatusUnexpected builds a usage service
+// getStripeCheckoutStatus endpoint unexpected error.
+func NewGetStripeCheckoutStatusUnexpected(body *GetStripeCheckoutStatusUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetStripeCheckoutStatusGatewayError builds a usage service
+// getStripeCheckoutStatus endpoint gateway_error error.
+func NewGetStripeCheckoutStatusGatewayError(body *GetStripeCheckoutStatusGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewCreateStripeCheckoutStripeEmbeddedCheckoutOK builds a "usage" service
+// "createStripeCheckout" endpoint result from a HTTP "OK" response.
+func NewCreateStripeCheckoutStripeEmbeddedCheckoutOK(body *CreateStripeCheckoutResponseBody) *usage.StripeEmbeddedCheckout {
+	v := &usage.StripeEmbeddedCheckout{
+		ClientSecret:   *body.ClientSecret,
+		PublishableKey: *body.PublishableKey,
+	}
+
+	return v
+}
+
 // NewCreateStripeCheckoutUnauthorized builds a usage service
 // createStripeCheckout endpoint unauthorized error.
 func NewCreateStripeCheckoutUnauthorized(body *CreateStripeCheckoutUnauthorizedResponseBody) *goa.ServiceError {
@@ -7417,6 +7799,43 @@ func ValidateGetUsageTiersResponseBody(body *GetUsageTiersResponseBody) (err err
 		if err2 := ValidateTierLimitsResponseBody(body.Enterprise); err2 != nil {
 			err = goa.MergeErrors(err, err2)
 		}
+	}
+	return
+}
+
+// ValidateGetStripeCheckoutStatusResponseBody runs the validations defined on
+// GetStripeCheckoutStatusResponseBody
+func ValidateGetStripeCheckoutStatusResponseBody(body *GetStripeCheckoutStatusResponseBody) (err error) {
+	if body.Status == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
+	}
+	if body.PaymentStatus == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("payment_status", "body"))
+	}
+	if body.BillingReady == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("billing_ready", "body"))
+	}
+	if body.Status != nil {
+		if !(*body.Status == "open" || *body.Status == "complete" || *body.Status == "expired") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"open", "complete", "expired"}))
+		}
+	}
+	if body.PaymentStatus != nil {
+		if !(*body.PaymentStatus == "paid" || *body.PaymentStatus == "unpaid" || *body.PaymentStatus == "no_payment_required") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.payment_status", *body.PaymentStatus, []any{"paid", "unpaid", "no_payment_required"}))
+		}
+	}
+	return
+}
+
+// ValidateCreateStripeCheckoutResponseBody runs the validations defined on
+// CreateStripeCheckoutResponseBody
+func ValidateCreateStripeCheckoutResponseBody(body *CreateStripeCheckoutResponseBody) (err error) {
+	if body.ClientSecret == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("client_secret", "body"))
+	}
+	if body.PublishableKey == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("publishable_key", "body"))
 	}
 	return
 }
@@ -10461,6 +10880,248 @@ func ValidateCreateCheckoutUnexpectedResponseBody(body *CreateCheckoutUnexpected
 // ValidateCreateCheckoutGatewayErrorResponseBody runs the validations defined
 // on createCheckout_gateway_error_response_body
 func ValidateCreateCheckoutGatewayErrorResponseBody(body *CreateCheckoutGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetStripeCheckoutStatusUnauthorizedResponseBody runs the validations
+// defined on getStripeCheckoutStatus_unauthorized_response_body
+func ValidateGetStripeCheckoutStatusUnauthorizedResponseBody(body *GetStripeCheckoutStatusUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetStripeCheckoutStatusForbiddenResponseBody runs the validations
+// defined on getStripeCheckoutStatus_forbidden_response_body
+func ValidateGetStripeCheckoutStatusForbiddenResponseBody(body *GetStripeCheckoutStatusForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetStripeCheckoutStatusBadRequestResponseBody runs the validations
+// defined on getStripeCheckoutStatus_bad_request_response_body
+func ValidateGetStripeCheckoutStatusBadRequestResponseBody(body *GetStripeCheckoutStatusBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetStripeCheckoutStatusNotFoundResponseBody runs the validations
+// defined on getStripeCheckoutStatus_not_found_response_body
+func ValidateGetStripeCheckoutStatusNotFoundResponseBody(body *GetStripeCheckoutStatusNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetStripeCheckoutStatusConflictResponseBody runs the validations
+// defined on getStripeCheckoutStatus_conflict_response_body
+func ValidateGetStripeCheckoutStatusConflictResponseBody(body *GetStripeCheckoutStatusConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetStripeCheckoutStatusUnsupportedMediaResponseBody runs the
+// validations defined on
+// getStripeCheckoutStatus_unsupported_media_response_body
+func ValidateGetStripeCheckoutStatusUnsupportedMediaResponseBody(body *GetStripeCheckoutStatusUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetStripeCheckoutStatusInvalidResponseBody runs the validations
+// defined on getStripeCheckoutStatus_invalid_response_body
+func ValidateGetStripeCheckoutStatusInvalidResponseBody(body *GetStripeCheckoutStatusInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetStripeCheckoutStatusInvariantViolationResponseBody runs the
+// validations defined on
+// getStripeCheckoutStatus_invariant_violation_response_body
+func ValidateGetStripeCheckoutStatusInvariantViolationResponseBody(body *GetStripeCheckoutStatusInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetStripeCheckoutStatusUnexpectedResponseBody runs the validations
+// defined on getStripeCheckoutStatus_unexpected_response_body
+func ValidateGetStripeCheckoutStatusUnexpectedResponseBody(body *GetStripeCheckoutStatusUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetStripeCheckoutStatusGatewayErrorResponseBody runs the validations
+// defined on getStripeCheckoutStatus_gateway_error_response_body
+func ValidateGetStripeCheckoutStatusGatewayErrorResponseBody(body *GetStripeCheckoutStatusGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}

@@ -1,6 +1,7 @@
 package mcpendpoints_test
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/google/uuid"
@@ -14,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -21,12 +23,12 @@ import (
 	pluginsrepo "github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
 
-func TestTransactionalEndpointWritesRejectCanonicalHostedServers(t *testing.T) {
+func TestTransactionalEndpointWritesApplyHostedRules(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	require.True(t, ok)
-	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.OrganizationSlug+"-hosted")
+	toolset := seedHostedToolset(t, ctx, ti.conn, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.OrganizationSlug+"-existing")
 	serverID := toolset.ID
 	_, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{
 		ID: serverID, ProjectID: *authCtx.ProjectID, Name: conv.ToPGText("hosted server"),
@@ -38,23 +40,52 @@ func TestTransactionalEndpointWritesRejectCanonicalHostedServers(t *testing.T) {
 		ProjectID: *authCtx.ProjectID, McpServerID: uuid.NullUUID{UUID: serverID, Valid: true}, Slug: authCtx.OrganizationSlug + "-existing",
 	})
 	require.NoError(t, err)
+	pending, err := customdomainsrepo.New(ti.conn).CreateCustomDomain(ctx, customdomainsrepo.CreateCustomDomainParams{
+		OrganizationID: authCtx.ActiveOrganizationID, Domain: "pending-" + uuid.NewString() + ".example.com", IpAllowlist: []string{},
+	})
+	require.NoError(t, err)
 
 	tx, err := ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction exercises the write seam
 	require.NoError(t, err)
 	defer func() { _ = tx.Rollback(ctx) }()
 	_, err = ti.service.CreateMcpEndpointInTransaction(ctx, tx, mcpendpoints.CreateMcpEndpointInTransactionInput{
-		AuthContext: authCtx, McpServerID: uuid.NullUUID{UUID: serverID, Valid: true}, Slug: authCtx.OrganizationSlug + "-new",
+		AuthContext: authCtx, McpServerID: uuid.NullUUID{UUID: serverID, Valid: true}, CustomDomainID: uuid.NullUUID{UUID: pending.ID, Valid: true}, Slug: authCtx.OrganizationSlug + "-docs",
 	})
 	requireOopsCode(t, err, oops.CodeInvalid)
-	require.ErrorContains(t, err, "a hosted MCP server's address is managed in the dashboard")
-	_, _, err = ti.service.UpdateMcpEndpointAddressInTransaction(ctx, tx, mcpendpoints.UpdateMcpEndpointAddressInput{
+	require.ErrorContains(t, err, "verified custom domain")
+	require.NoError(t, tx.Rollback(ctx))
+
+	tx, err = ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction exercises the write seam
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	_, err = ti.service.CreateMcpEndpointInTransaction(ctx, tx, mcpendpoints.CreateMcpEndpointInTransactionInput{
+		AuthContext: authCtx, McpServerID: uuid.NullUUID{UUID: serverID, Valid: true}, Slug: authCtx.OrganizationSlug + "-" + strings.Repeat("x", 41),
+	})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+	require.NoError(t, tx.Rollback(ctx))
+
+	tx, err = ti.conn.Begin(ctx) //nolint:glint // notestingrawsql: caller-owned transaction exercises the write seam
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	second, err := ti.service.CreateMcpEndpointInTransaction(ctx, tx, mcpendpoints.CreateMcpEndpointInTransactionInput{
+		AuthContext: authCtx, McpServerID: uuid.NullUUID{UUID: serverID, Valid: true}, Slug: authCtx.OrganizationSlug + "-second",
+	})
+	require.NoError(t, err, "a hosted server keeps several endpoints")
+	require.Equal(t, serverID.String(), *second.McpServerID)
+	updated, reconcileDomains, err := ti.service.UpdateMcpEndpointAddressInTransaction(ctx, tx, mcpendpoints.UpdateMcpEndpointAddressInput{
 		AuthContext: authCtx, EndpointID: endpoint.ID, Slug: authCtx.OrganizationSlug + "-renamed",
 	})
-	requireOopsCode(t, err, oops.CodeInvalid)
-	require.ErrorContains(t, err, "a hosted MCP server's address is managed in the dashboard")
-	stored, err := mcpendpointsrepo.New(tx).GetMCPEndpointByID(ctx, mcpendpointsrepo.GetMCPEndpointByIDParams{ID: endpoint.ID, ProjectID: *authCtx.ProjectID})
 	require.NoError(t, err)
-	require.Equal(t, endpoint.Slug, stored.Slug)
+	require.Empty(t, reconcileDomains)
+	require.Equal(t, endpoint.ID.String(), updated.ID, "the endpoint keeps its identity")
+	require.NoError(t, tx.Commit(ctx))
+
+	stored, err := legacyalias.Get(ctx, ti.conn, *authCtx.ProjectID, toolset.ID)
+	require.NoError(t, err)
+	require.Equal(t, authCtx.OrganizationSlug+"-renamed", stored.Slug.String, "the alias follows its endpoint")
+	endpoints, err := mcpendpointsrepo.New(ti.conn).ListMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListMCPEndpointsByMCPServerIDParams{ProjectID: *authCtx.ProjectID, McpServerID: serverID})
+	require.NoError(t, err)
+	require.Len(t, endpoints, 2)
 }
 
 func TestTransactionalEndpointWritesAllowIndependentToolsetBackedServer(t *testing.T) {

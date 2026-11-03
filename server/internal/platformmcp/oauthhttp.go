@@ -145,7 +145,7 @@ var ErrInvitationRequiresSSO = errors.New("invitation requires signing in with S
 // OAuthHTTPConfig refuses a user with no organization instead.
 type WorkspaceProvisioner interface {
 	SuggestedWorkspaceName(ctx context.Context, userID string) (string, error)
-	ProvisionWorkspace(ctx context.Context, userID, name string) (OrganizationOption, error)
+	ProvisionWorkspace(ctx context.Context, userID, name, clientName string) (OrganizationOption, error)
 	PendingInvitations(ctx context.Context, verifiedEmail, ssoOrganizationID string) ([]WorkspaceInvitation, error)
 	JoinInvitedWorkspace(ctx context.Context, userID, verifiedEmail, ssoOrganizationID, invitationID string) (OrganizationOption, error)
 }
@@ -754,7 +754,7 @@ func (s *OAuthHTTP) CreateWorkspaceHandler() http.Handler {
 		if !ok {
 			return
 		}
-		organization, err := s.workspaces.ProvisionWorkspace(r.Context(), userID, submitted)
+		organization, err := s.workspaces.ProvisionWorkspace(r.Context(), userID, submitted, client.Name)
 		switch {
 		case errors.Is(err, auth.ErrUserHasPendingInvitation):
 			redirectOAuthError(w, r, challenge.RedirectURI, challenge.State, &oauthwire.Error{Code: "access_denied", Description: "You have a pending invitation to a Speakeasy organization. Accept it from the invitation email, then connect again."})

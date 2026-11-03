@@ -12,6 +12,28 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const serversAttachAssistantServer = `-- name: ServersAttachAssistantServer :exec
+INSERT INTO assistant_mcp_servers (id, assistant_id, mcp_server_id, project_id)
+VALUES ($1::uuid, $2::uuid, $3::uuid, $4::uuid)
+`
+
+type ServersAttachAssistantServerParams struct {
+	ID          uuid.UUID
+	AssistantID uuid.UUID
+	McpServerID uuid.UUID
+	ProjectID   uuid.UUID
+}
+
+func (q *Queries) ServersAttachAssistantServer(ctx context.Context, arg ServersAttachAssistantServerParams) error {
+	_, err := q.db.Exec(ctx, serversAttachAssistantServer,
+		arg.ID,
+		arg.AssistantID,
+		arg.McpServerID,
+		arg.ProjectID,
+	)
+	return err
+}
+
 const serversInsertAgentConnectGrant = `-- name: ServersInsertAgentConnectGrant :exec
 INSERT INTO principal_grants
   (id, organization_id, principal_urn, scope, selectors)
@@ -158,10 +180,10 @@ INSERT INTO mcp_auth_clients
   (id, organization_id, project_id, client_type, source, name,
    remote_session_client_id, client_attachment_scope)
 SELECT $1::uuid, $2::text, $3::uuid, $4::text,
-       'backfill', $5::text, c.id, c.attachment_scope
+       $5::text, $6::text, c.id, c.attachment_scope
 FROM (SELECT 1) AS one
 LEFT JOIN remote_session_clients AS c
-  ON c.id = $6::uuid
+  ON c.id = $7::uuid
 `
 
 type ServersInsertAuthClientParams struct {
@@ -169,6 +191,7 @@ type ServersInsertAuthClientParams struct {
 	OrgID                 string
 	ProjectID             uuid.UUID
 	ClientType            string
+	Source                string
 	Name                  string
 	RemoteSessionClientID uuid.NullUUID
 }
@@ -176,8 +199,7 @@ type ServersInsertAuthClientParams struct {
 // Typed auth clients, as the upstream OAuth migration records them: Linear's
 // personal client over its OAuth registration, and one static credential
 // shared by GitHub and Linear, so the server settings show a shared client
-// and a server offering two. Slack is left undecided about upstream
-// authentication.
+// and a server offering two. Slack offers none.
 // The projects delete cascades the clients, their headers and associations.
 func (q *Queries) ServersInsertAuthClient(ctx context.Context, arg ServersInsertAuthClientParams) error {
 	_, err := q.db.Exec(ctx, serversInsertAuthClient,
@@ -185,8 +207,36 @@ func (q *Queries) ServersInsertAuthClient(ctx context.Context, arg ServersInsert
 		arg.OrgID,
 		arg.ProjectID,
 		arg.ClientType,
+		arg.Source,
 		arg.Name,
 		arg.RemoteSessionClientID,
+	)
+	return err
+}
+
+const serversInsertAuthClientForwardedHeader = `-- name: ServersInsertAuthClientForwardedHeader :exec
+INSERT INTO mcp_auth_client_headers
+  (id, auth_client_id, organization_id, name, is_required, value_from_request_header)
+VALUES
+  ($1::uuid, $2::uuid, $3::text, $4::text, TRUE,
+   $5::text)
+`
+
+type ServersInsertAuthClientForwardedHeaderParams struct {
+	ID                     uuid.UUID
+	AuthClientID           uuid.UUID
+	OrgID                  string
+	Name                   string
+	ValueFromRequestHeader string
+}
+
+func (q *Queries) ServersInsertAuthClientForwardedHeader(ctx context.Context, arg ServersInsertAuthClientForwardedHeaderParams) error {
+	_, err := q.db.Exec(ctx, serversInsertAuthClientForwardedHeader,
+		arg.ID,
+		arg.AuthClientID,
+		arg.OrgID,
+		arg.Name,
+		arg.ValueFromRequestHeader,
 	)
 	return err
 }
@@ -429,9 +479,9 @@ type ServersInsertEMAIdentityProviderClientParams struct {
 	RemoteSessionIssuerID uuid.UUID
 }
 
-// The workforce sign-in is left as it is: pointing it at this fictional
-// provider would send interactive sign-in for every server on it to a
-// provider that doesn't exist. The Services pages still show these vendors.
+// The workforce sign-in client is left unset: pointing interactive sign-in at
+// this fictional provider would send every server on it to a provider that
+// doesn't exist. The Services pages still show these vendors.
 func (q *Queries) ServersInsertEMAIdentityProviderClient(ctx context.Context, arg ServersInsertEMAIdentityProviderClientParams) error {
 	_, err := q.db.Exec(ctx, serversInsertEMAIdentityProviderClient, arg.ID, arg.OrgID, arg.RemoteSessionIssuerID)
 	return err
@@ -635,8 +685,8 @@ func (q *Queries) ServersInsertEngineeringEssentialsAssignment(ctx context.Conte
 }
 
 const serversInsertEngineeringEssentialsPlugin = `-- name: ServersInsertEngineeringEssentialsPlugin :one
-INSERT INTO plugins (organization_id, project_id, name, slug)
-VALUES ($1::text, $2::uuid, 'Engineering Essentials', 'engineering-essentials')
+INSERT INTO plugins (organization_id, project_id, name, slug, auto_sync_enabled)
+VALUES ($1::text, $2::uuid, 'Engineering Essentials', 'engineering-essentials', false)
 RETURNING id
 `
 
@@ -672,6 +722,93 @@ func (q *Queries) ServersInsertEngineeringEssentialsServers(ctx context.Context,
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const serversInsertExecutionProfile = `-- name: ServersInsertExecutionProfile :exec
+INSERT INTO execution_selection_profiles
+  (id, organization_id, project_id, assistant_id, trigger_instance_id, execution_context)
+VALUES
+  ($1::uuid, $2::text, $3::uuid, $4::uuid,
+   $5::uuid, $6::text)
+`
+
+type ServersInsertExecutionProfileParams struct {
+	ID                uuid.UUID
+	OrgID             string
+	ProjectID         uuid.UUID
+	AssistantID       uuid.UUID
+	TriggerInstanceID uuid.UUID
+	ExecutionContext  string
+}
+
+// The upstream credential an administrator chose for an assistant's turns
+// under one root trigger and execution context, as version 1 of its profile.
+func (q *Queries) ServersInsertExecutionProfile(ctx context.Context, arg ServersInsertExecutionProfileParams) error {
+	_, err := q.db.Exec(ctx, serversInsertExecutionProfile,
+		arg.ID,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.AssistantID,
+		arg.TriggerInstanceID,
+		arg.ExecutionContext,
+	)
+	return err
+}
+
+const serversInsertExecutionProfileChoice = `-- name: ServersInsertExecutionProfileChoice :exec
+INSERT INTO upstream_client_selections
+  (id, project_id, organization_id, credential_kind, credential_id,
+   mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth,
+   auth_client_id, auth_client_attachment_scope, source)
+SELECT $1::uuid, $2::uuid, $3::text, 'execution_profile_version',
+       $4::uuid, $5::uuid, ac.remote_session_client_id,
+       NULL, FALSE, ac.id, ac.attachment_scope, 'admin'
+FROM mcp_auth_clients AS ac
+WHERE ac.id = $6::uuid AND ac.organization_id = $3::text
+`
+
+type ServersInsertExecutionProfileChoiceParams struct {
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+	OrgID        string
+	VersionID    uuid.UUID
+	McpServerID  uuid.UUID
+	AuthClientID uuid.UUID
+}
+
+func (q *Queries) ServersInsertExecutionProfileChoice(ctx context.Context, arg ServersInsertExecutionProfileChoiceParams) error {
+	_, err := q.db.Exec(ctx, serversInsertExecutionProfileChoice,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.VersionID,
+		arg.McpServerID,
+		arg.AuthClientID,
+	)
+	return err
+}
+
+const serversInsertExecutionProfileVersion = `-- name: ServersInsertExecutionProfileVersion :exec
+INSERT INTO execution_selection_profile_versions
+  (id, profile_id, organization_id, project_id, version, source)
+VALUES ($1::uuid, $2::uuid, $3::text, $4::uuid, 1, 'admin')
+`
+
+type ServersInsertExecutionProfileVersionParams struct {
+	ID        uuid.UUID
+	ProfileID uuid.UUID
+	OrgID     string
+	ProjectID uuid.UUID
+}
+
+func (q *Queries) ServersInsertExecutionProfileVersion(ctx context.Context, arg ServersInsertExecutionProfileVersionParams) error {
+	_, err := q.db.Exec(ctx, serversInsertExecutionProfileVersion,
+		arg.ID,
+		arg.ProfileID,
+		arg.OrgID,
+		arg.ProjectID,
+	)
+	return err
 }
 
 const serversInsertGatewayEndpoints = `-- name: ServersInsertGatewayEndpoints :exec
@@ -775,6 +912,36 @@ func (q *Queries) ServersInsertGitHubUserGrants(ctx context.Context, arg Servers
 	return err
 }
 
+const serversInsertHeadlessClient = `-- name: ServersInsertHeadlessClient :exec
+INSERT INTO user_session_clients
+  (id, project_id, organization_id, user_session_issuer_id, client_id,
+   client_secret_hash, client_name, redirect_uris, client_id_issued_at,
+   token_endpoint_auth_method)
+VALUES
+  ($1::uuid, $2::uuid, $3::text, $4::uuid,
+   'gram_demo_client_nightly_report', NULL, 'Nightly report job',
+   ARRAY[]::text[], now() - interval '6 days', 'none')
+`
+
+type ServersInsertHeadlessClientParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	OrgID     string
+	IssuerID  uuid.UUID
+}
+
+// An app that signs in to Linear without a browser, so it cannot pick a
+// credential on the consent screen.
+func (q *Queries) ServersInsertHeadlessClient(ctx context.Context, arg ServersInsertHeadlessClientParams) error {
+	_, err := q.db.Exec(ctx, serversInsertHeadlessClient,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.IssuerID,
+	)
+	return err
+}
+
 const serversInsertHostedToolsetEndpoints = `-- name: ServersInsertHostedToolsetEndpoints :exec
 INSERT INTO mcp_endpoints (id, project_id, mcp_server_id, custom_domain_id, slug)
 SELECT overlay(overlay(md5($1::text || t.slug) placing '5' from 13) placing '8' from 17)::uuid,
@@ -837,6 +1004,70 @@ func (q *Queries) ServersInsertHostedToolsetMCPServers(ctx context.Context, arg 
 		arg.Toolset4,
 		arg.DiscoveryMcpSlug,
 		arg.ProjectID,
+	)
+	return err
+}
+
+const serversInsertIssuanceProfile = `-- name: ServersInsertIssuanceProfile :exec
+INSERT INTO issuance_selection_profiles
+  (id, organization_id, project_id, user_session_issuer_id,
+   user_session_client_id, name)
+VALUES
+  ($1::uuid, $2::text, $3::uuid, $4::uuid,
+   $5::uuid, $6::text)
+`
+
+type ServersInsertIssuanceProfileParams struct {
+	ID        uuid.UUID
+	OrgID     string
+	ProjectID uuid.UUID
+	IssuerID  uuid.UUID
+	ClientID  uuid.UUID
+	Name      string
+}
+
+// The credential the headless app's sessions use on one server.
+func (q *Queries) ServersInsertIssuanceProfile(ctx context.Context, arg ServersInsertIssuanceProfileParams) error {
+	_, err := q.db.Exec(ctx, serversInsertIssuanceProfile,
+		arg.ID,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.IssuerID,
+		arg.ClientID,
+		arg.Name,
+	)
+	return err
+}
+
+const serversInsertIssuanceProfileChoice = `-- name: ServersInsertIssuanceProfileChoice :exec
+INSERT INTO upstream_client_selections
+  (id, project_id, organization_id, credential_kind, credential_id,
+   mcp_server_id, remote_session_client_id, client_attachment_scope, no_auth,
+   auth_client_id, auth_client_attachment_scope, source)
+SELECT $1::uuid, $2::uuid, $3::text, 'issuance_profile',
+       $4::uuid, $5::uuid, ac.remote_session_client_id,
+       NULL, FALSE, ac.id, ac.attachment_scope, 'issuance'
+FROM mcp_auth_clients AS ac
+WHERE ac.id = $6::uuid AND ac.organization_id = $3::text
+`
+
+type ServersInsertIssuanceProfileChoiceParams struct {
+	ID           uuid.UUID
+	ProjectID    uuid.UUID
+	OrgID        string
+	ProfileID    uuid.UUID
+	McpServerID  uuid.UUID
+	AuthClientID uuid.UUID
+}
+
+func (q *Queries) ServersInsertIssuanceProfileChoice(ctx context.Context, arg ServersInsertIssuanceProfileChoiceParams) error {
+	_, err := q.db.Exec(ctx, serversInsertIssuanceProfileChoice,
+		arg.ID,
+		arg.ProjectID,
+		arg.OrgID,
+		arg.ProfileID,
+		arg.McpServerID,
+		arg.AuthClientID,
 	)
 	return err
 }
@@ -1559,7 +1790,7 @@ INSERT INTO mcp_server_auth_clients
   (id, project_id, organization_id, mcp_server_id, auth_client_id,
    client_attachment_scope, source)
 SELECT $1::uuid, $2::uuid, $3::text, $4::uuid,
-       ac.id, ac.attachment_scope, 'backfill'
+       ac.id, ac.attachment_scope, ac.source
 FROM mcp_auth_clients AS ac
 WHERE ac.id = $5::uuid
 `
@@ -1900,42 +2131,45 @@ func (q *Queries) ServersInsertValidatedSession(ctx context.Context, arg Servers
 	return err
 }
 
-const serversMarkRequiresUpstreamAuth = `-- name: ServersMarkRequiresUpstreamAuth :exec
-UPDATE mcp_servers
-SET requires_upstream_auth = TRUE
-WHERE project_id = $1::uuid
-  AND id = ANY($2::uuid[])
+const serversPickGatewayGitHubCredential = `-- name: ServersPickGatewayGitHubCredential :execrows
+UPDATE upstream_client_selections AS sel
+SET auth_client_id = ac.id,
+    auth_client_attachment_scope = ac.attachment_scope,
+    no_auth = FALSE
+FROM mcp_auth_clients AS ac
+WHERE ac.id = $1::uuid
+  AND ac.organization_id = $2::text
+  AND sel.project_id = $3::uuid
+  AND sel.organization_id = $2::text
+  AND sel.credential_kind = 'user_session'
+  AND sel.credential_id = ANY($4::uuid[])
+  AND sel.mcp_server_id = $5::uuid
+  AND sel.deleted IS FALSE
 `
 
-type ServersMarkRequiresUpstreamAuthParams struct {
-	ProjectID uuid.UUID
-	Ids       []uuid.UUID
+type ServersPickGatewayGitHubCredentialParams struct {
+	AuthClientID  uuid.UUID
+	OrgID         string
+	ProjectID     uuid.UUID
+	CredentialIds []uuid.UUID
+	McpServerID   uuid.UUID
 }
 
-func (q *Queries) ServersMarkRequiresUpstreamAuth(ctx context.Context, arg ServersMarkRequiresUpstreamAuthParams) error {
-	_, err := q.db.Exec(ctx, serversMarkRequiresUpstreamAuth, arg.ProjectID, arg.Ids)
-	return err
-}
-
-const serversMirrorHostedToolsets = `-- name: ServersMirrorHostedToolsets :exec
-UPDATE toolsets AS t
-SET
-    mcp_slug = e.slug
-  , custom_domain_id = e.custom_domain_id
-  , mcp_enabled = s.visibility <> 'disabled'
-  , mcp_is_public = s.visibility = 'public'
-  , user_session_issuer_id = s.user_session_issuer_id
-  , tool_variations_group_id = s.tool_variations_group_id
-FROM mcp_servers AS s
-JOIN mcp_endpoints AS e ON e.mcp_server_id = s.id AND e.project_id = s.project_id AND e.deleted IS FALSE
-WHERE s.id = t.id AND s.toolset_id = t.id AND s.project_id = t.project_id AND s.deleted IS FALSE
-  AND t.project_id = $1::uuid AND t.deleted IS FALSE
-`
-
-// Hosted toolsets mirror their canonical server's hosting state for pods that still read the toolset columns.
-func (q *Queries) ServersMirrorHostedToolsets(ctx context.Context, projectID uuid.UUID) error {
-	_, err := q.db.Exec(ctx, serversMirrorHostedToolsets, projectID)
-	return err
+// Sets the organization gateway's seeded GitHub choices to the caller's own
+// GitHub token. The server offers two credentials, so a choice that names
+// neither resolves to no credential under enforcement.
+func (q *Queries) ServersPickGatewayGitHubCredential(ctx context.Context, arg ServersPickGatewayGitHubCredentialParams) (int64, error) {
+	result, err := q.db.Exec(ctx, serversPickGatewayGitHubCredential,
+		arg.AuthClientID,
+		arg.OrgID,
+		arg.ProjectID,
+		arg.CredentialIds,
+		arg.McpServerID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const serversStampLinearRemoteSessionIssuer = `-- name: ServersStampLinearRemoteSessionIssuer :exec
@@ -1961,6 +2195,32 @@ type ServersStampLinearRemoteSessionIssuerParams struct {
 func (q *Queries) ServersStampLinearRemoteSessionIssuer(ctx context.Context, arg ServersStampLinearRemoteSessionIssuerParams) error {
 	_, err := q.db.Exec(ctx, serversStampLinearRemoteSessionIssuer, arg.RemoteSessionIssuerID, arg.McpServerID, arg.ProjectID)
 	return err
+}
+
+const serversTrustEMAIdentityProviderForInboundEMA = `-- name: ServersTrustEMAIdentityProviderForInboundEMA :execrows
+UPDATE user_session_issuers
+SET trusted_remote_session_issuer_id = $1::uuid
+WHERE id = $2::uuid
+  AND organization_id = $3::text
+  AND project_id IS NULL
+  AND deleted IS FALSE
+`
+
+type ServersTrustEMAIdentityProviderForInboundEMAParams struct {
+	EmaProvider     uuid.UUID
+	WorkforceIssuer uuid.UUID
+	OrgID           string
+}
+
+// Inbound EMA: the workforce issuer accepts ID-JAGs from Acme Identity. Only
+// the issuer is linked, never the sign-in client, so interactive sign-in stays
+// on the organization's own login.
+func (q *Queries) ServersTrustEMAIdentityProviderForInboundEMA(ctx context.Context, arg ServersTrustEMAIdentityProviderForInboundEMAParams) (int64, error) {
+	result, err := q.db.Exec(ctx, serversTrustEMAIdentityProviderForInboundEMA, arg.EmaProvider, arg.WorkforceIssuer, arg.OrgID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
 }
 
 const serversUpsertLinearProtectedResource = `-- name: ServersUpsertLinearProtectedResource :exec

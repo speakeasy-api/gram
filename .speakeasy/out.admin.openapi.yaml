@@ -30,6 +30,9 @@ paths:
               schema:
                 format: int64
                 type: integer
+            Content-Security-Policy:
+              schema:
+                type: string
             Content-Type:
               schema:
                 type: string
@@ -39,12 +42,15 @@ paths:
             Last-Modified:
               schema:
                 type: string
+            X-Content-Type-Options:
+              schema:
+                type: string
           content:
             image/*:
               schema:
                 type: string
                 format: binary
-                description: PNG, JPEG, GIF or WebP image bytes; Content-Type preserves the stored image MIME type.
+                description: PNG, JPEG, GIF, WebP or validated static SVG image bytes; Content-Type preserves the stored image MIME type.
         "400":
           content:
             application/json:
@@ -111,7 +117,7 @@ paths:
       x-speakeasy-name-override: serveImage
   /admin/assets.uploadImage:
     post:
-      description: Upload a global issuer logo, limited to 4 MiB and PNG, JPEG, GIF or WebP.
+      description: 'Upload a platform logo, limited to 4 MiB and PNG, JPEG, GIF, WebP or static SVG with local clip paths. This is a direct upload, not a staged proposal: successful uploads are publicly served immediately and remain stored.'
       operationId: adminUploadPlatformImage
       parameters:
         - allowEmptyValue: true
@@ -125,7 +131,7 @@ paths:
           content:
             application/json:
               schema:
-                $ref: '#/components/schemas/UploadImageResult'
+                $ref: '#/components/schemas/AdminUploadImageResult'
           description: OK response.
         "400":
           content:
@@ -793,6 +799,77 @@ paths:
       x-speakeasy-name-override: getHookClients
       x-speakeasy-react-hook:
         name: AdminGetHookClients
+  /admin/mcpAuthGrants.backfill:
+    post:
+      description: Grants unrestricted mcp:auth to every principal that holds any mcp:connect grant, in every organization. The connect grant's selectors are ignored. Safe to run more than once.
+      operationId: adminBackfillMcpAuthGrants
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminBackfillMCPAuthGrantsResult'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: backfillMcpAuthGrants admin
+      tags:
+        - admin
+      x-speakeasy-name-override: backfillMcpAuthGrants
+      x-speakeasy-react-hook:
+        name: AdminBackfillMcpAuthGrants
   /admin/onboarding.playbooks:
     get:
       description: Read every playbook, or, when an organization is named, the shared ones and its own.
@@ -3409,6 +3486,81 @@ paths:
               schema:
                 $ref: '#/components/schemas/Error'
       x-speakeasy-name-override: resumeStripeSubscription
+  /admin/organization.setAdoptionDashboardUrl:
+    post:
+      description: Sets or clears the link to an organization's adoption dashboard shown on the admin overview. An empty or absent URL clears it.
+      operationId: adminSetAdoptionDashboardUrl
+      requestBody:
+        content:
+          application/json:
+            schema:
+              $ref: '#/components/schemas/SetAdoptionDashboardURLRequestBody'
+        required: true
+      responses:
+        "200":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/AdminOrganization'
+          description: OK response.
+        "400":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'bad_request: request is invalid'
+        "401":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unauthorized: unauthorized access'
+        "403":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'forbidden: permission denied'
+        "404":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'not_found: resource not found'
+        "409":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'conflict: resource already exists'
+        "415":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unsupported_media: unsupported media type'
+        "422":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'invalid: request contains one or more invalidation fields'
+        "500":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'unexpected: an unexpected error occurred'
+        "502":
+          content:
+            application/json:
+              schema:
+                $ref: '#/components/schemas/Error'
+          description: 'gateway_error: an unexpected error occurred'
+      summary: setAdoptionDashboardUrl admin
+      tags:
+        - admin
+      x-speakeasy-name-override: setAdoptionDashboardUrl
   /admin/organization.setInferenceKeyMonthlyLimit:
     post:
       tags:
@@ -8367,6 +8519,15 @@ paths:
       x-speakeasy-name-override: listUserOrganizations
 components:
   schemas:
+    AdminBackfillMCPAuthGrantsResult:
+      type: object
+      properties:
+        granted:
+          type: integer
+          description: How many principals gained the mcp:auth grant.
+          format: int64
+      required:
+        - granted
     AdminBulkUpdateAccountTypeResult:
       type: object
       properties:
@@ -9398,18 +9559,18 @@ components:
             $ref: '#/components/schemas/AdminMcpServerHealthAuthClient'
         requires_upstream_auth:
           type: boolean
-          description: Whether the upstream needs authentication. Omitted while undecided.
+          description: 'Whether the upstream needs authentication: true when the server offers at least one enabled auth client.'
         status:
           type: string
-          description: configured, setup_incomplete (required with no enabled client), no_auth_required or undecided.
+          description: configured (at least one enabled auth client), setup_incomplete (no auth client was ever linked to it, live or detached, but it has upstream credentials that no auth client records yet) or no_auth_required.
           enum:
             - configured
             - setup_incomplete
             - no_auth_required
-            - undecided
       description: Whether the server's upstream needs authentication and the auth clients it offers.
       required:
         - status
+        - requires_upstream_auth
         - auth_clients
     AdminMcpServerHealthUserSessionIssuer:
       type: object
@@ -9922,6 +10083,10 @@ components:
         account_type:
           type: string
           description: Speakeasy account type (e.g. free, pro, payg, enterprise).
+        adoption_dashboard_url:
+          type: string
+          description: Staff-entered link to the organization's adoption dashboard. Absent when none has been set.
+          format: uri
         created_at:
           type: string
           description: The creation date of the organization.
@@ -10685,6 +10850,17 @@ components:
         - id
         - customer_id
         - status
+    AdminUploadImageResult:
+      type: object
+      properties:
+        asset:
+          $ref: '#/components/schemas/Asset'
+        url:
+          type: string
+          description: Canonical public URL for the uploaded image
+      required:
+        - asset
+        - url
     AdminUpstreamAuthEnforcement:
       type: object
       properties:
@@ -10756,7 +10932,7 @@ components:
           format: int64
         complete:
           type: boolean
-          description: Whether every configured identity has its auth client, server links and header copies recorded, no backfilled record is left to retire, no server offering one is left undecided, and no phase failed.
+          description: Whether every configured identity has its auth client, server links and header copies recorded, no backfilled record is left to retire, and no phase failed.
         failed_phases:
           type: array
           items:
@@ -10788,7 +10964,7 @@ components:
           format: int64
         pending_marked_servers:
           type: integer
-          description: Servers offering a backfilled auth client whose need for upstream authentication is still undecided, not yet marked as needing it.
+          description: 'Deprecated: always 0. Whether a server needs upstream authentication follows from the auth clients it offers, so no server is marked.'
           format: int64
         pending_retirements:
           type: integer
@@ -10852,7 +11028,7 @@ components:
           description: user_backed for turns run for a user the event identified, userless for turns run as the trigger's workload.
         reason:
           type: string
-          description: 'Why there is no choice: selection_required (several clients could serve it), personal_requires_user (only a personal client serves it, and the turn has no user), no_client (no live, enabled auth client carries its upstream OAuth client), setup_incomplete (it needs upstream authentication and offers no auth client) or upstream_auth_undecided (it offers no auth client and an administrator has not decided whether it needs upstream authentication).'
+          description: 'Why there is no choice: selection_required (several clients could serve it), personal_requires_user (only a personal client serves it, and the turn has no user), no_client (no live, enabled auth client carries its upstream OAuth client) or setup_incomplete (no auth client was ever linked to it, live or detached, but it has upstream credentials that no auth client records yet).'
         servers:
           type: integer
           description: Profile and server pairs with no choice for this reason.
@@ -10959,7 +11135,7 @@ components:
           format: int64
         servers_marked_requiring_upstream_auth:
           type: integer
-          description: Servers marked as needing upstream authentication because they offer a backfilled auth client.
+          description: 'Deprecated: always omitted. Whether a server needs upstream authentication follows from the auth clients it offers, so no server is marked.'
           format: int64
         status:
           $ref: '#/components/schemas/AdminUpstreamOAuthMigrationStatus'
@@ -11291,6 +11467,12 @@ components:
           type: string
         after_snapshot: {}
         before_snapshot: {}
+        category:
+          type: string
+          description: 'What kind of event the entry records: ''configuration'' for a change to the platform''s configuration, ''security'' for machine access and other security-relevant activity that is not a configuration decision. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.'
+          enum:
+            - configuration
+            - security
         created_at:
           type: string
           description: The creation date of the audit log.
@@ -11416,12 +11598,23 @@ components:
     CreateOrganizationRequestBody:
       type: object
       properties:
+        name:
+          type: string
+          description: Organization display name. When omitted, a name is derived from the registrable company domain.
+          minLength: 1
+          maxLength: 100
         ownership_confirmed:
           type: boolean
           description: The operator confirms that domain ownership was established outside this form.
+        slug:
+          type: string
+          description: Preferred organization URL slug. When omitted, a unique slug is derived from the organization name. Explicit slugs use lowercase letters, numbers, and hyphens.
+          pattern: ^[a-z0-9]+(?:-[a-z0-9]+)*$
+          minLength: 2
+          maxLength: 100
         url:
           type: string
-          description: Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes the name and verified email domain.
+          description: Company HTTP(S) URL or bare hostname. The exact normalized hostname becomes the verified email domain.
           minLength: 1
       required:
         - url
@@ -12126,6 +12319,9 @@ components:
         tool_io_logs_enabled:
           type: boolean
           description: Whether tool I/O logging is enabled
+        upstream_auth_enforced:
+          type: boolean
+          description: Whether upstream auth enforcement is on for the organization. Absent when the state could not be read. Staff change it through the admin enforcement endpoint.
       required:
         - logs_enabled
         - tool_io_logs_enabled
@@ -12658,6 +12854,17 @@ components:
         - id
         - updated_at
         - data_json
+    SetAdoptionDashboardURLRequestBody:
+      type: object
+      properties:
+        adoption_dashboard_url:
+          type: string
+          description: An https URL, or empty to clear the link.
+          maxLength: 2048
+        organization_id:
+          type: string
+      required:
+        - organization_id
     SetInferenceKeyMonthlyLimitRequestBody:
       type: object
       properties:
@@ -13320,13 +13527,6 @@ components:
       required:
         - revision
         - draft
-    UploadImageResult:
-      type: object
-      properties:
-        asset:
-          $ref: '#/components/schemas/Asset'
-      required:
-        - asset
   securitySchemes:
     apikey_header_Authorization:
       type: apiKey

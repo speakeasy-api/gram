@@ -24,7 +24,7 @@ func TestAttachToDefaultPlugin_ExcludesPlatformWrapper(t *testing.T) {
 	require.True(t, ok)
 	toolset, err := toolsetsrepo.New(ti.conn).CreateToolset(ctx, toolsetsrepo.CreateToolsetParams{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: *authCtx.ProjectID,
-		Name: "Platform wrapper", Slug: "platform-wrapper", McpEnabled: true,
+		Name: "Platform wrapper", Slug: "platform-wrapper",
 	})
 	require.NoError(t, err)
 	_, err = toolsetsrepo.New(ti.conn).CreateToolsetVersion(ctx, toolsetsrepo.CreateToolsetVersionParams{

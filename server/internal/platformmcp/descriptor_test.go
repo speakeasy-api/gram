@@ -237,10 +237,10 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 		"get_platform_context", "list_projects", "find_mcp", "get_mcp",
 		"request_mcp_review", "get_my_mcp_review_request",
 		"get_project_overview", "get_mcp_diagnostics", "get_tool_usage_summary", "list_recent_tool_calls", "list_attribute_keys",
-		"search_gram_docs", "list_skills", "get_skill", "list_skill_versions",
+		"search_speakeasy_docs", "list_skills", "get_skill", "list_skill_versions",
 		"list_skill_feedback", "list_skill_suggestions", "list_skill_suggestion_feedback",
 		"create_skill", "add_skill_version", "update_skill_metadata", "list_skill_distributions",
-		"list_my_sessions", "continue_session", searchChatsToolName, readChatToolName,
+		"list_my_sessions", "continue_session", "create_session_handoff_link", searchChatsToolName, readChatToolName,
 		// The analytics reads hold the caller to project:read in the handler.
 		describeAnalyticsCatalogToolName, listAnalyticsDimensionValuesToolName, runAnalyticsQueryToolName,
 		// The widget tools hold the caller to project:read in the handler; the
@@ -255,6 +255,8 @@ func TestEveryExternalToolUsesAKnownAuthorizationPolicy(t *testing.T) {
 	}
 	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["distribute_skill"])
 	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["undistribute_skill"])
+	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["link_skill_to_mcp"])
+	require.Equal(t, ExternalAuthorizationOrgAdmin, byName["unlink_skill_from_mcp"])
 	for _, name := range []string{"list_skill_insights", "compare_skill_versions"} {
 		require.Equal(t, ExternalAuthorizationOrgAdmin, byName[name], "session cost is organization spend: %s", name)
 	}
@@ -432,9 +434,11 @@ func TestAssistantAudienceExcludesConnectionScopedTools(t *testing.T) {
 		operationSetPluginAssignments,
 		operationCreatePlugin,
 		operationRenamePlugin,
+		operationSetPluginAutoSync,
 		operationRepublishPlugin,
 		"list_my_sessions",
 		"continue_session",
+		"create_session_handoff_link",
 		searchChatsToolName, readChatToolName,
 		"list_data_exports",
 		"create_data_export",

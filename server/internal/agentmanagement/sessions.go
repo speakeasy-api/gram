@@ -54,6 +54,7 @@ func (s *Service) ListSessions(ctx context.Context, payload *gen.ListSessionsPay
 	rows, err := repo.New(s.db).ListManagedAgentSessions(ctx, repo.ListManagedAgentSessionsParams{
 		OrganizationID: human.Auth.ActiveOrganizationID,
 		AgentSubject:   urn.NewAgentSubject(agent.ID).String(),
+		AgentID:        agent.ID,
 		Cursor:         cursor, LimitValue: int32(limit + 1),
 	})
 	if err != nil {
@@ -70,7 +71,16 @@ func (s *Service) ListSessions(ctx context.Context, payload *gen.ListSessionsPay
 			ID: row.ID.String(), IssuerID: row.UserSessionIssuerID.String(), IssuerSlug: row.IssuerSlug,
 			CreatedAt: row.CreatedAt.Time.Format(time.RFC3339Nano), ExpiresAt: row.ExpiresAt.Time.Format(time.RFC3339Nano),
 			RefreshExpiresAt: row.RefreshExpiresAt.Time.Format(time.RFC3339Nano),
-			ProjectID:        nil, ClientName: nil, AuthorizerUserID: nil, LastUsedAt: nil,
+			SubjectKind:      "agent",
+			ProjectID:        nil, ClientName: nil, AuthorizerUserID: nil, LastUsedAt: nil, WorkloadSubject: nil,
+		}
+		// The query returns the agent's own sessions and its workloads' sessions;
+		// a workload one says which workload signed in.
+		if row.SubjectUrn.Kind == urn.SessionSubjectKindWorkload {
+			if _, external, err := row.SubjectUrn.Workload(); err == nil {
+				item.SubjectKind = "workload"
+				item.WorkloadSubject = &external
+			}
 		}
 		if row.ProjectID.Valid {
 			value := row.ProjectID.UUID.String()

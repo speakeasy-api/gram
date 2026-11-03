@@ -102,15 +102,7 @@ vi.mock("@/components/require-scope", () => ({
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: vi.fn(),
   useProjectSlugForRequests: () => "test-project",
-}));
-
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    policyCenter: { goTo: vi.fn() },
-    mcp: {
-      details: { inspect: { href: (slug: string) => `/mcp/${slug}/inspect` } },
-    },
-  }),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "test-project" }),
 }));
 
 vi.mock("nuqs", () => ({
@@ -1180,7 +1172,7 @@ describe("PolicyMCPScopePicker all-server selection", () => {
       screen
         .getByRole("link", { name: "Discover tools on Docs MCP" })
         .getAttribute("href"),
-    ).toBe("/mcp/docs-mcp/inspect");
+    ).toBe("/org/projects/test-project/mcp/docs-mcp/inspect");
   });
 
   it("says when a policy names tools the server has not discovered yet", async () => {

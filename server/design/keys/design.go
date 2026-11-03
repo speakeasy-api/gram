@@ -54,6 +54,27 @@ var _ = Service("keys", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "rotate")
 	})
 
+	Method("extendAgentKeys", func() {
+		Description("Add mcp:connect grants to every live key the caller issued for an agent, so servers the agent is given reach the keys it already runs with. Each key's new policy is checked like issuance: the agent, its owner and the caller must all allow it. Keys issued by someone else are left as they are. The result lists only the keys this call changed: keys that already held the grants, expired keys and other people's keys are not in it.")
+
+		Payload(func() {
+			Extend(ExtendAgentKeysForm)
+			security.SessionPayload()
+		})
+
+		Result(ListKeysResult)
+
+		HTTP(func() {
+			POST("/rpc/keys.extendAgentKeys")
+			security.SessionHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "extendAgentAPIKeys")
+		Meta("openapi:extension:x-speakeasy-name-override", "extendAgentKeys")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ExtendAgentAPIKeys"}`)
+	})
+
 	Method("listKeys", func() {
 		Description("List all api keys for an organization")
 
@@ -155,6 +176,14 @@ var CreateKeyForm = Type("CreateKeyForm", func() {
 	Attribute("requested_grants", ArrayOf(agentsdesign.PolicyGrantForm), "Exact allow grants approved for an agent credential")
 	Attribute("expires_at", String, "Agent credential expiry; defaults to 90 days and cannot exceed one year", func() { Format(FormatDateTime) })
 	Attribute("policy_grants", ArrayOf(APIKeyPolicyGrant), "Optional policy for an ordinary key: mcp:connect and mcp:auth grants, and mcp:blocked_connect and mcp:blocked_auth blocks, that its server and auth client access is evaluated against. Not yet enforced. Requires org admin.", func() { MaxLength(100) })
+	Attribute("auth_client_choices", ArrayOf(AgentKeyAuthClientChoice), "For an agent key: the upstream credential the key uses on each MCP server it names. Where typed upstream authentication is enforced, the key is served on a server with the credential chosen here, checked again on every request. Shared credentials only: an agent reaches a person's own connection when it acts for them.", func() { MaxLength(100) })
+})
+
+var AgentKeyAuthClientChoice = Type("AgentKeyAuthClientChoice", func() {
+	Description("The upstream credential an agent key uses on one MCP server.")
+	Required("mcp_server_id")
+	Attribute("mcp_server_id", String, "The MCP server.", func() { Format(FormatUUID) })
+	Attribute("auth_client_id", String, "The auth client the key uses there. Omit for a server whose upstream needs no authentication.", func() { Format(FormatUUID) })
 })
 
 var RotateKeyForm = Type("RotateKeyForm", func() {
@@ -165,6 +194,24 @@ var RotateKeyForm = Type("RotateKeyForm", func() {
 	Attribute("delegated_grants_version", Int, "Delegated policy format version", func() { Minimum(1) })
 	Attribute("requested_grants", ArrayOf(agentsdesign.PolicyGrantForm), "New exact allow grants approved for the replacement credential")
 	Attribute("expires_at", String, "Replacement expiry; defaults to 90 days and cannot exceed one year", func() { Format(FormatDateTime) })
+})
+
+var ExtendAgentKeysForm = Type("ExtendAgentKeysForm", func() {
+	Required("agent_id", "requested_grants")
+	Attribute("agent_id", String, "The agent whose keys gain the grants", func() { Format(FormatUUID) })
+	Attribute("requested_grants", ArrayOf(ExtendAgentKeyGrantForm), "Server grants to add to each key", func() {
+		MinLength(1)
+		MaxLength(100)
+	})
+	Attribute("auth_client_choices", ArrayOf(AgentKeyAuthClientChoice), "The upstream credential each key uses on the servers it gains, checked as at issuance. Recorded only on keys that gain that server.", func() { MaxLength(100) })
+})
+
+var ExtendAgentKeyGrantForm = Type("ExtendAgentKeyGrantForm", func() {
+	Description("A server grant an agent key gains. Anything broader is a new delegation, made by issuing a key.")
+	Required("scope", "effect", "selector")
+	Attribute("scope", String, "The grant's scope", func() { Enum("mcp:connect") })
+	Attribute("effect", String, "Grant effect", func() { Enum("allow") })
+	Attribute("selector", agentsdesign.PolicySelector)
 })
 
 var APIKeyPolicySelector = Type("APIKeyPolicySelector", func() {

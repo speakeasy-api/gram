@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsetsrepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -46,7 +47,7 @@ func TestServeOrganizationGateway_HostedAuthenticationEligibility(t *testing.T) 
 			auth, ok := contextvalues.GetAuthContext(ctx)
 			require.True(t, ok)
 			slug := "auth-member-" + uuid.NewString()[:8]
-			toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), auth, slug)
+			toolset := createPublicMCPToolset(t, ctx, ti, auth, slug)
 			server, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{ID: uuid.New(), ProjectID: *auth.ProjectID, Name: conv.ToPGText(tt.name), Slug: conv.ToPGText(slug), ToolsetID: conv.ToNullUUID(toolset.ID), Visibility: mcpservers.VisibilityPublic})
 			require.NoError(t, err)
 			if tt.oauth {
@@ -70,9 +71,8 @@ func TestServeOrganizationGateway_HostedAuthenticationEligibility(t *testing.T) 
 				_, err = mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{ID: server.ID, Name: server.Name, Slug: server.Slug, ToolsetID: conv.ToNullUUID(toolset.ID), ProjectID: *auth.ProjectID, EnvironmentID: uuid.NullUUID{UUID: env.ID, Valid: true}, Visibility: mcpservers.VisibilityPublic})
 				require.NoError(t, err)
 			}
-			// Independent wrappers do not inherit legacy endpoint enablement.
-			_, err = toolsetsrepo.New(ti.conn).UpdateToolset(ctx, toolsetsrepo.UpdateToolsetParams{Name: toolset.Name, Description: toolset.Description, DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug, McpSlug: toolset.McpSlug, McpIsPublic: !tt.private, McpEnabled: false, Slug: toolset.Slug, ProjectID: toolset.ProjectID})
-			require.NoError(t, err)
+			// The toolset-level connect check follows the canonical server's visibility.
+			testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: conv.Ternary(tt.private, "private", "public")})
 			w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, mintOrganizationGatewayBearer(t, ti, fx), listServersBody(t))
 			require.NoError(t, err)
 			require.Equal(t, http.StatusOK, w.Code, w.Body.String())
@@ -106,7 +106,7 @@ func TestServeOrganizationGateway_ExcludesPlatformToolsets(t *testing.T) {
 			auth, ok := contextvalues.GetAuthContext(ctx)
 			require.True(t, ok)
 			slug := "platform-member-" + uuid.NewString()[:8]
-			toolset := createPublicMCPToolset(t, ctx, toolsetsrepo.New(ti.conn), auth, slug)
+			toolset := createPublicMCPToolset(t, ctx, ti, auth, slug)
 			_, err := mcpserversrepo.New(ti.conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{ID: uuid.New(), ProjectID: *auth.ProjectID, Name: conv.ToPGText(tt.name), Slug: conv.ToPGText(slug), ToolsetID: conv.ToNullUUID(toolset.ID), Visibility: mcpservers.VisibilityPublic})
 			require.NoError(t, err)
 			_, err = toolsetsrepo.New(ti.conn).CreateToolsetVersion(ctx, toolsetsrepo.CreateToolsetVersionParams{ToolsetID: toolset.ID, Version: 1, ToolUrns: tt.tools, ResourceUrns: []urn.Resource{}, PredecessorID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}})

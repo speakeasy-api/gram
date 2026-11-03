@@ -37,7 +37,7 @@ func TestGovernor_ServesOnlyAnUnambiguousBinding(t *testing.T) {
 	_, ok = g.Serves(t.Context(), unbound)
 	require.False(t, ok)
 
-	f.addSlashVariantBinding(t, remotesessions.PreparationStateReady)
+	f.addAmbiguousBinding(t)
 	_, ok = g.Serves(t.Context(), f.req)
 	require.False(t, ok, "ambiguous bindings require configuration and are never presented as served")
 	require.True(t, g.Governs(t.Context(), f.req), "the runtime still claims an ambiguous upstream")
@@ -216,7 +216,7 @@ func TestGovernor_RefreshDecisionUncertainty(t *testing.T) {
 		t.Parallel()
 		f := newChainStoreFixture(t)
 		g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
-		f.addSlashVariantBinding(t, remotesessions.PreparationStateReady)
+		f.addAmbiguousBinding(t)
 		verdict := g.RefreshDecision(t.Context(), f.req)
 		require.Equal(t, RefreshUnconfirmed, verdict.Decision, "the runtime forbids an ambiguous upstream, which no reconnect repairs")
 		require.Equal(t, ReasonConfigurationRequired, verdict.Reason)
@@ -272,7 +272,7 @@ func TestInspectIdentityChainingForTenant(t *testing.T) {
 	t.Parallel()
 	f := newChainStoreFixture(t)
 
-	results, err := remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, f.req.ProjectID, f.req.OrganizationID, f.req.UserSessionIssuerID, uuid.NullUUID{UUID: f.sel.remoteIssuerID, Valid: true}, f.req.UpstreamResource+"/", true)
+	results, err := remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, f.req.ProjectID, f.req.OrganizationID, f.req.UserSessionIssuerID, uuid.NullUUID{UUID: f.sel.remoteIssuerID, Valid: true}, f.req.UpstreamResource, true)
 	require.NoError(t, err)
 	require.Len(t, results, 1)
 	require.Equal(t, remotesessions.PreparationStateReady, results[0].State)
@@ -282,14 +282,16 @@ func TestInspectIdentityChainingForTenant(t *testing.T) {
 	f.addSlashVariantBinding(t, remotesessions.PreparationStateUnknownGrants)
 	results, err = remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, f.req.ProjectID, f.req.OrganizationID, f.req.UserSessionIssuerID, uuid.NullUUID{UUID: f.sel.remoteIssuerID, Valid: true}, f.req.UpstreamResource, true)
 	require.NoError(t, err)
-	require.Len(t, results, 2, "inspection reports bindings in every live state")
+	require.Len(t, results, 1, "inspection excludes a different exact resource even in a live state")
 
-	for _, suffix := range []string{"//", "///", "////", "/////"} {
-		bindResource(t, f.db, f.req, f.sel.remoteIssuerID, f.sel.clientID, "https://api.resource.example.test"+suffix, remotesessions.PreparationStateUnknownGrants)
+	for range 5 {
+		issuerURL := "https://resource-" + uuid.NewString() + ".example.test"
+		issuer, client := prepareResourceClient(t, f.db, f.chainer.enc, f.req.OrganizationID, issuerURL, issuerURL+"/token", "inspection-client", "inspection-secret")
+		bindResource(t, f.db, f.req, issuer, client, f.sel.resource, remotesessions.PreparationStateUnknownGrants)
 	}
-	results, err = remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, f.req.ProjectID, f.req.OrganizationID, f.req.UserSessionIssuerID, uuid.NullUUID{UUID: f.sel.remoteIssuerID, Valid: true}, f.req.UpstreamResource, true)
+	results, err = remotesessions.InspectIdentityChainingForTenant(t.Context(), f.db, f.req.ProjectID, f.req.OrganizationID, f.req.UserSessionIssuerID, uuid.NullUUID{UUID: uuid.Nil, Valid: false}, f.req.UpstreamResource, true)
 	require.NoError(t, err)
-	require.Len(t, results, 6, "inspection never truncates the binding list")
+	require.Len(t, results, 6, "inspection never truncates exact-resource bindings in any live state")
 
 	for _, foreign := range []struct {
 		project uuid.UUID
