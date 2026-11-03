@@ -91,6 +91,7 @@ import { adminSetInferenceKeyMonthlyLimit } from "../funcs/adminSetInferenceKeyM
 import { adminSetOrganizationChatAnalysisSettings } from "../funcs/adminSetOrganizationChatAnalysisSettings.js";
 import { adminSetOrganizationFeature } from "../funcs/adminSetOrganizationFeature.js";
 import { adminSetOrganizationOnboardingStack } from "../funcs/adminSetOrganizationOnboardingStack.js";
+import { adminSetOrganizationProviderSetup } from "../funcs/adminSetOrganizationProviderSetup.js";
 import { adminSetRegistryEntryPublished } from "../funcs/adminSetRegistryEntryPublished.js";
 import { adminSetStripeCustomer } from "../funcs/adminSetStripeCustomer.js";
 import { adminSetStripeSubscription } from "../funcs/adminSetStripeSubscription.js";
@@ -200,6 +201,7 @@ import { SetInferenceKeyMonthlyLimitRequestBody } from "../models/components/set
 import { SetOrganizationChatAnalysisSettingsRequestBody } from "../models/components/setorganizationchatanalysissettingsrequestbody.js";
 import { SetOrganizationFeatureRequestBody } from "../models/components/setorganizationfeaturerequestbody.js";
 import { SetOrganizationOnboardingStackRequestBody } from "../models/components/setorganizationonboardingstackrequestbody.js";
+import { SetOrganizationProviderSetupRequestBody } from "../models/components/setorganizationprovidersetuprequestbody.js";
 import { SetRegistryEntryPublishedRequestBody } from "../models/components/setregistryentrypublishedrequestbody.js";
 import { SetStripeCustomerRequestBody } from "../models/components/setstripecustomerrequestbody.js";
 import { SetStripeSubscriptionRequestBody } from "../models/components/setstripesubscriptionrequestbody.js";
@@ -900,6 +902,23 @@ export class Admin extends ClientSDK {
     options?: RequestOptions,
   ): Promise<AdminListOrganizationProjectsResult> {
     return unwrapAsync(adminListOrganizationProjects(
+      this,
+      request,
+      options,
+    ));
+  }
+
+  /**
+   * setOrganizationProviderSetup admin
+   *
+   * @remarks
+   * Enable or disable the temporary provider setup rollout for one organization. Staff only; disabled by default. Existing credential storage and OAuth flows are unaffected.
+   */
+  async setOrganizationProviderSetup(
+    request: SetOrganizationProviderSetupRequestBody,
+    options?: RequestOptions,
+  ): Promise<ProductFeatures> {
+    return unwrapAsync(adminSetOrganizationProviderSetup(
       this,
       request,
       options,

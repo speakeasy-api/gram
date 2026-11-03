@@ -24,6 +24,7 @@ type Server struct {
 	ListBindings                      http.Handler
 	AttachBinding                     http.Handler
 	DetachBinding                     http.Handler
+	TestServerConnection              http.Handler
 	CommitServerIdentityConfiguration http.Handler
 	GetServerIdentityImpact           http.Handler
 	ListServerClientAssociations      http.Handler
@@ -65,6 +66,7 @@ func New(
 			{"ListBindings", "GET", "/rpc/remoteSessions.listBindings"},
 			{"AttachBinding", "POST", "/rpc/remoteSessions.attachBinding"},
 			{"DetachBinding", "POST", "/rpc/remoteSessions.detachBinding"},
+			{"TestServerConnection", "POST", "/rpc/remoteSessions.testServerConnection"},
 			{"CommitServerIdentityConfiguration", "POST", "/rpc/remoteSessions.commitServerIdentityConfiguration"},
 			{"GetServerIdentityImpact", "GET", "/rpc/remoteSessions.getServerIdentityImpact"},
 			{"ListServerClientAssociations", "GET", "/rpc/remoteSessions.listServerClientAssociations"},
@@ -78,6 +80,7 @@ func New(
 		ListBindings:                      NewListBindingsHandler(e.ListBindings, mux, decoder, encoder, errhandler, formatter),
 		AttachBinding:                     NewAttachBindingHandler(e.AttachBinding, mux, decoder, encoder, errhandler, formatter),
 		DetachBinding:                     NewDetachBindingHandler(e.DetachBinding, mux, decoder, encoder, errhandler, formatter),
+		TestServerConnection:              NewTestServerConnectionHandler(e.TestServerConnection, mux, decoder, encoder, errhandler, formatter),
 		CommitServerIdentityConfiguration: NewCommitServerIdentityConfigurationHandler(e.CommitServerIdentityConfiguration, mux, decoder, encoder, errhandler, formatter),
 		GetServerIdentityImpact:           NewGetServerIdentityImpactHandler(e.GetServerIdentityImpact, mux, decoder, encoder, errhandler, formatter),
 		ListServerClientAssociations:      NewListServerClientAssociationsHandler(e.ListServerClientAssociations, mux, decoder, encoder, errhandler, formatter),
@@ -98,6 +101,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.ListBindings = m(s.ListBindings)
 	s.AttachBinding = m(s.AttachBinding)
 	s.DetachBinding = m(s.DetachBinding)
+	s.TestServerConnection = m(s.TestServerConnection)
 	s.CommitServerIdentityConfiguration = m(s.CommitServerIdentityConfiguration)
 	s.GetServerIdentityImpact = m(s.GetServerIdentityImpact)
 	s.ListServerClientAssociations = m(s.ListServerClientAssociations)
@@ -117,6 +121,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountListBindingsHandler(mux, h.ListBindings)
 	MountAttachBindingHandler(mux, h.AttachBinding)
 	MountDetachBindingHandler(mux, h.DetachBinding)
+	MountTestServerConnectionHandler(mux, h.TestServerConnection)
 	MountCommitServerIdentityConfigurationHandler(mux, h.CommitServerIdentityConfiguration)
 	MountGetServerIdentityImpactHandler(mux, h.GetServerIdentityImpact)
 	MountListServerClientAssociationsHandler(mux, h.ListServerClientAssociations)
@@ -375,6 +380,60 @@ func NewDetachBindingHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "detachBinding")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessions")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountTestServerConnectionHandler configures the mux to serve the
+// "remoteSessions" service "testServerConnection" endpoint.
+func MountTestServerConnectionHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/remoteSessions.testServerConnection", f)
+}
+
+// NewTestServerConnectionHandler creates a HTTP handler which loads the HTTP
+// request and calls the "remoteSessions" service "testServerConnection"
+// endpoint.
+func NewTestServerConnectionHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeTestServerConnectionRequest(mux, decoder)
+		encodeResponse = EncodeTestServerConnectionResponse(encoder)
+		encodeError    = EncodeTestServerConnectionError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "testServerConnection")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "remoteSessions")
 		payload, err := decodeRequest(r)
 		if err != nil {

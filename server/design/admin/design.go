@@ -564,6 +564,21 @@ var _ = Service("admin", func() {
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"AdminOrganizationFeatures"}`)
 	})
 
+	Method("setOrganizationProviderSetup", func() {
+		Description("Enable or disable the temporary provider setup rollout for one organization. Staff only; disabled by default. Existing credential storage and OAuth flows are unaffected.")
+		Payload(func() {
+			Meta("openapi:typename", "SetOrganizationProviderSetupRequestBody")
+			security.AdminAuthPayload()
+			Attribute("organization_id", String)
+			Attribute("enabled", Boolean)
+			Required("organization_id", "enabled")
+		})
+		Result(shared.ProductFeatures)
+		HTTP(func() { POST("/admin/organization.providerSetup"); Response(StatusOK) })
+		Meta("openapi:operationId", "adminSetOrganizationProviderSetup")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name":"SetAdminOrganizationProviderSetup"}`)
+	})
+
 	Method("setOrganizationFeature", func() {
 		Payload(func() {
 			Meta("openapi:typename", "SetOrganizationFeatureRequestBody")

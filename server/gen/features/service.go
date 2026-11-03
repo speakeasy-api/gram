@@ -63,6 +63,9 @@ type ProductFeatureName string
 // ProductFeatures is the result type of the features service
 // getProductFeatures method.
 type ProductFeatures struct {
+	// Whether the staff-managed provider setup rollout is enabled. Defaults to
+	// false when absent.
+	ProviderSetupEnabled *bool
 	// Whether logging is enabled
 	LogsEnabled bool
 	// Whether tool I/O logging is enabled
@@ -215,6 +218,7 @@ func NewViewedProductFeatures(res *ProductFeatures, view string) *featuresviews.
 // ProductFeatures.
 func newProductFeatures(vres *featuresviews.ProductFeaturesView) *ProductFeatures {
 	res := &ProductFeatures{
+		ProviderSetupEnabled: vres.ProviderSetupEnabled,
 		UpstreamAuthEnforced: vres.UpstreamAuthEnforced,
 	}
 	if vres.LogsEnabled != nil {
@@ -290,6 +294,7 @@ func newProductFeatures(vres *featuresviews.ProductFeaturesView) *ProductFeature
 // type ProductFeaturesView using the "default" view.
 func newProductFeaturesView(res *ProductFeatures) *featuresviews.ProductFeaturesView {
 	vres := &featuresviews.ProductFeaturesView{
+		ProviderSetupEnabled:                    res.ProviderSetupEnabled,
 		LogsEnabled:                             &res.LogsEnabled,
 		ToolIoLogsEnabled:                       &res.ToolIoLogsEnabled,
 		SessionCaptureEnabled:                   &res.SessionCaptureEnabled,
