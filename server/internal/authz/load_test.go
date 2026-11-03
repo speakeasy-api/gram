@@ -202,6 +202,15 @@ func TestLoadGrantsAddsAssistantDefaultsOnlyForCanonicalSystemRole(t *testing.T)
 	require.NoError(t, err)
 	require.True(t, GrantsSatisfy(grants, AssistantCheck(ScopeAssistantRead, "assistant_1", "project_a")))
 	require.True(t, GrantsSatisfy(grants, AssistantCheck(ScopeAssistantWrite, "assistant_1", "project_a")))
+	require.True(t, GrantsSatisfy(grants, Check{Scope: ScopeMemoryRead, ResourceID: "project_a"}))
+	require.True(t, GrantsSatisfy(grants, Check{Scope: ScopeMemoryWrite, ResourceID: "project_a"}))
+
+	memberRole, err := q.GetGlobalRoleBySlug(ctx, SystemRoleMember)
+	require.NoError(t, err)
+	member := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+memberRole.ID.String())
+	grants, err = LoadGrants(ctx, conn, organizationID, []urn.Principal{member})
+	require.NoError(t, err)
+	require.False(t, GrantsSatisfy(grants, Check{Scope: ScopeMemoryRead, ResourceID: "project_a"}))
 
 	grants, err = LoadGrants(ctx, conn, organizationID, []urn.Principal{
 		urn.NewPrincipal(urn.PrincipalTypeRole, "organization:"+uuid.NewString()),
