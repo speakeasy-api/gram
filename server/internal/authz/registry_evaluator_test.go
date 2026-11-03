@@ -11,6 +11,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	s "github.com/speakeasy-api/gram/server/internal/authz/schema"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // evaluatorSliceDeclarations extends the frozen schema slice with the types the
@@ -174,6 +175,9 @@ func runEvaluatorCorpusCase(t *testing.T, reg *s.Registry, evaluator *RegistryEv
 			Dimensions:      c.Dimensions,
 			StrictMatch:     c.Strict,
 			RepresentedUser: fixtureUserID,
+			Actor:           urn.NewPrincipal(urn.PrincipalTypeUser, fixtureUserID),
+			Facts:           nil,
+			RequiredFacts:   nil,
 		})
 		if err != nil {
 			// RequireAny validates every check before deciding, so an invalid
@@ -286,6 +290,9 @@ func docRequest(permission string, dims map[string]string) PermissionRequest {
 		Dimensions:      dims,
 		StrictMatch:     false,
 		RepresentedUser: "",
+		Actor:           urn.Principal{},
+		Facts:           nil,
+		RequiredFacts:   nil,
 	}
 }
 
@@ -380,8 +387,8 @@ func TestRegistryEvaluatorErrors(t *testing.T) {
 	evaluator := docEvaluator(t)
 	policy := []Grant{grantOf(testRole, "note:read", "note", "*"), grantOf(testRole, "doc:read", "doc", "*")}
 
-	// A fact-reading node errors whichever branch it sits in, and through
-	// Perm, even when a grant branch would allow.
+	// A fact-reading permission needs an actor whichever branch reads the
+	// fact, and through Perm, even when a grant branch would allow.
 	for _, permission := range []string{"own_first", "own_last", "via_own"} {
 		_, err := evaluator.Evaluate(policy, PermissionRequest{
 			Permission:      s.PermissionRef{Type: "note", Permission: permission},
@@ -389,8 +396,11 @@ func TestRegistryEvaluatorErrors(t *testing.T) {
 			Dimensions:      nil,
 			StrictMatch:     false,
 			RepresentedUser: "",
+			Actor:           urn.Principal{},
+			Facts:           nil,
+			RequiredFacts:   nil,
 		})
-		require.ErrorIs(t, err, ErrUnsupportedExpression, permission)
+		require.ErrorIs(t, err, ErrMissingActor, permission)
 	}
 
 	_, err := evaluator.Evaluate(policy, docRequest("missing", nil))
