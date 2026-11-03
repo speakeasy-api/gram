@@ -1,6 +1,6 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Gram } from "@gram/client";
+import { GramCore } from "@gram/client/core.js";
 import { HTTPClient, type Fetcher } from "@gram/client/lib/http.js";
 import { GramProvider } from "@gram/client/react-query/_context.js";
 import { queryKeyGetStripeSubscription } from "@gram/client/react-query/getStripeSubscription.js";
@@ -69,7 +69,7 @@ function deferred() {
 }
 function setup() {
   const fetcher = vi.fn<Fetcher>();
-  const sdk = new Gram({
+  const sdk = new GramCore({
     serverURL: "https://billing.example",
     httpClient: new HTTPClient({ fetcher }),
     retryConfig: { strategy: "none" },

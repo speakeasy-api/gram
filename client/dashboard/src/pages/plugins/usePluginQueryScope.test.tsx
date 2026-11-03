@@ -1,6 +1,6 @@
 import { renderHook } from "@testing-library/react";
 import { expect, it, vi } from "vitest";
-import { Gram } from "@gram/client";
+import { Plugins } from "@gram/client/sdk/plugins.js";
 import { HTTPClient } from "@gram/client/lib/http.js";
 import { usePluginQueryScope } from "./usePluginQueryScope";
 vi.mock("@/contexts/Auth", () => ({
@@ -9,7 +9,7 @@ vi.mock("@/contexts/Auth", () => ({
 }));
 it("sends the project slug, never the authorization resource ID, on generated SDK requests", async () => {
   const requests: Request[] = [];
-  const client = new Gram({
+  const plugins = new Plugins({
     serverURL: "https://gram.example",
     httpClient: new HTTPClient({
       fetcher: async (request) => {
@@ -21,7 +21,7 @@ it("sends the project slug, never the authorization resource ID, on generated SD
     }),
   });
   const { result } = renderHook(usePluginQueryScope);
-  await client.plugins.listPlugins(result.current);
+  await plugins.listPlugins(result.current);
   expect(requests).toHaveLength(1);
   expect(requests[0]!.headers.get("Gram-Project")).toBe("project-slug");
   expect(requests[0]!.headers.get("Gram-Session")).toBe("session-a");
