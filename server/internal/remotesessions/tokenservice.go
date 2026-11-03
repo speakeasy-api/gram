@@ -286,6 +286,10 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, sess remo
 		if errors.Is(err, ErrNoValidToken) {
 			return zero, nil
 		}
+		// The caller left, which says nothing about the session; the outcome metric counts it.
+		if refreshErr, ok := errors.AsType[*RefreshError](err); ok && refreshErr.Outcome == remotesessionmetrics.RefreshOutcomeCanceled {
+			return zero, fmt.Errorf("refresh canceled: %w", err)
+		}
 		// validateAndRefresh errors only when a refresh was required (the
 		// stored access token is past its deadline) and could not be
 		// completed. The specific upstream answer is logged here because
@@ -294,9 +298,6 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, sess remo
 		// pgx.ErrNoRows case above), while one that clears on its own or
 		// needs an administrator comes back as its refined ErrNoValidToken.
 		m.logger.WarnContext(ctx, "remote session unusable: upstream token refresh failed", refreshFailureAttrs(sess, err)...)
-		if refreshErr, ok := errors.AsType[*RefreshError](err); ok && refreshErr.Outcome == remotesessionmetrics.RefreshOutcomeCanceled {
-			return zero, fmt.Errorf("refresh canceled: %w", err)
-		}
 		// A broken query is ours to fix: neither an outage nor a reconnect.
 		if oops.IsStoreFailure(err) && !oops.IsInfrastructureFailure(err) {
 			return zero, fmt.Errorf("refresh store failure: %w", err)

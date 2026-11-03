@@ -351,6 +351,36 @@ func TestRefreshNow_CancellationIsNotAnOutage(t *testing.T) {
 	require.Zero(t, remotesessions.RetryAfter(err), "no cooldown starts")
 }
 
+// A caller that leaves mid-refresh gets its own error back, not an outage or a reconnect.
+func TestResolveAccessTokens_CanceledCallerIsNotAnOutage(t *testing.T) {
+	t.Parallel()
+
+	entered := make(chan struct{})
+	release := make(chan struct{})
+	var refreshAttempts atomic.Int32
+	ctx, env := newExpiredRefreshEnv(t, "refresh-resolve-canceled", func(w http.ResponseWriter, _ *http.Request) {
+		if refreshAttempts.Add(1) == 1 {
+			close(entered)
+		}
+		<-release
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	defer close(release)
+
+	callCtx, cancel := context.WithCancel(ctx)
+	result := make(chan error, 1)
+	go func() {
+		_, err := env.mgr.ResolveAccessTokens(callCtx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
+		result <- err
+	}()
+	<-entered
+	cancel()
+
+	err := <-result
+	require.ErrorIs(t, err, context.Canceled)
+	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+}
+
 func TestResolveAccessToken_UpstreamServerErrorIsNoToken(t *testing.T) {
 	t.Parallel()
 
