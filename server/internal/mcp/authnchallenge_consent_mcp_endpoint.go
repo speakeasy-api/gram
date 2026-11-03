@@ -400,17 +400,23 @@ func (s *Service) serveConsentProxiedMCP(
 	if serverRow.Visibility == mcpservers.VisibilityPrivate && subject.Kind == urn.SessionSubjectKindAnonymous {
 		return oops.E(oops.CodeBadRequest, nil, "anonymous subject cannot enumerate a private MCP server").LogWarn(ctx, logger)
 	}
-	tokens, err := s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
-	if errors.Is(err, remotesessions.ErrNoValidToken) {
-		// The all-or-nothing resolution fails when any provider bound to the
-		// user session issuer is unusable, including one this server never
-		// routes to. Listing tools needs only this server's own credential, and
-		// the runtime resolves only the client chosen on this page, so a usable
-		// credential for this upstream is enough. Otherwise the original error
-		// keeps its classification below.
-		if available, ok := s.consentOwnUpstreamTokens(ctx, logger, endpoint, subject, serverRow); ok {
-			tokens, err = available, nil
-		}
+	// Listing tools needs only this server's own credential, and the runtime
+	// resolves only the client chosen on this page, so a provider bound to the
+	// same user session issuer that this server never routes to must not block
+	// it. One pass skipping unusable providers serves whenever this upstream's
+	// credential is usable.
+	//
+	// Temporary: this should be removed after incident resolution, when
+	// per-server provider scoping (#7613) replaces it with a single
+	// resolveEndpointAccessTokens call.
+	tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "resolve available upstream tokens for consent transport").LogError(ctx, logger)
+	}
+	if !consentOwnUpstreamTokenUsable(tokens, endpoint, serverRow) {
+		// Otherwise the all-or-nothing resolution decides, so every outcome
+		// below keeps the classification it had before.
+		tokens, err = s.remoteChallengeMgr.ResolveAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 	}
 	if err != nil {
 		if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
@@ -556,27 +562,19 @@ func consentInventoryDeferred(cards []remoteSessionCard, hasPrefill bool) bool {
 	return true
 }
 
-// consentOwnUpstreamTokens resolves the subject's usable credentials, skipping
-// providers without one, and reports whether exactly one of them routes to
-// this server's upstream with a usable token. Only then are the credentials
-// returned, so routeUpstreamToken picks that token without failing closed. A
-// missing, ambiguous, or failed credential for this upstream, or a lookup
-// fault, reports false and the caller keeps its original error.
-func (s *Service) consentOwnUpstreamTokens(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, serverRow *mcpservers_repo.McpServer) (map[uuid.UUID]remotesessions.UpstreamToken, bool) {
-	tokens, err := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
-	if err != nil {
-		logger.WarnContext(ctx, "resolve available upstream tokens for consent transport", attr.SlogError(err))
-		return nil, false
-	}
-
-	if serverRow.TunneledMcpServerID.Valid {
-		token, terr := tunneledIssuerToken(tokens, serverRow.RemoteSessionIssuerID, strings.TrimRight(endpoint.UpstreamResource, "/"))
-		return tokens, terr == nil && token.Token != ""
-	}
-
+// consentOwnUpstreamTokenUsable reports whether exactly one of tokens routes to
+// this server's upstream with a usable token, by the rules routeUpstreamToken
+// applies, so routing then picks that token without failing closed. A missing,
+// ambiguous, or failed credential for this upstream reports false. It only
+// inspects tokens, so it logs nothing.
+func consentOwnUpstreamTokenUsable(tokens map[uuid.UUID]remotesessions.UpstreamToken, endpoint *ResolvedMcpEndpoint, serverRow *mcpservers_repo.McpServer) bool {
 	want := strings.TrimRight(endpoint.UpstreamResource, "/")
+	if serverRow.TunneledMcpServerID.Valid {
+		token, err := tunneledIssuerToken(tokens, serverRow.RemoteSessionIssuerID, want)
+		return err == nil && token.Token != ""
+	}
 	if want == "" {
-		return nil, false
+		return false
 	}
 	var match remotesessions.UpstreamToken
 	found := 0
@@ -586,7 +584,7 @@ func (s *Service) consentOwnUpstreamTokens(ctx context.Context, logger *slog.Log
 			match = entry
 		}
 	}
-	return tokens, found == 1 && match.Token != "" && match.ClientCredentialErr == nil
+	return found == 1 && match.Token != "" && match.ClientCredentialErr == nil
 }
 
 // consentTransportDeferred re-evaluates consentInventoryDeferred for the

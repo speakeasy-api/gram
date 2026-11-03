@@ -6,15 +6,19 @@ import (
 	"net/http"
 	"net/http/httptest"
 	"sync"
+	"sync/atomic"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	remotemcp_repo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
+	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
 // siblingProviderUpstream is a streamable HTTP MCP upstream that records the
@@ -122,4 +126,49 @@ func TestConsentInventory_UnconnectedOwnProviderStillConflicts(t *testing.T) {
 
 	requireConsentInventoryConflict(t, fx)
 	require.Empty(t, upstream.bearers(), "a sibling's credential is never sent to this upstream")
+}
+
+func TestConsentInventory_SiblingProviderOutageRefreshesOnce(t *testing.T) {
+	t.Parallel()
+
+	upstream := newSiblingProviderUpstream(t)
+	var tokenRequests atomic.Int32
+	tokenServer := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+		tokenRequests.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	}))
+	t.Cleanup(tokenServer.Close)
+
+	tag := "sibling-outage"
+	ctx, fx := standaloneConsent(t, tag, upstream.url, func(ctx context.Context, ti *testInstance, projectID, issuerID uuid.UUID, slug string) uuid.UUID {
+		return attachConsentStreamableMcpServer(t, ctx, ti.conn, projectID, issuerID, slug, upstream.url)
+	})
+	fx.clientA = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, tag+"-a", "", []uuid.UUID{fx.shared})
+	fx.clientB = createConsentRemoteClient(t, ctx, fx.ti.conn, fx.projectID, fx.orgID, tag+"-b", tokenServer.URL, []uuid.UUID{fx.shared})
+	grant(t, ctx, fx, fx.clientA, upstream.url)
+
+	// The unrelated provider's access token has expired and its token endpoint
+	// is down, so resolving it attempts an upstream refresh that fails.
+	access, err := fx.ti.enc.Encrypt([]byte("expired"))
+	require.NoError(t, err)
+	refresh, err := fx.ti.enc.Encrypt([]byte("refresh-" + tag))
+	require.NoError(t, err)
+	_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+		SubjectUrn:             fx.subject,
+		UserSessionIssuerID:    fx.shared,
+		RemoteSessionClientID:  fx.clientB,
+		AccessTokenEncrypted:   access,
+		AccessExpiresAt:        pgtype.Timestamptz{Time: time.Now().Add(-time.Minute), Valid: true},
+		RefreshTokenEncrypted:  pgtype.Text{String: refresh, Valid: true},
+		AuthorizationExpiresAt: pgtype.Timestamptz{Valid: false},
+		RefreshExpiresAt:       pgtype.Timestamptz{Time: time.Now().Add(time.Hour), Valid: true},
+		Scopes:                 []string{},
+		Resource:               conv.ToPGTextEmpty(consentUpstreamB),
+		AutoRefresh:            true,
+	})
+	require.NoError(t, err)
+
+	w := serveConsentMCPRequest(t, ctx, fx.ti, fx.endpoint, fx.stateID, "csrf-token", uuid.NewString(), `{"jsonrpc":"2.0","id":1,"method":"tools/list"}`, nil)
+	require.Contains(t, w.Body.String(), "list_issues")
+	require.Equal(t, int32(1), tokenRequests.Load(), "the unrelated provider's failing refresh is attempted once per request")
 }
