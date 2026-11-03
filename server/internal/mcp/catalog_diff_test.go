@@ -82,3 +82,19 @@ func TestCatalogDiffInvalidDefinition(t *testing.T) {
 	_, err := compareToolDefinition(nil, &toolListEntry{InputSchema: json.RawMessage(`{`)})
 	require.ErrorContains(t, err, "encode tool definition")
 }
+
+func TestCatalogDiffPreservesSchemaText(t *testing.T) {
+	t.Parallel()
+	tool := &toolListEntry{Name: "source--text", InputSchema: json.RawMessage(`{"description":"A & B < C > D"}`)}
+	fields, err := compareToolDefinition(nil, tool)
+	require.NoError(t, err)
+	for _, field := range fields {
+		if field.Name == "inputSchema" {
+			require.Contains(t, field.After, "A & B < C > D")
+			require.NotContains(t, field.After, `\u0026`)
+		}
+	}
+	var html bytes.Buffer
+	require.NoError(t, consentTemplate.ExecuteTemplate(&html, "catalogToolDiff", catalogToolChange{Name: tool.Name, Fields: fields}))
+	require.Contains(t, html.String(), "A &amp; B &lt; C &gt; D")
+}

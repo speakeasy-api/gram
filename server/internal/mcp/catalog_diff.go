@@ -100,11 +100,14 @@ func compareToolDefinition(before, after *toolListEntry) ([]catalogFieldChange, 
 			if err := decoder.Decode(&decoded); err != nil {
 				return nil, fmt.Errorf("decode definition field: %w", err)
 			}
-			canonical, err := json.Marshal(decoded)
+			var canonical bytes.Buffer
+			encoder := json.NewEncoder(&canonical)
+			encoder.SetEscapeHTML(false)
+			err := encoder.Encode(decoded)
 			if err != nil {
 				return nil, fmt.Errorf("encode definition field: %w", err)
 			}
-			fields[key] = canonical
+			fields[key] = bytes.TrimSpace(canonical.Bytes())
 		}
 		return fields, nil
 	}

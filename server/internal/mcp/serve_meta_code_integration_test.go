@@ -20,6 +20,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -495,17 +496,19 @@ await tools.call(path, {})`, false)
 
 func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 	for _, tc := range []struct {
-		name             string
-		selection        []string
-		typedAuth        bool
-		revoke           bool
-		evictCatalog     bool
-		revokeAtApproval bool
-		commitFailure    bool
-		cancel           bool
+		name              string
+		selection         []string
+		typedAuth         bool
+		revoke            bool
+		evictCatalog      bool
+		revokeAtApproval  bool
+		commitFailure     bool
+		completionFailure bool
+		cancel            bool
 	}{
 		{name: "all tools"},
 		{name: "commit failure preserves catalogue", commitFailure: true},
+		{name: "completion failure can retry", completionFailure: true},
 		{name: "selected tools", selection: []string{"other-tracker--tool_000"}},
 		{name: "typed auth client", typedAuth: true},
 		{name: "revoked during consent", revoke: true},
@@ -516,7 +519,15 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			mock := memberMock()
 			mock.buildAuthURLResult, _ = url.Parse("https://login.example.test/authorize")
-			ctx, ti := newTestMCPServiceWithIdentityResolver(t, mock)
+			var completionCache *reconnectCompletionFailureCache
+			var wrap func(cache.Cache) cache.Cache
+			if tc.completionFailure {
+				wrap = func(delegate cache.Cache) cache.Cache {
+					completionCache = &reconnectCompletionFailureCache{OwnershipStore: delegate.(codemode.OwnershipStore)}
+					return completionCache
+				}
+			}
+			ctx, ti := newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), mock, mcp.TunnelPublicConfig{}, wrap)
 			auth, _ := contextvalues.GetAuthContext(ctx)
 			mock.upsertResult = auth.UserID
 			ti.service.manual = true
@@ -736,7 +747,28 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 				require.Equal(t, sessionPolicy.ToolSelection, afterPolicy.ToolSelection)
 				return
 			}
-			require.NoError(t, ti.service.ServeConsent(approved, approvedRequest, endpoint))
+			if tc.completionFailure {
+				completionCache.fail.Store(true)
+				require.ErrorContains(t, ti.service.ServeConsent(approved, approvedRequest, endpoint), "injected completion failure")
+				committed, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuer, Jti: claims.ID})
+				require.NoError(t, err)
+				pending, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+				require.NoError(t, err)
+				require.False(t, pending.CodeReconnect.CatalogComplete)
+				// Reloading and retrying must finish the committed approval, not replace it.
+				retryPage := consentGetPageWithContext(t, ctx, ti, slug, stateID)
+				require.Contains(t, retryPage, "Review updated tools")
+				approveForm.Set("tool_inventory_id", gatewayInventoryFromPage(t, retryPage).Attempt)
+				approvedRequest = httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(approveForm.Encode())).WithContext(ctx)
+				approvedRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+				approved = httptest.NewRecorder()
+				require.NoError(t, ti.service.ServeConsent(approved, approvedRequest, endpoint))
+				afterRetry, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuer, Jti: claims.ID})
+				require.NoError(t, err)
+				require.Equal(t, committed.ToolSelection, afterRetry.ToolSelection)
+			} else {
+				require.NoError(t, ti.service.ServeConsent(approved, approvedRequest, endpoint))
+			}
 			require.Equal(t, http.StatusSeeOther, approved.Code, approved.Body.String())
 			if permitCallers != nil {
 				calls := permitCallers()[permitChecksBefore:]
@@ -792,4 +824,17 @@ await tools.call(path, {})`, false)
 			t.Log("AFTER: a fresh Python execution discovers, describes and calls one read tool with the newly connected credential.")
 		})
 	}
+}
+
+// Retain every cache capability while failing exactly the final challenge CAS.
+type reconnectCompletionFailureCache struct {
+	codemode.OwnershipStore
+	fail atomic.Bool
+}
+
+func (c *reconnectCompletionFailureCache) CompareAndSwap(ctx context.Context, key string, expected, replacement any, ttl time.Duration) (bool, error) {
+	if state, ok := replacement.(mcp.AuthnChallengeState); ok && state.CodeReconnect != nil && state.CodeReconnect.CatalogComplete && c.fail.Swap(false) {
+		return false, fmt.Errorf("injected completion failure")
+	}
+	return c.OwnershipStore.CompareAndSwap(ctx, key, expected, replacement, ttl)
 }

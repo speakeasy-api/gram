@@ -99,6 +99,8 @@ type connectionCatalogAuth struct {
 type connectionCatalog struct {
 	// Version controls the stored data contract.
 	Version int `json:"version"`
+	// ApprovalChallengeID recognizes a committed reconnect after a cache-write failure.
+	ApprovalChallengeID string `json:"approval_challenge_id,omitempty"`
 	// ID identifies this connection's catalog.
 	ID uuid.UUID `json:"id"`
 	// OrganizationID isolates the record's tenant.
@@ -232,7 +234,7 @@ func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *Resolve
 	}
 	slices.SortFunc(tools, func(a, b *toolListEntry) int { return strings.Compare(a.Name, b.Name) })
 	catalog := connectionCatalog{
-		Version: connectionCatalogVersion, ID: uuid.New(), OrganizationID: endpoint.OrganizationID,
+		Version: connectionCatalogVersion, ApprovalChallengeID: "", ID: uuid.New(), OrganizationID: endpoint.OrganizationID,
 		IssuerID: endpoint.UserSessionIssuerID, ClientID: state.ClientID, Subject: *state.Subject,
 		Resource: inventory.Resource, Members: members, MemberOutcomes: outcomes, Tools: tools,
 		ExpiresAt: expiresAt,

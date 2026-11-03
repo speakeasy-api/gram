@@ -10,6 +10,7 @@ import (
 
 	redisCache "github.com/go-redis/cache/v9"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -30,8 +31,19 @@ func (s *Service) reconnectPolicy(ctx context.Context, q *usersessionsrepo.Queri
 	if err != nil {
 		return nil, fmt.Errorf("parse reconnect policy: %w", err)
 	}
-	if policy == nil || policy.Catalog == nil || policy.Catalog.ID != b.CatalogID || policy.Catalog.Mode != toolfilter.CatalogModeCached || !endpointAcceptsToolSelectionResource(endpoint, policy.Resource) {
+	if policy == nil || policy.Catalog == nil || !endpointAcceptsToolSelectionResource(endpoint, policy.Resource) {
 		return nil, fmt.Errorf("reconnect catalogue no longer matches the connection")
+	}
+	if policy.Catalog.ID != b.CatalogID {
+		catalog, err := s.loadConnectionCatalog(contextvalues.SetOAuthClientID(ctx, b.ClientID), endpoint, *state.Subject, policy.Catalog, time.Now())
+		if err != nil {
+			return nil, err
+		}
+		if state.ID == "" || catalog.ApprovalChallengeID != state.ID {
+			return nil, fmt.Errorf("reconnect catalogue belongs to another approval")
+		}
+	} else if policy.Catalog.Mode != toolfilter.CatalogModeCached {
+		return nil, fmt.Errorf("reconnect catalogue is not frozen")
 	}
 	return policy, nil
 }
@@ -90,6 +102,14 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, e
 	if err != nil {
 		return err
 	}
+	if policy.Catalog.ID != state.CodeReconnect.CatalogID {
+		// This challenge already committed; retry only cache invalidation and completion.
+		jtis, err := commitCodeReconnectPolicy(ctx, tx, endpoint, state, policy, policy.Catalog.ID)
+		if err != nil {
+			return err
+		}
+		return s.finishCodeReconnectApproval(w, r, endpoint, state, jtis)
+	}
 	previous, err := s.loadConnectionCatalog(ctx, endpoint, *state.Subject, policy.Catalog, time.Now())
 	if err != nil {
 		return err
@@ -108,6 +128,7 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, e
 	if err != nil {
 		return err
 	}
+	frozen.ApprovalChallengeID = state.ID
 	replacement, err := frozen.marshal()
 	if err != nil {
 		return err
@@ -131,17 +152,6 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, e
 	policy.Catalog.ID = frozen.ID
 	policy.Catalog.AllTools = selection == nil
 	policy.Catalog.Mode = mode
-	rawPolicy, err := policy.MarshalJSON()
-	if err != nil {
-		return fmt.Errorf("encode approved policy: %w", err)
-	}
-	jtis, err := q.UpdateReconnectSessionPolicy(ctx, usersessionsrepo.UpdateReconnectSessionPolicyParams{CredentialID: b.CredentialID, UserSessionIssuerID: endpoint.UserSessionIssuerID, OrganizationID: endpoint.OrganizationID, ProjectID: uuid.NullUUID{UUID: endpoint.ProjectID, Valid: endpoint.ProjectID != uuid.Nil}, SubjectUrn: *state.Subject, ToolSelection: rawPolicy, ClientID: b.ClientID, CatalogID: b.CatalogID.String()})
-	if err != nil {
-		return fmt.Errorf("update approved session policy: %w", err)
-	}
-	if len(jtis) == 0 {
-		return fmt.Errorf("reconnect connection is no longer active")
-	}
 	conditional, ok := s.connectionCatalogCache.(cache.ConditionalCache)
 	if !ok {
 		return fmt.Errorf("catalogue store does not support reconnect")
@@ -160,9 +170,35 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, e
 	if !stored {
 		return fmt.Errorf("catalogue publication conflict; reload the review before approving")
 	}
-	if err := tx.Commit(ctx); err != nil {
-		return fmt.Errorf("commit catalogue approval: %w", err)
+	jtis, err := commitCodeReconnectPolicy(ctx, tx, endpoint, state, policy, b.CatalogID)
+	if err != nil {
+		return err
 	}
+	return s.finishCodeReconnectApproval(w, r, endpoint, state, jtis)
+}
+
+func commitCodeReconnectPolicy(ctx context.Context, tx pgx.Tx, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, policy *toolfilter.SessionPolicy, expectedCatalogID uuid.UUID) ([]string, error) {
+	b := state.CodeReconnect
+	rawPolicy, err := policy.MarshalJSON()
+	if err != nil {
+		return nil, fmt.Errorf("encode approved policy: %w", err)
+	}
+	jtis, err := usersessionsrepo.New(tx).UpdateReconnectSessionPolicy(ctx, usersessionsrepo.UpdateReconnectSessionPolicyParams{CredentialID: b.CredentialID, UserSessionIssuerID: endpoint.UserSessionIssuerID, OrganizationID: endpoint.OrganizationID, ProjectID: uuid.NullUUID{UUID: endpoint.ProjectID, Valid: endpoint.ProjectID != uuid.Nil}, SubjectUrn: *state.Subject, ToolSelection: rawPolicy, ClientID: b.ClientID, CatalogID: expectedCatalogID.String()})
+	if err != nil {
+		return nil, fmt.Errorf("update approved session policy: %w", err)
+	}
+	if len(jtis) == 0 {
+		return nil, fmt.Errorf("reconnect connection is no longer active")
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return nil, fmt.Errorf("commit catalogue approval: %w", err)
+	}
+	return jtis, nil
+}
+
+func (s *Service) finishCodeReconnectApproval(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, jtis []string) error {
+	ctx := r.Context()
+	b := state.CodeReconnect
 	for _, jti := range jtis {
 		if err := s.sessionPolicyCache.DeleteByKey(ctx, sessionPolicyCacheKey(endpoint.UserSessionIssuerID.String(), jti)); err != nil {
 			return fmt.Errorf("invalidate session policy: %w", err)

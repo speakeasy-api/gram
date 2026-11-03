@@ -110,7 +110,7 @@ func TestConsentPagePreview(t *testing.T) {
 	}{
 		{"no-services", base},
 		{"tool-definition-diff", func() consentTemplateData {
-			d := base
+			d := withIsland(base)
 			d.ClientName = "Coding assistant"
 			d.MCPSlug = "team-tools"
 			before := &connectionCatalog{Tools: []*toolListEntry{
