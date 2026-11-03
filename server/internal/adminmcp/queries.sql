@@ -365,3 +365,7 @@ WHERE id = @id;
 UPDATE organization_metadata
 SET name = @name
 WHERE id = @id;
+
+-- name: RestorePublicCatalogIconAssetFixture :exec
+-- Test-only: returns an asset to the public catalog icon shape.
+UPDATE assets SET content_type = 'image/svg+xml', project_id = NULL, organization_id = NULL, deleted_at = NULL WHERE id = @id;

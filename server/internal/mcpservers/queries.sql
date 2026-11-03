@@ -945,3 +945,28 @@ WHERE auth_client_id = @auth_client_id AND organization_id = @organization_id AN
 -- name: SetEMABindingGatewayIssuerFixture :exec
 UPDATE remote_session_ema_bindings SET user_session_issuer_id = @user_session_issuer_id
 WHERE remote_session_client_id = @remote_session_client_id AND project_id = @project_id;
+
+-- name: UpdateMCPServerNetworkAccessMode :execrows
+UPDATE mcp_servers
+SET network_access_mode = @network_access_mode,
+    updated_at = clock_timestamp()
+WHERE mcp_servers.id = @id
+  AND mcp_servers.project_id = @project_id
+  AND mcp_servers.deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = mcp_servers.project_id AND p.deleted IS FALSE);
+
+-- name: LockLiveRemoteMCPSource :one
+SELECT TRUE
+FROM remote_mcp_servers
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: LockLiveTunneledMCPSource :one
+SELECT TRUE
+FROM tunneled_mcp_servers
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR UPDATE;

@@ -1815,6 +1815,95 @@ VALUES (@id, sqlc.narg('organization_id')::text, @slug, @issuer, sqlc.narg('auth
 INSERT INTO remote_session_clients (id, organization_id, remote_session_issuer_id, client_id, scope, token_endpoint_auth_method)
 VALUES (@id, @organization_id::text, @remote_session_issuer_id, @client_id, @scope::text[], 'client_secret_basic');
 
+-- name: SeedDelegationUserSessionIssuerFixture :exec
+-- Trust the delegation client from an organization-scoped user session issuer.
+INSERT INTO user_session_issuers (organization_id, slug, authn_challenge_mode, session_duration, trusted_remote_session_issuer_id, trusted_remote_session_client_id)
+VALUES (@organization_id, @slug, 'interactive', interval '1 hour', @trusted_remote_session_issuer_id, @trusted_remote_session_client_id);
+
+-- name: RestoreDelegationUserIssuersFixture :exec
+UPDATE user_session_issuers SET deleted_at = NULL
+WHERE organization_id = @organization_id::text;
+
+-- name: ExpireDelegationAssertionFixture :exec
+-- The delegation fixtures below force lifecycle and expiry state that
+-- production writes cannot produce.
+UPDATE trusted_issuer_sessions SET identity_assertion_expires_at = clock_timestamp() - interval '1 hour' WHERE id = @id;
+
+-- name: ClearDelegationGenerationFixture :exec
+UPDATE trusted_issuer_sessions SET credential_generation = NULL WHERE id = @id;
+
+-- name: BackdateDelegationRefreshAttemptFixture :exec
+UPDATE trusted_issuer_sessions SET last_refresh_attempt_at = clock_timestamp() - interval '2 days' WHERE id = @id;
+
+-- name: ExpireDelegationCredentialFixture :exec
+UPDATE trusted_issuer_sessions
+SET identity_assertion_expires_at = clock_timestamp() - interval '1 hour',
+    refresh_expires_at = clock_timestamp() - interval '1 hour'
+WHERE id = @id;
+
+-- name: MarkDelegationObservedFixture :exec
+UPDATE trusted_issuer_sessions
+SET observation_status = 'durable_credential_present',
+    observed_at = clock_timestamp(),
+    credential_obtained_at = clock_timestamp() - interval '1 day',
+    last_refresh_succeeded_at = clock_timestamp() - interval '1 hour'
+WHERE id = @id;
+
+-- name: ExpireDelegationRefreshFixture :exec
+UPDATE trusted_issuer_sessions
+SET refresh_token_encrypted = NULL,
+    refresh_expires_at = clock_timestamp() - interval '1 day',
+    identity_assertion_expires_at = NULL
+WHERE id = @id;
+
+-- name: SetStaleDelegationRefreshExpiryFixture :exec
+UPDATE trusted_issuer_sessions
+SET identity_assertion_encrypted = 'valid-assertion',
+    identity_assertion_expires_at = clock_timestamp() + interval '1 day',
+    upstream_subject_encrypted = 'subject',
+    refresh_expires_at = clock_timestamp() - interval '1 day'
+WHERE id = @id;
+
+-- name: SetDelegationProjectFixture :exec
+UPDATE trusted_issuer_sessions SET project_id = @project_id WHERE id = @id;
+
+-- name: GetDelegationAssertionOrSubjectPresentFixture :one
+-- Reads private credential columns that no production query exposes.
+SELECT (identity_assertion_encrypted IS NOT NULL OR upstream_subject_encrypted IS NOT NULL)::boolean AS present
+FROM trusted_issuer_sessions WHERE id = @id;
+
+-- name: GetDelegationSecretsPresentFixture :one
+SELECT (identity_assertion_encrypted IS NOT NULL OR refresh_token_encrypted IS NOT NULL OR upstream_subject_encrypted IS NOT NULL OR nonce_encrypted IS NOT NULL)::boolean AS present
+FROM trusted_issuer_sessions WHERE id = @id;
+
+-- name: GetDelegationSecretsAndGenerationFixture :one
+SELECT (identity_assertion_encrypted IS NOT NULL OR refresh_token_encrypted IS NOT NULL OR upstream_subject_encrypted IS NOT NULL OR nonce_encrypted IS NOT NULL)::boolean AS present,
+       credential_generation
+FROM trusted_issuer_sessions WHERE id = @id;
+
+-- name: SeedDelegationLifecycleSessionFixture :exec
+-- Fabricates trusted issuer sessions in lifecycle states production writes
+-- cannot produce.
+INSERT INTO trusted_issuer_sessions (id, organization_id, remote_session_client_id, subject_urn, identity_assertion_encrypted, refresh_token_encrypted, upstream_subject_encrypted, nonce_encrypted, deleted_at)
+VALUES (@id, @organization_id, @remote_session_client_id, 'user:cleanup-test', 'assertion', 'refresh', 'subject', 'nonce',
+        CASE WHEN @lifecycle::text = 'deleted' THEN clock_timestamp() ELSE NULL END);
+
+-- name: OrphanDelegationSessionFixture :exec
+UPDATE trusted_issuer_sessions SET remote_session_client_id = NULL, organization_id = NULL WHERE id = @id;
+
+-- name: StripDelegationOrphanSecretsFixture :exec
+UPDATE trusted_issuer_sessions
+SET remote_session_client_id = NULL, identity_assertion_encrypted = NULL, refresh_token_encrypted = NULL,
+    upstream_subject_encrypted = NULL, nonce_encrypted = NULL
+WHERE id = @id;
+
+-- name: StripDelegationLifecycleSecretsFixture :exec
+UPDATE trusted_issuer_sessions
+SET identity_assertion_encrypted = NULL, refresh_token_encrypted = NULL, upstream_subject_encrypted = NULL, nonce_encrypted = NULL,
+    deleted_at = CASE WHEN @lifecycle::text = 'secret-free-deleted' THEN clock_timestamp() ELSE NULL END,
+    organization_id = CASE WHEN @lifecycle::text = 'secret-free-org-orphan' THEN NULL ELSE organization_id END
+WHERE id = @id;
+
 -- name: CountPreparationFixtureBindingByID :one
 SELECT count(*) FROM remote_session_ema_bindings WHERE id = @id AND project_id = @project_id;
 
@@ -2421,3 +2510,62 @@ UPDATE api_keys
 SET created_by_user_id = @created_by_user_id
 WHERE id = @id
   AND organization_id = @organization_id;
+
+-- name: ExpireAPIKeyAtStatementFixture :exec
+-- Test-only fixture: expires a key one second before the statement started.
+UPDATE api_keys SET expires_at = statement_timestamp() - INTERVAL '1 second' WHERE id = @id AND organization_id = @organization_id;
+
+-- name: ReorderInferenceTranscriptFixture :exec
+-- Test-only fixture: assigns tied timestamps and ids in reverse transcript
+-- order, which no writer produces.
+UPDATE chat_messages SET created_at = '2026-01-01', id = CASE content WHEN 'EXAMPLE prompt' THEN 'ffffffff-ffff-ffff-ffff-ffffffffffff'::uuid WHEN 'reply' THEN 'eeeeeeee-eeee-eeee-eeee-eeeeeeeeeeee'::uuid ELSE 'dddddddd-dddd-dddd-dddd-dddddddddddd'::uuid END WHERE chat_id = @chat_id AND project_id = @project_id;
+
+-- name: CountPrincipalGrantsFixture :one
+SELECT count(*) FROM principal_grants WHERE organization_id = @organization_id AND principal_urn = @principal_urn;
+
+-- name: CountAgentCreationRowsFixture :one
+-- Test-only fixture: every row an agent creation writes, for rollback checks.
+SELECT
+  (SELECT count(*) FROM agents a WHERE a.organization_id = @organization_id::text) AS agents,
+  (SELECT count(*) FROM principal_grants g WHERE g.organization_id = @organization_id::text AND g.principal_urn LIKE 'agent:%') AS grants,
+  (SELECT count(*) FROM audit_logs l WHERE l.organization_id = @organization_id::text) AS audits;
+
+-- name: SetUserSessionIssuerTenancyFixture :exec
+-- Test-only fixture: legacy nullable issuer tenancy.
+UPDATE user_session_issuers SET project_id = @project_id, organization_id = @organization_id WHERE id = @id;
+
+-- name: SetUserSessionTenancyFixture :exec
+-- Test-only fixture: legacy nullable session tenancy.
+UPDATE user_sessions SET project_id = @project_id, organization_id = @organization_id WHERE id = @id;
+
+-- name: SetRemoteSessionClientProjectFixture :exec
+-- Test-only fixture: moves the client behind a remote session to another project.
+UPDATE remote_session_clients SET project_id = @project_id WHERE remote_session_clients.id = (SELECT rs.remote_session_client_id FROM remote_sessions rs WHERE rs.id = @remote_session_id::uuid);
+
+-- name: GetUserSessionDeletedFixture :one
+SELECT deleted FROM user_sessions WHERE id = @id;
+
+-- name: GetRemoteSessionDeletedFixture :one
+SELECT deleted FROM remote_sessions WHERE id = @id;
+
+-- name: InsertOlderRemoteSessionTombstoneFixture :exec
+-- Test-only fixture: an unrelated tombstone one second older than the source row.
+INSERT INTO remote_sessions (subject_urn, user_session_issuer_id, remote_session_client_id, access_token_encrypted, deleted_at)
+SELECT src.subject_urn, src.user_session_issuer_id, src.remote_session_client_id, 'unrelated-old-access', src.deleted_at - interval '1 second'
+FROM remote_sessions src WHERE src.id = @id::uuid;
+
+-- name: RemoteSessionSharesUserSessionBoundaryFixture :one
+SELECT (r.deleted_at = s.deleted_at)::boolean AS same_boundary
+FROM remote_sessions r JOIN user_sessions s ON s.id = @user_session_id
+WHERE r.id = @remote_session_id;
+
+-- name: RemoteSessionHasLiveCredentialsFixture :one
+SELECT (NOT deleted AND access_token_encrypted = @access_token_encrypted::text AND refresh_token_encrypted = @refresh_token_encrypted::text AND upstream_subject = @upstream_subject::text)::boolean AS preserved
+FROM remote_sessions WHERE id = @id;
+
+-- name: DeletedRemoteSessionIdentityClearedFixture :one
+SELECT (upstream_subject IS NULL AND upstream_email IS NULL AND upstream_display_name IS NULL AND identity_source IS NULL AND enrichment IS NULL)::boolean AS identity_cleared
+FROM remote_sessions WHERE id = @id AND deleted;
+
+-- name: GetDeletedRemoteSessionCredentialsFixture :one
+SELECT subject_urn, access_token_encrypted, refresh_token_encrypted FROM remote_sessions WHERE id = @id AND deleted;

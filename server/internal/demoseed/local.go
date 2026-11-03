@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
@@ -140,43 +141,97 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 
 	// Resolve the developer's user row before anything references it: a login
 	// that happened before this seed owns an id we cannot predict.
-	var workosID string
-	if err := tx.QueryRow(ctx, localUpsertDeveloperSQL, dev.ID, dev.Email, dev.Name, dev.WorkOSID).
-		Scan(&dev.ID, &workosID); err != nil {
+	q := repo.New(tx)
+	upserted, err := q.LocalUpsertDeveloper(ctx, repo.LocalUpsertDeveloperParams{ID: dev.ID, Email: dev.Email, DisplayName: dev.Name, WorkosID: dev.WorkOSID})
+	if err != nil {
 		return fmt.Errorf("local fixture %q: %w", "upsert developer", err)
 	}
+	// The upsert always writes workos_id from the dev-idp subject, so it is
+	// never NULL here.
+	dev.ID = upserted.ID
+	workosID := upserted.WorkosID.String
 	logger.InfoContext(ctx, "adopting developer into the local org", attr.SlogUserID(dev.ID))
 
+	projectID := uuid.MustParse(spec.ProjectID())
+	deploymentID := uuid.MustParse(spec.DeploymentID())
+	assetID := uuid.MustParse(localMCPAppAssetID())
 	for _, step := range []struct {
 		name string
-		sql  string
-		args []any
+		run  func() error
 	}{
-		{"link org to the dev-idp", localLinkWorkOSOrgSQL, []any{spec.OrgID, spec.WorkOSOrgID}},
-		{"adopt developer", localAdoptDeveloperSQL, []any{spec.OrgID, dev.ID, workosID}},
-		{"grant session visibility", localSessionVisibilitySQL, []any{spec.OrgID, dev.ID}},
-		{"grant tool log visibility", localToolLogVisibilitySQL, []any{spec.OrgID, dev.ID}},
-		{"enable platform mcp", localPlatformMCPFeatureSQL, []any{spec.OrgID}},
-		{"enable sso and directory sync", localIdentityFeaturesSQL, []any{spec.OrgID}},
-		{"approve tool calls", localToolApproverSQL, []any{spec.OrgID, spec.FixedUUID(approvalPolicyFixedID), "user:" + dev.ID}},
-		{"verify developer email domain", localVerifiedDomainSQL, []any{spec.OrgID, emailDomain(dev.Email)}},
-		{"api key", localAPIKeySQL, []any{spec.OrgID, spec.ProjectID(), dev.ID, localAPIKeyID(), LocalAPIKeyName, apiKeyHash, apiKey[:len(auth.APIKeyPrefix(env))+5]}},
-		{"api key policy", localAPIKeyPolicySQL, []any{spec.OrgID, localAPIKeyID(), spec.ProjectID()}},
-		{"default environment", localEnvironmentSQL, []any{spec.OrgID, spec.ProjectID(), localEnvironmentID()}},
-		{"mcp registry", localMCPRegistrySQL, nil},
-		{"enable code mode", localCodeModeFeatureSQL, []any{spec.OrgID}},
-		{"code mode gateway", localCodeModeGatewaySQL, []any{spec.OrgID, spec.ProjectID()}},
-		{"mcp app asset", localMCPAppAssetSQL, []any{
-			localMCPAppAssetID(), spec.ProjectID(), spec.OrgID, app.url, app.size, app.sha256,
+		{"link org to the dev-idp", func() error {
+			return q.LocalLinkWorkOSOrg(ctx, repo.LocalLinkWorkOSOrgParams{OrganizationID: spec.OrgID, WorkosOrgID: spec.WorkOSOrgID})
 		}},
-		{"mcp app function", localMCPAppSQL, []any{
-			spec.ProjectID(), spec.DeploymentID(), localMCPAppFunctionID(), localMCPAppAssetID(),
-			MCPAppFunctionSlug, MCPAppRuntime, mcpAppToolURN(), MCPAppToolName,
-			mcpAppToolDescription, mcpAppInputSchema, MCPAppResourceURI, mcpAppResourceURN(),
+		{"adopt developer", func() error {
+			return q.LocalAdoptDeveloper(ctx, repo.LocalAdoptDeveloperParams{OrganizationID: spec.OrgID, UserID: dev.ID, WorkosUserID: workosID})
 		}},
-		{"mcp app toolset entry", localMCPAppToolsetSQL, []any{spec.OrgID, mcpAppToolURN(), mcpAppResourceURN(), MCPAppToolsetSlug}},
+		{"grant session visibility", func() error {
+			return q.LocalGrantSessionVisibility(ctx, repo.LocalGrantSessionVisibilityParams{OrganizationID: spec.OrgID, UserID: dev.ID})
+		}},
+		{"grant tool log visibility", func() error {
+			return q.LocalGrantToolLogVisibility(ctx, repo.LocalGrantToolLogVisibilityParams{OrganizationID: spec.OrgID, UserID: dev.ID})
+		}},
+		{"enable platform mcp", func() error { return q.LocalEnablePlatformMCPFeature(ctx, spec.OrgID) }},
+		{"enable sso and directory sync", func() error { return q.LocalEnableIdentityFeatures(ctx, spec.OrgID) }},
+		{"approve tool calls", func() error {
+			return q.LocalAddToolApprover(ctx, repo.LocalAddToolApproverParams{OrganizationID: spec.OrgID, PolicyID: uuid.MustParse(spec.FixedUUID(approvalPolicyFixedID)), Approver: "user:" + dev.ID})
+		}},
+		{"verify developer email domain", func() error {
+			return q.LocalVerifyEmailDomain(ctx, repo.LocalVerifyEmailDomainParams{OrganizationID: spec.OrgID, Domain: emailDomain(dev.Email)})
+		}},
+		{"api key", func() error {
+			return q.LocalUpsertAPIKey(ctx, repo.LocalUpsertAPIKeyParams{
+				ID:              uuid.MustParse(localAPIKeyID()),
+				OrganizationID:  spec.OrgID,
+				ProjectID:       projectID,
+				CreatedByUserID: dev.ID,
+				Name:            LocalAPIKeyName,
+				KeyPrefix:       apiKey[:len(auth.APIKeyPrefix(env))+5],
+				KeyHash:         apiKeyHash,
+			})
+		}},
+		{"api key policy", func() error {
+			return q.LocalGrantAPIKeyPolicy(ctx, repo.LocalGrantAPIKeyPolicyParams{OrganizationID: spec.OrgID, ApiKeyID: localAPIKeyID(), ProjectID: spec.ProjectID()})
+		}},
+		{"default environment", func() error {
+			return q.LocalUpsertEnvironment(ctx, repo.LocalUpsertEnvironmentParams{ID: uuid.MustParse(localEnvironmentID()), OrganizationID: spec.OrgID, ProjectID: projectID})
+		}},
+		{"mcp registry", func() error { return q.LocalEnsureMCPRegistry(ctx) }},
+		{"enable code mode", func() error { return q.LocalEnableCodeModeFeature(ctx, spec.OrgID) }},
+		{"code mode gateway", func() error {
+			return q.LocalSetCodeModeGateway(ctx, repo.LocalSetCodeModeGatewayParams{OrganizationID: spec.OrgID, ProjectID: projectID})
+		}},
+		{"mcp app asset", func() error {
+			return q.LocalUpsertMCPAppAsset(ctx, repo.LocalUpsertMCPAppAssetParams{
+				ID:             assetID,
+				ProjectID:      projectID,
+				OrganizationID: spec.OrgID,
+				Url:            app.url,
+				ContentLength:  int64(app.size),
+				Sha256:         app.sha256,
+			})
+		}},
+		{"mcp app function", func() error {
+			return q.LocalUpsertMCPApp(ctx, repo.LocalUpsertMCPAppParams{
+				ProjectID:       projectID,
+				DeploymentID:    deploymentID,
+				FunctionID:      uuid.MustParse(localMCPAppFunctionID()),
+				AssetID:         assetID,
+				FunctionSlug:    MCPAppFunctionSlug,
+				Runtime:         MCPAppRuntime,
+				ToolUrn:         mcpAppToolURN(),
+				ToolName:        MCPAppToolName,
+				ToolDescription: mcpAppToolDescription,
+				InputSchema:     []byte(mcpAppInputSchema),
+				ResourceUri:     MCPAppResourceURI,
+				ResourceUrn:     mcpAppResourceURN(),
+			})
+		}},
+		{"mcp app toolset entry", func() error {
+			return q.LocalAttachMCPAppToToolset(ctx, repo.LocalAttachMCPAppToToolsetParams{OrganizationID: spec.OrgID, ToolUrn: mcpAppToolURN(), ResourceUrn: mcpAppResourceURN(), ToolsetSlug: MCPAppToolsetSlug})
+		}},
 	} {
-		if _, err := tx.Exec(ctx, step.sql, step.args...); err != nil {
+		if err := step.run(); err != nil {
 			return fmt.Errorf("local fixture %q: %w", step.name, err)
 		}
 	}
@@ -233,7 +288,7 @@ func StaleOverrideVars() []string {
 type developer struct {
 	// ID is the id a user row would get if none exists yet. An earlier login
 	// may already have created one under a different id, in which case
-	// localUpsertDeveloperSQL returns that one instead.
+	// LocalUpsertDeveloper returns that one instead.
 	ID string
 	// WorkOSID is the subject the dev-idp presents for this developer.
 	WorkOSID string
@@ -301,178 +356,6 @@ func bustLocalCaches(ctx context.Context, logger *slog.Logger, cache *redis.Clie
 		logger.WarnContext(ctx, "could not clear the local feature cache; restart the server if entitlements look stale", attr.SlogError(err))
 	}
 }
-
-// Stamp the WorkOS link the auth callback would otherwise add on first login.
-// Setting it up front means org lookups by workos_id resolve before anyone has
-// logged in, and the callback finds an already-linked row to update rather
-// than a bare one. It is local-only because the shared demo org has no WorkOS
-// counterpart at all.
-const localLinkWorkOSOrgSQL = `
-UPDATE organization_metadata
-SET workos_id = $2, updated_at = clock_timestamp()
-WHERE id = $1 AND workos_id IS DISTINCT FROM $2
-`
-
-// You, as a real member.
-//
-// Keyed on email, not id: a developer who logged in before seeding already has
-// a row whose id the auth callback derived from the dev-idp subject
-// (users.UserIDFromWorkOSID), which is not the id derived here from the email.
-// ON CONFLICT (id) would miss that row and collide on users_email_key instead,
-// so the statement returns the id that actually exists and the rest of the
-// fixtures use it. Login-first and seed-first therefore converge on one row:
-// the auth callback resolves an existing user by email too (see
-// identity.resolveGramUserID).
-//
-// users.workos_id is the subject the dev-idp will present at login. It has to
-// be the WorkOS-shaped form, not a bare UUID — a mismatch there is invisible
-// until login mints a second user.
-const localUpsertDeveloperSQL = `
-INSERT INTO users (id, email, display_name, workos_id, admin)
-VALUES ($1, $2, $3, $4, TRUE)
-ON CONFLICT (email) DO UPDATE
-  SET display_name = EXCLUDED.display_name,
-      workos_id = EXCLUDED.workos_id,
-      admin = TRUE, deleted_at = NULL, updated_at = clock_timestamp()
-RETURNING id, workos_id
-`
-
-// Your membership and Admin role assignment, against the user id
-// localUpsertDeveloperSQL resolved.
-const localAdoptDeveloperSQL = `
-WITH membership AS (
-  INSERT INTO organization_user_relationships
-    (organization_id, user_id, workos_user_id, workos_membership_id)
-  VALUES ($1, $2, $3, 'devidp_mem_' || $2)
-  ON CONFLICT (organization_id, user_id) WHERE deleted IS FALSE
-  DO UPDATE SET
-    workos_user_id = EXCLUDED.workos_user_id,
-    workos_membership_id = EXCLUDED.workos_membership_id,
-    deleted_at = NULL, updated_at = clock_timestamp()
-  RETURNING user_id, workos_user_id, workos_membership_id
-),
-admin_role AS (
-  SELECT id FROM global_roles
-  WHERE workos_slug = 'admin' AND deleted IS FALSE AND workos_deleted IS FALSE
-  LIMIT 1
-)
-INSERT INTO organization_role_assignments
-  (organization_id, workos_user_id, user_id, role_urn, workos_membership_id, workos_updated_at)
-SELECT $1, membership.workos_user_id, membership.user_id,
-       'role:global:' || admin_role.id::text, membership.workos_membership_id, clock_timestamp()
-FROM membership CROSS JOIN admin_role
-ON CONFLICT (organization_id, workos_user_id, role_urn) WHERE deleted_at IS NULL
-DO UPDATE SET deleted_at = NULL, updated_at = clock_timestamp()
-`
-
-// chat:read is deliberately absent from the Admin system role, so the seeded
-// chats (owned by the fictional teammates) would otherwise be invisible:
-// without it chatVisibilityScope falls back to own-sessions-only.
-const localSessionVisibilitySQL = `
-INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
-VALUES ($1, 'user:' || $2, 'chat:read',
-        jsonb_build_object('resource_kind', 'chat', 'resource_id', '*'))
-ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING
-`
-
-// log:read is likewise held by no system role, so without it the Tool Logs page
-// and the session Tool calls view would be closed to the local admin.
-const localToolLogVisibilitySQL = `
-INSERT INTO principal_grants (organization_id, principal_urn, scope, effect, selectors)
-VALUES ($1, 'user:' || $2, 'log:read', NULL,
-        jsonb_build_object('resource_kind', 'project', 'resource_id', '*'))
-ON CONFLICT (organization_id, principal_urn, scope, COALESCE(effect, 'allow'), selectors) DO NOTHING
-`
-
-// platform_mcp is the default-on organization entitlement locally; the shared
-// demo org deliberately does not enable it (its Plugins pages stay empty).
-const localPlatformMCPFeatureSQL = `
-INSERT INTO organization_features (organization_id, feature_name)
-VALUES ($1, 'platform_mcp')
-ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
-`
-
-// Code Mode is a staff-managed entitlement; enabled locally so the seeded Code
-// Mode gateway runs against the local runtime. The shared demo org never gets
-// it: once a deployment runs the code runtime, Code Mode spends runner
-// capacity on whoever explores the demo.
-const localCodeModeFeatureSQL = `
-INSERT INTO organization_features (organization_id, feature_name)
-VALUES ($1, 'code_mode')
-ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
-`
-
-// The developer approves the seeded tool approval policy too, so the Tool
-// approvals tab offers Approve once and Deny locally. The shared demo org keeps
-// its demo approvers only.
-const localToolApproverSQL = `
-UPDATE risk_policies
-SET approval_config = jsonb_set(approval_config, '{approvers}', (approval_config -> 'approvers') || to_jsonb($3::text))
-WHERE organization_id = $1 AND id = $2::uuid AND NOT (approval_config -> 'approvers') ? $3::text
-`
-
-// SSO and directory sync (scim) are paid entitlements that gate the WorkOS
-// admin portal; enabled locally so the identity setup flow works end to end.
-const localIdentityFeaturesSQL = `
-INSERT INTO organization_features (organization_id, feature_name)
-VALUES ($1, 'sso'), ($1, 'scim')
-ON CONFLICT (organization_id, feature_name) WHERE deleted IS FALSE DO NOTHING
-`
-
-// The developer's email domain is verified locally so a dev-idp SSO sign-in
-// passes the SSO identity check end to end.
-const localVerifiedDomainSQL = `
-UPDATE organization_metadata
-SET verified_domains = array_append(COALESCE(verified_domains, '{}'), $2::text)
-WHERE id = $1
-  AND $2::text <> ''
-  AND NOT EXISTS (
-      SELECT 1 FROM unnest(COALESCE(verified_domains, '{}')) AS d WHERE lower(d) = lower($2::text)
-  )
-`
-
-// A key with a well-known hash. The plaintext is never stored, so the row is
-// upserted by id and the value lives in mise.toml.
-const localAPIKeySQL = `
-INSERT INTO api_keys (id, organization_id, project_id, created_by_user_id, name, key_prefix, key_hash, scopes)
-VALUES ($4, $1, $2, $3, $5, $7, $6, ARRAY['producer', 'chat'])
-ON CONFLICT (id) DO UPDATE
-  SET organization_id = EXCLUDED.organization_id, project_id = EXCLUDED.project_id,
-      created_by_user_id = EXCLUDED.created_by_user_id, name = EXCLUDED.name,
-      key_prefix = EXCLUDED.key_prefix, key_hash = EXCLUDED.key_hash,
-      scopes = EXCLUDED.scopes, deleted_at = NULL, updated_at = clock_timestamp()
-`
-
-// localAPIKeyPolicySQL gives the fixed key what its scopes reach today, so the
-// mandatory server check allows it.
-const localAPIKeyPolicySQL = `
-INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
-VALUES ($1, 'api_key:' || $2::text, 'mcp:connect',
-        jsonb_build_object('resource_kind', 'mcp', 'resource_id', '*', 'project_id', $3::text))
-ON CONFLICT DO NOTHING
-`
-
-const localEnvironmentSQL = `
-INSERT INTO environments (id, organization_id, project_id, name, slug)
-VALUES ($3, $1, $2, 'Default', 'default')
-ON CONFLICT (project_id, slug) WHERE deleted IS FALSE
-DO UPDATE SET name = EXCLUDED.name, updated_at = clock_timestamp()
-`
-
-// The shared seed stores this gateway as Progressive because the demo org has
-// no code runtime; local stacks can run one, so the gateway shows Code Mode.
-const localCodeModeGatewaySQL = `
-UPDATE meta_mcp_servers SET discovery_mode = 'code_mode', updated_at = clock_timestamp()
-WHERE organization_id = $1 AND project_id = $2 AND name = 'Python Code Gateway' AND deleted IS FALSE
-`
-
-// The default registry backing the Catalog page. Global, not tenant-scoped,
-// which is precisely why it cannot live in the tenant seed.
-const localMCPRegistrySQL = `
-INSERT INTO mcp_registries (name, url)
-VALUES ('Speakeasy Recommended', 'https://api.pulsemcp.com')
-ON CONFLICT (url) WHERE deleted IS FALSE DO NOTHING
-`
 
 func emailDomain(email string) string {
 	at := strings.LastIndexByte(email, '@')
