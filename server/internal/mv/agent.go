@@ -153,6 +153,21 @@ func DeliveredAgentPluginRows(rows []repo.GetAgentPluginSetRow) []repo.GetAgentP
 
 // walkAgentPluginRows visits each row with a published marketplace. Same-named
 // rows collapse to the first, since a collapsed project's marketplace isn't served.
+// ObservabilityPluginRow returns the row whose observability plugin
+// BuildAgentPluginsView delivers first: the first row to claim its marketplace
+// name, among published rows, that has not disabled observability. Nil when the
+// view would deliver none. Callers that hand out the same plugin through
+// another channel use this so they never serve one devices don't receive.
+func ObservabilityPluginRow(rows []repo.GetAgentPluginSetRow) *repo.GetAgentPluginSetRow {
+	var found *repo.GetAgentPluginSetRow
+	walkAgentPluginRows(rows, func(row repo.GetAgentPluginSetRow, _ string, firstForName, _ bool) {
+		if found == nil && firstForName && row.ObservabilityEnabled {
+			found = &row
+		}
+	})
+	return found
+}
+
 func walkAgentPluginRows(rows []repo.GetAgentPluginSetRow, visit func(row repo.GetAgentPluginSetRow, name string, firstForName, delivered bool)) {
 	// marketplace name -> the project that owns it (the first/lowest-pr.id
 	// row to claim that name).

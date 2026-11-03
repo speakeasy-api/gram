@@ -355,3 +355,42 @@ func TestBuildAgentPluginsView_ETagTracksServers(t *testing.T) {
 	require.NotEqual(t, unlinked, with(&gen.AgentPluginServer{ID: new("srv-1"), Name: "Linear", DashboardURL: nil}),
 		"gaining a server id changes the ETag, so cached agents pick it up")
 }
+
+// ObservabilityPluginRow must pick the same row BuildAgentPluginsView delivers
+// observability for, or the Claude upload would hand out a plugin devices
+// never receive (DNO-1461).
+func TestObservabilityPluginRow_MirrorsViewCollapse(t *testing.T) {
+	t.Parallel()
+
+	now := time.Date(2026, 5, 29, 12, 0, 0, 0, time.UTC)
+
+	t.Run("same-named later row does not stand in for a disabled owner", func(t *testing.T) {
+		t.Parallel()
+		owner := marketplaceRow("acme", "Acme Corp", "default", true, "tokA", now)
+		owner.ObservabilityEnabled = false
+		rows := []repo.GetAgentPluginSetRow{owner, marketplaceRow("acme", "Acme Corp", "other", true, "tokB", now)}
+
+		require.Nil(t, mv.ObservabilityPluginRow(rows))
+		for _, p := range mv.BuildAgentPluginsView(rows, testMarketplaceURL, nil).Plugins {
+			require.NotEqual(t, "acme-corp-observability", p.Slug, "view agrees: no observability plugin")
+		}
+	})
+
+	t.Run("distinct-named later row is used", func(t *testing.T) {
+		t.Parallel()
+		first := marketplaceRow("acme", "Acme Corp", "default", true, "tokA", now)
+		first.ObservabilityEnabled = false
+		second := marketplaceRow("acme", "Acme Corp", "platform", false, "tokB", now)
+		rows := []repo.GetAgentPluginSetRow{first, second}
+
+		got := mv.ObservabilityPluginRow(rows)
+		require.NotNil(t, got)
+		require.Equal(t, second.ProjectID, got.ProjectID)
+	})
+
+	t.Run("unpublished rows are skipped", func(t *testing.T) {
+		t.Parallel()
+		unpublished := marketplaceRow("acme", "Acme Corp", "default", true, "", now)
+		require.Nil(t, mv.ObservabilityPluginRow([]repo.GetAgentPluginSetRow{unpublished}))
+	})
+}

@@ -10,6 +10,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
+	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
@@ -49,7 +50,7 @@ func (s *Service) GetClaudeObservabilityPlugin(ctx context.Context, payload *gen
 	if err != nil {
 		return nil, nil, oops.E(oops.CodeUnexpected, err, "error listing agent plugins").LogError(ctx, s.logger)
 	}
-	row := observabilityProject(rows)
+	row := mv.ObservabilityPluginRow(rows)
 	if row == nil || s.claudePlugins == nil {
 		return nil, nil, oops.E(oops.CodeNotFound, nil, "this organization has no observability plugin")
 	}
@@ -62,17 +63,4 @@ func (s *Service) GetClaudeObservabilityPlugin(ctx context.Context, payload *gen
 		ContentType:        "application/zip",
 		ContentDisposition: fmt.Sprintf(`attachment; filename="%s-observability-claude.zip"`, row.OrganizationSlug),
 	}, io.NopCloser(bytes.NewReader(archive)), nil
-}
-
-// observabilityProject picks the project whose observability plugin the
-// device is delivered: the first published one (a non-empty marketplace token,
-// as the agent plugin view requires) that has not disabled it. Rows
-// arrive default project first.
-func observabilityProject(rows []repo.GetAgentPluginSetRow) *repo.GetAgentPluginSetRow {
-	for i := range rows {
-		if rows[i].MarketplaceToken.Valid && rows[i].MarketplaceToken.String != "" && rows[i].ObservabilityEnabled {
-			return &rows[i]
-		}
-	}
-	return nil
 }
