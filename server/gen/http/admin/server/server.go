@@ -83,7 +83,6 @@ type Server struct {
 	DescribeMcpServerHealth                 http.Handler
 	GetMcpServerToolCalls                   http.Handler
 	GetHookClients                          http.Handler
-	ListCustomDomains                       http.Handler
 	ListExternalMcpMigrationCandidates      http.Handler
 	PreviewExternalMcpMigration             http.Handler
 	MigrateExternalMcpServers               http.Handler
@@ -126,6 +125,7 @@ type Server struct {
 	EnableUpstreamAuthEnforcement           http.Handler
 	DisableUpstreamAuthEnforcement          http.Handler
 	BackfillMcpAuthGrants                   http.Handler
+	ListCustomDomains                       http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -217,7 +217,6 @@ func New(
 			{"DescribeMcpServerHealth", "GET", "/admin/project.mcpServerHealth"},
 			{"GetMcpServerToolCalls", "GET", "/admin/project.mcpServerToolCalls"},
 			{"GetHookClients", "GET", "/admin/hookClients.get"},
-			{"ListCustomDomains", "GET", "/admin/customDomains.list"},
 			{"ListExternalMcpMigrationCandidates", "GET", "/admin/externalMcpMigration.listCandidates"},
 			{"PreviewExternalMcpMigration", "POST", "/admin/externalMcpMigration.preview"},
 			{"MigrateExternalMcpServers", "POST", "/admin/externalMcpMigration.migrate"},
@@ -260,6 +259,7 @@ func New(
 			{"EnableUpstreamAuthEnforcement", "POST", "/admin/upstreamOAuthMigration.enableEnforcement"},
 			{"DisableUpstreamAuthEnforcement", "POST", "/admin/upstreamOAuthMigration.disableEnforcement"},
 			{"BackfillMcpAuthGrants", "POST", "/admin/mcpAuthGrants.backfill"},
+			{"ListCustomDomains", "GET", "/admin/customDomains.list"},
 		},
 		Login:                                   NewLoginHandler(e.Login, mux, decoder, encoder, errhandler, formatter),
 		Callback:                                NewCallbackHandler(e.Callback, mux, decoder, encoder, errhandler, formatter),
@@ -323,7 +323,6 @@ func New(
 		DescribeMcpServerHealth:                 NewDescribeMcpServerHealthHandler(e.DescribeMcpServerHealth, mux, decoder, encoder, errhandler, formatter),
 		GetMcpServerToolCalls:                   NewGetMcpServerToolCallsHandler(e.GetMcpServerToolCalls, mux, decoder, encoder, errhandler, formatter),
 		GetHookClients:                          NewGetHookClientsHandler(e.GetHookClients, mux, decoder, encoder, errhandler, formatter),
-		ListCustomDomains:                       NewListCustomDomainsHandler(e.ListCustomDomains, mux, decoder, encoder, errhandler, formatter),
 		ListExternalMcpMigrationCandidates:      NewListExternalMcpMigrationCandidatesHandler(e.ListExternalMcpMigrationCandidates, mux, decoder, encoder, errhandler, formatter),
 		PreviewExternalMcpMigration:             NewPreviewExternalMcpMigrationHandler(e.PreviewExternalMcpMigration, mux, decoder, encoder, errhandler, formatter),
 		MigrateExternalMcpServers:               NewMigrateExternalMcpServersHandler(e.MigrateExternalMcpServers, mux, decoder, encoder, errhandler, formatter),
@@ -366,6 +365,7 @@ func New(
 		EnableUpstreamAuthEnforcement:           NewEnableUpstreamAuthEnforcementHandler(e.EnableUpstreamAuthEnforcement, mux, decoder, encoder, errhandler, formatter),
 		DisableUpstreamAuthEnforcement:          NewDisableUpstreamAuthEnforcementHandler(e.DisableUpstreamAuthEnforcement, mux, decoder, encoder, errhandler, formatter),
 		BackfillMcpAuthGrants:                   NewBackfillMcpAuthGrantsHandler(e.BackfillMcpAuthGrants, mux, decoder, encoder, errhandler, formatter),
+		ListCustomDomains:                       NewListCustomDomainsHandler(e.ListCustomDomains, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -436,7 +436,6 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.DescribeMcpServerHealth = m(s.DescribeMcpServerHealth)
 	s.GetMcpServerToolCalls = m(s.GetMcpServerToolCalls)
 	s.GetHookClients = m(s.GetHookClients)
-	s.ListCustomDomains = m(s.ListCustomDomains)
 	s.ListExternalMcpMigrationCandidates = m(s.ListExternalMcpMigrationCandidates)
 	s.PreviewExternalMcpMigration = m(s.PreviewExternalMcpMigration)
 	s.MigrateExternalMcpServers = m(s.MigrateExternalMcpServers)
@@ -479,6 +478,7 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.EnableUpstreamAuthEnforcement = m(s.EnableUpstreamAuthEnforcement)
 	s.DisableUpstreamAuthEnforcement = m(s.DisableUpstreamAuthEnforcement)
 	s.BackfillMcpAuthGrants = m(s.BackfillMcpAuthGrants)
+	s.ListCustomDomains = m(s.ListCustomDomains)
 }
 
 // MethodNames returns the methods served.
@@ -548,7 +548,6 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountDescribeMcpServerHealthHandler(mux, h.DescribeMcpServerHealth)
 	MountGetMcpServerToolCallsHandler(mux, h.GetMcpServerToolCalls)
 	MountGetHookClientsHandler(mux, h.GetHookClients)
-	MountListCustomDomainsHandler(mux, h.ListCustomDomains)
 	MountListExternalMcpMigrationCandidatesHandler(mux, h.ListExternalMcpMigrationCandidates)
 	MountPreviewExternalMcpMigrationHandler(mux, h.PreviewExternalMcpMigration)
 	MountMigrateExternalMcpServersHandler(mux, h.MigrateExternalMcpServers)
@@ -591,6 +590,7 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountEnableUpstreamAuthEnforcementHandler(mux, h.EnableUpstreamAuthEnforcement)
 	MountDisableUpstreamAuthEnforcementHandler(mux, h.DisableUpstreamAuthEnforcement)
 	MountBackfillMcpAuthGrantsHandler(mux, h.BackfillMcpAuthGrants)
+	MountListCustomDomainsHandler(mux, h.ListCustomDomains)
 }
 
 // Mount configures the mux to serve the admin endpoints.
@@ -3940,59 +3940,6 @@ func NewGetHookClientsHandler(
 	})
 }
 
-// MountListCustomDomainsHandler configures the mux to serve the "admin"
-// service "listCustomDomains" endpoint.
-func MountListCustomDomainsHandler(mux goahttp.Muxer, h http.Handler) {
-	f, ok := h.(http.HandlerFunc)
-	if !ok {
-		f = func(w http.ResponseWriter, r *http.Request) {
-			h.ServeHTTP(w, r)
-		}
-	}
-	mux.Handle("GET", "/admin/customDomains.list", f)
-}
-
-// NewListCustomDomainsHandler creates a HTTP handler which loads the HTTP
-// request and calls the "admin" service "listCustomDomains" endpoint.
-func NewListCustomDomainsHandler(
-	endpoint goa.Endpoint,
-	mux goahttp.Muxer,
-	decoder func(*http.Request) goahttp.Decoder,
-	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
-	errhandler func(context.Context, http.ResponseWriter, error),
-	formatter func(ctx context.Context, err error) goahttp.Statuser,
-) http.Handler {
-	var (
-		decodeRequest  = DecodeListCustomDomainsRequest(mux, decoder)
-		encodeResponse = EncodeListCustomDomainsResponse(encoder)
-		encodeError    = EncodeListCustomDomainsError(encoder, formatter)
-	)
-	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
-		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
-		ctx = context.WithValue(ctx, goa.MethodKey, "listCustomDomains")
-		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
-		payload, err := decodeRequest(r)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		res, err := endpoint(ctx, payload)
-		if err != nil {
-			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-			return
-		}
-		if err := encodeResponse(ctx, w, res); err != nil {
-			if errhandler != nil {
-				errhandler(ctx, w, err)
-			}
-		}
-	})
-}
-
 // MountListExternalMcpMigrationCandidatesHandler configures the mux to serve
 // the "admin" service "listExternalMcpMigrationCandidates" endpoint.
 func MountListExternalMcpMigrationCandidatesHandler(mux goahttp.Muxer, h http.Handler) {
@@ -6226,6 +6173,59 @@ func NewBackfillMcpAuthGrantsHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "backfillMcpAuthGrants")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListCustomDomainsHandler configures the mux to serve the "admin"
+// service "listCustomDomains" endpoint.
+func MountListCustomDomainsHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/admin/customDomains.list", f)
+}
+
+// NewListCustomDomainsHandler creates a HTTP handler which loads the HTTP
+// request and calls the "admin" service "listCustomDomains" endpoint.
+func NewListCustomDomainsHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListCustomDomainsRequest(mux, decoder)
+		encodeResponse = EncodeListCustomDomainsResponse(encoder)
+		encodeError    = EncodeListCustomDomainsError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listCustomDomains")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "admin")
 		payload, err := decodeRequest(r)
 		if err != nil {

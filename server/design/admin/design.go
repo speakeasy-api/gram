@@ -1400,7 +1400,6 @@ var _ = Service("admin", func() {
 	supportCoverageMethods()
 	mcpServerHealthMethods()
 	hookClientsMethods()
-	customDomainMethods()
 	externalMcpMigrationMethods()
 	registryDesign()
 	onboardingStackMethods()
@@ -1476,4 +1475,5 @@ var _ = Service("admin", func() {
 
 	upstreamOAuthMigrationMethods()
 	mcpAuthBackfillMethods()
+	customDomainMethods()
 })

@@ -23,6 +23,9 @@ type CustomDomainStatus struct {
 	// Domain is the organization's configured hostname.
 	Domain string `json:"domain,omitempty"`
 
+	// DNSTarget is the designated public CNAME destination, not an ownership credential.
+	DNSTarget string `json:"dns_target,omitempty"`
+
 	// Verified is the ownership verification state.
 	Verified bool `json:"verified"`
 
@@ -45,7 +48,7 @@ type CustomDomainStatus struct {
 	CheckedAt string `json:"checked_at,omitempty"`
 }
 
-func readCustomDomainStatus(ctx context.Context, db *pgxpool.Pool, organizationID string) (CustomDomainStatus, error) {
+func readCustomDomainStatus(ctx context.Context, db *pgxpool.Pool, organizationID, targetSuffix string) (CustomDomainStatus, error) {
 	var output CustomDomainStatus
 	if db == nil || organizationID == "" {
 		return output, ErrUnavailable
@@ -59,6 +62,7 @@ func readCustomDomainStatus(ctx context.Context, db *pgxpool.Pool, organizationI
 	}
 	output.Configured = true
 	output.Domain = domain.Domain
+	output.DNSTarget, _ = customdomains.DNSTarget(targetSuffix, domain.DnsTargetToken)
 	output.Verified = domain.Verified
 	output.Activated = domain.Activated
 	output.DNSConfigurationStatus = domain.DnsConfigurationStatus.String
@@ -75,11 +79,11 @@ func readCustomDomainStatus(ctx context.Context, db *pgxpool.Pool, organizationI
 	return output, nil
 }
 
-func registerCustomDomainStatusTool(reg *Registrar, db *pgxpool.Pool, logger *slog.Logger) {
+func registerCustomDomainStatusTool(reg *Registrar, db *pgxpool.Pool, logger *slog.Logger, targetSuffix string) {
 	tool := new(mcp.Tool)
 	tool.Name = "get_custom_domain_status"
 	tool.Title = "Get Custom Domain Status"
-	tool.Description = "Read the current organization's saved custom domain ownership, activation, advisory DNS configuration, and infrastructure health. Requires organization administrator access. DNS unconfirmed includes proxies and flattened records; neither a DNS match nor healthy infrastructure proves public endpoint availability. Health observations never automatically disable a domain. Check checked_at for freshness. Use the organization's Network Access settings to recheck or change configuration. Returns no verification tokens or credentials."
+	tool.Description = "Read the current organization's saved custom domain ownership, activation, designated CNAME destination, advisory DNS configuration, and infrastructure health. Requires organization administrator access. DNS unconfirmed includes proxies and flattened records; neither a DNS match nor healthy infrastructure proves public endpoint availability. Health observations never automatically disable a domain. Check checked_at for freshness. Use the organization's Network Access settings to recheck or change configuration. dns_target is the public CNAME destination to configure when present. Returns no ownership verification tokens or credentials."
 	tool.Annotations = readOnlyAnnotations()
 	addTool(reg, tool, ToolMeta{Authorization: ExternalAuthorizationOrgAdmin, Audiences: externalOnly, ProjectScope: ProjectScopeNone, DiscoveryScopes: nil}, func(ctx context.Context, _ *mcp.CallToolRequest, _ struct{}) (*mcp.CallToolResult, CustomDomainStatus, error) {
 		var noOutput CustomDomainStatus
@@ -87,7 +91,7 @@ func registerCustomDomainStatusTool(reg *Registrar, db *pgxpool.Pool, logger *sl
 		if err != nil {
 			return nil, noOutput, err
 		}
-		output, err := readCustomDomainStatus(ctx, db, principal.OrganizationID)
+		output, err := readCustomDomainStatus(ctx, db, principal.OrganizationID, targetSuffix)
 		if err != nil {
 			if logger != nil && !errors.Is(err, ErrUnavailable) {
 				logger.ErrorContext(ctx, "read custom domain diagnosis", attr.SlogError(err))

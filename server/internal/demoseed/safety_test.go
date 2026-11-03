@@ -6,6 +6,8 @@ import (
 	"regexp"
 	"testing"
 
+	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/demoseed/repo"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/assets/assetstest"
@@ -69,6 +71,12 @@ func TestDemoSeedSafety(t *testing.T) {
 	otherSeed, err := seedPostgres(ctx, logger, db, blob, otherTenantSpec)
 	require.NoError(t, err)
 	require.NoError(t, migrateUpstreamAuth(ctx, logger, db, otherTenantSpec.OrgID))
+	planted, err := repo.New(db).OrgPlantCustomDomainDependents(ctx, repo.OrgPlantCustomDomainDependentsParams{
+		OrgID: otherTenantSpec.OrgID, ProjectID: uuid.MustParse(otherTenantSpec.ProjectID()),
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 3, planted, "fixture must include a root endpoint and two same-slug toolsets")
+
 	require.NoError(t, demoseedtest.PlantMCPServerDependents(
 		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
 	))
@@ -144,6 +152,12 @@ func TestDemoSeedSafety(t *testing.T) {
 	// Plant stray demo-scope rows: the next run must clean them up, restoring
 	// the exact per-table counts of the first run.
 	require.NoError(t, demoseedtest.TamperDemoRows(ctx, db, ch, constants.DemoOrganizationID, DefaultSpec().ProjectID()))
+	planted, err = repo.New(db).OrgPlantCustomDomainDependents(ctx, repo.OrgPlantCustomDomainDependentsParams{
+		OrgID: constants.DemoOrganizationID, ProjectID: uuid.MustParse(DefaultSpec().ProjectID()),
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 3, planted, "reseed must remove both kinds of custom-domain dependents")
+
 	milestoneCount, err = demoseedtest.CountReseedSafetyProjectMilestones(
 		ctx, db, constants.DemoOrganizationID, DefaultSpec().ProjectID(),
 	)

@@ -318,7 +318,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerMCPConnectionSettingsTool(reg, NewMCPConnectionSettingsService(postgresReader.db).WithCodeModeAvailability(postgresReader.codeModeAvailable))
 		registerGatewaySessionTool(reg, postgresReader.gatewaySessions)
 		registerMCPConnectionMutationTools(reg, connectionMutationService)
-		registerCustomDomainStatusTool(reg, postgresReader.db, postgresReader.logger)
+		registerCustomDomainStatusTool(reg, postgresReader.db, postgresReader.logger, postgresReader.customDomainTargetSuffix)
 		if postgresReader.networkIngress == nil {
 			registerUnavailableNetworkIngressTool(reg)
 		} else {
@@ -373,7 +373,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 		registerDashboardTools(reg, postgresReader.dashboards)
 	} else {
 		registerWhoamiTool(reg, nil)
-		registerCustomDomainStatusTool(reg, nil, nil)
+		registerCustomDomainStatusTool(reg, nil, nil, "")
 		registerUnavailableMCPConnectionSettingsTool(reg)
 		registerGatewaySessionTool(reg, nil)
 		registerMCPConnectionMutationTools(reg, nil)

@@ -431,12 +431,11 @@ Browser verification: [~] — follow check 33 in `seed/demo/verify.md`.
 - Reseeding removes workload trust and agent rows through the existing organization-scoped cleanup, and explicitly removes the owner's deterministic direct grant before recreating it. Postflight checks verify the exact trust chain and both project-scoped grants, and reject additional inference grants.
 - Browser verification and live reseeding have not been run for this addition.
 
-### [x] Custom domain diagnostics
+### [~] Custom domain diagnostics
 
 Network Access settings show a tenant-specific reserved example hostname with a saved
 unconfirmed DNS observation alongside healthy infrastructure. This demonstrates
 that proxies or flattened DNS can hide a target without proving a service outage.
-The fixture is not activated and creates no public route or certificate. Verified
-in the local and demo organizations, including a narrow viewport: unconfirmed DNS
-and ready infrastructure render separately, with no outage warning or recheck
-action for the inactive fixture. Both seed runs and tenant-isolation checks pass.
+The fixture is not activated and creates no public route or certificate.
+The Custom domain diagnostics check in `verify.md` must pass before this entry
+is marked verified.

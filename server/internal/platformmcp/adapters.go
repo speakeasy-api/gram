@@ -354,6 +354,8 @@ func (r *PostgresReadinessRecorder) RecordReady(ctx context.Context, principal P
 }
 
 type PostgresReader struct {
+	// customDomainTargetSuffix is the normalized parent of designated CNAME destinations.
+	customDomainTargetSuffix  string
 	xaaReadiness              *xaaReadinessService
 	issuerGate                *internalsessionissuers.Gate
 	logger                    *slog.Logger
@@ -402,6 +404,7 @@ type PostgresReader struct {
 
 func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 	return &PostgresReader{
+		customDomainTargetSuffix:  "",
 		logger:                    logger.With(attr.SlogComponent("platformmcp")),
 		db:                        db,
 		reader:                    readmodel.New(db),
@@ -447,6 +450,12 @@ func NewPostgresReader(logger *slog.Logger, db *pgxpool.Pool) *PostgresReader {
 		dashboards:                nil,
 		codeModeAvailable:         nil,
 	}
+}
+
+// WithCustomDomainTargetSuffix supplies the deployment's normalized CNAME suffix.
+func (r *PostgresReader) WithCustomDomainTargetSuffix(suffix string) *PostgresReader {
+	r.customDomainTargetSuffix = suffix
+	return r
 }
 
 // WithCodeModeAvailability lets gateway connection settings report the
