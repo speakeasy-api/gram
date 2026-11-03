@@ -373,6 +373,59 @@ var _ = Service("chat", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "setPinned")
 	})
 
+	Method("getMemory", func() {
+		Description("Show whether Organizational Memory reads this session, the masked summary it reads, memos saved from it and the day digest that folded it. Requires the org-memory rollout.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The ID of the chat", func() { Format(FormatUUID) })
+			Required("id")
+		})
+
+		Result(ChatMemory)
+
+		HTTP(func() {
+			GET("/rpc/chat.getMemory")
+			Param("id")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getChatMemory")
+		Meta("openapi:extension:x-speakeasy-name-override", "getMemory")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "ChatMemory"}`)
+	})
+
+	Method("setMemoryExcluded", func() {
+		Description("Exclude a session from Organizational Memory, or return it. Anyone who can read the session may exclude it; returning someone else's session needs chat:write. Digests that folded an excluded session are rebuilt without it on the next rollup. Requires the org-memory rollout.")
+
+		Security(security.Session, security.ProjectSlug)
+
+		Payload(func() {
+			security.SessionPayload()
+			security.ProjectPayload()
+			Attribute("id", String, "The ID of the chat", func() { Format(FormatUUID) })
+			Attribute("excluded", Boolean, "True to keep the session out of memory, false to return it")
+			Required("id", "excluded")
+		})
+
+		Result(ChatMemory)
+
+		HTTP(func() {
+			POST("/rpc/chat.setMemoryExcluded")
+			security.SessionHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "setChatMemoryExcluded")
+		Meta("openapi:extension:x-speakeasy-name-override", "setMemoryExcluded")
+	})
+
 	Method("summarize", func() {
 		Description("Generate or return a persisted LLM summary of a chat session transcript. When a summary already exists and regenerate is false, returns the cached summary without calling the model.")
 
@@ -647,6 +700,9 @@ var ChatOverview = Type("ChatOverview", func() {
 	Attribute("account_type", String, "Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.")
 	Attribute("account_email", String, "Email of the AI account that produced the chat, resolved from the linked AI account. May differ from the employee's work email (e.g. a personal account).")
 	Attribute("pinned", Boolean, "True when the chat is pinned")
+	Attribute("memory_state", String, "Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it.", func() {
+		Enum("remembered", "not_summarized", "excluded", "personal")
+	})
 	Attribute("summary", String, "Persisted LLM summary of the session transcript, if one has been generated")
 	Attribute("summary_generated_at", String, func() {
 		Description("When the session summary was last generated.")
@@ -654,6 +710,30 @@ var ChatOverview = Type("ChatOverview", func() {
 	})
 
 	Required("id", "title", "num_messages", "created_at", "updated_at", "last_message_timestamp")
+})
+
+var ChatMemoryMemo = Type("ChatMemoryMemo", func() {
+	Description("A fact an agent saved to Organizational Memory from this session.")
+	Required("id", "content", "created_at")
+	Attribute("id", String, "Memo ID.", func() { Format(FormatUUID) })
+	Attribute("content", String, "Masked memo text.")
+	Attribute("created_at", String, "When the memo was saved.", func() { Format(FormatDateTime) })
+})
+
+var ChatMemory = Type("ChatMemory", func() {
+	Description("A session's standing in Organizational Memory.")
+	Required("state", "memos", "can_exclude", "can_include")
+	Attribute("state", String, "remembered, not_summarized, excluded or personal; see ChatOverview.memory_state.", func() {
+		Enum("remembered", "not_summarized", "excluded", "personal")
+	})
+	Attribute("summary", String, "The masked summary memory reads for this session, when one exists.")
+	Attribute("summarized_at", String, "When the masked summary was written.", func() { Format(FormatDateTime) })
+	Attribute("excluded_at", String, "When the session was excluded from memory.", func() { Format(FormatDateTime) })
+	Attribute("memos", ArrayOf(ChatMemoryMemo), "Memos agents saved from this session, oldest first.")
+	Attribute("day_digest_id", String, "The day digest that folded this session, once its day closed.", func() { Format(FormatUUID) })
+	Attribute("day_digest_period_start", String, "The UTC day that digest covers.", func() { Format(FormatDate) })
+	Attribute("can_exclude", Boolean, "True when the caller may exclude this session from memory: its owner or anyone who can read it.")
+	Attribute("can_include", Boolean, "True when the caller may return an excluded session to memory: its owner, or a holder of chat:write.")
 })
 
 var ChatParticipant = Type("ChatParticipant", func() {

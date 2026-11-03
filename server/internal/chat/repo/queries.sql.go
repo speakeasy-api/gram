@@ -976,6 +976,68 @@ func (q *Queries) GetChatEntryTotals(ctx context.Context, arg GetChatEntryTotals
 	return i, err
 }
 
+const getChatMemory = `-- name: GetChatMemory :one
+SELECT
+  CASE
+    WHEN c.memory_excluded_at IS NOT NULL THEN 'excluded'
+    WHEN EXISTS (
+      SELECT 1 FROM user_accounts mua
+      WHERE mua.id = c.user_account_id
+        AND (mua.account_type IS NULL OR mua.account_type = 'personal')
+    ) THEN 'personal'
+    WHEN c.summary_redacted AND c.summary IS NOT NULL THEN 'remembered'
+    ELSE 'not_summarized'
+  END::text AS memory_state,
+  c.summary_redacted,
+  c.summary,
+  c.summary_generated_at,
+  c.memory_excluded_at,
+  COALESCE(d.id::text, '')::text AS day_digest_id,
+  d.period_start AS day_digest_period_start
+FROM chats c
+LEFT JOIN LATERAL (
+  SELECT dd.id, dd.period_start FROM memory_digests dd
+  WHERE dd.project_id = c.project_id
+    AND dd.level = 'day'
+    AND dd.chat_ids @> ARRAY[c.id]
+  LIMIT 1
+) d ON TRUE
+WHERE c.id = $1 AND c.project_id = $2 AND c.deleted IS FALSE
+`
+
+type GetChatMemoryParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+type GetChatMemoryRow struct {
+	MemoryState          string
+	SummaryRedacted      bool
+	Summary              pgtype.Text
+	SummaryGeneratedAt   pgtype.Timestamptz
+	MemoryExcludedAt     pgtype.Timestamptz
+	DayDigestID          string
+	DayDigestPeriodStart pgtype.Date
+}
+
+// A session's standing in Organizational Memory. The state applies the same
+// eligibility as the memory readers; the summary is returned only when it was
+// written from the masked transcript, since that is the text memory reads.
+func (q *Queries) GetChatMemory(ctx context.Context, arg GetChatMemoryParams) (GetChatMemoryRow, error) {
+	row := q.db.QueryRow(ctx, getChatMemory, arg.ID, arg.ProjectID)
+	var i GetChatMemoryRow
+	err := row.Scan(
+		&i.MemoryState,
+		&i.SummaryRedacted,
+		&i.Summary,
+		&i.SummaryGeneratedAt,
+		&i.MemoryExcludedAt,
+		&i.DayDigestID,
+		&i.DayDigestPeriodStart,
+	)
+	return i, err
+}
+
 const getChatMemorySummaryEligibility = `-- name: GetChatMemorySummaryEligibility :one
 SELECT (
   c.deleted IS FALSE
@@ -2092,6 +2154,47 @@ func (q *Queries) ListChatContentPartsByChatID(ctx context.Context, arg ListChat
 			&i.Deleted,
 			&i.IsRisk,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listChatMemoryMemos = `-- name: ListChatMemoryMemos :many
+SELECT m.id, m.content, m.created_at
+FROM memory_memos m
+WHERE m.chat_id = $1
+  AND m.project_id = $2
+  AND m.deleted IS FALSE
+ORDER BY m.created_at
+`
+
+type ListChatMemoryMemosParams struct {
+	ChatID    uuid.NullUUID
+	ProjectID uuid.UUID
+}
+
+type ListChatMemoryMemosRow struct {
+	ID        uuid.UUID
+	Content   string
+	CreatedAt pgtype.Timestamptz
+}
+
+// Memos an agent saved from this session.
+func (q *Queries) ListChatMemoryMemos(ctx context.Context, arg ListChatMemoryMemosParams) ([]ListChatMemoryMemosRow, error) {
+	rows, err := q.db.Query(ctx, listChatMemoryMemos, arg.ChatID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListChatMemoryMemosRow
+	for rows.Next() {
+		var i ListChatMemoryMemosRow
+		if err := rows.Scan(&i.ID, &i.Content, &i.CreatedAt); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -3264,6 +3367,24 @@ page_chats AS (
     -- id with no name rather than disappearing from the session's history.
     lc.agent_id,
     acting_agent.name AS agent_name,
+    -- Whether Organizational Memory reads this session, with the same
+    -- eligibility its readers apply: excluded by a person, owned through a
+    -- personal or unclassified account, summarized from the masked
+    -- transcript, or not summarized yet.
+    (
+      SELECT CASE
+        WHEN mc.memory_excluded_at IS NOT NULL THEN 'excluded'
+        WHEN EXISTS (
+          SELECT 1 FROM user_accounts mua
+          WHERE mua.id = mc.user_account_id
+            AND (mua.account_type IS NULL OR mua.account_type = 'personal')
+        ) THEN 'personal'
+        WHEN mc.summary_redacted AND mc.summary IS NOT NULL THEN 'remembered'
+        ELSE 'not_summarized'
+      END
+      FROM chats mc
+      WHERE mc.id = lc.id
+    )::text AS memory_state,
     lc.total_count,
     lc.page_position
   FROM limited_chats lc
@@ -3294,7 +3415,7 @@ page_chats AS (
 ),
 chat_attribution AS (
   SELECT
-    lc.id, lc.title, lc.user_id, lc.external_user_id, lc.created_at, lc.updated_at, lc.pinned_at, lc.litellm_proxied, lc.num_messages, lc.source, lc.last_message_timestamp, lc.account_type, lc.account_email, lc.assistant_id, lc.assistant_name, lc.assistant_agent_id, lc.agent_id, lc.agent_name, lc.total_count, lc.page_position,
+    lc.id, lc.title, lc.user_id, lc.external_user_id, lc.created_at, lc.updated_at, lc.pinned_at, lc.litellm_proxied, lc.num_messages, lc.source, lc.last_message_timestamp, lc.account_type, lc.account_email, lc.assistant_id, lc.assistant_name, lc.assistant_agent_id, lc.agent_id, lc.agent_name, lc.memory_state, lc.total_count, lc.page_position,
     COALESCE(CASE WHEN lc.source = 'litellm' THEN (
       SELECT CASE
         WHEN user_agent = ANY (ARRAY['claude-code', 'codex', 'opencode']::text[]) THEN user_agent
@@ -3329,6 +3450,7 @@ SELECT
   lc.assistant_agent_id,
   lc.agent_id,
   lc.agent_name,
+  lc.memory_state,
   lc.total_count
 FROM chat_attribution lc
 ORDER BY lc.page_position
@@ -3379,6 +3501,7 @@ type ListChatsRow struct {
 	AssistantAgentID     uuid.NullUUID
 	AgentID              uuid.NullUUID
 	AgentName            pgtype.Text
+	MemoryState          string
 	TotalCount           int64
 }
 
@@ -3441,6 +3564,7 @@ func (q *Queries) ListChats(ctx context.Context, arg ListChatsParams) ([]ListCha
 			&i.AssistantAgentID,
 			&i.AgentID,
 			&i.AgentName,
+			&i.MemoryState,
 			&i.TotalCount,
 		); err != nil {
 			return nil, err
@@ -4498,6 +4622,25 @@ UPDATE assistants SET deleted_at = clock_timestamp() WHERE id = $1
 // its threads behind).
 func (q *Queries) SeedSoftDeleteAssistant(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, seedSoftDeleteAssistant, id)
+	return err
+}
+
+const setChatMemoryExcluded = `-- name: SetChatMemoryExcluded :exec
+UPDATE chats
+SET memory_excluded_at = CASE WHEN $1::boolean THEN COALESCE(memory_excluded_at, clock_timestamp()) ELSE NULL END
+WHERE id = $2 AND project_id = $3 AND deleted IS FALSE
+`
+
+type SetChatMemoryExcludedParams struct {
+	Excluded  bool
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Excluding keeps the first exclusion time; including clears it. The digest
+// rollup deletes and rebuilds any digest that folded a newly excluded chat.
+func (q *Queries) SetChatMemoryExcluded(ctx context.Context, arg SetChatMemoryExcludedParams) error {
+	_, err := q.db.Exec(ctx, setChatMemoryExcluded, arg.Excluded, arg.ID, arg.ProjectID)
 	return err
 }
 

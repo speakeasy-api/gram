@@ -34,6 +34,15 @@ type SetPinnedRequestBody struct {
 	Pinned *bool `form:"pinned,omitempty" json:"pinned,omitempty" xml:"pinned,omitempty"`
 }
 
+// SetMemoryExcludedRequestBody is the type of the "chat" service
+// "setMemoryExcluded" endpoint HTTP request body.
+type SetMemoryExcludedRequestBody struct {
+	// The ID of the chat
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// True to keep the session out of memory, false to return it
+	Excluded *bool `form:"excluded,omitempty" json:"excluded,omitempty" xml:"excluded,omitempty"`
+}
+
 // SummarizeRequestBody is the type of the "chat" service "summarize" endpoint
 // HTTP request body.
 type SummarizeRequestBody struct {
@@ -170,6 +179,11 @@ type LoadChatOverviewResponseBody struct {
 	AccountEmail *string `form:"account_email,omitempty" json:"account_email,omitempty" xml:"account_email,omitempty"`
 	// True when the chat is pinned
 	Pinned *bool `form:"pinned,omitempty" json:"pinned,omitempty" xml:"pinned,omitempty"`
+	// Whether Organizational Memory reads this session: remembered (its masked
+	// summary is in memory), not_summarized (no masked summary yet), excluded
+	// (someone kept it out), or personal (it came from a personal or unclassified
+	// AI account). Only listings populate it.
+	MemoryState *string `form:"memory_state,omitempty" json:"memory_state,omitempty" xml:"memory_state,omitempty"`
 	// Persisted LLM summary of the session transcript, if one has been generated
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// When the session summary was last generated.
@@ -286,6 +300,11 @@ type LoadChatResponseBody struct {
 	AccountEmail *string `form:"account_email,omitempty" json:"account_email,omitempty" xml:"account_email,omitempty"`
 	// True when the chat is pinned
 	Pinned *bool `form:"pinned,omitempty" json:"pinned,omitempty" xml:"pinned,omitempty"`
+	// Whether Organizational Memory reads this session: remembered (its masked
+	// summary is in memory), not_summarized (no masked summary yet), excluded
+	// (someone kept it out), or personal (it came from a personal or unclassified
+	// AI account). Only listings populate it.
+	MemoryState *string `form:"memory_state,omitempty" json:"memory_state,omitempty" xml:"memory_state,omitempty"`
 	// Persisted LLM summary of the session transcript, if one has been generated
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// When the session summary was last generated.
@@ -306,6 +325,58 @@ type CreditUsageResponseBody struct {
 	CreditsUsed float64 `form:"credits_used" json:"credits_used" xml:"credits_used"`
 	// The number of monthly credits
 	MonthlyCredits int `form:"monthly_credits" json:"monthly_credits" xml:"monthly_credits"`
+}
+
+// GetMemoryResponseBody is the type of the "chat" service "getMemory" endpoint
+// HTTP response body.
+type GetMemoryResponseBody struct {
+	// remembered, not_summarized, excluded or personal; see
+	// ChatOverview.memory_state.
+	State string `form:"state" json:"state" xml:"state"`
+	// The masked summary memory reads for this session, when one exists.
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// When the masked summary was written.
+	SummarizedAt *string `form:"summarized_at,omitempty" json:"summarized_at,omitempty" xml:"summarized_at,omitempty"`
+	// When the session was excluded from memory.
+	ExcludedAt *string `form:"excluded_at,omitempty" json:"excluded_at,omitempty" xml:"excluded_at,omitempty"`
+	// Memos agents saved from this session, oldest first.
+	Memos []*ChatMemoryMemoResponseBody `form:"memos" json:"memos" xml:"memos"`
+	// The day digest that folded this session, once its day closed.
+	DayDigestID *string `form:"day_digest_id,omitempty" json:"day_digest_id,omitempty" xml:"day_digest_id,omitempty"`
+	// The UTC day that digest covers.
+	DayDigestPeriodStart *string `form:"day_digest_period_start,omitempty" json:"day_digest_period_start,omitempty" xml:"day_digest_period_start,omitempty"`
+	// True when the caller may exclude this session from memory: its owner or
+	// anyone who can read it.
+	CanExclude bool `form:"can_exclude" json:"can_exclude" xml:"can_exclude"`
+	// True when the caller may return an excluded session to memory: its owner, or
+	// a holder of chat:write.
+	CanInclude bool `form:"can_include" json:"can_include" xml:"can_include"`
+}
+
+// SetMemoryExcludedResponseBody is the type of the "chat" service
+// "setMemoryExcluded" endpoint HTTP response body.
+type SetMemoryExcludedResponseBody struct {
+	// remembered, not_summarized, excluded or personal; see
+	// ChatOverview.memory_state.
+	State string `form:"state" json:"state" xml:"state"`
+	// The masked summary memory reads for this session, when one exists.
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// When the masked summary was written.
+	SummarizedAt *string `form:"summarized_at,omitempty" json:"summarized_at,omitempty" xml:"summarized_at,omitempty"`
+	// When the session was excluded from memory.
+	ExcludedAt *string `form:"excluded_at,omitempty" json:"excluded_at,omitempty" xml:"excluded_at,omitempty"`
+	// Memos agents saved from this session, oldest first.
+	Memos []*ChatMemoryMemoResponseBody `form:"memos" json:"memos" xml:"memos"`
+	// The day digest that folded this session, once its day closed.
+	DayDigestID *string `form:"day_digest_id,omitempty" json:"day_digest_id,omitempty" xml:"day_digest_id,omitempty"`
+	// The UTC day that digest covers.
+	DayDigestPeriodStart *string `form:"day_digest_period_start,omitempty" json:"day_digest_period_start,omitempty" xml:"day_digest_period_start,omitempty"`
+	// True when the caller may exclude this session from memory: its owner or
+	// anyone who can read it.
+	CanExclude bool `form:"can_exclude" json:"can_exclude" xml:"can_exclude"`
+	// True when the caller may return an excluded session to memory: its owner, or
+	// a holder of chat:write.
+	CanInclude bool `form:"can_include" json:"can_include" xml:"can_include"`
 }
 
 // SummarizeResponseBody is the type of the "chat" service "summarize" endpoint
@@ -1990,6 +2061,369 @@ type SetPinnedGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetMemoryUnauthorizedResponseBody is the type of the "chat" service
+// "getMemory" endpoint HTTP response body for the "unauthorized" error.
+type GetMemoryUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryForbiddenResponseBody is the type of the "chat" service "getMemory"
+// endpoint HTTP response body for the "forbidden" error.
+type GetMemoryForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryBadRequestResponseBody is the type of the "chat" service
+// "getMemory" endpoint HTTP response body for the "bad_request" error.
+type GetMemoryBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryNotFoundResponseBody is the type of the "chat" service "getMemory"
+// endpoint HTTP response body for the "not_found" error.
+type GetMemoryNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryConflictResponseBody is the type of the "chat" service "getMemory"
+// endpoint HTTP response body for the "conflict" error.
+type GetMemoryConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryUnsupportedMediaResponseBody is the type of the "chat" service
+// "getMemory" endpoint HTTP response body for the "unsupported_media" error.
+type GetMemoryUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryInvalidResponseBody is the type of the "chat" service "getMemory"
+// endpoint HTTP response body for the "invalid" error.
+type GetMemoryInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryInvariantViolationResponseBody is the type of the "chat" service
+// "getMemory" endpoint HTTP response body for the "invariant_violation" error.
+type GetMemoryInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryUnexpectedResponseBody is the type of the "chat" service
+// "getMemory" endpoint HTTP response body for the "unexpected" error.
+type GetMemoryUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMemoryGatewayErrorResponseBody is the type of the "chat" service
+// "getMemory" endpoint HTTP response body for the "gateway_error" error.
+type GetMemoryGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetMemoryExcludedUnauthorizedResponseBody is the type of the "chat" service
+// "setMemoryExcluded" endpoint HTTP response body for the "unauthorized" error.
+type SetMemoryExcludedUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetMemoryExcludedForbiddenResponseBody is the type of the "chat" service
+// "setMemoryExcluded" endpoint HTTP response body for the "forbidden" error.
+type SetMemoryExcludedForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetMemoryExcludedBadRequestResponseBody is the type of the "chat" service
+// "setMemoryExcluded" endpoint HTTP response body for the "bad_request" error.
+type SetMemoryExcludedBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetMemoryExcludedNotFoundResponseBody is the type of the "chat" service
+// "setMemoryExcluded" endpoint HTTP response body for the "not_found" error.
+type SetMemoryExcludedNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetMemoryExcludedConflictResponseBody is the type of the "chat" service
+// "setMemoryExcluded" endpoint HTTP response body for the "conflict" error.
+type SetMemoryExcludedConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetMemoryExcludedUnsupportedMediaResponseBody is the type of the "chat"
+// service "setMemoryExcluded" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SetMemoryExcludedUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetMemoryExcludedInvalidResponseBody is the type of the "chat" service
+// "setMemoryExcluded" endpoint HTTP response body for the "invalid" error.
+type SetMemoryExcludedInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetMemoryExcludedInvariantViolationResponseBody is the type of the "chat"
+// service "setMemoryExcluded" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SetMemoryExcludedInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetMemoryExcludedUnexpectedResponseBody is the type of the "chat" service
+// "setMemoryExcluded" endpoint HTTP response body for the "unexpected" error.
+type SetMemoryExcludedUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetMemoryExcludedGatewayErrorResponseBody is the type of the "chat" service
+// "setMemoryExcluded" endpoint HTTP response body for the "gateway_error"
+// error.
+type SetMemoryExcludedGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // SummarizeUnauthorizedResponseBody is the type of the "chat" service
 // "summarize" endpoint HTTP response body for the "unauthorized" error.
 type SummarizeUnauthorizedResponseBody struct {
@@ -2971,6 +3405,11 @@ type ChatOverviewResponseBody struct {
 	AccountEmail *string `form:"account_email,omitempty" json:"account_email,omitempty" xml:"account_email,omitempty"`
 	// True when the chat is pinned
 	Pinned *bool `form:"pinned,omitempty" json:"pinned,omitempty" xml:"pinned,omitempty"`
+	// Whether Organizational Memory reads this session: remembered (its masked
+	// summary is in memory), not_summarized (no masked summary yet), excluded
+	// (someone kept it out), or personal (it came from a personal or unclassified
+	// AI account). Only listings populate it.
+	MemoryState *string `form:"memory_state,omitempty" json:"memory_state,omitempty" xml:"memory_state,omitempty"`
 	// Persisted LLM summary of the session transcript, if one has been generated
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// When the session summary was last generated.
@@ -3164,6 +3603,16 @@ type ChatTotalsResponseBody struct {
 	RiskOnly int64 `form:"risk_only" json:"risk_only" xml:"risk_only"`
 }
 
+// ChatMemoryMemoResponseBody is used to define fields on response body types.
+type ChatMemoryMemoResponseBody struct {
+	// Memo ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Masked memo text.
+	Content string `form:"content" json:"content" xml:"content"`
+	// When the memo was saved.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
+}
+
 // ChatSessionLinkResponseBody is used to define fields on response body types.
 type ChatSessionLinkResponseBody struct {
 	// Chat id of the parent session in this relationship. Absent when the caller's
@@ -3289,6 +3738,7 @@ func NewLoadChatOverviewResponseBody(res *chat.ChatOverview) *LoadChatOverviewRe
 		AccountType:          res.AccountType,
 		AccountEmail:         res.AccountEmail,
 		Pinned:               res.Pinned,
+		MemoryState:          res.MemoryState,
 		Summary:              res.Summary,
 		SummaryGeneratedAt:   res.SummaryGeneratedAt,
 	}
@@ -3342,6 +3792,7 @@ func NewLoadChatResponseBody(res *chat.Chat) *LoadChatResponseBody {
 		AccountType:          res.AccountType,
 		AccountEmail:         res.AccountEmail,
 		Pinned:               res.Pinned,
+		MemoryState:          res.MemoryState,
 		Summary:              res.Summary,
 		SummaryGeneratedAt:   res.SummaryGeneratedAt,
 	}
@@ -3423,6 +3874,62 @@ func NewCreditUsageResponseBody(res *chat.CreditUsageResult) *CreditUsageRespons
 	body := &CreditUsageResponseBody{
 		CreditsUsed:    res.CreditsUsed,
 		MonthlyCredits: res.MonthlyCredits,
+	}
+	return body
+}
+
+// NewGetMemoryResponseBody builds the HTTP response body from the result of
+// the "getMemory" endpoint of the "chat" service.
+func NewGetMemoryResponseBody(res *chat.ChatMemory) *GetMemoryResponseBody {
+	body := &GetMemoryResponseBody{
+		State:                res.State,
+		Summary:              res.Summary,
+		SummarizedAt:         res.SummarizedAt,
+		ExcludedAt:           res.ExcludedAt,
+		DayDigestID:          res.DayDigestID,
+		DayDigestPeriodStart: res.DayDigestPeriodStart,
+		CanExclude:           res.CanExclude,
+		CanInclude:           res.CanInclude,
+	}
+	if res.Memos != nil {
+		body.Memos = make([]*ChatMemoryMemoResponseBody, len(res.Memos))
+		for i, val := range res.Memos {
+			if val == nil {
+				body.Memos[i] = nil
+				continue
+			}
+			body.Memos[i] = marshalChatChatMemoryMemoToChatMemoryMemoResponseBody(val)
+		}
+	} else {
+		body.Memos = []*ChatMemoryMemoResponseBody{}
+	}
+	return body
+}
+
+// NewSetMemoryExcludedResponseBody builds the HTTP response body from the
+// result of the "setMemoryExcluded" endpoint of the "chat" service.
+func NewSetMemoryExcludedResponseBody(res *chat.ChatMemory) *SetMemoryExcludedResponseBody {
+	body := &SetMemoryExcludedResponseBody{
+		State:                res.State,
+		Summary:              res.Summary,
+		SummarizedAt:         res.SummarizedAt,
+		ExcludedAt:           res.ExcludedAt,
+		DayDigestID:          res.DayDigestID,
+		DayDigestPeriodStart: res.DayDigestPeriodStart,
+		CanExclude:           res.CanExclude,
+		CanInclude:           res.CanInclude,
+	}
+	if res.Memos != nil {
+		body.Memos = make([]*ChatMemoryMemoResponseBody, len(res.Memos))
+		for i, val := range res.Memos {
+			if val == nil {
+				body.Memos[i] = nil
+				continue
+			}
+			body.Memos[i] = marshalChatChatMemoryMemoToChatMemoryMemoResponseBody(val)
+		}
+	} else {
+		body.Memos = []*ChatMemoryMemoResponseBody{}
 	}
 	return body
 }
@@ -4766,6 +5273,288 @@ func NewSetPinnedGatewayErrorResponseBody(res *goa.ServiceError) *SetPinnedGatew
 	return body
 }
 
+// NewGetMemoryUnauthorizedResponseBody builds the HTTP response body from the
+// result of the "getMemory" endpoint of the "chat" service.
+func NewGetMemoryUnauthorizedResponseBody(res *goa.ServiceError) *GetMemoryUnauthorizedResponseBody {
+	body := &GetMemoryUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryForbiddenResponseBody builds the HTTP response body from the
+// result of the "getMemory" endpoint of the "chat" service.
+func NewGetMemoryForbiddenResponseBody(res *goa.ServiceError) *GetMemoryForbiddenResponseBody {
+	body := &GetMemoryForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryBadRequestResponseBody builds the HTTP response body from the
+// result of the "getMemory" endpoint of the "chat" service.
+func NewGetMemoryBadRequestResponseBody(res *goa.ServiceError) *GetMemoryBadRequestResponseBody {
+	body := &GetMemoryBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryNotFoundResponseBody builds the HTTP response body from the
+// result of the "getMemory" endpoint of the "chat" service.
+func NewGetMemoryNotFoundResponseBody(res *goa.ServiceError) *GetMemoryNotFoundResponseBody {
+	body := &GetMemoryNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryConflictResponseBody builds the HTTP response body from the
+// result of the "getMemory" endpoint of the "chat" service.
+func NewGetMemoryConflictResponseBody(res *goa.ServiceError) *GetMemoryConflictResponseBody {
+	body := &GetMemoryConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryUnsupportedMediaResponseBody builds the HTTP response body from
+// the result of the "getMemory" endpoint of the "chat" service.
+func NewGetMemoryUnsupportedMediaResponseBody(res *goa.ServiceError) *GetMemoryUnsupportedMediaResponseBody {
+	body := &GetMemoryUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryInvalidResponseBody builds the HTTP response body from the
+// result of the "getMemory" endpoint of the "chat" service.
+func NewGetMemoryInvalidResponseBody(res *goa.ServiceError) *GetMemoryInvalidResponseBody {
+	body := &GetMemoryInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryInvariantViolationResponseBody builds the HTTP response body
+// from the result of the "getMemory" endpoint of the "chat" service.
+func NewGetMemoryInvariantViolationResponseBody(res *goa.ServiceError) *GetMemoryInvariantViolationResponseBody {
+	body := &GetMemoryInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryUnexpectedResponseBody builds the HTTP response body from the
+// result of the "getMemory" endpoint of the "chat" service.
+func NewGetMemoryUnexpectedResponseBody(res *goa.ServiceError) *GetMemoryUnexpectedResponseBody {
+	body := &GetMemoryUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMemoryGatewayErrorResponseBody builds the HTTP response body from the
+// result of the "getMemory" endpoint of the "chat" service.
+func NewGetMemoryGatewayErrorResponseBody(res *goa.ServiceError) *GetMemoryGatewayErrorResponseBody {
+	body := &GetMemoryGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetMemoryExcludedUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "setMemoryExcluded" endpoint of the "chat" service.
+func NewSetMemoryExcludedUnauthorizedResponseBody(res *goa.ServiceError) *SetMemoryExcludedUnauthorizedResponseBody {
+	body := &SetMemoryExcludedUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetMemoryExcludedForbiddenResponseBody builds the HTTP response body from
+// the result of the "setMemoryExcluded" endpoint of the "chat" service.
+func NewSetMemoryExcludedForbiddenResponseBody(res *goa.ServiceError) *SetMemoryExcludedForbiddenResponseBody {
+	body := &SetMemoryExcludedForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetMemoryExcludedBadRequestResponseBody builds the HTTP response body
+// from the result of the "setMemoryExcluded" endpoint of the "chat" service.
+func NewSetMemoryExcludedBadRequestResponseBody(res *goa.ServiceError) *SetMemoryExcludedBadRequestResponseBody {
+	body := &SetMemoryExcludedBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetMemoryExcludedNotFoundResponseBody builds the HTTP response body from
+// the result of the "setMemoryExcluded" endpoint of the "chat" service.
+func NewSetMemoryExcludedNotFoundResponseBody(res *goa.ServiceError) *SetMemoryExcludedNotFoundResponseBody {
+	body := &SetMemoryExcludedNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetMemoryExcludedConflictResponseBody builds the HTTP response body from
+// the result of the "setMemoryExcluded" endpoint of the "chat" service.
+func NewSetMemoryExcludedConflictResponseBody(res *goa.ServiceError) *SetMemoryExcludedConflictResponseBody {
+	body := &SetMemoryExcludedConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetMemoryExcludedUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "setMemoryExcluded" endpoint of the "chat"
+// service.
+func NewSetMemoryExcludedUnsupportedMediaResponseBody(res *goa.ServiceError) *SetMemoryExcludedUnsupportedMediaResponseBody {
+	body := &SetMemoryExcludedUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetMemoryExcludedInvalidResponseBody builds the HTTP response body from
+// the result of the "setMemoryExcluded" endpoint of the "chat" service.
+func NewSetMemoryExcludedInvalidResponseBody(res *goa.ServiceError) *SetMemoryExcludedInvalidResponseBody {
+	body := &SetMemoryExcludedInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetMemoryExcludedInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "setMemoryExcluded" endpoint of the "chat"
+// service.
+func NewSetMemoryExcludedInvariantViolationResponseBody(res *goa.ServiceError) *SetMemoryExcludedInvariantViolationResponseBody {
+	body := &SetMemoryExcludedInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetMemoryExcludedUnexpectedResponseBody builds the HTTP response body
+// from the result of the "setMemoryExcluded" endpoint of the "chat" service.
+func NewSetMemoryExcludedUnexpectedResponseBody(res *goa.ServiceError) *SetMemoryExcludedUnexpectedResponseBody {
+	body := &SetMemoryExcludedUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetMemoryExcludedGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "setMemoryExcluded" endpoint of the "chat" service.
+func NewSetMemoryExcludedGatewayErrorResponseBody(res *goa.ServiceError) *SetMemoryExcludedGatewayErrorResponseBody {
+	body := &SetMemoryExcludedGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewSummarizeUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "summarize" endpoint of the "chat" service.
 func NewSummarizeUnauthorizedResponseBody(res *goa.ServiceError) *SummarizeUnauthorizedResponseBody {
@@ -5598,6 +6387,29 @@ func NewSetPinnedPayload(body *SetPinnedRequestBody, sessionToken *string, proje
 	return v
 }
 
+// NewGetMemoryPayload builds a chat service getMemory endpoint payload.
+func NewGetMemoryPayload(id string, sessionToken *string, projectSlugInput *string) *chat.GetMemoryPayload {
+	v := &chat.GetMemoryPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewSetMemoryExcludedPayload builds a chat service setMemoryExcluded endpoint
+// payload.
+func NewSetMemoryExcludedPayload(body *SetMemoryExcludedRequestBody, sessionToken *string, projectSlugInput *string) *chat.SetMemoryExcludedPayload {
+	v := &chat.SetMemoryExcludedPayload{
+		ID:       *body.ID,
+		Excluded: *body.Excluded,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
 // NewSummarizePayload builds a chat service summarize endpoint payload.
 func NewSummarizePayload(body *SummarizeRequestBody, sessionToken *string, projectSlugInput *string) *chat.SummarizePayload {
 	v := &chat.SummarizePayload{
@@ -5687,6 +6499,21 @@ func ValidateSetPinnedRequestBody(body *SetPinnedRequestBody) (err error) {
 	}
 	if body.Pinned == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("pinned", "body"))
+	}
+	return
+}
+
+// ValidateSetMemoryExcludedRequestBody runs the validations defined on
+// SetMemoryExcludedRequestBody
+func ValidateSetMemoryExcludedRequestBody(body *SetMemoryExcludedRequestBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Excluded == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("excluded", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
 	}
 	return
 }

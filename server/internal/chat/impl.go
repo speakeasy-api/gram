@@ -489,6 +489,7 @@ func (s *Service) chatOverviews(ctx context.Context, authCtx *contextvalues.Auth
 			AccountType:          conv.PtrEmpty(row.AccountType),
 			AccountEmail:         conv.PtrEmpty(row.AccountEmail),
 			Pinned:               &pinned,
+			MemoryState:          conv.PtrEmpty(row.MemoryState),
 			// List responses omit summary text to keep pages light; loadChat /
 			// summarize return the persisted summary when present.
 			Summary:            nil,
@@ -1644,6 +1645,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		AccountType:          conv.PtrEmpty(chat.AccountType),
 		AccountEmail:         conv.PtrEmpty(chat.AccountEmail),
 		Pinned:               &pinned,
+		MemoryState:          nil,
 		Summary:              conv.FromPGText[string](chat.Summary),
 		SummaryGeneratedAt:   formatOptionalTimestamptz(chat.SummaryGeneratedAt),
 		Messages:             resultMessages,

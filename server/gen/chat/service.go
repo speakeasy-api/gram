@@ -50,6 +50,15 @@ type Service interface {
 	// Pin or unpin a chat. Pinned chats surface in a dedicated section above
 	// recents on the chat page.
 	SetPinned(context.Context, *SetPinnedPayload) (err error)
+	// Show whether Organizational Memory reads this session, the masked summary it
+	// reads, memos saved from it and the day digest that folded it. Requires the
+	// org-memory rollout.
+	GetMemory(context.Context, *GetMemoryPayload) (res *ChatMemory, err error)
+	// Exclude a session from Organizational Memory, or return it. Anyone who can
+	// read the session may exclude it; returning someone else's session needs
+	// chat:write. Digests that folded an excluded session are rebuilt without it
+	// on the next rollup. Requires the org-memory rollout.
+	SetMemoryExcluded(context.Context, *SetMemoryExcludedPayload) (res *ChatMemory, err error)
 	// Generate or return a persisted LLM summary of a chat session transcript.
 	// When a summary already exists and regenerate is false, returns the cached
 	// summary without calling the model.
@@ -92,7 +101,7 @@ const ServiceName = "chat"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [14]string{"listChats", "getAssistantSessionSummary", "getWorkUnitsTrend", "loadChatOverview", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "summarize", "summarizeToolCall", "submitFeedback", "listSources", "listSessionLinks"}
+var MethodNames = [16]string{"listChats", "getAssistantSessionSummary", "getWorkUnitsTrend", "loadChatOverview", "loadChat", "generateTitle", "creditUsage", "deleteChat", "setPinned", "getMemory", "setMemoryExcluded", "summarize", "summarizeToolCall", "submitFeedback", "listSources", "listSessionLinks"}
 
 type AgentUsage struct {
 	// The agent usage payload discriminator.
@@ -223,6 +232,11 @@ type Chat struct {
 	AccountEmail *string
 	// True when the chat is pinned
 	Pinned *bool
+	// Whether Organizational Memory reads this session: remembered (its masked
+	// summary is in memory), not_summarized (no masked summary yet), excluded
+	// (someone kept it out), or personal (it came from a personal or unclassified
+	// AI account). Only listings populate it.
+	MemoryState *string
 	// Persisted LLM summary of the session transcript, if one has been generated
 	Summary *string
 	// When the session summary was last generated.
@@ -243,6 +257,41 @@ type ChatContentPart struct {
 	// Whether this content part has an active risk finding.
 	IsRisk bool
 	// When the content part was created.
+	CreatedAt string
+}
+
+// ChatMemory is the result type of the chat service getMemory method.
+type ChatMemory struct {
+	// remembered, not_summarized, excluded or personal; see
+	// ChatOverview.memory_state.
+	State string
+	// The masked summary memory reads for this session, when one exists.
+	Summary *string
+	// When the masked summary was written.
+	SummarizedAt *string
+	// When the session was excluded from memory.
+	ExcludedAt *string
+	// Memos agents saved from this session, oldest first.
+	Memos []*ChatMemoryMemo
+	// The day digest that folded this session, once its day closed.
+	DayDigestID *string
+	// The UTC day that digest covers.
+	DayDigestPeriodStart *string
+	// True when the caller may exclude this session from memory: its owner or
+	// anyone who can read it.
+	CanExclude bool
+	// True when the caller may return an excluded session to memory: its owner, or
+	// a holder of chat:write.
+	CanInclude bool
+}
+
+// A fact an agent saved to Organizational Memory from this session.
+type ChatMemoryMemo struct {
+	// Memo ID.
+	ID string
+	// Masked memo text.
+	Content string
+	// When the memo was saved.
 	CreatedAt string
 }
 
@@ -359,6 +408,11 @@ type ChatOverview struct {
 	AccountEmail *string
 	// True when the chat is pinned
 	Pinned *bool
+	// Whether Organizational Memory reads this session: remembered (its masked
+	// summary is in memory), not_summarized (no masked summary yet), excluded
+	// (someone kept it out), or personal (it came from a personal or unclassified
+	// AI account). Only listings populate it.
+	MemoryState *string
 	// Persisted LLM summary of the session transcript, if one has been generated
 	Summary *string
 	// When the session summary was last generated.
@@ -538,6 +592,14 @@ type GetAssistantSessionSummaryPayload struct {
 	From string
 	// End of the activity range (ISO 8601)
 	To string
+}
+
+// GetMemoryPayload is the payload type of the chat service getMemory method.
+type GetMemoryPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The ID of the chat
+	ID string
 }
 
 // GetWorkUnitsTrendPayload is the payload type of the chat service
@@ -724,6 +786,17 @@ type RiskSegment struct {
 	// Whether messages exist after this segment within the generation. Expand with
 	// an `after_seq` request using `last_seq`.
 	HasMoreAfter bool
+}
+
+// SetMemoryExcludedPayload is the payload type of the chat service
+// setMemoryExcluded method.
+type SetMemoryExcludedPayload struct {
+	SessionToken     *string
+	ProjectSlugInput *string
+	// The ID of the chat
+	ID string
+	// True to keep the session out of memory, false to return it
+	Excluded bool
 }
 
 // SetPinnedPayload is the payload type of the chat service setPinned method.

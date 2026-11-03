@@ -2213,6 +2213,481 @@ func DecodeSetPinnedResponse(decoder func(*http.Response) goahttp.Decoder, resto
 	}
 }
 
+// BuildGetMemoryRequest instantiates a HTTP request object with method and
+// path set to call the "chat" service "getMemory" endpoint
+func (c *Client) BuildGetMemoryRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetMemoryChatPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("chat", "getMemory", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetMemoryRequest returns an encoder for requests sent to the chat
+// getMemory server.
+func EncodeGetMemoryRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*chat.GetMemoryPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("chat", "getMemory", "*chat.GetMemoryPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		values := req.URL.Query()
+		values.Add("id", p.ID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetMemoryResponse returns a decoder for responses returned by the chat
+// getMemory endpoint. restoreBody controls whether the response body should be
+// restored after having been read.
+// DecodeGetMemoryResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetMemoryResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetMemoryResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "getMemory", err)
+			}
+			err = ValidateGetMemoryResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "getMemory", err)
+			}
+			res := NewGetMemoryChatMemoryOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetMemoryUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "getMemory", err)
+			}
+			err = ValidateGetMemoryUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "getMemory", err)
+			}
+			return nil, NewGetMemoryUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetMemoryForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "getMemory", err)
+			}
+			err = ValidateGetMemoryForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "getMemory", err)
+			}
+			return nil, NewGetMemoryForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetMemoryBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "getMemory", err)
+			}
+			err = ValidateGetMemoryBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "getMemory", err)
+			}
+			return nil, NewGetMemoryBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetMemoryNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "getMemory", err)
+			}
+			err = ValidateGetMemoryNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "getMemory", err)
+			}
+			return nil, NewGetMemoryNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetMemoryConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "getMemory", err)
+			}
+			err = ValidateGetMemoryConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "getMemory", err)
+			}
+			return nil, NewGetMemoryConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetMemoryUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "getMemory", err)
+			}
+			err = ValidateGetMemoryUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "getMemory", err)
+			}
+			return nil, NewGetMemoryUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetMemoryInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "getMemory", err)
+			}
+			err = ValidateGetMemoryInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "getMemory", err)
+			}
+			return nil, NewGetMemoryInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetMemoryInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "getMemory", err)
+				}
+				err = ValidateGetMemoryInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "getMemory", err)
+				}
+				return nil, NewGetMemoryInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetMemoryUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "getMemory", err)
+				}
+				err = ValidateGetMemoryUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "getMemory", err)
+				}
+				return nil, NewGetMemoryUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("chat", "getMemory", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetMemoryGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "getMemory", err)
+			}
+			err = ValidateGetMemoryGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "getMemory", err)
+			}
+			return nil, NewGetMemoryGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("chat", "getMemory", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSetMemoryExcludedRequest instantiates a HTTP request object with method
+// and path set to call the "chat" service "setMemoryExcluded" endpoint
+func (c *Client) BuildSetMemoryExcludedRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetMemoryExcludedChatPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("chat", "setMemoryExcluded", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetMemoryExcludedRequest returns an encoder for requests sent to the
+// chat setMemoryExcluded server.
+func EncodeSetMemoryExcludedRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*chat.SetMemoryExcludedPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("chat", "setMemoryExcluded", "*chat.SetMemoryExcludedPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ProjectSlugInput != nil {
+			head := *p.ProjectSlugInput
+			req.Header.Set("Gram-Project", head)
+		}
+		body := NewSetMemoryExcludedRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("chat", "setMemoryExcluded", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetMemoryExcludedResponse returns a decoder for responses returned by
+// the chat setMemoryExcluded endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeSetMemoryExcludedResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetMemoryExcludedResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetMemoryExcludedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "setMemoryExcluded", err)
+			}
+			err = ValidateSetMemoryExcludedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "setMemoryExcluded", err)
+			}
+			res := NewSetMemoryExcludedChatMemoryOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetMemoryExcludedUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "setMemoryExcluded", err)
+			}
+			err = ValidateSetMemoryExcludedUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "setMemoryExcluded", err)
+			}
+			return nil, NewSetMemoryExcludedUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetMemoryExcludedForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "setMemoryExcluded", err)
+			}
+			err = ValidateSetMemoryExcludedForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "setMemoryExcluded", err)
+			}
+			return nil, NewSetMemoryExcludedForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetMemoryExcludedBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "setMemoryExcluded", err)
+			}
+			err = ValidateSetMemoryExcludedBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "setMemoryExcluded", err)
+			}
+			return nil, NewSetMemoryExcludedBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetMemoryExcludedNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "setMemoryExcluded", err)
+			}
+			err = ValidateSetMemoryExcludedNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "setMemoryExcluded", err)
+			}
+			return nil, NewSetMemoryExcludedNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetMemoryExcludedConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "setMemoryExcluded", err)
+			}
+			err = ValidateSetMemoryExcludedConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "setMemoryExcluded", err)
+			}
+			return nil, NewSetMemoryExcludedConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetMemoryExcludedUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "setMemoryExcluded", err)
+			}
+			err = ValidateSetMemoryExcludedUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "setMemoryExcluded", err)
+			}
+			return nil, NewSetMemoryExcludedUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetMemoryExcludedInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "setMemoryExcluded", err)
+			}
+			err = ValidateSetMemoryExcludedInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "setMemoryExcluded", err)
+			}
+			return nil, NewSetMemoryExcludedInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetMemoryExcludedInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "setMemoryExcluded", err)
+				}
+				err = ValidateSetMemoryExcludedInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "setMemoryExcluded", err)
+				}
+				return nil, NewSetMemoryExcludedInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetMemoryExcludedUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("chat", "setMemoryExcluded", err)
+				}
+				err = ValidateSetMemoryExcludedUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("chat", "setMemoryExcluded", err)
+				}
+				return nil, NewSetMemoryExcludedUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("chat", "setMemoryExcluded", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetMemoryExcludedGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("chat", "setMemoryExcluded", err)
+			}
+			err = ValidateSetMemoryExcludedGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("chat", "setMemoryExcluded", err)
+			}
+			return nil, NewSetMemoryExcludedGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("chat", "setMemoryExcluded", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildSummarizeRequest instantiates a HTTP request object with method and
 // path set to call the "chat" service "summarize" endpoint
 func (c *Client) BuildSummarizeRequest(ctx context.Context, v any) (*http.Request, error) {
@@ -3444,6 +3919,7 @@ func unmarshalChatOverviewResponseBodyToChatChatOverview(v *ChatOverviewResponse
 		AccountType:          v.AccountType,
 		AccountEmail:         v.AccountEmail,
 		Pinned:               v.Pinned,
+		MemoryState:          v.MemoryState,
 		Summary:              v.Summary,
 		SummaryGeneratedAt:   v.SummaryGeneratedAt,
 	}
@@ -3659,6 +4135,18 @@ func unmarshalChatTotalsResponseBodyToChatChatTotals(v *ChatTotalsResponseBody) 
 		ToolCalls:         *v.ToolCalls,
 		ToolResults:       *v.ToolResults,
 		RiskOnly:          *v.RiskOnly,
+	}
+
+	return res
+}
+
+// unmarshalChatMemoryMemoResponseBodyToChatChatMemoryMemo builds a value of
+// type *chat.ChatMemoryMemo from a value of type *ChatMemoryMemoResponseBody.
+func unmarshalChatMemoryMemoResponseBodyToChatChatMemoryMemo(v *ChatMemoryMemoResponseBody) *chat.ChatMemoryMemo {
+	res := &chat.ChatMemoryMemo{
+		ID:        *v.ID,
+		Content:   *v.Content,
+		CreatedAt: *v.CreatedAt,
 	}
 
 	return res

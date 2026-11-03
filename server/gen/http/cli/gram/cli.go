@@ -137,7 +137,7 @@ func UsageCommands() []string {
 		"auth (callback|login|switch-scopes|enter-demo|logout|logout-everywhere|register|info|transfer-out|transfer-in)",
 		"auth-clients (list-auth-clients|get-auth-client|update-auth-client|create-auth-client|attach-auth-client-to-mcp-server|set-auth-client-headers|detach-auth-client-from-mcp-server|list-mcp-server-auth-client-choices|list-issuance-profiles|set-issuance-profile|delete-issuance-profile|get-mcp-server-authentication|set-mcp-server-upstream-auth-requirement|get-auth-client-audience|set-auth-client-audience)",
 		"business-memories (list-business-memories|list-business-memory-content-scopes|search-business-memories)",
-		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat-overview|load-chat|generate-title|credit-usage|delete-chat|set-pinned|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
+		"chat (list-chats|get-assistant-session-summary|get-work-units-trend|load-chat-overview|load-chat|generate-title|credit-usage|delete-chat|set-pinned|get-memory|set-memory-excluded|summarize|summarize-tool-call|submit-feedback|list-sources|list-session-links)",
 		"chat-sessions (create|revoke)",
 		"cli-auth (authorize|redeem)",
 		"dashboards (list-dashboards|get-dashboard|create-dashboard|update-dashboard|save-dashboard-layout|add-dashboard-widget|remove-dashboard-widget|save-dashboard-filters|duplicate-dashboard|duplicate-built-in-dashboard|delete-dashboard)",
@@ -1167,6 +1167,16 @@ func ParseEndpoint(
 		chatSetPinnedBodyFlag             = chatSetPinnedFlags.String("body", "REQUIRED", "")
 		chatSetPinnedSessionTokenFlag     = chatSetPinnedFlags.String("session-token", "", "")
 		chatSetPinnedProjectSlugInputFlag = chatSetPinnedFlags.String("project-slug-input", "", "")
+
+		chatGetMemoryFlags                = flag.NewFlagSet("get-memory", flag.ExitOnError)
+		chatGetMemoryIDFlag               = chatGetMemoryFlags.String("id", "REQUIRED", "")
+		chatGetMemorySessionTokenFlag     = chatGetMemoryFlags.String("session-token", "", "")
+		chatGetMemoryProjectSlugInputFlag = chatGetMemoryFlags.String("project-slug-input", "", "")
+
+		chatSetMemoryExcludedFlags                = flag.NewFlagSet("set-memory-excluded", flag.ExitOnError)
+		chatSetMemoryExcludedBodyFlag             = chatSetMemoryExcludedFlags.String("body", "REQUIRED", "")
+		chatSetMemoryExcludedSessionTokenFlag     = chatSetMemoryExcludedFlags.String("session-token", "", "")
+		chatSetMemoryExcludedProjectSlugInputFlag = chatSetMemoryExcludedFlags.String("project-slug-input", "", "")
 
 		chatSummarizeFlags                = flag.NewFlagSet("summarize", flag.ExitOnError)
 		chatSummarizeBodyFlag             = chatSummarizeFlags.String("body", "REQUIRED", "")
@@ -5692,6 +5702,8 @@ func ParseEndpoint(
 	chatCreditUsageFlags.Usage = chatCreditUsageUsage
 	chatDeleteChatFlags.Usage = chatDeleteChatUsage
 	chatSetPinnedFlags.Usage = chatSetPinnedUsage
+	chatGetMemoryFlags.Usage = chatGetMemoryUsage
+	chatSetMemoryExcludedFlags.Usage = chatSetMemoryExcludedUsage
 	chatSummarizeFlags.Usage = chatSummarizeUsage
 	chatSummarizeToolCallFlags.Usage = chatSummarizeToolCallUsage
 	chatSubmitFeedbackFlags.Usage = chatSubmitFeedbackUsage
@@ -7451,6 +7463,12 @@ func ParseEndpoint(
 
 			case "set-pinned":
 				epf = chatSetPinnedFlags
+
+			case "get-memory":
+				epf = chatGetMemoryFlags
+
+			case "set-memory-excluded":
+				epf = chatSetMemoryExcludedFlags
 
 			case "summarize":
 				epf = chatSummarizeFlags
@@ -10775,6 +10793,12 @@ func ParseEndpoint(
 			case "set-pinned":
 				endpoint = c.SetPinned()
 				data, err = chatc.BuildSetPinnedPayload(*chatSetPinnedBodyFlag, *chatSetPinnedSessionTokenFlag, *chatSetPinnedProjectSlugInputFlag)
+			case "get-memory":
+				endpoint = c.GetMemory()
+				data, err = chatc.BuildGetMemoryPayload(*chatGetMemoryIDFlag, *chatGetMemorySessionTokenFlag, *chatGetMemoryProjectSlugInputFlag)
+			case "set-memory-excluded":
+				endpoint = c.SetMemoryExcluded()
+				data, err = chatc.BuildSetMemoryExcludedPayload(*chatSetMemoryExcludedBodyFlag, *chatSetMemoryExcludedSessionTokenFlag, *chatSetMemoryExcludedProjectSlugInputFlag)
 			case "summarize":
 				endpoint = c.Summarize()
 				data, err = chatc.BuildSummarizePayload(*chatSummarizeBodyFlag, *chatSummarizeSessionTokenFlag, *chatSummarizeProjectSlugInputFlag)
@@ -17390,6 +17414,8 @@ func chatUsage() {
 	fmt.Fprintln(os.Stderr, `    credit-usage: Get the total number of chat credits and usage for the current billing period`)
 	fmt.Fprintln(os.Stderr, `    delete-chat: Soft-delete a chat by its ID`)
 	fmt.Fprintln(os.Stderr, `    set-pinned: Pin or unpin a chat. Pinned chats surface in a dedicated section above recents on the chat page.`)
+	fmt.Fprintln(os.Stderr, `    get-memory: Show whether Organizational Memory reads this session, the masked summary it reads, memos saved from it and the day digest that folded it. Requires the org-memory rollout.`)
+	fmt.Fprintln(os.Stderr, `    set-memory-excluded: Exclude a session from Organizational Memory, or return it. Anyone who can read the session may exclude it; returning someone else's session needs chat:write. Digests that folded an excluded session are rebuilt without it on the next rollup. Requires the org-memory rollout.`)
 	fmt.Fprintln(os.Stderr, `    summarize: Generate or return a persisted LLM summary of a chat session transcript. When a summary already exists and regenerate is false, returns the cached summary without calling the model.`)
 	fmt.Fprintln(os.Stderr, `    summarize-tool-call: Generate or return a persisted two-sentence summary of one tool call. Concurrent requests share the same cached result.`)
 	fmt.Fprintln(os.Stderr, `    submit-feedback: Submit user feedback for a chat (success/failure)`)
@@ -17657,6 +17683,50 @@ func chatSetPinnedUsage() {
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
 	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat set-pinned --body '{\n      \"id\": \"abc123\",\n      \"pinned\": false\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func chatGetMemoryUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] chat get-memory", os.Args[0])
+	fmt.Fprint(os.Stderr, " -id STRING")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Show whether Organizational Memory reads this session, the masked summary it reads, memos saved from it and the day digest that folded it. Requires the org-memory rollout.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -id STRING: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat get-memory --id \"550e8400-e29b-41d4-a716-446655440000\" --session-token \"abc123\" --project-slug-input \"abc123\"")
+}
+
+func chatSetMemoryExcludedUsage() {
+	// Header with flags
+	fmt.Fprintf(os.Stderr, "%s [flags] chat set-memory-excluded", os.Args[0])
+	fmt.Fprint(os.Stderr, " -body JSON")
+	fmt.Fprint(os.Stderr, " -session-token STRING")
+	fmt.Fprint(os.Stderr, " -project-slug-input STRING")
+	fmt.Fprintln(os.Stderr)
+
+	// Description
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, `Exclude a session from Organizational Memory, or return it. Anyone who can read the session may exclude it; returning someone else's session needs chat:write. Digests that folded an excluded session are rebuilt without it on the next rollup. Requires the org-memory rollout.`)
+
+	// Flags list
+	fmt.Fprintln(os.Stderr, `    -body JSON: `)
+	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
+	fmt.Fprintln(os.Stderr, `    -project-slug-input STRING: `)
+
+	fmt.Fprintln(os.Stderr)
+	fmt.Fprintln(os.Stderr, "Example:")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "chat set-memory-excluded --body '{\n      \"excluded\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }' --session-token \"abc123\" --project-slug-input \"abc123\"")
 }
 
 func chatSummarizeUsage() {

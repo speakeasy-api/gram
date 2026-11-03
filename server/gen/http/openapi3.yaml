@@ -26655,6 +26655,104 @@ paths:
             x-speakeasy-react-hook:
                 name: AssistantSessionSummary
                 type: query
+    /rpc/chat.getMemory:
+        get:
+            description: Show whether Organizational Memory reads this session, the masked summary it reads, memos saved from it and the day digest that folded it. Requires the org-memory rollout.
+            operationId: getChatMemory
+            parameters:
+                - allowEmptyValue: true
+                  description: The ID of the chat
+                  in: query
+                  name: id
+                  required: true
+                  schema:
+                    description: The ID of the chat
+                    format: uuid
+                    type: string
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ChatMemory'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: getMemory chat
+            tags:
+                - chat
+            x-speakeasy-name-override: getMemory
+            x-speakeasy-react-hook:
+                name: ChatMemory
     /rpc/chat.getWorkUnitsTrend:
         get:
             description: 'Aggregate work-units analysis results over time for the project: work done and cost/token efficiency per UTC day.'
@@ -27519,6 +27617,99 @@ paths:
             x-speakeasy-react-hook:
                 name: LoadChatOverview
                 type: query
+    /rpc/chat.setMemoryExcluded:
+        post:
+            description: Exclude a session from Organizational Memory, or return it. Anyone who can read the session may exclude it; returning someone else's session needs chat:write. Digests that folded an excluded session are rebuilt without it on the next rollup. Requires the org-memory rollout.
+            operationId: setChatMemoryExcluded
+            parameters:
+                - allowEmptyValue: true
+                  description: Session header
+                  in: header
+                  name: Gram-Session
+                  schema:
+                    description: Session header
+                    type: string
+                - allowEmptyValue: true
+                  description: project header
+                  in: header
+                  name: Gram-Project
+                  schema:
+                    description: project header
+                    type: string
+            requestBody:
+                content:
+                    application/json:
+                        schema:
+                            $ref: '#/components/schemas/SetMemoryExcludedRequestBody'
+                required: true
+            responses:
+                "200":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/ChatMemory'
+                    description: OK response.
+                "400":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'bad_request: request is invalid'
+                "401":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unauthorized: unauthorized access'
+                "403":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'forbidden: permission denied'
+                "404":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'not_found: resource not found'
+                "409":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'conflict: resource already exists'
+                "415":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unsupported_media: unsupported media type'
+                "422":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'invalid: request contains one or more invalidation fields'
+                "500":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'unexpected: an unexpected error occurred'
+                "502":
+                    content:
+                        application/json:
+                            schema:
+                                $ref: '#/components/schemas/Error'
+                    description: 'gateway_error: an unexpected error occurred'
+            security:
+                - project_slug_header_Gram-Project: []
+                  session_header_Gram-Session: []
+            summary: setMemoryExcluded chat
+            tags:
+                - chat
+            x-speakeasy-name-override: setMemoryExcluded
     /rpc/chat.setPinned:
         post:
             description: Pin or unpin a chat. Pinned chats surface in a dedicated section above recents on the chat page.
@@ -101728,6 +101919,14 @@ components:
                     type: integer
                     description: The highest generation number present for this chat. To load the full history, walk from `max_generation` down to 0, requesting each generation in turn.
                     format: int64
+                memory_state:
+                    type: string
+                    description: 'Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it.'
+                    enum:
+                        - remembered
+                        - not_summarized
+                        - excluded
+                        - personal
                 messages:
                     type: array
                     items:
@@ -101889,6 +102088,72 @@ components:
                 - content
                 - is_risk
                 - created_at
+        ChatMemory:
+            type: object
+            properties:
+                can_exclude:
+                    type: boolean
+                    description: 'True when the caller may exclude this session from memory: its owner or anyone who can read it.'
+                can_include:
+                    type: boolean
+                    description: 'True when the caller may return an excluded session to memory: its owner, or a holder of chat:write.'
+                day_digest_id:
+                    type: string
+                    description: The day digest that folded this session, once its day closed.
+                    format: uuid
+                day_digest_period_start:
+                    type: string
+                    description: The UTC day that digest covers.
+                    format: date
+                excluded_at:
+                    type: string
+                    description: When the session was excluded from memory.
+                    format: date-time
+                memos:
+                    type: array
+                    items:
+                        $ref: '#/components/schemas/ChatMemoryMemo'
+                    description: Memos agents saved from this session, oldest first.
+                state:
+                    type: string
+                    description: remembered, not_summarized, excluded or personal; see ChatOverview.memory_state.
+                    enum:
+                        - remembered
+                        - not_summarized
+                        - excluded
+                        - personal
+                summarized_at:
+                    type: string
+                    description: When the masked summary was written.
+                    format: date-time
+                summary:
+                    type: string
+                    description: The masked summary memory reads for this session, when one exists.
+            description: A session's standing in Organizational Memory.
+            required:
+                - state
+                - memos
+                - can_exclude
+                - can_include
+        ChatMemoryMemo:
+            type: object
+            properties:
+                content:
+                    type: string
+                    description: Masked memo text.
+                created_at:
+                    type: string
+                    description: When the memo was saved.
+                    format: date-time
+                id:
+                    type: string
+                    description: Memo ID.
+                    format: uuid
+            description: A fact an agent saved to Organizational Memory from this session.
+            required:
+                - id
+                - content
+                - created_at
         ChatMessage:
             type: object
             properties:
@@ -101989,6 +102254,14 @@ components:
                 litellm_proxied:
                     type: boolean
                     description: True when the session's traffic was observed by the LiteLLM proxy, including sessions whose transcript is owned by the agent's own hook stream
+                memory_state:
+                    type: string
+                    description: 'Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it.'
+                    enum:
+                        - remembered
+                        - not_summarized
+                        - excluded
+                        - personal
                 num_messages:
                     type: integer
                     description: The number of messages in the chat
@@ -126081,6 +126354,19 @@ components:
             required:
                 - mcp_server_id
                 - requires_upstream_auth
+        SetMemoryExcludedRequestBody:
+            type: object
+            properties:
+                excluded:
+                    type: boolean
+                    description: True to keep the session out of memory, false to return it
+                id:
+                    type: string
+                    description: The ID of the chat
+                    format: uuid
+            required:
+                - id
+                - excluded
         SetOrganizationChatAnalysisSettingsRequestBody:
             type: object
             properties:

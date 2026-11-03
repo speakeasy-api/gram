@@ -80,6 +80,15 @@ func allChatEndpoints() []chatEndpoint {
 		{"submitFeedback", true, func(ctx context.Context, ti *chatTestInstance, id string) error {
 			return errOnly(ti.service.SubmitFeedback(ctx, &gen.SubmitFeedbackPayload{ID: id, Feedback: "failure"}))
 		}},
+		{"getMemory", false, func(ctx context.Context, ti *chatTestInstance, id string) error {
+			return errOnly(ti.service.GetMemory(ctx, &gen.GetMemoryPayload{ID: id}))
+		}},
+		{"setMemoryExcluded/exclude", false, func(ctx context.Context, ti *chatTestInstance, id string) error {
+			return errOnly(ti.service.SetMemoryExcluded(ctx, &gen.SetMemoryExcludedPayload{ID: id, Excluded: true}))
+		}},
+		{"setMemoryExcluded/include", true, func(ctx context.Context, ti *chatTestInstance, id string) error {
+			return errOnly(ti.service.SetMemoryExcluded(ctx, &gen.SetMemoryExcludedPayload{ID: id, Excluded: false}))
+		}},
 		{"deleteChat", true, func(ctx context.Context, ti *chatTestInstance, id string) error {
 			return ti.service.DeleteChat(ctx, &gen.DeleteChatPayload{ID: id})
 		}},

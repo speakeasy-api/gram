@@ -985,6 +985,24 @@ page_chats AS (
     -- id with no name rather than disappearing from the session's history.
     lc.agent_id,
     acting_agent.name AS agent_name,
+    -- Whether Organizational Memory reads this session, with the same
+    -- eligibility its readers apply: excluded by a person, owned through a
+    -- personal or unclassified account, summarized from the masked
+    -- transcript, or not summarized yet.
+    (
+      SELECT CASE
+        WHEN mc.memory_excluded_at IS NOT NULL THEN 'excluded'
+        WHEN EXISTS (
+          SELECT 1 FROM user_accounts mua
+          WHERE mua.id = mc.user_account_id
+            AND (mua.account_type IS NULL OR mua.account_type = 'personal')
+        ) THEN 'personal'
+        WHEN mc.summary_redacted AND mc.summary IS NOT NULL THEN 'remembered'
+        ELSE 'not_summarized'
+      END
+      FROM chats mc
+      WHERE mc.id = lc.id
+    )::text AS memory_state,
     lc.total_count,
     lc.page_position
   FROM limited_chats lc
@@ -1050,6 +1068,7 @@ SELECT
   lc.assistant_agent_id,
   lc.agent_id,
   lc.agent_name,
+  lc.memory_state,
   lc.total_count
 FROM chat_attribution lc
 ORDER BY lc.page_position;
@@ -2262,3 +2281,50 @@ SELECT (
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
 WHERE c.id = @id AND c.project_id = @project_id;
+
+-- name: GetChatMemory :one
+-- A session's standing in Organizational Memory. The state applies the same
+-- eligibility as the memory readers; the summary is returned only when it was
+-- written from the masked transcript, since that is the text memory reads.
+SELECT
+  CASE
+    WHEN c.memory_excluded_at IS NOT NULL THEN 'excluded'
+    WHEN EXISTS (
+      SELECT 1 FROM user_accounts mua
+      WHERE mua.id = c.user_account_id
+        AND (mua.account_type IS NULL OR mua.account_type = 'personal')
+    ) THEN 'personal'
+    WHEN c.summary_redacted AND c.summary IS NOT NULL THEN 'remembered'
+    ELSE 'not_summarized'
+  END::text AS memory_state,
+  c.summary_redacted,
+  c.summary,
+  c.summary_generated_at,
+  c.memory_excluded_at,
+  COALESCE(d.id::text, '')::text AS day_digest_id,
+  d.period_start AS day_digest_period_start
+FROM chats c
+LEFT JOIN LATERAL (
+  SELECT dd.id, dd.period_start FROM memory_digests dd
+  WHERE dd.project_id = c.project_id
+    AND dd.level = 'day'
+    AND dd.chat_ids @> ARRAY[c.id]
+  LIMIT 1
+) d ON TRUE
+WHERE c.id = @id AND c.project_id = @project_id AND c.deleted IS FALSE;
+
+-- name: ListChatMemoryMemos :many
+-- Memos an agent saved from this session.
+SELECT m.id, m.content, m.created_at
+FROM memory_memos m
+WHERE m.chat_id = @chat_id
+  AND m.project_id = @project_id
+  AND m.deleted IS FALSE
+ORDER BY m.created_at;
+
+-- name: SetChatMemoryExcluded :exec
+-- Excluding keeps the first exclusion time; including clears it. The digest
+-- rollup deletes and rebuilds any digest that folded a newly excluded chat.
+UPDATE chats
+SET memory_excluded_at = CASE WHEN @excluded::boolean THEN COALESCE(memory_excluded_at, clock_timestamp()) ELSE NULL END
+WHERE id = @id AND project_id = @project_id AND deleted IS FALSE;

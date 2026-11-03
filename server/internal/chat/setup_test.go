@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/chatfindings"
@@ -63,6 +64,7 @@ type chatTestInstance struct {
 	projectSlug string
 	orgID       string
 	assets      assets.BlobStore
+	flags       *feature.InMemory
 }
 
 // newTestChatService builds a chat service with RBAC enforcement.
@@ -118,8 +120,13 @@ func newTestChatServiceWithOptions(t *testing.T, completionClient openrouter.Com
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	assetStorage := assetstest.NewTestBlobStore(t)
+	// Organizational Memory is on by default so its per-chat endpoints run in
+	// the shared authorization tables; summaries stay on the legacy path.
+	flags := &feature.InMemory{}
+	flags.SetFlag(feature.FlagOrgMemory, feature.AnyDistinctID, true)
 	svc := chat.NewService(logger, tp, conn, mgr, nil, nil, completionClient, nil, nil, nil, assetStorage, authzEngine, nil, billingClient, audit.NewLogger()).
-		WithRiskFindings(chatfindings.New(conn, riskchrepo.New(chConn)))
+		WithRiskFindings(chatfindings.New(conn, riskchrepo.New(chConn))).
+		WithMaskedSummaries(nil, flags)
 
 	return &chatTestInstance{
 		service:     svc,
@@ -130,5 +137,6 @@ func newTestChatServiceWithOptions(t *testing.T, completionClient openrouter.Com
 		projectSlug: project.Slug,
 		orgID:       orgID,
 		assets:      assetStorage,
+		flags:       flags,
 	}
 }

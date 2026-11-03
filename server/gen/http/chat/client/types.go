@@ -33,6 +33,15 @@ type SetPinnedRequestBody struct {
 	Pinned bool `form:"pinned" json:"pinned" xml:"pinned"`
 }
 
+// SetMemoryExcludedRequestBody is the type of the "chat" service
+// "setMemoryExcluded" endpoint HTTP request body.
+type SetMemoryExcludedRequestBody struct {
+	// The ID of the chat
+	ID string `form:"id" json:"id" xml:"id"`
+	// True to keep the session out of memory, false to return it
+	Excluded bool `form:"excluded" json:"excluded" xml:"excluded"`
+}
+
 // SummarizeRequestBody is the type of the "chat" service "summarize" endpoint
 // HTTP request body.
 type SummarizeRequestBody struct {
@@ -169,6 +178,11 @@ type LoadChatOverviewResponseBody struct {
 	AccountEmail *string `form:"account_email,omitempty" json:"account_email,omitempty" xml:"account_email,omitempty"`
 	// True when the chat is pinned
 	Pinned *bool `form:"pinned,omitempty" json:"pinned,omitempty" xml:"pinned,omitempty"`
+	// Whether Organizational Memory reads this session: remembered (its masked
+	// summary is in memory), not_summarized (no masked summary yet), excluded
+	// (someone kept it out), or personal (it came from a personal or unclassified
+	// AI account). Only listings populate it.
+	MemoryState *string `form:"memory_state,omitempty" json:"memory_state,omitempty" xml:"memory_state,omitempty"`
 	// Persisted LLM summary of the session transcript, if one has been generated
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// When the session summary was last generated.
@@ -285,6 +299,11 @@ type LoadChatResponseBody struct {
 	AccountEmail *string `form:"account_email,omitempty" json:"account_email,omitempty" xml:"account_email,omitempty"`
 	// True when the chat is pinned
 	Pinned *bool `form:"pinned,omitempty" json:"pinned,omitempty" xml:"pinned,omitempty"`
+	// Whether Organizational Memory reads this session: remembered (its masked
+	// summary is in memory), not_summarized (no masked summary yet), excluded
+	// (someone kept it out), or personal (it came from a personal or unclassified
+	// AI account). Only listings populate it.
+	MemoryState *string `form:"memory_state,omitempty" json:"memory_state,omitempty" xml:"memory_state,omitempty"`
 	// Persisted LLM summary of the session transcript, if one has been generated
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// When the session summary was last generated.
@@ -305,6 +324,58 @@ type CreditUsageResponseBody struct {
 	CreditsUsed *float64 `form:"credits_used,omitempty" json:"credits_used,omitempty" xml:"credits_used,omitempty"`
 	// The number of monthly credits
 	MonthlyCredits *int `form:"monthly_credits,omitempty" json:"monthly_credits,omitempty" xml:"monthly_credits,omitempty"`
+}
+
+// GetMemoryResponseBody is the type of the "chat" service "getMemory" endpoint
+// HTTP response body.
+type GetMemoryResponseBody struct {
+	// remembered, not_summarized, excluded or personal; see
+	// ChatOverview.memory_state.
+	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
+	// The masked summary memory reads for this session, when one exists.
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// When the masked summary was written.
+	SummarizedAt *string `form:"summarized_at,omitempty" json:"summarized_at,omitempty" xml:"summarized_at,omitempty"`
+	// When the session was excluded from memory.
+	ExcludedAt *string `form:"excluded_at,omitempty" json:"excluded_at,omitempty" xml:"excluded_at,omitempty"`
+	// Memos agents saved from this session, oldest first.
+	Memos []*ChatMemoryMemoResponseBody `form:"memos,omitempty" json:"memos,omitempty" xml:"memos,omitempty"`
+	// The day digest that folded this session, once its day closed.
+	DayDigestID *string `form:"day_digest_id,omitempty" json:"day_digest_id,omitempty" xml:"day_digest_id,omitempty"`
+	// The UTC day that digest covers.
+	DayDigestPeriodStart *string `form:"day_digest_period_start,omitempty" json:"day_digest_period_start,omitempty" xml:"day_digest_period_start,omitempty"`
+	// True when the caller may exclude this session from memory: its owner or
+	// anyone who can read it.
+	CanExclude *bool `form:"can_exclude,omitempty" json:"can_exclude,omitempty" xml:"can_exclude,omitempty"`
+	// True when the caller may return an excluded session to memory: its owner, or
+	// a holder of chat:write.
+	CanInclude *bool `form:"can_include,omitempty" json:"can_include,omitempty" xml:"can_include,omitempty"`
+}
+
+// SetMemoryExcludedResponseBody is the type of the "chat" service
+// "setMemoryExcluded" endpoint HTTP response body.
+type SetMemoryExcludedResponseBody struct {
+	// remembered, not_summarized, excluded or personal; see
+	// ChatOverview.memory_state.
+	State *string `form:"state,omitempty" json:"state,omitempty" xml:"state,omitempty"`
+	// The masked summary memory reads for this session, when one exists.
+	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
+	// When the masked summary was written.
+	SummarizedAt *string `form:"summarized_at,omitempty" json:"summarized_at,omitempty" xml:"summarized_at,omitempty"`
+	// When the session was excluded from memory.
+	ExcludedAt *string `form:"excluded_at,omitempty" json:"excluded_at,omitempty" xml:"excluded_at,omitempty"`
+	// Memos agents saved from this session, oldest first.
+	Memos []*ChatMemoryMemoResponseBody `form:"memos,omitempty" json:"memos,omitempty" xml:"memos,omitempty"`
+	// The day digest that folded this session, once its day closed.
+	DayDigestID *string `form:"day_digest_id,omitempty" json:"day_digest_id,omitempty" xml:"day_digest_id,omitempty"`
+	// The UTC day that digest covers.
+	DayDigestPeriodStart *string `form:"day_digest_period_start,omitempty" json:"day_digest_period_start,omitempty" xml:"day_digest_period_start,omitempty"`
+	// True when the caller may exclude this session from memory: its owner or
+	// anyone who can read it.
+	CanExclude *bool `form:"can_exclude,omitempty" json:"can_exclude,omitempty" xml:"can_exclude,omitempty"`
+	// True when the caller may return an excluded session to memory: its owner, or
+	// a holder of chat:write.
+	CanInclude *bool `form:"can_include,omitempty" json:"can_include,omitempty" xml:"can_include,omitempty"`
 }
 
 // SummarizeResponseBody is the type of the "chat" service "summarize" endpoint
@@ -1989,6 +2060,369 @@ type SetPinnedGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// GetMemoryUnauthorizedResponseBody is the type of the "chat" service
+// "getMemory" endpoint HTTP response body for the "unauthorized" error.
+type GetMemoryUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMemoryForbiddenResponseBody is the type of the "chat" service "getMemory"
+// endpoint HTTP response body for the "forbidden" error.
+type GetMemoryForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMemoryBadRequestResponseBody is the type of the "chat" service
+// "getMemory" endpoint HTTP response body for the "bad_request" error.
+type GetMemoryBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMemoryNotFoundResponseBody is the type of the "chat" service "getMemory"
+// endpoint HTTP response body for the "not_found" error.
+type GetMemoryNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMemoryConflictResponseBody is the type of the "chat" service "getMemory"
+// endpoint HTTP response body for the "conflict" error.
+type GetMemoryConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMemoryUnsupportedMediaResponseBody is the type of the "chat" service
+// "getMemory" endpoint HTTP response body for the "unsupported_media" error.
+type GetMemoryUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMemoryInvalidResponseBody is the type of the "chat" service "getMemory"
+// endpoint HTTP response body for the "invalid" error.
+type GetMemoryInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMemoryInvariantViolationResponseBody is the type of the "chat" service
+// "getMemory" endpoint HTTP response body for the "invariant_violation" error.
+type GetMemoryInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMemoryUnexpectedResponseBody is the type of the "chat" service
+// "getMemory" endpoint HTTP response body for the "unexpected" error.
+type GetMemoryUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// GetMemoryGatewayErrorResponseBody is the type of the "chat" service
+// "getMemory" endpoint HTTP response body for the "gateway_error" error.
+type GetMemoryGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMemoryExcludedUnauthorizedResponseBody is the type of the "chat" service
+// "setMemoryExcluded" endpoint HTTP response body for the "unauthorized" error.
+type SetMemoryExcludedUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMemoryExcludedForbiddenResponseBody is the type of the "chat" service
+// "setMemoryExcluded" endpoint HTTP response body for the "forbidden" error.
+type SetMemoryExcludedForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMemoryExcludedBadRequestResponseBody is the type of the "chat" service
+// "setMemoryExcluded" endpoint HTTP response body for the "bad_request" error.
+type SetMemoryExcludedBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMemoryExcludedNotFoundResponseBody is the type of the "chat" service
+// "setMemoryExcluded" endpoint HTTP response body for the "not_found" error.
+type SetMemoryExcludedNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMemoryExcludedConflictResponseBody is the type of the "chat" service
+// "setMemoryExcluded" endpoint HTTP response body for the "conflict" error.
+type SetMemoryExcludedConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMemoryExcludedUnsupportedMediaResponseBody is the type of the "chat"
+// service "setMemoryExcluded" endpoint HTTP response body for the
+// "unsupported_media" error.
+type SetMemoryExcludedUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMemoryExcludedInvalidResponseBody is the type of the "chat" service
+// "setMemoryExcluded" endpoint HTTP response body for the "invalid" error.
+type SetMemoryExcludedInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMemoryExcludedInvariantViolationResponseBody is the type of the "chat"
+// service "setMemoryExcluded" endpoint HTTP response body for the
+// "invariant_violation" error.
+type SetMemoryExcludedInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMemoryExcludedUnexpectedResponseBody is the type of the "chat" service
+// "setMemoryExcluded" endpoint HTTP response body for the "unexpected" error.
+type SetMemoryExcludedUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetMemoryExcludedGatewayErrorResponseBody is the type of the "chat" service
+// "setMemoryExcluded" endpoint HTTP response body for the "gateway_error"
+// error.
+type SetMemoryExcludedGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // SummarizeUnauthorizedResponseBody is the type of the "chat" service
 // "summarize" endpoint HTTP response body for the "unauthorized" error.
 type SummarizeUnauthorizedResponseBody struct {
@@ -2970,6 +3404,11 @@ type ChatOverviewResponseBody struct {
 	AccountEmail *string `form:"account_email,omitempty" json:"account_email,omitempty" xml:"account_email,omitempty"`
 	// True when the chat is pinned
 	Pinned *bool `form:"pinned,omitempty" json:"pinned,omitempty" xml:"pinned,omitempty"`
+	// Whether Organizational Memory reads this session: remembered (its masked
+	// summary is in memory), not_summarized (no masked summary yet), excluded
+	// (someone kept it out), or personal (it came from a personal or unclassified
+	// AI account). Only listings populate it.
+	MemoryState *string `form:"memory_state,omitempty" json:"memory_state,omitempty" xml:"memory_state,omitempty"`
 	// Persisted LLM summary of the session transcript, if one has been generated
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
 	// When the session summary was last generated.
@@ -3163,6 +3602,16 @@ type ChatTotalsResponseBody struct {
 	RiskOnly *int64 `form:"risk_only,omitempty" json:"risk_only,omitempty" xml:"risk_only,omitempty"`
 }
 
+// ChatMemoryMemoResponseBody is used to define fields on response body types.
+type ChatMemoryMemoResponseBody struct {
+	// Memo ID.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Masked memo text.
+	Content *string `form:"content,omitempty" json:"content,omitempty" xml:"content,omitempty"`
+	// When the memo was saved.
+	CreatedAt *string `form:"created_at,omitempty" json:"created_at,omitempty" xml:"created_at,omitempty"`
+}
+
 // ChatSessionLinkResponseBody is used to define fields on response body types.
 type ChatSessionLinkResponseBody struct {
 	// Chat id of the parent session in this relationship. Absent when the caller's
@@ -3217,6 +3666,16 @@ func NewSetPinnedRequestBody(p *chat.SetPinnedPayload) *SetPinnedRequestBody {
 	body := &SetPinnedRequestBody{
 		ID:     p.ID,
 		Pinned: p.Pinned,
+	}
+	return body
+}
+
+// NewSetMemoryExcludedRequestBody builds the HTTP request body from the
+// payload of the "setMemoryExcluded" endpoint of the "chat" service.
+func NewSetMemoryExcludedRequestBody(p *chat.SetMemoryExcludedPayload) *SetMemoryExcludedRequestBody {
+	body := &SetMemoryExcludedRequestBody{
+		ID:       p.ID,
+		Excluded: p.Excluded,
 	}
 	return body
 }
@@ -3788,6 +4247,7 @@ func NewLoadChatOverviewChatOverviewOK(body *LoadChatOverviewResponseBody) *chat
 		AccountType:          body.AccountType,
 		AccountEmail:         body.AccountEmail,
 		Pinned:               body.Pinned,
+		MemoryState:          body.MemoryState,
 		Summary:              body.Summary,
 		SummaryGeneratedAt:   body.SummaryGeneratedAt,
 	}
@@ -3992,6 +4452,7 @@ func NewLoadChatChatOK(body *LoadChatResponseBody) *chat.Chat {
 		AccountType:          body.AccountType,
 		AccountEmail:         body.AccountEmail,
 		Pinned:               body.Pinned,
+		MemoryState:          body.MemoryState,
 		Summary:              body.Summary,
 		SummaryGeneratedAt:   body.SummaryGeneratedAt,
 	}
@@ -4803,6 +5264,354 @@ func NewSetPinnedUnexpected(body *SetPinnedUnexpectedResponseBody) *goa.ServiceE
 // NewSetPinnedGatewayError builds a chat service setPinned endpoint
 // gateway_error error.
 func NewSetPinnedGatewayError(body *SetPinnedGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMemoryChatMemoryOK builds a "chat" service "getMemory" endpoint result
+// from a HTTP "OK" response.
+func NewGetMemoryChatMemoryOK(body *GetMemoryResponseBody) *chat.ChatMemory {
+	v := &chat.ChatMemory{
+		State:                *body.State,
+		Summary:              body.Summary,
+		SummarizedAt:         body.SummarizedAt,
+		ExcludedAt:           body.ExcludedAt,
+		DayDigestID:          body.DayDigestID,
+		DayDigestPeriodStart: body.DayDigestPeriodStart,
+		CanExclude:           *body.CanExclude,
+		CanInclude:           *body.CanInclude,
+	}
+	v.Memos = make([]*chat.ChatMemoryMemo, len(body.Memos))
+	for i, val := range body.Memos {
+		if val == nil {
+			v.Memos[i] = nil
+			continue
+		}
+		v.Memos[i] = unmarshalChatMemoryMemoResponseBodyToChatChatMemoryMemo(val)
+	}
+
+	return v
+}
+
+// NewGetMemoryUnauthorized builds a chat service getMemory endpoint
+// unauthorized error.
+func NewGetMemoryUnauthorized(body *GetMemoryUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMemoryForbidden builds a chat service getMemory endpoint forbidden
+// error.
+func NewGetMemoryForbidden(body *GetMemoryForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMemoryBadRequest builds a chat service getMemory endpoint bad_request
+// error.
+func NewGetMemoryBadRequest(body *GetMemoryBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMemoryNotFound builds a chat service getMemory endpoint not_found
+// error.
+func NewGetMemoryNotFound(body *GetMemoryNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMemoryConflict builds a chat service getMemory endpoint conflict error.
+func NewGetMemoryConflict(body *GetMemoryConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMemoryUnsupportedMedia builds a chat service getMemory endpoint
+// unsupported_media error.
+func NewGetMemoryUnsupportedMedia(body *GetMemoryUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMemoryInvalid builds a chat service getMemory endpoint invalid error.
+func NewGetMemoryInvalid(body *GetMemoryInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMemoryInvariantViolation builds a chat service getMemory endpoint
+// invariant_violation error.
+func NewGetMemoryInvariantViolation(body *GetMemoryInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMemoryUnexpected builds a chat service getMemory endpoint unexpected
+// error.
+func NewGetMemoryUnexpected(body *GetMemoryUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewGetMemoryGatewayError builds a chat service getMemory endpoint
+// gateway_error error.
+func NewGetMemoryGatewayError(body *GetMemoryGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMemoryExcludedChatMemoryOK builds a "chat" service "setMemoryExcluded"
+// endpoint result from a HTTP "OK" response.
+func NewSetMemoryExcludedChatMemoryOK(body *SetMemoryExcludedResponseBody) *chat.ChatMemory {
+	v := &chat.ChatMemory{
+		State:                *body.State,
+		Summary:              body.Summary,
+		SummarizedAt:         body.SummarizedAt,
+		ExcludedAt:           body.ExcludedAt,
+		DayDigestID:          body.DayDigestID,
+		DayDigestPeriodStart: body.DayDigestPeriodStart,
+		CanExclude:           *body.CanExclude,
+		CanInclude:           *body.CanInclude,
+	}
+	v.Memos = make([]*chat.ChatMemoryMemo, len(body.Memos))
+	for i, val := range body.Memos {
+		if val == nil {
+			v.Memos[i] = nil
+			continue
+		}
+		v.Memos[i] = unmarshalChatMemoryMemoResponseBodyToChatChatMemoryMemo(val)
+	}
+
+	return v
+}
+
+// NewSetMemoryExcludedUnauthorized builds a chat service setMemoryExcluded
+// endpoint unauthorized error.
+func NewSetMemoryExcludedUnauthorized(body *SetMemoryExcludedUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMemoryExcludedForbidden builds a chat service setMemoryExcluded
+// endpoint forbidden error.
+func NewSetMemoryExcludedForbidden(body *SetMemoryExcludedForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMemoryExcludedBadRequest builds a chat service setMemoryExcluded
+// endpoint bad_request error.
+func NewSetMemoryExcludedBadRequest(body *SetMemoryExcludedBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMemoryExcludedNotFound builds a chat service setMemoryExcluded
+// endpoint not_found error.
+func NewSetMemoryExcludedNotFound(body *SetMemoryExcludedNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMemoryExcludedConflict builds a chat service setMemoryExcluded
+// endpoint conflict error.
+func NewSetMemoryExcludedConflict(body *SetMemoryExcludedConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMemoryExcludedUnsupportedMedia builds a chat service setMemoryExcluded
+// endpoint unsupported_media error.
+func NewSetMemoryExcludedUnsupportedMedia(body *SetMemoryExcludedUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMemoryExcludedInvalid builds a chat service setMemoryExcluded endpoint
+// invalid error.
+func NewSetMemoryExcludedInvalid(body *SetMemoryExcludedInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMemoryExcludedInvariantViolation builds a chat service
+// setMemoryExcluded endpoint invariant_violation error.
+func NewSetMemoryExcludedInvariantViolation(body *SetMemoryExcludedInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMemoryExcludedUnexpected builds a chat service setMemoryExcluded
+// endpoint unexpected error.
+func NewSetMemoryExcludedUnexpected(body *SetMemoryExcludedUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetMemoryExcludedGatewayError builds a chat service setMemoryExcluded
+// endpoint gateway_error error.
+func NewSetMemoryExcludedGatewayError(body *SetMemoryExcludedGatewayErrorResponseBody) *goa.ServiceError {
 	v := &goa.ServiceError{
 		Name:      *body.Name,
 		ID:        *body.ID,
@@ -5718,6 +6527,11 @@ func ValidateLoadChatOverviewResponseBody(body *LoadChatOverviewResponseBody) (e
 	if body.LastMessageTimestamp != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_message_timestamp", *body.LastMessageTimestamp, goa.FormatDateTime))
 	}
+	if body.MemoryState != nil {
+		if !(*body.MemoryState == "remembered" || *body.MemoryState == "not_summarized" || *body.MemoryState == "excluded" || *body.MemoryState == "personal") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.memory_state", *body.MemoryState, []any{"remembered", "not_summarized", "excluded", "personal"}))
+		}
+	}
 	if body.SummaryGeneratedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.summary_generated_at", *body.SummaryGeneratedAt, goa.FormatDateTime))
 	}
@@ -5817,6 +6631,11 @@ func ValidateLoadChatResponseBody(body *LoadChatResponseBody) (err error) {
 	if body.LastMessageTimestamp != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_message_timestamp", *body.LastMessageTimestamp, goa.FormatDateTime))
 	}
+	if body.MemoryState != nil {
+		if !(*body.MemoryState == "remembered" || *body.MemoryState == "not_summarized" || *body.MemoryState == "excluded" || *body.MemoryState == "personal") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.memory_state", *body.MemoryState, []any{"remembered", "not_summarized", "excluded", "personal"}))
+		}
+	}
 	if body.SummaryGeneratedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.summary_generated_at", *body.SummaryGeneratedAt, goa.FormatDateTime))
 	}
@@ -5840,6 +6659,90 @@ func ValidateCreditUsageResponseBody(body *CreditUsageResponseBody) (err error) 
 	}
 	if body.MonthlyCredits == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("monthly_credits", "body"))
+	}
+	return
+}
+
+// ValidateGetMemoryResponseBody runs the validations defined on
+// GetMemoryResponseBody
+func ValidateGetMemoryResponseBody(body *GetMemoryResponseBody) (err error) {
+	if body.State == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
+	}
+	if body.Memos == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("memos", "body"))
+	}
+	if body.CanExclude == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_exclude", "body"))
+	}
+	if body.CanInclude == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_include", "body"))
+	}
+	if body.State != nil {
+		if !(*body.State == "remembered" || *body.State == "not_summarized" || *body.State == "excluded" || *body.State == "personal") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"remembered", "not_summarized", "excluded", "personal"}))
+		}
+	}
+	if body.SummarizedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.summarized_at", *body.SummarizedAt, goa.FormatDateTime))
+	}
+	if body.ExcludedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.excluded_at", *body.ExcludedAt, goa.FormatDateTime))
+	}
+	for _, e := range body.Memos {
+		if e != nil {
+			if err2 := ValidateChatMemoryMemoResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.DayDigestID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.day_digest_id", *body.DayDigestID, goa.FormatUUID))
+	}
+	if body.DayDigestPeriodStart != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.day_digest_period_start", *body.DayDigestPeriodStart, goa.FormatDate))
+	}
+	return
+}
+
+// ValidateSetMemoryExcludedResponseBody runs the validations defined on
+// SetMemoryExcludedResponseBody
+func ValidateSetMemoryExcludedResponseBody(body *SetMemoryExcludedResponseBody) (err error) {
+	if body.State == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("state", "body"))
+	}
+	if body.Memos == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("memos", "body"))
+	}
+	if body.CanExclude == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_exclude", "body"))
+	}
+	if body.CanInclude == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("can_include", "body"))
+	}
+	if body.State != nil {
+		if !(*body.State == "remembered" || *body.State == "not_summarized" || *body.State == "excluded" || *body.State == "personal") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.state", *body.State, []any{"remembered", "not_summarized", "excluded", "personal"}))
+		}
+	}
+	if body.SummarizedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.summarized_at", *body.SummarizedAt, goa.FormatDateTime))
+	}
+	if body.ExcludedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.excluded_at", *body.ExcludedAt, goa.FormatDateTime))
+	}
+	for _, e := range body.Memos {
+		if e != nil {
+			if err2 := ValidateChatMemoryMemoResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	if body.DayDigestID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.day_digest_id", *body.DayDigestID, goa.FormatUUID))
+	}
+	if body.DayDigestPeriodStart != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.day_digest_period_start", *body.DayDigestPeriodStart, goa.FormatDate))
 	}
 	return
 }
@@ -8078,6 +8981,486 @@ func ValidateSetPinnedGatewayErrorResponseBody(body *SetPinnedGatewayErrorRespon
 	return
 }
 
+// ValidateGetMemoryUnauthorizedResponseBody runs the validations defined on
+// getMemory_unauthorized_response_body
+func ValidateGetMemoryUnauthorizedResponseBody(body *GetMemoryUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMemoryForbiddenResponseBody runs the validations defined on
+// getMemory_forbidden_response_body
+func ValidateGetMemoryForbiddenResponseBody(body *GetMemoryForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMemoryBadRequestResponseBody runs the validations defined on
+// getMemory_bad_request_response_body
+func ValidateGetMemoryBadRequestResponseBody(body *GetMemoryBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMemoryNotFoundResponseBody runs the validations defined on
+// getMemory_not_found_response_body
+func ValidateGetMemoryNotFoundResponseBody(body *GetMemoryNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMemoryConflictResponseBody runs the validations defined on
+// getMemory_conflict_response_body
+func ValidateGetMemoryConflictResponseBody(body *GetMemoryConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMemoryUnsupportedMediaResponseBody runs the validations defined
+// on getMemory_unsupported_media_response_body
+func ValidateGetMemoryUnsupportedMediaResponseBody(body *GetMemoryUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMemoryInvalidResponseBody runs the validations defined on
+// getMemory_invalid_response_body
+func ValidateGetMemoryInvalidResponseBody(body *GetMemoryInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMemoryInvariantViolationResponseBody runs the validations defined
+// on getMemory_invariant_violation_response_body
+func ValidateGetMemoryInvariantViolationResponseBody(body *GetMemoryInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMemoryUnexpectedResponseBody runs the validations defined on
+// getMemory_unexpected_response_body
+func ValidateGetMemoryUnexpectedResponseBody(body *GetMemoryUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateGetMemoryGatewayErrorResponseBody runs the validations defined on
+// getMemory_gateway_error_response_body
+func ValidateGetMemoryGatewayErrorResponseBody(body *GetMemoryGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMemoryExcludedUnauthorizedResponseBody runs the validations
+// defined on setMemoryExcluded_unauthorized_response_body
+func ValidateSetMemoryExcludedUnauthorizedResponseBody(body *SetMemoryExcludedUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMemoryExcludedForbiddenResponseBody runs the validations defined
+// on setMemoryExcluded_forbidden_response_body
+func ValidateSetMemoryExcludedForbiddenResponseBody(body *SetMemoryExcludedForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMemoryExcludedBadRequestResponseBody runs the validations defined
+// on setMemoryExcluded_bad_request_response_body
+func ValidateSetMemoryExcludedBadRequestResponseBody(body *SetMemoryExcludedBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMemoryExcludedNotFoundResponseBody runs the validations defined
+// on setMemoryExcluded_not_found_response_body
+func ValidateSetMemoryExcludedNotFoundResponseBody(body *SetMemoryExcludedNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMemoryExcludedConflictResponseBody runs the validations defined
+// on setMemoryExcluded_conflict_response_body
+func ValidateSetMemoryExcludedConflictResponseBody(body *SetMemoryExcludedConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMemoryExcludedUnsupportedMediaResponseBody runs the validations
+// defined on setMemoryExcluded_unsupported_media_response_body
+func ValidateSetMemoryExcludedUnsupportedMediaResponseBody(body *SetMemoryExcludedUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMemoryExcludedInvalidResponseBody runs the validations defined on
+// setMemoryExcluded_invalid_response_body
+func ValidateSetMemoryExcludedInvalidResponseBody(body *SetMemoryExcludedInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMemoryExcludedInvariantViolationResponseBody runs the validations
+// defined on setMemoryExcluded_invariant_violation_response_body
+func ValidateSetMemoryExcludedInvariantViolationResponseBody(body *SetMemoryExcludedInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMemoryExcludedUnexpectedResponseBody runs the validations defined
+// on setMemoryExcluded_unexpected_response_body
+func ValidateSetMemoryExcludedUnexpectedResponseBody(body *SetMemoryExcludedUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetMemoryExcludedGatewayErrorResponseBody runs the validations
+// defined on setMemoryExcluded_gateway_error_response_body
+func ValidateSetMemoryExcludedGatewayErrorResponseBody(body *SetMemoryExcludedGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateSummarizeUnauthorizedResponseBody runs the validations defined on
 // summarize_unauthorized_response_body
 func ValidateSummarizeUnauthorizedResponseBody(body *SummarizeUnauthorizedResponseBody) (err error) {
@@ -9315,6 +10698,11 @@ func ValidateChatOverviewResponseBody(body *ChatOverviewResponseBody) (err error
 	if body.LastMessageTimestamp != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.last_message_timestamp", *body.LastMessageTimestamp, goa.FormatDateTime))
 	}
+	if body.MemoryState != nil {
+		if !(*body.MemoryState == "remembered" || *body.MemoryState == "not_summarized" || *body.MemoryState == "excluded" || *body.MemoryState == "personal") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.memory_state", *body.MemoryState, []any{"remembered", "not_summarized", "excluded", "personal"}))
+		}
+	}
 	if body.SummaryGeneratedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.summary_generated_at", *body.SummaryGeneratedAt, goa.FormatDateTime))
 	}
@@ -9564,6 +10952,27 @@ func ValidateChatTotalsResponseBody(body *ChatTotalsResponseBody) (err error) {
 	}
 	if body.RiskOnly == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("risk_only", "body"))
+	}
+	return
+}
+
+// ValidateChatMemoryMemoResponseBody runs the validations defined on
+// ChatMemoryMemoResponseBody
+func ValidateChatMemoryMemoResponseBody(body *ChatMemoryMemoResponseBody) (err error) {
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Content == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("content", "body"))
+	}
+	if body.CreatedAt == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.ID != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", *body.ID, goa.FormatUUID))
+	}
+	if body.CreatedAt != nil {
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
 	}
 	return
 }
