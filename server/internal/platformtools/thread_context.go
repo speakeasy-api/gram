@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/platformtools/core"
 	"github.com/speakeasy-api/gram/server/internal/toolconfig"
 )
@@ -17,7 +18,8 @@ import (
 // ThreadContextResolver resolves an explicitly selected thread under the caller's
 // existing authorization. It must not replace the caller's auth context or actor.
 // The returned chat ID supplies the same conversation metadata as automatic calls.
-type ThreadContextResolver func(context.Context, uuid.UUID) (contextvalues.AssistantPrincipal, string, error)
+// ThreadContextResolver selects a thread; write is true when the tool can change state.
+type ThreadContextResolver func(ctx context.Context, threadID uuid.UUID, write bool) (contextvalues.AssistantPrincipal, string, error)
 
 type threadFallback struct {
 	PlatformToolExecutor
@@ -39,7 +41,7 @@ func (t *threadFallback) Call(ctx context.Context, env toolconfig.ToolCallEnv, p
 	if err != nil {
 		return err
 	}
-	if _, automatic := contextvalues.GetAssistantPrincipal(ctx); !automatic {
+	if automatic, ok := contextvalues.GetAssistantPrincipal(ctx); !ok || automatic.ThreadID == uuid.Nil {
 		if _, selected := contextvalues.GetAssistantToolTarget(ctx); selected && payload != nil {
 			var input map[string]json.RawMessage
 			if err := json.NewDecoder(payload).Decode(&input); err != nil {
@@ -62,7 +64,8 @@ func (t *threadFallback) Call(ctx context.Context, env toolconfig.ToolCallEnv, p
 // thread_id, for gateway schema validation. Only the executor wrapper strips it.
 // Repeated preparation preserves an already selected target.
 func PrepareThreadContext(ctx context.Context, descriptor ToolDescriptor, env toolconfig.ToolCallEnv, payload io.Reader, resolve ThreadContextResolver) (context.Context, toolconfig.ToolCallEnv, io.Reader, error) {
-	if _, ok := contextvalues.GetAssistantToolTarget(ctx); ok || descriptor.ThreadContext == "" {
+	attached, hasTarget := contextvalues.GetAssistantToolTarget(ctx)
+	if (hasTarget && attached.ThreadID != uuid.Nil) || descriptor.ThreadContext == "" {
 		return ctx, env, payload, nil
 	}
 	var body []byte
@@ -76,7 +79,7 @@ func PrepareThreadContext(ctx context.Context, descriptor ToolDescriptor, env to
 	var input map[string]json.RawMessage
 	if len(body) != 0 {
 		if err := json.Unmarshal(body, &input); err != nil {
-			return ctx, env, nil, fmt.Errorf("decode tool input: %w", err)
+			return ctx, env, nil, oops.E(oops.CodeBadRequest, err, "decode tool input")
 		}
 	}
 	needed := descriptor.ThreadContext == core.ThreadContextRequired
@@ -99,16 +102,23 @@ func PrepareThreadContext(ctx context.Context, descriptor ToolDescriptor, env to
 	}
 	var rawID string
 	if err := json.Unmarshal(input["thread_id"], &rawID); err != nil {
-		return ctx, env, nil, fmt.Errorf("thread_id is required without an assistant principal")
+		if hasTarget {
+			// An assistant-scoped principal keeps its existing behavior when no
+			// thread is named.
+			return ctx, env, bytes.NewReader(body), nil
+		}
+		return ctx, env, nil, oops.E(oops.CodeBadRequest, nil, "thread_id is required without an assistant principal")
 	}
 	threadID, err := uuid.Parse(rawID)
 	if err != nil || threadID == uuid.Nil {
-		return ctx, env, nil, fmt.Errorf("thread_id must be a non-zero UUID")
+		return ctx, env, nil, oops.E(oops.CodeBadRequest, nil, "thread_id must be a non-zero UUID")
 	}
 	if resolve == nil {
 		return ctx, env, nil, fmt.Errorf("explicit thread selection is not configured")
 	}
-	principal, chatID, err := resolve(ctx, threadID)
+	// Anything not declared read-only may change the target thread's state.
+	write := descriptor.Annotations == nil || descriptor.Annotations.ReadOnlyHint == nil || !*descriptor.Annotations.ReadOnlyHint
+	principal, chatID, err := resolve(ctx, threadID, write)
 	if err != nil {
 		return ctx, env, nil, err
 	}

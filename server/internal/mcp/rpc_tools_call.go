@@ -370,8 +370,8 @@ func handleToolsCall(
 
 	if plan.Kind == gateway.ToolKindPlatform {
 		if definition, ok := platformtools.FindToolDescriptor(toolURN, platformExtras...); ok {
-			ctx, toolCallEnv, _, err = platformtools.PrepareThreadContext(ctx, definition, toolCallEnv, bytes.NewReader(params.Arguments), func(ctx context.Context, threadID uuid.UUID) (contextvalues.AssistantPrincipal, string, error) {
-				principal, chatID, err := threadcontext.Resolve(ctx, db, authzEngine, threadID)
+			ctx, toolCallEnv, _, err = platformtools.PrepareThreadContext(ctx, definition, toolCallEnv, bytes.NewReader(params.Arguments), func(ctx context.Context, threadID uuid.UUID, write bool) (contextvalues.AssistantPrincipal, string, error) {
+				principal, chatID, err := threadcontext.Resolve(ctx, db, authzEngine, threadID, write)
 				if err != nil {
 					return principal, chatID, fmt.Errorf("resolve platform thread: %w", err)
 				}

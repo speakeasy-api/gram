@@ -8,8 +8,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/platformtools/threadcontext"
 )
 
-func (s *Service) resolvePlatformThreadContext(ctx context.Context, threadID uuid.UUID) (contextvalues.AssistantPrincipal, string, error) {
-	principal, chatID, err := threadcontext.Resolve(ctx, s.db, s.authz, threadID)
+func (s *Service) resolvePlatformThreadContext(ctx context.Context, threadID uuid.UUID, write bool) (contextvalues.AssistantPrincipal, string, error) {
+	principal, chatID, err := threadcontext.Resolve(ctx, s.db, s.authz, threadID, write)
 	if err != nil {
 		return principal, chatID, fmt.Errorf("resolve platform thread: %w", err)
 	}

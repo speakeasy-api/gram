@@ -127,8 +127,8 @@ func NewService(
 
 	executors, gates := platformtools.BuildExecutors(cfg.deps, cfg.extras...)
 	for name, executor := range executors {
-		executors[name] = platformtools.WithThreadFallback(executor, func(ctx context.Context, threadID uuid.UUID) (contextvalues.AssistantPrincipal, string, error) {
-			return threadcontext.Resolve(ctx, db, cfg.threadAuthorizer, threadID)
+		executors[name] = platformtools.WithThreadFallback(executor, func(ctx context.Context, threadID uuid.UUID, write bool) (contextvalues.AssistantPrincipal, string, error) {
+			return threadcontext.Resolve(ctx, db, cfg.threadAuthorizer, threadID, write)
 		})
 	}
 

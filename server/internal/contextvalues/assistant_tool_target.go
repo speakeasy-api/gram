@@ -1,6 +1,10 @@
 package contextvalues
 
-import "context"
+import (
+	"context"
+
+	"github.com/google/uuid"
+)
 
 type assistantToolTargetKey struct{}
 
@@ -11,13 +15,17 @@ func SetAssistantToolTarget(ctx context.Context, target AssistantPrincipal) cont
 	return context.WithValue(ctx, assistantToolTargetKey{}, target)
 }
 
-// GetAssistantToolTarget returns automatic assistant context when attached,
-// otherwise the explicit tool target. Use this for tool targeting and target
-// attribution only, never to classify or authorize the caller.
+// GetAssistantToolTarget returns automatic thread context when attached,
+// otherwise the explicit tool target, otherwise an assistant-scoped principal
+// without a thread. Use this for tool targeting and target attribution only,
+// never to classify or authorize the caller.
 func GetAssistantToolTarget(ctx context.Context) (AssistantPrincipal, bool) {
-	if principal, ok := GetAssistantPrincipal(ctx); ok {
+	principal, hasPrincipal := GetAssistantPrincipal(ctx)
+	if hasPrincipal && principal.ThreadID != uuid.Nil {
 		return principal, true
 	}
-	target, ok := ctx.Value(assistantToolTargetKey{}).(AssistantPrincipal)
-	return target, ok
+	if target, ok := ctx.Value(assistantToolTargetKey{}).(AssistantPrincipal); ok {
+		return target, true
+	}
+	return principal, hasPrincipal
 }

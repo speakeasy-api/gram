@@ -15,12 +15,13 @@ import (
 
 // Resolve selects a live thread in the caller's project.
 // Assistant access uses the same resource-aware read check as sending an
-// assistant message. The caller's identity and grants remain authoritative;
+// assistant message, or the write check for tools that change state. A denial is
+// reported as not found so thread IDs cannot be probed. The caller's identity
+// and grants remain authoritative;
 // selecting a thread does not authenticate as its assistant or creator.
 // Dashboard chat ownership gates human message ingress, not machine tool
-// targeting. Keep the existing tool authorization rather than adding chat-owner
-// or assistant-write requirements to target selection.
-func Resolve(ctx context.Context, db *pgxpool.Pool, authorizer *authz.Engine, threadID uuid.UUID) (contextvalues.AssistantPrincipal, string, error) {
+// targeting.
+func Resolve(ctx context.Context, db *pgxpool.Pool, authorizer *authz.Engine, threadID uuid.UUID, write bool) (contextvalues.AssistantPrincipal, string, error) {
 	var empty contextvalues.AssistantPrincipal
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
@@ -42,7 +43,15 @@ func Resolve(ctx context.Context, db *pgxpool.Pool, authorizer *authz.Engine, th
 	if thread.OrganizationID != authCtx.ActiveOrganizationID {
 		return empty, "", oops.E(oops.CodeNotFound, nil, "assistant thread not found")
 	}
-	if err := authorizer.Require(ctx, authz.AssistantCheck(authz.ScopeAssistantRead, thread.AssistantID.String(), authCtx.ProjectID.String())); err != nil {
+	scope := authz.ScopeAssistantRead
+	if write {
+		scope = authz.ScopeAssistantWrite
+	}
+	if err := authorizer.Require(ctx, authz.AssistantCheck(scope, thread.AssistantID.String(), authCtx.ProjectID.String())); err != nil {
+		var denied *oops.ShareableError
+		if errors.As(err, &denied) && denied.Code == oops.CodeForbidden {
+			return empty, "", oops.E(oops.CodeNotFound, nil, "assistant thread not found")
+		}
 		return empty, "", err
 	}
 	return contextvalues.AssistantPrincipal{AssistantID: thread.AssistantID, ThreadID: thread.ID}, thread.ChatID.String(), nil

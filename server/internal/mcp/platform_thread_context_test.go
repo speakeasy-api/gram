@@ -58,7 +58,7 @@ func TestResolvePlatformThreadContextAuthorization(t *testing.T) {
 		{siblingThread, firstAssistant, siblingChat},
 		{otherThread, secondAssistant, otherChat},
 	} {
-		principal, chatID, err := service.resolvePlatformThreadContext(allowedCtx, target.threadID)
+		principal, chatID, err := service.resolvePlatformThreadContext(allowedCtx, target.threadID, false)
 		require.NoError(t, err)
 		require.Equal(t, contextvalues.AssistantPrincipal{AssistantID: target.assistantID, ThreadID: target.threadID}, principal)
 		require.Equal(t, target.chatID.String(), chatID)
@@ -74,29 +74,38 @@ func TestResolvePlatformThreadContextAuthorization(t *testing.T) {
 		{authz.NewGrant(authz.ScopeAssistantRead, firstAssistant.String())},
 	} {
 		deniedCtx := authztest.WithExactGrants(t, callerCtx, grants...)
-		principal, chatID, err := service.resolvePlatformThreadContext(deniedCtx, otherThread)
+		principal, chatID, err := service.resolvePlatformThreadContext(deniedCtx, otherThread, false)
 		var denied *oops.ShareableError
 		require.ErrorAs(t, err, &denied)
-		require.Equal(t, oops.CodeForbidden, denied.Code)
+		require.Equal(t, oops.CodeNotFound, denied.Code, "a denial must not reveal that the thread exists")
 		require.Zero(t, principal)
 		require.Empty(t, chatID)
 	}
+	// Tools that change state need write access to the target assistant.
+	_, _, err = service.resolvePlatformThreadContext(allowedCtx, firstThread, true)
+	var readOnly *oops.ShareableError
+	require.ErrorAs(t, err, &readOnly)
+	require.Equal(t, oops.CodeNotFound, readOnly.Code)
+	writeCtx := authztest.WithExactGrants(t, callerCtx, authz.NewGrant(authz.ScopeAssistantWrite, firstAssistant.String()))
+	principal, _, err := service.resolvePlatformThreadContext(writeCtx, firstThread, true)
+	require.NoError(t, err)
+	require.Equal(t, firstThread, principal.ThreadID)
 	// Project scoping remains enforced even with an otherwise valid assistant grant.
 	otherProjectID := uuid.New()
 	wrongProject := contextvalues.SetAuthContext(allowedCtx, &contextvalues.AuthContext{ActiveOrganizationID: orgID, ProjectID: &otherProjectID, UserID: auth.UserID})
-	_, _, err = service.resolvePlatformThreadContext(wrongProject, firstThread)
+	_, _, err = service.resolvePlatformThreadContext(wrongProject, firstThread, false)
 	var notFound *oops.ShareableError
 	require.ErrorAs(t, err, &notFound)
 	require.Equal(t, oops.CodeNotFound, notFound.Code)
 	wrongOrganization := contextvalues.SetAuthContext(allowedCtx, &contextvalues.AuthContext{ActiveOrganizationID: "org_other_thread_test", ProjectID: &project.ID, UserID: auth.UserID})
-	_, _, err = service.resolvePlatformThreadContext(wrongOrganization, firstThread)
+	_, _, err = service.resolvePlatformThreadContext(wrongOrganization, firstThread, false)
 	require.ErrorAs(t, err, &notFound)
 	require.Equal(t, oops.CodeNotFound, notFound.Code)
-	_, _, err = service.resolvePlatformThreadContext(allowedCtx, uuid.Nil)
+	_, _, err = service.resolvePlatformThreadContext(allowedCtx, uuid.Nil, false)
 	var badRequest *oops.ShareableError
 	require.ErrorAs(t, err, &badRequest)
 	require.Equal(t, oops.CodeBadRequest, badRequest.Code)
-	_, _, err = service.resolvePlatformThreadContext(ctx, firstThread)
+	_, _, err = service.resolvePlatformThreadContext(ctx, firstThread, false)
 	var unauthorized *oops.ShareableError
 	require.ErrorAs(t, err, &unauthorized)
 	require.Equal(t, oops.CodeUnauthorized, unauthorized.Code)

@@ -48,7 +48,7 @@ func TestPrepareThreadContextPreservesValidationPayloadAndIdentity(t *testing.T)
 	target := contextvalues.AssistantPrincipal{AssistantID: uuid.New(), ThreadID: uuid.New()}
 	original := `{"thread_id":"` + target.ThreadID.String() + `","content":"keep"}`
 	calls := 0
-	resolve := func(context.Context, uuid.UUID) (contextvalues.AssistantPrincipal, string, error) {
+	resolve := func(context.Context, uuid.UUID, bool) (contextvalues.AssistantPrincipal, string, error) {
 		calls++
 		return target, "selected-chat", nil
 	}
@@ -93,7 +93,7 @@ func TestThreadFallbackAutomatic(t *testing.T) {
 		require.NoError(t, err)
 		require.JSONEq(t, `{"thread_id":"ignored"}`, string(body))
 		return nil
-	}}, func(context.Context, uuid.UUID) (contextvalues.AssistantPrincipal, string, error) {
+	}}, func(context.Context, uuid.UUID, bool) (contextvalues.AssistantPrincipal, string, error) {
 		t.Fatal("automatic context must not resolve explicit thread")
 		return contextvalues.AssistantPrincipal{}, "", nil
 	})
@@ -121,7 +121,7 @@ func TestThreadFallbackExplicit(t *testing.T) {
 		require.NoError(t, err)
 		require.JSONEq(t, `{"content":"keep"}`, string(body))
 		return nil
-	}}, func(gotCtx context.Context, id uuid.UUID) (contextvalues.AssistantPrincipal, string, error) {
+	}}, func(gotCtx context.Context, id uuid.UUID, _ bool) (contextvalues.AssistantPrincipal, string, error) {
 		require.Equal(t, ctx, gotCtx)
 		require.Equal(t, selected, id)
 		return principal, "selected-chat", nil
@@ -138,7 +138,7 @@ func TestThreadFallbackRequiredAndDenied(t *testing.T) {
 	tool := WithThreadFallback(threadTestExecutor{descriptor: ToolDescriptor{ThreadContext: core.ThreadContextRequired}, call: func(context.Context, toolconfig.ToolCallEnv, io.Reader, io.Writer) error {
 		t.Fatal("must not dispatch")
 		return nil
-	}}, func(context.Context, uuid.UUID) (contextvalues.AssistantPrincipal, string, error) {
+	}}, func(context.Context, uuid.UUID, bool) (contextvalues.AssistantPrincipal, string, error) {
 		return contextvalues.AssistantPrincipal{}, "", denied
 	})
 	for _, body := range []string{`{}`, `{"thread_id":"bad"}`, `{"thread_id":"00000000-0000-0000-0000-000000000000"}`} {
@@ -180,7 +180,7 @@ func TestThreadFallbackConcurrent(t *testing.T) {
 			return errors.New("thread context leaked across calls")
 		}
 		return nil
-	}}, func(_ context.Context, id uuid.UUID) (contextvalues.AssistantPrincipal, string, error) {
+	}}, func(_ context.Context, id uuid.UUID, _ bool) (contextvalues.AssistantPrincipal, string, error) {
 		return contextvalues.AssistantPrincipal{AssistantID: uuid.New(), ThreadID: id}, id.String(), nil
 	})
 	for range 24 {

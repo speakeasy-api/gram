@@ -21,3 +21,16 @@ func TestAssistantToolTargetDoesNotAuthenticate(t *testing.T) {
 	require.True(t, ok)
 	require.Equal(t, automatic, got, "authenticated automatic context wins")
 }
+
+func TestAssistantToolTargetPrefersExplicitThreadOverThreadlessPrincipal(t *testing.T) {
+	t.Parallel()
+	threadless := AssistantPrincipal{AssistantID: uuid.New(), ThreadID: uuid.Nil}
+	ctx := SetAssistantPrincipal(t.Context(), threadless)
+	got, ok := GetAssistantToolTarget(ctx)
+	require.True(t, ok)
+	require.Equal(t, threadless, got, "an assistant-scoped principal still targets its assistant")
+	explicit := AssistantPrincipal{AssistantID: threadless.AssistantID, ThreadID: uuid.New()}
+	got, ok = GetAssistantToolTarget(SetAssistantToolTarget(ctx, explicit))
+	require.True(t, ok)
+	require.Equal(t, explicit, got, "an explicit thread wins over a principal without one")
+}
