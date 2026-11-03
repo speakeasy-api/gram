@@ -123,7 +123,7 @@ func (s *seeder) seedMemory(ctx context.Context) error {
 		var source *remembered
 		for _, d := range days {
 			for _, r := range byDay[d] {
-				if r.topic == m.topic {
+				if r.topic == m.topic && (source == nil || r.at.After(source.at)) {
 					source = &r
 				}
 			}
@@ -223,7 +223,10 @@ func (s *seeder) seedMemory(ctx context.Context) error {
 	var months []time.Time
 	for _, w := range weeks {
 		m := time.Date(w.Year(), w.Month(), 1, 0, 0, 0, 0, time.UTC)
-		if !m.AddDate(0, 1, 0).After(today) && !slices.Contains(months, m) {
+		// The rollup closes a month once the ISO week holding its last day
+		// has closed too.
+		lastWeekEnd := weekStart(m.AddDate(0, 1, -1)).AddDate(0, 0, 7)
+		if !lastWeekEnd.After(today) && !slices.Contains(months, m) {
 			months = append(months, m)
 		}
 	}

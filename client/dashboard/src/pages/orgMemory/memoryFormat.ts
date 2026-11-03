@@ -1,3 +1,4 @@
+import { pluralize } from "@/lib/format";
 import { format } from "date-fns";
 
 export type DigestLevel = "day" | "week" | "month";
@@ -17,7 +18,7 @@ export function parsePeriodDate(value: PeriodDate): Date {
 
 /** The label a period goes by: "Tue, Oct 27", "Oct 26 – Nov 1", "October 2026". */
 export function formatPeriod(
-  level: DigestLevel | string,
+  level: string,
   start: PeriodDate,
   end: PeriodDate,
 ): string {
@@ -53,13 +54,12 @@ export function describeDigestSources(digest: {
   childCount: number;
 }): string {
   if (digest.level === "day") {
-    return `${plural(digest.sessionCount, "session")} · ${plural(digest.memoCount, "memo")}`;
+    return `${pluralize(digest.sessionCount, "session")} · ${pluralize(digest.memoCount, "memo")}`;
   }
-  return plural(digest.childCount, digest.level === "month" ? "week" : "day");
-}
-
-export function plural(count: number, noun: string): string {
-  return `${count} ${noun}${count === 1 ? "" : "s"}`;
+  return pluralize(
+    digest.childCount,
+    digest.level === "month" ? "week" : "day",
+  );
 }
 
 /** The first line of a digest, for the timeline's one-line preview. */

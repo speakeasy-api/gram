@@ -9,6 +9,8 @@ import type { OrgMemorySession } from "@gram/client/models/components/orgmemorys
 import { useOrgMemoryDigest } from "@gram/client/react-query/orgMemoryDigest.js";
 import { useOrgMemoryDigests } from "@gram/client/react-query/orgMemoryDigests.js";
 import { useOrgMemoryRecent } from "@gram/client/react-query/orgMemoryRecent.js";
+import { pluralize } from "@/lib/format";
+import { keepPreviousData } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
 import { useState } from "react";
 import {
@@ -17,7 +19,6 @@ import {
   type DigestLevel,
   firstLine,
   formatPeriod,
-  plural,
 } from "./memoryFormat";
 
 const PAGE_SIZE = 12;
@@ -51,6 +52,8 @@ export function OrgMemoryTimeline({
   const [limit, setLimit] = useState(PAGE_SIZE);
   const digests = useOrgMemoryDigests({ level, limit }, undefined, {
     throwOnError: false,
+    // "Show older" grows the page; keep the current one on screen meanwhile.
+    placeholderData: keepPreviousData,
   });
   const recent = useOrgMemoryRecent({ limit: 20 }, undefined, {
     throwOnError: false,
@@ -60,8 +63,11 @@ export function OrgMemoryTimeline({
   const recentCount =
     (recent.data?.sessions.length ?? 0) + (recent.data?.memos.length ?? 0);
   const hasRecent = recentCount > 0;
+  // A "recent" selection whose items have all rolled up falls back to the
+  // newest digest rather than an empty view.
+  const selected = selectedId === RECENT && !hasRecent ? null : selectedId;
   const activeId =
-    selectedId ?? (hasRecent ? RECENT : (rows[0]?.id ?? null)) ?? null;
+    selected ?? (hasRecent ? RECENT : (rows[0]?.id ?? null)) ?? null;
 
   if (digests.isPending || recent.isPending) {
     return (
@@ -106,7 +112,7 @@ export function OrgMemoryTimeline({
             active={activeId === RECENT}
             onClick={() => onSelect(RECENT)}
             title="Not rolled up yet"
-            meta={plural(recentCount, "item")}
+            meta={pluralize(recentCount, "item")}
             preview="Sessions and memos waiting for tonight's day digest"
             dashed
           />
@@ -271,16 +277,6 @@ function DigestDetail({
           memos={memos}
           onOpenSession={onOpenSession}
         />
-      )}
-
-      {level === "day" && sessions.length < digest.sessionCount && (
-        <p className="text-muted-foreground text-xs">
-          {plural(digest.sessionCount - sessions.length, "session")} this digest
-          folded {digest.sessionCount - sessions.length === 1 ? "has" : "have"}{" "}
-          since left memory. The digest is rebuilt without{" "}
-          {digest.sessionCount - sessions.length === 1 ? "it" : "them"} on the
-          next nightly rollup.
-        </p>
       )}
     </article>
   );

@@ -7,6 +7,7 @@ import {
 } from "@gram/client/react-query/chatMemory.js";
 import { useChatSetMemoryExcludedMutation } from "@gram/client/react-query/chatSetMemoryExcluded.js";
 import { invalidateAllOrgMemoryDigests } from "@gram/client/react-query/orgMemoryDigests.js";
+import { invalidateAllOrgMemoryOverview } from "@gram/client/react-query/orgMemoryOverview.js";
 import { invalidateAllOrgMemoryRecent } from "@gram/client/react-query/orgMemoryRecent.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { format, formatDistanceToNow } from "date-fns";
@@ -62,6 +63,7 @@ export function SessionMemorySection({
           void invalidateAllListChats(queryClient);
           void invalidateAllOrgMemoryRecent(queryClient);
           void invalidateAllOrgMemoryDigests(queryClient);
+          void invalidateAllOrgMemoryOverview(queryClient);
           toast.success(
             next.state === "excluded"
               ? "Kept out of Organizational Memory. Digests that included it are rebuilt tonight."
@@ -145,7 +147,9 @@ export function SessionMemorySection({
             <p className="text-muted-foreground">
               {state === "personal"
                 ? "This session came from a personal or unclassified AI account, so it never enters Organizational Memory."
-                : "No masked summary yet. Memory reads sessions about 30 minutes after they go quiet."}
+                : excluded
+                  ? "Kept out of Organizational Memory, so agents never read this session."
+                  : "No masked summary yet. Memory reads sessions about 30 minutes after they go quiet."}
             </p>
           )}
 
