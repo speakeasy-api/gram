@@ -625,6 +625,10 @@ func newWorkerCommand() *cli.Command {
 					AdmitWorkloadSessionInTx:         runtimepolicy.AdmitWorkloadSessionInTx,
 					DevMode:                          c.String("environment") == "local",
 				})
+			authzClient, err := newAuthzClient(logger, meterProvider, authzEngine, featureFlags)
+			if err != nil {
+				return err
+			}
 
 			workosClient, workosAvailable, err := newWorkOSClient(guardianPolicy, c)
 			if err != nil {
@@ -875,6 +879,7 @@ func newWorkerCommand() *cli.Command {
 				DB:                             db,
 				EncryptionClient:               encryptionClient,
 				FeatureProvider:                featureFlags,
+				AuthzClient:                    authzClient,
 				AssetStorage:                   assetStorage,
 				SlackClient:                    slackClient,
 				SlackDirectoryTokenRefresher:   slackDirectoryRefresher,

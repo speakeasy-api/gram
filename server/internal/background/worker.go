@@ -32,6 +32,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	activitiespkg "github.com/speakeasy-api/gram/server/internal/background/activities"
 	"github.com/speakeasy-api/gram/server/internal/background/interceptors"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
@@ -82,6 +83,10 @@ type WorkerOptions struct {
 	CatalogPromotionDeliveryPaused bool
 
 	GuardianPolicy *guardian.Policy
+
+	// AuthzClient answers typed authorization operations for activities
+	// whose services have moved to the registry declarations.
+	AuthzClient *authz.Client
 
 	// TunnelHTTPClient carries back-channel OAuth calls for remote session
 	// clients bound to an MCP tunnel. Nil means tunnel-bound refreshes fail
@@ -208,6 +213,7 @@ func ForDeploymentProcessing(
 		CatalogPromotionDeliveryPaused: false,
 		DB:                             db,
 		GuardianPolicy:                 guardianPolicy,
+		AuthzClient:                    nil,
 		TunnelHTTPClient:               nil,
 		EncryptionClient:               enc,
 		FeatureProvider:                f,
@@ -308,6 +314,7 @@ func NewTemporalWorker(
 		CatalogPromotionDeliveryPaused: false,
 		MCPCatalog:                     nil,
 		GuardianPolicy:                 nil,
+		AuthzClient:                    nil,
 		TunnelHTTPClient:               nil,
 		DB:                             nil,
 		EncryptionClient:               nil,
@@ -366,6 +373,7 @@ func NewTemporalWorker(
 			CatalogPromotions:              conv.Default(o.CatalogPromotions, opts.CatalogPromotions),
 			CatalogPromotionDeliveryPaused: o.CatalogPromotionDeliveryPaused || opts.CatalogPromotionDeliveryPaused,
 			GuardianPolicy:                 conv.Default(o.GuardianPolicy, opts.GuardianPolicy),
+			AuthzClient:                    nil,
 			TunnelHTTPClient:               conv.Default(o.TunnelHTTPClient, opts.TunnelHTTPClient),
 			DB:                             conv.Default(o.DB, opts.DB),
 			EncryptionClient:               conv.Default(o.EncryptionClient, opts.EncryptionClient),
