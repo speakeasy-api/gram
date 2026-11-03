@@ -3127,11 +3127,18 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 			s.emitAssistantTelemetry(turnCtx, assistant, thread, &runtimeRecord, &event, "turn_failed", "assistant turn failed", "ERROR", runErr)
 
 			if kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) &&
-				(errors.Is(runErr, ErrRuntimeUnhealthy) || errors.Is(runErr, ErrHistoryCorrupted)) {
-				// Legacy replacement/self-heal would discard the session owner and
-				// its transcript cursor. Kit recovery must use its fenced checkpoint,
-				// never silently start a new conversation after a transport failure.
-				return ProcessThreadEventsResult{}, fmt.Errorf("preserve Kit session authority after turn failure: %w", runErr)
+				(errors.Is(runErr, ErrRuntimeUnhealthy) || errors.Is(runErr, ErrHistoryCorrupted) || errors.Is(runErr, errKitRuntimeUnrecoverable)) {
+				// A Kit runtime that cannot serve turns is replaced, dropping its
+				// conversation. Revoke its credentials, then retire it through the
+				// unhealthy-runtime path below.
+				revokeCtx, cancelRevoke := context.WithTimeout(context.WithoutCancel(ctx), teardownCapCleanupTimeout)
+				if err := s.revokeKitWorkload(revokeCtx, s.db, runtimeRecord); err != nil {
+					s.logger.WarnContext(ctx, "revoke retired Kit runtime", attr.SlogAssistantThreadID(thread.ID.String()), attr.SlogError(err))
+				}
+				cancelRevoke()
+				if !errors.Is(runErr, ErrRuntimeUnhealthy) {
+					runErr = errors.Join(ErrRuntimeUnhealthy, runErr)
+				}
 			}
 
 			teardownExhausted := errors.Is(runErr, ErrRuntimeUnhealthy) && event.Attempts >= maxRuntimeTeardowns

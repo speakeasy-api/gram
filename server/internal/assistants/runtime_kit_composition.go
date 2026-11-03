@@ -201,7 +201,7 @@ func (s *ServiceCore) kitProtocolFactory(c KitLocalCompositionConfig, cidrs []st
 }
 
 var errKitMCPDiscoveryUnavailable = errors.New("kit MCP desired set is unavailable; retry after discovery succeeds")
-var errKitMCPConfigurationUnverified = errors.New("kit runtime MCP configuration is unverified; a state-preserving upgrade is required")
+var errKitMCPConfigurationUnverified = fmt.Errorf("%w: kit runtime MCP configuration is unverified", errKitRuntimeUnrecoverable)
 
 // The verified filesystem config owns the machine-auth connections. Do not
 // shadow it with legacy per-turn server overlays or management credentials.
