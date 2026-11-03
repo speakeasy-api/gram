@@ -108,6 +108,10 @@ type WorkerOptions struct {
 	// records at; used alongside ExpectedTargetCNAME for verification/health.
 	ExpectedARecords []netip.Addr
 
+	// CustomDomainTargetSuffix is the normalized parent DNS name of per-domain
+	// CNAME targets (<token>.<suffix>); empty disables per-domain targets.
+	CustomDomainTargetSuffix string
+
 	// GitHubEvidenceToken authenticates the recheck sweep's repository
 	// lookups; empty falls back to GitHub's small unauthenticated budget.
 	GitHubEvidenceToken string
@@ -234,6 +238,7 @@ func ForDeploymentProcessing(
 		K8sClient:                      nil,
 		ExpectedTargetCNAME:            "",
 		ExpectedARecords:               nil,
+		CustomDomainTargetSuffix:       "",
 		GitHubEvidenceToken:            "",
 		SiteURL:                        nil,
 		ServerURL:                      nil,
@@ -328,6 +333,7 @@ func NewTemporalWorker(
 		K8sClient:                      nil,
 		ExpectedTargetCNAME:            "",
 		ExpectedARecords:               nil,
+		CustomDomainTargetSuffix:       "",
 		GitHubEvidenceToken:            "",
 		SiteURL:                        nil,
 		ServerURL:                      nil,
@@ -387,6 +393,7 @@ func NewTemporalWorker(
 			K8sClient:                      conv.Default(o.K8sClient, opts.K8sClient),
 			ExpectedTargetCNAME:            conv.Default(o.ExpectedTargetCNAME, opts.ExpectedTargetCNAME),
 			ExpectedARecords:               conv.DefaultSlice(o.ExpectedARecords, opts.ExpectedARecords),
+			CustomDomainTargetSuffix:       conv.Default(o.CustomDomainTargetSuffix, opts.CustomDomainTargetSuffix),
 			GitHubEvidenceToken:            conv.Default(o.GitHubEvidenceToken, opts.GitHubEvidenceToken),
 			SiteURL:                        conv.Default(o.SiteURL, opts.SiteURL),
 			ServerURL:                      conv.Default(o.ServerURL, opts.ServerURL),
@@ -500,6 +507,7 @@ func NewTemporalWorker(
 		opts.K8sClient,
 		opts.ExpectedTargetCNAME,
 		opts.ExpectedARecords,
+		opts.CustomDomainTargetSuffix,
 		opts.SiteURL,
 		opts.OrgHosts,
 		opts.BillingTracker,

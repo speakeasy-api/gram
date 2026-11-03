@@ -45,6 +45,7 @@ type CustomDomainHealth struct {
 	probe            func(ctx context.Context, domain string) error
 	expectedTarget   string
 	expectedARecords []netip.Addr
+	targetSuffix     string
 	emails           *email.Service
 	orgHosts         *orghost.Resolver
 }
@@ -71,9 +72,20 @@ type NotifyCustomDomainUnhealthyArgs struct {
 	Domain         string
 	Issue          customdomains.HealthIssue
 	CheckedAt      time.Time
+
+	// DNSTarget is the domain's per-domain CNAME target when the check ran;
+	// empty when it had none. Remediation emails point customers at it
+	// instead of the shared target.
+	DNSTarget string
+
+	// OtherDNSTarget reports that the domain's CNAME pointed at a per-domain
+	// target that is not its own.
+	OtherDNSTarget bool
 }
 
-func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure CustomDomainInfrastructureChecker, expectedTarget string, expectedARecords []netip.Addr, emails *email.Service, orgHosts *orghost.Resolver, guardianPolicy *guardian.Policy) *CustomDomainHealth {
+// NewCustomDomainHealth returns the health check activities. targetSuffix is
+// the normalized parent of per-domain CNAME targets; empty disables them.
+func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure CustomDomainInfrastructureChecker, expectedTarget string, expectedARecords []netip.Addr, targetSuffix string, emails *email.Service, orgHosts *orghost.Resolver, guardianPolicy *guardian.Policy) *CustomDomainHealth {
 	probe := func(ctx context.Context, domain string) error {
 		return errors.New("custom domain https probe is not configured")
 	}
@@ -90,6 +102,7 @@ func NewCustomDomainHealth(logger *slog.Logger, db *pgxpool.Pool, infrastructure
 		probe:            probe,
 		expectedTarget:   expectedTarget,
 		expectedARecords: expectedARecords,
+		targetSuffix:     targetSuffix,
 		emails:           emails,
 		orgHosts:         orgHosts,
 	}
@@ -142,9 +155,11 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		return noNotification, fmt.Errorf("get custom domain for health check: %w", err)
 	}
 
-	// Backfill rows created before DNS target tokens existed. Nothing checks
-	// the per-domain target yet, so a failure must not fail the health check.
-	backfillDNSTargetToken(ctx, c.logger, c.db, domain.OrganizationID, domain.ID, domain.Domain, domain.DnsTargetToken)
+	// Backfill rows created before DNS target tokens existed. A failure only
+	// means this check accepts the shared target alone, so it must not fail
+	// the health check.
+	dnsTargetToken := backfillDNSTargetToken(ctx, c.logger, c.db, domain.OrganizationID, domain.ID, domain.Domain, domain.DnsTargetToken)
+	targets := newCustomDomainRoutingTargets(c.expectedTarget, c.expectedARecords, c.targetSuffix, dnsTargetToken)
 
 	route, err := repository.GetCustomDomainRouteConfig(ctx, customdomainsrepo.GetCustomDomainRouteConfigParams{
 		ID:             domain.ID,
@@ -173,13 +188,15 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		Issue:                "",
 		CertificateExpiresAt: nil,
 	}
-	routingIssue, routingErr := checkCustomDomainRouting(ctx, c.resolver, domain.Domain, c.expectedTarget, c.expectedARecords)
-	if routingErr == nil && routingIssue == customdomains.HealthIssueDNSTargetMismatch {
+	routing, routingErr := checkCustomDomainRouting(ctx, c.resolver, domain.Domain, targets)
+	if routingErr == nil && routing.Issue == customdomains.HealthIssueDNSTargetMismatch && !routing.OtherDNSTarget {
 		// DNS shape says the domain points elsewhere, but proxied/CDN setups
 		// legitimately do that. If the domain still answers HTTPS, traffic is
-		// routing and the domain is healthy.
+		// routing and the domain is healthy. A CNAME to another domain's
+		// per-domain target also answers HTTPS today, but it would follow that
+		// domain when it moves, so the probe never clears it.
 		if probeErr := c.probe(ctx, domain.Domain); probeErr == nil {
-			routingIssue = ""
+			routing.Issue = ""
 		} else {
 			c.logger.InfoContext(ctx, "custom domain https probe failed after dns mismatch", attr.SlogURLDomain(domain.Domain), attr.SlogError(probeErr))
 		}
@@ -193,9 +210,10 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 		observation.Status = customdomains.HealthStatusUnhealthy
 		observation.Issue = customdomains.HealthIssueCheckFailed
 		preserveCertificateExpiry = true
-	case routingIssue != "":
+		routing = customDomainRouting{Issue: "", Method: customdomains.DNSRoutingMethodUnknown, OtherDNSTarget: false}
+	case routing.Issue != "":
 		observation.Status = customdomains.HealthStatusUnhealthy
-		observation.Issue = routingIssue
+		observation.Issue = routing.Issue
 		preserveCertificateExpiry = true
 	default:
 		infrastructureHealth, infrastructureErr := c.infrastructure.CheckCustomDomainInfrastructure(ctx, k8s.CustomDomainInfrastructureCheck{
@@ -243,6 +261,13 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 			observation.CertificateExpiresAt = current.CertificateExpiresAt
 		}
 		next = customdomains.ReconcileHealthState(current, observation, args.CheckedAt)
+		// A stale or retried check leaves the health state untouched, and must
+		// not overwrite the routing method a newer check recorded either.
+		routingMethod := lockedDomain.DnsRoutingMethod
+		if customdomains.IsNewerHealthCheck(current, args.CheckedAt) {
+			routingMethod = conv.ToPGText(string(routing.Method))
+		}
+		dnsTarget, _ := customdomains.DNSTarget(c.targetSuffix, dnsTargetToken)
 		switch {
 		case customdomains.ShouldNotifyUnhealthyTransition(current, next):
 			notification = NotifyCustomDomainUnhealthyArgs{
@@ -251,18 +276,24 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 				Domain:         domain.Domain,
 				Issue:          next.Issue,
 				CheckedAt:      args.CheckedAt,
+				DNSTarget:      dnsTarget,
+				OtherDNSTarget: routing.OtherDNSTarget,
 			}
 		case customdomains.IsRetryOfUnhealthyTransition(current, args.CheckedAt):
 			// A previous attempt committed the transition but died before
 			// reporting it; re-emit the same args so the retry returns the same
 			// answer. The notify workflow ID and the email idempotency key both
-			// derive from CheckedAt, so nothing is delivered twice.
+			// derive from CheckedAt, so nothing is delivered twice. DNSTarget
+			// and OtherDNSTarget come from this retry's own observation, which
+			// only affects the email wording.
 			notification = NotifyCustomDomainUnhealthyArgs{
 				CustomDomainID: domain.ID,
 				OrganizationID: args.OrganizationID,
 				Domain:         domain.Domain,
 				Issue:          current.Issue,
 				CheckedAt:      args.CheckedAt,
+				DNSTarget:      dnsTarget,
+				OtherDNSTarget: routing.OtherDNSTarget,
 			}
 		}
 		_, err = repository.UpdateCustomDomainHealth(ctx, customdomainsrepo.UpdateCustomDomainHealthParams{
@@ -272,6 +303,7 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 			UnhealthySince:       conv.PtrToPGTimestamptz(next.UnhealthySince),
 			CertificateExpiresAt: conv.PtrToPGTimestamptz(next.CertificateExpiresAt),
 			ConsecutiveFailures:  pgtype.Int4{Int32: next.ConsecutiveFailures, Valid: true},
+			DnsRoutingMethod:     routingMethod,
 			ID:                   domain.ID,
 			OrganizationID:       args.OrganizationID,
 		})
@@ -302,6 +334,7 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 			attr.SlogOrganizationID(args.OrganizationID),
 			attr.SlogCustomDomainHealthStatus(string(next.Status)),
 			attr.SlogCustomDomainHealthIssue(string(next.Issue)),
+			attr.SlogCustomDomainDNSRoutingMethod(string(routing.Method)),
 		)
 	}
 
@@ -345,8 +378,9 @@ func (c *CustomDomainHealth) NotifyOrgAdmins(ctx context.Context, args NotifyCus
 			Domain: args.Domain,
 			IssueMessage: customdomains.HealthIssueMessage(args.Issue, customdomains.DNSRemediation{
 				Domain:           args.Domain,
-				ExpectedCNAME:    c.expectedTarget,
+				ExpectedCNAME:    conv.Default(args.DNSTarget, c.expectedTarget),
 				ExpectedARecords: customdomains.FormatARecords(c.expectedARecords),
+				OtherDNSTarget:   args.OtherDNSTarget,
 			}),
 			DomainLink: domainLink,
 		}

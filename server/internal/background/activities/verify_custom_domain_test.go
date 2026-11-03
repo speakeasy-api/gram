@@ -70,7 +70,7 @@ func newActivity(t *testing.T, ti *testInstance) *activities.VerifyCustomDomain 
 	t.Helper()
 
 	logger := testenv.NewLogger(t)
-	activity := activities.NewVerifyCustomDomain(logger, ti.conn, audit.NewLogger(), testTargetCNAME, nil)
+	activity := activities.NewVerifyCustomDomain(logger, ti.conn, audit.NewLogger(), testTargetCNAME, nil, "")
 	activity.SetResolver(ti.resolver)
 
 	return activity
@@ -508,7 +508,7 @@ func TestVerifyCustomDomain_ApexMatchesConfiguredARecords(t *testing.T) {
 
 	row := createDomainRow(t, ctx, ti, orgID, domain)
 	logger := testenv.NewLogger(t)
-	activity := activities.NewVerifyCustomDomain(logger, ti.conn, audit.NewLogger(), testTargetCNAME, []netip.Addr{netip.MustParseAddr("34.127.46.134")})
+	activity := activities.NewVerifyCustomDomain(logger, ti.conn, audit.NewLogger(), testTargetCNAME, []netip.Addr{netip.MustParseAddr("34.127.46.134")}, "")
 	activity.SetResolver(ti.resolver)
 
 	result, err := activity.Do(ctx, activities.VerifyCustomDomainArgs{

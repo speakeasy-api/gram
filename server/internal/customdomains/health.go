@@ -51,9 +51,20 @@ type HealthObservation struct {
 // type can be suggested. Apex detection is a heuristic, so the copy offers the
 // suggested record first without asserting the other is wrong.
 type DNSRemediation struct {
-	Domain           string
-	ExpectedCNAME    string
+	// Domain is the custom domain the message is about.
+	Domain string
+
+	// ExpectedCNAME is the CNAME target to suggest: the domain's per-domain
+	// target when it has one, otherwise the shared target.
+	ExpectedCNAME string
+
+	// ExpectedARecords are the static ingress IPs to suggest for apex domains.
 	ExpectedARecords []string
+
+	// OtherDNSTarget reports that the domain's CNAME points at a per-domain
+	// target that is not its own: another domain's, or one released when a
+	// domain was deleted.
+	OtherDNSTarget bool
 }
 
 // expectedRecordDescription names the DNS record the customer should create.
@@ -91,6 +102,13 @@ func HealthIssueMessage(issue HealthIssue, remediation DNSRemediation) string {
 		}
 		return "DNS records for the domain could not be found."
 	case HealthIssueDNSTargetMismatch:
+		if remediation.OtherDNSTarget {
+			const otherTarget = "The domain's CNAME record points at a Speakeasy routing target that belongs to another domain or is no longer in use."
+			if record != "" {
+				return fmt.Sprintf("%s Create %s instead.", otherTarget, record)
+			}
+			return otherTarget
+		}
 		if record != "" {
 			return fmt.Sprintf("The domain's DNS no longer resolves to the expected target. Create %s.", record)
 		}
@@ -160,9 +178,16 @@ func IsRetryOfUnhealthyTransition(current HealthState, checkedAt time.Time) bool
 		current.UnhealthySince != nil && checkedAt.Equal(*current.UnhealthySince)
 }
 
+// IsNewerHealthCheck reports whether a check at checkedAt is newer than the
+// last persisted one. ReconcileHealthState ignores older and retried checks,
+// and anything persisted alongside the health state must do the same.
+func IsNewerHealthCheck(current HealthState, checkedAt time.Time) bool {
+	return current.CheckedAt == nil || checkedAt.UTC().After(*current.CheckedAt)
+}
+
 func ReconcileHealthState(current HealthState, observation HealthObservation, checkedAt time.Time) HealthState {
 	checkedAt = checkedAt.UTC()
-	if current.CheckedAt != nil && !checkedAt.After(*current.CheckedAt) {
+	if !IsNewerHealthCheck(current, checkedAt) {
 		return current
 	}
 

@@ -289,6 +289,28 @@ func TestHealthIssueMessageNamesExpectedCNAME(t *testing.T) {
 	)
 }
 
+func TestHealthIssueMessageOtherDNSTarget(t *testing.T) {
+	t.Parallel()
+
+	other := DNSRemediation{Domain: "chat.example.com", ExpectedCNAME: "abcde23456.domains.example.net", ExpectedARecords: nil, OtherDNSTarget: true}
+	require.Equal(t,
+		"The domain's CNAME record points at a Speakeasy routing target that belongs to another domain or is no longer in use. Create a CNAME record pointing the domain at abcde23456.domains.example.net instead.",
+		HealthIssueMessage(HealthIssueDNSTargetMismatch, other),
+	)
+
+	// Only the mismatch message is about where the CNAME points.
+	require.Equal(t,
+		"DNS records for the domain could not be found. Create a CNAME record pointing the domain at abcde23456.domains.example.net.",
+		HealthIssueMessage(HealthIssueDNSNotFound, other),
+	)
+
+	otherWithoutTarget := DNSRemediation{Domain: "chat.example.com", ExpectedCNAME: "", ExpectedARecords: nil, OtherDNSTarget: true}
+	require.Equal(t,
+		"The domain's CNAME record points at a Speakeasy routing target that belongs to another domain or is no longer in use.",
+		HealthIssueMessage(HealthIssueDNSTargetMismatch, otherWithoutTarget),
+	)
+}
+
 func TestHealthIssueMessageApexNamesARecords(t *testing.T) {
 	t.Parallel()
 
