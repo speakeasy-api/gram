@@ -5854,10 +5854,10 @@ examples:
   createTemporaryGrant:
     speakeasy-default-create-temporary-grant:
       requestBody:
-        application/json: {"expires_at": "2024-12-28T08:34:40.518Z", "scope": "<value>", "user_id": "<id>"}
+        application/json: {"expires_at": "2024-12-28T08:34:40.518Z", "principal_urn": "<value>", "scope": "<value>"}
       responses:
         "200":
-          application/json: {"created_at": "2026-02-05T17:18:37.499Z", "expires_at": "2026-05-28T20:13:16.229Z", "id": "fc296f4e-68c2-48b3-835a-e6a871c1940b", "other_access": [], "principal_urn": "<value>", "remaining_seconds": 2504, "scope": "<value>", "selector": {"resource_id": "<id>", "resource_kind": "skill"}, "status": "active", "updated_at": "2025-10-14T16:15:54.850Z", "user_id": "<id>"}
+          application/json: {"created_at": "2026-02-05T17:18:37.499Z", "expires_at": "2026-05-28T20:13:16.229Z", "id": "fc296f4e-68c2-48b3-835a-e6a871c1940b", "other_access": [], "principal_urn": "<value>", "remaining_seconds": 2504, "scope": "<value>", "selector": {"resource_id": "<id>", "resource_kind": "skill"}, "status": "active", "updated_at": "2025-10-14T16:15:54.850Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
@@ -11209,6 +11209,7 @@ examples:
       parameters:
         query:
           include_expired: false
+          principal_urn: "<value>"
       responses:
         "200":
           application/json: {"grants": []}
@@ -12232,7 +12233,7 @@ examples:
         application/json: {"expires_at": "2024-09-17T01:42:19.664Z", "id": "2922e605-1016-41f4-bfe2-0190641abe3f"}
       responses:
         "200":
-          application/json: {"created_at": "2024-07-08T21:49:38.520Z", "expires_at": "2026-06-25T01:41:53.790Z", "id": "8c9b6353-33c2-4e66-8af9-646b2b9b94c0", "other_access": ["<value 1>", "<value 2>"], "principal_urn": "<value>", "remaining_seconds": 456400, "scope": "<value>", "selector": {"resource_id": "<id>", "resource_kind": "environment"}, "status": "expired", "updated_at": "2026-01-12T17:59:57.002Z", "user_id": "<id>"}
+          application/json: {"created_at": "2024-07-08T21:49:38.520Z", "expires_at": "2026-06-25T01:41:53.790Z", "id": "8c9b6353-33c2-4e66-8af9-646b2b9b94c0", "other_access": ["<value 1>", "<value 2>"], "principal_urn": "<value>", "remaining_seconds": 456400, "scope": "<value>", "selector": {"resource_id": "<id>", "resource_kind": "environment"}, "status": "expired", "updated_at": "2026-01-12T17:59:57.002Z"}
         "400":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
         "500":
@@ -12643,7 +12644,7 @@ examples:
         application/json: {"id": "eb5af0f2-c2b0-4fb8-9ada-4006f392ec47"}
       responses:
         "200":
-          application/json: {"created_at": "2025-02-04T21:03:55.673Z", "expires_at": "2024-04-07T19:43:23.047Z", "id": "983e560d-7abf-44f0-b07c-ffe75b635e1d", "other_access": ["<value 1>", "<value 2>", "<value 3>"], "principal_urn": "<value>", "remaining_seconds": 943865, "scope": "<value>", "selector": {"resource_id": "<id>", "resource_kind": "environment"}, "status": "revoked", "updated_at": "2026-10-25T20:44:52.897Z", "user_id": "<id>"}
+          application/json: {"created_at": "2025-02-04T21:03:55.673Z", "expires_at": "2024-04-07T19:43:23.047Z", "id": "983e560d-7abf-44f0-b07c-ffe75b635e1d", "other_access": ["<value 1>", "<value 2>", "<value 3>"], "principal_urn": "<value>", "remaining_seconds": 943865, "scope": "<value>", "selector": {"resource_id": "<id>", "resource_kind": "environment"}, "status": "revoked", "updated_at": "2026-10-25T20:44:52.897Z"}
         "400":
           application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":

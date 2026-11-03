@@ -59,10 +59,10 @@ export type TemporaryGrantsQueryError =
  * listTemporaryGrants access
  *
  * @remarks
- * List temporary grants with their boundary, deadline and remaining time, soonest deadline first. Organization administrators see every member's grants; anyone else sees only their own. Each active grant says which other grants the member holds that would still give the same access once it ends. Revoked grants are removed and appear only in the audit log.
+ * List the temporary grants given to one principal, with their boundary, deadline and remaining time, soonest deadline first. Organization administrators may list any principal's grants; anyone else may list only grants given to themselves (their own user:<id>). Each active grant says which other grants would still give the principal the same access once it ends. Revoked grants are removed and appear only in the audit log.
  */
 export function useTemporaryGrants(
-  request?: ListTemporaryGrantsRequest | undefined,
+  request: ListTemporaryGrantsRequest,
   security?: ListTemporaryGrantsSecurity | undefined,
   options?: QueryHookOptions<
     TemporaryGrantsQueryData,
@@ -85,10 +85,10 @@ export function useTemporaryGrants(
  * listTemporaryGrants access
  *
  * @remarks
- * List temporary grants with their boundary, deadline and remaining time, soonest deadline first. Organization administrators see every member's grants; anyone else sees only their own. Each active grant says which other grants the member holds that would still give the same access once it ends. Revoked grants are removed and appear only in the audit log.
+ * List the temporary grants given to one principal, with their boundary, deadline and remaining time, soonest deadline first. Organization administrators may list any principal's grants; anyone else may list only grants given to themselves (their own user:<id>). Each active grant says which other grants would still give the principal the same access once it ends. Revoked grants are removed and appear only in the audit log.
  */
 export function useTemporaryGrantsSuspense(
-  request?: ListTemporaryGrantsRequest | undefined,
+  request: ListTemporaryGrantsRequest,
   security?: ListTemporaryGrantsSecurity | undefined,
   options?: SuspenseQueryHookOptions<
     TemporaryGrantsQueryData,
@@ -111,7 +111,7 @@ export function setTemporaryGrantsData(
   client: QueryClient,
   queryKeyBase: [
     parameters: {
-      userId?: string | undefined;
+      principalUrn: string;
       includeExpired?: boolean | undefined;
       gramSession?: string | undefined;
     },
@@ -127,7 +127,7 @@ export function invalidateTemporaryGrants(
   client: QueryClient,
   queryKeyBase: TupleToPrefixes<
     [parameters: {
-      userId?: string | undefined;
+      principalUrn: string;
       includeExpired?: boolean | undefined;
       gramSession?: string | undefined;
     }]

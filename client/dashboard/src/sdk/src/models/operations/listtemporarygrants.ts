@@ -11,9 +11,9 @@ export type ListTemporaryGrantsSecurity = {
 
 export type ListTemporaryGrantsRequest = {
   /**
-   * Only list grants given to this member. Members who are not organization administrators may only pass their own ID.
+   * The principal whose grants to list, e.g. user:<id>, role:organization:<id> or agent:<id>. Members who are not organization administrators may only pass their own user URN.
    */
-  userId?: string | undefined;
+  principalUrn: string;
   /**
    * Include grants whose deadline has passed.
    */
@@ -56,7 +56,7 @@ export function listTemporaryGrantsSecurityToJSON(
 
 /** @internal */
 export type ListTemporaryGrantsRequest$Outbound = {
-  user_id?: string | undefined;
+  principal_urn: string;
   include_expired: boolean;
   "Gram-Session"?: string | undefined;
 };
@@ -67,13 +67,13 @@ export const ListTemporaryGrantsRequest$outboundSchema: z.ZodMiniType<
   ListTemporaryGrantsRequest
 > = z.pipe(
   z.object({
-    userId: z.optional(z.string()),
+    principalUrn: z.string(),
     includeExpired: z._default(z.boolean(), false),
     gramSession: z.optional(z.string()),
   }),
   z.transform((v) => {
     return remap$(v, {
-      userId: "user_id",
+      principalUrn: "principal_urn",
       includeExpired: "include_expired",
       gramSession: "Gram-Session",
     });
