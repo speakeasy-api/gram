@@ -502,18 +502,19 @@ func (k *KitGKERuntimeBackend) finishColdProvision(ctx context.Context, r assist
 
 func (k *KitGKERuntimeBackend) waitPod(ctx context.Context, r assistantRuntimeRecord, m kitGKEBackendMetadata) (*unstructured.Unstructured, error) {
 	for {
-		if _, err := k.get(ctx, r, kitClaimGVR, kitGKEName(r), m.ClaimUID); err != nil {
+		claim, err := k.get(ctx, r, kitClaimGVR, kitGKEName(r), m.ClaimUID)
+		if err != nil {
 			return nil, err
 		}
-		pods, err := k.config.GKE.Dynamic.Resource(gkePodGVR).Namespace(k.config.GKE.Namespace).List(ctx, metav1.ListOptions{LabelSelector: gkeClaimUIDLabel + "=" + string(m.ClaimUID)})
+		pods, err := sandbox.PodsForClaim(ctx, k.config.GKE.Dynamic, k.config.GKE.Namespace, claim, sandbox.SandboxesV1Beta1)
 		if err != nil {
 			return nil, fmt.Errorf("kit GKE waitPod: %w", err)
 		}
-		if len(pods.Items) > 1 {
+		if len(pods) > 1 {
 			return nil, kitGKEAdmissionTerminalError{fmt.Errorf("ambiguous Kit GKE claim pod authority")}
 		}
-		if len(pods.Items) == 1 {
-			p := &pods.Items[0]
+		if len(pods) == 1 {
+			p := &pods[0]
 			if err := k.checkObject(r, p, m.PodUID); err != nil {
 				return nil, kitGKEAdmissionTerminalError{err}
 			}
@@ -531,6 +532,7 @@ func (k *KitGKERuntimeBackend) waitPod(ctx context.Context, r assistantRuntimeRe
 			ip, _, _ := unstructured.NestedString(p.Object, "status", "podIP")
 			if phase == "Running" && net.ParseIP(ip) != nil {
 				if _, _, e := kitGKEProcessIdentity(p); e == nil {
+					// Discovery through the claim already proved ownership.
 					if e = k.checkPod(r, p, m); e != nil {
 						return nil, kitGKEAdmissionTerminalError{e}
 					}
@@ -570,7 +572,7 @@ func (k *KitGKERuntimeBackend) checkPod(r assistantRuntimeRecord, p *unstructure
 	if err := k.checkObject(r, p, m.PodUID); err != nil {
 		return err
 	}
-	if (m.PodName != "" && p.GetName() != m.PodName) || p.GetLabels()[gkeClaimUIDLabel] != string(m.ClaimUID) {
+	if uid, ok := p.GetLabels()[gkeClaimUIDLabel]; (m.PodName != "" && p.GetName() != m.PodName) || (ok && uid != string(m.ClaimUID)) {
 		return fmt.Errorf("kit GKE source pod was replaced outside admission")
 	}
 	serviceAccount, _, _ := unstructured.NestedString(p.Object, "spec", "serviceAccountName")
@@ -592,6 +594,34 @@ func (k *KitGKERuntimeBackend) checkPod(r assistantRuntimeRecord, p *unstructure
 	}
 	return nil
 }
+
+// checkPodClaim proves an unlabelled pod belongs to the admitted claim
+// through the claim's assigned Sandbox and its controller owner references.
+// checkPod has already matched any claim label. The claim is fetched when the
+// caller has not loaded it. Lookup failures are returned unwrapped so callers
+// can retry them.
+func (k *KitGKERuntimeBackend) checkPodClaim(ctx context.Context, r assistantRuntimeRecord, claim, p *unstructured.Unstructured, m kitGKEBackendMetadata) error {
+	if _, ok := p.GetLabels()[gkeClaimUIDLabel]; ok {
+		return nil
+	}
+	if claim == nil {
+		var err error
+		if claim, err = k.get(ctx, r, kitClaimGVR, kitGKEName(r), m.ClaimUID); err != nil {
+			return err
+		}
+	}
+	pods, err := sandbox.PodsForClaim(ctx, k.config.GKE.Dynamic, k.config.GKE.Namespace, claim, sandbox.SandboxesV1Beta1)
+	if err != nil {
+		return fmt.Errorf("kit GKE claim pod ownership: %w", err)
+	}
+	for _, owned := range pods {
+		if owned.GetUID() == p.GetUID() {
+			return nil
+		}
+	}
+	return fmt.Errorf("kit GKE source pod was replaced outside admission")
+}
+
 func (k *KitGKERuntimeBackend) protocol(ctx context.Context, r assistantRuntimeRecord) (runtimeProtocol, error) {
 	return k.protocolForLifecycle(ctx, r, false)
 }
@@ -606,13 +636,18 @@ func (k *KitGKERuntimeBackend) protocolForLifecycle(ctx context.Context, r assis
 		return nil, fmt.Errorf("kit GKE authority is fenced in phase %s", state.Phase)
 	}
 	m := state.Metadata
+	var claim *unstructured.Unstructured
 	for _, s := range []struct {
 		gvr  schema.GroupVersionResource
 		name string
 		uid  types.UID
 	}{{kitClaimGVR, kitGKEName(r), m.ClaimUID}, {kitWarmPoolGVR, m.WarmPoolName, m.WarmPoolUID}, {kitTemplateGVR, m.templateName(r), m.TemplateUID}, {kitSecretGVR, m.SecretName, m.SecretUID}, {kitServiceAccountGVR, m.Workload.ServiceAccount, m.ServiceAccountUID}} {
-		if _, err = k.get(ctx, r, s.gvr, s.name, s.uid); err != nil {
+		o, err := k.get(ctx, r, s.gvr, s.name, s.uid)
+		if err != nil {
 			return nil, err
+		}
+		if s.gvr == kitClaimGVR {
+			claim = o
 		}
 	}
 	pod, err := k.get(ctx, r, gkePodGVR, m.PodName, m.PodUID)
@@ -620,6 +655,9 @@ func (k *KitGKERuntimeBackend) protocolForLifecycle(ctx context.Context, r assis
 		return nil, err
 	}
 	if err = k.checkPod(r, pod, m); err != nil {
+		return nil, err
+	}
+	if err = k.checkPodClaim(ctx, r, claim, pod, m); err != nil {
 		return nil, err
 	}
 	phase, _, _ := unstructured.NestedString(pod.Object, "status", "phase")

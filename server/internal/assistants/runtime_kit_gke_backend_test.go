@@ -19,6 +19,8 @@ import (
 	"k8s.io/apimachinery/pkg/types"
 	dynamicfake "k8s.io/client-go/dynamic/fake"
 	ktesting "k8s.io/client-go/testing"
+
+	sandboxpkg "github.com/speakeasy-api/gram/server/internal/sandbox"
 )
 
 type kitGKEBackendProtocol struct{ settled bool }
@@ -46,6 +48,13 @@ func (p *kitGKEBackendProtocol) PrepareRuntimeSwitch(context.Context, assistantR
 }
 
 func kitGKEBackendFixture(t *testing.T) (*KitGKERuntimeBackend, *dynamicfake.FakeDynamicClient, assistantRuntimeRecord, *int) {
+	t.Helper()
+	return kitGKEBackendFixtureWithLayout(t, true)
+}
+
+// labelPods selects the controller layout: older controllers label pods with
+// the claim UID, newer ones only label the Sandbox and expose a pod selector.
+func kitGKEBackendFixtureWithLayout(t *testing.T, labelPods bool) (*KitGKERuntimeBackend, *dynamicfake.FakeDynamicClient, assistantRuntimeRecord, *int) {
 	t.Helper()
 	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{gkePodGVR: "PodList", kitClaimGVR: "SandboxClaimList"})
 	input := kitGKEInput()
@@ -75,7 +84,20 @@ func kitGKEBackendFixture(t *testing.T) (*KitGKERuntimeBackend, *dynamicfake.Fak
 			pod := kitObject("Pod", "v1", "pod-"+r.ID.String(), k.identity(r))
 			pod.SetUID("pod-uid")
 			labels := obj.GetLabels()
-			labels[gkeClaimUIDLabel] = string(obj.GetUID())
+			if labelPods {
+				labels[gkeClaimUIDLabel] = string(obj.GetUID())
+			} else {
+				sandboxName := "sandbox-" + r.ID.String()
+				sandbox := kitObject("Sandbox", "agents.x-k8s.io/v1beta1", sandboxName, k.identity(r))
+				sandbox.SetUID("sandbox-uid")
+				sandbox.SetLabels(map[string]string{gkeClaimUIDLabel: string(obj.GetUID())})
+				sandbox.SetOwnerReferences([]metav1.OwnerReference{{APIVersion: kitClaimGVR.GroupVersion().String(), Kind: "SandboxClaim", Name: obj.GetName(), UID: obj.GetUID(), Controller: new(true)}})
+				sandbox.Object["status"] = map[string]any{"selector": "agents.x-k8s.io/sandbox-name-hash=fixture"}
+				require.NoError(t, client.Tracker().Create(sandboxpkg.SandboxesV1Beta1, sandbox, k.config.GKE.Namespace))
+				obj.Object["status"] = map[string]any{"sandbox": map[string]any{"name": sandboxName}}
+				labels["agents.x-k8s.io/sandbox-name-hash"] = "fixture"
+				pod.SetOwnerReferences([]metav1.OwnerReference{{APIVersion: "agents.x-k8s.io/v1beta1", Kind: "Sandbox", Name: sandboxName, UID: sandbox.GetUID(), Controller: new(true)}})
+			}
 			pod.SetLabels(labels)
 			pod.SetAnnotations(obj.GetAnnotations())
 			template, err := client.Tracker().Get(kitTemplateGVR, k.config.GKE.Namespace, kitGKETemplateName(kitGKEName(r)))
@@ -111,6 +133,28 @@ func TestKitGKEBackendColdEnsureAndExactReuse(t *testing.T) {
 	require.NoError(t, err)
 	_, err = k.Ensure(t.Context(), r)
 	require.ErrorContains(t, err, "authority mismatch")
+}
+func TestKitGKEBackendFindsPodThroughAssignedSandbox(t *testing.T) {
+	t.Parallel()
+	k, client, r, _ := kitGKEBackendFixtureWithLayout(t, false)
+	result, err := k.Ensure(t.Context(), r)
+	require.NoError(t, err)
+	require.True(t, result.ColdStart)
+	r.BackendMetadataJSON = result.BackendMetadataJSON
+	result, err = k.Ensure(t.Context(), r)
+	require.NoError(t, err)
+	require.False(t, result.ColdStart)
+	m, err := k.metadata(r)
+	require.NoError(t, err)
+	pod, err := client.Resource(gkePodGVR).Namespace(m.Namespace).Get(t.Context(), m.PodName, metav1.GetOptions{})
+	require.NoError(t, err)
+	owners := pod.GetOwnerReferences()
+	owners[0].UID = "foreign-sandbox"
+	pod.SetOwnerReferences(owners)
+	_, err = client.Resource(gkePodGVR).Namespace(m.Namespace).Update(t.Context(), pod, metav1.UpdateOptions{})
+	require.NoError(t, err)
+	_, err = k.Ensure(t.Context(), r)
+	require.ErrorContains(t, err, "replaced outside admission")
 }
 func TestKitGKEBackendStopCannotClaimCheckpointSuccess(t *testing.T) {
 	t.Parallel()
