@@ -125,6 +125,12 @@ type answer struct {
 type citation struct {
 	kind string
 	id   uuid.UUID
+
+	// resolved is set when a memo or digest citation was looked up; chats
+	// are its source chats, empty when the item doesn't exist or has none.
+	// Chat citations need no lookup.
+	resolved bool
+	chats    []uuid.UUID
 }
 
 // verdict is the judge's grade for one answer.
@@ -306,9 +312,20 @@ func ask(ctx context.Context, client openrouter.CompletionClient, model string, 
 	result.usage.latency = time.Since(started)
 	result.toolOutput = toolOutput.String()
 	for _, match := range citationPattern.FindAllStringSubmatch(result.text, -1) {
-		if id, err := uuid.Parse(match[2]); err == nil {
-			result.citations = append(result.citations, citation{kind: match[1], id: id})
+		id, err := uuid.Parse(match[2])
+		if err != nil {
+			continue
 		}
+		c := citation{kind: match[1], id: id, resolved: false, chats: nil}
+		if c.kind != "chat" && a.Sources != nil {
+			// An ID that matches no memo or digest resolves to no chats, so
+			// the citation is invalid: the agent most likely made it up. A
+			// failed lookup leaves the citation unchecked instead.
+			if chats, err := a.Sources(ctx, c.kind, c.id); err == nil {
+				c.resolved, c.chats = true, chats
+			}
+		}
+		result.citations = append(result.citations, c)
 	}
 	return result
 }
