@@ -94,8 +94,8 @@ var errTunnelNoRoute = errors.New("tunnel has no live route")
 // tunnelUnavailableMessage stays free of tunnel internals: public callers read it.
 const tunnelUnavailableMessage = "This MCP server can't be reached right now. Retry shortly. If it keeps happening, ask your administrator to check that it's running."
 
-// tunnelOutageRetryAfter paces the retry and tags the 503 external: the customer runs the tunnel.
-func tunnelOutageRetryAfter(w http.ResponseWriter, err error) {
+// tagTunnelOutage paces the retry and tags the 503 external: the customer runs the tunnel.
+func tagTunnelOutage(w http.ResponseWriter, err error) {
 	if errors.Is(err, errTunnelNoRoute) {
 		setOutageRetryAfter(w)
 		w.Header().Set(constants.HeaderProxiedResponse, "1")

@@ -4,7 +4,7 @@
 // refresh handler (challenge.go, organizationsessionhandlers.go), and the
 // scheduled pre-emptive refresh activity (background worker). Sharing matters
 // because refresh tokens rotate: two callers presenting the same refresh token
-// to a provider with reuse detection (OAuth 2.0 Security BCP 4.13.2) can
+// to a provider with reuse detection (RFC 9700 section 4.14.2) can
 // revoke the whole token family.
 
 package remotesessions
@@ -327,7 +327,7 @@ const (
 	refreshLeaseMargin = time.Second
 
 	// refreshOutageCooldown paces retries after an outage: callers are told to retry.
-	refreshOutageCooldown = 30 * time.Second
+	refreshOutageCooldown = oops.OutageRetryAfter
 
 	// refreshOutageCooldownMax caps a provider's Retry-After against an odd header.
 	refreshOutageCooldownMax = 5 * time.Minute
@@ -659,7 +659,7 @@ func (s *RefreshService) refresh(
 		case wait > 0:
 			return zero, nil, nil, &refreshDeferredError{wait: wait, noOutage: false}
 		}
-		// Never post unserialized: two waiters presenting one token can revoke the family (BCP 4.13.2).
+		// No POST while another request holds the lock: two presenting one token can revoke the family (RFC 9700 section 4.14.2).
 		lockAcquiredAt = time.Now()
 		held, lockErr = s.locks.Add(ctx, lockKey, refreshLockTTL)
 		if lockErr == nil && !held {
@@ -698,7 +698,7 @@ func (s *RefreshService) refresh(
 
 	// sess predates the lock, so a holder that finished while we were acquiring
 	// has already consumed its refresh token. Replaying one makes providers with
-	// reuse detection (OAuth 2.0 Security BCP 4.13.2) revoke the whole family,
+	// reuse detection (RFC 9700 section 4.14.2) revoke the whole family,
 	// the winner's fresh pair included, which nothing below can detect.
 	snapshotAt := sess.UpdatedAt.Time
 

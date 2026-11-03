@@ -921,16 +921,16 @@ func TestServePublic_Tunneled_AuthenticatedOfflineTunnelKeepsTheSession(t *testi
 	require.Equal(t, http.StatusOK, up.Code, up.Body.String())
 }
 
-func TestTunnelOutageRetryAfter(t *testing.T) {
+func TestTagTunnelOutage(t *testing.T) {
 	t.Parallel()
 
 	down := httptest.NewRecorder()
-	mcp.TunnelOutageRetryAfter(down, fmt.Errorf("build proxy: %w", mcp.ErrTunnelNoRoute))
+	mcp.TagTunnelOutage(down, fmt.Errorf("build proxy: %w", mcp.ErrTunnelNoRoute))
 	require.NotEmpty(t, down.Header().Get("Retry-After"))
 	require.Equal(t, "1", down.Header().Get(constants.HeaderProxiedResponse))
 
 	other := httptest.NewRecorder()
-	mcp.TunnelOutageRetryAfter(other, errors.New("tunnel route is invalid"))
+	mcp.TagTunnelOutage(other, errors.New("tunnel route is invalid"))
 	require.Empty(t, other.Header().Get("Retry-After"))
 	require.Empty(t, other.Header().Get(constants.HeaderProxiedResponse), "a fault on our side stays counted")
 }

@@ -55,8 +55,8 @@ func (e *idJAGExchange) reject(reason mcpmetrics.IDJAGRejectionReason, err error
 	return attrs
 }
 
-// idJAGOutageMessage answers an exchange a dependency outage stopped.
-const idJAGOutageMessage = "Speakeasy can't check this sign-in right now. Retry shortly."
+// idJAGOutageLogMessage is for logs: OAuthErrHandle writes the client's description.
+const idJAGOutageLogMessage = "Speakeasy can't check this sign-in right now. Retry shortly."
 
 // idJAGServerFault reports a failure after validation that refused nothing.
 func idJAGServerFault(err error) bool {

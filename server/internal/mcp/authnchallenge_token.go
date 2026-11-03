@@ -616,9 +616,9 @@ func (s *Service) handleTokenJWTBearerGrant(
 		if idjag.ReasonOf(err) == idjag.ReasonKeyUnresolvable {
 			// The customer's identity provider is down, so this doesn't alert on-call.
 			w.Header().Set(constants.HeaderProxiedResponse, "1")
-			return outageError(w, err, idJAGOutageMessage).LogWarn(ctx, logger)
+			return outageError(w, err, idJAGOutageLogMessage).LogWarn(ctx, logger)
 		}
-		return outageError(w, err, idJAGOutageMessage).LogError(ctx, logger)
+		return outageError(w, err, idJAGOutageLogMessage).LogError(ctx, logger)
 	}
 	if idjag.IsStoreFault(err) {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth ID-JAG token request failed", clientRow.ClientID, presentedAuthMethod, oauthwire.GrantTypeJWTBearer, oautherr.CodeServerError, exchange.rejectAssertion(err)...)

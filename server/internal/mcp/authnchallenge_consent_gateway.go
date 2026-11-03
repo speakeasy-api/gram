@@ -80,8 +80,8 @@ type gatewayServer struct {
 	// cardIDs are the services the server signs in through.
 	cardIDs []string
 
-	// connectionOutage marks a service of this server a provider outage stopped, which reconnecting may repair.
-	connectionOutage bool
+	// providerOutage marks a service of this server a provider outage stopped, which reconnecting may repair.
+	providerOutage bool
 
 	// connectionDown marks a service of this server any recorded outage stopped.
 	connectionDown bool
@@ -139,7 +139,7 @@ func (g gatewayServer) ConnectionUnavailable() bool {
 
 // reconnectsOutage reports an unavailable server whose connection a person can try replacing.
 func (g gatewayServer) reconnectsOutage() bool {
-	return g.Status == gatewayServerUnavailable && g.connectionOutage
+	return g.Status == gatewayServerUnavailable && g.providerOutage
 }
 
 // NeedsSignIn reports whether the server signs in through a service the
@@ -313,12 +313,12 @@ func (s *Service) gatewayConsent(
 func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewayConsentView {
 	view := &gatewayConsentView{Servers: make([]gatewayServer, 0, len(members)), ReadyCount: 0, ListOpen: false, Focus: nil, FocusUnavailable: false, CanHide: false, members: members, cards: cards, auth: nil}
 	for _, member := range members {
-		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", ServerID: member.serverID.String(), Hidden: false, cardIDs: nil, connectionOutage: false, connectionDown: false, Auth: nil}
+		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", ServerID: member.serverID.String(), Hidden: false, cardIDs: nil, providerOutage: false, connectionDown: false, Auth: nil}
 		for _, card := range cards {
 			if cardServesMember(card, member) {
 				server.cardIDs = append(server.cardIDs, card.ClientID)
 				server.Status = strongerStatus(server.Status, cardStatus(card))
-				server.connectionOutage = server.connectionOutage || (card.Unavailable && !card.UnavailableTunnel)
+				server.providerOutage = server.providerOutage || (card.Unavailable && !card.UnavailableTunnel)
 				server.connectionDown = server.connectionDown || card.Unavailable
 			}
 		}

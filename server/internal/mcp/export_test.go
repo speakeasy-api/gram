@@ -185,10 +185,10 @@ func (s *Service) VerifyConnectionRecoveryCompletion(r *http.Request, remote rem
 	return s.verifyConnectionRecoveryCompletion(r, remote)
 }
 
-// TunnelOutageRetryAfter and ErrTunnelNoRoute expose the answer every tunneled path shares.
+// TagTunnelOutage and ErrTunnelNoRoute expose the answer every tunneled path shares.
 var (
-	TunnelOutageRetryAfter = tunnelOutageRetryAfter
-	ErrTunnelNoRoute       = errTunnelNoRoute
+	TagTunnelOutage  = tagTunnelOutage
+	ErrTunnelNoRoute = errTunnelNoRoute
 )
 
 // SetDB swaps only the pool the service reads endpoints through, to fail that first read.

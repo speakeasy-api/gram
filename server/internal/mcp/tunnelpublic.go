@@ -447,7 +447,7 @@ func (s *Service) serveTunneledPublicInit(
 		Request:            r,
 	})
 	if err != nil {
-		tunnelOutageRetryAfter(w, err)
+		tagTunnelOutage(w, err)
 		if reserved {
 			s.rollbackReservation(ctx, logger, tunnelID, mcpServerID, sid)
 		}

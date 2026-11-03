@@ -1611,7 +1611,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		m.recordCIMDAuthorizationFailure(ctx, state, errCode, q.Get("error_description"))
 		// RFC 6749 §4.1.2.1: the provider's own codes for an outage at authorize.
 		if errCode == oautherr.CodeTemporarilyUnavailable || errCode == oautherr.CodeServerError {
-			return none, providerOutageError(oops.E(oops.CodeUnavailable, nil, "The sign-in provider returned an error: %s", errCode).LogWarn(ctx, logger, attr.SlogOAuthError(errCode)), m.providerLabel(ctx, state), true)
+			return none, providerOutageError(oops.E(oops.CodeUnavailable, nil, "The sign-in provider returned an error: %s", errCode).LogWarn(ctx, logger, attr.SlogOAuthError(errCode)), m.providerLabel(ctx, state))
 		}
 		return none, denied(ctx, logger, q)
 	}
@@ -1713,7 +1713,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		if !exchangeFailureIsProviderOutage(failure, err) {
 			return none, failure
 		}
-		return none, providerOutageError(failure, m.providerLabel(ctx, state), true)
+		return none, providerOutageError(failure, m.providerLabel(ctx, state))
 	}
 	// The pair is live upstream from this line on, and every path out of here
 	// that does not store it strands it: unreachable through Speakeasy, and outside
@@ -1996,12 +1996,9 @@ func TagExternalOutage(w http.ResponseWriter, err error) {
 }
 
 // providerOutageError presents a provider outage as one to try again shortly.
-func providerOutageError(err *oops.ShareableError, provider string, external bool) error {
+func providerOutageError(err *oops.ShareableError, provider string) error {
 	presented := oops.WithBrowserProvider(oops.WithBrowserReason(err, oauthui.ReasonProviderUnavailable), provider)
-	if external {
-		return fmt.Errorf("complete remote login: %w: %w", ErrProviderOutageExternal, presented)
-	}
-	return fmt.Errorf("complete remote login: %w", presented)
+	return fmt.Errorf("complete remote login: %w: %w", ErrProviderOutageExternal, presented)
 }
 
 // providerLabel is the name a person knows the provider by; a tunneled provider's host stays off the page.
