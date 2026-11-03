@@ -1210,3 +1210,7 @@ SELECT DISTINCT g.organization_id, g.principal_urn, 'mcp:auth', '{"resource_kind
 FROM principal_grants AS g
 WHERE g.scope = 'mcp:connect'
 ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING;
+
+-- name: AdminBackdateUserSessionFixture :exec
+-- Test fixture: no writer backdates a session.
+UPDATE user_sessions SET created_at = @created_at WHERE id = @id;

@@ -1,6 +1,6 @@
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { Gram } from "@gram/client";
+import { GramCore } from "@gram/client/core.js";
 import { HTTPClient, type Fetcher } from "@gram/client/lib/http.js";
 import { GramProvider } from "@gram/client/react-query/_context.js";
 import type { ReactNode } from "react";
@@ -45,7 +45,7 @@ function checkoutResponse(session = SESSION) {
 const queryClients: QueryClient[] = [];
 function setup() {
   const fetcher = vi.fn<Fetcher>();
-  const client = new Gram({
+  const client = new GramCore({
     serverURL: "https://checkout.example",
     httpClient: new HTTPClient({ fetcher }),
     retryConfig: { strategy: "none" },

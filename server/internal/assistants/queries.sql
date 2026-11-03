@@ -2044,3 +2044,23 @@ SELECT pg_advisory_unlock(hashtext('asst:' || @assistant_id::text))::boolean AS 
 
 -- name: GetAssistantTransactionIsolationForTest :one
 SELECT current_setting('transaction_isolation')::text AS isolation;
+
+-- name: RetireMCPServerEndpointsFixture :exec
+-- Test fixture: retires every endpoint of one MCP server.
+UPDATE mcp_endpoints SET deleted_at = clock_timestamp() WHERE mcp_server_id = @mcp_server_id AND project_id = @project_id;
+
+-- name: SoftDeleteCustomDomainFixture :exec
+-- Test fixture: soft-deletes a custom domain under its endpoints.
+UPDATE custom_domains SET deleted_at = clock_timestamp() WHERE id = @id AND organization_id = @organization_id;
+
+-- name: BackdateMCPEndpointBySlugFixture :exec
+-- Test fixture: makes one endpoint a day older than when it was created.
+UPDATE mcp_endpoints SET created_at = created_at - interval '1 day' WHERE slug = @slug AND project_id = @project_id;
+
+-- name: LockKitLocalWorkloadSubject :exec
+-- Serializes kit workload provisioning for one external subject across
+-- projects. The key is the caller's canonical JSON encoding of the subject.
+SELECT pg_advisory_xact_lock(hashtextextended(@subject_key::text, 0));
+
+-- name: LockProjectForKitWorkload :one
+SELECT id FROM projects WHERE id = @project_id AND organization_id = @organization_id FOR UPDATE;

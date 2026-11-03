@@ -178,24 +178,17 @@ func TestLifecycleReplayConflictAndBoundedReceipt(t *testing.T) {
 	_, err = service.DeactivatePrescription(t.Context(), DeactivatePrescriptionRequest{MutationContext: testMutationContext(orgID, operationID), PrescriptionID: result.PrescriptionID, ExpectedVersion: 1})
 	require.ErrorIs(t, err, ErrOperationConflict, "operation type is part of the receipt identity")
 
-	var prescriptions, operations int
-	//nolint:glint // notestingrawsql: asserts private persisted killswitch state that no production query reads
-	require.NoError(t, conn.QueryRow(t.Context(), `SELECT count(*) FROM killswitch_prescriptions WHERE organization_id = $1`, orgID).Scan(&prescriptions))
-	//nolint:glint // notestingrawsql: asserts private persisted killswitch state that no production query reads
-	require.NoError(t, conn.QueryRow(t.Context(), `SELECT count(*) FROM killswitch_operations WHERE organization_id = $1`, orgID).Scan(&operations))
-	require.Equal(t, 1, prescriptions)
-	require.Equal(t, 1, operations)
-	var exactRetention, boundedResponse bool
-	//nolint:glint // notestingrawsql: asserts private persisted killswitch state that no production query reads
-	require.NoError(t, conn.QueryRow(t.Context(), `
-		SELECT expires_at = created_at + interval '30 days',
-		       response ?& ARRAY['response_version', 'prescription_id', 'prescription_version', 'state']
-		         AND (SELECT count(*) FROM jsonb_object_keys(response)) = 4
-		FROM killswitch_operations
-		WHERE organization_id = $1 AND operation_id = $2
-	`, orgID, operationID).Scan(&exactRetention, &boundedResponse))
-	require.True(t, exactRetention)
-	require.True(t, boundedResponse)
+	fixtures := repo.New(conn)
+	prescriptions, err := fixtures.CountKillswitchPrescriptionsFixture(t.Context(), orgID)
+	require.NoError(t, err)
+	operations, err := fixtures.CountKillswitchOperationsFixture(t.Context(), orgID)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), prescriptions)
+	require.Equal(t, int64(1), operations)
+	receipt, err := fixtures.GetKillswitchOperationReceiptShapeFixture(t.Context(), repo.GetKillswitchOperationReceiptShapeFixtureParams{OrganizationID: orgID, OperationID: operationID})
+	require.NoError(t, err)
+	require.True(t, receipt.ExactRetention)
+	require.True(t, receipt.BoundedResponse)
 }
 
 func TestLifecycleConcurrentCreationAndCAS(t *testing.T) {
@@ -395,12 +388,11 @@ func TestLifecycleOrganizationIsolationAndCrossProjectResources(t *testing.T) {
 	_, err = service.ActivatePrescription(t.Context(), crossOrganizationReplay)
 	require.ErrorIs(t, err, ErrInvalidReference)
 
-	var countA, countB int
-	//nolint:glint // notestingrawsql: asserts private persisted killswitch state that no production query reads
-	require.NoError(t, conn.QueryRow(t.Context(), `SELECT count(*) FROM killswitch_prescriptions WHERE organization_id = $1`, orgA).Scan(&countA))
-	//nolint:glint // notestingrawsql: asserts private persisted killswitch state that no production query reads
-	require.NoError(t, conn.QueryRow(t.Context(), `SELECT count(*) FROM killswitch_prescriptions WHERE organization_id = $1`, orgB).Scan(&countB))
-	require.Equal(t, 1, countA)
+	countA, err := repo.New(conn).CountKillswitchPrescriptionsFixture(t.Context(), orgA)
+	require.NoError(t, err)
+	countB, err := repo.New(conn).CountKillswitchPrescriptionsFixture(t.Context(), orgB)
+	require.NoError(t, err)
+	require.Equal(t, int64(1), countA)
 	require.Zero(t, countB)
 }
 
@@ -471,8 +463,7 @@ func TestLifecycleDynamicAllIntervalsRollbackCleanupAndReclaim(t *testing.T) {
 	require.Empty(t, v1.SelectedResourceKeys)
 	require.Nil(t, v1.ExpiresAt)
 
-	//nolint:glint // notestingrawsql: corrupts private operation state to exercise idempotency recovery paths production writes cannot reach
-	_, err = conn.Exec(t.Context(), `UPDATE killswitch_operations SET expires_at = clock_timestamp() - interval '1 second' WHERE organization_id = $1 AND operation_id = $2`, orgID, operationID)
+	err = repo.New(conn).ExpireKillswitchOperationFixture(t.Context(), repo.ExpireKillswitchOperationFixtureParams{OrganizationID: orgID, OperationID: operationID})
 	require.NoError(t, err)
 	reusedOperation := request
 	reusedOperation.Desired.InternalNote = "different request after receipt expiry"
@@ -496,11 +487,10 @@ func TestLifecycleDynamicAllIntervalsRollbackCleanupAndReclaim(t *testing.T) {
 		{organizationID: otherOrgID, operationID: uuid.New()},
 	}
 	for _, expired := range expiredOperations {
-		//nolint:glint // notestingrawsql: fabricates already-expired operations for the cleanup sweep
-		_, err = conn.Exec(t.Context(), `
-			INSERT INTO killswitch_operations (organization_id, operation_id, actor_user_id, operation, request_hash, expires_at)
-			VALUES ($1, $2, 'user:test', 'change', 'sha256:test', clock_timestamp() - interval '1 second')
-		`, expired.organizationID, expired.operationID)
+		err = repo.New(conn).InsertKillswitchOperationExpiringInFixture(t.Context(), repo.InsertKillswitchOperationExpiringInFixtureParams{
+			OrganizationID: expired.organizationID, OperationID: expired.operationID, ActorUserID: "user:test", Operation: "change",
+			RequestHash: "sha256:test", ExpiresIn: pgtype.Interval{Microseconds: -time.Second.Microseconds(), Days: 0, Months: 0, Valid: true},
+		})
 		require.NoError(t, err)
 	}
 	deleted, err := service.CleanupExpiredOperations(t.Context(), OrganizationID(orgID), 2)
@@ -509,10 +499,9 @@ func TestLifecycleDynamicAllIntervalsRollbackCleanupAndReclaim(t *testing.T) {
 	deleted, err = service.CleanupExpiredOperations(t.Context(), OrganizationID(orgID), 2)
 	require.NoError(t, err)
 	require.Equal(t, int64(1), deleted)
-	var otherOrgOperations int
-	//nolint:glint // notestingrawsql: asserts private persisted killswitch state that no production query reads
-	require.NoError(t, conn.QueryRow(t.Context(), `SELECT count(*) FROM killswitch_operations WHERE organization_id = $1`, otherOrgID).Scan(&otherOrgOperations))
-	require.Equal(t, 3, otherOrgOperations, "organization cleanup must not sweep another organization")
+	otherOrgOperations, err := repo.New(conn).CountKillswitchOperationsFixture(t.Context(), otherOrgID)
+	require.NoError(t, err)
+	require.Equal(t, int64(3), otherOrgOperations, "organization cleanup must not sweep another organization")
 	_, err = service.CleanupExpiredOperations(t.Context(), OrganizationID(orgID), 0)
 	require.ErrorIs(t, err, ErrInvalidArgument)
 	_, err = service.CleanupExpiredOperations(t.Context(), "", 1)
@@ -649,23 +638,14 @@ func TestLifecycleRejectsInvalidTransitionsAndReceiptPayload(t *testing.T) {
 	badRequest := testActivateRequest(orgID, badOperation)
 	_, err = service.ActivatePrescription(t.Context(), badRequest)
 	require.NoError(t, err)
-	//nolint:glint // notestingrawsql: corrupts private operation state to exercise idempotency recovery paths production writes cannot reach
-	_, err = conn.Exec(t.Context(), `
-		UPDATE killswitch_operations
-		SET status = 'pending', response = NULL
-		WHERE organization_id = $1 AND operation_id = $2
-	`, orgID, badOperation)
+	err = repo.New(conn).ResetKillswitchOperationToPendingFixture(t.Context(), repo.ResetKillswitchOperationToPendingFixtureParams{OrganizationID: orgID, OperationID: badOperation})
 	require.NoError(t, err)
 	_, err = service.ActivatePrescription(t.Context(), badRequest)
 	require.ErrorIs(t, err, ErrOperationUnavailable)
 
-	//nolint:glint // notestingrawsql: corrupts private operation state to exercise idempotency recovery paths production writes cannot reach
-	_, err = conn.Exec(t.Context(), `
-		UPDATE killswitch_operations
-		SET status = 'completed',
-		    response = jsonb_build_object('response_version', 'future', 'prescription_id', $3::text, 'prescription_version', 1, 'state', 'active')
-		WHERE organization_id = $1 AND operation_id = $2
-	`, orgID, badOperation, result.PrescriptionID)
+	err = repo.New(conn).CompleteKillswitchOperationWithFutureResponseFixture(t.Context(), repo.CompleteKillswitchOperationWithFutureResponseFixtureParams{
+		PrescriptionID: string(result.PrescriptionID), OrganizationID: orgID, OperationID: badOperation,
+	})
 	require.NoError(t, err)
 	_, err = service.ActivatePrescription(t.Context(), badRequest)
 	require.ErrorIs(t, err, ErrOperationUnavailable)

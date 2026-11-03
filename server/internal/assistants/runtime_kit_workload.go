@@ -174,14 +174,13 @@ func (s *ServiceCore) provisionKitWorkload(ctx context.Context, r assistantRunti
 		if err != nil {
 			return nil, fmt.Errorf("provision kit workload: %w", err)
 		}
-		if _, err := db.Exec(ctx, "SELECT pg_advisory_xact_lock(hashtextextended($1, 0))", string(key)); err != nil {
+		if err := assistantrepo.New(db).LockKitLocalWorkloadSubject(ctx, string(key)); err != nil {
 			return nil, fmt.Errorf("provision kit workload: %w", err)
 		}
 	}
 	// The project row serializes creation across assistants sharing a cluster.
 	// Issuer child writes additionally use the ordinary workload-policy row lock.
-	var locked uuid.UUID
-	if err := db.QueryRow(ctx, "SELECT id FROM projects WHERE id = $1 AND organization_id = $2 FOR UPDATE", r.ProjectID, identity.OrganizationID).Scan(&locked); err != nil {
+	if _, err := assistantrepo.New(db).LockProjectForKitWorkload(ctx, assistantrepo.LockProjectForKitWorkloadParams{ProjectID: r.ProjectID, OrganizationID: identity.OrganizationID}); err != nil {
 		return nil, fmt.Errorf("provision kit workload: %w", err)
 	}
 	issuers, err := q.FindWorkloadIssuersByIssuer(ctx, workloadrepo.FindWorkloadIssuersByIssuerParams{OrganizationID: identity.OrganizationID, ProjectID: project, Issuers: canonicalIssuer.MatchCandidates()})
@@ -217,8 +216,8 @@ func (s *ServiceCore) provisionKitWorkload(ctx context.Context, r assistantRunti
 	// issuer recreation. Old assertions and sessions can still be valid;
 	// changing only metadata.Generation cannot distinguish them. Query all
 	// historical issuer rows for this external issuer URL, not just its ID.
-	var used bool
-	if err := db.QueryRow(ctx, "SELECT EXISTS (SELECT 1 FROM workload_identity_admissions a JOIN workload_issuers i ON i.id = a.workload_issuer_id WHERE a.organization_id = $1 AND i.organization_id = $1 AND i.issuer = ANY($2::text[]) AND a.subject = $3 AND a.match_kind = 'exact')", identity.OrganizationID, canonicalIssuer.MatchCandidates(), subject).Scan(&used); err != nil {
+	used, err := q.WorkloadSubjectWasExactlyAdmitted(ctx, workloadrepo.WorkloadSubjectWasExactlyAdmittedParams{OrganizationID: identity.OrganizationID, Issuers: canonicalIssuer.MatchCandidates(), Subject: subject})
+	if err != nil {
 		return nil, fmt.Errorf("provision kit workload: %w", err)
 	}
 	if used {
