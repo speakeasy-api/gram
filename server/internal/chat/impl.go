@@ -50,7 +50,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -91,17 +90,16 @@ type Service struct {
 
 	workloadInference WorkloadInferenceAuthorizer
 
-	// summaries and flags switch Summarize onto the masked summary path for
-	// organizations with the org-memory flag on. Nil keeps the legacy path.
+	// summaries switches Summarize onto the masked summary path for
+	// organizations with Organizational Memory turned on. Nil keeps the
+	// legacy path.
 	summaries *SummaryGenerator
-	flags     feature.Provider
 }
 
 // WithMaskedSummaries routes Summarize through the masked summary generator
-// for organizations with the org-memory flag on.
-func (s *Service) WithMaskedSummaries(summaries *SummaryGenerator, flags feature.Provider) *Service {
+// for organizations with Organizational Memory turned on.
+func (s *Service) WithMaskedSummaries(summaries *SummaryGenerator) *Service {
 	s.summaries = summaries
-	s.flags = flags
 	return s
 }
 
@@ -174,7 +172,6 @@ func NewService(
 		workloadInference: nil, // opt in via WithWorkloadInference
 
 		summaries: nil, // opt in via WithMaskedSummaries
-		flags:     nil,
 	}
 }
 
@@ -2569,7 +2566,7 @@ func (s *Service) Summarize(ctx context.Context, payload *gen.SummarizePayload) 
 		}
 	}
 
-	if s.summaries != nil && OrgMemoryEnabled(ctx, s.logger, s.db, s.flags, authCtx.ActiveOrganizationID) {
+	if s.summaries != nil && OrgMemoryEnabled(ctx, s.logger, s.db, authCtx.ActiveOrganizationID) {
 		return s.summarizeMasked(ctx, chat, payload.Regenerate)
 	}
 
