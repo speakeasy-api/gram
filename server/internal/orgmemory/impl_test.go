@@ -172,7 +172,7 @@ func TestGetOrgMemoryDigestCitesOnlyEligibleSources(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, "day", got.Digest.Level)
 	require.Equal(t, "2026-10-27", got.Digest.PeriodStart)
-	require.Equal(t, 2, got.Digest.SessionCount)
+	require.Equal(t, 1, got.Digest.SessionCount, "an excluded session is neither listed nor counted")
 	require.Len(t, got.Sessions, 1)
 	require.Equal(t, kept.String(), got.Sessions[0].ID)
 	require.Equal(t, "Webhook cutover", got.Sessions[0].Title)

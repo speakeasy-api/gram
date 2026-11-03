@@ -20,15 +20,17 @@ WHERE c.project_id = @project_id
 
 -- name: CountLeftOutSessions :one
 -- Summarized sessions memory skips on purpose: excluded by a person, or from
--- a personal account.
+-- a personal or unclassified account.
 SELECT count(*)::bigint
 FROM chats c
 LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
 WHERE c.project_id = @project_id
   AND c.organization_id = @organization_id
   AND c.summary_redacted IS TRUE
+  AND c.summary IS NOT NULL
   AND c.deleted IS FALSE
-  AND (c.memory_excluded_at IS NOT NULL OR ua.account_type = 'personal')
+  AND (c.memory_excluded_at IS NOT NULL
+       OR (ua.id IS NOT NULL AND (ua.account_type IS NULL OR ua.account_type = 'personal')))
   AND c.summary_generated_at >= @since::timestamptz;
 
 -- name: CountSavedMemos :one
@@ -39,7 +41,7 @@ LEFT JOIN user_accounts ua ON ua.id = c.user_account_id
 WHERE m.project_id = @project_id
   AND m.organization_id = @organization_id
   AND m.deleted IS FALSE
-  AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+  AND (m.chat_id IS NULL OR (c.project_id = m.project_id AND c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
   AND m.created_at >= @since::timestamptz;
 
 -- name: CountMemoryRecalls :one
@@ -116,7 +118,7 @@ WHERE m.id = ANY(@ids::uuid[])
   AND m.project_id = @project_id
   AND m.organization_id = @organization_id
   AND m.deleted IS FALSE
-  AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+  AND (m.chat_id IS NULL OR (c.project_id = m.project_id AND c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
 ORDER BY m.created_at;
 
 -- name: ListRecentSessions :many
@@ -155,7 +157,7 @@ LEFT JOIN agents a ON a.id = m.author_agent_id
 WHERE m.project_id = @project_id
   AND m.organization_id = @organization_id
   AND m.deleted IS FALSE
-  AND (c.id IS NULL OR (c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
+  AND (m.chat_id IS NULL OR (c.project_id = m.project_id AND c.memory_excluded_at IS NULL AND c.deleted IS FALSE AND (ua.id IS NULL OR ua.account_type <> 'personal')))
   AND m.created_at >= @since::timestamptz
   AND NOT EXISTS (
     SELECT 1 FROM memory_digests d
