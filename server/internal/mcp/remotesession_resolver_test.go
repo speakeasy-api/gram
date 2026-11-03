@@ -241,7 +241,7 @@ func mintUserSessionBearerForSubject(
 
 	token, jti, err := usersessions.NewSigner("test-jwt-secret").Mint(usersessions.MintParams{
 		Subject:  subject,
-		Audience: urn.NewToolset(toolset.ID).String(),
+		Audience: urn.NewUserSessionIssuer(toolset.UserSessionIssuerID.UUID).String(),
 		Issuer:   ti.serverURL.String() + "/mcp/" + toolset.McpSlug.String,
 		Lifetime: time.Hour,
 	})

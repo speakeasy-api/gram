@@ -82,16 +82,16 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 	}
 	outcome.Action = candidate.Action
 	if candidate.Action == ActionDelete {
-		outcome.McpSlug = candidate.Alias.Slug.String
-		err := m.deleteInTx(ctx, tx, actor, toolset, candidate.Alias.Slug, &outcome)
+		outcome.McpSlug = candidate.Row.EndpointSlug
+		err := m.deleteInTx(ctx, tx, actor, toolset, candidate.Row.EndpointSlug, &outcome)
 		return outcome, err
 	}
-	outcome.McpSlug = candidate.Alias.Slug.String
+	outcome.McpSlug = candidate.Row.EndpointSlug
 	outcome.Warnings = append(outcome.Warnings, candidate.Warnings...)
 
 	// Lock order matches hostedmcp: custom domains, then the server's
 	// endpoints, then the server row, which the switch locks as it updates it.
-	if _, err := hostedmcp.LockDomains(ctx, tx, organizationID, candidate.Alias.CustomDomainID); err != nil {
+	if _, err := hostedmcp.LockDomains(ctx, tx, organizationID, candidate.Row.EndpointCustomDomainID); err != nil {
 		return outcome, fmt.Errorf("lock custom domain: %w", err)
 	}
 	serverID, err := queries.GetToolsetServerID(ctx, repo.GetToolsetServerIDParams{ToolsetID: conv.ToNullUUID(toolset.ID), ProjectID: projectID})
@@ -101,8 +101,13 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 	if err != nil {
 		return outcome, fmt.Errorf("read toolset server: %w", err)
 	}
-	if _, err := mcpendpointsrepo.New(tx).LockMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockMCPEndpointsByMCPServerIDParams{McpServerID: serverID, ProjectID: projectID}); err != nil {
+	endpoints, err := mcpendpointsrepo.New(tx).LockMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.LockMCPEndpointsByMCPServerIDParams{McpServerID: serverID, ProjectID: projectID})
+	if err != nil {
 		return outcome, fmt.Errorf("lock server endpoints: %w", err)
+	}
+	// The domain lock above came from the candidate read; the locked endpoint must still be that address.
+	if len(endpoints) != 1 || endpoints[0].Slug != candidate.Row.EndpointSlug || endpoints[0].CustomDomainID != candidate.Row.EndpointCustomDomainID {
+		return outcome, fail("its address changed during the migration; run it again")
 	}
 	outcome.McpServerID = serverID
 	server, err := mcpserversrepo.New(tx).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: serverID, ProjectID: projectID})

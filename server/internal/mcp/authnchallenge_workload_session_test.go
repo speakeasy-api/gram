@@ -129,11 +129,12 @@ func seedWorkloadSession(t *testing.T, ctx context.Context, ti *testInstance, fx
 
 func workloadSessionEndpoint(fx agentConsentFixture) *mcp.ResolvedMcpEndpoint {
 	return &mcp.ResolvedMcpEndpoint{
-		AudienceURN:         urn.NewToolset(fx.toolset.ID).String(),
+		AudienceURN:         urn.NewUserSessionIssuer(fx.toolset.UserSessionIssuerID.UUID).String(),
 		OrganizationID:      fx.orgID,
 		ProjectID:           fx.target.ProjectID,
 		RouteBase:           mcproute.MCP,
 		Slug:                fx.toolset.McpSlug.String,
+		McpServerID:         uuid.NullUUID{UUID: fx.toolset.ID, Valid: true},
 		ToolsetID:           uuid.NullUUID{UUID: fx.toolset.ID, Valid: true},
 		UserSessionIssuerID: fx.target.UserSessionIssuerID,
 	}
@@ -144,7 +145,7 @@ func mintSessionBearerExpiringAt(t *testing.T, ti *testInstance, fx agentConsent
 
 	token, _, err := sessiontokens.NewSigner("test-jwt-secret").Mint(sessiontokens.MintParams{
 		Subject:   session.SubjectUrn,
-		Audience:  urn.NewToolset(fx.toolset.ID).String(),
+		Audience:  urn.NewUserSessionIssuer(fx.toolset.UserSessionIssuerID.UUID).String(),
 		Issuer:    ti.serverURL.JoinPath("mcp", fx.toolset.McpSlug.String).String(),
 		ExpiresAt: &expiresAt,
 		ClientID:  fx.client.ClientID,

@@ -13,7 +13,7 @@ import (
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-func TestLoadToolUsageMatchers_CoverAliasAndEveryEndpoint(t *testing.T) {
+func TestLoadToolUsageMatchers_CoverEveryEndpoint(t *testing.T) {
 	t.Parallel()
 
 	ctx, ti := newTestLogsService(t)
@@ -21,7 +21,7 @@ func TestLoadToolUsageMatchers_CoverAliasAndEveryEndpoint(t *testing.T) {
 	require.True(t, ok)
 	projectID := *authCtx.ProjectID
 
-	// A legacy toolset whose alias differs from both of its canonical server's addresses.
+	// A toolset whose canonical server has three addresses.
 	legacyServer := createHostedMCPServerFixture(t, ctx, ti, "Matcher Legacy", "matcher-legacy")
 	endpoints := mcpendpointsRepo.New(ti.conn)
 	for _, slug := range []string{"acme-matcher-legacy-first", "acme-matcher-legacy-second"} {
@@ -31,7 +31,7 @@ func TestLoadToolUsageMatchers_CoverAliasAndEveryEndpoint(t *testing.T) {
 		require.NoError(t, err)
 	}
 
-	// A toolset created after the flip: no alias, an endpoint on its canonical server.
+	// A toolset with one endpoint on its canonical server.
 	flipped, err := toolsetsRepo.New(ti.conn).CreateToolset(ctx, toolsetsRepo.CreateToolsetParams{
 		OrganizationID: authCtx.ActiveOrganizationID, ProjectID: projectID, Name: "Matcher Flipped", Slug: "matcher-flipped",
 		Description: pgtype.Text{}, DefaultEnvironmentSlug: pgtype.Text{},

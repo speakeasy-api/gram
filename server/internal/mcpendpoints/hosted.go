@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -135,13 +134,11 @@ func (s *Service) updateHostedEndpointInTx(ctx context.Context, dbtx pgx.Tx, log
 			return nil, nil, oops.E(oops.CodeUnexpected, err, "lock mcp endpoint slug scope").LogError(ctx, logger)
 		}
 		// The scope is the endpoint's own domain or the organization's verified one, so a
-		// soft-deleted domain must not block a move within it; the server's frozen toolset alias does not count.
+		// soft-deleted domain must not block a move within it.
 		available, err := CheckSlugAvailable(ctx, dbtx, SlugAvailabilityCheck{
 			Slug:                     slug,
 			CustomDomainID:           customDomainID,
 			OrganizationID:           authCtx.ActiveOrganizationID,
-			ExcludeToolsetID:         uuid.NullUUID{UUID: uuid.Nil, Valid: false},
-			ExcludeMcpServerID:       uuid.NullUUID{UUID: server.ID, Valid: true},
 			SkipDomainOwnershipCheck: true,
 		})
 		if err != nil {
@@ -209,9 +206,6 @@ func (s *Service) updateHostedEndpointInTx(ctx context.Context, dbtx pgx.Tx, log
 		reconcileDomains = append(reconcileDomains, existing.CustomDomainID.UUID)
 	}
 
-	if err := legacyalias.FollowAlias(ctx, dbtx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, server.ID); err != nil {
-		return nil, nil, err //nolint:wrapcheck // oops errors pass through.
-	}
 	return afterView, reconcileDomains, nil
 }
 

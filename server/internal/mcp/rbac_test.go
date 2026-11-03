@@ -279,7 +279,7 @@ func createPrivateMCPToolset(t *testing.T, ctx context.Context, ti *testInstance
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, slug, "private", noIssuer())
+	toolset := hostToolset(t, ctx, ti, toolsetRow, slug, "private", noIssuer())
 
 	return toolset
 }

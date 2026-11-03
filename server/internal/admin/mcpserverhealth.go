@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/authclients"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
@@ -100,14 +99,6 @@ func (s *Service) resolveHealthServer(ctx context.Context, organizationID, rawPr
 		return nil, oops.C(oops.CodeNotFound)
 	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "read mcp server").LogError(ctx, s.logger, logAttrs...)
-	}
-
-	if row.UrlSlug == "" && row.ToolsetID.Valid && row.ToolsetWrapperCount <= 1 {
-		alias, err := legacyalias.Get(ctx, s.db, projectID, row.ToolsetID.UUID)
-		if err != nil {
-			return nil, oops.E(oops.CodeUnexpected, err, "read mcp server alias").LogError(ctx, s.logger, logAttrs...)
-		}
-		row.UrlSlug = alias.Slug.String
 	}
 
 	return &healthServer{queries: queries, projectID: projectID, row: row, bucket: bucket, logAttrs: logAttrs}, nil

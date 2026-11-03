@@ -663,8 +663,6 @@ SELECT
     ms.id AS meta_mcp_server_id,
     ms.name,
     e.slug,
-    -- legacyalias: the caller checks deleted rows against aliases; drop with AIM-670.
-    e.custom_domain_id,
     e.deleted,
     e.is_domain_root,
     cd.domain AS custom_domain,
@@ -704,7 +702,6 @@ type ListMetaMCPEndpointsForTelemetryByProjectIDRow struct {
 	MetaMcpServerID uuid.UUID
 	Name            string
 	Slug            string
-	CustomDomainID  uuid.NullUUID
 	Deleted         bool
 	IsDomainRoot    pgtype.Bool
 	CustomDomain    pgtype.Text
@@ -712,9 +709,8 @@ type ListMetaMCPEndpointsForTelemetryByProjectIDRow struct {
 }
 
 // Gateway endpoints for classifying hook-observed calls by URL. Deleted rows keep
-// matching unless a live endpoint now holds the slug in that namespace (callers also
-// drop ones a legacy toolset alias holds); the existence check mirrors the global
-// unique index, so it is not project-scoped.
+// matching unless a live endpoint now holds the slug in that namespace; the
+// existence check mirrors the global unique index, so it is not project-scoped.
 func (q *Queries) ListMetaMCPEndpointsForTelemetryByProjectID(ctx context.Context, projectID uuid.UUID) ([]ListMetaMCPEndpointsForTelemetryByProjectIDRow, error) {
 	rows, err := q.db.Query(ctx, listMetaMCPEndpointsForTelemetryByProjectID, projectID)
 	if err != nil {
@@ -728,7 +724,6 @@ func (q *Queries) ListMetaMCPEndpointsForTelemetryByProjectID(ctx context.Contex
 			&i.MetaMcpServerID,
 			&i.Name,
 			&i.Slug,
-			&i.CustomDomainID,
 			&i.Deleted,
 			&i.IsDomainRoot,
 			&i.CustomDomain,

@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/tombstone"
@@ -234,7 +233,7 @@ func LockServer(ctx context.Context, tx pgx.Tx, organizationID string, projectID
 }
 
 // RequireLiveAddress rejects enabling a hosted server with no endpoint that can serve: one on the platform or on
-// a live, verified and activated custom domain. A canonical server's legacy toolset alias also serves while it lasts.
+// a live, verified and activated custom domain.
 func RequireLiveAddress(ctx context.Context, tx pgx.Tx, organizationID string, server mcpserversrepo.McpServer) error {
 	live, err := mcpendpointsrepo.New(tx).ListServableMCPEndpointsByMCPServerID(ctx, mcpendpointsrepo.ListServableMCPEndpointsByMCPServerIDParams{
 		OrganizationID: organizationID, ProjectID: server.ProjectID, McpServerID: server.ID,
@@ -244,15 +243,6 @@ func RequireLiveAddress(ctx context.Context, tx pgx.Tx, organizationID string, s
 	}
 	if len(live) > 0 {
 		return nil
-	}
-	if IsCanonical(&server, server.ID) {
-		alias, err := legacyalias.Get(ctx, tx, server.ProjectID, server.ID)
-		if err != nil {
-			return oops.E(oops.CodeUnexpected, err, "load hosted MCP legacy alias")
-		}
-		if alias.Slug.Valid && alias.Slug.String != "" {
-			return nil
-		}
 	}
 	return oops.E(oops.CodeInvalid, nil, "hosted MCP server has no address; add one before enabling it")
 }

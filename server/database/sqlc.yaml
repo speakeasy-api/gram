@@ -252,17 +252,6 @@ sql:
         sql_package: "pgx/v5"
         omit_unused_structs: true
 
-  # The legacy toolset alias reads the columns sqlc_retired_columns.sql drops, so it alone leaves that file out.
-  - schema: schema.sql
-    queries: ../internal/hostedmcp/legacyalias/queries.sql
-    engine: postgresql
-    gen:
-      go:
-        package: "repo"
-        out: "../internal/hostedmcp/legacyalias/repo"
-        sql_package: "pgx/v5"
-        omit_unused_structs: true
-
   - schema: [schema.sql, sqlc_retired_columns.sql]
     queries: ../internal/toolsets/queries.sql
     engine: postgresql

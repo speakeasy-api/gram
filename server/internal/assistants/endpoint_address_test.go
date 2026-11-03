@@ -71,18 +71,15 @@ func TestAssistantHostedServerOnCustomDomainUsesEndpointURL(t *testing.T) {
 	require.Equal(t, "https://mcp.example.test/mcp/org-test-billing-x1", f.runtime(t)[0].URL)
 }
 
-// A hosted server whose domain is not live keeps its legacy alias, but new attachments need a live endpoint.
-func TestAssistantHostedServerOnInactiveDomainKeepsLegacyAlias(t *testing.T) {
+// A hosted server whose only endpoint is on a domain that is not live has no address.
+func TestAssistantHostedServerOnInactiveDomainHasNoAddress(t *testing.T) {
 	t.Parallel()
 	f := newHostedAttachmentFixture(t, "endpoint_addr_hosted_inactive")
 	domainID := f.customDomain(t, "org-test", "mcp.example.test", true, false)
 	f.moveHostedToDomain(t, domainID)
-	testenv.SetLegacyAlias(t, t.Context(), f.db, f.projectID, f.hosted.ID, "org-test-billing-x1", uuid.NullUUID{UUID: domainID, Valid: true})
 	f.addServerRow(t, f.hosted.ID, uuid.NullUUID{})
 
-	servers := f.runtime(t)
-	require.Len(t, servers, 1)
-	require.Equal(t, "https://gram.test/mcp/org-test-billing-x1", servers[0].URL)
+	require.Empty(t, f.runtime(t))
 
 	_, err := f.core.CreateAssistant(t.Context(), "org-test", f.projectID, "user-1", "Second", "openai/gpt-4o-mini", "", nil,
 		[]*types.AssistantMCPServerRef{{McpServerSlug: "org-test-billing-x1"}}, 300, 1, StatusActive, false, allowAllMCPEnable)

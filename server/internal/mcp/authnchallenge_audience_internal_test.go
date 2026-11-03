@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/golang-jwt/jwt/v5"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
@@ -28,8 +29,8 @@ func TestValidateUserSessionBearerAudiencesResourceBindingAndIssuerPortability(t
 	)
 	signer := sessiontokens.NewSigner("audience-policy-test-secret")
 	subject := urn.NewUserSubject("user-1")
-	audiencesA := userSessionBearerAudiences{Resource: resourceA, Current: currentAudience, Legacy: ""}
-	audiencesB := userSessionBearerAudiences{Resource: resourceB, Current: currentAudience, Legacy: ""}
+	audiencesA := userSessionBearerAudiences{Resource: resourceA, Current: currentAudience}
+	audiencesB := userSessionBearerAudiences{Resource: resourceB, Current: currentAudience}
 
 	resourceToken, _, err := signer.Mint(sessiontokens.MintParams{
 		Subject: subject, Audience: resourceA, Issuer: resourceA, Lifetime: time.Hour,
@@ -52,33 +53,26 @@ func TestValidateUserSessionBearerAudiencesResourceBindingAndIssuerPortability(t
 	}
 }
 
-func TestValidateUserSessionBearerAudiencesLegacyFallback(t *testing.T) {
+func TestValidateUserSessionBearerAudiencesRejectsToolsetAudience(t *testing.T) {
 	t.Parallel()
 
 	const (
 		resource        = "https://gram.example.test/mcp/a"
 		currentAudience = "user_session_issuer:11111111-1111-1111-1111-111111111111"
-		legacyAudience  = "toolset:22222222-2222-2222-2222-222222222222"
 	)
 	signer := sessiontokens.NewSigner("audience-policy-test-secret")
-	subject := urn.NewUserSubject("user-1")
-	audiences := userSessionBearerAudiences{Resource: resource, Current: currentAudience, Legacy: legacyAudience}
-
-	legacyToken, _, err := signer.Mint(sessiontokens.MintParams{
-		Subject: subject, Audience: legacyAudience, Issuer: resource, Lifetime: time.Hour,
+	toolsetAudience := urn.NewToolset(uuid.MustParse("22222222-2222-2222-2222-222222222222")).String()
+	token, _, err := signer.Mint(sessiontokens.MintParams{
+		Subject: urn.NewUserSubject("user-1"), Audience: toolsetAudience, Issuer: resource, Lifetime: time.Hour,
 	})
 	require.NoError(t, err)
-	_, accepted, err := validateUserSessionBearerAudiences(t.Context(), signer, audienceNeverRevoked{}, legacyToken, audiences)
-	require.NoError(t, err)
-	require.Equal(t, userSessionAudienceLegacy, accepted)
 
-	unrelatedToken, _, err := signer.Mint(sessiontokens.MintParams{
-		Subject: subject, Audience: "unrelated", Issuer: resource, Lifetime: time.Hour,
+	_, _, err = validateUserSessionBearerAudiences(t.Context(), signer, audienceNeverRevoked{}, token, userSessionBearerAudiences{
+		Resource:         resource,
+		Current:          currentAudience,
+		IssuerMCPServers: urn.NewUserSessionIssuerMCPServers(uuid.MustParse("11111111-1111-1111-1111-111111111111")).String(),
 	})
-	require.NoError(t, err)
-	_, _, err = validateUserSessionBearerAudiences(t.Context(), signer, audienceNeverRevoked{}, unrelatedToken, audiences)
 	require.ErrorIs(t, err, jwt.ErrTokenInvalidAudience)
-	require.ErrorContains(t, err, "validate legacy audience")
 }
 
 func TestValidateUserSessionBearerAudiencesRejectsBroadenedResourceToken(t *testing.T) {
@@ -101,7 +95,6 @@ func TestValidateUserSessionBearerAudiencesRejectsBroadenedResourceToken(t *test
 	_, _, err = validateUserSessionBearerAudiences(t.Context(), signer, audienceNeverRevoked{}, token, userSessionBearerAudiences{
 		Resource: resource,
 		Current:  currentAudience,
-		Legacy:   "toolset:22222222-2222-2222-2222-222222222222",
 	})
 	require.ErrorContains(t, err, "audience must exactly match")
 }

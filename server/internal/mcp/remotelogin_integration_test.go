@@ -69,6 +69,7 @@ func TestRemoteLoginCallback_AuthenticatedSubject(t *testing.T) {
 		UserSessionIssuerID: result.UserSessionIssuer.ID,
 		Endpoint: mcp.EndpointRef{
 			McpSlug:        result.McpSlug,
+			McpServerID:    uuid.NullUUID{UUID: result.Toolset.ID, Valid: true},
 			CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		},
 		ClientID:            "test-mcp-client",
@@ -113,6 +114,7 @@ func TestRemoteLoginCallback_AnonymousSubject(t *testing.T) {
 		UserSessionIssuerID: result.UserSessionIssuer.ID,
 		Endpoint: mcp.EndpointRef{
 			McpSlug:        result.McpSlug,
+			McpServerID:    uuid.NullUUID{UUID: result.Toolset.ID, Valid: true},
 			CustomDomainID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		},
 		ClientID:            "test-mcp-client",
@@ -357,7 +359,7 @@ func attachCustomDomainToToolset(
 	})
 	require.NoError(t, err)
 
-	testenv.SetLegacyAlias(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, toolset.McpSlug.String, uuid.NullUUID{UUID: domain.ID, Valid: true})
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Slug: toolset.McpSlug.String, CustomDomainID: uuid.NullUUID{UUID: domain.ID, Valid: true}})
 	toolset.CustomDomainID = uuid.NullUUID{UUID: domain.ID, Valid: true}
 
 	return toolset, domain

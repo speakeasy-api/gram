@@ -1842,8 +1842,6 @@ SELECT
   , t.name
   , t.slug
   , COALESCE(addr.slug, '')::text AS mcp_slug
-  -- legacyalias: a hosted toolset without a servable endpoint takes its legacy alias as its address; drop with AIM-670.
-  , (cw.id IS NOT NULL)::BOOLEAN AS hosted
   , (cw.id IS NOT NULL AND cw.visibility <> 'disabled')::BOOLEAN AS mcp_enabled
   , (t.external_oauth_server_id IS NOT NULL)::BOOLEAN AS oauth_configured
   , ARRAY(
@@ -1888,7 +1886,6 @@ type ListToolsetsUsingOpenAPIv3SourceRow struct {
 	Name            string
 	Slug            string
 	McpSlug         string
-	Hosted          bool
 	McpEnabled      bool
 	OauthConfigured bool
 	SourceToolUrns  []string
@@ -1908,7 +1905,6 @@ func (q *Queries) ListToolsetsUsingOpenAPIv3Source(ctx context.Context, arg List
 			&i.Name,
 			&i.Slug,
 			&i.McpSlug,
-			&i.Hosted,
 			&i.McpEnabled,
 			&i.OauthConfigured,
 			&i.SourceToolUrns,

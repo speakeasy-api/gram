@@ -433,14 +433,6 @@ func DescribeToolsetEntries(
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load hosted MCP state").LogError(ctx, logger)
 	}
-	toolsetProjects := make(map[uuid.UUID]uuid.UUID, len(toolsets))
-	for _, toolset := range toolsets {
-		toolsetProjects[toolset.ID] = toolset.ProjectID
-	}
-	aliases, err := toolsetAliases(ctx, db, hostingByID, toolsetProjects)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load hosted MCP state").LogError(ctx, logger)
-	}
 
 	// Assemble each toolset's entry from the shared, pre-fetched results —
 	// pure Go, no DB calls in this loop.
@@ -561,7 +553,7 @@ func DescribeToolsetEntries(
 			})
 		}
 
-		hosting := deriveToolsetHosting(aliases[toolset.ID], toolset.ExternalOauthServerID, hostingstate.For(hostingByID, toolset.ID))
+		hosting := deriveToolsetHosting(toolset.ExternalOauthServerID, hostingstate.For(hostingByID, toolset.ID))
 		result = append(result, &types.ToolsetEntry{
 			ID:                           toolset.ID.String(),
 			OrganizationID:               toolset.OrganizationID,
@@ -645,11 +637,7 @@ func DescribeToolset(
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load hosted MCP state").LogError(ctx, logger)
 	}
-	aliases, err := toolsetAliases(ctx, tx, hostingByID, map[uuid.UUID]uuid.UUID{toolset.ID: toolset.ProjectID})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load hosted MCP state").LogError(ctx, logger)
-	}
-	hosting := deriveToolsetHosting(aliases[toolset.ID], toolset.ExternalOauthServerID, hostingstate.For(hostingByID, toolset.ID))
+	hosting := deriveToolsetHosting(toolset.ExternalOauthServerID, hostingstate.For(hostingByID, toolset.ID))
 
 	// TODO: It would be better if every query below accepted a deployment ID as a parameter to guarantee cache consistency.
 	activeDeploymentID, err := deploymentRepo.GetActiveDeploymentID(ctx, pid)
@@ -1096,14 +1084,6 @@ func GetToolsetsSummary(
 		}
 		maps.Copy(hostingByID, rows)
 	}
-	toolsetProjects := make(map[uuid.UUID]uuid.UUID, len(toolsets))
-	for _, ts := range toolsets {
-		toolsetProjects[ts.ID] = ts.ProjectID
-	}
-	aliases, err := toolsetAliases(ctx, tx, hostingByID, toolsetProjects)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "failed to load hosted MCP state").LogError(ctx, logger)
-	}
 
 	// Assemble results — look up each toolset's tools from the index.
 	result := make([]*types.ToolsetSummary, 0, len(toolsets))
@@ -1116,9 +1096,7 @@ func GetToolsetsSummary(
 			}
 		}
 
-		alias := aliases[ts.ID]
-		alias.CustomDomainID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
-		hosting := deriveToolsetHosting(alias, ts.ExternalOauthServerID, hostingstate.For(hostingByID, ts.ID))
+		hosting := deriveToolsetHosting(ts.ExternalOauthServerID, hostingstate.For(hostingByID, ts.ID))
 		result = append(result, &types.ToolsetSummary{
 			ID:                     ts.ID.String(),
 			OrganizationID:         ts.OrganizationID,

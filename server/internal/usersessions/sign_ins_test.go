@@ -979,7 +979,7 @@ func TestMintUserSession_LinksTheDashboardSignIn(t *testing.T) {
 				return
 			}
 			require.NoError(t, err)
-			claims, err := usersessions.NewSigner("test-jwt-secret").Validate(minted.AccessToken, urn.NewToolset(toolset.ID).String())
+			claims, err := usersessions.NewSigner("test-jwt-secret").Validate(minted.AccessToken, urn.NewUserSessionIssuer(hostedIssuerID(t, ctx, ti, toolset)).String())
 			require.NoError(t, err)
 			row, err := repo.New(ti.conn).GetUserSessionByJTI(ctx, repo.GetUserSessionByJTIParams{UserSessionIssuerID: hostedIssuerID(t, ctx, ti, toolset), Jti: claims.ID})
 			require.NoError(t, err)

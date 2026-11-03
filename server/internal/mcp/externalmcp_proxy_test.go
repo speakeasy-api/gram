@@ -130,7 +130,7 @@ func setupToolsetWithExternalMCP(
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
 	})
 	require.NoError(t, err)
-	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, mcpSlug, "private", noIssuer())
+	toolset := hostToolset(t, ctx, ti, toolsetRow, mcpSlug, "private", noIssuer())
 
 	// Make the toolset public
 	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "public"})
