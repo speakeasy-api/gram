@@ -1315,11 +1315,11 @@ func (s *Service) recordRemoteSessionRejection(ctx context.Context, authenticati
 
 // writeRemoteSessionReconnectChallenge answers a request whose required
 // upstream remote session is missing or its grant is gone, which only the
-// person reconnecting it at {routeBase}/{slug}/connect repairs. RFC 6750 reads a
-// 401 without an error code as "no credentials presented", so clients replay the
-// token they hold indefinitely; invalid_token makes them refresh, which the
-// token endpoint refuses for the same reason, and then reauthorize through the
-// consent page that reconnects the upstream. Only a person's session from a
+// person reconnecting it at {routeBase}/{slug}/connect repairs. Without an error
+// code, clients tend to replay the token they hold indefinitely; RFC 6750 section
+// 3.1 lets invalid_token prompt a refresh, which the token endpoint refuses for
+// the same reason, and clients then reauthorize through the consent page that
+// reconnects the upstream. Only a person's session from a
 // refreshable grant can follow that path. Every other caller keeps the bare
 // challenge, since telling it to discard a credential it cannot replace, or an
 // agent session whose attached credential belongs to someone else, would
@@ -1335,7 +1335,8 @@ func (s *Service) writeRemoteSessionReconnectChallenge(ctx context.Context, w ht
 
 // subjectReauthorizesToReconnect reports a person at the client who can repair
 // a connection on the consent page. Enforced auth clients can offer an anonymous
-// subject no personal connection, so reauthorizing could strand it.
+// subject no personal connection, so it is not told to reauthorize here; the
+// auth client resolver still decides its refresh.
 func (s *Service) subjectReauthorizesToReconnect(ctx context.Context, organizationID string, subject urn.SessionSubject) bool {
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:
