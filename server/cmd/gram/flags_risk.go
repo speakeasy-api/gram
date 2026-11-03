@@ -72,8 +72,8 @@ func parseOptionalPepperKeyRing(ctx context.Context, logger *slog.Logger, raw st
 	return fingerprinter, nil
 }
 
-// connectionDeviceKeys derives connection device keys from the keyring, for processes that
-// don't otherwise need it. An unset or unusable keyring only leaves device_key empty.
+// connectionDeviceKeys derives connection device keys from the keyring. An unset or unusable
+// keyring only leaves device_key empty.
 func connectionDeviceKeys(ctx context.Context, logger *slog.Logger, raw string) mcpconnectionattempts.RecorderOption {
 	var fingerprinter risk.Fingerprinter
 	if raw == "" {
