@@ -33,7 +33,9 @@ type KitRuntimeProtocol struct{ config KitRuntimeProtocolConfig }
 var _ runtimeProtocol = (*KitRuntimeProtocol)(nil)
 var _ runtimeSwitchCoordinator = (*KitRuntimeProtocol)(nil)
 
-var ErrKitUpgradeNoticeUnsupported = errors.New("kit runtime-generated context upgrade notice is not supported by the pinned runtime")
+// kitHistoryDroppedNotice tells a fresh Kit session that the conversation it
+// joins had earlier turns it cannot see. Prior transcript is never replayed.
+const kitHistoryDroppedNotice = "Earlier messages in this conversation are not available to you. Respond to the current message without assuming what was said before."
 
 func NewKitRuntimeProtocol(c KitRuntimeProtocolConfig) (*KitRuntimeProtocol, error) {
 	if c.Core == nil || c.Projector == nil || c.Endpoint == nil || c.Endpoint.Path != "/acp/v2" || !filepath.IsAbs(c.CWD) {
@@ -109,20 +111,7 @@ func (p *KitRuntimeProtocol) RunTurn(ctx context.Context, r assistantRuntimeReco
 	if session.ChatID == uuid.Nil {
 		return ErrKitRuntimeBinding
 	}
-	currentIDs := []uuid.UUID{}
-	if req.CanonicalUserMessageID != uuid.Nil {
-		currentIDs = append(currentIDs, req.CanonicalUserMessageID)
-	}
-	if !found && session.HasPriorTranscript {
-		prior, err := assistantrepo.New(p.config.Core.db).KitProtocolHasPriorMessages(ctx, assistantrepo.KitProtocolHasPriorMessagesParams{ProjectID: uuid.NullUUID{UUID: r.ProjectID, Valid: true}, ChatID: session.ChatID, CurrentMessageIds: currentIDs})
-		if err != nil {
-			return fmt.Errorf("kit protocol operation: %w", err)
-		}
-		if prior {
-			return ErrKitUpgradeNoticeUnsupported
-		}
-	}
-	prompt, err := kitProtocolPrompt(req)
+	prompt, err := kitProtocolPrompt(req, !found && session.HasPriorTranscript)
 	if err != nil {
 		return fmt.Errorf("kit protocol operation: %w", err)
 	}
@@ -523,10 +512,13 @@ func kitConsumeNotifications(ctx context.Context, notifications <-chan kitacp.No
 
 // Images must already be materialized by server attachment loading. Never fetch
 // untrusted image URLs from the control-plane adapter.
-func kitProtocolPrompt(req runTurnRequest) ([]map[string]any, error) {
+func kitProtocolPrompt(req runTurnRequest, historyDropped bool) ([]map[string]any, error) {
 	prompt := []map[string]any{}
 	if req.SourceInstructions != "" {
 		prompt = append(prompt, map[string]any{"type": "text", "text": req.SourceInstructions})
+	}
+	if historyDropped {
+		prompt = append(prompt, map[string]any{"type": "text", "text": kitHistoryDroppedNotice})
 	}
 	prompt = append(prompt, map[string]any{"type": "text", "text": req.Prompt})
 	for _, part := range req.InputParts {

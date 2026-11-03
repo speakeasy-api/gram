@@ -465,12 +465,25 @@ func TestKitProtocolRunTurnPersistsReplaysAndProjects(t *testing.T) {
 
 func TestKitProtocolPromptContent(t *testing.T) {
 	t.Parallel()
-	prompt, err := kitProtocolPrompt(runTurnRequest{Prompt: "hello", InputParts: []runtimeContentPart{{Type: "image_url", ImageURL: &runtimeImageURL{URL: "data:image/png;base64,aGVsbG8="}}}})
+	prompt, err := kitProtocolPrompt(runTurnRequest{Prompt: "hello", InputParts: []runtimeContentPart{{Type: "image_url", ImageURL: &runtimeImageURL{URL: "data:image/png;base64,aGVsbG8="}}}}, false)
 	require.NoError(t, err)
 	require.Equal(t, "image", prompt[1]["type"])
 	require.Equal(t, "image/png", prompt[1]["mimeType"])
-	_, err = kitProtocolPrompt(runTurnRequest{InputParts: []runtimeContentPart{{Type: "image_url", ImageURL: &runtimeImageURL{URL: "http://example.invalid/image.png"}}}})
+	_, err = kitProtocolPrompt(runTurnRequest{InputParts: []runtimeContentPart{{Type: "image_url", ImageURL: &runtimeImageURL{URL: "http://example.invalid/image.png"}}}}, false)
 	require.Error(t, err)
+}
+
+func TestKitProtocolPromptNoticesDroppedHistory(t *testing.T) {
+	t.Parallel()
+	prompt, err := kitProtocolPrompt(runTurnRequest{SourceInstructions: "source", Prompt: "hello"}, true)
+	require.NoError(t, err)
+	require.Len(t, prompt, 3)
+	require.Equal(t, "source", prompt[0]["text"])
+	require.Equal(t, kitHistoryDroppedNotice, prompt[1]["text"])
+	require.Equal(t, "hello", prompt[2]["text"])
+	prompt, err = kitProtocolPrompt(runTurnRequest{Prompt: "hello"}, false)
+	require.NoError(t, err)
+	require.Len(t, prompt, 1)
 }
 
 func TestKitProtocolModelSelectionFailsClosed(t *testing.T) {
@@ -519,7 +532,7 @@ func TestKitProtocolSourceContextIsPerTurn(t *testing.T) {
 	for _, channel := range []string{"CHANNEL_ONE", "CHANNEL_TWO"} {
 		source, err := composeInstructions("", assistantThreadRecord{SourceKind: sourceKindSlack, SourceRefJSON: []byte(`{"channel_id":"` + channel + `","thread_id":"123.456"}`)}, nil, "")
 		require.NoError(t, err)
-		prompt, err := kitProtocolPrompt(runTurnRequest{SourceInstructions: source, Prompt: "Please reply"})
+		prompt, err := kitProtocolPrompt(runTurnRequest{SourceInstructions: source, Prompt: "Please reply"}, false)
 		require.NoError(t, err)
 		require.Len(t, prompt, 2)
 		require.Equal(t, "Please reply", prompt[1]["text"])
@@ -535,7 +548,7 @@ func TestKitProtocolSourceContextIsPerTurn(t *testing.T) {
 	}
 	require.NotContains(t, contexts[0], "CHANNEL_TWO")
 	require.NotContains(t, contexts[1], "CHANNEL_ONE")
-	prompt, err := kitProtocolPrompt(runTurnRequest{Prompt: "No Slack context"})
+	prompt, err := kitProtocolPrompt(runTurnRequest{Prompt: "No Slack context"}, false)
 	require.NoError(t, err)
 	require.Len(t, prompt, 1)
 	require.Equal(t, "No Slack context", prompt[0]["text"])
@@ -546,7 +559,7 @@ func TestKitProtocolPreservesUpstreamSignInAction(t *testing.T) {
 	source, err := composeInstructions("", assistantThreadRecord{SourceKind: sourceKindSlack, SourceRefJSON: []byte(`{"channel_id":"CHANNEL","thread_id":"123.456"}`)}, nil, "")
 	require.NoError(t, err)
 	action := "<message-context>\nEventType: assistant_mcp_auth_required\nMCPSlug: tools\nAuthURL: https://auth.example/authorize?state=opaque-state&code_challenge=opaque-challenge\n</message-context>"
-	prompt, err := kitProtocolPrompt(runTurnRequest{SourceInstructions: source, Prompt: action})
+	prompt, err := kitProtocolPrompt(runTurnRequest{SourceInstructions: source, Prompt: action}, false)
 	require.NoError(t, err)
 	require.Equal(t, action, prompt[1]["text"], "an upstream sign-in action must reach the model verbatim")
 	require.Contains(t, prompt[0]["text"], "deliver it to the OWNER")
