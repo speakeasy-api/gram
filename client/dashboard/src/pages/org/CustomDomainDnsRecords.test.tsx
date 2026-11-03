@@ -125,3 +125,16 @@ describe("RecommendedDnsUpdateAlert", () => {
     expect(screen.getByText(target)).toBeTruthy();
   });
 });
+
+it("explains flattening at a zone root without configured A records", () => {
+  renderRecords({ domain: "example.co.uk", dnsTarget: target });
+  expect(screen.getByText(/If this is your DNS zone root/)).toBeTruthy();
+  expect(screen.getByText(target)).toBeTruthy();
+});
+
+it("does not label a subdomain's shared-target A fallback as a zone root", () => {
+  renderRecords({ aRecords });
+  fireEvent.click(screen.getByRole("button", { name: "A records" }));
+  expect(screen.getByText(aRecords[0]!)).toBeTruthy();
+  expect(screen.queryByText(/the zone root/)).toBeNull();
+});

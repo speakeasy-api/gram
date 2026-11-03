@@ -68,7 +68,8 @@ export function CustomDomainDnsRecords({
       ? "CNAME flattening (recommended)"
       : "CNAME (recommended)"
     : "CNAME (subdomain)";
-  const aLabel = designatedTarget ? "A records" : "A record (apex domain)";
+  const aLabel =
+    isApex && !designatedTarget ? "A record (apex domain)" : "A records";
 
   const txtName = `_gram.${domain.domain}`;
   const txtValue = `gram-domain-verify=${domain.domain},${domain.organizationId}`;
@@ -120,8 +121,14 @@ export function CustomDomainDnsRecords({
                 <>
                   Create an A record for{" "}
                   <span className="font-mono break-all">{domain.domain}</span>{" "}
-                  (the zone root, often written as{" "}
-                  <span className="font-mono">@</span>) pointing to:
+                  {isApex && (
+                    <>
+                      {" "}
+                      (the zone root, often written as{" "}
+                      <span className="font-mono">@</span>)
+                    </>
+                  )}{" "}
+                  pointing to:
                 </>
               )}
             </Text>
@@ -158,6 +165,13 @@ export function CustomDomainDnsRecords({
                 </>
               )}
             </Text>
+            {!(designatedTarget && isApex) && (
+              <Text variant="body" className="text-muted-foreground mb-2">
+                If this is your DNS zone root (often written as @), use your
+                provider’s CNAME flattening, ALIAS, or ANAME support. A standard
+                CNAME cannot be placed at the zone root.
+              </Text>
+            )}
             <RecordValue
               value={designatedTarget || sharedCnameTarget}
               label="CNAME value"
