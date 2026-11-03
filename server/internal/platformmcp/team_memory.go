@@ -11,7 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/memorygate"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
@@ -55,19 +55,17 @@ type TextRedactor interface {
 // chat summaries, memos and digests. Reads need memory:read on the project
 // and writes need memory:write. Neither grant implies transcript access.
 type TeamMemoryService struct {
-	db            *pgxpool.Pool
-	engine        *authz.Engine
-	audit         *audit.Logger
-	flags         feature.Provider
-	organizations OrganizationSlugResolver
-	budget        OperationBudget
-	redactor      TextRedactor
+	db       *pgxpool.Pool
+	engine   *authz.Engine
+	audit    *audit.Logger
+	budget   OperationBudget
+	redactor TextRedactor
 }
 
 // NewTeamMemoryService composes the team memory tools. Missing dependencies
 // leave stable unavailable tools registered on the server.
-func NewTeamMemoryService(db *pgxpool.Pool, engine *authz.Engine, auditLogger *audit.Logger, flags feature.Provider, organizations OrganizationSlugResolver, budget OperationBudget, redactor TextRedactor) *TeamMemoryService {
-	service := &TeamMemoryService{db: db, engine: engine, audit: auditLogger, flags: flags, organizations: organizations, budget: budget, redactor: redactor}
+func NewTeamMemoryService(db *pgxpool.Pool, engine *authz.Engine, auditLogger *audit.Logger, budget OperationBudget, redactor TextRedactor) *TeamMemoryService {
+	service := &TeamMemoryService{db: db, engine: engine, audit: auditLogger, budget: budget, redactor: redactor}
 	if !service.valid() {
 		return nil
 	}
@@ -75,7 +73,7 @@ func NewTeamMemoryService(db *pgxpool.Pool, engine *authz.Engine, auditLogger *a
 }
 
 func (s *TeamMemoryService) valid() bool {
-	return s != nil && s.db != nil && s.engine != nil && s.audit != nil && s.flags != nil && s.organizations != nil && s.budget.valid() && s.redactor != nil
+	return s != nil && s.db != nil && s.engine != nil && s.audit != nil && s.budget.valid() && s.redactor != nil
 }
 
 // authorizeRead resolves the project and requires memory:read on it.
@@ -89,7 +87,7 @@ func (s *TeamMemoryService) authorizeWrite(ctx context.Context, principal Princi
 }
 
 // authorize admits only an authenticated person on the external endpoint,
-// requires scope on the exact project, checks the rollout flag, and then
+// requires scope on the exact project, checks that Organizational Memory is on, and then
 // meters the call. Memory is project-scoped, so the grant check follows resolution;
 // an unknown project and a missing grant both refuse without content.
 func (s *TeamMemoryService) authorize(ctx context.Context, principal Principal, projectID, projectSlug string, scope authz.Scope) (ResolvedProject, error) {
@@ -123,14 +121,14 @@ func (s *TeamMemoryService) authorize(ctx context.Context, principal Principal, 
 	if err := s.engine.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: project.ID.String(), Dimensions: nil}); err != nil {
 		return zero, &ExternalAuthorizationError{RequiredScope: string(scope), RequestAccessURL: "", cause: err}
 	}
-	enabled, err := s.enabled(ctx, principal.OrganizationID, project.Slug)
+	enabled, err := s.enabled(ctx, principal.OrganizationID)
 	if err != nil {
 		return zero, err
 	}
 	if !enabled {
 		return zero, errTeamMemoryNotEnabled
 	}
-	// Charged last, so a caller without the grant or the flag cannot drain the
+	// Charged last, so a caller without the grant or the setting cannot drain the
 	// allowance for people who have both.
 	if err := s.budget.Allow(ctx, principal); err != nil {
 		return zero, err
@@ -138,18 +136,15 @@ func (s *TeamMemoryService) authorize(ctx context.Context, principal Principal, 
 	return project, nil
 }
 
-// enabled evaluates the team memory rollout flag. Disabled, missing and
-// indeterminate read as off; an evaluation error is unavailable.
-func (s *TeamMemoryService) enabled(ctx context.Context, organizationID, projectSlug string) (bool, error) {
-	organizationSlug, err := s.organizations.OrganizationSlug(ctx, organizationID)
-	if err != nil || organizationSlug == "" {
-		return false, fmt.Errorf("%w: organization slug is unavailable", ErrUnavailable)
-	}
-	evaluation, err := feature.EvaluateFlag(ctx, s.flags, feature.FlagOrgMemory, organizationID, feature.OrgProjectGroups(organizationSlug, projectSlug))
+// enabled reports whether Organizational Memory is turned on for the
+// organization in the staff admin dashboard. No setting reads as off; a
+// lookup error is unavailable.
+func (s *TeamMemoryService) enabled(ctx context.Context, organizationID string) (bool, error) {
+	on, err := memorygate.Enabled(ctx, s.db, organizationID)
 	if err != nil {
-		return false, fmt.Errorf("%w: evaluate team memory flag: %w", ErrUnavailable, err)
+		return false, fmt.Errorf("%w: %w", ErrUnavailable, err)
 	}
-	return evaluation == feature.EvaluationEnabled, nil
+	return on, nil
 }
 
 // recordRead writes one audit entry for a memory read, naming every source

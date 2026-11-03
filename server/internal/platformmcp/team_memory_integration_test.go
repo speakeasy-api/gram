@@ -17,7 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/memorygate"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
@@ -28,7 +28,6 @@ type teamMemoryFixture struct {
 	db        *pgxpool.Pool
 	principal Principal
 	project   ResolvedProject
-	flags     *feature.InMemory
 	service   *TeamMemoryService
 }
 
@@ -38,11 +37,10 @@ func newTeamMemoryFixture(t *testing.T) teamMemoryFixture {
 	require.NoError(t, err)
 	principal, project := seedRegistrationLifecycle(t, t.Context(), db)
 	engine := authz.NewEngine(testenv.NewLogger(t), db, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagOrgMemory, principal.OrganizationID, true)
-	service := NewTeamMemoryService(db, engine, audit.NewLogger(), flags, NewPostgresOrganizationSlugResolver(db), allowBudget(), NewChatSearchRedactor())
+	require.NoError(t, memorygate.Set(t.Context(), db, principal.OrganizationID, true))
+	service := NewTeamMemoryService(db, engine, audit.NewLogger(), allowBudget(), NewChatSearchRedactor())
 	require.NotNil(t, service)
-	return teamMemoryFixture{db: db, principal: principal, project: project, flags: flags, service: service}
+	return teamMemoryFixture{db: db, principal: principal, project: project, service: service}
 }
 
 // context authenticates the fixture principal with grants on the project.
@@ -157,8 +155,8 @@ func TestRememberRefusesWhenFlagOffOrInputInvalid(t *testing.T) {
 	_, err = f.service.Remember(ctx, f.principal, RememberInput{ProjectSlug: f.project.Slug, Content: "fact", ChatID: foreign.String()})
 	require.ErrorIs(t, err, ErrRiskReadNotFound)
 
-	f.flags.SetFlag(feature.FlagOrgMemory, f.principal.OrganizationID, false)
-	_, err = f.service.Remember(ctx, f.principal, f.remember("flag off"))
+	require.NoError(t, memorygate.Set(t.Context(), f.db, f.principal.OrganizationID, false))
+	_, err = f.service.Remember(ctx, f.principal, f.remember("memory off"))
 	require.ErrorIs(t, err, errTeamMemoryNotEnabled)
 
 	count, err := testrepo.New(f.db).CountMemoryMemosFixture(t.Context())
@@ -338,7 +336,7 @@ func TestSearchTeamMemoryRequiresProjectMemoryReadGrant(t *testing.T) {
 		require.ErrorIs(t, err, errTeamMemoryInvalid)
 	}
 
-	f.flags.SetFlag(feature.FlagOrgMemory, f.principal.OrganizationID, false)
+	require.NoError(t, memorygate.Set(t.Context(), f.db, f.principal.OrganizationID, false))
 	_, err = f.service.Search(f.reader(t.Context()), f.principal, f.search("anything"))
 	require.ErrorIs(t, err, errTeamMemoryNotEnabled)
 }
@@ -405,8 +403,8 @@ func TestTeamMemoryBudgetChargedOnlyAfterGrantAndFlag(t *testing.T) {
 	var denied *ExternalAuthorizationError
 	require.ErrorAs(t, err, &denied)
 
-	f.flags.SetFlag(feature.FlagOrgMemory, f.principal.OrganizationID, false)
-	_, err = limited.Remember(ctx, f.principal, f.remember("flag off"))
+	require.NoError(t, memorygate.Set(t.Context(), f.db, f.principal.OrganizationID, false))
+	_, err = limited.Remember(ctx, f.principal, f.remember("memory off"))
 	require.ErrorIs(t, err, errTeamMemoryNotEnabled)
 }
 
