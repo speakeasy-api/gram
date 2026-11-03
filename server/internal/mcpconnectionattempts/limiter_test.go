@@ -13,7 +13,7 @@ import (
 
 func limiterRow(organizationID, serverID, reason, subject string) Row {
 	var row Row
-	row.OrganizationID, row.ServerID, row.Reason, row.SubjectURN = organizationID, serverID, reason, subject
+	row.OrganizationID, row.ServerID, row.Step, row.Reason, row.SubjectURN = organizationID, serverID, StepInboundAuthorize.String(), reason, subject
 	return row
 }
 
@@ -49,6 +49,9 @@ func TestOnceLimiter_KeysAreSeparate(t *testing.T) {
 	require.True(t, limiter.allow(limiterRow("org", "other-server", "invalid_request", "user:a"), now))
 	require.True(t, limiter.allow(limiterRow("org", "server", "expired", "user:a"), now))
 	require.True(t, limiter.allow(limiterRow("org", "server", "invalid_request", "user:b"), now))
+	otherStep := row
+	otherStep.Step = StepInboundToken.String()
+	require.True(t, limiter.allow(otherStep, now), "one stage can't hold back another")
 }
 
 // A public server gives every request a new anonymous subject, which must not earn a new key.
@@ -74,12 +77,54 @@ func TestOnceLimiter_OrganizationCeilingAcrossKeys(t *testing.T) {
 	now := time.Now()
 	allowed := 0
 	for i := range onceOrgBurst * 3 {
-		if limiter.allow(limiterRow("org", strconv.Itoa(i), "invalid_request", ""), now) {
+		label := strconv.Itoa(i)
+		if limiter.allow(limiterRow("org", "server-"+label, "code-"+label, "user:"+label), now) {
 			allowed++
 		}
 	}
 	require.Equal(t, onceOrgBurst, allowed)
 	require.True(t, limiter.allow(limiterRow("other-org", "server", "invalid_request", ""), now), "one organization's flood leaves others alone")
+}
+
+// A noisy key can't use up the ceiling, so other rows in the organization still get through.
+func TestOnceLimiter_AHeldBackKeySpendsNoCeiling(t *testing.T) {
+	t.Parallel()
+
+	limiter := newOnceLimiter()
+	now := time.Now()
+	noisy := limiterRow("org", "server", "invalid_request", "")
+	for range onceOrgBurst * 3 {
+		limiter.allow(noisy, now)
+	}
+
+	allowed := 0
+	for i := range onceOrgBurst * 2 {
+		if limiter.allow(limiterRow("org", strconv.Itoa(i), "expired", ""), now) {
+			allowed++
+		}
+	}
+	require.Equal(t, onceOrgBurst-onceKeyBurst, allowed)
+}
+
+// A row the ceiling refused wasn't recorded, so its key keeps the token for later.
+func TestOnceLimiter_ACeilingRefusalSpendsNoKeyToken(t *testing.T) {
+	t.Parallel()
+
+	limiter := newOnceLimiter()
+	now := time.Now()
+	for i := range onceOrgBurst {
+		require.True(t, limiter.allow(limiterRow("org", strconv.Itoa(i), "invalid_request", ""), now))
+	}
+	row := limiterRow("org", "quiet", "invalid_request", "")
+	for range onceKeyBurst * 2 {
+		require.False(t, limiter.allow(row, now))
+	}
+
+	later := now.Add(time.Second)
+	for range onceKeyBurst {
+		require.True(t, limiter.allow(row, later))
+	}
+	require.False(t, limiter.allow(row, later), "the key's own burst is still the limit")
 }
 
 func TestOnceLimiter_MemoryStaysBounded(t *testing.T) {

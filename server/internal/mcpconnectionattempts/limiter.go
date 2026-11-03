@@ -34,6 +34,7 @@ const (
 type onceKey struct {
 	organizationID string
 	serverID       string
+	step           string
 	what           string
 	subject        string
 }
@@ -56,7 +57,7 @@ func newOnceLimiter() *onceLimiter {
 	return &onceLimiter{mu: sync.Mutex{}, keys: keys, orgs: orgs}
 }
 
-// allow reports whether a row may go on. A key that is held back uses none of its organization's ceiling.
+// allow reports whether a row may go on. A row held back by either limit spends from neither.
 func (l *onceLimiter) allow(row Row, now time.Time) bool {
 	// An anonymous subject is new on every request, so it can't separate callers.
 	subject := row.SubjectURN
@@ -67,7 +68,7 @@ func (l *onceLimiter) allow(row Row, now time.Time) bool {
 	if what == "" {
 		what = row.StepResult
 	}
-	key := onceKey{organizationID: row.OrganizationID, serverID: row.ServerID, what: what, subject: subject}
+	key := onceKey{organizationID: row.OrganizationID, serverID: row.ServerID, step: row.Step, what: what, subject: subject}
 
 	l.mu.Lock()
 	defer l.mu.Unlock()
@@ -77,7 +78,9 @@ func (l *onceLimiter) allow(row Row, now time.Time) bool {
 		limiter = rate.NewLimiter(rate.Every(onceKeyInterval), onceKeyBurst)
 		l.keys.Add(key, limiter)
 	}
-	if !limiter.AllowN(now, 1) {
+	reservation := limiter.ReserveN(now, 1)
+	if reservation.DelayFrom(now) > 0 {
+		reservation.CancelAt(now)
 		return false
 	}
 	org, ok := l.orgs.Get(row.OrganizationID)
@@ -85,5 +88,9 @@ func (l *onceLimiter) allow(row Row, now time.Time) bool {
 		org = rate.NewLimiter(onceOrgPerSecond, onceOrgBurst)
 		l.orgs.Add(row.OrganizationID, org)
 	}
-	return org.AllowN(now, 1)
+	if !org.AllowN(now, 1) {
+		reservation.CancelAt(now)
+		return false
+	}
+	return true
 }
