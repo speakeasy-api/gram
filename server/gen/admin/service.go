@@ -335,13 +335,15 @@ type Service interface {
 	// Edit, enable or disable a signup offer. Existing accepted promotion
 	// applications are unchanged.
 	UpdateSignupOffer(context.Context, *UpdateSignupOfferPayload) (res *AdminSignupOffer, err error)
-	// Returns live Stripe subscription details for confirmation before recording
-	// the subscription on a PAYG organization that has a customer and no
-	// subscription.
+	// Returns eligible live Stripe subscription details before linking it to a
+	// free, PAYG, or unconverted enterprise trial organization with a matching
+	// Stripe customer.
 	GetStripeSubscriptionCandidate(context.Context, *GetStripeSubscriptionCandidatePayload) (res *AdminStripeSubscriptionCandidate, err error)
-	// Records a Stripe subscription ID on a PAYG organization when its
-	// subscription ID is empty, after verifying the subscription belongs to the
-	// organization's Stripe customer.
+	// Links an eligible existing Stripe subscription and atomically activates PAYG
+	// for free organizations or unconverted enterprise trials. Existing PAYG
+	// organizations retain their access policy. Verifies customer ownership,
+	// preserves existing subscription links and redeemed partner anchors, and
+	// accepts same-subscription retries.
 	SetStripeSubscription(context.Context, *SetStripeSubscriptionPayload) (res *AdminOrganization, err error)
 	// Returns estimated usage at current PAYG list prices for every active paying
 	// organization: enterprise organizations not on a running or ending trial, and

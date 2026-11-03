@@ -126,8 +126,9 @@ export function useCatalogEntries(enabled = true): {
   const query = useWorkloadPlatforms({}, undefined, {
     enabled,
     throwOnError: false,
-    // Embedded in the server binary, so it changes only with a deploy:
-    // reopening Command K or the wizard should not fetch it again.
+    // Embedded in the server binary, so it changes only with a deploy or
+    // when a feature flag offers an entry to the organization: reopening
+    // Command K or the wizard should not fetch it again.
     staleTime: CATALOG_STALE_TIME_MS,
   });
   // Disabled means the caller may not read the catalog, so nothing cached from

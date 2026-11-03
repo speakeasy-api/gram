@@ -93,8 +93,9 @@ func TestEmbeddedGitHubActionsPinsOneRepository(t *testing.T) {
 
 	github := embeddedPlatform(t, "github-actions")
 	// Listed but not offered until a stable speakeasyd release supports
-	// GitHub Actions. The rest of this test, the API tests that read the
-	// catalog, and the dashboard's own fixtures keep the setup covered.
+	// GitHub Actions, except to organizations its feature flag is on for.
+	// The rest of this test, the API tests that read the catalog, and the
+	// dashboard's own fixtures keep the setup covered.
 	require.False(t, github.Enabled)
 	require.Equal(t, "https://token.actions.githubusercontent.com", github.Issuer.Value)
 	require.Equal(t, "https://token.actions.githubusercontent.com/.well-known/jwks", github.JWKSURI.Value)

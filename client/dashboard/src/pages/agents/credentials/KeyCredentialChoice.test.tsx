@@ -16,19 +16,44 @@ afterEach(() => {
 });
 
 describe("KeyCredentialChoice", () => {
-  it("asks nothing of a server with one credential", () => {
-    mocks.choices = [
-      { id: "a", name: "Token", clientType: "static_credential" },
-    ];
+  it("asks nothing of a server without shared credentials", () => {
+    mocks.choices = [];
     const { container } = render(
       <KeyCredentialChoice
         serverId="s"
         serverName="GitHub"
         value={undefined}
-        onChange={() => undefined}
+        onChange={() => {}}
       />,
     );
     expect(container.innerHTML).toBe("");
+  });
+
+  it("offers a server's only shared credential as an explicit pick", () => {
+    mocks.choices = [
+      { id: "a", name: "Token", clientType: "static_credential" },
+    ];
+    const onChange = vi.fn();
+    render(
+      <KeyCredentialChoice
+        serverId="s"
+        serverName="GitHub"
+        value={undefined}
+        onChange={(id) => {
+          onChange(id);
+        }}
+      />,
+    );
+    expect(onChange).not.toHaveBeenCalled();
+    fireEvent.click(
+      screen.getByRole("combobox", {
+        name: "Credential the key uses on GitHub",
+      }),
+    );
+    fireEvent.click(
+      screen.getByRole("option", { name: /Token · Static credential/ }),
+    );
+    expect(onChange).toHaveBeenCalledWith("a");
   });
 
   it("asks which credential to use when a server offers several", () => {
