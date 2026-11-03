@@ -74,3 +74,30 @@ func TestHookClientsCacheRefreshPreservesSnapshotOnReadFailure(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, before, after)
 }
+
+func TestHookClientsCacheRefreshPreservesSnapshotOnDeviceReadFailure(t *testing.T) {
+	t.Parallel()
+	server := miniredis.RunT(t)
+	rc := redis.NewClient(&redis.Options{Addr: server.Addr()})
+	t.Cleanup(func() { require.NoError(t, rc.Close()) })
+	devices := deviceagentversions.NewStore(rc)
+	require.NoError(t, devices.Record(t.Context(), "example", "machine", "1.0.0", time.Now()))
+	warmer := NewHookClientsCache(testenv.NewLogger(t), cache.NewRedisCacheAdapter(rc), stubHookClientsReader{}, devices)
+	require.NoError(t, warmer.Refresh(t.Context()))
+	before, err := warmer.hookClientsCache.Get(t.Context(), hookClientsCacheKey(hookClientsDefaultWindowDays))
+	require.NoError(t, err)
+	require.NotEmpty(t, before.DeviceAgents)
+	readErr := errors.New("device versions unavailable")
+	warmer.deviceAgentVersions = stubDeviceAgentVersions{err: readErr}
+	require.ErrorIs(t, warmer.Refresh(t.Context()), readErr)
+	after, err := warmer.hookClientsCache.Get(t.Context(), hookClientsCacheKey(hookClientsDefaultWindowDays))
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+	// The same activity can recover on retry without clearing the saved snapshot.
+	warmer.deviceAgentVersions = devices
+	require.NoError(t, warmer.Refresh(t.Context()))
+	recovered, err := warmer.hookClientsCache.Get(t.Context(), hookClientsCacheKey(hookClientsDefaultWindowDays))
+	require.NoError(t, err)
+	require.Equal(t, before.DeviceAgents, recovered.DeviceAgents)
+	require.True(t, recovered.QueriedAt.After(before.QueriedAt))
+}

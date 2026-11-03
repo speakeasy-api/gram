@@ -158,7 +158,7 @@ func NewHookClientsCache(logger *slog.Logger, storage cache.Cache, reader HookCl
 const hookClientsDefaultWindowDays = 15
 
 // Refresh refreshes the default Fleet Health window without a page visit.
-// Cache write failures are returned so the scheduled activity retries them.
+// Read and cache write failures are returned so the scheduled activity retries them.
 func (s *HookClientsCache) Refresh(ctx context.Context) error {
 	if s.hookClients == nil {
 		return errors.New("fleet health reader is unavailable")
@@ -166,6 +166,10 @@ func (s *HookClientsCache) Refresh(ctx context.Context) error {
 	ctx, cancel := context.WithTimeout(ctx, hookClientsRefreshBudget)
 	defer cancel()
 	snapshot, err := s.loadHookClientsSnapshot(ctx, hookClientsDefaultWindowDays)
+	if err != nil {
+		return err
+	}
+	snapshot.DeviceAgents, err = s.readDeviceAgentVersions(ctx, snapshot.WindowDays, snapshot.QueriedAt)
 	if err != nil {
 		return err
 	}
@@ -247,13 +251,17 @@ func (s *HookClientsCache) readHookClientsSnapshot(ctx context.Context, windowDa
 	if err != nil {
 		return hookClientsSnapshot{}, err
 	}
+	snapshot.DeviceAgents, err = s.readDeviceAgentVersions(ctx, windowDays, snapshot.QueriedAt)
+	if err != nil {
+		s.logger.WarnContext(ctx, "failed to read device agent versions", attr.SlogError(err))
+	}
 	if err := s.publishHookClientsSnapshot(ctx, snapshot); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache hook clients", attr.SlogError(err))
 	}
 	return snapshot, nil
 }
 
-// loadHookClientsSnapshot gathers all grids before replacing the cached snapshot.
+// loadHookClientsSnapshot reads the hook and inference grids from ClickHouse.
 func (s *HookClientsCache) loadHookClientsSnapshot(ctx context.Context, windowDays int) (hookClientsSnapshot, error) {
 	queriedAt := time.Now().UTC()
 	sessions, err := s.hookClients.Sessions(ctx, windowDays)
@@ -270,7 +278,7 @@ func (s *HookClientsCache) loadHookClientsSnapshot(ctx context.Context, windowDa
 		QueriedAt:    queriedAt,
 		Sessions:     sessions,
 		Inference:    inference,
-		DeviceAgents: s.readDeviceAgentVersions(ctx, windowDays, queriedAt),
+		DeviceAgents: []deviceagentversions.Row{},
 	}
 	return snapshot, nil
 }
@@ -309,19 +317,17 @@ func (s *HookClientsCache) publishHookClientsSnapshot(ctx context.Context, snaps
 	return fmt.Errorf("publish hook clients snapshot: still contended after %d attempts", hookClientsPublishAttempts)
 }
 
-// readDeviceAgentVersions returns the device agent grid, or none when it is
-// not configured or Redis fails. The grid is additive, so a Redis fault never
-// hides the two ClickHouse grids.
-func (s *HookClientsCache) readDeviceAgentVersions(ctx context.Context, windowDays int, now time.Time) []deviceagentversions.Row {
+// readDeviceAgentVersions leaves the optional grid empty when unconfigured.
+// Callers choose whether a read failure is best-effort or retryable.
+func (s *HookClientsCache) readDeviceAgentVersions(ctx context.Context, windowDays int, now time.Time) ([]deviceagentversions.Row, error) {
 	if s.deviceAgentVersions == nil {
-		return []deviceagentversions.Row{}
+		return []deviceagentversions.Row{}, nil
 	}
 	rows, err := s.deviceAgentVersions.Read(ctx, windowDays, now)
 	if err != nil {
-		s.logger.WarnContext(ctx, "failed to read device agent versions", attr.SlogError(err))
-		return []deviceagentversions.Row{}
+		return []deviceagentversions.Row{}, fmt.Errorf("read device agent versions: %w", err)
 	}
-	return rows
+	return rows, nil
 }
 
 // hookClientsError keeps a shareable error's code and logs server faults,
