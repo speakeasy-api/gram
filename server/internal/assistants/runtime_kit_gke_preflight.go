@@ -27,7 +27,8 @@ func (k *KitGKERuntimeBackend) preflightPermissions(ctx context.Context) error {
 		{kitServiceAccountGVR, []string{"create", "get", "delete"}},
 		{kitSecretGVR, []string{"create", "get", "delete"}},
 		{kitTemplateGVR, []string{"create", "get", "delete"}},
-		{gkeSandboxClaimGVR, []string{"create", "get", "delete", "list"}},
+		{kitWarmPoolGVR, []string{"create", "get", "delete"}},
+		{kitClaimGVR, []string{"create", "get", "delete", "list"}},
 		{gkePodGVR, []string{"get", "list", "delete"}},
 	}
 	if k.config.Provision.SnapshotsEnabled {

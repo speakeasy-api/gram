@@ -2,10 +2,12 @@ import {
   act,
   cleanup,
   fireEvent,
-  render,
+  render as testingRender,
   screen,
   waitFor,
 } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { getAgentPlatforms } from "../setup-data";
 import { PlatformSetupStepBody } from "./platform-setup-steps";
@@ -23,12 +25,11 @@ vi.mock("@gram/client/react-query/marketplaceSettings", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "default",
+  useSlugs: () => ({ orgSlug: "example", projectSlug: "default" }),
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    deviceAgent: { href: () => "/example/device-agent" },
-  }),
-}));
+
+const render = (ui: ReactElement) =>
+  testingRender(ui, { wrapper: MemoryRouter });
 
 const step = getAgentPlatforms("https://app.getgram.ai")
   .find(({ id }) => id === "claude-cowork")!

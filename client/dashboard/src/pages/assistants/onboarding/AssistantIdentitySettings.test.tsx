@@ -42,15 +42,6 @@ vi.mock("@/hooks/useRBAC", () => ({
     },
   }),
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
-  useRoutes: () => ({
-    identity: { href: () => "/org/identity" },
-    identities: {
-      detail: { overview: { href: (id: string) => `/identities/${id}` } },
-    },
-  }),
-}));
 vi.mock("@gram/client/react-query/assistantsUpgradeIdentity.js", () => ({
   useAssistantsUpgradeIdentityMutation: (options: {
     onSuccess: (result: Assistant) => void;
@@ -68,6 +59,7 @@ vi.mock("@gram/client/react-query/agents.js", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({ agents: { list: mocks.refetchAgents } }),
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@/components/sessions/collectPageItems", () => ({
   // Through a hook so a test can hold the list unresolved and watch what the
@@ -270,7 +262,7 @@ describe("Assistant identity management", () => {
     setup({ ...assistant, identityState: "ACTIVE", agentId: "example-agent" });
     expect(
       screen.getByRole("link", { name: "Example agent" }).getAttribute("href"),
-    ).toBe("/identities/agent%3Aexample-agent");
+    ).toBe("/org/projects/project/identities/agent%3Aexample-agent/overview");
     expect(screen.queryByText("example-agent")).toBeNull();
     expect(
       screen.queryByRole("button", { name: "Set up agent identity" }),

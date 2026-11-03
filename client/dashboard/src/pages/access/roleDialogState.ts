@@ -72,29 +72,33 @@ function selectorIdentity(s: Selector): string {
   ]);
 }
 
-/** Sorted, comma-joined grant keys for cheap equality check.
- *  Encodes what each effect covers — every selector, not how the rules group
- *  them — so swapping one server for another marks the form dirty while
- *  regrouping the same selectors does not. */
+/** What one permission covers, as a single comparable string, or null when the
+ *  form holds no entry for it — which is not the same as an entry whose rules
+ *  cover nothing. Encodes what each effect covers — every selector, not how
+ *  the rules group them — so swapping one server for another counts as a
+ *  change while regrouping the same selectors does not. */
+export function grantSummaryKey(grant: RoleGrant | undefined): string | null {
+  if (!grant) return null;
+  return (["allow", "deny"] as const)
+    .flatMap((effect) => {
+      const rules = grant.rules.filter((r) => r.effect === effect);
+      if (rules.length === 0) return [];
+      if (rules.some((r) => r.selectors === null)) return [`${effect}:*`];
+      const ids = [
+        ...new Set(
+          rules.flatMap((r) => (r.selectors ?? []).map(selectorIdentity)),
+        ),
+      ].sort();
+      return [`${effect}:${ids.join("|")}`];
+    })
+    .join("+");
+}
+
+/** Sorted, comma-joined grant keys for cheap equality check. */
 export function grantKeysString(grants: Record<string, RoleGrant>): string {
   return Object.entries(grants)
     .sort(([a], [b]) => a.localeCompare(b))
-    .map(([key, g]) => {
-      const summary = (["allow", "deny"] as const)
-        .flatMap((effect) => {
-          const rules = g.rules.filter((r) => r.effect === effect);
-          if (rules.length === 0) return [];
-          if (rules.some((r) => r.selectors === null)) return [`${effect}:*`];
-          const ids = [
-            ...new Set(
-              rules.flatMap((r) => (r.selectors ?? []).map(selectorIdentity)),
-            ),
-          ].sort();
-          return [`${effect}:${ids.join("|")}`];
-        })
-        .join("+");
-      return `${key}[${summary}]`;
-    })
+    .map(([key, grant]) => `${key}[${grantSummaryKey(grant) ?? ""}]`)
     .join(",");
 }
 

@@ -234,6 +234,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		PickedMcpServerIds:  []uuid.UUID{},
 		PickedClientIds:     []uuid.UUID{},
 		PickedAuthClientIds: nil,
+		ScopeMcpServerIds:   nil,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "record upstream client selections").LogError(ctx, s.logger)
 	}
