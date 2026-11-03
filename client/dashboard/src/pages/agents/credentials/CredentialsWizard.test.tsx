@@ -23,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   listDelegableGrants: vi.fn(),
   checkPolicyGrants: vi.fn(),
   mcpServers: vi.fn(),
+  getMcpServer: vi.fn(),
+  updateMcpServer: vi.fn(),
   toolsets: vi.fn(),
   fetch: vi.fn(),
   platforms: vi.fn(),
@@ -124,6 +126,8 @@ vi.mock("@/contexts/Sdk", () => ({
       extendAgentKeys: mocks.extendAgentKeys,
     },
     plugins: { getPlugin: mocks.getPlugin },
+    // Moving a server onto the agent's provider, from the Credential step.
+    mcpServers: { get: mocks.getMcpServer, update: mocks.updateMcpServer },
     // Read per project, for the projects that trust a platform on their own.
     // Each project sees its own rows among every issuer listed.
     workloadIdentities: { list: mocks.workloadList },
@@ -250,6 +254,14 @@ vi.mock("@gram/client/react-query/plugins.js", () => ({
 // Only read to keep a prefilled name from colliding with one in use.
 vi.mock("@gram/client/react-query/agents.js", () => ({
   useAgents: () => ({ data: { result: { items: mocks.agentList() } } }),
+}));
+// The move's confirmation previews where clients sign in; nothing to show here.
+vi.mock("@gram/client/react-query/userSessionIssuerAttachImpact.js", () => ({
+  useUserSessionIssuerAttachImpact: () => ({
+    data: undefined,
+    isError: false,
+    isFetching: false,
+  }),
 }));
 vi.mock("@gram/client/react-query/listMcpServersForOrg.js", () => ({
   useListMcpServersForOrg: (_r: unknown, _s: unknown, options: object) =>
@@ -1210,6 +1222,57 @@ describe("Connecting a GKE cluster", () => {
     expect(
       screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
     ).toBe(true);
+  });
+
+  it("moves a server onto the agent's provider without leaving the wizard", async () => {
+    mocks.platforms.mockReturnValue([gke]);
+    mocks.tokenEndpoints.mockReturnValue([sharedServer]);
+    const onOwnProvider = {
+      ...githubServer,
+      userSessionIssuerId: "usi_private",
+    };
+    mocks.mcpServers.mockResolvedValue({ mcpServers: [onOwnProvider] });
+    mocks.getMcpServer.mockResolvedValue(onOwnProvider);
+    mocks.updateMcpServer.mockImplementation(async () => {
+      const moved = { ...onOwnProvider, userSessionIssuerId: "usi_shared" };
+      mocks.mcpServers.mockResolvedValue({ mcpServers: [moved] });
+      return moved;
+    });
+    setup();
+    fireEvent.change(screen.getByLabelText("Name"), {
+      target: { value: "Review Agent" },
+    });
+    await nameChecked();
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+    fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+    await continueFromAuthentication();
+    fireEvent.click(await screen.findByRole("radio", { name: /GKE/ }));
+
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Move to shared" }),
+    );
+    // The same confirmation as the server's settings: its clients sign in again.
+    fireEvent.click(
+      await screen.findByRole("button", { name: "Change issuer" }),
+    );
+
+    await waitFor(() =>
+      expect(
+        mocks.updateMcpServer.mock.calls.at(-1)?.[0]?.updateMcpServerForm
+          ?.userSessionIssuerId,
+      ).toBe("usi_shared"),
+    );
+    await waitFor(() =>
+      expect(
+        screen.queryByText(
+          "This agent's servers need to share one MCP authentication provider",
+        ),
+      ).toBeNull(),
+    );
+    expect(
+      screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
+    ).toBe(false);
   });
 
   // GitHub Actions jobs get their tokens through the device agent at each

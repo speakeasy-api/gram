@@ -164,9 +164,11 @@ it("names a server on its own provider and shows no values", () => {
     useSetupValues(undefined, [server("a", "private")]),
   );
   expect(result.current.values).toBeUndefined();
+  // The only shared provider available is where the server can move.
   expect(result.current.mismatch).toEqual({
     ownProvider: [server("a", "private")],
     split: [],
+    target: { id: "org", slug: "organization" },
   });
 });
 
@@ -180,6 +182,8 @@ it("names each provider when the servers are split across them", () => {
     { label: "one", servers: [server("a", "one")] },
     { label: "two", servers: [server("b", "two")] },
   ]);
+  // Split across two, there's no single provider to move them to.
+  expect(result.current.mismatch?.target).toBeNull();
 });
 
 it("keeps today's choice when no server signs anyone in", () => {

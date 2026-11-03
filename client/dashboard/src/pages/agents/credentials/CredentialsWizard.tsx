@@ -1926,7 +1926,10 @@ export function CredentialsWizard({
             {credential === "workload" &&
               platformKey !== null &&
               workload.exchange.mismatch !== null && (
-                <ProviderMismatchNotice mismatch={workload.exchange.mismatch} />
+                <ProviderMismatchNotice
+                  mismatch={workload.exchange.mismatch}
+                  onMoved={inventory.refetch}
+                />
               )}
           </div>
         );

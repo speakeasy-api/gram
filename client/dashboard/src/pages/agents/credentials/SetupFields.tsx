@@ -17,8 +17,14 @@ import { mcpServerRouteParam } from "@/lib/sources";
 import { useRoutes } from "@/routes";
 import { ExternalLink } from "lucide-react";
 import type { WorkloadIssuer } from "@gram/client/models/components/workloadissuer.js";
-import { Fragment, type JSX, type ReactNode } from "react";
+import { Fragment, useState, type JSX, type ReactNode } from "react";
 import { Link } from "react-router";
+import { RequireScope } from "@/components/require-scope";
+import { useSdkClient } from "@/contexts/Sdk";
+import { linkMcpServerUserSessionIssuer } from "@/lib/linkUserSessionIssuer";
+import { ChangeIssuerConfirmDialog } from "@/pages/mcp/x/tabs/settings/sections/authentication/ChangeIssuerConfirmDialog";
+import { useMutation } from "@tanstack/react-query";
+import { toast } from "sonner";
 import { ConsoleRow, type ConsoleField } from "./ConsoleRow";
 import type { SetupServer } from "./setupInstructions";
 import { variableProblem, type CatalogVariable } from "./workloadCatalog";
@@ -190,9 +196,16 @@ export function SetupWarning({
  */
 export function ProviderMismatchNotice({
   mismatch,
+  onMoved,
 }: {
   mismatch: ProviderMismatch;
+  /**
+   * Rereads the agent's servers after one is moved. Without it the notice
+   * only links to each server's settings.
+   */
+  onMoved?: () => void;
 }): JSX.Element {
+  const moveTo = onMoved ? mismatch.target : null;
   return (
     <Alert
       variant="warning"
@@ -211,6 +224,15 @@ export function ProviderMismatchNotice({
               key={server.id}
               server={server}
               reason="Uses its own MCP authentication provider, so it won't accept the token this setup gives the agent."
+              action={
+                moveTo && onMoved ? (
+                  <MoveToProvider
+                    server={server}
+                    target={moveTo}
+                    onMoved={onMoved}
+                  />
+                ) : undefined
+              }
             />
           ))}
           {mismatch.split.flatMap((group) =>
@@ -231,11 +253,13 @@ export function ProviderMismatchNotice({
 function MismatchRow({
   server,
   reason,
+  action,
 }: {
   server: SetupServer;
   reason: string;
+  /** Fixes the server in place; replaces the settings link when given. */
+  action?: ReactNode;
 }): JSX.Element {
-  const routes = useRoutes({ projectSlug: server.projectSlug });
   return (
     <li className="flex flex-wrap items-center justify-between gap-x-4 gap-y-1 py-2 first:pt-0 last:pb-0">
       <div className="min-w-0 flex-1">
@@ -246,21 +270,91 @@ function MismatchRow({
           {reason}
         </Text>
       </div>
-      {server.projectSlug && (
-        <Button variant="secondary" size="sm" asChild>
-          <Link
-            to={`${routes.mcp.details.settings.href(
-              mcpServerRouteParam({ id: server.id, slug: server.slug }),
-            )}#authentication`}
-            target="_blank"
-            rel="noreferrer"
-          >
-            Open authentication settings
-            <ExternalLink className="size-3.5" aria-hidden="true" />
-          </Link>
-        </Button>
-      )}
+      {action ?? <SettingsLink server={server} />}
     </li>
+  );
+}
+
+/** Opens the server's authentication settings in a new tab. */
+function SettingsLink({ server }: { server: SetupServer }): JSX.Element | null {
+  const routes = useRoutes({ projectSlug: server.projectSlug });
+  if (!server.projectSlug) return null;
+  return (
+    <Button variant="secondary" size="sm" asChild>
+      <Link
+        to={`${routes.mcp.details.settings.href(
+          mcpServerRouteParam({ id: server.id, slug: server.slug }),
+        )}#authentication`}
+        target="_blank"
+        rel="noreferrer"
+      >
+        Open authentication settings
+        <ExternalLink className="size-3.5" aria-hidden="true" />
+      </Link>
+    </Button>
+  );
+}
+
+/**
+ * Moves one server onto the shared provider the agent's token comes from,
+ * after the same confirmation its settings page asks for: everyone connected
+ * to it signs in again.
+ */
+function MoveToProvider({
+  server,
+  target,
+  onMoved,
+}: {
+  server: SetupServer;
+  target: { id: string; slug: string };
+  onMoved: () => void;
+}): JSX.Element {
+  const client = useSdkClient();
+  const [open, setOpen] = useState(false);
+  const move = useMutation({
+    mutationFn: () =>
+      linkMcpServerUserSessionIssuer(client, server.id, target.id),
+    onSuccess: () => {
+      setOpen(false);
+      toast.success(`${server.name} now uses ${target.slug}`);
+      onMoved();
+    },
+  });
+  return (
+    <RequireScope
+      scope="mcp:write"
+      resourceId={server.resourceId}
+      level="component"
+    >
+      {({ disabled }) =>
+        disabled ? (
+          <SettingsLink server={server} />
+        ) : (
+          <>
+            <Button
+              variant="secondary"
+              size="sm"
+              onClick={() => {
+                move.reset();
+                setOpen(true);
+              }}
+            >
+              Move to {target.slug}
+            </Button>
+            <ChangeIssuerConfirmDialog
+              open={open}
+              onOpenChange={setOpen}
+              target={{ attachImpactTarget: { mcpServerId: server.id } }}
+              replacing
+              candidate={target}
+              onConfirm={() => move.mutate()}
+              isPending={move.isPending}
+              error={move.error}
+            />
+          </>
+        )
+      }
+    </RequireScope>
   );
 }
 

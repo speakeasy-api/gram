@@ -36,6 +36,12 @@ export interface ProviderMismatch {
   ownProvider: SetupServer[];
   /** When the servers use several shared providers, each with its servers. */
   split: { label: string; servers: SetupServer[] }[];
+  /**
+   * The shared provider every server could move to: the one the others
+   * already use, or the only one available. Null when there's a choice to
+   * make, such as servers split across shared providers.
+   */
+  target: { id: string; slug: string } | null;
 }
 
 const ORGANIZATION_GROUP = "Organization";
@@ -129,8 +135,18 @@ export function useSetupValues(
           ),
         }))
       : [];
+  const candidates = used.length > 0 ? used : inScope;
+  const target =
+    candidates.length === 1
+      ? {
+          id: candidates[0]!.userSessionIssuerId,
+          slug: endpointLabel(candidates[0]!),
+        }
+      : null;
   const mismatch =
-    ownProvider.length > 0 || split.length > 0 ? { ownProvider, split } : null;
+    ownProvider.length > 0 || split.length > 0
+      ? { ownProvider, split, target }
+      : null;
   const endpoints = used.length > 0 ? used : inScope;
   const selected =
     endpoints.find((e) => e.userSessionIssuerId === chosenId) ?? endpoints[0];
