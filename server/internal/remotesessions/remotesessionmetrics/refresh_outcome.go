@@ -83,9 +83,9 @@ const (
 
 	// RefreshOutcomeCanceled: the caller's context ended before the POST
 	// started, most often an MCP client disconnecting or a worker activity
-	// timing out. A started POST runs on and reports its own outcome. Its own
-	// outcome so that neither unreachable (upstream health) nor
-	// internal_error (Speakeasy faults) absorbs routine client disconnects.
+	// timing out. A started POST runs on and reports its own outcome. Separate
+	// so that neither unreachable (upstream health) nor internal_error
+	// (Speakeasy faults) absorbs routine client disconnects.
 	RefreshOutcomeCanceled RefreshOutcome = "canceled"
 
 	// RefreshOutcomeInternalError: Speakeasy could not build or persist the request.

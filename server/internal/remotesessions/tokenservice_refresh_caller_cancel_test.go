@@ -153,7 +153,6 @@ func TestRefreshNow_ManualTriggerWaitsForTheResult(t *testing.T) {
 	var refreshes atomic.Int32
 	arrived := make(chan struct{})
 	release := make(chan struct{})
-	close(release)
 	ctx, env := newExpiredRefreshEnv(t, "refresh-manual-cancel", rotatingProvider(&refreshes, arrived, release))
 	active, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{
 		SubjectUrn:            env.subject,
@@ -163,13 +162,28 @@ func TestRefreshNow_ManualTriggerWaitsForTheResult(t *testing.T) {
 
 	adminCtx, cancel := context.WithCancel(ctx)
 	defer cancel()
+	type refreshed struct {
+		result remotesessions.RefreshResult
+		err    error
+	}
+	returned := make(chan refreshed, 1)
 	go func() {
-		<-arrived
-		cancel()
+		result, err := env.refresher.RefreshNow(adminCtx, active, "", remotesessionmetrics.RefreshTriggerManual)
+		returned <- refreshed{result: result, err: err}
 	}()
-	result, err := env.refresher.RefreshNow(adminCtx, active, "", remotesessionmetrics.RefreshTriggerManual)
-	require.NoError(t, err, "the caller must learn the outcome so it can audit the refresh")
-	require.Equal(t, "access-rotated", result.AccessToken)
+
+	<-arrived
+	cancel()
+	select {
+	case <-returned:
+		t.Fatal("a manual refresh must wait for the provider after its caller leaves")
+	case <-time.After(100 * time.Millisecond):
+	}
+	close(release)
+
+	got := <-returned
+	require.NoError(t, got.err, "the caller must learn the outcome so it can audit the refresh")
+	require.Equal(t, "access-rotated", got.result.AccessToken)
 }
 
 func TestResolveAccessToken_CallerCancelStillClearsARefusedGrant(t *testing.T) {

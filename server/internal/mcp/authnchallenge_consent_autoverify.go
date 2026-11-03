@@ -70,6 +70,15 @@ func (a *autoVerifications) shutdown(ctx context.Context) error {
 func (s *Service) Shutdown(ctx context.Context) error {
 	// Stop automatic verification admission before releasing runtimes.
 	s.autoVerifications.closeAdmission()
+	// Concurrent with the drains below so their time does not spend this one's budget.
+	refreshesDrained := make(chan error, 1)
+	go func() {
+		if s.remoteChallengeMgr == nil {
+			refreshesDrained <- nil
+			return
+		}
+		refreshesDrained <- s.remoteChallengeMgr.DrainRefreshes(ctx)
+	}()
 	var errs []error
 	if runtime, ok := s.codeExecutor.(interface{ Shutdown(context.Context) error }); ok {
 		if err := runtime.Shutdown(ctx); err != nil {
@@ -85,10 +94,8 @@ func (s *Service) Shutdown(ctx context.Context) error {
 	if err := s.autoVerifications.shutdown(ctx); err != nil {
 		errs = append(errs, fmt.Errorf("drain automatic verifications: %w", err))
 	}
-	if s.remoteChallengeMgr != nil {
-		if err := s.remoteChallengeMgr.DrainRefreshes(ctx); err != nil {
-			errs = append(errs, fmt.Errorf("drain upstream token refreshes: %w", err))
-		}
+	if err := <-refreshesDrained; err != nil {
+		errs = append(errs, fmt.Errorf("drain upstream token refreshes: %w", err))
 	}
 	s.toolCallLogger.Close()
 	return errors.Join(errs...)
