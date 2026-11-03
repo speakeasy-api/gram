@@ -30,6 +30,6 @@ Review follow-ups adopted on #8442 (each fails closed):
 
 - Present facts must match their declared kind, so a bare presence or a value of another kind cannot satisfy a guard.
 - Traversal is enforced as one hop, and related resources are validated like requests.
-- An auth-client permission with a bound represented user and no represented policies is an error. No permission may reach an auth client through `Via`, so the represented ceiling always applies by the requested type.
+- An auth-client permission for a represented user other than the actor, with no represented policies, is an error. A user acting for themselves is already limited by their own live policies. No permission may reach an auth client through `Via`, so the represented ceiling always applies by the requested type.
 - A standing veto block denies even when another veto check is undecided.
 - An absent `bool` fact stays unresolved for `IsFalse` rather than reading as false. `bool` facts are declared for NOT NULL columns, so absence means the value was not established.

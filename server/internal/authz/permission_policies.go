@@ -81,15 +81,16 @@ type PolicyDecision struct {
 	Option int
 }
 
-// ErrMissingRepresentedPolicy reports an auth-client permission for a bound
-// represented user whose policies admission did not load. A missing ceiling
+// ErrMissingRepresentedPolicy reports an auth-client permission for a
+// represented user other than the actor whose policies admission did not
+// load. A missing ceiling
 // is an error, never a lifted one.
 var ErrMissingRepresentedPolicy = errors.New("authorization binds a represented user without their policies")
 
 func (e *RegistryEvaluator) policiesFor(set PolicySet, ref schema.PermissionRef) ([]Policy, error) {
 	policies := slices.Concat(set.Policies, set.Captured)
 	if e.kinds[ref.Type] == ResourceKindMCPAuthClient {
-		if set.RepresentedUser != "" && len(set.Represented) == 0 {
+		if set.representsAnotherUser() && len(set.Represented) == 0 {
 			return nil, fmt.Errorf("evaluate %s.%s: %w", ref.Type, ref.Permission, ErrMissingRepresentedPolicy)
 		}
 		policies = append(policies, set.Represented...)
@@ -103,6 +104,16 @@ func (set PolicySet) bind(req PermissionRequest) PermissionRequest {
 	req.Actor = set.Actor
 	req.RepresentedUser = set.RepresentedUser
 	return req
+}
+
+// representsAnotherUser reports whether the represented user is someone other
+// than the actor. A user acting for themselves is limited by their own live
+// policies, which already apply.
+func (set PolicySet) representsAnotherUser() bool {
+	if set.RepresentedUser == "" {
+		return false
+	}
+	return set.Actor.Type != urn.PrincipalTypeUser || set.Actor.ID != set.RepresentedUser
 }
 
 func (set PolicySet) validate() error {

@@ -595,6 +595,26 @@ func TestAuthClientPermissionsKeepTheRepresentedCeiling(t *testing.T) {
 		require.True(t, decision.Allowed)
 	})
 
+	t.Run("a user representing themselves needs no separate policies", func(t *testing.T) {
+		t.Parallel()
+		evaluator, err := NewRegistryEvaluator(compileEvaluatorSlice(t))
+		require.NoError(t, err)
+		role := "role:organization:role_1"
+		set := humanSet(grantOf(role, string(ScopeMCPAuth), ResourceKindMCPAuthClient, "client_a", SelectorKeyClientType, AuthClientTypeServiceAccount, SelectorKeyProjectID, "proj_1"))
+		decision, err := evaluator.Decide(set, PermissionRequest{
+			Permission:      s.PermissionRef{Type: "mcp_auth_client", Permission: "use"},
+			ResourceID:      "client_a",
+			Dimensions:      map[string]string{SelectorKeyClientType: AuthClientTypeServiceAccount, SelectorKeyProjectID: "proj_1"},
+			StrictMatch:     false,
+			RepresentedUser: "",
+			Actor:           urn.Principal{},
+			Facts:           nil,
+			RequiredFacts:   nil,
+		})
+		require.NoError(t, err)
+		require.True(t, decision.Allowed)
+	})
+
 	t.Run("no permission may reach an auth client through a relationship", func(t *testing.T) {
 		t.Parallel()
 		reg, err := s.Compile(s.Config{Roles: nil, WriteSurfaces: []string{"access"}, Conditions: nil, RetiredRuntimeScopes: nil},
