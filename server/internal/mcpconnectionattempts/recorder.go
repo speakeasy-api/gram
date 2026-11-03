@@ -35,7 +35,7 @@ const (
 		sub_reason, who_fixes, grant_type, is_final, retries, auth_client_id,
 		remote_session_issuer_id, user_session_issuer_id, user_session_client_id,
 		remote_session_client_id, subject_urn, user_session_id, remote_session_id,
-		trace_id, provider_host, app_key)`
+		trace_id, provider_host, app_key, client_family, client_version, repeats, device_key)`
 
 	eventsTable = "mcp_connection_events"
 
@@ -53,6 +53,9 @@ const (
 
 	// drainLogWait bounds the wait for Shutdown's one log line.
 	drainLogWait = time.Second
+
+	// defaultRepeatsInterval is how long a burst that stopped waits before its count is written.
+	defaultRepeatsInterval = time.Minute
 
 	// dropLogInterval limits logging per reason during an outage.
 	dropLogInterval = time.Minute
@@ -78,6 +81,7 @@ const (
 	dropPanic        dropReason = "panic"
 	dropRateLimited  dropReason = "rate_limited"
 	dropQueueReserve dropReason = "queue_reserved"
+	dropRepeatsLost  dropReason = "repeats_lost"
 )
 
 // shortLabel is the shape of a sub-reason or grant type. It is what keeps a raw
@@ -196,6 +200,13 @@ type Row struct {
 	TraceID               string
 	ProviderHost          string
 	AppKey                string
+	ClientFamily          string
+	ClientVersion         string
+	Repeats               uint32
+	DeviceKey             string
+
+	// clientIP waits here for the writer to hash it. It is never stored or logged.
+	clientIP string
 }
 
 var errInvalidEvent = errors.New("invalid connection event")
@@ -265,6 +276,11 @@ func RowAt(attempt Attempt, step Step, what Happened, final bool, at time.Time, 
 		TraceID:               "",
 		ProviderHost:          "",
 		AppKey:                appKey,
+		ClientFamily:          "",
+		ClientVersion:         "",
+		Repeats:               0,
+		DeviceKey:             "",
+		clientIP:              "",
 	}
 	for _, opt := range opts {
 		if opt.apply != nil {
@@ -302,7 +318,7 @@ func appendRowsInto(ctx context.Context, conn driver.Conn, table string, rows []
 			row.SubReason, row.WhoFixes, row.GrantType, row.IsFinal, row.Retries, row.AuthClientID,
 			row.RemoteSessionIssuerID, row.UserSessionIssuerID, row.UserSessionClientID,
 			row.RemoteSessionClientID, row.SubjectURN, row.UserSessionID, row.RemoteSessionID,
-			row.TraceID, row.ProviderHost, row.AppKey,
+			row.TraceID, row.ProviderHost, row.AppKey, row.ClientFamily, row.ClientVersion, row.Repeats, row.DeviceKey,
 		); err != nil {
 			return fmt.Errorf("append connection event: %w", err)
 		}
@@ -321,6 +337,7 @@ type config struct {
 	flushInterval    time.Duration
 	insertTimeout    time.Duration
 	logsCheckTimeout time.Duration
+	repeatsInterval  time.Duration
 }
 
 // Recorder writes connection events. Its methods only queue a row. One goroutine checks the
@@ -330,6 +347,7 @@ type Recorder struct {
 	conn        driver.Conn
 	limiter     *onceLimiter
 	logsEnabled func(context.Context, string) (bool, error)
+	deviceKey   []byte
 	capture     func(Row)
 	cfg         config
 	steps       metric.Int64Counter
@@ -365,23 +383,25 @@ func newDropCounters() map[dropReason]*atomic.Int64 {
 		dropPanic:        {},
 		dropRateLimited:  {},
 		dropQueueReserve: {},
+		dropRepeatsLost:  {},
 	}
 }
 
 // NewRecorder starts a recorder. Stop it with Shutdown. Without logsEnabled
 // nothing is written.
-func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn driver.Conn, logsEnabled func(context.Context, string) (bool, error)) *Recorder {
-	return newRecorder(logger, meterProvider, conn, logsEnabled, config{
+func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn driver.Conn, logsEnabled func(context.Context, string) (bool, error), opts ...RecorderOption) *Recorder {
+	return newRecorder(logger, meterProvider, conn, logsEnabled, recorderDeviceKey(opts), config{
 		table:            eventsTable,
 		queueSize:        defaultQueueSize,
 		maxBatch:         defaultMaxBatch,
 		flushInterval:    defaultFlushInterval,
 		insertTimeout:    defaultInsertTimeout,
 		logsCheckTimeout: defaultLogsCheckTimeout,
+		repeatsInterval:  defaultRepeatsInterval,
 	})
 }
 
-func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn driver.Conn, logsEnabled func(context.Context, string) (bool, error), cfg config) *Recorder {
+func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn driver.Conn, logsEnabled func(context.Context, string) (bool, error), deviceKey []byte, cfg config) *Recorder {
 	logger = logger.With(attr.SlogComponent("mcp_connection_attempts"))
 	meter := meterProvider.Meter(meterScope)
 
@@ -403,6 +423,7 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 		conn:        conn,
 		limiter:     newOnceLimiter(),
 		logsEnabled: logsEnabled,
+		deviceKey:   deviceKey,
 		capture:     nil,
 		cfg:         cfg,
 		steps:       steps,
@@ -429,8 +450,9 @@ func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (
 		conn:        nil,
 		limiter:     nil,
 		logsEnabled: logsEnabled,
+		deviceKey:   nil,
 		capture:     capture,
-		cfg:         config{table: "", queueSize: 0, maxBatch: 0, flushInterval: 0, insertTimeout: 0, logsCheckTimeout: time.Second},
+		cfg:         config{table: "", queueSize: 0, maxBatch: 0, flushInterval: 0, insertTimeout: 0, logsCheckTimeout: time.Second, repeatsInterval: 0},
 		steps:       nil,
 		dropped:     nil,
 		queue:       nil,
@@ -473,13 +495,17 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 	}
 	if limited && r.limiter != nil {
 		if r.queueReserved() {
+			r.dropLostRepeats(ctx, r.limiter.holdBack(row))
 			r.drop(ctx, dropQueueReserve, 1, nil)
 			return
 		}
-		if !r.limiter.allow(row, time.Now()) {
+		decision := r.limiter.take(row, time.Now())
+		r.dropLostRepeats(ctx, decision.lost)
+		if !decision.allowed {
 			r.drop(ctx, dropRateLimited, 1, nil)
 			return
 		}
+		row.Repeats = decision.repeats
 	}
 	if spanCtx := trace.SpanContextFromContext(ctx); spanCtx.HasTraceID() {
 		row.TraceID = spanCtx.TraceID().String()
@@ -487,6 +513,7 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 	r.countStep(ctx, row)
 	if r.capture != nil {
 		if reason, _ := r.organizationAllowed(row.OrganizationID); reason == "" {
+			r.stampDevice(&row)
 			r.capture(row)
 		}
 		return
@@ -512,6 +539,12 @@ func (r *Recorder) enqueue(row Row) dropReason {
 	default:
 		r.unfinished.Add(-1)
 		return dropQueueFull
+	}
+}
+
+func (r *Recorder) dropLostRepeats(ctx context.Context, lost int) {
+	if lost > 0 {
+		r.drop(ctx, dropRepeatsLost, lost, nil)
 	}
 }
 
@@ -589,6 +622,8 @@ func (r *Recorder) run() {
 
 	ticker := time.NewTicker(r.cfg.flushInterval)
 	defer ticker.Stop()
+	repeats := time.NewTicker(r.cfg.repeatsInterval)
+	defer repeats.Stop()
 
 	// organizations holds each logs check for one flush: one lookup per organization per interval.
 	organizations := map[string]dropReason{}
@@ -621,6 +656,7 @@ func (r *Recorder) run() {
 				r.drop(context.Background(), reason, 1, nil)
 				return
 			}
+			r.stampDevice(&row)
 			batch = append(batch, row)
 		})
 		if len(batch) == pending {
@@ -630,18 +666,28 @@ func (r *Recorder) run() {
 			flush()
 		}
 	}
+	addPending := func(rows []Row) {
+		for _, row := range rows {
+			r.unfinished.Add(1)
+			r.countStep(context.Background(), row)
+			add(row)
+		}
+	}
 	for {
 		select {
 		case row := <-r.queue:
 			add(row)
 		case <-ticker.C:
 			flush()
+		case <-repeats.C:
+			addPending(r.limiter.pendingRows(time.Now(), false))
 		case <-r.stop:
 			for {
 				select {
 				case row := <-r.queue:
 					add(row)
 				default:
+					addPending(r.limiter.pendingRows(time.Now(), true))
 					flush()
 					return
 				}

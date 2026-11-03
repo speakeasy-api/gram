@@ -341,6 +341,11 @@ GRAM_FUNCTIONS_LOCAL_RUNNER_ROOT = "{{config_root}}/local/functions"
 PULSE_REGISTRY_TENANT = { default = "unset" }
 PULSE_REGISTRY_KEY = { default = "unset" }
 
+###########################
+## Connection attempts ##
+###########################
+GRAM_CONNECTION_DEVICE_KEY_SECRET = "local-6b003b3d9f379d79f8a89601bf847247"
+
 ##########
 ## Risk ##
 ##########
