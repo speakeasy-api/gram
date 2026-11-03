@@ -15,7 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/memorygate"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp"
 	"github.com/speakeasy-api/gram/server/internal/platformmcp/memoryeval"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -59,10 +59,9 @@ func searchTeamMemoryArm(t *testing.T, loaded loadedCorpus) (context.Context, ar
 	t.Helper()
 	engine := authz.NewEngine(testenv.NewLogger(t), loaded.db, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	budget := platformmcp.OperationBudget{Connection: allowLimiter{}, Organization: allowLimiter{}}
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagOrgMemory, loaded.organizationID, true)
+	require.NoError(t, memorygate.Set(t.Context(), loaded.db, loaded.organizationID, true))
 	redactor := platformmcp.NewChatSearchRedactor()
-	service := platformmcp.NewTeamMemoryService(loaded.db, engine, audit.NewLogger(), flags, platformmcp.NewPostgresOrganizationSlugResolver(loaded.db), budget, redactor)
+	service := platformmcp.NewTeamMemoryService(loaded.db, engine, audit.NewLogger(), budget, redactor)
 	require.NotNil(t, service)
 	writeProxySummaries(t, loaded, redactor)
 
