@@ -1399,37 +1399,26 @@ func recheckGlobalClientAssociationScope(ctx context.Context, dbtx pgx.Tx, clien
 }
 
 func serversLosingGlobalClient(ctx context.Context, dbtx pgx.Tx, clientID uuid.UUID) (map[string]globalClientScope, error) {
-	rows, err := dbtx.Query(ctx, `
-SELECT DISTINCT a.organization_id, a.mcp_server_id, a.project_id
-FROM mcp_server_remote_session_clients AS a
-JOIN mcp_servers AS s ON s.id = a.mcp_server_id AND s.deleted IS FALSE
-WHERE a.remote_session_client_id = $1
-ORDER BY a.organization_id, a.mcp_server_id`, clientID)
+	rows, err := upstreamclientsrepo.New(dbtx).ListServersAssociatedWithClient(ctx, upstreamclientsrepo.ListServersAssociatedWithClientParams{
+		RemoteSessionClientID: clientID,
+		OrganizationID:        pgtype.Text{String: "", Valid: false},
+	})
 	if err != nil {
 		return nil, fmt.Errorf("list servers losing global client: %w", err)
 	}
-	defer rows.Close()
 	affected := map[string]globalClientScope{}
 	seen := map[string]map[uuid.UUID]bool{}
-	for rows.Next() {
-		var organizationID string
-		var serverID, projectID uuid.UUID
-		if err := rows.Scan(&organizationID, &serverID, &projectID); err != nil {
-			return nil, fmt.Errorf("scan server losing global client: %w", err)
+	for _, row := range rows {
+		scope := affected[row.OrganizationID]
+		scope.servers = append(scope.servers, row.McpServerID)
+		if seen[row.OrganizationID] == nil {
+			seen[row.OrganizationID] = map[uuid.UUID]bool{}
 		}
-		scope := affected[organizationID]
-		scope.servers = append(scope.servers, serverID)
-		if seen[organizationID] == nil {
-			seen[organizationID] = map[uuid.UUID]bool{}
+		if !seen[row.OrganizationID][row.ProjectID] {
+			seen[row.OrganizationID][row.ProjectID] = true
+			scope.projects = append(scope.projects, row.ProjectID)
 		}
-		if !seen[organizationID][projectID] {
-			seen[organizationID][projectID] = true
-			scope.projects = append(scope.projects, projectID)
-		}
-		affected[organizationID] = scope
-	}
-	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("read servers losing global client: %w", err)
+		affected[row.OrganizationID] = scope
 	}
 	return affected, nil
 }

@@ -1193,32 +1193,21 @@ func recheckClientAssociationScope(ctx context.Context, dbtx pgx.Tx, organizatio
 }
 
 func serversLosingClientAssociations(ctx context.Context, dbtx pgx.Tx, organizationID string, clientID uuid.UUID) ([]uuid.UUID, []uuid.UUID, error) {
-	rows, err := dbtx.Query(ctx, `
-SELECT DISTINCT a.mcp_server_id, a.project_id
-FROM mcp_server_remote_session_clients AS a
-JOIN mcp_servers AS s ON s.id = a.mcp_server_id AND s.deleted IS FALSE
-WHERE a.remote_session_client_id = $1
-  AND a.organization_id = $2
-ORDER BY a.mcp_server_id`, clientID, organizationID)
+	rows, err := upstreamclientsrepo.New(dbtx).ListServersAssociatedWithClient(ctx, upstreamclientsrepo.ListServersAssociatedWithClientParams{
+		RemoteSessionClientID: clientID,
+		OrganizationID:        conv.ToPGText(organizationID),
+	})
 	if err != nil {
 		return nil, nil, fmt.Errorf("list servers losing client associations: %w", err)
 	}
-	defer rows.Close()
 	var servers, projects []uuid.UUID
 	seen := map[uuid.UUID]bool{}
-	for rows.Next() {
-		var serverID, projectID uuid.UUID
-		if err := rows.Scan(&serverID, &projectID); err != nil {
-			return nil, nil, fmt.Errorf("scan server losing client association: %w", err)
+	for _, row := range rows {
+		servers = append(servers, row.McpServerID)
+		if !seen[row.ProjectID] {
+			seen[row.ProjectID] = true
+			projects = append(projects, row.ProjectID)
 		}
-		servers = append(servers, serverID)
-		if !seen[projectID] {
-			seen[projectID] = true
-			projects = append(projects, projectID)
-		}
-	}
-	if err := rows.Err(); err != nil {
-		return nil, nil, fmt.Errorf("read servers losing client associations: %w", err)
 	}
 	return servers, projects, nil
 }
