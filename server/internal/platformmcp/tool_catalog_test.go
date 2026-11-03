@@ -238,6 +238,7 @@ func TestCandidateInspectionDirectRemoteProtocols(t *testing.T) {
 				require.True(t, inspection.RequiresDashboardSetup)
 			} else {
 				require.Equal(t, []string{"example"}, inspection.ToolNames)
+				require.Equal(t, new(1), inspection.ToolCount)
 			}
 		})
 	}
@@ -253,7 +254,7 @@ func TestCatalogCandidateOmitsUnknownToolCountAndExplainsSignIn(t *testing.T) {
 	require.NotContains(t, string(raw), "tool_count")
 	require.Contains(t, string(raw), `"auth_setup":"manual"`)
 
-	raw, err = json.Marshal(CatalogCandidate{ToolCount: 3})
+	raw, err = json.Marshal(CatalogCandidate{ToolCount: new(3)})
 	require.NoError(t, err)
 	require.Contains(t, string(raw), `"tool_count":3`)
 
