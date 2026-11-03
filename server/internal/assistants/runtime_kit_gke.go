@@ -263,7 +263,7 @@ func RenderKitGKEProvision(in KitGKEProvisionInput) (KitGKEObjects, error) {
 		RestartPolicy:   new(corev1.ContainerRestartPolicyAlways),
 		StartupProbe:    &corev1.Probe{ProbeHandler: corev1.ProbeHandler{Exec: &corev1.ExecAction{Command: []string{"test", "-s", KitWorkloadAssertionPath}}}, PeriodSeconds: 2, TimeoutSeconds: 5, FailureThreshold: 60},
 		SecurityContext: security,
-		Resources:       corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("10m"), corev1.ResourceMemory: resource.MustParse("8Mi"), corev1.ResourceEphemeralStorage: resource.MustParse("16Mi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m"), corev1.ResourceMemory: resource.MustParse("32Mi"), corev1.ResourceEphemeralStorage: resource.MustParse("64Mi")}},
+		Resources:       corev1.ResourceRequirements{Requests: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("10m"), corev1.ResourceMemory: resource.MustParse("16Mi"), corev1.ResourceEphemeralStorage: resource.MustParse("16Mi")}, Limits: corev1.ResourceList{corev1.ResourceCPU: resource.MustParse("100m"), corev1.ResourceMemory: resource.MustParse("32Mi"), corev1.ResourceEphemeralStorage: resource.MustParse("64Mi")}},
 		VolumeMounts:    []corev1.VolumeMount{{Name: "workload", MountPath: "/var/run/secrets/speakeasy/workload"}},
 	}}
 	if in.SnapshotsEnabled {
@@ -323,7 +323,17 @@ func validateKitResources(resources corev1.ResourceRequirements) error {
 			return fmt.Errorf("kit requires positive explicit %s requests and limits with request <= limit", name)
 		}
 	}
+	if !kitGKEMemoryCoversCPU(resources.Requests) {
+		return fmt.Errorf("kit memory request must be at least 1Gi per requested vCPU")
+	}
 	return nil
+}
+
+// The assistant cluster's sandbox admission policy rejects any container that
+// requests less than 1Gi of memory per requested vCPU.
+func kitGKEMemoryCoversCPU(requests corev1.ResourceList) bool {
+	cpu, memory := requests[corev1.ResourceCPU], requests[corev1.ResourceMemory]
+	return memory.AsApproximateFloat64() >= cpu.AsApproximateFloat64()*(1<<30)
 }
 
 // Templates and claims each create a managed network policy named after themselves.
