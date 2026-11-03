@@ -47,7 +47,8 @@ export function OrgMemoryTimeline({
   level: DigestLevel;
   selectedId: string | null;
   onSelect: (digestId: string, level?: DigestLevel) => void;
-  onOpenSession: (chatId: string) => void;
+  // Undefined when the reader lacks chat:read: sessions show but don't open.
+  onOpenSession: ((chatId: string) => void) | undefined;
 }): JSX.Element {
   const [limit, setLimit] = useState(PAGE_SIZE);
   const digests = useOrgMemoryDigests({ level, limit }, undefined, {
@@ -86,7 +87,8 @@ export function OrgMemoryTimeline({
         icon="circle-alert"
         heading="Couldn't load Organizational Memory"
         description={
-          loadError.message || "Reading memory needs chat:read on this project."
+          loadError.message ||
+          "Reading memory needs memory:read on this project."
         }
       />
     );
@@ -214,7 +216,7 @@ function DigestDetail({
 }: {
   digestId: string;
   onSelect: (digestId: string, level?: DigestLevel) => void;
-  onOpenSession: (chatId: string) => void;
+  onOpenSession: ((chatId: string) => void) | undefined;
 }): JSX.Element {
   const detail = useOrgMemoryDigest({ id: digestId }, undefined, {
     throwOnError: false,
@@ -290,7 +292,7 @@ function RecentDetail({
 }: {
   sessions: OrgMemorySession[];
   memos: OrgMemoryMemo[];
-  onOpenSession: (chatId: string) => void;
+  onOpenSession: ((chatId: string) => void) | undefined;
 }): JSX.Element {
   return (
     <article className="flex flex-col gap-6">
@@ -320,7 +322,7 @@ function SourceLists({
 }: {
   sessions: OrgMemorySession[];
   memos: OrgMemoryMemo[];
-  onOpenSession: (chatId: string) => void;
+  onOpenSession: ((chatId: string) => void) | undefined;
 }): JSX.Element {
   return (
     <>
@@ -335,7 +337,7 @@ function SourceLists({
                     Saved by {memoAuthor(memo)} ·{" "}
                     {format(memo.createdAt, "MMM d, HH:mm")}
                   </span>
-                  {memo.chatId && (
+                  {memo.chatId && onOpenSession && (
                     <button
                       type="button"
                       className="text-foreground hover:underline"
@@ -355,23 +357,19 @@ function SourceLists({
           <ul className="divide-border divide-y border">
             {sessions.map((session) => (
               <li key={session.id}>
-                <button
-                  type="button"
-                  onClick={() => onOpenSession(session.id)}
-                  className="hover:bg-muted/40 focus-visible:ring-ring flex w-full min-w-0 flex-col gap-1 px-4 py-3 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
-                >
-                  <span className="flex items-baseline justify-between gap-3">
-                    <span className="truncate text-sm font-medium">
-                      {session.title || "Untitled session"}
-                    </span>
-                    <span className="text-muted-foreground shrink-0 font-mono text-[11px]">
-                      {format(session.summarizedAt, "MMM d, HH:mm")}
-                    </span>
-                  </span>
-                  <span className="text-muted-foreground line-clamp-3 text-sm">
-                    {session.summary}
-                  </span>
-                </button>
+                {onOpenSession ? (
+                  <button
+                    type="button"
+                    onClick={() => onOpenSession(session.id)}
+                    className="hover:bg-muted/40 focus-visible:ring-ring flex w-full min-w-0 flex-col gap-1 px-4 py-3 text-left transition-colors focus-visible:ring-2 focus-visible:outline-none"
+                  >
+                    <SessionRow session={session} />
+                  </button>
+                ) : (
+                  <div className="flex min-w-0 flex-col gap-1 px-4 py-3">
+                    <SessionRow session={session} />
+                  </div>
+                )}
               </li>
             ))}
           </ul>
@@ -431,4 +429,23 @@ function memoAuthor(memo: OrgMemoryMemo): string {
   if (memo.authorKind === "agent") return "an agent";
   if (memo.authorKind === "user") return "a teammate";
   return "Speakeasy";
+}
+
+// Titles are empty for readers without chat:read; the time still places it.
+function SessionRow({ session }: { session: OrgMemorySession }): JSX.Element {
+  return (
+    <>
+      <span className="flex items-baseline justify-between gap-3">
+        <span className="truncate text-sm font-medium">
+          {session.title || "Session"}
+        </span>
+        <span className="text-muted-foreground shrink-0 font-mono text-[11px]">
+          {format(session.summarizedAt, "MMM d, HH:mm")}
+        </span>
+      </span>
+      <span className="text-muted-foreground line-clamp-3 text-sm">
+        {session.summary}
+      </span>
+    </>
+  );
 }

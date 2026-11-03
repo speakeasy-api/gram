@@ -2,6 +2,7 @@ import { ResourceListPage } from "@/components/page-templates";
 import { SegmentedControl } from "@/components/ui/SegmentedControl";
 import { useProject } from "@/contexts/Auth";
 import { useFeatureFlag } from "@/hooks/useFeatureFlag";
+import { useRBAC } from "@/hooks/useRBAC";
 import { FEATURE_FLAGS } from "@/lib/featureFlags";
 import { formatCompact } from "@/lib/format";
 import { useChatDetailSheet } from "@/pages/chatLogs/useChatDetailSheet";
@@ -55,6 +56,9 @@ export function OrgMemoryPage(): JSX.Element {
   const level = parseLevel(searchParams.get("level"));
   const selectedId = searchParams.get("digest");
   const { openChat, sheet } = useChatDetailSheet();
+  // Memory needs memory:read; opening the cited transcript needs chat:read.
+  const { hasAnyScope } = useRBAC();
+  const canOpenSessions = hasAnyScope(["chat:read"], project.id);
 
   const enabled = flag.status === "enabled";
   const overview = useOrgMemoryOverview({ days: OVERVIEW_DAYS }, undefined, {
@@ -82,7 +86,7 @@ export function OrgMemoryPage(): JSX.Element {
   const stats = overview.data;
   return (
     <ResourceListPage
-      scope="chat:read"
+      scope="memory:read"
       resourceId={project.id}
       title="Agent Sessions"
       description="What your agents remember about the team's past sessions: day, week and month digests built from masked session summaries and the memos agents saved."
@@ -144,7 +148,7 @@ export function OrgMemoryPage(): JSX.Element {
         onSelect={(digest, nextLevel) =>
           select({ digest, level: nextLevel ?? level })
         }
-        onOpenSession={openChat}
+        onOpenSession={canOpenSessions ? openChat : undefined}
       />
       {sheet}
     </ResourceListPage>

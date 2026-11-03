@@ -324,12 +324,12 @@ const RouteProvider = () => {
       : [];
     // Organizational Memory is a tab of Agent Sessions, not a sidebar page,
     // so it registers on its own behind the same rollout flag and the
-    // chat:read grant on this project its endpoints require.
+    // memory:read grant on this project its endpoints require.
     if (
       projectSlug &&
       projectId &&
       orgMemoryEnabled &&
-      hasAnyScope(["chat:read"], projectId)
+      hasAnyScope(["memory:read"], projectId)
     ) {
       projectActions.push(
         routeToNavAction(
