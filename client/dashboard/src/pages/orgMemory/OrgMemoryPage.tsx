@@ -136,7 +136,9 @@ export function OrgMemoryPage(): JSX.Element {
       }
       isLoading={!enabled}
     >
+      {/* Keyed by project so kept-previous pages never cross projects. */}
       <OrgMemoryTimeline
+        key={project.id}
         level={level}
         selectedId={selectedId}
         onSelect={(digest, nextLevel) =>

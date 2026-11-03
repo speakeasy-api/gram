@@ -147,7 +147,7 @@ func (s *seeder) seedMemory(ctx context.Context) error {
 		memosByDay[day] = append(memosByDay[day], id)
 	}
 
-	insertDigest := func(level string, start, end time.Time, content string, chats, memos, children []uuid.UUID) (uuid.UUID, error) {
+	insertDigest := func(level string, start, end, closedAt time.Time, content string, chats, memos, children []uuid.UUID) (uuid.UUID, error) {
 		id := s.det("memory-digest-" + level + "-" + start.Format(time.DateOnly))
 		if err := s.q.MemoryInsertDigest(ctx, repo.MemoryInsertDigestParams{
 			ID:             id,
@@ -160,7 +160,7 @@ func (s *seeder) seedMemory(ctx context.Context) error {
 			ChatIds:        chats,
 			MemoIds:        memos,
 			ChildDigestIds: children,
-			GeneratedAt:    ts(writtenAt(end)),
+			GeneratedAt:    ts(writtenAt(closedAt)),
 		}); err != nil {
 			return uuid.Nil, fmt.Errorf("insert demo %s digest %s: %w", level, start.Format(time.DateOnly), err)
 		}
@@ -181,7 +181,7 @@ func (s *seeder) seedMemory(ctx context.Context) error {
 		}
 		content := fmt.Sprintf("%d sessions on %s. The team worked on %s.",
 			len(chats), d.Format("Monday, January 2"), memoryTopicList(topics, 4))
-		id, err := insertDigest("day", d, d.AddDate(0, 0, 1), content, chats, memosByDay[d], nil)
+		id, err := insertDigest("day", d, d.AddDate(0, 0, 1), d.AddDate(0, 0, 1), content, chats, memosByDay[d], nil)
 		if err != nil {
 			return err
 		}
@@ -212,7 +212,7 @@ func (s *seeder) seedMemory(ctx context.Context) error {
 		}
 		content := fmt.Sprintf("Week of %s, across %d active days. Recurring work: %s.",
 			w.Format("January 2"), len(children), memoryTopicList(topics, 5))
-		id, err := insertDigest("week", w, w.AddDate(0, 0, 7), content, nil, nil, children)
+		id, err := insertDigest("week", w, w.AddDate(0, 0, 7), w.AddDate(0, 0, 7), content, nil, nil, children)
 		if err != nil {
 			return err
 		}
@@ -245,7 +245,9 @@ func (s *seeder) seedMemory(ctx context.Context) error {
 		}
 		content := fmt.Sprintf("%s in review. The team's sessions centered on %s.",
 			m.Format("January 2006"), memoryTopicList(topics, 6))
-		if _, err := insertDigest("month", m, m.AddDate(0, 1, 0), content, nil, nil, children); err != nil {
+		// A month is written once the week holding its last day closes.
+		closedAt := weekStart(m.AddDate(0, 1, -1)).AddDate(0, 0, 7)
+		if _, err := insertDigest("month", m, m.AddDate(0, 1, 0), closedAt, content, nil, nil, children); err != nil {
 			return err
 		}
 	}

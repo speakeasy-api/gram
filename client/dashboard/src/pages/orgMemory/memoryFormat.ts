@@ -11,7 +11,7 @@ type PeriodDate = { toString(): string } | string;
  * UTC days, so parsing them as instants would shift every label one day back
  * for viewers west of UTC.
  */
-export function parsePeriodDate(value: PeriodDate): Date {
+function parsePeriodDate(value: PeriodDate): Date {
   const [y, m, d] = String(value).slice(0, 10).split("-").map(Number);
   return new Date(y ?? 1970, (m ?? 1) - 1, d ?? 1);
 }
