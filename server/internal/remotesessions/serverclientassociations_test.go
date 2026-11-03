@@ -11,6 +11,7 @@ import (
 	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -42,6 +43,25 @@ func associate(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizati
 	})
 	require.NoError(t, err)
 	return n
+}
+
+// typedClients is the live typed auth clients one MCP server offers.
+func typedClients(t *testing.T, ctx context.Context, conn *pgxpool.Pool, serverID uuid.UUID) []uuid.UUID {
+	t.Helper()
+	ids, err := authclientbackfill.New(conn).ListServerAuthClientsFixture(ctx, serverID)
+	require.NoError(t, err)
+	return ids
+}
+
+// recordTypedClients writes the typed auth clients and links the servers'
+// associations call for, as every association writer does.
+func recordTypedClients(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, serverIDs ...uuid.UUID) {
+	t.Helper()
+	tx, err := conn.Begin(ctx)
+	require.NoError(t, err)
+	defer func() { _ = tx.Rollback(ctx) }()
+	require.NoError(t, authclientbackfill.SyncServerAssociations(ctx, tx, organizationID, serverIDs...))
+	require.NoError(t, tx.Commit(ctx))
 }
 
 func TestMCPServerUpstreamClientAssociations(t *testing.T) {
@@ -136,6 +156,33 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 		var shareable *oops.ShareableError
 		require.ErrorAs(t, err, &shareable)
 		require.Equal(t, oops.CodeNotFound, shareable.Code, "a second detach finds nothing to remove")
+	})
+
+	t.Run("detaching a server retires the typed client it offered", func(t *testing.T) {
+		t.Parallel()
+
+		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-assoc-typed")
+		first := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-typed-a")
+		second := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-typed-b")
+		clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-typed")
+		associate(t, ctx, ti.conn, orgID, projectID, first, clientID)
+		associate(t, ctx, ti.conn, orgID, projectID, second, clientID)
+		recordTypedClients(t, ctx, ti.conn, orgID, first, second)
+
+		offered := typedClients(t, ctx, ti.conn, first)
+		require.NotEmpty(t, offered, "the association must have a typed client to retire")
+		require.NotEmpty(t, typedClients(t, ctx, ti.conn, second))
+
+		require.NoError(t, ti.service.DetachServerClientAssociation(ctx, &gen.DetachServerClientAssociationPayload{
+			McpServerID:           first.String(),
+			RemoteSessionClientID: clientID.String(),
+		}))
+
+		require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, first))
+		require.Empty(t, typedClients(t, ctx, ti.conn, first),
+			"the typed client goes with the association it was derived from")
+		require.Equal(t, offered, typedClients(t, ctx, ti.conn, second),
+			"the other server on the same client keeps what it offers")
 	})
 
 	t.Run("the only server's own binding cannot be detached on its own", func(t *testing.T) {
