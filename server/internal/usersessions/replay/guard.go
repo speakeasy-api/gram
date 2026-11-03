@@ -9,6 +9,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 // minHoldTTL is the floor applied to every reservation's lifetime.
@@ -132,7 +133,7 @@ func (g *Guard) ReserveOwned(ctx context.Context, key Key, holdUntil time.Time, 
 	releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseBudget)
 	defer cancel()
 	_, _ = g.leases.ReleaseLeaseIfOwner(releaseCtx, storageKey, owner)
-	return false, fmt.Errorf("reserve assertion id: %w", err)
+	return false, fmt.Errorf("reserve assertion id: %w", oops.MarkStoreConnectionLost(err))
 }
 
 // Release gives up owner's reservation so the party can present the assertion

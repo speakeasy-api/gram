@@ -20,6 +20,9 @@ import (
 // a platform fault.
 var ErrNoTunnelRoute = errors.New("tunnel has no live route")
 
+// ErrRouteStoreUnavailable marks a failure reading our own route store, not the tunnel or its provider.
+var ErrRouteStoreUnavailable = errors.New("tunnel route store unavailable")
+
 // maxForwardAttempts bounds the gateway failover loop for one request. Each
 // retried attempt excludes the gateway that refused, so the loop also ends
 // when candidates run out.
@@ -107,7 +110,7 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 
 	candidates, err := c.routes.Candidates(ctx, tunnelID)
 	if err != nil {
-		return nil, fmt.Errorf("list tunnel routes: %w", err)
+		return nil, fmt.Errorf("list tunnel routes: %w: %w", ErrRouteStoreUnavailable, err)
 	}
 
 	exclude := map[string]struct{}{}

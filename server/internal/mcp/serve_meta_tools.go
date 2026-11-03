@@ -450,7 +450,7 @@ func (s *Service) buildMemberDispatch(
 	}
 	hostedTokens, err := hostedMemberTokens(tokens, member)
 	if err != nil {
-		return nil, hostingstate.NotHosted(), nil, withMemberConnectLink(err, member, gate.memberConnectURL(member))
+		return nil, hostingstate.NotHosted(), nil, withMemberConnectLink(err, member, gate.memberReconnectURL(member))
 	}
 	tokenInputs, err := appendRemoteSessionTokenInputs(nil, hostedTokens)
 	if err != nil {

@@ -106,7 +106,7 @@ func (g gatewayServer) Ready() bool {
 func (g gatewayServer) StatusLabel() string {
 	switch g.Status {
 	case gatewayServerUnavailable:
-		return "Unavailable · try again later"
+		return "Unavailable · try again shortly"
 	case gatewayServerNoAccess:
 		return "No access"
 	case gatewayServerNoSignIn:
@@ -486,6 +486,14 @@ func gatewayServerConnectURL(endpointRoot string, serverSlug string) string {
 // memberConnectURL is the URL a person opens to connect member on this
 // gateway, or empty when the gateway has no connect pages or the member signs
 // in through no service.
+// memberReconnectURL is the connect page for a person; agents and workloads have no page to reconnect on.
+func (g metaGateContext) memberReconnectURL(member metaMember) string {
+	if !codeConnectAvailable(&g) {
+		return ""
+	}
+	return g.memberConnectURL(member)
+}
+
 func (g metaGateContext) memberConnectURL(member metaMember) string {
 	if g.connectRoot == "" || !member.remoteSessionIssuerID.Valid {
 		return ""

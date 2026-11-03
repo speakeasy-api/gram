@@ -18,7 +18,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
-	"github.com/speakeasy-api/gram/server/internal/oauthui"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -42,6 +41,12 @@ var errValidationRateLimited = errors.New("remote session validation rate limite
 
 // validationRate caps verifies per consent challenge.
 var validationRate = ratelimit.PerMinute(6)
+
+// errValidationUnfinished marks a verify an outage stopped; the connect page reports it.
+var errValidationUnfinished = errors.New("remote session validation did not finish")
+
+// validationUnfinishedNotice follows a Verify that reached no verdict; it says nothing about now.
+const validationUnfinishedNotice = "Your last Verify didn't finish. Try again shortly."
 
 // validationLimitedNotice is the fixed card copy for a rate-limited verify.
 const validationLimitedNotice = "Try again in a moment"
@@ -114,6 +119,10 @@ func (s *Service) probeRemoteSession(
 	)
 	for _, projectID := range tokenProjectIDs {
 		resolved, rerr := s.remoteChallengeMgr.ResolveAvailableAccessTokens(ctx, projectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
+		if oops.IsInfrastructureFailure(rerr) {
+			logger.ErrorContext(ctx, "verify stopped by a store outage", attr.SlogError(rerr))
+			return fmt.Errorf("%w: %w", errValidationUnfinished, rerr)
+		}
 		if rerr != nil {
 			return oops.E(oops.CodeUnexpected, rerr, "resolve upstream tokens for validation").LogError(ctx, logger)
 		}
@@ -122,11 +131,12 @@ func (s *Service) probeRemoteSession(
 				if remotesessions.RefreshBusy(candidate.ClientCredentialErr) {
 					return errValidationRateLimited
 				}
-				failure := oops.E(oops.CodeUnavailable, candidate.ClientCredentialErr, "%s", remoteSessionUnavailableMessage)
 				if remotesessions.OutageKindOf(candidate.ClientCredentialErr) == remotesessions.RefreshOutageNone {
-					return fmt.Errorf("validate remote session: %w", oops.WithBrowserReason(failure.LogError(ctx, logger), oauthui.ReasonUnavailable))
+					logger.ErrorContext(ctx, "verify stopped by a refresh failure", attr.SlogError(candidate.ClientCredentialErr))
+				} else {
+					logger.WarnContext(ctx, "verify stopped by an outage", attr.SlogError(candidate.ClientCredentialErr))
 				}
-				return fmt.Errorf("validate remote session: %w", oops.WithBrowserReason(failure.LogWarn(ctx, logger), oauthui.ReasonProviderUnavailable))
+				return fmt.Errorf("%w: %w", errValidationUnfinished, candidate.ClientCredentialErr)
 			}
 			tokens, entry, tokenProjectID, usable = resolved, candidate, projectID, true
 			break

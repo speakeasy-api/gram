@@ -635,6 +635,14 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			}
 		}
 	}
+	if unfinished := r.URL.Query().Get("validate_unfinished"); unfinished != "" {
+		for i := range cards {
+			// An Unavailable card already says so, from stored state.
+			if cards[i].ClientID == unfinished && !cards[i].Unavailable {
+				cards[i].ValidationNotice = validationUnfinishedNotice
+			}
+		}
+	}
 	if limited := r.URL.Query().Get("validate_limited"); limited != "" {
 		for i := range cards {
 			if cards[i].ClientID == limited {
@@ -1196,7 +1204,11 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		}
 		if err := s.remoteChallengeMgr.CheckAccessTokens(agentCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject); err != nil {
 			if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
-				return remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
+				outage := remoteSessionUnavailableError(w, err).LogWarn(ctx, logger)
+				if remotesessions.OutageKindOf(err) != remotesessions.RefreshOutageNone {
+					return fmt.Errorf("check agent connections: %w", oops.WithBrowserReason(outage, oauthui.ReasonProviderUnavailable))
+				}
+				return outage
 			}
 			if errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) {
 				return oops.E(oops.CodeFailedPrecondition, err, "%s", remoteSessionMisconfiguredDescription).LogWarn(ctx, logger)
@@ -1638,8 +1650,11 @@ func isUniqueViolation(err error) bool {
 
 // expiredConnectionOutage reads recorded state, never the provider: a page load must not spend a refresh token.
 func (s *Service) expiredConnectionOutage(ctx context.Context, subject urn.SessionSubject, clientID uuid.UUID) (unavailable, tunnel bool) {
-	kind, tunnelID := s.remoteChallengeMgr.ConnectionOutage(ctx, subject, clientID)
+	kind, tunnelID, known := s.remoteChallengeMgr.ConnectionOutage(ctx, subject, clientID)
 	switch {
+	case !known:
+		// Can't tell, and a green card could auto-close the tab a reconnect link opened.
+		return true, tunnelID.Valid
 	case kind == remotesessions.RefreshOutageTunnel:
 		return true, true
 	case tunnelID.Valid && s.tunnelKnownDown(ctx, tunnelID.UUID):

@@ -151,11 +151,10 @@ func metaMemberClientCredentialError(member metaMember, err error) error {
 		if _, session := errors.AsType[*remotesessions.SessionOutageError](err); session {
 			return linkedMemberOutage(member, err, "")
 		}
-		cause := "right now"
 		if remotesessions.TokenEndpointCausedOutage(err) {
-			cause = "because its provider isn't available right now"
+			return newMemberUnavailableError(fmt.Sprintf("server %q can't get its credential because its provider isn't available right now. Retry shortly. If it keeps happening, ask your administrator", member.slug), nil)
 		}
-		return newMemberUnavailableError(fmt.Sprintf("server %q can't get its credential %s. Retry shortly. If it keeps happening, ask your administrator", member.slug, cause), nil)
+		return newMemberUnavailableError(fmt.Sprintf("server %q can't get its credential right now. Retry shortly. If it keeps happening, ask your administrator to contact Speakeasy support", member.slug), nil)
 	}
 
 	return &metaMemberError{message: fmt.Sprintf("server %q has an upstream credential that is misconfigured or was rejected; contact the MCP server administrator", member.slug)}
@@ -177,7 +176,7 @@ func linkedMemberOutage(member metaMember, err error, connectURL string) error {
 	retry := "Retry " + outageWaitWords(remotesessions.RetryAfter(err)) + "."
 	switch remotesessions.OutageKindOf(err) {
 	case remotesessions.RefreshOutageTunnel:
-		return newMemberUnavailableError(fmt.Sprintf("server %q can't be reached right now. %s If it keeps happening, ask your administrator to check that it's running", member.slug, retry), err)
+		return newMemberUnavailableError(fmt.Sprintf("server %q can't renew its sign-in right now. %s If it keeps happening, ask your administrator to check that the server and its sign-in provider are running", member.slug, retry), err)
 	case remotesessions.RefreshOutageProvider:
 		fallback := "If it keeps happening, ask your administrator"
 		if connectURL != "" {
@@ -186,7 +185,7 @@ func linkedMemberOutage(member metaMember, err error, connectURL string) error {
 		return newMemberUnavailableError(fmt.Sprintf("server %q can't renew its sign-in because its provider isn't available right now. %s %s", member.slug, retry, fallback), err)
 	case remotesessions.RefreshOutageNone:
 	}
-	return newMemberUnavailableError(fmt.Sprintf("server %q can't renew its sign-in right now. %s If it keeps happening, ask your administrator", member.slug, retry), err)
+	return newMemberUnavailableError(fmt.Sprintf("server %q can't renew its sign-in right now. %s If it keeps happening, ask your administrator to contact Speakeasy support", member.slug, retry), err)
 }
 
 // withMemberConnectLink adds the member's connect page to a connection outage.

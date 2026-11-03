@@ -374,16 +374,16 @@ func RefreshOutageKey(sess remotesessions_repo.RemoteSession) string {
 	return "remotesession:refresh-outage:" + sess.ID.String() + ":" + strconv.FormatInt(sess.GrantGeneration, 10)
 }
 
-// RecordedOutage reads what last stopped sess's refresh; fails open to none.
-func (s *RefreshService) RecordedOutage(ctx context.Context, sess remotesessions_repo.RemoteSession) RefreshOutageKind {
-	var kind RefreshOutageKind
+// RecordedOutage reads what last stopped sess's refresh; known is false when the record couldn't be read.
+func (s *RefreshService) RecordedOutage(ctx context.Context, sess remotesessions_repo.RemoteSession) (kind RefreshOutageKind, known bool) {
 	if err := s.locks.Get(ctx, RefreshOutageKey(sess), &kind); err != nil {
-		if !errors.Is(err, redisCache.ErrCacheMiss) {
-			s.logger.WarnContext(ctx, "remote session refresh outage unreadable", attr.SlogError(err))
+		if errors.Is(err, redisCache.ErrCacheMiss) {
+			return RefreshOutageNone, true
 		}
-		return RefreshOutageNone
+		s.logger.WarnContext(ctx, "remote session refresh outage unreadable", attr.SlogError(err))
+		return RefreshOutageNone, false
 	}
-	return kind
+	return kind, true
 }
 
 // errRefreshTunnelTransport marks a refresh that couldn't reach the tunnel's transport at all.
@@ -519,7 +519,8 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 	if trigger != remotesessionmetrics.RefreshTriggerManual {
 		if wait := s.refreshCooldownRemaining(ctx, sess); wait > 0 {
 			s.metrics.Record(ctx, client.IssuerUrl, trigger, remotesessionmetrics.RefreshOutcomeDeferred)
-			return zero, &RefreshError{IssuerURL: client.IssuerUrl, Outcome: remotesessionmetrics.RefreshOutcomeDeferred, retryAfter: wait, outageKind: kind, err: &refreshDeferredError{wait: wait, noOutage: false}}
+			recorded, _ := s.RecordedOutage(ctx, sess)
+			return zero, &RefreshError{IssuerURL: client.IssuerUrl, Outcome: remotesessionmetrics.RefreshOutcomeDeferred, retryAfter: wait, outageKind: recorded, err: &refreshDeferredError{wait: wait, noOutage: false}}
 		}
 	}
 
@@ -550,7 +551,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 			if deferred, ok := errors.AsType[*refreshDeferredError](err); ok {
 				retryAfter = deferred.wait
 				if !deferred.noOutage {
-					failureKind = kind
+					failureKind, _ = s.RecordedOutage(ctx, attempted)
 				}
 			}
 		}

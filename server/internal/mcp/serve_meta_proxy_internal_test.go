@@ -4,6 +4,7 @@ import (
 	"context"
 	"errors"
 	"net/http"
+	"strings"
 	"testing"
 	"time"
 
@@ -14,6 +15,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 func TestMemberResponseRecorderStatusStartsUnset(t *testing.T) {
@@ -347,7 +349,8 @@ func TestMemberTokens_StoreOutageReadsAsUnavailable(t *testing.T) {
 	require.Error(t, err)
 	_, unavailable = errors.AsType[memberUnavailableError](err)
 	require.False(t, unavailable, "a broken query is not an outage: %v", err)
-	require.NotContains(t, err.Error(), "retry", "retrying can't fix a broken query")
+	require.NotContains(t, strings.ToLower(err.Error()), "retry", "retrying can't fix a broken query")
+	require.Contains(t, err.Error(), "contact Speakeasy support")
 }
 
 func TestChainMetaMember_ChainingServesAnOutage(t *testing.T) {
@@ -399,10 +402,24 @@ func TestConnectionOutageMessage(t *testing.T) {
 		{"Linear", remotesessions.RefreshOutageProvider, 400 * time.Millisecond, "Linear's provider isn't available right now. Try again shortly."},
 		{"Linear", remotesessions.RefreshOutageProvider, time.Second, "Linear's provider isn't available right now. Try again shortly."},
 		{"Linear", remotesessions.RefreshOutageProvider, 2 * time.Second, "Linear's provider isn't available right now. Try again in about 2 seconds."},
-		{"Linear", remotesessions.RefreshOutageTunnel, 30 * time.Second, "Linear can't be reached right now. Try again in about 30 seconds."},
+		{"Linear", remotesessions.RefreshOutageTunnel, 30 * time.Second, "Linear can't renew its sign-in right now. Try again in about 30 seconds. If it keeps happening, ask your administrator to check that the server and its sign-in provider are running."},
 		{"Linear", remotesessions.RefreshOutageNone, 0, "Linear can't renew its sign-in right now. Try again shortly."},
 		{"Linear", remotesessions.RefreshOutageNone, 5 * time.Minute, "Linear can't renew its sign-in right now. Try again in about 5 minutes."},
 	} {
 		require.Equal(t, tc.want, connectionOutageMessage(tc.name, tc.kind, tc.wait))
 	}
+}
+
+// Only a person has a connect page to reconnect on.
+func TestMemberReconnectURL_OnlyForPeople(t *testing.T) {
+	t.Parallel()
+
+	member := metaMember{slug: "m", remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
+	gate := func(subject urn.SessionSubject) metaGateContext {
+		return metaGateContext{connectRoot: "https://app.example.test/connect", authentication: &issuerGateAuthentication{subject: subject}}
+	}
+	require.NotEmpty(t, gate(urn.NewUserSubject("user-1")).memberReconnectURL(member))
+	require.Empty(t, gate(urn.NewAgentSubject(uuid.New())).memberReconnectURL(member))
+	require.Empty(t, gate(urn.NewWorkloadSubject(uuid.New(), "workload")).memberReconnectURL(member))
+	require.Empty(t, metaGateContext{connectRoot: "https://app.example.test/connect"}.memberReconnectURL(member))
 }

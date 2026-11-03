@@ -6,6 +6,8 @@ import (
 	"encoding/json"
 	"errors"
 	"fmt"
+	"io"
+	"log/slog"
 	"net"
 	"net/http"
 	"net/http/httptest"
@@ -88,6 +90,7 @@ func TestIsInfrastructureFailure_RealNetworkErrors(t *testing.T) {
 
 	// Someone else's service failing isn't our outage, however it failed.
 	outboundRefused := httpGetError(http.DefaultClient, "http://"+closedAddr)
+	require.Error(t, outboundRefused)
 	require.False(t, oops.IsInfrastructureFailure(outboundRefused), "outbound refused: %v", outboundRefused)
 	release := make(chan struct{})
 	hanging := httptest.NewServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) { <-release }))
@@ -160,6 +163,68 @@ func droppedConnectionError(t *testing.T) error {
 	_, err = conn.Read(make([]byte, 1))
 	require.ErrorIs(t, err, syscall.ECONNRESET)
 	return fmt.Errorf("read: %w", err)
+}
+
+// A real client against a server that answers every command with the same reply.
+func redisReplyError(t *testing.T, reply string) error {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = listener.Close() })
+	go func() {
+		for {
+			conn, aerr := listener.Accept()
+			if aerr != nil {
+				return
+			}
+			go func() {
+				defer func() { _ = conn.Close() }()
+				buf := make([]byte, 4096)
+				for {
+					if _, rerr := conn.Read(buf); rerr != nil {
+						return
+					}
+					if _, werr := conn.Write([]byte(reply)); werr != nil {
+						return
+					}
+				}
+			}()
+		}
+	}()
+	client := redis.NewClient(&redis.Options{Addr: listener.Addr().String(), MaxRetries: -1, Protocol: 2, DisableIdentity: true})
+	t.Cleanup(func() { _ = client.Close() })
+	return client.Get(t.Context(), "key").Err() //nolint:wrapcheck // the test inspects the client's own error
+}
+
+// Our own store restarting, failing over or timing out is an outage on every route that answers one.
+func TestStoreTransientFailuresAnswerAsOutage(t *testing.T) {
+	t.Parallel()
+
+	for name, cause := range map[string]error{
+		"statement timeout":     &pgconn.PgError{Code: "57014"},
+		"lock timeout":          &pgconn.PgError{Code: "55P03"},
+		"read only failover":    &pgconn.PgError{Code: "25006"},
+		"redis loading":         redisReplyError(t, "-LOADING Redis is loading the dataset in memory\r\n"),
+		"redis read only":       redisReplyError(t, "-READONLY You can't write against a read only replica.\r\n"),
+		"redis master down":     redisReplyError(t, "-MASTERDOWN Link with MASTER is down\r\n"),
+		"redis connection lost": oops.MarkStoreConnectionLost(fmt.Errorf("get: %w", io.EOF)),
+	} {
+		require.True(t, oops.IsInfrastructureFailure(cause), "%s: %v", name, cause)
+		for handler, wrap := range map[string]func(*slog.Logger, func(http.ResponseWriter, *http.Request) error) http.Handler{
+			"mcp": oops.MCPErrHandle, "oauth": oops.OAuthErrHandle, "auth": oops.AuthErrHandle, "browser": oops.BrowserErrHandle,
+		} {
+			w := httptest.NewRecorder()
+			wrap(testenv.NewLogger(t), func(http.ResponseWriter, *http.Request) error {
+				return oops.E(oops.CodeUnexpected, cause, "load")
+			}).ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/", nil))
+			require.Equal(t, http.StatusServiceUnavailable, w.Code, "%s through %s", name, handler)
+			require.NotEmpty(t, w.Header().Get("Retry-After"), "%s through %s", name, handler)
+		}
+	}
+
+	require.False(t, oops.IsInfrastructureFailure(redisReplyError(t, "-WRONGTYPE Operation against a key\r\n")), "a broken command stays a bug")
+	require.False(t, oops.IsInfrastructureFailure(fmt.Errorf("decode body: %w", io.EOF)), "an unmarked EOF is a request body")
+	require.False(t, oops.IsInfrastructureFailure(oops.MarkStoreConnectionLost(errors.New("other"))))
 }
 
 func TestIsStoreFailure(t *testing.T) {

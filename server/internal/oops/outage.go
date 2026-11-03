@@ -3,6 +3,8 @@ package oops
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"log/slog"
 	"net"
 	"net/http"
@@ -31,6 +33,9 @@ var transientSQLStates = map[string]struct{}{
 	"57P03": {}, // cannot_connect_now
 	"40001": {}, // serialization_failure
 	"40P01": {}, // deadlock_detected
+	"57014": {}, // query_canceled: statement_timeout; a caller's own cancel is ruled out by answerOutage
+	"55P03": {}, // lock_not_available: lock_timeout
+	"25006": {}, // read_only_sql_transaction: a failover in progress
 }
 
 // transientSQLStateClasses are SQLSTATE classes a retry can clear: connection exceptions and exhausted resources.
@@ -40,6 +45,20 @@ var transientSQLStateClasses = []string{"08", "53"}
 var connectionErrnos = []syscall.Errno{
 	syscall.ECONNREFUSED, syscall.ECONNRESET, syscall.ECONNABORTED, syscall.EPIPE, syscall.ETIMEDOUT,
 	syscall.EHOSTUNREACH, syscall.ENETUNREACH, syscall.ENETDOWN, syscall.EADDRNOTAVAIL,
+}
+
+// transientRedisReplies are replies from a Redis restarting or failing over.
+var transientRedisReplies = []string{"LOADING ", "READONLY ", "MASTERDOWN "}
+
+// ErrStoreConnectionLost marks a store connection that closed mid-reply.
+var ErrStoreConnectionLost = errors.New("store connection lost")
+
+// MarkStoreConnectionLost marks an EOF from our own store; an EOF means something else from a request body.
+func MarkStoreConnectionLost(err error) error {
+	if errors.Is(err, io.EOF) || errors.Is(err, io.ErrUnexpectedEOF) {
+		return fmt.Errorf("%w: %w", ErrStoreConnectionLost, err)
+	}
+	return err
 }
 
 // IsInfrastructureFailure reports our own store or the network to it that couldn't answer right now.
@@ -60,8 +79,11 @@ func IsInfrastructureFailure(err error) bool {
 	if _, ok := errors.AsType[*pgconn.ConnectError](err); ok {
 		return true
 	}
-	if errors.Is(err, redis.ErrClosed) || errors.Is(err, redis.ErrPoolTimeout) {
+	if errors.Is(err, redis.ErrClosed) || errors.Is(err, redis.ErrPoolTimeout) || errors.Is(err, ErrStoreConnectionLost) {
 		return true
+	}
+	if reply, ok := errors.AsType[redis.Error](err); ok {
+		return slices.ContainsFunc(transientRedisReplies, func(prefix string) bool { return strings.HasPrefix(reply.Error(), prefix) })
 	}
 	if netErr, ok := errors.AsType[net.Error](err); ok && netErr.Timeout() {
 		return true

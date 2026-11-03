@@ -43,16 +43,17 @@ import (
 // memberRefreshOutageFixture is a gateway member whose user holds an expired
 // connection with a live refresh token, and a provider that can be taken down.
 type memberRefreshOutageFixture struct {
-	ti       *testInstance
-	metaSlug string
-	bearer   string
-	subject  urn.SessionSubject
-	clientID uuid.UUID
-	down     *atomic.Bool
-	upstream *atomic.Value
-	issuerID uuid.UUID
-	project  uuid.UUID
-	org      string
+	ti         *testInstance
+	metaSlug   string
+	bearer     string
+	subject    urn.SessionSubject
+	clientID   uuid.UUID
+	down       *atomic.Bool
+	retryAfter *atomic.Value
+	upstream   *atomic.Value
+	issuerID   uuid.UUID
+	project    uuid.UUID
+	org        string
 
 	// memberCalls counts MCP calls that reached the member.
 	memberCalls *atomic.Int32
@@ -79,10 +80,15 @@ func newMemberRefreshOutageFixture(t *testing.T, ctx context.Context, ti *testIn
 	orgID := authCtx.ActiveOrganizationID
 
 	down := &atomic.Bool{}
+	retryAfter := &atomic.Value{}
+	retryAfter.Store("")
 	refreshes := &atomic.Int32{}
 	provider := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		refreshes.Add(1)
 		if down.Load() {
+			if value, _ := retryAfter.Load().(string); value != "" {
+				w.Header().Set("Retry-After", value)
+			}
 			w.WriteHeader(http.StatusServiceUnavailable)
 			return
 		}
@@ -131,16 +137,17 @@ func newMemberRefreshOutageFixture(t *testing.T, ctx context.Context, ti *testIn
 	require.NoError(t, err)
 
 	return memberRefreshOutageFixture{
-		ti:       ti,
-		metaSlug: metaSlug,
-		bearer:   mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject),
-		subject:  subject,
-		clientID: clientID,
-		down:     down,
-		upstream: lastAuthorization,
-		issuerID: issuerID,
-		project:  projectID,
-		org:      orgID,
+		ti:         ti,
+		metaSlug:   metaSlug,
+		bearer:     mintMetaIssuerBearer(t, ti, metaSlug, issuerID, subject),
+		subject:    subject,
+		clientID:   clientID,
+		down:       down,
+		retryAfter: retryAfter,
+		upstream:   lastAuthorization,
+		issuerID:   issuerID,
+		project:    projectID,
+		org:        orgID,
 
 		memberCalls: memberCalls,
 		refreshes:   refreshes,
@@ -225,16 +232,18 @@ func TestServePublic_MetaEndpoint_TunnelBoundOutageDoesNotOfferReconnect(t *test
 
 	text, isError := metaToolResultText(t, executeMetaTool(t, ti, f.metaSlug, f.bearer, "member--ping"))
 	require.True(t, isError)
-	require.Contains(t, text, "can't be reached right now")
+	require.Contains(t, text, "can't renew its sign-in right now")
+	require.Contains(t, text, "check that the server and its sign-in provider are running")
 	require.Contains(t, text, "Retry")
 	require.NotContains(t, text, "reconnect")
-	require.NotContains(t, text, "provider")
+	require.NotContains(t, text, "provider isn't", "a tunnel-bound failure doesn't say which side failed")
 
 	status := f.connectionStatus(t, ctx)
 	require.Equal(t, metamcp.SignInUnavailable, status.Servers[0].Status)
 	require.NotContains(t, status.Servers[0].Detail, "reconnect")
 	require.NotNil(t, status.Servers[0].Outage)
-	require.Contains(t, status.Servers[0].Outage.Message, "can't be reached right now")
+	require.Contains(t, status.Servers[0].Outage.Message, "can't renew its sign-in right now")
+	require.Contains(t, status.Servers[0].Outage.Message, "sign-in provider are running")
 	require.Empty(t, status.Servers[0].Outage.ReconnectURL, "a tunnel row offers no button")
 }
 
@@ -286,7 +295,7 @@ func TestServePublic_MetaEndpoint_RefreshFailureNotFromTheProvider(t *testing.T)
 		state, instructions := mcp.ConnectionRouteFailureForOutage("member", token.ClientCredentialErr, true)
 		require.Equal(t, "unreachable", state)
 		require.Contains(t, instructions, "This server can't renew its sign-in right now. Retry in about")
-		require.Contains(t, instructions, "ask your administrator")
+		require.Contains(t, instructions, "ask your administrator to contact Speakeasy support")
 		require.NotContains(t, instructions, "tools.connect")
 	}
 }
@@ -311,6 +320,26 @@ func TestConnectionRouteFailure_ProviderOutageOffersReconnect(t *testing.T) {
 		_, instructions = mcp.ConnectionRouteFailureForOutage("member", token.ClientCredentialErr, false)
 		require.NotContains(t, instructions, "tools.connect", "an agent or anonymous caller can't use it")
 		require.Contains(t, instructions, "ask your administrator")
+	}
+}
+
+// The body says how long to wait when the provider asked for longer than the usual pause.
+func TestRemoteSessionUnavailable_MessageHonoursALongWait(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := newMemberRefreshOutageFixture(t, ctx, ti, func(upstream string) string { return upstream })
+	f.down.Store(true)
+	f.retryAfter.Store("300")
+
+	tokens, err := ti.service.RemoteChallengeManager().ResolveAvailableAccessTokens(ctx, f.project, f.org, f.issuerID, f.subject)
+	require.NoError(t, err)
+	require.NotEmpty(t, tokens)
+	for _, token := range tokens {
+		w := httptest.NewRecorder()
+		answer := mcp.RemoteSessionUnavailableError(w, token.ClientCredentialErr)
+		require.Equal(t, "This MCP server can't get the credential it needs right now. Retry in about 5 minutes.", answer.Error())
+		require.Equal(t, "300", w.Header().Get("Retry-After"))
 	}
 }
 

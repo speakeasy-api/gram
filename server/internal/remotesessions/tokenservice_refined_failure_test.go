@@ -175,7 +175,7 @@ func TestConnectionOutage_RecordedOnFailureClearedBySuccessAndReconnect(t *testi
 	}
 	outage := func() remotesessions.RefreshOutageKind {
 		t.Helper()
-		kind, _ := env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
+		kind, _, _ := env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
 		return kind
 	}
 	require.Equal(t, remotesessions.RefreshOutageNone, outage())
@@ -219,7 +219,9 @@ func TestRecordedOutage_CacheDownIsNoRecord(t *testing.T) {
 	require.NoError(t, broken.Close())
 	refresher := env.newRefresher(testenv.NewMeterProvider(t), cache.NewRedisCacheAdapter(broken))
 
-	require.Equal(t, remotesessions.RefreshOutageNone, refresher.RecordedOutage(ctx, env.session))
+	kind, known := refresher.RecordedOutage(ctx, env.session)
+	require.Equal(t, remotesessions.RefreshOutageNone, kind)
+	require.False(t, known, "a page can tell that apart from no record")
 }
 
 // A provider behind a tunnel records a tunnel outage: reconnecting goes through the same tunnel.
@@ -240,7 +242,7 @@ func TestConnectionOutage_TunneledProviderRecordsTunnel(t *testing.T) {
 
 	_, err = env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
-	kind, tunnel := env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
+	kind, tunnel, _ := env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
 	require.Equal(t, remotesessions.RefreshOutageTunnel, kind)
 	require.Equal(t, tunnelID, tunnel.UUID)
 }
@@ -276,7 +278,7 @@ func TestConnectionOutage_ProviderBehindLiveTunnelRecordsTunnel(t *testing.T) {
 	_, err = env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 	require.Equal(t, remotesessions.RefreshOutageTunnel, remotesessions.OutageKindOf(err))
-	kind, tunnel := env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
+	kind, tunnel, _ := env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
 	require.Equal(t, remotesessions.RefreshOutageTunnel, kind)
 	require.Equal(t, tunnelID, tunnel.UUID)
 	require.NotEmpty(t, gateway.paths, "the refresh reached the provider through the live tunnel")
@@ -294,7 +296,7 @@ func TestConnectionOutage_TunnelTransportMissingIsRecorded(t *testing.T) {
 
 	_, err := env.mgr.ResolveAccessTokens(ctx, env.projectID, env.organizationID, env.session.UserSessionIssuerID, env.subject)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
-	kind, _ := env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
+	kind, _, _ := env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
 	require.Equal(t, remotesessions.RefreshOutageTunnel, kind)
 	require.Positive(t, remotesessions.RetryAfter(err))
 	require.Zero(t, posts.Load())
@@ -426,7 +428,7 @@ func TestRefreshNow_UnusableProviderAnswerIsAProviderOutage(t *testing.T) {
 			require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
 			require.Equal(t, remotesessions.RefreshOutageProvider, remotesessions.OutageKindOf(err))
 			require.Positive(t, remotesessions.RetryAfter(err))
-			kind, _ := env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
+			kind, _, _ := env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
 			require.Equal(t, remotesessions.RefreshOutageProvider, kind)
 		})
 	}
@@ -473,14 +475,59 @@ func TestRefreshNow_InvalidGrantClearsTheOutageRecord(t *testing.T) {
 
 	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerManual)
 	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
-	kind, _ := env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
+	kind, _, _ := env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
 	require.Equal(t, remotesessions.RefreshOutageProvider, kind)
 
 	dead.Store(true)
 	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerManual)
 	require.Error(t, err)
-	kind, _ = env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
+	kind, _, _ = env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
 	require.Equal(t, remotesessions.RefreshOutageNone, kind)
+}
+
+// A cooldown whose record is gone can't name an outage the connect page won't show.
+func TestRefreshNow_CooldownWithoutRecordHasNoKind(t *testing.T) {
+	t.Parallel()
+
+	ctx, env := newExpiredRefreshEnv(t, "refresh-cooldown-no-record", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
+	require.Equal(t, remotesessions.RefreshOutageProvider, remotesessions.OutageKindOf(err))
+
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	active, err := env.q.GetActiveRemoteSession(ctx, repo.GetActiveRemoteSessionParams{SubjectUrn: env.subject, RemoteSessionClientID: env.clientID})
+	require.NoError(t, err)
+	require.NoError(t, cache.NewRedisCacheAdapter(redisClient).Delete(ctx, remotesessions.RefreshOutageKey(active)))
+
+	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
+	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+	require.Equal(t, remotesessions.RefreshOutageNone, remotesessions.OutageKindOf(err))
+	require.Positive(t, remotesessions.RetryAfter(err), "still paced")
+}
+
+// Our route store failing isn't the tunnel or its provider failing.
+func TestRefreshNow_RouteStoreFailureIsNotATunnelOutage(t *testing.T) {
+	t.Parallel()
+
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{})
+	require.NoError(t, err)
+	broken := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1", MaxRetries: -1})
+	require.NoError(t, broken.Close())
+	tunnels := tunnelrouting.NewHTTPClient(route.NewRedis(broken), "forward-token", policy, nil)
+	ctx, env := newSyntheticExpiryEnv(t, "refresh-route-store", func(w http.ResponseWriter, _ *http.Request) {
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"access_token":"expired-access","refresh_token":"live-refresh"}`))
+	}, withTunnels(tunnels))
+	bindIssuerToTunnel(t, env)
+	require.NoError(t, env.q.SetRemoteSessionAccessExpiresAt(ctx, repo.SetRemoteSessionAccessExpiresAtParams{
+		ID: env.session.ID, ProjectID: conv.ToNullUUID(env.projectID), AccessExpiresAt: conv.ToPGTimestamptz(time.Now().Add(-time.Hour)),
+	}))
+
+	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
+	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+	require.Equal(t, remotesessions.RefreshOutageNone, remotesessions.OutageKindOf(err))
 }
 
 // A cooldown left by a real outage still says what stopped the refresh.

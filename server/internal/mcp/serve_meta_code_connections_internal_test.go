@@ -22,9 +22,9 @@ func TestConnectionRouteFailure(t *testing.T) {
 		instructions string
 		canConnect   bool
 	}{
-		{name: "outage with no connection behind it", err: metaMemberClientCredentialError(member, remotesessions.ErrRemoteSessionUnavailable), want: "unreachable", instructions: "This server can't get its connection details right now. Retry shortly. If it keeps happening, ask your administrator.", canConnect: true},
+		{name: "outage with no connection behind it", err: metaMemberClientCredentialError(member, remotesessions.ErrRemoteSessionUnavailable), want: "unreachable", instructions: "This server can't get its connection details right now. Retry shortly. If it keeps happening, ask your administrator to contact Speakeasy support.", canConnect: true},
 		{name: "not connected", err: memberAuthFailure(member, memberDial{anonymous: true}), want: "reauth_required", instructions: "Call tools.connect(server=...) to reconnect, then verify again in a fresh execution.", canConnect: true},
-		{name: "not connected, and tools.connect isn't offered", err: memberAuthFailure(member, memberDial{anonymous: true}), want: "reauth_required", instructions: "This server needs a new sign-in, which can't be started from here. Ask your administrator.", canConnect: false},
+		{name: "not connected, and tools.connect isn't offered", err: memberAuthFailure(member, memberDial{anonymous: true}), want: "reauth_required", instructions: "This server needs a sign-in, which can't be started from here. Ask your administrator.", canConnect: false},
 		{name: "grant gone", err: remotesessions.ErrNoValidToken, want: "reauth_required", instructions: "Call tools.connect(server=...) to reconnect, then verify again in a fresh execution.", canConnect: true},
 		{name: "misconfigured", err: metaMemberClientCredentialError(member, remotesessions.ErrClientCredentialMisconfigured), want: "unknown", instructions: "Connection verification could not complete; try again later.", canConnect: true},
 	} {

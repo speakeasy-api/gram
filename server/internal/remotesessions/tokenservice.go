@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/inv"
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -1386,6 +1387,9 @@ func (s *RefreshService) postRefreshGrant(
 	}
 
 	resp, err := doer.Do(req)
+	if errors.Is(err, tunnelrouting.ErrRouteStoreUnavailable) {
+		return zero, fmt.Errorf("post refresh: %w", err)
+	}
 	if err != nil {
 		return zero, fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, err)
 	}

@@ -1016,18 +1016,19 @@ type RemoteSessionState struct {
 
 // ConnectionOutage reads the outage on record for subject's grant on clientID, and
 // the tunnel its provider sits behind. It calls nothing upstream, for pages to render from.
-func (m *ChallengeManager) ConnectionOutage(ctx context.Context, subject urn.SessionSubject, clientID uuid.UUID) (RefreshOutageKind, uuid.NullUUID) {
+func (m *ChallengeManager) ConnectionOutage(ctx context.Context, subject urn.SessionSubject, clientID uuid.UUID) (RefreshOutageKind, uuid.NullUUID, bool) {
 	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 	queries := remotesessions_repo.New(m.db)
 	sess, err := queries.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID})
 	if err != nil {
-		return RefreshOutageNone, none
+		return RefreshOutageNone, none, false
 	}
+	kind, known := m.refresher.RecordedOutage(ctx, sess)
 	client, err := queries.GetRemoteSessionClientWithIssuerByID(ctx, clientID)
 	if err != nil {
-		return m.refresher.RecordedOutage(ctx, sess), none
+		return kind, none, known
 	}
-	return m.refresher.RecordedOutage(ctx, sess), client.TunneledMcpServerID
+	return kind, client.TunneledMcpServerID, known
 }
 
 // RemoteSessionStatuses returns, per remote_session_client_id, the state of
@@ -2001,14 +2002,11 @@ func providerOutageError(err *oops.ShareableError, provider string) error {
 	return fmt.Errorf("complete remote login: %w: %w", ErrProviderOutageExternal, presented)
 }
 
-// providerLabel is the name a person knows the provider by; a tunneled provider's host stays off the page.
+// providerLabel is the issuer's host; a tunneled provider's host stays off the page.
 func (m *ChallengeManager) providerLabel(ctx context.Context, state RemoteLoginState) string {
 	row, err := remotesessions_repo.New(m.db).GetRemoteSessionClientWithIssuerByID(ctx, state.RemoteSessionClientID)
 	if err != nil || row.TunneledMcpServerID.Valid {
 		return ""
-	}
-	if row.ResourceName.Valid && row.ResourceName.String != "" {
-		return row.ResourceName.String
 	}
 	parsed, err := url.Parse(row.IssuerUrl)
 	if err != nil {
@@ -2019,6 +2017,9 @@ func (m *ChallengeManager) providerLabel(ctx context.Context, state RemoteLoginS
 
 // exchangeFailureIsProviderOutage excludes failures Speakeasy's own signing caused.
 func exchangeFailureIsProviderOutage(failure *oops.ShareableError, err error) bool {
+	if errors.Is(err, tunnelrouting.ErrRouteStoreUnavailable) {
+		return false
+	}
 	if _, signing := errors.AsType[*tokenEndpointSigningError](err); signing {
 		return false
 	}
@@ -2188,6 +2189,9 @@ func exchangeFailure(ctx context.Context, logger *slog.Logger, err error, tunnel
 		reason := "the identity provider could not be reached"
 		if errors.Is(err, tunnelrouting.ErrNoTunnelRoute) {
 			reason = "the MCP tunnel is not connected"
+		}
+		if errors.Is(err, tunnelrouting.ErrRouteStoreUnavailable) {
+			reason = "Speakeasy could not read the MCP tunnel's routes"
 		}
 		return oops.E(oops.CodeGatewayError, err, "%s: %s", message, reason).LogError(ctx, logger)
 	}

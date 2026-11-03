@@ -143,3 +143,13 @@ func TestExchangeFailure_FixedReasons(t *testing.T) {
 		})
 	}
 }
+
+// Our own route store failing is ours: not the provider's outage page, and not tagged external.
+func TestExchangeFailure_RouteStoreIsNotAProviderOutage(t *testing.T) {
+	t.Parallel()
+
+	err := &tokenExchangeUnavailableError{err: fmt.Errorf("post token: list tunnel routes: %w: %w", tunnelrouting.ErrRouteStoreUnavailable, errors.New("redis: client is closed"))}
+	failure := exchangeFailure(t.Context(), testenv.NewLogger(t), err, true)
+	require.False(t, exchangeFailureIsProviderOutage(failure, err))
+	require.Contains(t, failure.Error(), "could not read the MCP tunnel's routes")
+}

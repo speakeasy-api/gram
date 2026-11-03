@@ -370,7 +370,7 @@
                   everything descriptive sits in the disclosure below. */}}
                   {{if .Unavailable}}
                   <span class="text-xs text-default-warning" data-validation="unavailable"
-                    >Unavailable · try again later</span
+                    >Unavailable · try again shortly</span
                   >
                   {{else if .Rejected}}
                   <span class="text-xs text-default-warning" data-validation="rejected"
@@ -393,10 +393,6 @@
                     >{{else if .CanValidate}}<span class="text-muted-foreground" data-validation="none"
                       > · Not yet verified</span
                     >{{end}}</span
-                  >
-                  {{end}} {{if .ValidationNotice}}
-                  <span class="text-xs text-default-warning" data-validation-notice
-                    >{{.ValidationNotice}}</span
                   >
                   {{end}} {{if .AttachmentReconnect}}
                   <span class="text-xs text-muted-foreground">Sign in again to choose the account for this agent</span>
@@ -432,6 +428,10 @@
                   {{else}}
                   <span class="text-xs text-muted-foreground"
                     >Not connected</span
+                  >
+                  {{end}} {{if .ValidationNotice}}
+                  <span class="text-xs text-default-warning" data-validation-notice
+                    >{{.ValidationNotice}}</span
                   >
                   {{end}} {{if .SharedServerNote}}
                   <span class="text-xs text-muted-foreground" data-shared-server-note
@@ -928,7 +928,7 @@
         <div class="flex flex-col gap-4 px-6 py-6 sm:px-8" data-gateway-focus-footer>
           <p class="text-sm text-muted-foreground">
             {{if .Gateway.Focus.NotSetUp}}{{.Gateway.Focus.Name}} signs people in through a service that isn't set up on this gateway yet, so it can't be connected here. Ask an administrator to set up sign-in for it.
-            {{else if .Gateway.Focus.ConnectionUnavailable}}{{.Gateway.Focus.Name}} can't be reached right now. Try again shortly.
+            {{else if .Gateway.Focus.ConnectionUnavailable}}{{.Gateway.Focus.Name}}'s sign-in has expired and couldn't be renewed. Try again shortly.
             {{else if .Gateway.Focus.NeedsSignIn}}Connecting is all {{.Gateway.Focus.Name}} needs. As soon as a service above is connected, it works through this gateway, with nothing else to approve.
             {{if .FirstParty}}Go back to your AI client and try again. You can close this tab.{{else}}Go back to all servers to finish giving {{.ClientName}} access.{{end}}{{else}}{{.Gateway.Focus.Name}} needs no sign-in, so it works through this gateway with nothing to connect.{{end}}
           </p>

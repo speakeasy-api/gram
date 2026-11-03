@@ -129,7 +129,7 @@ func (s *Service) memberSignInStatus(ctx context.Context, logger *slog.Logger, g
 		}
 		tokens, err := hostedMemberTokens(gateTokens, member)
 		if err != nil {
-			return memberFailureSignIn(*gate, member, withMemberConnectLink(err, member, gate.memberConnectURL(member)))
+			return memberFailureSignIn(*gate, member, withMemberConnectLink(err, member, gate.memberReconnectURL(member)))
 		}
 		if len(tokens) == 0 {
 			return metamcp.SignInNotConnected, "", nil
@@ -215,7 +215,7 @@ func memberFailureSignIn(gate metaGateContext, member metaMember, err error) (st
 	kind := remotesessions.OutageKindOf(unavailable.session)
 	reconnectURL := ""
 	if kind == remotesessions.RefreshOutageProvider {
-		reconnectURL = gate.memberConnectURL(member)
+		reconnectURL = gate.memberReconnectURL(member)
 	}
 	return metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: connectionOutageMessage(name, kind, remotesessions.RetryAfter(unavailable.session)), ReconnectURL: reconnectURL}
 }
@@ -231,7 +231,7 @@ func connectionOutageMessage(name string, kind remotesessions.RefreshOutageKind,
 		}
 		return possessive + " provider isn't available right now. " + retry
 	case remotesessions.RefreshOutageTunnel:
-		return name + " can't be reached right now. " + retry
+		return name + " can't renew its sign-in right now. " + retry + " If it keeps happening, ask your administrator to check that the server and its sign-in provider are running."
 	case remotesessions.RefreshOutageNone:
 	}
 	return name + " can't renew its sign-in right now. " + retry

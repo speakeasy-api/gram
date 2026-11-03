@@ -149,7 +149,7 @@ func serviceUnavailable(w http.ResponseWriter, _ *http.Request) {
 
 func requireUnavailablePage(t *testing.T, page string) {
 	t.Helper()
-	require.Contains(t, page, "Unavailable · try again later")
+	require.Contains(t, page, "Unavailable · try again shortly")
 	require.Contains(t, page, "> Reconnect </button>")
 	require.Contains(t, page, "0 of 1 connected")
 	require.NotContains(t, page, "Service connected")
@@ -209,7 +209,7 @@ func TestServeConsent_RecordedOutageTellsTheTruthThenReconnectClears(t *testing.
 	list := fx
 	list.server = ""
 	_, listPage, _ := render(t, list)
-	require.Contains(t, listPage, "Unavailable · try again later")
+	require.Contains(t, listPage, "Unavailable · try again shortly")
 	require.Contains(t, listPage, "> Reconnect </button>")
 	require.Contains(t, listPage, "0 of 1")
 	require.NotContains(t, listPage, "data-auto-close")
@@ -234,7 +234,7 @@ func TestServeConsent_TunnelOutageOffersNoReconnect(t *testing.T) {
 	list.server = ""
 	for _, view := range []consentActionFixture{fx, list} {
 		_, page, _ := render(t, view)
-		require.Contains(t, page, "Unavailable · try again later")
+		require.Contains(t, page, "Unavailable · try again shortly")
 		require.NotContains(t, page, "> Reconnect </button>")
 		require.NotContains(t, page, "data-auto-close")
 		require.NotContains(t, strings.ToLower(page), "tunnel is", "the provider behind it may be what failed")
@@ -244,7 +244,7 @@ func TestServeConsent_TunnelOutageOffersNoReconnect(t *testing.T) {
 	require.Contains(t, listPage, "data-gateway-server-page", "Refresh stays one page away")
 
 	_, focusPage, _ := render(t, fx)
-	require.Contains(t, focusPage, "can't be reached right now. Try again shortly.")
+	require.Contains(t, focusPage, "sign-in has expired and couldn't be renewed. Try again shortly.")
 	require.NotContains(t, focusPage, "needs no sign-in")
 }
 
@@ -271,7 +271,7 @@ func TestServeConsent_TunnelDownWithoutRecordOffersNoReconnect(t *testing.T) {
 	require.NoError(t, err)
 
 	_, page, _ := render(t, fx)
-	require.Contains(t, page, "Unavailable · try again later")
+	require.Contains(t, page, "Unavailable · try again shortly")
 	require.NotContains(t, page, "> Reconnect </button>")
 	require.NotContains(t, page, "data-auto-close")
 	require.Zero(t, posts.Load())
@@ -320,7 +320,7 @@ func TestServeConsent_RefusedRefreshAsksToReconnect(t *testing.T) {
 		_, page, _ := render(t, view)
 		require.Contains(t, page, "> Reconnect </button>")
 		require.NotContains(t, page, "Service connected")
-		require.NotContains(t, page, "Unavailable · try again later")
+		require.NotContains(t, page, "Unavailable · try again shortly")
 		require.NotContains(t, page, "data-auto-close")
 	}
 }
@@ -352,7 +352,7 @@ func TestServeConsentAction_ManualRefreshDuringOutageThenSuccessClears(t *testin
 	_, err = pressRefresh(t, fx, clientID)
 	require.NoError(t, err)
 	recovered := visitConsent(t, fx, redirect)
-	require.NotContains(t, recovered, "Unavailable · try again later")
+	require.NotContains(t, recovered, "Unavailable · try again shortly")
 	require.Contains(t, recovered, "1 of 1 connected")
 
 	spoofed := visitConsent(t, fx, "/mcp/"+fx.endpoint.Slug+"/connect?state="+url.QueryEscape(fx.stateID)+"&server="+url.QueryEscape(fx.server)+"&refresh_unavailable="+uuid.NewString())

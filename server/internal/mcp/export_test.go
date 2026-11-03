@@ -201,6 +201,9 @@ func ConnectionRouteFailureForOutage(slug string, outage error, canConnect bool)
 	return connectionRouteFailure(linkedMemberOutage(metaMember{slug: slug}, outage, ""), canConnect)
 }
 
+// RemoteSessionUnavailableError exposes the answer for a required connection in an outage.
+var RemoteSessionUnavailableError = remoteSessionUnavailableError
+
 // SetAuthzEngine swaps the authorization engine, to make it fail.
 func (s *Service) SetAuthzEngine(engine *authz.Engine) {
 	s.authz = engine

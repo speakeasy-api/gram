@@ -1322,11 +1322,12 @@ func clientCredentialMisconfiguredError(err error) *oops.ShareableError {
 // required upstream token endpoint that is temporarily unavailable, so every
 // path that hits one tells the client the same thing and paces its retries.
 func remoteSessionUnavailableError(w http.ResponseWriter, err error) *oops.ShareableError {
-	outage := outageError(w, err, remoteSessionUnavailableMessage)
 	if wait := remotesessions.RetryAfter(err); wait > oops.OutageRetryAfter {
+		outage := outageError(w, err, "This MCP server can't get the credential it needs right now. Retry "+outageWaitWords(wait)+".")
 		w.Header().Set("Retry-After", strconv.Itoa(int(wait.Seconds())))
+		return outage
 	}
-	return outage
+	return outageError(w, err, remoteSessionUnavailableMessage)
 }
 
 // outageError is a 503 with Retry-After: RFC 6749 and RFC 6750 define no outage code here.

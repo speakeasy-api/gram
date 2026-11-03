@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/httpcache"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 )
 
@@ -342,7 +343,7 @@ func (k *KeyResolver) refreshShared(ctx context.Context, source Source) (*Result
 		if err != nil {
 			// A limiter store outage fails closed: rotation waits rather
 			// than the refresh path running unthrottled.
-			return nil, fmt.Errorf("key set refresh rate limiter: %w: %w", ErrKeyStoreUnavailable, err)
+			return nil, fmt.Errorf("key set refresh rate limiter: %w: %w", ErrKeyStoreUnavailable, oops.MarkStoreConnectionLost(err))
 		}
 		if !allowed.Allowed {
 			k.logger.WarnContext(ctx, "jwks forced refresh denied by rate limiter",
@@ -405,7 +406,7 @@ func (k *KeyResolver) refreshShared(ctx context.Context, source Source) (*Result
 func (k *KeyResolver) cachedState(ctx context.Context, source Source) (CacheState, error) {
 	state, err := k.cache.Get(ctx, source.CacheKey())
 	if err != nil {
-		return CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}, LastErrorAt: time.Time{}, LastError: "", Revision: ""}, fmt.Errorf("read key set cache: %w: %w", ErrKeyStoreUnavailable, err)
+		return CacheState{Document: nil, ETag: "", ExpiresAt: time.Time{}, RefreshedAt: time.Time{}, LastErrorAt: time.Time{}, LastError: "", Revision: ""}, fmt.Errorf("read key set cache: %w: %w", ErrKeyStoreUnavailable, oops.MarkStoreConnectionLost(err))
 	}
 	state.ETag = httpcache.SanitizeETag(state.ETag, maxETagLength)
 	return state, nil
