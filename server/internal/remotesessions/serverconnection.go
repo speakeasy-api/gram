@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 )
 
 // ServerConnectionTester checks a stored upstream with one dashboard user's
@@ -35,6 +36,18 @@ func (s *Service) TestServerConnection(ctx context.Context, payload *gen.TestSer
 	}
 	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, id.String(), authCtx.ProjectID.String())); err != nil {
 		return nil, err
+	}
+	// Read durable state so disabling the rollout takes effect on the next test,
+	// independently of the dashboard feature snapshot's cache.
+	if s.productFeatures == nil {
+		return nil, oops.E(oops.CodeNotFound, nil, "Provider setup is unavailable for this organization.")
+	}
+	enabled, err := s.productFeatures.IsFeatureEnabledUncached(ctx, authCtx.ActiveOrganizationID, productfeatures.FeatureProviderSetup)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "Could not check provider setup availability. Try again later.").LogError(ctx, s.logger)
+	}
+	if !enabled {
+		return nil, oops.E(oops.CodeNotFound, nil, "Provider setup is unavailable for this organization.")
 	}
 	target, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: id, ProjectID: *authCtx.ProjectID})
 	if errors.Is(err, pgx.ErrNoRows) {

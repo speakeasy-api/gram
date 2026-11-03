@@ -17,6 +17,7 @@ var ProductFeatureName = Type("ProductFeatureName", String, func() {
 })
 
 var ProductFeatures = ResultType("application/vnd.product-features", func() {
+	Attribute("provider_setup_enabled", Boolean, "Whether the staff-managed provider setup rollout is enabled. Defaults to false when absent.")
 	Attribute("logs_enabled", Boolean, "Whether logging is enabled")
 	Attribute("tool_io_logs_enabled", Boolean, "Whether tool I/O logging is enabled")
 	Attribute("session_capture_enabled", Boolean, "Whether Claude Code session capture is enabled")

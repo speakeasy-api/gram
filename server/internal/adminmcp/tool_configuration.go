@@ -8,11 +8,14 @@ import (
 	"github.com/modelcontextprotocol/go-sdk/mcp"
 
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 )
 
 var errConfigurationUnavailable = errors.New("organization configuration is unavailable")
 
 type OrganizationFeatures struct {
+	// ProviderSetupEnabled reports the staff-managed provider setup rollout.
+	ProviderSetupEnabled                 bool   `json:"provider_setup_enabled"`
 	OrganizationID                       string `json:"organization_id"`
 	LogsEnabled                          bool   `json:"logs_enabled"`
 	ToolIOLogsEnabled                    bool   `json:"tool_io_logs_enabled"`
@@ -64,7 +67,8 @@ func registerConfigurationTools(server *mcp.Server, organizations OrganizationRe
 			return nil, OrganizationFeatures{}, errConfigurationUnavailable
 		}
 		return nil, OrganizationFeatures{
-			OrganizationID: org.ID, LogsEnabled: features.LogsEnabled, ToolIOLogsEnabled: features.ToolIoLogsEnabled,
+			ProviderSetupEnabled: conv.PtrValOr(features.ProviderSetupEnabled, false),
+			OrganizationID:       org.ID, LogsEnabled: features.LogsEnabled, ToolIOLogsEnabled: features.ToolIoLogsEnabled,
 			SessionCaptureEnabled: features.SessionCaptureEnabled, AuthzChallengeLoggingEnabled: features.AuthzChallengeLoggingEnabled,
 			SSOEnabled: features.SsoEnabled, SCIMEnabled: features.ScimEnabled, HooksBrowserLoginEnabled: features.HooksBrowserLoginEnabled,
 			HooksFailOpenEnabled: features.HooksFailOpenEnabled, CustomModelKeysEnabled: features.CustomModelKeysEnabled,

@@ -22,6 +22,7 @@ type Endpoints struct {
 	Logout                                  goa.Endpoint
 	GetSession                              goa.Endpoint
 	GetOrganizationFeatures                 goa.Endpoint
+	SetOrganizationProviderSetup            goa.Endpoint
 	SetOrganizationFeature                  goa.Endpoint
 	GetOrganizationChatAnalysisSettings     goa.Endpoint
 	SetOrganizationChatAnalysisSettings     goa.Endpoint
@@ -151,6 +152,7 @@ func NewEndpoints(s Service) *Endpoints {
 		Logout:                                  NewLogoutEndpoint(s),
 		GetSession:                              NewGetSessionEndpoint(s, a.APIKeyAuth),
 		GetOrganizationFeatures:                 NewGetOrganizationFeaturesEndpoint(s, a.APIKeyAuth),
+		SetOrganizationProviderSetup:            NewSetOrganizationProviderSetupEndpoint(s, a.APIKeyAuth),
 		SetOrganizationFeature:                  NewSetOrganizationFeatureEndpoint(s, a.APIKeyAuth),
 		GetOrganizationChatAnalysisSettings:     NewGetOrganizationChatAnalysisSettingsEndpoint(s, a.APIKeyAuth),
 		SetOrganizationChatAnalysisSettings:     NewSetOrganizationChatAnalysisSettingsEndpoint(s, a.APIKeyAuth),
@@ -260,6 +262,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.Logout = m(e.Logout)
 	e.GetSession = m(e.GetSession)
 	e.GetOrganizationFeatures = m(e.GetOrganizationFeatures)
+	e.SetOrganizationProviderSetup = m(e.SetOrganizationProviderSetup)
 	e.SetOrganizationFeature = m(e.SetOrganizationFeature)
 	e.GetOrganizationChatAnalysisSettings = m(e.GetOrganizationChatAnalysisSettings)
 	e.SetOrganizationChatAnalysisSettings = m(e.SetOrganizationChatAnalysisSettings)
@@ -431,6 +434,34 @@ func NewGetOrganizationFeaturesEndpoint(s Service, authAPIKeyFn security.AuthAPI
 			return nil, err
 		}
 		res, err := s.GetOrganizationFeatures(ctx, p)
+		if err != nil {
+			return nil, err
+		}
+		vres := NewViewedProductFeatures(res, "default")
+		return vres, nil
+	}
+}
+
+// NewSetOrganizationProviderSetupEndpoint returns an endpoint function that
+// calls the method "setOrganizationProviderSetup" of service "admin".
+func NewSetOrganizationProviderSetupEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetOrganizationProviderSetupPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "admin_auth",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.AdminSessionToken != nil {
+			key = *p.AdminSessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		res, err := s.SetOrganizationProviderSetup(ctx, p)
 		if err != nil {
 			return nil, err
 		}

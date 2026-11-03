@@ -36,6 +36,10 @@ type Client struct {
 	// getOrganizationFeatures endpoint.
 	GetOrganizationFeaturesDoer goahttp.Doer
 
+	// SetOrganizationProviderSetup Doer is the HTTP client used to make requests
+	// to the setOrganizationProviderSetup endpoint.
+	SetOrganizationProviderSetupDoer goahttp.Doer
+
 	// SetOrganizationFeature Doer is the HTTP client used to make requests to the
 	// setOrganizationFeature endpoint.
 	SetOrganizationFeatureDoer goahttp.Doer
@@ -457,6 +461,7 @@ func NewClient(
 		LogoutDoer:                                  doer,
 		GetSessionDoer:                              doer,
 		GetOrganizationFeaturesDoer:                 doer,
+		SetOrganizationProviderSetupDoer:            doer,
 		SetOrganizationFeatureDoer:                  doer,
 		GetOrganizationChatAnalysisSettingsDoer:     doer,
 		SetOrganizationChatAnalysisSettingsDoer:     doer,
@@ -679,6 +684,30 @@ func (c *Client) GetOrganizationFeatures() goa.Endpoint {
 		resp, err := c.GetOrganizationFeaturesDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("admin", "getOrganizationFeatures", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetOrganizationProviderSetup returns an endpoint that makes HTTP requests to
+// the admin service setOrganizationProviderSetup server.
+func (c *Client) SetOrganizationProviderSetup() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetOrganizationProviderSetupRequest(c.encoder)
+		decodeResponse = DecodeSetOrganizationProviderSetupResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetOrganizationProviderSetupRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetOrganizationProviderSetupDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("admin", "setOrganizationProviderSetup", err)
 		}
 		return decodeResponse(resp)
 	}

@@ -51,6 +51,8 @@ type Service interface {
 	// the signed-in user's saved authorization. Never executes tools. A provider
 	// tab returning is not evidence of authorization. Requires an ordinary
 	// dashboard session and mcp:connect on the exact server; API keys are refused.
+	// Requires the staff-managed provider_setup organization feature, disabled by
+	// default; unavailable organizations receive HTTP 404.
 	TestServerConnection(context.Context, *TestServerConnectionPayload) (res *ServerConnectionTestResult, err error)
 	// Atomically configure identity for a Remote MCP-backed MCP server. The
 	// complete plan selects or creates a project Remote Identity Provider and
