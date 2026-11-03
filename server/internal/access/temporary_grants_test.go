@@ -619,3 +619,30 @@ func TestTemporaryGrant_DoesNotStandInForSystemRoleDefaults(t *testing.T) {
 	require.NoError(t, authz.SeedSystemRoleGrantsTx(ctx, ti.conn, orgID))
 	require.Greater(t, len(listPrincipalGrants(t, ctx, ti.conn, orgID, role)), 1, "a role holding only a temporary grant still gets its default grants")
 }
+
+func TestTemporaryGrant_EveryonePrincipal(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+	seedTemporaryGrantRecipient(t, ctx, ti.conn, orgID)
+	everyone := authz.AllUsersPrincipal()
+
+	grant := createTemporaryGrantFor(t, ctx, ti, everyone.String(), authz.ScopeChatRead, nil)
+	require.Equal(t, everyone.String(), grant.PrincipalUrn)
+
+	allowed, err := authz.GrantsAuthorize(loadMemberGrants(t, ctx, ti.conn, orgID, temporaryGrantRecipientID), chatReadCheck(orgID))
+	require.NoError(t, err)
+	require.True(t, allowed, "every member gets the access while the grant is active")
+
+	listed, err := ti.service.ListTemporaryGrants(ctx, &gen.ListTemporaryGrantsPayload{SessionToken: nil, PrincipalUrn: everyone.String(), IncludeExpired: false})
+	require.NoError(t, err)
+	require.Len(t, listed.Grants, 1)
+
+	expireTemporaryGrant(t, ctx, ti.conn, grant.ID)
+	allowed, err = authz.GrantsAuthorize(loadMemberGrants(t, ctx, ti.conn, orgID, temporaryGrantRecipientID), chatReadCheck(orgID))
+	require.NoError(t, err)
+	require.False(t, allowed, "members lose the access at the deadline")
+}
