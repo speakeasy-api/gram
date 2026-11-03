@@ -24,7 +24,7 @@ import (
 	analysisrepo "github.com/speakeasy-api/gram/server/internal/chat/analysis/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chatredact"
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/memorygate"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
@@ -45,11 +45,11 @@ type outcome struct {
 }
 
 const (
-	outcomeWritten  = "written"
-	outcomeEmpty    = "empty"
-	outcomeSkipped  = "skipped"
-	outcomeFlagOff  = "flag_off"
-	outcomeNotFound = "not_found"
+	outcomeWritten   = "written"
+	outcomeEmpty     = "empty"
+	outcomeSkipped   = "skipped"
+	outcomeMemoryOff = "memory_off"
+	outcomeNotFound  = "not_found"
 )
 
 // Judge writes a chat's masked summary once the chat has gone quiet, and again
@@ -57,7 +57,6 @@ const (
 type Judge struct {
 	logger    *slog.Logger
 	db        *pgxpool.Pool
-	features  feature.Provider
 	summaries *chat.SummaryGenerator
 	client    openrouter.CompletionClient
 	limiter   *ratelimit.Limiter
@@ -72,12 +71,11 @@ var (
 
 // NewJudge returns a summary judge. It needs a completion client; with none the
 // roster should leave it out.
-func NewJudge(logger *slog.Logger, db *pgxpool.Pool, features feature.Provider, client openrouter.CompletionClient, limiter *ratelimit.Limiter) *Judge {
+func NewJudge(logger *slog.Logger, db *pgxpool.Pool, client openrouter.CompletionClient, limiter *ratelimit.Limiter) *Judge {
 	summaries := chat.NewSummaryGenerator(db, client, chatredact.New())
 	return &Judge{
 		logger:    logger.With(attr.SlogComponent("chat-summary-judge")),
 		db:        db,
-		features:  features,
 		summaries: summaries.WithUsage(billing.ModelUsageSourceChatAnalysis, billing.ModelUsageSourceChatAnalysis),
 		client:    client,
 		limiter:   limiter,
@@ -100,18 +98,19 @@ func (j *Judge) Judge(ctx context.Context, in analysis.JudgeInput) (analysis.Jud
 		return analysis.JudgeResult{}, fmt.Errorf("parse chat summary project id: %w", err)
 	}
 
-	// The settings row is the budget; the org-memory flag is the rollout gate.
-	// An organization with the row but not the flag spends nothing.
-	// A failed flag lookup is retried rather than scored as flag-off: a scored
-	// chat only comes back once it has new messages.
+	// The settings row is the budget; the staff admin Business Memory
+	// Extraction toggle is the Organizational Memory gate. An organization
+	// with a summary row of its own but the toggle off spends nothing. A
+	// failed lookup is retried rather than scored as off: a scored chat only
+	// comes back once it has new messages.
 	if j.summaries == nil {
-		return j.finish(ctx, in, projectID, outcomeFlagOff, nil)
+		return j.finish(ctx, in, projectID, outcomeMemoryOff, nil)
 	}
-	switch on, err := chat.OrgMemoryFlag(ctx, j.db, j.features, in.OrgID); {
+	switch on, err := memorygate.Enabled(ctx, j.db, in.OrgID); {
 	case err != nil:
-		return analysis.JudgeResult{}, fmt.Errorf("read org memory flag: %w: %w", analysis.ErrRetryable, err)
+		return analysis.JudgeResult{}, fmt.Errorf("read organizational memory setting: %w: %w", analysis.ErrRetryable, err)
 	case !on:
-		return j.finish(ctx, in, projectID, outcomeFlagOff, nil)
+		return j.finish(ctx, in, projectID, outcomeMemoryOff, nil)
 	}
 
 	eligible, err := repo.New(j.db).GetChatMemorySummaryEligibility(ctx, repo.GetChatMemorySummaryEligibilityParams{ID: in.ChatID, ProjectID: projectID})

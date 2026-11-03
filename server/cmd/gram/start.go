@@ -1294,7 +1294,7 @@ func newStartCommand() *cli.Command {
 				WithTurnStream(turnStream).
 				WithRiskFindings(chatRiskFindings).
 				WithStreamRotation(meterProvider, c.Duration("stream-max-age")).
-				WithMaskedSummaries(chat.NewSummaryGenerator(db, chatClient, chatredact.New()), featureFlags)
+				WithMaskedSummaries(chat.NewSummaryGenerator(db, chatClient, chatredact.New()))
 			assistantsCore := assistants.NewServiceCore(logger, tracerProvider, meterProvider, db, guardianPolicy, encryptionClient, assistantRuntime, slackClient, assistantTokenManager, serverURL, telemLogger, contextWindowResolver, auditLogger, assistantIdentities, authzEngine)
 			assistantsCore.SetWakeCanceller(triggerApp)
 			assistantsCore.SetDashboardIngestor(triggerApp)
