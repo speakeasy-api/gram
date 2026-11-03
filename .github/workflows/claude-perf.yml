@@ -21,10 +21,9 @@ on:
 
 permissions: {}
 
-# Concurrency is per job, because only a job's group can read the gate's
-# result. GitHub keeps only the newest pending job in a group, so the
-# per-pull-request groups of analyse and post take only requests the gate
-# approved, and no other comment can replace a queued review.
+# Concurrency is per job, so that only the jobs that run after the gate
+# approves enter a pull request's queue: a workflow-level group is joined
+# before any job can check the commenter.
 jobs:
   gate:
     name: gate
@@ -42,6 +41,9 @@ jobs:
       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 5
+    # A group of its own, so no comment waits on or replaces another here.
+    # Every job has one because the workflow has none (zizmor's
+    # concurrency-limits).
     concurrency:
       group: ${{ github.workflow }}-gate-${{ github.run_id }}
       cancel-in-progress: false
@@ -53,9 +55,11 @@ jobs:
       base_sha: ${{ steps.gate.outputs.base_sha }}
       head_sha: ${{ steps.gate.outputs.head_sha }}
     steps:
-      # Before anything touches Speakeasy: device-agent-action checks no
-      # commenter, and on issue_comment it cannot tell a fork pull request
-      # (github.event.pull_request is empty), while the OIDC token is available.
+      # Before anything touches Speakeasy. On issue_comment a job gets an
+      # OIDC token even for a fork's pull request, and device-agent-action
+      # checks no commenter and cannot tell a fork there
+      # (github.event.pull_request is empty). So the checks run here, before
+      # analyse is queued or asks the environment's reviewers.
       - name: Refuse other comments, non-writers, forks and closed pull requests
         id: gate
         env:
@@ -84,7 +88,6 @@ jobs:
             exit 1
           fi
           [ "$state" = OPEN ] || { echo "::error::Pull request #$PR is $state."; exit 1; }
-          # analyse reviews these commits, even if the head moves meanwhile.
           printf 'pr=%s\nbase_sha=%s\nhead_sha=%s\n' "$PR" "$base" "$head" >>"$GITHUB_OUTPUT"
 
   analyse:
@@ -95,22 +98,27 @@ jobs:
     environment: speakeasy-perf # the only subject the Speakeasy agent's rule admits
     timeout-minutes: 20
     # One review per pull request at a time; a newer request waits for the
-    # current one. Only requests the gate approved get here, so only they
-    # enter the queue or ask the environment's reviewers for approval.
+    # current one. GitHub keeps only the newest waiting job in a group, so the
+    # group is the pull request's only once the gate approved: no other
+    # comment can replace a queued review.
     concurrency:
-      group: ${{ github.workflow }}-analyse-${{ needs.gate.outputs.approved == 'true' && needs.gate.outputs.pr || github.run_id }}
+      group: >-
+        ${{ github.workflow }}-analyse-${{ needs.gate.outputs.approved == 'true' &&
+        needs.gate.outputs.pr || github.run_id }}
       cancel-in-progress: false
     permissions:
       contents: read # checks out main and reads the diff
       pull-requests: read # reads the pull request
       id-token: write # Speakeasy and the Claude API each exchange the job's OIDC token
     outputs:
+      started: ${{ steps.fetch.outputs.started }}
       report: ${{ steps.claude.outputs.structured_output }}
     steps:
       # The diff between the commits the gate read, not the head now: a push
       # after the gate cannot change what is reviewed or which commit the
       # comment names.
       - name: Fetch the pull request at the gate's commits
+        id: fetch
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
@@ -119,6 +127,9 @@ jobs:
           HEAD_SHA: ${{ needs.gate.outputs.head_sha }}
         run: |
           set -euo pipefail
+          # Tells post that this review ran: one that a newer request
+          # replaced in the queue never starts.
+          echo "started=true" >>"$GITHUB_OUTPUT"
           mkdir -p "$RUNNER_TEMP/pr"
           gh api -H "Accept: application/vnd.github.diff" "repos/$REPO/compare/$BASE_SHA...$HEAD_SHA" \
             >"$RUNNER_TEMP/pr/diff.patch"
@@ -215,16 +226,19 @@ jobs:
     name: post
     needs: [gate, analyse]
     # Also after a failed review, so that a "no verdict" notice replaces an
-    # earlier verdict. A request the gate refused, or one that never reached
-    # it, posts nothing.
-    if: always() && needs.gate.outputs.approved == 'true'
+    # earlier verdict. A request the gate refused posts nothing, and so does
+    # one that a newer request replaced in the queue before it started; the
+    # newer one posts.
+    if: always() && needs.gate.outputs.approved == 'true' && needs.analyse.outputs.started == 'true'
     runs-on: blacksmith-2vcpu-ubuntu-2404
     timeout-minutes: 5
     # One comment update per pull request at a time, in the order the reviews
     # finished: two runs cannot both create the comment, or post an older
     # review over a newer one.
     concurrency:
-      group: ${{ github.workflow }}-post-${{ needs.gate.outputs.approved == 'true' && needs.gate.outputs.pr || github.run_id }}
+      group: >-
+        ${{ github.workflow }}-post-${{ needs.gate.outputs.approved == 'true' &&
+        needs.gate.outputs.pr || github.run_id }}
       cancel-in-progress: false
     permissions:
       contents: read # checks out the comment renderer
@@ -240,7 +254,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          PR: ${{ github.event.issue.number }}
+          PR: ${{ needs.gate.outputs.pr }}
           MARKER: "<!-- speakeasy-perf-review -->"
           HEAD_SHA: ${{ needs.gate.outputs.head_sha }}
           REPORT: ${{ needs.analyse.outputs.report }}
