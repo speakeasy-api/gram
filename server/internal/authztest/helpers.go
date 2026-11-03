@@ -44,3 +44,15 @@ func ChallengeLoggingAlwaysDisabled(context.Context, string) (bool, error) {
 func ChallengeLoggingAlwaysEnabled(context.Context, string) (bool, error) {
 	return true, nil
 }
+
+// NewClient builds the typed authorization client over engine with the
+// default registry, failing the test if the registry does not compile.
+func NewClient(t *testing.T, engine *authz.Engine) *authz.Client {
+	t.Helper()
+
+	client, err := authz.NewDefaultClient(engine)
+	if err != nil {
+		t.Fatalf("create authorization client: %v", err)
+	}
+	return client
+}

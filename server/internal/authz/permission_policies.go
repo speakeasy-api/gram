@@ -79,6 +79,10 @@ type PolicyDecision struct {
 	// Option is the index of the alternative that allowed, or of the option
 	// whose block vetoed the request; -1 for a single permission.
 	Option int
+
+	// Grant is a grant that satisfied the permission in the first policy,
+	// for diagnostics. It is nil when denied or when only facts allowed.
+	Grant *Grant
 }
 
 // ErrMissingRepresentedPolicy reports an auth-client permission for a
@@ -150,6 +154,7 @@ func (e *RegistryEvaluator) decide(set PolicySet, req PermissionRequest, p evalu
 		return PolicyDecision{}, err
 	}
 	var firstErr error
+	var representative *Grant
 	for _, policy := range policies {
 		out := e.run(policy.Grants, req, p)
 		switch {
@@ -158,13 +163,15 @@ func (e *RegistryEvaluator) decide(set PolicySet, req PermissionRequest, p evalu
 				firstErr = fmt.Errorf("policy %s: %w", policy.Principal, out.err)
 			}
 		case !out.allowed:
-			return PolicyDecision{Allowed: false, Reason: out.reason, Policy: policy.Principal, Option: -1}, nil
+			return PolicyDecision{Allowed: false, Reason: out.reason, Policy: policy.Principal, Option: -1, Grant: nil}, nil
+		case representative == nil:
+			representative = out.grant
 		}
 	}
 	if firstErr != nil {
 		return PolicyDecision{}, fmt.Errorf("evaluate %s.%s: %w", req.Permission.Type, req.Permission.Permission, firstErr)
 	}
-	return PolicyDecision{Allowed: true, Reason: PermissionReasonMatched, Policy: "", Option: -1}, nil
+	return PolicyDecision{Allowed: true, Reason: PermissionReasonMatched, Policy: "", Option: -1, Grant: representative}, nil
 }
 
 // DecideAlternatives answers named alternatives: options lists one request per
@@ -220,7 +227,7 @@ func (e *RegistryEvaluator) DecideAlternatives(set PolicySet, ref schema.Permiss
 						vetoErr = fmt.Errorf("veto %s.%s: %w", option.Permission.Type, option.Permission.Permission, restored.err)
 					}
 				case stands:
-					return PolicyDecision{Allowed: false, Reason: PermissionReasonExcluded, Policy: policy.Principal, Option: i}, nil
+					return PolicyDecision{Allowed: false, Reason: PermissionReasonExcluded, Policy: policy.Principal, Option: i, Grant: nil}, nil
 				}
 			}
 		}
@@ -230,7 +237,7 @@ func (e *RegistryEvaluator) DecideAlternatives(set PolicySet, ref schema.Permiss
 	}
 
 	var firstErr error
-	denied := PolicyDecision{Allowed: false, Reason: PermissionReasonNoGrant, Policy: "", Option: -1}
+	denied := PolicyDecision{Allowed: false, Reason: PermissionReasonNoGrant, Policy: "", Option: -1, Grant: nil}
 	for i, option := range options {
 		decision, err := e.decide(set, option, prepared[i])
 		switch {
