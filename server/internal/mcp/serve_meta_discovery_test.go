@@ -576,8 +576,8 @@ func TestGatewayDirectListsReachableMembersWhenOneIsDown(t *testing.T) {
 	slug := "gateway-" + uuid.NewString()
 	gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
 	member := seedHostedMetaMember(t, ctx, ti, gateway.ID, "Hosted tools", 1, mcpservers.VisibilityPublic, "alpha")
-	// Keep the port reserved: closing it lets another parallel test bind the
-	// same address and accidentally turn the unavailable member into a live one.
+	// Keep a deterministic unavailable upstream: closing the port lets another
+	// parallel test bind the same address and turn the member into a live one.
 	down := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
 		w.WriteHeader(http.StatusServiceUnavailable)
 	}))
@@ -592,7 +592,7 @@ func TestGatewayDirectListsReachableMembersWhenOneIsDown(t *testing.T) {
 	require.Contains(t, w.Body.String(), member.slug+"--alpha")
 	require.NotContains(t, w.Body.String(), downSlug+"--")
 	require.NotContains(t, w.Body.String(), `"error"`)
-	requireOmittedMemberLog(t, omittedMemberLogs(t, *authCtx.ProjectID, gateway.ID, 1)[0], http.StatusBadGateway, downSlug)
+	requireOmittedMemberLog(t, omittedMemberLogs(t, *authCtx.ProjectID, gateway.ID, 1)[0], http.StatusServiceUnavailable, downSlug)
 }
 
 func TestGatewayDirectDescribesMembersConcurrently(t *testing.T) {
