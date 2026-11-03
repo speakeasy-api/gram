@@ -338,7 +338,8 @@ func decodeDashboardDetails(body []byte) (*serverDetailsResult, error) {
 			Variables: toExternalMCPRemoteVariables(r.Variables),
 		})
 	}
-	// Catalog records do not publish tool declarations. Live discovery is separate.
+	// Tool declarations carried in _meta pass through as opaque metadata and are
+	// not interpreted. Live discovery is separate.
 	return &serverDetailsResult{
 		Title: enrichment.Server.Title, IconURL: icon, Meta: enrichment.Meta,
 		Name:        serverResp.Server.Name,

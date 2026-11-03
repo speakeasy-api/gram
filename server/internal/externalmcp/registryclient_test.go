@@ -844,11 +844,6 @@ func (c *registryTestCache) DeleteByPrefix(_ context.Context, prefix string) err
 	return nil
 }
 
-// TestListServers_ComputesSupportsDcr exercises the raw PulseMCP wire format so
-// the JSON tags for detail.authorizationServerMetadata.registration_endpoint
-// stay faithful to the upstream schema. A non-empty registration endpoint on
-// any remote's OAuth auth option marks the server as DCR-capable; OAuth without
-// a registration endpoint and API-key servers are not.
 func TestListServers_PreservesRepositoryAndPackages(t *testing.T) {
 	t.Parallel()
 	ctx := context.Background()
