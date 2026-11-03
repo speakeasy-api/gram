@@ -1,0 +1,38 @@
+.speakeasy/out.openapi.yaml
+  h_2620cc60cfd1e9 483,3044,3048,3050-3051,3053,3700,93779-93781,93792,117395,117398
+client/dashboard/src/sdk/.speakeasy/gen.lock
+  h_2620cc60cfd1e9 5857,5860,11212,12236,12647
+client/dashboard/src/sdk/src/funcs/accessCreateTemporaryGrant.ts
+  h_2620cc60cfd1e9 45
+client/dashboard/src/sdk/src/funcs/accessListTemporaryGrants.ts
+  h_2620cc60cfd1e9 45,49,76,98,110-111,116
+client/dashboard/src/sdk/src/funcs/accessRevokeTemporaryGrant.ts
+  h_2620cc60cfd1e9 45
+client/dashboard/src/sdk/src/models/components/createtemporarygrantform.ts
+  h_2620cc60cfd1e9 18-21,39,52,60
+client/dashboard/src/sdk/src/models/components/temporarygrant.ts
+  h_2620cc60cfd1e9 41,45
+client/dashboard/src/sdk/src/models/operations/listtemporarygrants.ts
+  h_2620cc60cfd1e9 14,16,59,70,76
+client/dashboard/src/sdk/src/react-query/createTemporaryGrant.ts
+  h_2620cc60cfd1e9 57
+client/dashboard/src/sdk/src/react-query/revokeTemporaryGrant.ts
+  h_2620cc60cfd1e9 57
+client/dashboard/src/sdk/src/react-query/temporaryGrants.core.ts
+  h_2620cc60cfd1e9 25,41,50-52,80
+client/dashboard/src/sdk/src/react-query/temporaryGrants.ts
+  h_2620cc60cfd1e9 62,65,88,91,114,130
+client/dashboard/src/sdk/src/sdk/access.ts
+  h_2620cc60cfd1e9 298,773,776,906
+---
+{
+  "schema_version": "authorship/3.0.0",
+  "git_ai_version": "1.7.5",
+  "base_commit_sha": "e6092c53d0eb0027ef26a9312e325c57f546d860",
+  "prompts": {},
+  "humans": {
+    "h_2620cc60cfd1e9": {
+      "author": "tgmendes <tiago@speakeasy.com>"
+    }
+  }
+}
