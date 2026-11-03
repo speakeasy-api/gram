@@ -239,8 +239,8 @@ func (r *Report) Markdown() string {
 			fmt.Fprintf(&b, "%d memory-writing calls reported no cost, so those costs are a lower bound.\n\n", unpriced)
 		}
 	}
-	b.WriteString("| Model | Arm | Accuracy (mean, range) | Point | Timeline | Reversal | Negative | Isolation | Valid citations | Leaks | Isolation violations | Not found on negatives | Tool tokens/question | Misses (retrieval/reasoning/error) | Cost | Latency mean/p95 |\n")
-	b.WriteString("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
+	b.WriteString("| Model | Arm | Accuracy (mean, range) | Hard set | Point | Timeline | Reversal | Paraphrase | Synthesis | Negative | Isolation | Valid citations | Leaks | Isolation violations | Not found on negatives | Tool tokens/question | Misses (retrieval/reasoning/error) | Cost | Latency mean/p95 |\n")
+	b.WriteString("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
 	for _, s := range r.Scores {
 		accuracy := "n/a"
 		if len(s.AccuracyByRun) > 0 {
@@ -253,13 +253,16 @@ func (r *Report) Markdown() string {
 		if s.Answerable > 0 && s.HasTools {
 			citations = fmt.Sprintf("%.0f%%", 100*float64(s.ValidCited)/float64(s.Answerable))
 		}
-		fmt.Fprintf(&b, "| %s | %s | %s | %s | %s | %s | %s | %s | %s | %d %v | %d %v | %d/%d | %d | %d/%d/%d | $%.2f | %.1fs/%.1fs |\n",
-			s.Model, s.Arm, accuracy,
-			kind(memoryeval.QuestionPointLookup), kind(memoryeval.QuestionTimeline), kind(memoryeval.QuestionReversal), kind(memoryeval.QuestionNegative), kind(memoryeval.QuestionIsolation),
+		hard := s.Hard()
+		fmt.Fprintf(&b, "| %s | %s | %s | %.0f%% | %s | %s | %s | %s | %s | %s | %s | %s | %d %v | %d %v | %d/%d | %d | %d/%d/%d | $%.2f | %.1fs/%.1fs |\n",
+			s.Model, s.Arm, accuracy, 100*hard.rate(),
+			kind(memoryeval.QuestionPointLookup), kind(memoryeval.QuestionTimeline), kind(memoryeval.QuestionReversal),
+			kind(memoryeval.QuestionParaphrase), kind(memoryeval.QuestionSynthesis), kind(memoryeval.QuestionNegative), kind(memoryeval.QuestionIsolation),
 			citations, len(s.Leaks), s.Leaks, len(s.IsolationViolations), s.IsolationViolations,
 			s.NotFound, s.Negatives, s.ToolTokensPerQuestion, s.RetrievalMisses, s.ReasoningMisses, s.Errors,
 			s.CostUSD, float64(s.LatencyMeanMS)/1000, float64(s.LatencyP95MS)/1000)
 	}
-	b.WriteString("\nCounts in the kind columns are summed across runs. Valid citations is the share of answerable questions whose answer cites at least one chat and only chats that contain the answer; memo and digest citations are not checked against the corpus. Runs where nothing was graded are left out of accuracy. Cost is what the answering model reported; it is $0.00 when the provider reports none.\n")
+	b.WriteString("\nCounts in the kind columns are summed across runs. Hard set is accuracy on the paraphrase and synthesis questions, which share no keywords with their sources. Valid citations is the share of answerable questions whose answer cites at least one chat and only chats that contain the answer; memo and digest citations are not checked against the corpus. Runs where nothing was graded are left out of accuracy. Cost is what the answering model reported; it is $0.00 when the provider reports none.\n")
+	b.WriteString(r.gatesMarkdown())
 	return b.String()
 }

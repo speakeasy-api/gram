@@ -139,10 +139,10 @@ func TestJudgedEvalHarnessScoresScriptedAnswers(t *testing.T) {
 				search = s
 			}
 		}
-		require.InDelta(t, 10.0/40, none.AccuracyByRun[0], 1e-9, "no memory answers Not found, which is right for the 10 negative and isolation questions")
-		require.InDelta(t, 1.0/40, search.AccuracyByRun[0], 1e-9, "the scripted search arm only answers the pooler question")
-		require.Equal(t, 30, search.Answerable)
-		require.Equal(t, 30, search.CitedAnswers)
+		require.InDelta(t, 10.0/55, none.AccuracyByRun[0], 1e-9, "no memory answers Not found, which is right for the 10 negative and isolation questions")
+		require.InDelta(t, 1.0/55, search.AccuracyByRun[0], 1e-9, "the scripted search arm only answers the pooler question")
+		require.Equal(t, 45, search.Answerable)
+		require.Equal(t, 45, search.CitedAnswers)
 		require.Equal(t, 1, search.ValidCited, "the reversal chat supports only the pooler question")
 		require.Empty(t, search.Leaks)
 		require.Empty(t, search.IsolationViolations)
@@ -150,6 +150,6 @@ func TestJudgedEvalHarnessScoresScriptedAnswers(t *testing.T) {
 		require.Zero(t, none.ToolTokensPerQuestion)
 		require.True(t, search.HasTools)
 		require.False(t, none.HasTools)
-		require.Equal(t, 40, search.Answers)
+		require.Equal(t, 55, search.Answers)
 	}
 }

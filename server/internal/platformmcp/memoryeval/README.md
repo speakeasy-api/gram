@@ -6,9 +6,12 @@ Synthetic corpus, questions and checks for team chat memory in the Platform MCP.
   (25 decisions, 8 reversals, 22 timeline chats across 8 timelines, 10
   planted secrets, 3 private sessions) plus a 12-chat second project. Chat
   IDs are derived from chat keys.
-- **Questions**: 40, each with an answer key. Answerable questions also name
+- **Questions**: 55, each with an answer key. Answerable questions also name
   their source chats and the evidence terms a source must contain; the 5
-  negative and 5 isolation questions expect "Not found" and have neither.
+  negative and 5 isolation questions expect "Not found" and have neither. The
+  hard set (10 paraphrases and 5 syntheses across several chats) shares no
+  keywords with its sources, which `TestHardQuestionsShareNoKeywordsWithSources`
+  enforces, so keyword search on the question text alone cannot answer it.
 - **Mechanical checks** (CI, every PR): `TestSearchChatsBaselineMechanical`
   loads the corpus into Postgres and probes the `search_chats` baseline. It
   asserts no credential leaks, no other-project results and full retrieval of
@@ -41,8 +44,13 @@ inform, rather than settle, whether team memory needs embeddings. The judged rep
 and E, querying with evidence words and with each question's own text, so
 retrieval can be compared without the answering agent.
 
-The flag turns on when arm D reaches at least 80% accuracy and beats arm B by
-15 points, cites valid sources at least 95% of the time, leaks no secret,
-returns nothing from another project or a private session, answers at least
-4 of 5 negative questions "Not found", and keeps its recall block under 8k
-tokens.
+The flag turns on when arm D meets every gate:
+
+- **Recall**: at least 15 points above arm B on the hard set.
+- **Overall accuracy**: at least 80%, and no lower than arm B.
+- **Privacy**: no leaked secret, and nothing from another project or a
+  private session.
+- **Citations**: valid sources at least 95% of the time.
+- **Negatives**: at least 4 of 5 answered "Not found".
+- **Tokens**: recall block under 8k tokens, and tool tokens per question at
+  most twice arm B's.
