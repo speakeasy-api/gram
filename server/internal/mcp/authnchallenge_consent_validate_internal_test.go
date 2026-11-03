@@ -14,7 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // The verdict never quotes the member: a rejection on either leg wins, then the deadline, then the last status seen.
@@ -118,8 +122,24 @@ func TestUnservedCredentialReason(t *testing.T) {
 	t.Parallel()
 
 	require.Contains(t, unservedCredentialReason(0, false), "no project")
-	require.Contains(t, unservedCredentialReason(1, true), "different client")
-	require.Empty(t, unservedCredentialReason(1, false))
+	require.Contains(t, unservedCredentialReason(1, false), "not linked")
+	require.Empty(t, unservedCredentialReason(1, true))
+}
+
+// An organization gateway scoped to a project reaches no other project's client.
+func TestProbeRemoteSession_ClientOnNoProjectCannotBeChecked(t *testing.T) {
+	t.Parallel()
+
+	service := &Service{}
+	subject := urn.NewUserSubject("user_1")
+	endpoint := &ResolvedMcpEndpoint{RouteBase: mcproute.OrganizationGateway, ProjectID: uuid.New()}
+	client := remotesessions.Client{ProjectID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
+
+	err := service.probeRemoteSession(t.Context(), testenv.NewLogger(t), endpoint, AuthnChallengeState{Subject: &subject}, client, nil, remotesessionmetrics.ValidationTriggerVerify)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeBadRequest, shareable.Code)
+	require.ErrorContains(t, err, "This connection can't be checked here.")
 }
 
 func TestDescribeNoUsableCredential(t *testing.T) {

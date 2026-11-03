@@ -402,11 +402,7 @@ func consentCardsApprovable(cards []remoteSessionCard) bool {
 // the grant's typed pick. The registration it names replaces the card-derived
 // pick in upstreamPicks; a headers-only client removes it. A pick that is no
 // longer usable, or a missing one where a choice is required, is
-// errConsentConfigurationChanged. Where the page offers no typed choice the
-// cards decide, and failing consentCardsApprovable is
-// errConsentNoUsableConnection. A gateway is judged by its inventory instead.
-// So is an agent by CheckAccessTokens: an attached connection is stored under
-// its owner, so the agent's cards read as not connected while it still works.
+// errConsentConfigurationChanged. With no typed choice, cards decide a person's direct-server approval.
 func (s *Service) consentDirectAuthClientPick(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, posted string, upstreamPicks map[uuid.UUID]uuid.UUID, cards []remoteSessionCard) (map[uuid.UUID]uuid.UUID, error) {
 	picked := uuid.Nil
 	if posted != "" {
@@ -421,6 +417,7 @@ func (s *Service) consentDirectAuthClientPick(ctx context.Context, endpoint *Res
 		return nil, err
 	}
 	if auth == nil {
+		// An agent's attached connection is stored under its owner, so its own cards can't decide.
 		agent := challengeState.Subject != nil && challengeState.Subject.Kind == urn.SessionSubjectKindAgent
 		if !endpoint.MetaMcpServerID.Valid && !agent && !consentCardsApprovable(cards) {
 			return nil, errConsentNoUsableConnection

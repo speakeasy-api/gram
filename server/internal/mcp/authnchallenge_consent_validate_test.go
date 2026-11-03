@@ -1195,7 +1195,7 @@ func TestServeConsentAction_ValidateRefusesExpiredGrant(t *testing.T) {
 	var oopsErr *oops.ShareableError
 	require.ErrorAs(t, err, &oopsErr)
 	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
-	require.ErrorContains(t, err, "Connect this service before verifying it.")
+	require.ErrorContains(t, err, "Reconnect this service.")
 	require.Empty(t, fx.member.drain(), "no probe reached the member")
 	require.Empty(t, validationCounts(t, fx.reader))
 }

@@ -141,9 +141,7 @@ type consentTemplateData struct {
 	RedirectURI        string
 	ScriptURL          string
 	RemoteSessionCards []remoteSessionCard
-	// ConsentEnabled gates the "Give Access" button. True when there are no
-	// remote-session challenges, or when at least one challenge has been
-	// completed (a card is Connected). Cancel is always available.
+	// ConsentEnabled gates the "Give Access" button; the service cards, a typed choice or a gateway's inventory decide it.
 	ConsentEnabled bool
 	// ApprovalError blocks approval while keeping Cancel available.
 	ApprovalError *consentApprovalError
@@ -666,7 +664,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	// stored preference, so the page value is on only when none of them is off.
 	everyCardAutoRefreshes := true
 	for _, c := range cards {
-		// A chained service counts once its exchange is known to work.
+		// The page's count: a chained service counts once its exchange works. consentCardsApprovable decides approval.
 		if c.Connected || c.ChainCheck == chainCheckConnected {
 			connectedCardCount++
 		}
