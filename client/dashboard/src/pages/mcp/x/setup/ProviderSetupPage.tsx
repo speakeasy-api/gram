@@ -136,8 +136,7 @@ function RetainedProviderSetup({
 }): JSX.Element {
   const navigate = useNavigate();
   const [s, dispatch] = useReducer(reduce, storageKey, (key) => {
-    const state = loadProviderProgress(provider, key);
-    return { ...state, complete: false, screen: "setup" as const };
+    return loadProviderProgress(provider, key);
   });
   useEffect(() => {
     saveProviderProgress(storageKey, s);
@@ -298,7 +297,7 @@ function SetupBody({
               className="@container/task min-w-0 max-w-[768px] text-sm leading-[1.65] [&_summary]:cursor-pointer [&_strong]:font-semibold"
             >
               {content}
-              {live?.error &&
+              {live.error &&
                 (s.step !== "test" || live.errorStep === "save") && (
                   <Alert variant="error" className="mt-5">
                     <p>{live.error}</p>
@@ -338,9 +337,9 @@ function SetupBody({
                       variant="primary"
                       disabled={
                         !complete ||
-                        !!live?.pending ||
-                        !!live?.loading ||
-                        !!live?.error
+                        !!live.pending ||
+                        !!live.loading ||
+                        !!live.error
                       }
                       onClick={() => dispatch({ type: "complete" })}
                     >
@@ -349,11 +348,11 @@ function SetupBody({
                   ) : (
                     <Button
                       variant="primary"
-                      disabled={!!live?.pending || live?.loading}
-                      onClick={() => dispatch({ type: "next" })}
+                      disabled={!!live.pending || live.loading}
+                      onClick={live.next}
                     >
                       <Button.Text>
-                        {live?.pending === "save"
+                        {live.pending === "save"
                           ? "Saving…"
                           : s.step === "begin"
                             ? "Get started"

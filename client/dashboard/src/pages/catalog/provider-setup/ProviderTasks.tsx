@@ -55,7 +55,7 @@ function Plan() {
 }
 function Credentials() {
   const { s, dispatch, live } = useSetup();
-  const saved = !!live && s.saved;
+  const saved = s.saved;
   return (
     <>
       <InProvider
@@ -74,7 +74,7 @@ function Credentials() {
         field="clientId"
         label="Client ID"
         disabled={saved}
-        value={saved ? (live?.savedClientId ?? "") : undefined}
+        value={saved ? (live.savedClientId ?? "") : undefined}
         placeholder="Paste Client ID"
       />
       <SetupField
@@ -89,12 +89,11 @@ function Credentials() {
           <Button
             variant="secondary"
             onClick={() => {
-              dispatch({
-                type: "field",
+              live.changeField({
                 field: "clientId",
-                value: live?.savedClientId ?? "",
+                value: live.savedClientId ?? "",
               });
-              dispatch({ type: "field", field: "clientSecret", value: "" });
+              live.changeField({ field: "clientSecret", value: "" });
               dispatch({
                 type: "connection",
                 saved: false,
@@ -119,7 +118,7 @@ function SlackTask({ serverName }: { serverName: string }) {
     { throwOnError: false },
   );
   const redirectUrl = s.saved
-    ? live?.callbackUrl
+    ? live.callbackUrl
     : callbackQuery.data?.callbackUrl;
   const scopes = scopesFor(s);
   const appManifest = redirectUrl

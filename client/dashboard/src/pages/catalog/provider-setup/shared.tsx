@@ -105,7 +105,7 @@ export function SetupField({
   value?: string;
   type?: string;
 }): JSX.Element {
-  const { s, dispatch } = useSetup();
+  const { s, dispatch, live } = useSetup();
   const id = `setup-${s.provider}-${field}`,
     error = s.errors[field];
   const secret = field === "clientSecret";
@@ -144,7 +144,7 @@ export function SetupField({
         error={!!error}
         aria-invalid={!!error}
         aria-describedby={error ? `${id}-error` : undefined}
-        onChange={(value) => dispatch({ type: "field", field, value })}
+        onChange={(value) => live.changeField({ field, value })}
       />
       {error && <FieldError id={`${id}-error`}>{error}</FieldError>}
     </Field>
@@ -176,7 +176,7 @@ export function Choices({
   options: ChoiceOption[];
   className?: string;
 }): JSX.Element {
-  const { s, dispatch } = useSetup();
+  const { s, live } = useSetup();
   return (
     <fieldset className={cn("mb-7 min-w-0 border-0 p-0", className)}>
       {visibleLabel && (
@@ -187,7 +187,7 @@ export function Choices({
         value={s.values[field]}
         showIndicator={false}
         className="grid grid-cols-1 gap-2 sm:grid-cols-2"
-        onValueChange={(value) => dispatch({ type: "field", field, value })}
+        onValueChange={(value) => live.changeField({ field, value })}
       >
         {options.map(({ value, title, description, icon: Icon }) => (
           <RadioCard

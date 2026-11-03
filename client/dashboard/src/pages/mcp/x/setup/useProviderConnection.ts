@@ -1,3 +1,8 @@
+import { useServerClientConfiguration } from "@/lib/remote-identity/queries/useServerClientConfiguration";
+import { invalidateIdentityConfiguration } from "@/lib/remote-identity/queries/invalidateIdentityConfiguration";
+import { mcpServerVisibilityUpdateForm } from "@/lib/mcp-server-visibility";
+import { useOAuthPopup } from "@/components/sessions/useOAuthPopup";
+import { queryKeyRemoteSessionClient } from "@gram/client/react-query/remoteSessionClient";
 import {
   useCallback,
   useEffect,
@@ -6,7 +11,7 @@ import {
   useState,
   type Dispatch,
 } from "react";
-import { useQuery, useQueryClient } from "@tanstack/react-query";
+import { useQueryClient } from "@tanstack/react-query";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useProject, useSession } from "@/contexts/Auth";
 import { collectPageItems } from "@/components/sessions/collectPageItems";
@@ -19,6 +24,7 @@ import {
   validate,
   type Action,
   type State,
+  type FieldName,
 } from "@/pages/catalog/provider-setup/state";
 import { GramError } from "@gram/client/models/errors/gramerror";
 import type { McpServer } from "@gram/client/models/components/mcpserver";
@@ -27,12 +33,10 @@ import { invalidateAllRemoteSessions } from "@gram/client/react-query/remoteSess
 import { invalidateAllRemoteSessionsCount } from "@gram/client/react-query/remoteSessionsCount";
 import { invalidateAllUserSessionIssuer } from "@gram/client/react-query/userSessionIssuer";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients";
-import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers";
 
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers";
 import { invalidateAllRemoteSessionClient } from "@gram/client/react-query/remoteSessionClient";
-import { invalidateAllRemoteSessionIssuer } from "@gram/client/react-query/remoteSessionIssuer";
 import { invalidateAllGetRemoteMcpServerScopes } from "@gram/client/react-query/getRemoteMcpServerScopes";
 
 const sameScopes = (
@@ -44,6 +48,20 @@ const sameScopes = (
   return a.length === b.length && a.every((scope, i) => scope === b[i]);
 };
 
+class ConfigurationChanged extends Error {}
+
+function recoveryFor(result: {
+  status: string;
+  code: string;
+}): ProviderConnection["recovery"] {
+  if (result.status === "authorization_required")
+    return result.code === "scope_mismatch" ? "permissions" : "signin";
+  if (result.status === "configuration_required")
+    return result.code === "remote_user_identity_required"
+      ? "settings"
+      : "credentials";
+}
+
 const providers = {
   slack: {
     name: "Slack",
@@ -53,8 +71,12 @@ const providers = {
   },
 };
 
-type ProviderConnection = {
-  dispatch: Dispatch<Action>;
+export type ProviderConnection = {
+  next: () => void;
+  signIn: () => void;
+  testConnection: () => void;
+  changeField: (change: { field: FieldName; value: string }) => void;
+  dispatch: Dispatch<Exclude<Action, { type: "field" | "next" }>>;
   pending: "save" | "signin" | "test" | null;
   error: string | null;
   errorStep: "save" | "signin" | "test";
@@ -102,25 +124,43 @@ export function useProviderConnection(
   const session = useSession();
   const project = useProject();
   const queryClient = useQueryClient();
-  const [pending, setPending] = useState<"save" | "signin" | "test" | null>(
-    null,
-  );
-  const [signInReady, setSignInReady] = useState(false);
-  const [error, setError] = useState<string | null>(null);
-  const [errorStep, setErrorStep] = useState<"save" | "signin" | "test">(
-    "save",
-  );
+  const [phase, setPhase] = useState<
+    "idle" | "saving" | "preparing-signin" | "awaiting-signin" | "testing"
+  >("idle");
+  const [failure, setFailure] = useState<{
+    step: ProviderConnection["errorStep"];
+    message: string;
+    recovery?: ProviderConnection["recovery"];
+  } | null>(null);
   const [toolCount, setToolCount] = useState<number | null>(null);
-  const [recovery, setRecovery] = useState<ProviderConnection["recovery"]>();
-  const popup = useRef<Window | null>(null);
+  const pending =
+    phase === "idle"
+      ? null
+      : phase === "saving"
+        ? "save"
+        : phase === "testing"
+          ? "test"
+          : "signin";
+  const preparing = phase === "saving" || phase === "preparing-signin";
+  const fail = (
+    step: ProviderConnection["errorStep"],
+    message: string,
+    recovery?: ProviderConnection["recovery"],
+  ) => setFailure({ step, message, recovery });
+  const checkOnReturn = useRef<() => void>(() => {});
+  const {
+    cancel: cancelPopup,
+    isClosed: isPopupClosed,
+    open: openPopup,
+  } = useOAuthPopup(() => checkOnReturn.current());
   const generation = useRef(0);
   const hydrated = useRef(false);
   useEffect(
     () => () => {
       generation.current++;
-      popup.current?.close();
+      cancelPopup();
     },
-    [],
+    [cancelPopup],
   );
   const targetKey = JSON.stringify([
     project.id,
@@ -132,71 +172,35 @@ export function useProviderConnection(
   ]);
   const currentTarget = useRef(targetKey);
   const observedClient = useRef<string | null>(null);
-  const statusKey = [
-    "providerSetupConnection",
-    targetKey,
-    providerKey,
-    server.id,
-    server.userSessionIssuerId,
-    session.user.id,
-  ];
-  const loadConfiguration = async () => {
-    const { associations } =
-      await sdk.remoteSessions.listServerClientAssociations({
-        mcpServerId: server.id,
-      });
-    const association = associations.find((a) => {
-      try {
-        const url = new URL(a.issuerUrl);
-        return (
-          url.origin === config.issuer &&
-          url.pathname.replace(/\/+$/, "") === "" &&
-          !url.search &&
-          !url.hash &&
-          !url.username &&
-          !url.password
-        );
-      } catch {
-        return false;
-      }
-    });
-    if (!association) return null;
-    const client = await sdk.remoteSessionClients.get({
-      id: association.remoteSessionClientId,
-    });
-    return {
-      client,
-      serverCount: association.serverCount,
-    };
+  const [loadedTarget, setLoadedTarget] = useState(targetKey);
+  const configuration = useServerClientConfiguration(server.id, config.issuer);
+  const loadConfiguration = configuration.refetch;
+  const status = {
+    ...configuration,
+    isSuccess: loadedTarget === targetKey && configuration.isSuccess,
+    isLoading: loadedTarget !== targetKey || configuration.isLoading,
   };
-  const status = useQuery({
-    queryKey: statusKey,
-    queryFn: loadConfiguration,
-    retry: false,
-    refetchOnWindowFocus: true,
-    throwOnError: false,
-  });
   useEffect(() => {
     if (currentTarget.current === targetKey) return;
     currentTarget.current = targetKey;
+    void loadConfiguration()
+      .finally(() => {
+        if (currentTarget.current === targetKey) setLoadedTarget(targetKey);
+      })
+      .catch(() => {});
     hydrated.current = false;
     observedClient.current = null;
     generation.current++;
     setToolCount(null);
-    popup.current?.close();
-    setSignInReady(false);
-    setPending(
-      pending === "save" || (pending === "signin" && !signInReady)
-        ? "save"
-        : null,
-    );
+    cancelPopup();
+    setPhase(preparing ? "saving" : "idle");
     dispatch({
       type: "connection",
       saved: false,
       authorized: false,
       tested: false,
     });
-  }, [targetKey, pending, signInReady, dispatch]);
+  }, [targetKey, preparing, dispatch, loadConfiguration, cancelPopup]);
   useEffect(() => {
     if (!status.isSuccess) return;
     const fingerprint = JSON.stringify([
@@ -215,15 +219,14 @@ export function useProviderConnection(
         tested: false,
         ...(!status.data ? { saved: false } : {}),
       });
-      if (pending !== "save" && !(pending === "signin" && !signInReady)) {
+      if (!preparing) {
         generation.current++;
-        popup.current?.close();
-        setSignInReady(false);
-        setPending(null);
+        cancelPopup();
+        setPhase("idle");
       }
     }
     observedClient.current = fingerprint;
-  }, [status.isSuccess, status.data, pending, signInReady, dispatch]);
+  }, [status.isSuccess, status.data, preparing, dispatch, cancelPopup]);
   useEffect(() => {
     if (!status.isSuccess || hydrated.current) return;
     hydrated.current = true;
@@ -316,7 +319,7 @@ export function useProviderConnection(
   ]);
 
   useEffect(() => {
-    if (pending !== "signin" || !signInReady) return;
+    if (phase !== "awaiting-signin") return;
     let active = true;
     let checking = false;
     const check = async () => {
@@ -329,26 +332,30 @@ export function useProviderConnection(
           result.status === "ready" && result.toolCount != null;
         dispatch({ type: "connection", authorized, tested: false });
         if (authorized) {
-          setPending(null);
-          setError(null);
+          setPhase("idle");
+          setFailure(null);
         } else if (result.code === "scope_mismatch") {
-          popup.current?.close();
-          setPending(null);
-          setRecovery("permissions");
-          setError(connectionFailure(result, "signin"));
+          cancelPopup();
+          setPhase("idle");
+          fail("signin", connectionFailure(result, "signin"), "permissions");
         } else if (result.status !== "authorization_required") {
-          setPending(null);
-          setError(connectionFailure(result, "signin"));
-          if (result.status === "configuration_required")
-            setRecovery("settings");
-        } else if (popup.current?.closed) {
-          setPending(null);
-          setError(`${name} sign-in did not finish. Try signing in again.`);
+          setPhase("idle");
+          fail(
+            "signin",
+            connectionFailure(result, "signin"),
+            result.status === "configuration_required" ? "settings" : undefined,
+          );
+        } else if (isPopupClosed()) {
+          setPhase("idle");
+          fail(
+            "signin",
+            `${name} sign-in did not finish. Try signing in again.`,
+          );
         }
       } catch {
         if (!active) return;
-        setPending(null);
-        setError(`Couldn’t check ${name} sign-in. Try again.`);
+        setPhase("idle");
+        fail("signin", `Couldn’t check ${name} sign-in. Try again.`);
       } finally {
         checking = false;
       }
@@ -359,23 +366,20 @@ export function useProviderConnection(
       () => {
         active = false;
         generation.current++;
-        popup.current?.close();
-        setPending(null);
-        setError(`${name} sign-in timed out. Try signing in again.`);
+        cancelPopup();
+        setPhase("idle");
+        fail("signin", `${name} sign-in timed out. Try signing in again.`);
       },
       5 * 60 * 1000,
     );
-    const onFocus = () => {
-      void check();
-    };
-    window.addEventListener("focus", onFocus);
+    checkOnReturn.current = () => void check();
     return () => {
       active = false;
       window.clearInterval(timer);
       window.clearTimeout(timeout);
-      window.removeEventListener("focus", onFocus);
+      checkOnReturn.current = () => {};
     };
-  }, [pending, signInReady, name, checkConnection, dispatch]);
+  }, [phase, name, checkConnection, dispatch, cancelPopup, isPopupClosed]);
 
   // Revoke before changing scopes: a failed update must not leave a broader
   // grant usable, and verification must wait until both operations finish.
@@ -385,15 +389,13 @@ export function useProviderConnection(
     if (generation.current !== run) throw new Error("Setup target changed");
     if (!saved) throw new Error("Saved app configuration is missing");
     if (saved.client.id !== status.data?.client.id) {
-      setRecovery("settings");
-      throw new Error("App configuration changed");
+      throw new ConfigurationChanged();
     }
     const changing = !sameScopes(saved.client.scope, scopes);
     const readOnly = !scopes.some((scope) => scope.includes(":write"));
     if (!changing && !readOnly) return;
     if (saved.serverCount > 1 && changing) {
-      setRecovery("settings");
-      throw new Error("Shared app connection");
+      throw new ConfigurationChanged();
     }
     const sessions = await collectPageItems(
       sdk.remoteSessions.list({
@@ -423,7 +425,10 @@ export function useProviderConnection(
       updated.client.scope,
       updated.client.updatedAt,
     ]);
-    queryClient.setQueryData(statusKey, updated);
+    queryClient.setQueryData(
+      queryKeyRemoteSessionClient({ id: updated.client.id }),
+      updated.client,
+    );
     await Promise.all([
       invalidateAllRemoteSessionClients(queryClient),
       invalidateAllRemoteSessionClient(queryClient),
@@ -431,25 +436,22 @@ export function useProviderConnection(
     ]);
   };
 
-  const applyPermissions = async (
-    scopes: string[],
-    next?: Action | (() => Promise<void>),
-  ) => {
+  const updatePermissions = async (scopes: string[]) => {
     const run = generation.current;
-    setErrorStep("save");
-    setPending("save");
+    setPhase("saving");
     try {
       await syncPermissions(scopes);
-      if (generation.current !== run) return;
-      if (typeof next === "function") await next();
-      else if (next) dispatch(next);
-    } catch {
+      return generation.current === run;
+    } catch (err) {
       if (generation.current === run)
-        setError(
+        fail(
+          "save",
           "Couldn’t update Slack permissions. Select Continue to retry.",
+          err instanceof ConfigurationChanged ? "settings" : undefined,
         );
+      return false;
     } finally {
-      setPending(null);
+      setPhase("idle");
     }
   };
 
@@ -463,9 +465,8 @@ export function useProviderConnection(
       dispatch({ type: "next" });
       return;
     }
-    setErrorStep("save");
-    setPending("save");
-    setError(null);
+    setPhase("saving");
+    setFailure(null);
     try {
       let current = await sdk.mcpServers.get({ id: server.id });
       if (generation.current !== run) return;
@@ -494,16 +495,7 @@ export function useProviderConnection(
         if (generation.current !== run) return;
         current = await sdk.mcpServers.update({
           updateMcpServerForm: {
-            id: current.id,
-            visibility:
-              current.visibility === "disabled"
-                ? "disabled"
-                : current.visibility === "public"
-                  ? "public"
-                  : "private",
-            remoteMcpServerId: current.remoteMcpServerId,
-            environmentId: current.environmentId,
-            toolVariationsGroupId: current.toolVariationsGroupId,
+            ...mcpServerVisibilityUpdateForm(current, current.visibility),
             userSessionIssuerId: isolated.id,
           },
         });
@@ -526,9 +518,10 @@ export function useProviderConnection(
         latest.remoteMcpServerId !== current.remoteMcpServerId ||
         latest.environmentId !== current.environmentId
       ) {
-        setRecovery("settings");
-        setError(
+        fail(
+          "save",
           "This server’s identity changed. Reload its settings before saving credentials.",
+          "settings",
         );
         return;
       }
@@ -569,11 +562,7 @@ export function useProviderConnection(
       if (current.visibility === "disabled")
         await sdk.mcpServers.update({
           updateMcpServerForm: {
-            id: current.id,
-            visibility: "private",
-            remoteMcpServerId: current.remoteMcpServerId,
-            environmentId: current.environmentId,
-            toolVariationsGroupId: current.toolVariationsGroupId,
+            ...mcpServerVisibilityUpdateForm(current, "private"),
           },
         });
       if (generation.current !== run) return;
@@ -588,38 +577,35 @@ export function useProviderConnection(
       dispatch({ type: "goto", step: "test" });
       await Promise.all([
         status.refetch(),
+        invalidateIdentityConfiguration(queryClient),
         invalidateAllGetMcpServer(queryClient),
-        invalidateAllRemoteSessionClients(queryClient),
-        invalidateAllRemoteSessionIssuers(queryClient),
-        invalidateAllRemoteSessionIssuer(queryClient),
-        invalidateAllRemoteSessionClient(queryClient),
         invalidateAllMcpServers(queryClient),
         invalidateAllUserSessionIssuers(queryClient),
         invalidateAllUserSessionIssuer(queryClient),
-        invalidateAllGetRemoteMcpServerScopes(queryClient),
       ]);
     } catch (err) {
       if (generation.current !== run) return;
       const identityConflict =
         err instanceof GramError && err.statusCode === 409;
-      setRecovery(identityConflict ? "settings" : undefined);
-      setError(
+      fail(
+        "save",
         identityConflict
           ? "Review this server’s identity settings before saving these app credentials."
           : `Couldn’t save ${name} credentials. Check the app details and try again.`,
+        identityConflict ? "settings" : undefined,
       );
     } finally {
-      setPending(null);
+      setPhase("idle");
     }
   };
 
   const signIn = async () => {
     const run = generation.current;
-    setErrorStep("signin");
-    setRecovery(undefined);
+    if (pending) return;
+    setFailure(null);
     const slug = server.platformEndpointSlug;
     if (!slug) {
-      setError("This server needs an endpoint before you can sign in.");
+      fail("signin", "This server needs an endpoint before you can sign in.");
       return;
     }
     try {
@@ -633,53 +619,56 @@ export function useProviderConnection(
       )
         throw new Error("Insecure address");
     } catch {
-      setError("Use an HTTPS server address before signing in to Slack.");
+      fail("signin", "Use an HTTPS server address before signing in to Slack.");
       return;
     }
-    // Open synchronously so browsers allow the tab before any await.
-    popup.current = window.open("about:blank", `${providerKey}-setup-signin`);
-    if (!popup.current) {
-      setError(`Allow pop-ups to sign in to ${name}.`);
-      return;
-    }
-    setSignInReady(false);
-    setPending("signin");
-    setError(null);
+    // A previous verification failure can leave its OAuth tab open.
+    cancelPopup();
+    setPhase("preparing-signin");
+    setFailure(null);
     dispatch({ type: "connection", authorized: false, tested: false });
-    try {
-      const savedClient = status.data?.client;
-      if (!savedClient) {
-        popup.current?.close();
-        setPending(null);
-        setRecovery("credentials");
-        setError(`Save your ${name} app credentials first.`);
-        return;
-      }
-      if (providerKey === "slack") await syncPermissions(requestedScopes);
-      if (generation.current !== run) {
-        setPending(null);
-        return;
-      }
-      const url = firstPartyConnectUrl(`${getServerURL()}/mcp/${slug}`);
-      if (!url) throw new Error(`Couldn’t open ${name} sign-in.`);
-      popup.current.location.href = url;
-      setSignInReady(true);
-    } catch {
-      if (generation.current !== run) {
-        setPending(null);
-        return;
-      }
-      popup.current?.close();
-      setPending(null);
-      setError(`Couldn’t start ${name} sign-in. Try again.`);
+    const opened = openPopup(
+      async () => {
+        try {
+          if (!status.data?.client) {
+            fail(
+              "signin",
+              `Save your ${name} app credentials first.`,
+              "credentials",
+            );
+            throw new Error("Missing credentials");
+          }
+          await syncPermissions(requestedScopes);
+          if (generation.current !== run)
+            throw new Error("Setup target changed");
+          const url = firstPartyConnectUrl(`${getServerURL()}/mcp/${slug}`);
+          if (!url) throw new Error(`Couldn’t open ${name} sign-in.`);
+          setPhase("awaiting-signin");
+          return url;
+        } catch (err) {
+          setPhase("idle");
+          if (generation.current === run && status.data?.client)
+            fail(
+              "signin",
+              `Couldn’t start ${name} sign-in. Try again.`,
+              err instanceof ConfigurationChanged ? "settings" : undefined,
+            );
+          throw err;
+        }
+      },
+      { name: `${providerKey}-setup-signin`, features: "" },
+    );
+    if (!opened) {
+      setPhase("idle");
+      fail("signin", `Allow pop-ups to sign in to ${name}.`);
     }
   };
 
   const test = async () => {
     const run = generation.current;
-    setErrorStep("test");
-    setPending("test");
-    setError(null);
+    if (pending) return;
+    setPhase("testing");
+    setFailure(null);
     setToolCount(null);
     dispatch({ type: "connection", tested: false });
     try {
@@ -689,115 +678,87 @@ export function useProviderConnection(
         setToolCount(result.toolCount);
         dispatch({ type: "connection", authorized: true, tested: true });
       } else {
-        if (result.status === "authorization_required") {
+        if (result.status === "authorization_required")
           dispatch({ type: "connection", authorized: false, tested: false });
-          setRecovery(
-            result.code === "scope_mismatch" ? "permissions" : "signin",
-          );
-        } else if (result.status === "configuration_required") {
-          setRecovery(
-            result.code === "remote_user_identity_required"
-              ? "settings"
-              : "credentials",
-          );
-        }
-        setError(connectionFailure(result, "test"));
+        fail("test", connectionFailure(result, "test"), recoveryFor(result));
       }
     } catch {
       if (generation.current === run)
-        setError(
+        fail(
+          "test",
           `Couldn’t initialize ${name} and list its tools. Check app permissions, sign in again, and retry.`,
         );
     } finally {
-      if (generation.current === run) setPending(null);
+      if (generation.current === run) setPhase("idle");
     }
   };
 
-  const liveDispatch: Dispatch<Action> = (action) => {
-    if (pending && !["secret", "copy"].includes(action.type)) return;
+  const navigate: ProviderConnection["dispatch"] = (action) => {
+    if (pending && action.type !== "secret") return;
     if (
       action.type === "complete" &&
-      (status.isLoading || status.isError || error)
+      (status.isLoading || status.isError || failure)
     )
       return;
-    if (!["secret", "copy"].includes(action.type)) {
-      setError(null);
-      setRecovery(undefined);
-    }
-    if (status.data?.client) {
-      if (
-        action.type === "field" &&
-        action.field === "access" &&
-        action.value !== s.values.access
-      ) {
-        if ((status.data?.serverCount ?? 0) > 1) {
-          setErrorStep("save");
-          setRecovery("settings");
-          setError(
-            "This app connection is shared. Update its permissions in Settings.",
-          );
-          return;
-        }
-        generation.current++;
-        setToolCount(null);
-        dispatch(action);
-        void applyPermissions(
-          scopesFor({ ...s, values: { ...s.values, access: action.value } }),
-        );
-        return;
-      }
-      if (
-        action.type === "next" &&
-        !sameScopes(status.data?.client.scope, requestedScopes)
-      ) {
-        void applyPermissions(
-          requestedScopes,
-          s.step === "credentials"
-            ? s.saved
-              ? { type: "goto", step: "test" }
-              : save
-            : action,
-        );
-        return;
-      }
-    }
-    if (action.type === "next" && s.step === "credentials") {
-      void save();
-      return;
-    }
-    if (action.type === "modal" && action.modal === "signin") {
-      void signIn();
-      return;
-    }
-    if (action.type === "modal" && action.modal === "test") {
-      void test();
-      return;
-    }
-    if (action.type === "field" || action.type === "restart") {
-      generation.current++;
-      setToolCount(null);
-    }
+    if (action.type !== "secret") setFailure(null);
     dispatch(action);
   };
+  const changeField: ProviderConnection["changeField"] = ({ field, value }) => {
+    if (pending) return;
+    setFailure(null);
+    if (
+      field === "access" &&
+      value !== access &&
+      status.data?.client &&
+      status.data.serverCount > 1
+    ) {
+      fail(
+        "save",
+        "This app connection is shared. Update its permissions in Settings.",
+        "settings",
+      );
+      return;
+    }
+    generation.current++;
+    setToolCount(null);
+    dispatch({ type: "field", field, value });
+    if (field === "access" && value !== access && status.data?.client)
+      void updatePermissions(scopesFor({ values: { access: value } }));
+  };
+  const next = async () => {
+    if (pending || status.isLoading || status.isError) return;
+    setFailure(null);
+    if (
+      status.data?.client &&
+      !sameScopes(status.data.client.scope, requestedScopes)
+    ) {
+      if (!(await updatePermissions(requestedScopes))) return;
+    }
+    if (s.step === "credentials") await save();
+    else dispatch({ type: "next" });
+  };
   return {
-    dispatch: liveDispatch,
+    dispatch: navigate,
+    next: () => void next(),
+    changeField,
+    signIn: () => void signIn(),
+    testConnection: () => void test(),
     pending,
     error:
-      error ??
+      failure?.message ??
       (status.error
         ? `Couldn’t load saved ${name} credentials. Try again.`
         : null),
-    errorStep: error ? errorStep : "save",
-    recovery,
+    errorStep: failure?.step ?? "save",
+    recovery: failure?.recovery,
     retryLoad: () => {
-      void status.refetch();
+      void status.refetch().catch(() => {});
     },
     cancelSignIn: () => {
       generation.current++;
-      popup.current?.close();
-      setSignInReady(false);
+      cancelPopup();
       // An in-flight scope mutation must settle before another choice can write.
-      setPending(pending === "signin" && !signInReady ? "save" : null);
+      setPhase(phase === "preparing-signin" ? "saving" : "idle");
       dispatch({ type: "connection", authorized: false, tested: false });
     },
     toolCount,

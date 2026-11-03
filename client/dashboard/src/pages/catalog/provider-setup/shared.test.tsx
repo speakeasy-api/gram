@@ -1,3 +1,4 @@
+import { connectionFixture } from "./connection-fixture";
 import { cleanup, render, screen, waitFor } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { afterEach, describe, expect, it, vi } from "vitest";
@@ -8,7 +9,7 @@ import { CopyValue } from "./shared";
 function Subject() {
   const [s, dispatch] = useReducer(reduce, initialState("slack"));
   return (
-    <SetupContext value={{ s, dispatch }}>
+    <SetupContext value={{ s, dispatch, live: connectionFixture(dispatch) }}>
       <CopyValue
         label="Redirect URL"
         value="https://callback.example/callback"

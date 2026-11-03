@@ -19,10 +19,8 @@ export type State = {
   saved: boolean;
   authorized: boolean;
   tested: boolean;
-  complete: boolean;
   returnToTest: boolean;
   showSecret: boolean;
-  copied: string;
   configChanged: boolean;
 };
 export function initialState(provider: Provider): State {
@@ -36,10 +34,8 @@ export function initialState(provider: Provider): State {
     saved: false,
     authorized: false,
     tested: false,
-    complete: false,
     returnToTest: false,
     showSecret: false,
-    copied: "",
     configChanged: false,
   };
 }
@@ -81,10 +77,7 @@ export type Action =
   | { type: "next" }
   | { type: "back" }
   | { type: "complete" }
-  | { type: "restart" }
-  | { type: "modal"; modal: string | null }
-  | { type: "secret" }
-  | { type: "copy"; key: string };
+  | { type: "secret" };
 export function reduce(s: State, a: Action): State {
   switch (a.type) {
     case "connection":
@@ -94,8 +87,6 @@ export function reduce(s: State, a: Action): State {
         authorized: a.authorized ?? s.authorized,
         tested: a.tested ?? s.tested,
       };
-    case "restart":
-      return initialState(s.provider);
     case "field": {
       if (s.values[a.field] === a.value) return s;
       const boundary = steps(s).findIndex((t) => t.id === s.step);
@@ -105,8 +96,6 @@ export function reduce(s: State, a: Action): State {
         saved: a.field === "access" && s.saved,
         authorized: false,
         tested: false,
-        complete: false,
-        copied: "",
         errors: {},
         done: s.done.filter(
           (id) => steps(s).findIndex((t) => t.id === id) < boundary,
@@ -158,16 +147,11 @@ export function reduce(s: State, a: Action): State {
       return ready(s) && s.authorized && s.tested
         ? {
             ...s,
-            complete: true,
             screen: "success",
             done: steps(s).map((t) => t.id),
           }
         : s;
     case "secret":
       return { ...s, showSecret: !s.showSecret };
-    case "copy":
-      return { ...s, copied: a.key };
-    case "modal":
-      return s; // The connection hook owns sign-in and testing.
   }
 }

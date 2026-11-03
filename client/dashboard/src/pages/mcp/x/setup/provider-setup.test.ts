@@ -132,7 +132,6 @@ describe("Slack progress", () => {
       saved: true,
       authorized: true,
       tested: true,
-      complete: true,
       done: ["begin", "app", "credentials", "test"],
       values: {
         ...state.values,
@@ -143,17 +142,22 @@ describe("Slack progress", () => {
       },
     });
     expect(sessionStorage.getItem(key)).not.toContain("private-");
+    expect(JSON.parse(sessionStorage.getItem(key)!)).toEqual({
+      revision: 1,
+      step: "test",
+      done: ["begin", "app"],
+      values: { appChoice: "existing", access: "read" },
+    });
     const restored = loadProviderProgress("slack", key);
     expect(restored.values.appChoice).toBe("existing");
     expect(restored.values.access).toBe("read");
     expect(restored.values.clientId).toBe("");
     expect(restored.values.clientSecret).toBe("");
-    expect([
-      restored.saved,
-      restored.authorized,
-      restored.tested,
-      restored.complete,
-    ]).toEqual([false, false, false, false]);
+    expect([restored.saved, restored.authorized, restored.tested]).toEqual([
+      false,
+      false,
+      false,
+    ]);
     expect(restored.done).toEqual(["begin", "app"]);
     expect(restored.screen).toBe("setup");
     expect(
@@ -169,15 +173,13 @@ describe("Slack progress", () => {
       ).step,
     ).toBe("begin");
   });
-  it("ignores completion and credential/test markers in older snapshots", () => {
+  it("ignores untrusted credential/test markers in a choice snapshot", () => {
     sessionStorage.setItem(
       "legacy",
       JSON.stringify({
         revision: 1,
-        complete: true,
         done: ["begin", "app", "credentials", "test"],
-        appChoice: "existing",
-        access: "read",
+        values: { appChoice: "existing", access: "read" },
       }),
     );
     const state = loadProviderProgress("slack", "legacy");

@@ -1,3 +1,4 @@
+import { connectionFixture } from "./connection-fixture";
 import { useReducer } from "react";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
@@ -29,14 +30,14 @@ function SavedCredentials({ provider }: { provider: "slack" }) {
       value={{
         s,
         dispatch,
-        live: {
+        live: connectionFixture(dispatch, {
           pending: null,
           error: null,
           errorStep: "save",
           toolCount: null,
           loading: false,
           savedClientId: "saved-app-id",
-        },
+        }),
       }}
     >
       <ProviderTask serverName="Demo" />
@@ -74,6 +75,7 @@ it.each([false, true])(
   "uses the callback for the actual retained/replacement client (saved=%s)",
   (saved) => {
     const initial = initialState("slack");
+    const dispatch = vi.fn<() => void>();
     render(
       <SetupContext
         value={{
@@ -83,15 +85,15 @@ it.each([false, true])(
             saved,
             values: { ...initial.values, appChoice: "existing" },
           },
-          dispatch: vi.fn<() => void>(),
-          live: {
+          dispatch,
+          live: connectionFixture(dispatch, {
             pending: null,
             error: null,
             errorStep: "save",
             toolCount: null,
             loading: false,
             callbackUrl: "https://previous.example/callback",
-          },
+          }),
         }}
       >
         <ProviderTask serverName="Slack" />

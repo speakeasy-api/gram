@@ -1,22 +1,11 @@
-import { createContext, useContext, type Dispatch } from "react";
-import type { Action, State } from "./state";
+import type { ProviderConnection } from "@/pages/mcp/x/setup/useProviderConnection";
+import { createContext, useContext } from "react";
+import type { State } from "./state";
 
 type SetupContextValue = {
   s: State;
-  dispatch: Dispatch<Action>;
-  live?: {
-    pending: string | null;
-    error: string | null;
-    errorStep: "save" | "signin" | "test";
-    toolCount: number | null;
-    loading: boolean;
-    callbackUrl?: string;
-    savedClientId?: string;
-    recovery?: "signin" | "credentials" | "settings" | "permissions";
-    settingsHref?: string;
-    retryLoad?: () => void;
-    cancelSignIn?: () => void;
-  };
+  dispatch: ProviderConnection["dispatch"];
+  live: ProviderConnection & { settingsHref?: string };
 };
 export const SetupContext = createContext<SetupContextValue | null>(null);
 export function useSetup(): SetupContextValue {

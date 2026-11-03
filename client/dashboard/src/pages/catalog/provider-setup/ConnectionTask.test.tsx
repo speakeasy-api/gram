@@ -1,3 +1,4 @@
+import { connectionFixture } from "./connection-fixture";
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { initialState } from "./state";
@@ -10,6 +11,7 @@ describe("connection action errors", () => {
     "keeps a live %s failure in its own action row",
     (errorStep) => {
       const state = initialState("slack");
+      const dispatch = vi.fn<() => void>();
       render(
         <SetupContext
           value={{
@@ -18,14 +20,14 @@ describe("connection action errors", () => {
               saved: true,
               authorized: errorStep === "test",
             },
-            dispatch: vi.fn<() => void>(),
-            live: {
+            dispatch,
+            live: connectionFixture(dispatch, {
               pending: null,
               error: "Try this action again.",
               errorStep,
               toolCount: null,
               loading: false,
-            },
+            }),
           }}
         >
           <ConnectionTask />
@@ -45,6 +47,7 @@ it("offers sign-in again when the backend requires authorization", async () => {
   const user = userEvent.setup();
   const dispatch = vi.fn<() => void>();
   const state = initialState("slack");
+  const signIn = vi.fn<() => void>();
   render(
     <SetupContext
       value={{
@@ -53,41 +56,43 @@ it("offers sign-in again when the backend requires authorization", async () => {
           saved: true,
         },
         dispatch,
-        live: {
+        live: connectionFixture(dispatch, {
           pending: null,
           error: "Sign in is required.",
+          signIn,
           errorStep: "test",
           recovery: "signin",
           toolCount: null,
           loading: false,
-        },
+        }),
       }}
     >
       <ConnectionTask />
     </SetupContext>,
   );
   await user.click(screen.getByRole("button", { name: "Sign in again ↗" }));
-  expect(dispatch).toHaveBeenCalledWith({ type: "modal", modal: "signin" });
+  expect(signIn).toHaveBeenCalledTimes(1);
 });
 
 it("allows a waiting sign-in to be cancelled", async () => {
   const { default: userEvent } = await import("@testing-library/user-event");
   const user = userEvent.setup();
   const cancelSignIn = vi.fn<() => void>();
+  const dispatch = vi.fn<() => void>();
   const state = initialState("slack");
   render(
     <SetupContext
       value={{
         s: { ...state, saved: true },
-        dispatch: vi.fn<() => void>(),
-        live: {
+        dispatch,
+        live: connectionFixture(dispatch, {
           pending: "signin",
           error: null,
           errorStep: "signin",
           toolCount: null,
           loading: false,
           cancelSignIn,
-        },
+        }),
       }}
     >
       <ConnectionTask />

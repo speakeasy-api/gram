@@ -3,7 +3,6 @@ import {
   steps,
   type State,
   type Provider,
-  type FieldName,
 } from "@/pages/catalog/provider-setup/state";
 import type { ServerInstallStatus } from "@/pages/catalog/useRemoteMcpInstallWorkflow";
 
@@ -62,14 +61,6 @@ export function providerProgressKey(
 ): string {
   return `provider-setup:${provider}:v1:${[userId, orgId, projectId, serverId].map(encodeURIComponent).join(":")}`;
 }
-const progressFields = [
-  "appChoice",
-  "access",
-] as const satisfies readonly FieldName[];
-const choiceValues: Partial<Record<FieldName, readonly string[]>> = {
-  appChoice: ["new", "existing"],
-  access: ["all", "read"],
-};
 export function saveProviderProgress(key: string, state: State): void {
   try {
     sessionStorage.setItem(
@@ -80,12 +71,10 @@ export function saveProviderProgress(key: string, state: State): void {
         done: state.done.filter(
           (step) => !["credentials", "test"].includes(step),
         ),
-        complete: false,
-        appChoice: state.values.appChoice,
-        access: state.values.access,
-        values: Object.fromEntries(
-          progressFields.map((field) => [field, state.values[field]]),
-        ),
+        values: {
+          appChoice: state.values.appChoice,
+          access: state.values.access,
+        },
       }),
     );
   } catch {
@@ -106,22 +95,23 @@ export function loadProviderProgress(
       value.revision !== 1
     )
       return initial;
-    // Accept the original flat choice snapshots as well as the values object.
-    const values =
-      "values" in value && value.values && typeof value.values === "object"
-        ? value.values
-        : value;
-    for (const field of progressFields) {
-      if (!(field in values)) continue;
-      const entry: unknown = Reflect.get(values, field);
-      const choices = choiceValues[field];
-      if (
-        typeof entry === "string" &&
-        entry.length <= 10000 &&
-        (!choices || choices.includes(entry))
-      )
-        initial.values[field] = entry;
-    }
+    if (
+      !("values" in value) ||
+      !value.values ||
+      typeof value.values !== "object"
+    )
+      return initial;
+    const { values } = value;
+    if (
+      "appChoice" in values &&
+      (values.appChoice === "new" || values.appChoice === "existing")
+    )
+      initial.values.appChoice = values.appChoice;
+    if (
+      "access" in values &&
+      (values.access === "all" || values.access === "read")
+    )
+      initial.values.access = values.access;
     // Resolve branch-specific steps after restoring choices.
     const validSteps = steps(initial).map((step) => step.id);
     if (

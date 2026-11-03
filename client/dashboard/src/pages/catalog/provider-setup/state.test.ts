@@ -10,7 +10,6 @@ describe("Slack setup state", () => {
         saved: true,
         authorized: true,
         tested: true,
-        complete: true,
         values: {
           ...initial.values,
           clientId: "app-id",
@@ -21,12 +20,11 @@ describe("Slack setup state", () => {
     );
     expect(state.values.clientId).toBe("");
     expect(state.values.clientSecret).toBe("");
-    expect([
-      state.saved,
-      state.authorized,
-      state.tested,
-      state.complete,
-    ]).toEqual([false, false, false, false]);
+    expect([state.saved, state.authorized, state.tested]).toEqual([
+      false,
+      false,
+      false,
+    ]);
   });
   it("keeps saved credentials but invalidates authorization and testing after a permission change", () => {
     const state = reduce(

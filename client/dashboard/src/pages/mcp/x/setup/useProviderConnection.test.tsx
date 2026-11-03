@@ -1,3 +1,4 @@
+import { queryKeyRemoteSessionClient } from "@gram/client/react-query/remoteSessionClient";
 import { useReducer, type PropsWithChildren } from "react";
 import { act, cleanup, renderHook, waitFor } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -172,7 +173,7 @@ describe("live provider setup", () => {
         },
       });
       await waitFor(() => expect(result.current.loading).toBe(false));
-      act(() => result.current.dispatch({ type: "next" }));
+      act(() => result.current.next());
       await waitFor(() => expect(result.current.state.saved).toBe(true));
       expect(mocks.commit).toHaveBeenCalledWith({
         commitServerIdentityConfigurationForm: expect.objectContaining({
@@ -212,7 +213,7 @@ describe("live provider setup", () => {
       },
     });
     await waitFor(() => expect(result.current.loading).toBe(false));
-    act(() => result.current.dispatch({ type: "next" }));
+    act(() => result.current.next());
     await waitFor(() => expect(result.current.pending).toBeNull());
     expect(mocks.updateServer).toHaveBeenCalledWith({
       updateMcpServerForm: {
@@ -247,14 +248,14 @@ describe("live provider setup", () => {
       values: { ...state.values, clientId: "id", clientSecret: "secret" },
     });
     await waitFor(() => expect(result.current.loading).toBe(false));
-    act(() => result.current.dispatch({ type: "next" }));
+    act(() => result.current.next());
     await waitFor(() => expect(result.current.error).toBeTruthy());
     expect(result.current.errorStep).toBe("save");
     expect(result.current.state.saved).toBe(false);
     expect(result.current.state.step).toBe("credentials");
     expect(result.current.state.values.clientSecret).toBe("secret");
     mocks.commit.mockResolvedValue({ status: "registered" });
-    act(() => result.current.dispatch({ type: "next" }));
+    act(() => result.current.next());
     await waitFor(() => expect(result.current.state.saved).toBe(true));
     expect(result.current.error).toBeNull();
     expect(result.current.state.values.clientSecret).toBe("");
@@ -274,7 +275,7 @@ describe("live provider setup", () => {
       values: { ...state.values, clientId: "id", clientSecret: "secret" },
     });
     await waitFor(() => expect(result.current.loading).toBe(false));
-    act(() => result.current.dispatch({ type: "next" }));
+    act(() => result.current.next());
     await waitFor(() => expect(result.current.recovery).toBe("settings"));
     expect(result.current.state.saved).toBe(false);
     expect(result.current.error).not.toContain("internal detail");
@@ -295,11 +296,12 @@ describe("live provider setup", () => {
     vi.mocked(window.open).mockReturnValue({
       closed: true,
       location: { href: "" },
+      focus: vi.fn(),
       close: vi.fn(),
     } as unknown as Window);
     const { result } = mount("slack", { step: "test" });
     await waitFor(() => expect(result.current.state.saved).toBe(true));
-    act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
+    act(() => result.current.signIn());
     act(() => {
       window.dispatchEvent(new Event("focus"));
     });
@@ -311,7 +313,12 @@ describe("live provider setup", () => {
 
   it("opens Slack sign-in on this server's first-party endpoint with the saved scopes", async () => {
     saved("slack", scopesFor(initialState("slack")));
-    const popup = { closed: false, location: { href: "" }, close: vi.fn() };
+    const popup = {
+      closed: false,
+      location: { href: "" },
+      focus: vi.fn(),
+      close: vi.fn(),
+    };
     vi.mocked(window.open).mockReturnValue(popup as unknown as Window);
     const { result } = mount("slack", {
       step: "test",
@@ -320,7 +327,7 @@ describe("live provider setup", () => {
     expect(result.current.callbackUrl).toBe(
       "https://platform.example/callback",
     );
-    act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
+    act(() => result.current.signIn());
     await waitFor(() =>
       expect(popup.location.href).toBe(
         "https://platform.example/mcp/demo-endpoint/connect/first-party",
@@ -343,11 +350,16 @@ describe("live provider setup", () => {
         message: "Sign in first.",
       },
     });
-    const popup = { closed: true, location: { href: "" }, close: vi.fn() };
+    const popup = {
+      closed: true,
+      location: { href: "" },
+      focus: vi.fn(),
+      close: vi.fn(),
+    };
     vi.mocked(window.open).mockReturnValue(popup as unknown as Window);
     const { result } = mount("slack", { step: "test" });
     await waitFor(() => expect(result.current.state.saved).toBe(true));
-    act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
+    act(() => result.current.signIn());
     act(() => {
       window.dispatchEvent(new Event("focus"));
     });
@@ -360,11 +372,16 @@ describe("live provider setup", () => {
 
   it("lets the user cancel waiting for sign-in", async () => {
     saved("slack");
-    const popup = { closed: false, location: { href: "" }, close: vi.fn() };
+    const popup = {
+      closed: false,
+      location: { href: "" },
+      focus: vi.fn(),
+      close: vi.fn(),
+    };
     vi.mocked(window.open).mockReturnValue(popup as unknown as Window);
     const { result } = mount("slack", { step: "test" });
     await waitFor(() => expect(result.current.state.saved).toBe(true));
-    act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
+    act(() => result.current.signIn());
     expect(result.current.pending).toBe("signin");
     act(() => result.current.cancelSignIn());
     await waitFor(() => expect(result.current.pending).toBeNull());
@@ -388,11 +405,16 @@ describe("live provider setup", () => {
           },
         ]),
       );
-    const popup = { closed: false, location: { href: "" }, close: vi.fn() };
+    const popup = {
+      closed: false,
+      location: { href: "" },
+      focus: vi.fn(),
+      close: vi.fn(),
+    };
     vi.mocked(window.open).mockReturnValue(popup as unknown as Window);
     const { result } = mount("slack", { step: "test" });
     await waitFor(() => expect(result.current.state.saved).toBe(true));
-    act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
+    act(() => result.current.signIn());
     await waitFor(() => expect(result.current.recovery).toBe("permissions"));
     expect(result.current.error).toContain("still granting write access");
     expect(mocks.revoke).toHaveBeenCalledWith({ id: "broader-grant" });
@@ -414,11 +436,16 @@ describe("live provider setup", () => {
             finish = resolve;
           }),
       );
-    const popup = { closed: false, location: { href: "" }, close: vi.fn() };
+    const popup = {
+      closed: false,
+      location: { href: "" },
+      focus: vi.fn(),
+      close: vi.fn(),
+    };
     vi.mocked(window.open).mockReturnValue(popup as unknown as Window);
     const { result } = mount("slack", { step: "test" });
     await waitFor(() => expect(result.current.state.saved).toBe(true));
-    act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
+    act(() => result.current.signIn());
     await waitFor(() => expect(mocks.sessions).toHaveBeenCalledTimes(2));
     act(() => result.current.cancelSignIn());
     await act(async () =>
@@ -442,18 +469,23 @@ describe("live provider setup", () => {
     saved("slack", scopesFor(initialState("slack")));
     const { result } = mount("slack", { step: "test" });
     await waitFor(() => expect(result.current.state.saved).toBe(true));
-    act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
+    act(() => result.current.signIn());
     expect(result.current.error).toContain("HTTPS");
     expect(window.open).not.toHaveBeenCalled();
   });
   it("allows HTTP only for the local development sign-in endpoint", async () => {
     mocks.serverUrl = "http://localhost:1234";
     saved("slack", scopesFor(initialState("slack")));
-    const popup = { closed: false, location: { href: "" }, close: vi.fn() };
+    const popup = {
+      closed: false,
+      location: { href: "" },
+      focus: vi.fn(),
+      close: vi.fn(),
+    };
     vi.mocked(window.open).mockReturnValue(popup as unknown as Window);
     const { result } = mount("slack", { step: "test" });
     await waitFor(() => expect(result.current.state.saved).toBe(true));
-    act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
+    act(() => result.current.signIn());
     await waitFor(() =>
       expect(popup.location.href).toBe(
         "http://localhost:1234/mcp/demo-endpoint/connect/first-party",
@@ -493,7 +525,7 @@ describe("live provider setup", () => {
       values: { ...initial.values, clientId: "id", clientSecret: "secret" },
     });
     await waitFor(() => expect(result.current.loading).toBe(false));
-    act(() => result.current.dispatch({ type: "next" }));
+    act(() => result.current.next());
     await waitFor(() => expect(result.current.error).toBeTruthy());
     expect(mocks.updateServer).toHaveBeenCalledExactlyOnceWith({
       updateMcpServerForm: expect.objectContaining({
@@ -511,28 +543,25 @@ describe("live provider setup", () => {
     act(() => result.current.dispatch({ type: "connection", saved: false }));
     mocks.updateClient.mockRejectedValueOnce(new Error("Offline"));
     act(() =>
-      result.current.dispatch({
-        type: "field",
+      result.current.changeField({
         field: "access",
         value: "read",
       }),
     );
     await waitFor(() => expect(result.current.error).toBeTruthy());
     act(() =>
-      result.current.dispatch({
-        type: "field",
+      result.current.changeField({
         field: "clientId",
         value: "replacement-id",
       }),
     );
     act(() =>
-      result.current.dispatch({
-        type: "field",
+      result.current.changeField({
         field: "clientSecret",
         value: "replacement-secret",
       }),
     );
-    act(() => result.current.dispatch({ type: "next" }));
+    act(() => result.current.next());
     await waitFor(() => expect(mocks.commit).toHaveBeenCalled());
     expect(mocks.commit).toHaveBeenCalledWith(
       expect.objectContaining({
@@ -561,7 +590,7 @@ describe("live provider setup", () => {
       values: { ...state.values, clientId: "id", clientSecret: "secret" },
     });
     await waitFor(() => expect(hook.result.current.loading).toBe(false));
-    act(() => hook.result.current.dispatch({ type: "next" }));
+    act(() => hook.result.current.next());
     await waitFor(() => expect(mocks.provider).toHaveBeenCalled());
     hook.rerender({
       mcpServer: { ...server, userSessionIssuerId: "replacement-issuer" },
@@ -583,7 +612,7 @@ describe("live provider setup", () => {
       values: { ...state.values, clientId: "id", clientSecret: "secret" },
     });
     await waitFor(() => expect(result.current.loading).toBe(false));
-    act(() => result.current.dispatch({ type: "next" }));
+    act(() => result.current.next());
     await waitFor(() => expect(result.current.recovery).toBe("settings"));
     expect(mocks.commit).not.toHaveBeenCalled();
     expect(result.current.state.saved).toBe(false);
@@ -601,8 +630,7 @@ describe("live provider setup", () => {
     const { result } = mount("slack", { step: "app" });
     await waitFor(() => expect(result.current.state.saved).toBe(true));
     act(() =>
-      result.current.dispatch({
-        type: "field",
+      result.current.changeField({
         field: "access",
         value: "read",
       }),
@@ -632,8 +660,7 @@ describe("live provider setup", () => {
       }),
     );
     act(() =>
-      result.current.dispatch({
-        type: "field",
+      result.current.changeField({
         field: "access",
         value: "read",
       }),
@@ -657,8 +684,7 @@ describe("live provider setup", () => {
       ],
     });
     act(() =>
-      result.current.dispatch({
-        type: "field",
+      result.current.changeField({
         field: "access",
         value: "read",
       }),
@@ -671,7 +697,7 @@ describe("live provider setup", () => {
     saved("slack", scopesFor(initialState("slack")));
     const hook = mount("slack", { step: "test" });
     await waitFor(() => expect(hook.result.current.state.saved).toBe(true));
-    act(() => hook.result.current.dispatch({ type: "modal", modal: "test" }));
+    act(() => hook.result.current.testConnection());
     await waitFor(() => expect(hook.result.current.state.tested).toBe(true));
     mocks.associations.mockResolvedValue({ associations: [] });
     hook.rerender({
@@ -699,8 +725,7 @@ describe("live provider setup", () => {
     });
     await waitFor(() => expect(result.current.state.saved).toBe(true));
     act(() =>
-      result.current.dispatch({
-        type: "field",
+      result.current.changeField({
         field: "access",
         value: "read",
       }),
@@ -723,26 +748,30 @@ describe("live provider setup", () => {
           finish = resolve;
         }),
     );
-    const popup = { closed: false, location: { href: "" }, close: vi.fn() };
+    const popup = {
+      closed: false,
+      location: { href: "" },
+      focus: vi.fn(),
+      close: vi.fn(),
+    };
     vi.mocked(window.open).mockReturnValue(popup as unknown as Window);
     const { result } = mount("slack", { step: "test" });
     await waitFor(() => expect(result.current.state.saved).toBe(true));
     act(() =>
-      result.current.dispatch({
-        type: "field",
+      result.current.changeField({
         field: "access",
         value: "read",
       }),
     );
     await waitFor(() => expect(mocks.updateClient).toHaveBeenCalled());
-    act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
+    act(() => result.current.signIn());
     act(() => {
       window.dispatchEvent(new Event("focus"));
     });
     expect(mocks.probe).not.toHaveBeenCalled();
     expect(result.current.state.authorized).toBe(false);
     await act(async () => finish());
-    act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
+    act(() => result.current.signIn());
     await waitFor(() =>
       expect(popup.location.href).toContain("/connect/first-party"),
     );
@@ -756,13 +785,17 @@ describe("live provider setup", () => {
   it("waits for permission repair before verifying a retried Slack sign-in", async () => {
     saved("slack", scopesFor(initialState("slack")));
     mocks.updateClient.mockRejectedValueOnce(new Error("Unavailable"));
-    const popup = { closed: false, location: { href: "" }, close: vi.fn() };
+    const popup = {
+      closed: false,
+      location: { href: "" },
+      focus: vi.fn(),
+      close: vi.fn(),
+    };
     vi.mocked(window.open).mockReturnValue(popup as unknown as Window);
     const { result } = mount("slack", { step: "test" });
     await waitFor(() => expect(result.current.state.saved).toBe(true));
     act(() =>
-      result.current.dispatch({
-        type: "field",
+      result.current.changeField({
         field: "access",
         value: "read",
       }),
@@ -775,7 +808,7 @@ describe("live provider setup", () => {
           finish = resolve;
         }),
     );
-    act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
+    act(() => result.current.signIn());
     await waitFor(() => expect(mocks.updateClient).toHaveBeenCalledTimes(2));
     act(() => {
       window.dispatchEvent(new Event("focus"));
@@ -791,13 +824,17 @@ describe("live provider setup", () => {
   it("keeps permission repair locked after cancelling sign-in until the mutation settles", async () => {
     saved("slack", scopesFor(initialState("slack")));
     mocks.updateClient.mockRejectedValueOnce(new Error("Unavailable"));
-    const popup = { closed: false, location: { href: "" }, close: vi.fn() };
+    const popup = {
+      closed: false,
+      location: { href: "" },
+      focus: vi.fn(),
+      close: vi.fn(),
+    };
     vi.mocked(window.open).mockReturnValue(popup as unknown as Window);
     const { result } = mount("slack", { step: "test" });
     await waitFor(() => expect(result.current.state.saved).toBe(true));
     act(() =>
-      result.current.dispatch({
-        type: "field",
+      result.current.changeField({
         field: "access",
         value: "read",
       }),
@@ -810,13 +847,11 @@ describe("live provider setup", () => {
           finish = resolve;
         }),
     );
-    act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
+    act(() => result.current.signIn());
     await waitFor(() => expect(mocks.updateClient).toHaveBeenCalledTimes(2));
     act(() => result.current.cancelSignIn());
     expect(result.current.pending).toBe("save");
-    act(() =>
-      result.current.dispatch({ type: "field", field: "access", value: "all" }),
-    );
+    act(() => result.current.changeField({ field: "access", value: "all" }));
     expect(result.current.state.values.access).toBe("read");
     await act(async () => finish());
     await waitFor(() => expect(result.current.pending).toBeNull());
@@ -834,8 +869,7 @@ describe("live provider setup", () => {
     const { result } = mount("slack", { step: "app" });
     await waitFor(() => expect(result.current.state.saved).toBe(true));
     act(() =>
-      result.current.dispatch({
-        type: "field",
+      result.current.changeField({
         field: "access",
         value: "read",
       }),
@@ -843,7 +877,7 @@ describe("live provider setup", () => {
     await waitFor(() => expect(result.current.error).toContain("permissions"));
     expect(mocks.updateClient).not.toHaveBeenCalled();
     expect(result.current.state.step).toBe("app");
-    act(() => result.current.dispatch({ type: "next" }));
+    act(() => result.current.next());
     await waitFor(() => expect(result.current.state.step).toBe("credentials"));
     expect(mocks.revoke).toHaveBeenCalledTimes(2);
     expect(mocks.updateClient).toHaveBeenCalledTimes(1);
@@ -858,19 +892,23 @@ describe("live provider setup", () => {
         { id: "other-issuer", userSessionIssuerId: "other-issuer" },
       ]),
     );
-    const popup = { closed: false, location: { href: "" }, close: vi.fn() };
+    const popup = {
+      closed: false,
+      location: { href: "" },
+      focus: vi.fn(),
+      close: vi.fn(),
+    };
     vi.mocked(window.open).mockReturnValue(popup as unknown as Window);
     const { result } = mount("slack", { step: "test" });
     await waitFor(() => expect(result.current.state.saved).toBe(true));
     act(() =>
-      result.current.dispatch({
-        type: "field",
+      result.current.changeField({
         field: "access",
         value: "read",
       }),
     );
     await waitFor(() => expect(result.current.pending).toBeNull());
-    act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
+    act(() => result.current.signIn());
     await waitFor(() =>
       expect(popup.location.href).toContain("/connect/first-party"),
     );
@@ -896,11 +934,16 @@ describe("live provider setup", () => {
           finish = resolve;
         }),
     );
-    const popup = { closed: false, location: { href: "" }, close: vi.fn() };
+    const popup = {
+      closed: false,
+      location: { href: "" },
+      focus: vi.fn(),
+      close: vi.fn(),
+    };
     vi.mocked(window.open).mockReturnValue(popup as unknown as Window);
     const { result } = mount("slack", { step: "test" });
     await waitFor(() => expect(result.current.state.saved).toBe(true));
-    act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
+    act(() => result.current.signIn());
     await waitFor(() => expect(mocks.probe).toHaveBeenCalled());
     act(() => result.current.cancelSignIn());
     await act(async () =>
@@ -925,8 +968,7 @@ describe("live provider setup", () => {
     const { result } = mount("slack", { step: "app" });
     await waitFor(() => expect(result.current.state.saved).toBe(true));
     act(() =>
-      result.current.dispatch({
-        type: "field",
+      result.current.changeField({
         field: "access",
         value: "read",
       }),
@@ -950,11 +992,12 @@ describe("live provider setup", () => {
     vi.mocked(window.open).mockReturnValue({
       closed: false,
       location: { href: "" },
+      focus: vi.fn(),
       close: vi.fn(),
     } as unknown as Window);
     const { result } = mount("slack", { step: "test" });
     await waitFor(() => expect(result.current.state.saved).toBe(true));
-    act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
+    act(() => result.current.signIn());
     act(() => {
       window.dispatchEvent(new Event("focus"));
     });
@@ -970,7 +1013,7 @@ describe("live provider setup", () => {
     saved("slack");
     const { result } = mount("slack", { step: "test" });
     await waitFor(() => expect(result.current.state.saved).toBe(true));
-    act(() => result.current.dispatch({ type: "modal", modal: "signin" }));
+    act(() => result.current.signIn());
     expect(result.current.errorStep).toBe("signin");
     expect(result.current.error).toContain("Allow pop-ups");
     expect(result.current.state.authorized).toBe(false);
@@ -979,7 +1022,7 @@ describe("live provider setup", () => {
   it("uses the server test API with the exact target and dashboard session", async () => {
     const { result } = mount("slack", { step: "test" });
     await waitFor(() => expect(result.current.loading).toBe(false));
-    act(() => result.current.dispatch({ type: "modal", modal: "test" }));
+    act(() => result.current.testConnection());
     await waitFor(() => expect(result.current.state.tested).toBe(true));
     expect(mocks.probe).toHaveBeenCalledWith(
       expect.anything(),
@@ -1006,7 +1049,7 @@ describe("live provider setup", () => {
       });
       const { result } = mount("slack", { step: "test", authorized: true });
       await waitFor(() => expect(result.current.loading).toBe(false));
-      act(() => result.current.dispatch({ type: "modal", modal: "test" }));
+      act(() => result.current.testConnection());
       await waitFor(() =>
         expect(result.current.error).toBe(
           status === "authorization_required"
@@ -1035,12 +1078,12 @@ describe("live provider setup", () => {
       tested: true,
     });
     await waitFor(() => expect(result.current.loading).toBe(false));
-    act(() => result.current.dispatch({ type: "modal", modal: "test" }));
+    act(() => result.current.testConnection());
     await waitFor(() => expect(result.current.error).toBeTruthy());
     expect(result.current.error).not.toContain("sensitive");
     expect(result.current.state.tested).toBe(false);
     await waitFor(() => expect(result.current.pending).toBeNull());
-    act(() => result.current.dispatch({ type: "modal", modal: "test" }));
+    act(() => result.current.testConnection());
     await waitFor(() => expect(result.current.state.tested).toBe(true));
     expect(result.current.error).toBeNull();
     expect(result.current.toolCount).toBe(2);
@@ -1053,8 +1096,122 @@ describe("live provider setup", () => {
     });
     const { result } = mount("slack", { step: "test" });
     await waitFor(() => expect(result.current.loading).toBe(false));
-    act(() => result.current.dispatch({ type: "modal", modal: "test" }));
+    act(() => result.current.testConnection());
     await waitFor(() => expect(result.current.error).toBeTruthy());
     expect(result.current.state.tested).toBe(false);
   });
 });
+
+it("invalidates verification when Settings updates the canonical client cache", async () => {
+  saved("slack", scopesFor(initialState("slack")));
+  const { result } = mount("slack", { step: "test" });
+  await waitFor(() => expect(result.current.loading).toBe(false));
+  act(() => result.current.testConnection());
+  await waitFor(() => expect(result.current.state.tested).toBe(true));
+  const cache = clients.at(-1)!;
+  const key = queryKeyRemoteSessionClient({ id: "client" });
+  expect(cache.getQueryData(key)).toBeDefined();
+  await act(async () => {
+    cache.setQueryData(key, {
+      ...cache.getQueryData<object>(key),
+      id: "client",
+      scope: scopesFor({ values: { access: "read" } }),
+      updatedAt: new Date(),
+    });
+  });
+  await waitFor(() => expect(result.current.state.tested).toBe(false));
+  expect(result.current.state.authorized).toBe(false);
+});
+
+it("starts a fresh configuration read after an identity change even if the previous read is pending", async () => {
+  let finishOld!: (value: {
+    associations: {
+      issuerUrl: string;
+      remoteSessionClientId: string;
+      serverCount: number;
+    }[];
+  }) => void;
+  mocks.associations.mockReturnValueOnce(
+    new Promise((resolve) => {
+      finishOld = resolve;
+    }),
+  );
+  mocks.associations.mockResolvedValue({ associations: [] });
+  const hook = mount("slack");
+  await waitFor(() => expect(mocks.associations).toHaveBeenCalledTimes(1));
+  hook.rerender({
+    mcpServer: { ...server, userSessionIssuerId: "replacement-issuer" },
+  });
+  await waitFor(() => expect(mocks.associations).toHaveBeenCalledTimes(2));
+  await act(async () =>
+    finishOld({
+      associations: [
+        {
+          issuerUrl: "https://mcp.slack.com",
+          remoteSessionClientId: "old-client",
+          serverCount: 1,
+        },
+      ],
+    }),
+  );
+  await waitFor(() => expect(hook.result.current.loading).toBe(false));
+  expect(hook.result.current.state.saved).toBe(false);
+  expect(mocks.client).not.toHaveBeenCalled();
+});
+
+it.each(["network", "diagnostic"] as const)(
+  "restarts sign-in after a %s failure while the previous tab is still open",
+  async (failure) => {
+    saved("slack", scopesFor(initialState("slack")));
+    mocks.probe.mockResolvedValueOnce(
+      failure === "network"
+        ? { ok: false, error: new Error("Connection interrupted") }
+        : {
+            ok: true,
+            value: {
+              status: "failed",
+              code: "provider_unavailable",
+              message: "",
+            },
+          },
+    );
+    const previous = {
+      closed: false,
+      location: { href: "" },
+      focus: vi.fn(),
+      close: vi.fn(),
+    };
+    const replacement = {
+      closed: false,
+      location: { href: "" },
+      focus: vi.fn(),
+      close: vi.fn(),
+    };
+    vi.mocked(window.open)
+      .mockReturnValueOnce(previous as unknown as Window)
+      .mockReturnValueOnce(replacement as unknown as Window);
+    const { result } = mount("slack", { step: "test" });
+    await waitFor(() => expect(result.current.state.saved).toBe(true));
+    act(() => result.current.signIn());
+    await waitFor(() => expect(result.current.error).toContain("Try again"));
+    expect(result.current.pending).toBeNull();
+    expect(previous.close).not.toHaveBeenCalled();
+    const readsBeforeRetry = mocks.associations.mock.calls.length;
+
+    act(() => result.current.signIn());
+
+    expect(previous.close).toHaveBeenCalledTimes(1);
+    expect(window.open).toHaveBeenCalledTimes(2);
+    await waitFor(() =>
+      expect(replacement.location.href).toBe(
+        "https://platform.example/mcp/demo-endpoint/connect/first-party",
+      ),
+    );
+    expect(mocks.associations.mock.calls.length).toBeGreaterThan(
+      readsBeforeRetry,
+    );
+    await waitFor(() => expect(result.current.state.authorized).toBe(true));
+    expect(result.current.state.tested).toBe(false);
+    expect(result.current.error).toBeNull();
+  },
+);

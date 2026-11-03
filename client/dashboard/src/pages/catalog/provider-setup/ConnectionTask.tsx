@@ -7,26 +7,22 @@ import { Button } from "@/components/ui/Button";
 import { names, ready } from "./state";
 import { Correction } from "./shared";
 function LiveConnectionError() {
-  const { live, dispatch } = useSetup();
+  const { live } = useSetup();
   return (
     <>
-      <p>{live?.error}</p>
-      {live?.recovery === "signin" && (
-        <Button
-          variant="secondary"
-          size="sm"
-          onClick={() => dispatch({ type: "modal", modal: "signin" })}
-        >
+      <p>{live.error}</p>
+      {live.recovery === "signin" && (
+        <Button variant="secondary" size="sm" onClick={live.signIn}>
           <Button.Text>Sign in again ↗</Button.Text>
         </Button>
       )}
-      {live?.recovery === "credentials" && (
+      {live.recovery === "credentials" && (
         <Correction step="credentials">Review credentials</Correction>
       )}
-      {live?.recovery === "permissions" && (
+      {live.recovery === "permissions" && (
         <Correction step="app">Review Slack permissions</Correction>
       )}
-      {live?.recovery === "settings" && (
+      {live.recovery === "settings" && (
         <Link to={live.settingsHref ?? "../settings#authentication"}>
           Open identity settings
         </Link>
@@ -45,7 +41,8 @@ export function ConnectionTask(): JSX.Element {
     action: string;
     available: boolean;
     step?: string;
-    modal?: string;
+    run?: () => void;
+    pending?: boolean;
     hint?: string;
     error?: ReactNode;
   };
@@ -63,14 +60,13 @@ export function ConnectionTask(): JSX.Element {
       done: s.authorized,
       status: "Signed in",
       action:
-        live?.error && live.errorStep === "signin"
-          ? "Try again ↗"
-          : "Sign in ↗",
+        live.error && live.errorStep === "signin" ? "Try again ↗" : "Sign in ↗",
       available,
-      modal: "signin",
+      run: live.signIn,
+      pending: live.pending === "signin",
       hint: "Save your connection credentials first.",
       error:
-        live?.error && live.errorStep === "signin" ? (
+        live.error && live.errorStep === "signin" ? (
           <LiveConnectionError />
         ) : undefined,
     },
@@ -79,14 +75,15 @@ export function ConnectionTask(): JSX.Element {
       done: s.tested,
       status: "Passed",
       action:
-        live?.error && live.errorStep === "test"
+        live.error && live.errorStep === "test"
           ? "Test again"
           : "Test connection",
       available: available && s.authorized,
-      modal: "test",
+      run: live.testConnection,
+      pending: live.pending === "test",
       hint: "Sign in to Slack first.",
       error:
-        live?.error && live.errorStep === "test" ? (
+        live.error && live.errorStep === "test" ? (
           <LiveConnectionError />
         ) : undefined,
     },
@@ -129,7 +126,7 @@ export function ConnectionTask(): JSX.Element {
                     ) : (
                       <Button
                         variant="secondary"
-                        disabled={!row.available || !!live?.pending}
+                        disabled={!row.available || !!live.pending}
                         onClick={() =>
                           row.step
                             ? dispatch({
@@ -137,17 +134,17 @@ export function ConnectionTask(): JSX.Element {
                                 step: row.step,
                                 correction: true,
                               })
-                            : dispatch({ type: "modal", modal: row.modal! })
+                            : row.run?.()
                         }
                       >
-                        {live?.pending === "signin" && row.modal === "signin"
+                        {row.pending && live.pending === "signin"
                           ? `Waiting for ${names[s.provider]}…`
-                          : live?.pending === "test" && row.modal === "test"
+                          : row.pending && live.pending === "test"
                             ? "Testing…"
                             : row.action}
                       </Button>
                     )}
-                    {row.modal === "signin" && live?.pending === "signin" && (
+                    {row.pending && live.pending === "signin" && (
                       <Button variant="tertiary" onClick={live.cancelSignIn}>
                         <Button.Text>Cancel sign-in</Button.Text>
                       </Button>
@@ -169,7 +166,7 @@ export function ConnectionTask(): JSX.Element {
               </Fragment>
             );
           })}
-          {live?.toolCount != null && s.tested && (
+          {live.toolCount != null && s.tested && (
             <tr>
               <td colSpan={2} className="pt-5 text-sm text-muted-foreground">
                 Connected · {live.toolCount} tools discovered. No tools were
