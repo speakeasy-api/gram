@@ -47,26 +47,24 @@ func TestListPlatforms_ReturnsTheCatalogPolicy(t *testing.T) {
 	require.Empty(t, claudeTag.Subject.Alternatives)
 }
 
-// recordingFlags is an in-memory flag provider that records each evaluation
-// and, with fail set, fails every one.
+// recordingFlags is an in-memory flag provider that records what each
+// evaluation asks and, with fail set, fails every one. Its zero value is ready
+// to use.
 type recordingFlags struct {
-	*feature.InMemory
+	feature.InMemory
 	fail  error
-	asked []flagEvaluation
+	asked []flagRequest
 }
 
-type flagEvaluation struct {
+// flagRequest is what one evaluation asked the provider.
+type flagRequest struct {
 	flag       feature.Flag
 	distinctID string
 	groups     map[string]string
 }
 
-func newRecordingFlags() *recordingFlags {
-	return &recordingFlags{InMemory: &feature.InMemory{}, fail: nil, asked: nil}
-}
-
 func (f *recordingFlags) EvaluateFlag(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (feature.Evaluation, error) {
-	f.asked = append(f.asked, flagEvaluation{flag: flag, distinctID: distinctID, groups: groups})
+	f.asked = append(f.asked, flagRequest{flag: flag, distinctID: distinctID, groups: groups})
 	if f.fail != nil {
 		return feature.EvaluationIndeterminate, f.fail
 	}
@@ -87,17 +85,25 @@ func listedEnabled(t *testing.T, ctx context.Context, ti *testInstance) map[stri
 	return enabled
 }
 
+// requireGitHubActionsComingSoon requires ctx's caller to be offered every
+// entry but GitHub Actions.
+func requireGitHubActionsComingSoon(t *testing.T, ctx context.Context, ti *testInstance) {
+	t.Helper()
+
+	require.Equal(t, map[string]bool{"claude-tag": true, "github-actions": false, "gke": true}, listedEnabled(t, ctx, ti))
+}
+
 func TestListPlatforms_OffersGitHubActionsWhereItsFlagIsOn(t *testing.T) {
 	t.Parallel()
-	flags := newRecordingFlags()
+	flags := &recordingFlags{}
 	ctx, ti := newTestServiceWithFlags(t, flags)
 	flags.SetFlag(feature.FlagWorkloadPlatformGitHubActions, ti.orgID, true)
 
 	require.Equal(t, map[string]bool{"claude-tag": true, "github-actions": true, "gke": true}, listedEnabled(t, ctx, ti))
-	// Asked once, for the one entry that names a flag, as the caller's
+	// Asked once, for the one entry with a flag, as the caller's
 	// organization and its organization group, which the flag targets.
 	require.NotEmpty(t, ti.orgSlug)
-	require.Equal(t, []flagEvaluation{{
+	require.Equal(t, []flagRequest{{
 		flag:       feature.FlagWorkloadPlatformGitHubActions,
 		distinctID: ti.orgID,
 		groups:     map[string]string{"organization": ti.orgSlug},
@@ -112,42 +118,51 @@ func TestListPlatforms_OffersGitHubActionsWhereItsFlagIsOn(t *testing.T) {
 	}
 }
 
-func TestListPlatforms_KeepsGitHubActionsComingSoonWithoutItsFlag(t *testing.T) {
+func TestListPlatforms_KeepsGitHubActionsComingSoonWhileItsFlagIsMissing(t *testing.T) {
 	t.Parallel()
+	flags := &recordingFlags{}
+	ctx, ti := newTestServiceWithFlags(t, flags)
 
-	for _, tc := range []struct {
-		name  string
-		setup func(flags *recordingFlags, orgID string)
-	}{
-		{name: "missing", setup: func(*recordingFlags, string) {}},
-		{name: "off", setup: func(flags *recordingFlags, orgID string) {
-			flags.SetFlag(feature.FlagWorkloadPlatformGitHubActions, orgID, false)
-		}},
-		{name: "on for another organization", setup: func(flags *recordingFlags, _ string) {
-			flags.SetFlag(feature.FlagWorkloadPlatformGitHubActions, "another-organization", true)
-		}},
-		{name: "failing", setup: func(flags *recordingFlags, orgID string) {
-			flags.SetFlag(feature.FlagWorkloadPlatformGitHubActions, orgID, true)
-			flags.fail = errors.New("flag service unavailable")
-		}},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			flags := newRecordingFlags()
-			ctx, ti := newTestServiceWithFlags(t, flags)
-			tc.setup(flags, ti.orgID)
+	requireGitHubActionsComingSoon(t, ctx, ti)
+	require.Len(t, flags.asked, 1)
+}
 
-			require.Equal(t, map[string]bool{"claude-tag": true, "github-actions": false, "gke": true}, listedEnabled(t, ctx, ti))
-			require.Len(t, flags.asked, 1)
-		})
-	}
+func TestListPlatforms_KeepsGitHubActionsComingSoonWhileItsFlagIsOff(t *testing.T) {
+	t.Parallel()
+	flags := &recordingFlags{}
+	ctx, ti := newTestServiceWithFlags(t, flags)
+	flags.SetFlag(feature.FlagWorkloadPlatformGitHubActions, ti.orgID, false)
 
-	t.Run("no provider", func(t *testing.T) {
-		t.Parallel()
-		ctx, ti := newTestService(t)
+	requireGitHubActionsComingSoon(t, ctx, ti)
+	require.Len(t, flags.asked, 1)
+}
 
-		require.Equal(t, map[string]bool{"claude-tag": true, "github-actions": false, "gke": true}, listedEnabled(t, ctx, ti))
-	})
+func TestListPlatforms_KeepsGitHubActionsComingSoonWhileItsFlagIsOnForAnotherOrganization(t *testing.T) {
+	t.Parallel()
+	flags := &recordingFlags{}
+	ctx, ti := newTestServiceWithFlags(t, flags)
+	flags.SetFlag(feature.FlagWorkloadPlatformGitHubActions, "another-organization", true)
+
+	requireGitHubActionsComingSoon(t, ctx, ti)
+	require.Len(t, flags.asked, 1)
+}
+
+func TestListPlatforms_KeepsGitHubActionsComingSoonWhenItsFlagFails(t *testing.T) {
+	t.Parallel()
+	flags := &recordingFlags{fail: errors.New("flag service unavailable")}
+	ctx, ti := newTestServiceWithFlags(t, flags)
+	// On, but the failure wins: an evaluation that errors is never enabled.
+	flags.SetFlag(feature.FlagWorkloadPlatformGitHubActions, ti.orgID, true)
+
+	requireGitHubActionsComingSoon(t, ctx, ti)
+	require.Len(t, flags.asked, 1)
+}
+
+func TestListPlatforms_KeepsGitHubActionsComingSoonWithoutAFlagProvider(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+
+	requireGitHubActionsComingSoon(t, ctx, ti)
 }
 
 func TestListPlatforms_RequiresWorkloadRead(t *testing.T) {
