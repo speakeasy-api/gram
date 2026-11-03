@@ -484,10 +484,11 @@ func (q *Queries) GetSlackMappingForTest(ctx context.Context, arg GetSlackMappin
 }
 
 const getSlackRoutingConnectionByProject = `-- name: GetSlackRoutingConnectionByProject :one
-SELECT id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, default_project_id, created_at, updated_at FROM slack_directory_connections
-WHERE organization_id = $1
-  AND default_project_id = $2
-  AND disconnected_at IS NULL
+SELECT id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, default_project_id, created_at, updated_at FROM slack_directory_connections c
+WHERE c.organization_id = $1
+  AND c.default_project_id = $2
+  AND c.disconnected_at IS NULL
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = c.default_project_id AND p.deleted IS FALSE)
 `
 
 type GetSlackRoutingConnectionByProjectParams struct {
@@ -1034,11 +1035,13 @@ func (q *Queries) ListSlackEmailMappingCandidates(ctx context.Context, arg ListS
 }
 
 const listSlackRoutingConnectionsByTeam = `-- name: ListSlackRoutingConnectionsByTeam :many
-SELECT id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, default_project_id, created_at, updated_at FROM slack_directory_connections
-WHERE slack_team_id = $1
-  AND default_project_id IS NOT NULL
-  AND disconnected_at IS NULL
-ORDER BY created_at, id
+SELECT id, organization_id, slack_team_id, slack_team_name, credentials_encrypted, granted_scopes, generation, health, disconnected_at, last_sync_started_at, last_full_sync_generation, last_full_sync_succeeded_at, last_sync_failed_at, last_error_code, default_project_id, created_at, updated_at FROM slack_directory_connections c
+WHERE c.slack_team_id = $1
+  AND c.default_project_id IS NOT NULL
+  AND c.disconnected_at IS NULL
+  -- Soft-deleting a project keeps the assignment, so skip it here.
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = c.default_project_id AND p.deleted IS FALSE)
+ORDER BY c.created_at, c.id
 `
 
 // Connected workspaces that route Slack events to a project. A workspace can
@@ -1074,6 +1077,36 @@ func (q *Queries) ListSlackRoutingConnectionsByTeam(ctx context.Context, slackTe
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const lockOrganizationDefaultProject = `-- name: LockOrganizationDefaultProject :many
+SELECT p.id FROM projects p
+WHERE p.organization_id = $1 AND p.slug = 'default' AND p.deleted IS FALSE
+FOR NO KEY UPDATE
+`
+
+// Serializes authorizations that may assign the organization's "default"
+// project, so two workspaces connected at once cannot both claim it and fail
+// on the default_project_id unique index. The later one sees the earlier
+// assignment and connects without a default project.
+func (q *Queries) LockOrganizationDefaultProject(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, lockOrganizationDefaultProject, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err

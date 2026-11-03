@@ -352,6 +352,7 @@ LEFT JOIN assets logo
   ON logo.id = metadata.logo_id
   AND (logo.project_id = s.project_id
     OR (logo.project_id IS NULL AND (logo.organization_id = p.organization_id OR logo.organization_id IS NULL)))
+  AND logo.deleted IS FALSE
   AND logo.kind = 'image'
   AND logo.content_type IN ('image/png', 'image/jpeg', 'image/gif')
 WHERE p.organization_id = $1

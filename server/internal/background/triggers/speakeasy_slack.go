@@ -95,7 +95,7 @@ func (s SlackEventSummary) Addressed() bool {
 	case "app_mention":
 		return true
 	case "message":
-		return len(s.ChannelID) > 0 && s.ChannelID[0] == 'D' && (s.Subtype == "" || s.Subtype == "file_share")
+		return len(s.ChannelID) > 0 && s.ChannelID[0] == 'D' && (s.Subtype == "" || s.Subtype == "file_share" || s.Subtype == "thread_broadcast")
 	default:
 		return false
 	}

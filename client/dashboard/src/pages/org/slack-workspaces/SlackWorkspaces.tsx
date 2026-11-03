@@ -297,7 +297,7 @@ function SlackWorkspacesContent(): JSX.Element {
         </Alert>
       )}
       <ApiErrorAlert
-        error={query.error ?? begin.error ?? setDefaultProject.error}
+        error={setDefaultProject.error ?? begin.error ?? query.error}
       />
       {redirectError && <Alert variant="error">{redirectError}</Alert>}
       {query.isError && (

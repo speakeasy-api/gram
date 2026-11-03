@@ -6,6 +6,7 @@ import {
   screen,
   waitFor,
 } from "@testing-library/react";
+import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter, useLocation } from "react-router";
 import type { ReactNode } from "react";
@@ -276,6 +277,41 @@ it("shows None when no default project is set", () => {
   expect(
     screen.getByRole("combobox", { name: "Default project" }).textContent,
   ).toContain("None");
+});
+
+it("saves the chosen default project for the workspace", async () => {
+  // Radix scrolls the selected option into view in browsers.
+  Element.prototype.scrollIntoView = vi.fn<() => void>();
+  const user = userEvent.setup();
+  show();
+  await user.click(screen.getByRole("combobox", { name: "Default project" }));
+  await user.click(screen.getByRole("option", { name: "Beta" }));
+  expect(mocks.setDefaultProject).toHaveBeenCalledWith(
+    expect.objectContaining({
+      request: {
+        setSlackDirectoryDefaultProjectRequestBody: {
+          id: "connection-one",
+          projectId: "project-beta",
+        },
+      },
+    }),
+  );
+});
+
+it("clears the default project when None is chosen", async () => {
+  Element.prototype.scrollIntoView = vi.fn<() => void>();
+  mocks.defaultProjectId = "project-alpha";
+  const user = userEvent.setup();
+  show();
+  await user.click(screen.getByRole("combobox", { name: "Default project" }));
+  await user.click(screen.getByRole("option", { name: "None" }));
+  expect(mocks.setDefaultProject).toHaveBeenCalledWith(
+    expect.objectContaining({
+      request: {
+        setSlackDirectoryDefaultProjectRequestBody: { id: "connection-one" },
+      },
+    }),
+  );
 });
 
 it("disconnects the generation the administrator confirmed", () => {

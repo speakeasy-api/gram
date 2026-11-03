@@ -17,6 +17,15 @@ SELECT * FROM slack_directory_connections
 WHERE organization_id = @organization_id AND slack_team_id = @slack_team_id
 FOR UPDATE;
 
+-- name: LockOrganizationDefaultProject :many
+-- Serializes authorizations that may assign the organization's "default"
+-- project, so two workspaces connected at once cannot both claim it and fail
+-- on the default_project_id unique index. The later one sees the earlier
+-- assignment and connects without a default project.
+SELECT p.id FROM projects p
+WHERE p.organization_id = @organization_id AND p.slug = 'default' AND p.deleted IS FALSE
+FOR NO KEY UPDATE;
+
 -- name: CreateSlackDirectoryConnection :one
 -- A new workspace answers for the organization's "default" project unless that
 -- project already answers in another workspace.
@@ -341,15 +350,18 @@ RETURNING *;
 -- name: ListSlackRoutingConnectionsByTeam :many
 -- Connected workspaces that route Slack events to a project. A workspace can
 -- be connected by more than one organization, so callers must handle several.
-SELECT * FROM slack_directory_connections
-WHERE slack_team_id = @slack_team_id
-  AND default_project_id IS NOT NULL
-  AND disconnected_at IS NULL
-ORDER BY created_at, id;
+SELECT * FROM slack_directory_connections c
+WHERE c.slack_team_id = @slack_team_id
+  AND c.default_project_id IS NOT NULL
+  AND c.disconnected_at IS NULL
+  -- Soft-deleting a project keeps the assignment, so skip it here.
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = c.default_project_id AND p.deleted IS FALSE)
+ORDER BY c.created_at, c.id;
 
 -- name: GetSlackRoutingConnectionByProject :one
 -- The connected workspace whose Speakeasy app replies for a project.
-SELECT * FROM slack_directory_connections
-WHERE organization_id = @organization_id
-  AND default_project_id = @default_project_id
-  AND disconnected_at IS NULL;
+SELECT * FROM slack_directory_connections c
+WHERE c.organization_id = @organization_id
+  AND c.default_project_id = @default_project_id
+  AND c.disconnected_at IS NULL
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = c.default_project_id AND p.deleted IS FALSE);

@@ -1316,6 +1316,8 @@ SELECT count(*) FROM assistant_threads t
 JOIN chats c ON c.id = t.chat_id AND c.project_id = t.project_id
 WHERE t.project_id = $1::uuid
   AND t.source_kind = 'speakeasy_slack'
+  AND t.deleted IS FALSE
+  AND c.deleted IS FALSE
   AND c.session_surface = 'speakeasy-slack'
 `
 

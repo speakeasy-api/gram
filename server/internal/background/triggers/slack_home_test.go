@@ -88,6 +88,24 @@ func TestPublishSlackAppHomeCallsViewsPublish(t *testing.T) {
 	require.Equal(t, "https://app.getgram.ai", view.Blocks[2].Elements[0].URL)
 }
 
+func TestPublishSlackAppHomePublishesForPausedTrigger(t *testing.T) {
+	t.Parallel()
+
+	called := false
+	app := newSlackHomeTestApp(t, func(w http.ResponseWriter, r *http.Request) {
+		called = true
+		w.Header().Set("Content-Type", "application/json")
+		_, _ = w.Write([]byte(`{"ok":true}`))
+	})
+	instance := triggerrepo.TriggerInstance{DefinitionSlug: DefinitionSlugSlack, Status: StatusPaused}
+	env := map[string]string{"SLACK_BOT_TOKEN": "xoxb-test-token"}
+	envelope := EventEnvelope{Event: slackTriggerEvent{EventType: "app_home_opened"}}
+
+	app.publishSlackAppHome(t.Context(), instance, env, appHomeOpenedWebhookBody("home"), envelope)
+
+	require.True(t, called)
+}
+
 func TestPublishSlackAppHomeSkipsMessagesTab(t *testing.T) {
 	t.Parallel()
 

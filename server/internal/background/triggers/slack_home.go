@@ -22,13 +22,11 @@ type slackAppHomeOpenedEventBody struct {
 // publishSlackAppHome answers a Slack app_home_opened event for the Home tab
 // with a views.publish call. Slack keeps the Home tab spinning until the app
 // publishes a view for the user, so this runs for every opening regardless of
-// the trigger's event_types subscription. Best-effort, mirroring
+// the trigger's event_types subscription or status: the view is static, and a
+// paused trigger would otherwise leave the tab spinning. Best-effort, mirroring
 // unfurlSlackGramLinks: a failure here only costs the Home tab content.
 func (a *App) publishSlackAppHome(ctx context.Context, instance triggerrepo.TriggerInstance, env map[string]string, body []byte, event EventEnvelope) {
 	if a.slackClient == nil || a.siteURL == nil || !isSlackDefinition(instance.DefinitionSlug) {
-		return
-	}
-	if instance.Status != StatusActive {
 		return
 	}
 	evt, isSlack := event.Event.(slackTriggerEvent)

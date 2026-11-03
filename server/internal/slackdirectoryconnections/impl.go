@@ -274,6 +274,12 @@ func (s *Service) saveAuthorization(ctx context.Context, ac *contextvalues.AuthC
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
 	queries := repo.New(tx)
 	before, err := queries.LockSlackDirectoryConnectionByTeam(ctx, repo.LockSlackDirectoryConnectionByTeamParams{OrganizationID: ac.ActiveOrganizationID, SlackTeamID: authorization.WorkspaceID})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return fmt.Errorf("lock workspace: %w", err)
+	}
+	if _, lockErr := queries.LockOrganizationDefaultProject(ctx, ac.ActiveOrganizationID); lockErr != nil {
+		return fmt.Errorf("lock default project: %w", lockErr)
+	}
 	var previous *gen.SlackDirectoryConnection
 	var row repo.SlackDirectoryConnection
 	switch {

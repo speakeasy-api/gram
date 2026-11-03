@@ -59,9 +59,9 @@ In the shared app:
 1. **OAuth & Permissions → Redirect URLs:** add the exact callback derived from `GRAM_SERVER_URL`; retain existing entries. The browser follows it; localhost can work. Match scheme/port. Do not substitute the tunnel automatically: the login session belongs to the local origin.
 2. **OAuth & Permissions → Bot Token Scopes:** `chat:write`, `users:read`, `users:read.email`, `app_mentions:read`, `im:history`.
 3. **Socket Mode:** off for HTTP event delivery.
-4. **Event Subscriptions:** enable, set `/slack/events`, wait for **Verified**, add bot events `app_mention` and `message.im`, then **Save Changes**. Verification alone does not save: without subscriptions the save button was disabled and refreshing reverted the toggle.
-5. **Interactivity & Shortcuts:** enable and set `/slack/interactions`.
-6. **App Home:** enable Messages and allow users to send messages (manifest equivalent: `messages_tab_read_only_enabled: false`).
+4. **Event Subscriptions:** enable, set the Request URL to `https://<tunnel-host>/slack/events`, wait for **Verified**, add bot events `app_mention`, `message.im`, and `app_home_opened`, then **Save Changes**. Verification alone does not save: without subscriptions the save button was disabled and refreshing reverted the toggle.
+5. **Interactivity & Shortcuts:** enable and set the Request URL to `https://<tunnel-host>/slack/interactions`.
+6. **App Home:** enable the Home tab, enable Messages, and allow users to send messages (manifest equivalent: `home_tab_enabled: true`, `messages_tab_read_only_enabled: false`).
 
 After scope changes, reconnect/reinstall through **Connect Slack** in the local dashboard.
 
