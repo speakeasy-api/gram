@@ -298,7 +298,7 @@ func NewActivities(
 	chatAnalysisJudges, err := analysis.NewJudges(
 		analysis.NewWorkUnitsJudge(logger, tracerProvider, chatClient, judgeRateLimiter),
 		businessmemory.NewJudge(logger, tracerProvider, db, chatClient, judgeRateLimiter),
-		summaryjudge.NewJudge(logger, db, features, chatClient, judgeRateLimiter),
+		summaryjudge.NewJudge(logger, db, chatClient, judgeRateLimiter),
 	)
 	if err != nil {
 		panic(fmt.Errorf("new chat analysis judges: %w", err))
@@ -419,7 +419,7 @@ func NewActivities(
 		promoteStagedTelemetry:           activities.NewPromoteStagedTelemetry(logger, chConn, cacheAdapter, telemetryLogPublisher),
 		listStagedTelemetryProjects:      activities.NewListStagedTelemetryProjects(logger, chConn),
 		generateChatTitle:                activities.NewGenerateChatTitle(logger, db, chatClient),
-		memoryDigests:                    activities.NewMemoryDigests(logger, db, chatClient, features),
+		memoryDigests:                    activities.NewMemoryDigests(logger, db, chatClient),
 		processDeployment:                activities.NewProcessDeployment(logger, tracerProvider, meterProvider, guardianPolicy, db, features, assetStorage, billingRepo, mcpCatalog),
 		provisionFunctionsAccess:         activities.NewProvisionFunctionsAccess(logger, db, encryption),
 		deployFunctionRunners:            activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),

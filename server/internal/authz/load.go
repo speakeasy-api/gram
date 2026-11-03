@@ -51,14 +51,32 @@ func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, 
 	return withSystemRoleDefaults(grantRows, defaults), nil
 }
 
-// lateDefaultGroups are system-role default scopes added after organizations
-// were already seeded. Each group is supplied at load time to a built-in role
-// principal that holds no stored grant in that group.
-var lateDefaultGroups = []func(Scope) bool{
-	// Assistant scopes.
-	func(scope Scope) bool { return ResourceKindForScope(scope) == ResourceKindAssistant },
+// lateDefaultGroup is a set of system-role default scopes added after
+// organizations were already seeded. It is supplied at load time to a
+// built-in role principal that holds no stored grant in the group, when the
+// group can apply to that principal at all.
+type lateDefaultGroup struct {
+	// contains reports whether a scope belongs to the group.
+	contains func(Scope) bool
+	// appliesTo reports, from a principal's stored grants, whether its role
+	// can hold the group. It keeps roles that never get the group, such as
+	// member for admin-only scopes, from costing a role lookup on every load.
+	appliesTo func(stored []Grant) bool
+}
+
+var lateDefaultGroups = []lateDefaultGroup{
+	// Assistant scopes, defaults of every built-in role.
+	{
+		contains:  func(scope Scope) bool { return ResourceKindForScope(scope) == ResourceKindAssistant },
+		appliesTo: func([]Grant) bool { return true },
+	},
 	// Organizational Memory scopes, an org:admin default.
-	func(scope Scope) bool { return scope == ScopeMemoryRead || scope == ScopeMemoryWrite },
+	{
+		contains: func(scope Scope) bool { return scope == ScopeMemoryRead || scope == ScopeMemoryWrite },
+		appliesTo: func(stored []Grant) bool {
+			return slices.ContainsFunc(stored, func(grant Grant) bool { return grant.Scope == ScopeOrgAdmin })
+		},
+	},
 }
 
 // lateSystemRoleDefaults returns the late-added default scopes each built-in
@@ -74,10 +92,14 @@ func lateSystemRoleDefaults(ctx context.Context, db accessrepo.DBTX, principals 
 			continue
 		}
 		key := principal.String()
-		for i, inGroup := range lateDefaultGroups {
-			if !slices.ContainsFunc(grants, func(grant Grant) bool {
-				return grant.PrincipalUrn == key && inGroup(grant.Scope)
-			}) {
+		var stored []Grant
+		for _, grant := range grants {
+			if grant.PrincipalUrn == key {
+				stored = append(stored, grant)
+			}
+		}
+		for i, group := range lateDefaultGroups {
+			if group.appliesTo(stored) && !slices.ContainsFunc(stored, func(grant Grant) bool { return group.contains(grant.Scope) }) {
 				missing[key] = append(missing[key], i)
 			}
 		}
@@ -100,7 +122,7 @@ func lateSystemRoleDefaults(ctx context.Context, db accessrepo.DBTX, principals 
 		}
 		for _, grant := range roleGrants {
 			scope := Scope(grant.Scope)
-			if slices.ContainsFunc(groups, func(i int) bool { return lateDefaultGroups[i](scope) }) {
+			if slices.ContainsFunc(groups, func(i int) bool { return lateDefaultGroups[i].contains(scope) }) {
 				defaults[key] = append(defaults[key], scope)
 			}
 		}

@@ -23431,7 +23431,7 @@ func organizationsSubmitOnboardingSurveyUsage() {
 // orgMemoryUsage displays the usage of the org-memory command and its
 // subcommands.
 func orgMemoryUsage() {
-	fmt.Fprintln(os.Stderr, `Browse a project's Organizational Memory: digests, the sessions and memos they fold, and recent activity. Requires memory:read on the project and the org-memory rollout.`)
+	fmt.Fprintln(os.Stderr, `Browse a project's Organizational Memory: digests, the sessions and memos they fold, and recent activity. Requires memory:read on the project and Business Memory Extraction turned on for the organization.`)
 	fmt.Fprintf(os.Stderr, "Usage:\n    %s [globalflags] org-memory COMMAND [flags]\n\n", os.Args[0])
 	fmt.Fprintln(os.Stderr, "COMMAND:")
 	fmt.Fprintln(os.Stderr, `    get-org-memory-overview: Summarize the project's Organizational Memory over a recent window.`)
