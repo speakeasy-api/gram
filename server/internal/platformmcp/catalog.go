@@ -44,7 +44,7 @@ type CatalogCandidate struct {
 	Version     string `json:"version"`
 	// ToolCount is left out when the catalogue does not know the tool count, so
 	// it never reads as a server with no tools.
-	ToolCount   *int   `json:"tool_count,omitempty" jsonschema:"number of tools the server offers; absent when not known"`
+	ToolCount   int    `json:"tool_count,omitempty" jsonschema:"number of tools the server offers; absent when not known"`
 	SetupIntent string `json:"setup_intent"`
 	// SupportsDCR is advertised dynamic client registration support.
 	SupportsDCR bool `json:"supports_dcr"`
@@ -68,7 +68,7 @@ type CatalogConfigurationField struct {
 type CatalogDetails struct {
 	CatalogCandidate
 	Transport              string                      `json:"transport"`
-	ToolNames              []string                    `json:"tool_names,omitempty"`
+	ToolNames              []string                    `json:"tool_names"`
 	Configuration          []CatalogConfigurationField `json:"configuration"`
 	RequiresDashboardSetup bool                        `json:"requires_dashboard_setup"`
 
@@ -286,6 +286,13 @@ func projectCatalogDetails(descriptor CatalogDescriptor, catalogRef string, deta
 	if details.RemoteURL == "" || !validCatalogRemoteTemplate(details.RemoteURL) || details.TransportType != externalmcptypes.TransportTypeStreamableHTTP {
 		return CatalogDetails{}, ErrCatalogRejected
 	}
+	toolNames := make([]string, 0, len(details.Tools))
+	for _, tool := range details.Tools {
+		if tool.Name != "" {
+			toolNames = append(toolNames, tool.Name)
+		}
+	}
+	sort.Strings(toolNames)
 	configuration := catalogConfiguration(details.Headers, details.Variables)
 	return CatalogDetails{
 		CatalogCandidate: CatalogCandidate{
@@ -294,10 +301,12 @@ func projectCatalogDetails(descriptor CatalogDescriptor, catalogRef string, deta
 			Name:        details.Name,
 			Description: details.Description,
 			Version:     details.Version,
+			ToolCount:   len(toolNames),
 			SupportsDCR: details.SupportsDCR, SupportsCIMD: details.SupportsCIMD, AuthSetup: details.AuthSetup,
 			SetupIntent: descriptor.SetupIntent,
 		},
 		Transport:              string(details.TransportType),
+		ToolNames:              toolNames,
 		Configuration:          configuration,
 		RequiresDashboardSetup: catalogRequiresDashboardSetup(configuration),
 		remoteURLTemplate:      details.RemoteURL,
@@ -422,6 +431,7 @@ func catalogCandidateFromEntry(descriptor CatalogDescriptor, entry *types.Extern
 		Name:        name,
 		Description: entry.Description,
 		Version:     entry.Version,
+		ToolCount:   conv.PtrValOr(entry.ToolCount, 0),
 		SupportsDCR: entry.SupportsDcr, SupportsCIMD: conv.PtrValOr(entry.SupportsCimd, false), AuthSetup: conv.PtrValOr(entry.AuthSetup, "unknown"),
 		SetupIntent: descriptor.SetupIntent,
 	}

@@ -151,8 +151,8 @@ func officialEntry(registryID uuid.UUID, server serverJSON) *types.ExternalMCPSe
 		Title:             server.Title,
 		IconURL:           officialIconURL(server),
 		Meta:              nil,
-		ToolCount:         nil,
-		IsReadOnly:        nil,
+		ToolCount:         new(0),
+		IsReadOnly:        new(false),
 		SupportsDcr:       false,
 		SupportsCimd:      new(false), AuthSetup: new("unknown"),
 		Remotes: remotes,
@@ -205,6 +205,7 @@ func (a *OfficialRegistryAdapter) GetServerDetails(ctx context.Context, registry
 			Version:       detail.Server.Version,
 			RemoteURL:     "",
 			TransportType: "",
+			Tools:         nil,
 			Headers:       nil,
 			Variables:     nil,
 		}, nil
@@ -215,6 +216,7 @@ func (a *OfficialRegistryAdapter) GetServerDetails(ctx context.Context, registry
 		Version:       detail.Server.Version,
 		RemoteURL:     remote.URL,
 		TransportType: externalmcptypes.TransportType(remote.Type),
+		Tools:         nil,
 		Headers:       remote.Headers,
 		Variables:     remote.Variables,
 	}, nil

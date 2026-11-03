@@ -1,7 +1,6 @@
 package evidence_test
 
 import (
-	"bytes"
 	"context"
 	"encoding/json"
 	"errors"
@@ -85,7 +84,7 @@ func (quietProbes) ListToolDeclarations(_ context.Context, _ string) ([]capabili
 	return nil, nil
 }
 
-func (quietProbes) Lookup(_ context.Context, _ uuid.UUID, _ string) (*catalog.Match, error) {
+func (quietProbes) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
 	return nil, nil
 }
 
@@ -364,7 +363,7 @@ func (failingProbes) ListToolDeclarations(_ context.Context, _ string) ([]capabi
 	return nil, errors.New("server refused unauthenticated tools/list")
 }
 
-func (failingProbes) Lookup(_ context.Context, _ uuid.UUID, _ string) (*catalog.Match, error) {
+func (failingProbes) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
 	return nil, errors.New("registry unreachable")
 }
 
@@ -398,20 +397,89 @@ func (declaringProbes) ListToolDeclarations(_ context.Context, _ string) ([]capa
 	}, nil
 }
 
-func (declaringProbes) Lookup(_ context.Context, _ uuid.UUID, _ string) (*catalog.Match, error) {
+func (declaringProbes) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
 	return &catalog.Match{
 		Registry:  "Test Registry",
 		Specifier: "com.example/server",
 		Provenance: provenance.Provenance{
-			Status:      "active",
+			Catalogued: true, Official: true, Status: "active", IsLatest: true,
 			PublishedAt: time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC), UpdatedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
+			VisitorsLastWeek: 120, VisitorsLastFourWeeks: 480, VisitorsTotal: 9000,
+		},
+		Tools: nil,
+	}, nil
+}
+
+// cataloguedOnlyProbes stands in for an OAuth-protected server that refuses
+// unauthenticated tools/list while its registry entry carries the tool list.
+type cataloguedOnlyProbes struct{}
+
+func (cataloguedOnlyProbes) DiscoverAuthority(_ context.Context, _ string) (*authority.Declaration, error) {
+	return nil, nil
+}
+
+func (cataloguedOnlyProbes) ListToolDeclarations(_ context.Context, _ string) ([]capability.Declaration, error) {
+	return nil, errors.New("server refused unauthenticated tools/list")
+}
+
+func (cataloguedOnlyProbes) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
+	readOnly := true
+	return &catalog.Match{
+		Registry:  "Test Registry",
+		Specifier: "com.example/server",
+		Provenance: provenance.Provenance{
+			Catalogued: true, Official: true, Status: "active", IsLatest: true,
+			PublishedAt: time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC), UpdatedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
+			VisitorsLastWeek: 120, VisitorsLastFourWeeks: 480, VisitorsTotal: 9000,
+		},
+		Tools: []capability.Declaration{
+			{
+				Name: "search_docs", Description: "Search documentation", InputSchema: "",
+				ReadOnly: &readOnly, Destructive: nil, Idempotent: nil, OpenWorld: nil,
+			},
 		},
 	}, nil
 }
 
+// A server that refuses unauthenticated tools/list but is catalogued gets its
+// capability section from the registry's copy, labeled as such, with no
+// tool-declarations gap: the declarations were consulted, one step removed.
+func TestAssemble_RegistryCopyFillsCapabilitiesWhenServerRefuses(t *testing.T) {
+	t.Parallel()
+
+	assembler := evidence.NewAssembler(
+		&fakePackages{metadata: nil, err: nil},
+		quietRepos{}, quietAdvisories{}, quietDomains{}, &fakeTraffic{row: nil, usage: nil, rowErr: nil, usageErr: nil},
+		cataloguedOnlyProbes{},
+		cataloguedOnlyProbes{},
+		cataloguedOnlyProbes{},
+	)
+
+	raw, err := assembler.Assemble(t.Context(), uuid.New(), identity.Resolve("https://mcp.example.com/mcp"))
+	require.NoError(t, err)
+	doc := decode(t, raw)
+
+	require.Equal(t, "registry", doc["capabilities_source"])
+	capabilities, ok := doc["capabilities"].([]any)
+	require.True(t, ok)
+	require.Len(t, capabilities, 1)
+	first, ok := capabilities[0].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, "search_docs", first["tool"])
+
+	prov, ok := doc["provenance"].(map[string]any)
+	require.True(t, ok)
+	require.Equal(t, true, prov["catalogued"])
+	require.Equal(t, true, prov["official"])
+	require.Equal(t, "Test Registry", prov["registry"])
+
+	gaps, _ := doc["gaps"].([]any)
+	require.NotContains(t, gaps, "tool_declarations_probe_failed")
+}
+
 // cataloguedNoToolMetadata stands in for a server that refuses
-// unauthenticated tools/list and whose registry entry matched; catalog entries
-// carry no tool declarations.
+// unauthenticated tools/list and whose registry entry matched but carried no
+// tool metadata: the details fetch succeeded, Tools stayed nil.
 type cataloguedNoToolMetadata struct{}
 
 func (cataloguedNoToolMetadata) DiscoverAuthority(_ context.Context, _ string) (*authority.Declaration, error) {
@@ -422,14 +490,16 @@ func (cataloguedNoToolMetadata) ListToolDeclarations(_ context.Context, _ string
 	return nil, errors.New("server refused unauthenticated tools/list")
 }
 
-func (cataloguedNoToolMetadata) Lookup(_ context.Context, _ uuid.UUID, _ string) (*catalog.Match, error) {
+func (cataloguedNoToolMetadata) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
 	return &catalog.Match{
 		Registry:  "Test Registry",
 		Specifier: "com.example/server",
 		Provenance: provenance.Provenance{
-			Status:      "active",
+			Catalogued: true, Official: false, Status: "active", IsLatest: true,
 			PublishedAt: time.Date(2026, 1, 5, 0, 0, 0, 0, time.UTC), UpdatedAt: time.Date(2026, 7, 1, 0, 0, 0, 0, time.UTC),
+			VisitorsLastWeek: 0, VisitorsLastFourWeeks: 0, VisitorsTotal: 0,
 		},
+		Tools: nil,
 	}, nil
 }
 
@@ -511,7 +581,7 @@ func TestAssemble_RemoteProbesFillAuthorityAndCapabilities(t *testing.T) {
 	require.Equal(t, "oauth", authoritySection["mode"])
 	require.Equal(t, true, authoritySection["dynamic_registration"])
 
-	require.Equal(t, "server", doc["capabilities_source"], "declarations come from the server's own listing")
+	require.Equal(t, "server", doc["capabilities_source"], "a direct answer outranks the registry's copy")
 	capabilities, ok := doc["capabilities"].([]any)
 	require.True(t, ok)
 	require.Len(t, capabilities, 2)
@@ -570,7 +640,7 @@ func (authorityFailsToolsAnswer) ListToolDeclarations(_ context.Context, _ strin
 	}}, nil
 }
 
-func (authorityFailsToolsAnswer) Lookup(_ context.Context, _ uuid.UUID, _ string) (*catalog.Match, error) {
+func (authorityFailsToolsAnswer) Lookup(_ context.Context, _ uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
 	return nil, nil
 }
 
@@ -876,7 +946,7 @@ func TestAssemble_DomainFailureIsAGap(t *testing.T) {
 
 type projectCatalogProbe struct{ projectID uuid.UUID }
 
-func (p *projectCatalogProbe) Lookup(_ context.Context, projectID uuid.UUID, _ string) (*catalog.Match, error) {
+func (p *projectCatalogProbe) Lookup(_ context.Context, projectID uuid.UUID, _ string, _ bool) (*catalog.Match, error) {
 	p.projectID = projectID
 	return nil, nil
 }
@@ -889,47 +959,4 @@ func TestAssembleCatalogReceivesResearchProjectWithoutAuthContext(t *testing.T) 
 	_, err := assembler.Assemble(t.Context(), projectID, identity.Resolve("https://example.com/mcp"))
 	require.NoError(t, err)
 	require.Equal(t, projectID, probe.projectID)
-}
-
-func TestDecodeDocument_LegacyProvenance(t *testing.T) {
-	t.Parallel()
-	require.Equal(t, 2, evidence.Version)
-	for _, tc := range []struct {
-		name, provenance string
-	}{
-		{"omitted legacy false is unknown", `{"registry":"historical","catalogued":true,"official":true,"visitors_total":123}`},
-		{"recorded latest ignored", `{"catalogued":true,"status":"active","is_latest":true}`},
-		{"explicit false ignored", `{"catalogued":true,"is_latest":false}`},
-	} {
-		t.Run(tc.name, func(t *testing.T) {
-			t.Parallel()
-			document, err := evidence.DecodeDocument([]byte(`{"identity":{"kind":"remote","artifact_ref":"https://example.com/mcp"},"provenance":`+tc.provenance+`}`), 1)
-			require.NoError(t, err)
-			require.Equal(t, "https://example.com/mcp", document.Identity.ArtifactRef)
-			require.NotNil(t, document.Provenance)
-			require.True(t, document.Provenance.Catalogued)
-			raw, err := json.Marshal(document.Provenance)
-			require.NoError(t, err)
-			require.NotContains(t, string(raw), "is_latest")
-			require.NotContains(t, string(raw), "official")
-			require.NotContains(t, string(raw), "visitors")
-		})
-	}
-	for _, version := range []int{1, 2} {
-		baseline := []byte(`{"identity":{"kind":"remote"},"provenance":{"catalogued":true,"status":"deprecated","published_at":"2026-07-01T00:00:00Z","updated_at":"2026-08-01T00:00:00Z"}}`)
-		expected, err := evidence.DecodeDocument(baseline, version)
-		require.NoError(t, err)
-		for _, latest := range []string{"false", "true"} {
-			historical := bytes.Replace(baseline, []byte(`"catalogued":true`), []byte(`"catalogued":true,"is_latest":`+latest), 1)
-			document, err := evidence.DecodeDocument(historical, version)
-			require.NoError(t, err)
-			require.Equal(t, expected, document)
-			require.Contains(t, string(historical), `"is_latest":`+latest)
-		}
-	}
-
-	_, err := evidence.DecodeDocument([]byte(`{`), 1)
-	require.ErrorContains(t, err, "decode evidence document")
-	_, err = evidence.DecodeDocument([]byte(`{}`), 0)
-	require.ErrorContains(t, err, "unsupported evidence version")
 }

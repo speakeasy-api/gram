@@ -50,7 +50,7 @@ import (
 // Version is the shape version of the document this package assembles. It is
 // stored alongside every gather and copied onto every decision's frozen
 // snapshot, so bump it when the document's shape changes.
-const Version = 2
+const Version = 1
 
 // Document is one gather of everything known about a requested server.
 type Document struct {
@@ -101,19 +101,19 @@ type Document struct {
 	Authority *AuthoritySection `json:"authority,omitempty"`
 
 	// Capabilities is what each tool declares about itself, gathered from the
-	// server's own unauthenticated tools/list (see CapabilitiesSource).
+	// server's own unauthenticated tools/list or, failing that, the registry
+	// catalog's copy (see CapabilitiesSource).
 	Capabilities []CapabilitySection `json:"capabilities,omitempty"`
 
 	// CapabilitiesSource records where Capabilities came from: the server's
-	// own unauthenticated tools/list (CapabilitiesFromServer). Previously
-	// stored documents may instead carry a registry catalog entry's copy
-	// (CapabilitiesFromRegistry), which is one step further from the source,
-	// and the panel must say so. Empty when no source supplied declarations;
-	// set with an empty Capabilities when a source answered with zero tools,
-	// which is a real (if odd) declaration.
+	// own unauthenticated tools/list (CapabilitiesFromServer) or its registry
+	// catalog entry (CapabilitiesFromRegistry). The registry's copy is one
+	// step further from the source, and the panel must say so. Empty when no
+	// source supplied declarations; set with an empty Capabilities when a
+	// source answered with zero tools, which is a real (if odd) declaration.
 	CapabilitiesSource string `json:"capabilities_source,omitempty"`
 
-	// Provenance is the registry catalog's membership and lifecycle evidence
+	// Provenance is the registry catalog's maturity and popularity signals
 	// for the matched entry, present for remote targets whose catalog lookup
 	// ran. Catalogued false is checked-and-absent — every registry answered
 	// and none carries the URL — distinct from a lookup failure, which is a
@@ -125,9 +125,7 @@ type Document struct {
 	Gaps []string `json:"gaps,omitempty"`
 }
 
-// Capabilities sources, recorded in CapabilitiesSource. New gathers only
-// record CapabilitiesFromServer; CapabilitiesFromRegistry remains readable in
-// previously stored documents.
+// Capabilities sources, recorded in CapabilitiesSource.
 const (
 	CapabilitiesFromServer   = "server"
 	CapabilitiesFromRegistry = "registry"
@@ -270,12 +268,17 @@ type CapabilitySection struct {
 // ProvenanceSection mirrors provenance.Provenance for storage, plus which
 // registry made the claims.
 type ProvenanceSection struct {
-	Registry    string `json:"registry,omitempty"`
-	Specifier   string `json:"specifier,omitempty"`
-	Catalogued  bool   `json:"catalogued"`
-	Status      string `json:"status,omitempty"`
-	PublishedAt string `json:"published_at,omitempty"`
-	UpdatedAt   string `json:"updated_at,omitempty"`
+	Registry              string `json:"registry,omitempty"`
+	Specifier             string `json:"specifier,omitempty"`
+	Catalogued            bool   `json:"catalogued"`
+	Official              bool   `json:"official,omitempty"`
+	Status                string `json:"status,omitempty"`
+	IsLatest              bool   `json:"is_latest,omitempty"`
+	PublishedAt           string `json:"published_at,omitempty"`
+	UpdatedAt             string `json:"updated_at,omitempty"`
+	VisitorsLastWeek      int    `json:"visitors_last_week,omitempty"`
+	VisitorsLastFourWeeks int    `json:"visitors_last_four_weeks,omitempty"`
+	VisitorsTotal         int    `json:"visitors_total,omitempty"`
 }
 
 // Gap names for the sources that can fail independently.
@@ -355,10 +358,11 @@ type ToolProber interface {
 }
 
 // CatalogLookup matches a server URL against the research project's selected catalog.
-// A nil match with a nil error is checked-and-absent. *catalog.Source
-// satisfies it.
+// A nil match with a nil error is checked-and-absent. includeTools asks for
+// the entry's tool declarations, which cost an extra registry round trip;
+// when false, a match carries provenance only. *catalog.Source satisfies it.
 type CatalogLookup interface {
-	Lookup(ctx context.Context, projectID uuid.UUID, serverURL string) (*catalog.Match, error)
+	Lookup(ctx context.Context, projectID uuid.UUID, serverURL string, includeTools bool) (*catalog.Match, error)
 }
 
 var _ CatalogLookup = (*catalog.Source)(nil)
@@ -658,9 +662,10 @@ func credentialSections(credentials []authority.Credential) []CredentialSection 
 }
 
 // probeToolDeclarations connects without credentials and records what each
-// tool declares about itself. It reports whether the server answered; a
-// refusal's tool-declarations gap is recorded by lookupCatalog, after the
-// catalog gap when that lookup fails too.
+// tool declares about itself. It reports whether the server answered — a
+// refusal is not yet a gap, because the catalog lookup may still supply the
+// registry's copy of the declarations; recording the gap when both fail is
+// lookupCatalog's job.
 //
 // authorityConsulted gates the synthetic authority section: when the
 // authority probe itself failed, asserting "answers without any credential"
@@ -714,16 +719,21 @@ func recordUnauthenticatedListing(document *Document, declarations []capability.
 	document.Authority.UnauthenticatedTools = names
 }
 
-// lookupCatalog matches the server against the project's selected catalog. A
-// match always fills the provenance section. When the server itself refused to
-// list its tools, the tool-declarations gap lands here — the catalog carries no
-// declarations, so they could not be consulted anywhere, which must never read
-// as a clean empty list.
+// lookupCatalog matches the server against the project's selected catalog. A match
+// always fills the provenance section; its tool declarations fill the
+// capability section only when the server itself refused to answer, labeled
+// as the registry's copy. When the server refused and no registry supplies
+// declarations either, the tool-declarations gap lands here — declarations
+// could not be consulted anywhere, which must never read as a clean empty
+// list.
 func (a *Assembler) lookupCatalog(ctx context.Context, projectID uuid.UUID, serverURL string, document *Document, serverDeclared bool) {
 	lookupCtx, cancel := context.WithTimeout(ctx, a.sourceTimeout)
 	defer cancel()
 
-	match, err := a.catalog.Lookup(lookupCtx, projectID, serverURL)
+	// Tool declarations are only requested when the server itself refused to
+	// answer: the details fetch is an extra registry round trip whose result
+	// would otherwise be discarded in favor of the server's own words.
+	match, err := a.catalog.Lookup(lookupCtx, projectID, serverURL, !serverDeclared)
 	if err != nil {
 		document.Gaps = append(document.Gaps, GapCatalogLookup)
 		if !serverDeclared {
@@ -734,12 +744,17 @@ func (a *Assembler) lookupCatalog(ctx context.Context, projectID uuid.UUID, serv
 
 	if match == nil {
 		document.Provenance = &ProvenanceSection{
-			Registry:    "",
-			Specifier:   "",
-			Catalogued:  false,
-			Status:      "",
-			PublishedAt: "",
-			UpdatedAt:   "",
+			Registry:              "",
+			Specifier:             "",
+			Catalogued:            false,
+			Official:              false,
+			Status:                "",
+			IsLatest:              false,
+			PublishedAt:           "",
+			UpdatedAt:             "",
+			VisitorsLastWeek:      0,
+			VisitorsLastFourWeeks: 0,
+			VisitorsTotal:         0,
 		}
 		if !serverDeclared {
 			document.Gaps = append(document.Gaps, GapToolDeclarations)
@@ -748,17 +763,29 @@ func (a *Assembler) lookupCatalog(ctx context.Context, projectID uuid.UUID, serv
 	}
 
 	document.Provenance = &ProvenanceSection{
-		Registry:    match.Registry,
-		Specifier:   match.Specifier,
-		Catalogued:  true,
-		Status:      match.Provenance.Status,
-		PublishedAt: formatTime(match.Provenance.PublishedAt),
-		UpdatedAt:   formatTime(match.Provenance.UpdatedAt),
+		Registry:              match.Registry,
+		Specifier:             match.Specifier,
+		Catalogued:            match.Provenance.Catalogued,
+		Official:              match.Provenance.Official,
+		Status:                match.Provenance.Status,
+		IsLatest:              match.Provenance.IsLatest,
+		PublishedAt:           formatTime(match.Provenance.PublishedAt),
+		UpdatedAt:             formatTime(match.Provenance.UpdatedAt),
+		VisitorsLastWeek:      match.Provenance.VisitorsLastWeek,
+		VisitorsLastFourWeeks: match.Provenance.VisitorsLastFourWeeks,
+		VisitorsTotal:         match.Provenance.VisitorsTotal,
 	}
 
-	if !serverDeclared {
-		document.Gaps = append(document.Gaps, GapToolDeclarations)
+	if serverDeclared {
+		return
 	}
+	if match.Tools == nil {
+		document.Gaps = append(document.Gaps, GapToolDeclarations)
+		return
+	}
+
+	document.CapabilitiesSource = CapabilitiesFromRegistry
+	a.fillCapabilities(document, match.Tools)
 }
 
 // fillCapabilities assesses each declaration and appends it to the document's
@@ -797,10 +824,7 @@ func capabilityStrings(values []capability.Capability) []string {
 // here so a frozen version-1 snapshot stays decodable after the shape moves
 // on.
 func DecodeDocument(raw []byte, version int) (Document, error) {
-	// Shared fields retain their JSON representation in versions 1 and 2;
-	// retired latest/official/visitor claims are intentionally ignored
-	// in the current view, without rewriting the stored snapshot.
-	if version != 1 && version != Version {
+	if version != Version {
 		return Document{}, fmt.Errorf("unsupported evidence version %d", version)
 	}
 

@@ -198,43 +198,119 @@ func (te *ToolExtractor) Do(ctx context.Context, task ToolExtractorTask) error {
 		}
 	}
 
-	// Catalog records carry no tool declarations; one proxy tool forwards to the remote.
-	toolURN := urn.NewTool(urn.ToolKindExternalMCP, task.MCP.Slug, "proxy")
-	if err := toolURN.Validate(); err != nil {
-		return oops.E(oops.CodeInvalid, err, "[%s] invalid external mcp proxy tool name", task.MCP.Name).LogError(ctx, logger)
-	}
+	// Create tool definitions based on what's available
+	if len(serverDetails.Tools) > 0 {
+		// Create individual tool definitions for each tool from the registry
+		for _, tool := range serverDetails.Tools {
+			toolURN := urn.NewTool(urn.ToolKindExternalMCP, task.MCP.Slug, tool.Name)
+			if err := toolURN.Validate(); err != nil {
+				return oops.E(oops.CodeInvalid, err, "[%s] invalid external mcp tool name %s", task.MCP.Name, tool.Name).LogError(ctx, logger)
+			}
 
-	_, err = te.repo.CreateExternalMCPToolDefinition(ctx, repo.CreateExternalMCPToolDefinitionParams{
-		Type:                       string(types.ExternalMCPToolTypeProxy),
-		ExternalMcpAttachmentID:    task.MCP.AttachmentID,
-		ToolUrn:                    toolURN.String(),
-		RemoteUrl:                  serverDetails.RemoteURL,
-		TransportType:              serverDetails.TransportType,
-		RequiresOauth:              requiresOAuth,
-		OauthVersion:               oauthVersion,
-		OauthAuthorizationEndpoint: oauthAuthEndpoint,
-		OauthTokenEndpoint:         oauthTokenEndpoint,
-		OauthRegistrationEndpoint:  oauthRegEndpoint,
-		OauthScopesSupported:       oauthScopes,
-		HeaderDefinitions:          headerDefinitions,
-		Name:                       conv.PtrToPGTextEmpty(nil),
-		Description:                conv.PtrToPGTextEmpty(nil),
-		Schema:                     nil,
-		Title:                      pgtype.Text{String: "", Valid: false},
-		ReadOnlyHint:               pgtype.Bool{Bool: false, Valid: false},
-		DestructiveHint:            pgtype.Bool{Bool: false, Valid: false},
-		IdempotentHint:             pgtype.Bool{Bool: false, Valid: false},
-		OpenWorldHint:              pgtype.Bool{Bool: false, Valid: false},
-	})
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "[%s] error creating external mcp tool definition", task.MCP.Name).LogError(ctx, logger)
-	}
+			_, err = te.repo.CreateExternalMCPToolDefinition(ctx, repo.CreateExternalMCPToolDefinitionParams{
+				Type:                       string(types.ExternalMCPToolTypeDirect),
+				Name:                       conv.ToPGText(tool.Name),
+				Description:                conv.ToPGText(tool.Description),
+				Schema:                     tool.InputSchema,
+				ExternalMcpAttachmentID:    task.MCP.AttachmentID,
+				ToolUrn:                    toolURN.String(),
+				RemoteUrl:                  serverDetails.RemoteURL,
+				TransportType:              serverDetails.TransportType,
+				RequiresOauth:              requiresOAuth,
+				OauthVersion:               oauthVersion,
+				OauthAuthorizationEndpoint: oauthAuthEndpoint,
+				OauthTokenEndpoint:         oauthTokenEndpoint,
+				OauthRegistrationEndpoint:  oauthRegEndpoint,
+				OauthScopesSupported:       oauthScopes,
+				HeaderDefinitions:          headerDefinitions,
+				Title:                      extractAnnotationString(tool.Annotations, "title"),
+				ReadOnlyHint:               extractAnnotationBool(tool.Annotations, "readOnlyHint"),
+				DestructiveHint:            extractAnnotationBool(tool.Annotations, "destructiveHint"),
+				IdempotentHint:             extractAnnotationBool(tool.Annotations, "idempotentHint"),
+				OpenWorldHint:              extractAnnotationBool(tool.Annotations, "openWorldHint"),
+			})
+			if err != nil {
+				return oops.E(oops.CodeUnexpected, err, "[%s] error creating external mcp tool definition for %s", task.MCP.Name, tool.Name).LogError(ctx, logger)
+			}
+		}
 
-	logger.InfoContext(ctx, fmt.Sprintf("[%s] created external mcp proxy tool", task.MCP.Name),
-		attr.SlogToolURN(toolURN.String()),
-		attr.SlogOAuthRequired(requiresOAuth),
-		attr.SlogOAuthVersion(oauthVersion),
-	)
+		logger.InfoContext(ctx, fmt.Sprintf("[%s] created %d external mcp tool definitions", task.MCP.Name, len(serverDetails.Tools)),
+			attr.SlogOAuthRequired(requiresOAuth),
+			attr.SlogOAuthVersion(oauthVersion),
+		)
+	} else {
+		// Fallback to proxy tool when no tools are defined in the registry
+		toolURN := urn.NewTool(urn.ToolKindExternalMCP, task.MCP.Slug, "proxy")
+		if err := toolURN.Validate(); err != nil {
+			return oops.E(oops.CodeInvalid, err, "[%s] invalid external mcp proxy tool name", task.MCP.Name).LogError(ctx, logger)
+		}
+
+		_, err = te.repo.CreateExternalMCPToolDefinition(ctx, repo.CreateExternalMCPToolDefinitionParams{
+			Type:                       string(types.ExternalMCPToolTypeProxy),
+			ExternalMcpAttachmentID:    task.MCP.AttachmentID,
+			ToolUrn:                    toolURN.String(),
+			RemoteUrl:                  serverDetails.RemoteURL,
+			TransportType:              serverDetails.TransportType,
+			RequiresOauth:              requiresOAuth,
+			OauthVersion:               oauthVersion,
+			OauthAuthorizationEndpoint: oauthAuthEndpoint,
+			OauthTokenEndpoint:         oauthTokenEndpoint,
+			OauthRegistrationEndpoint:  oauthRegEndpoint,
+			OauthScopesSupported:       oauthScopes,
+			HeaderDefinitions:          headerDefinitions,
+			Name:                       conv.PtrToPGTextEmpty(nil),
+			Description:                conv.PtrToPGTextEmpty(nil),
+			Schema:                     nil,
+			Title:                      pgtype.Text{String: "", Valid: false},
+			ReadOnlyHint:               pgtype.Bool{Bool: false, Valid: false},
+			DestructiveHint:            pgtype.Bool{Bool: false, Valid: false},
+			IdempotentHint:             pgtype.Bool{Bool: false, Valid: false},
+			OpenWorldHint:              pgtype.Bool{Bool: false, Valid: false},
+		})
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "[%s] error creating external mcp tool definition", task.MCP.Name).LogError(ctx, logger)
+		}
+
+		logger.InfoContext(ctx, fmt.Sprintf("[%s] created external mcp proxy tool", task.MCP.Name),
+			attr.SlogToolURN(toolURN.String()),
+			attr.SlogOAuthRequired(requiresOAuth),
+			attr.SlogOAuthVersion(oauthVersion),
+		)
+	}
 
 	return nil
+}
+
+// extractAnnotationBool extracts a boolean annotation value from the MCP tool annotations map.
+// Returns an invalid pgtype.Bool when the key is missing or not a bool.
+func extractAnnotationBool(annotations map[string]any, key string) pgtype.Bool {
+	if annotations == nil {
+		return pgtype.Bool{Bool: false, Valid: false}
+	}
+	v, ok := annotations[key]
+	if !ok {
+		return pgtype.Bool{Bool: false, Valid: false}
+	}
+	b, ok := v.(bool)
+	if !ok {
+		return pgtype.Bool{Bool: false, Valid: false}
+	}
+	return pgtype.Bool{Bool: b, Valid: true}
+}
+
+// extractAnnotationString extracts a string annotation value from the MCP tool annotations map.
+// Returns an invalid pgtype.Text when the key is missing, not a string, or empty.
+func extractAnnotationString(annotations map[string]any, key string) pgtype.Text {
+	if annotations == nil {
+		return pgtype.Text{String: "", Valid: false}
+	}
+	v, ok := annotations[key]
+	if !ok {
+		return pgtype.Text{String: "", Valid: false}
+	}
+	s, ok := v.(string)
+	if !ok || s == "" {
+		return pgtype.Text{String: "", Valid: false}
+	}
+	return pgtype.Text{String: s, Valid: true}
 }

@@ -45,8 +45,8 @@ type CandidateInspection struct {
 	Description            string                      `json:"description,omitempty"`
 	Version                string                      `json:"version,omitempty"`
 	Transport              string                      `json:"transport"`
-	ToolNames              []string                    `json:"tool_names,omitempty"`
-	ToolCount              *int                        `json:"tool_count,omitempty"`
+	ToolNames              []string                    `json:"tool_names"`
+	ToolCount              int                         `json:"tool_count"`
 	Configuration          []CatalogConfigurationField `json:"configuration,omitempty"`
 	RequiresDashboardSetup bool                        `json:"requires_dashboard_setup"`
 	Trust                  string                      `json:"trust"`
@@ -161,7 +161,7 @@ func registerCandidateInspectionTool(reg *Registrar, catalog Catalog, directRemo
 				return directRemoteInspectionUnavailableToolResult(setupFailure(SetupCategoryTemporarilyUnavailable, ErrDirectRemoteUnavailable))
 			}
 			category := setupCategoryFromInspection(inspection)
-			return nil, CandidateInspection{CanonicalURL: inspection.CanonicalURL, Transport: inspection.Transport, ToolNames: inspection.ToolNames, ToolCount: new(inspection.ToolCount), RequiresDashboardSetup: inspection.RequiresDashboardSetup, Trust: inspection.Trust, Authentication: inspection.Authentication, OAuthDiscovery: inspection.OAuthDiscovery, AutomaticClientRegistration: automaticClientRegistrationFromInspection(inspection), SetupCategory: category, Actions: inspectionResultActions(category)}, nil
+			return nil, CandidateInspection{CanonicalURL: inspection.CanonicalURL, Transport: inspection.Transport, ToolNames: inspection.ToolNames, ToolCount: inspection.ToolCount, RequiresDashboardSetup: inspection.RequiresDashboardSetup, Trust: inspection.Trust, Authentication: inspection.Authentication, OAuthDiscovery: inspection.OAuthDiscovery, AutomaticClientRegistration: automaticClientRegistrationFromInspection(inspection), SetupCategory: category, Actions: inspectionResultActions(category)}, nil
 		}
 		if catalog == nil {
 			return nil, CandidateInspection{}, ErrCatalogUnavailable
@@ -176,7 +176,7 @@ func registerCandidateInspectionTool(reg *Registrar, catalog Catalog, directRemo
 			}
 			return nil, CandidateInspection{}, ErrCatalogUnavailable
 		}
-		return nil, CandidateInspection{ProviderKey: details.ProviderKey, CatalogRef: details.CatalogRef, Name: details.Name, Description: details.Description, Version: details.Version, Transport: details.Transport, Configuration: details.Configuration, RequiresDashboardSetup: details.RequiresDashboardSetup, Trust: "reviewed_catalog", SupportsDCR: new(details.SupportsDCR), SupportsCIMD: new(details.SupportsCIMD), AuthSetup: details.AuthSetup, SetupIntent: details.SetupIntent}, nil
+		return nil, CandidateInspection{ProviderKey: details.ProviderKey, CatalogRef: details.CatalogRef, Name: details.Name, Description: details.Description, Version: details.Version, Transport: details.Transport, ToolNames: details.ToolNames, ToolCount: details.ToolCount, Configuration: details.Configuration, RequiresDashboardSetup: details.RequiresDashboardSetup, Trust: "reviewed_catalog", SupportsDCR: new(details.SupportsDCR), SupportsCIMD: new(details.SupportsCIMD), AuthSetup: details.AuthSetup, SetupIntent: details.SetupIntent}, nil
 	})
 }
 

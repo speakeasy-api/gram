@@ -250,7 +250,7 @@ func (s *Service) GetServerDetails(ctx context.Context, payload *gen.GetServerDe
 		Title:             details.Title,
 		IconURL:           details.IconURL,
 		Meta:              details.Meta,
-		Tools:             nil,
+		Tools:             details.Tools,
 		Remotes:           details.Remotes,
 	}, nil
 }
@@ -296,6 +296,7 @@ type serverDetailsResult struct {
 	Name        string
 	Description string
 	Version     string
+	Tools       []*types.ExternalMCPTool
 	Remotes     []*types.ExternalMCPRemote
 }
 
@@ -325,25 +326,88 @@ func decodeDashboardDetails(body []byte) (*serverDetailsResult, error) {
 		icon = &enrichment.Server.Icons[0].Src
 	}
 
-	var serverResp serverDetailsEntry
+	type remoteMeta struct {
+		Tools []struct {
+			Name        string          `json:"name"`
+			Description string          `json:"description"`
+			InputSchema json.RawMessage `json:"inputSchema"`
+			Annotations map[string]any  `json:"annotations"`
+		} `json:"tools"`
+	}
+	var serverResp struct {
+		Server struct {
+			Name        string             `json:"name"`
+			Description string             `json:"description"`
+			Version     string             `json:"version"`
+			Remotes     []serverRemoteJSON `json:"remotes"`
+		} `json:"server"`
+		Meta struct {
+			Version struct {
+				FirstRemote  remoteMeta `json:"remotes[0]"`
+				SecondRemote remoteMeta `json:"remotes[1]"`
+				ThirdRemote  remoteMeta `json:"remotes[2]"`
+				FourthRemote remoteMeta `json:"remotes[3]"`
+				FifthRemote  remoteMeta `json:"remotes[4]"`
+			} `json:"com.pulsemcp/server-version"`
+		} `json:"_meta"`
+	}
 	if err := json.Unmarshal(body, &serverResp); err != nil {
 		return nil, fmt.Errorf("decode response: %w", err)
 	}
 
+	// Convert remotes and find preferred remote index (streamable-http > sse)
 	var remotes []*types.ExternalMCPRemote
-	for _, r := range serverResp.Server.Remotes {
+	preferredIndex := -1
+	foundStreamable := false
+	for i, r := range serverResp.Server.Remotes {
 		remotes = append(remotes, &types.ExternalMCPRemote{
-			URL: r.URL, TransportType: r.Type,
-			Headers:   toExternalMCPRemoteHeaders(r.Headers),
-			Variables: toExternalMCPRemoteVariables(r.Variables),
+			URL:           r.URL,
+			TransportType: r.Type,
+			Headers:       toExternalMCPRemoteHeaders(r.Headers),
+			Variables:     toExternalMCPRemoteVariables(r.Variables),
+		})
+		// Prefer the first streamable-http remote, falling back to the last SSE remote.
+		// Can't break early because we need all remotes in the slice.
+		if r.Type == "streamable-http" && !foundStreamable {
+			preferredIndex = i
+			foundStreamable = true
+		} else if r.Type == "sse" && !foundStreamable {
+			preferredIndex = i
+		}
+	}
+
+	// Get tools from the preferred remote (matching registryclient.go behavior)
+	var selectedRemote remoteMeta
+	switch preferredIndex {
+	case 0:
+		selectedRemote = serverResp.Meta.Version.FirstRemote
+	case 1:
+		selectedRemote = serverResp.Meta.Version.SecondRemote
+	case 2:
+		selectedRemote = serverResp.Meta.Version.ThirdRemote
+	case 3:
+		selectedRemote = serverResp.Meta.Version.FourthRemote
+	case 4:
+		selectedRemote = serverResp.Meta.Version.FifthRemote
+	}
+
+	// Convert tools
+	var tools []*types.ExternalMCPTool
+	for _, t := range selectedRemote.Tools {
+		tools = append(tools, &types.ExternalMCPTool{
+			Name:        &t.Name,
+			Description: &t.Description,
+			InputSchema: t.InputSchema,
+			Annotations: t.Annotations,
 		})
 	}
-	// Catalog records do not publish tool declarations. Live discovery is separate.
+
 	return &serverDetailsResult{
 		Title: enrichment.Server.Title, IconURL: icon, Meta: enrichment.Meta,
 		Name:        serverResp.Server.Name,
 		Description: serverResp.Server.Description,
 		Version:     serverResp.Server.Version,
+		Tools:       tools,
 		Remotes:     remotes,
 	}, nil
 }
