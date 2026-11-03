@@ -118,12 +118,9 @@ func TestRecordCrash_LogsScrubbedReportAndCountsClosedTags(t *testing.T) {
 func TestRecordCrash_GivesARollbackAMessage(t *testing.T) {
 	t.Parallel()
 
-	for name, tc := range map[string]struct {
-		to   *string
-		want string
-	}{
-		"binary rollback": {to: nil, want: "self-rollback from 0.43.0"},
-		"msi rollback":    {to: new("0.42.0"), want: "self-rollback from 0.43.0 to 0.42.0"},
+	for name, to := range map[string]*string{
+		"binary rollback": nil,
+		"msi rollback":    new("0.42.0"),
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
@@ -136,13 +133,14 @@ func TestRecordCrash_GivesARollbackAMessage(t *testing.T) {
 			report.Component = "runtime"
 			report.Message = nil
 			report.Stack = nil
-			report.Rollback = &gen.AgentCrashRollback{From: new("0.43.0"), To: tc.to}
+			report.Rollback = &gen.AgentCrashRollback{From: new("0.43.0-attacker.1"), To: to}
 			svc.recordCrash(t.Context(), "org-a", "", "endpoint", report)
 
 			var entry map[string]any
 			require.NoError(t, json.Unmarshal(logs.Bytes(), &entry))
 			require.Equal(t, "device_agent.rollback", entry["error.kind"])
-			require.Equal(t, tc.want, entry["error.message"])
+			require.Equal(t, "device agent self-rollback", entry["error.message"])
+			require.Equal(t, "0.43.0-attacker.1", entry["gram.agent.crash.rollback.from"])
 		})
 	}
 }
