@@ -136,7 +136,6 @@ var foundationPackageOwners = map[string]string{
 	"internal/telemetry/analytics":                           ownerL1,
 	"internal/templates":                                     ownerP2,
 	"internal/tools":                                         ownerP3,
-	"internal/toolsets":                                      ownerM1,
 	"internal/triggers":                                      ownerP5,
 	"internal/tunneledmcp":                                   ownerM4,
 	"internal/unproxiedmcp":                                  ownerM4,
