@@ -179,7 +179,7 @@ func (b *metaCodeBackend) currentState(ctx context.Context, execute, recovery bo
 		return ctx, nil, nil, b.revoke()
 	}
 	// The authenticated reference is unchanged, so reuse this execution's
-	// immutable consent record without another Redis read or upstream discovery.
+	// consent snapshot without another Redis read or upstream discovery.
 	expired := b.gate.catalogRecoveryOnly || (b.gate.catalog != nil && !time.Now().Before(b.gate.catalog.ExpiresAt))
 	if expired && !recovery {
 		return ctx, nil, nil, codemode.ErrConsentRequired
