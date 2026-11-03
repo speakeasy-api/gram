@@ -193,17 +193,22 @@ func TestLogReadNotImpliedByProjectOrOrgScopes(t *testing.T) {
 	require.Equal(t, ResourceKindProject, ResourceKindForScope(ScopeLogRead))
 }
 
-// memory:read and memory:write are not defaults for any system role. Team
-// memory summarizes every member's sessions, so it must be granted explicitly
-// per project; neither project access nor org:admin implies it.
-func TestSystemRolesExcludeMemoryScopes(t *testing.T) {
+// org:admin holds memory:read and memory:write by default; members do not.
+// Team memory summarizes every member's sessions, so a member needs an
+// explicit per-project grant.
+func TestSystemRoleAdminIncludesMemoryScopes(t *testing.T) {
 	t.Parallel()
 
-	for _, role := range []string{SystemRoleAdmin, SystemRoleMember} {
-		for _, grant := range SystemRoleGrants[role] {
-			require.NotEqual(t, string(ScopeMemoryRead), grant.Scope, role)
-			require.NotEqual(t, string(ScopeMemoryWrite), grant.Scope, role)
-		}
+	admin := make([]string, 0, len(SystemRoleGrants[SystemRoleAdmin]))
+	for _, grant := range SystemRoleGrants[SystemRoleAdmin] {
+		admin = append(admin, grant.Scope)
+	}
+	require.Contains(t, admin, string(ScopeMemoryRead))
+	require.Contains(t, admin, string(ScopeMemoryWrite))
+
+	for _, grant := range SystemRoleGrants[SystemRoleMember] {
+		require.NotEqual(t, string(ScopeMemoryRead), grant.Scope)
+		require.NotEqual(t, string(ScopeMemoryWrite), grant.Scope)
 	}
 }
 
