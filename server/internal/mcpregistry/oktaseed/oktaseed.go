@@ -152,7 +152,7 @@ var Vendors = []Vendor{
 		Title:            "Amplitude",
 		Description:      "Amplitude's hosted MCP server for product analytics.",
 		WebsiteURL:       "https://amplitude.com",
-		DocumentationURL: "",
+		DocumentationURL: "https://amplitude.com/docs/amplitude-ai/amplitude-mcp",
 		IconURL:          "https://amplitude.com/nextjs-public/favicon/apple-touch-icon.png",
 		SupportsDCR:      true,
 		Remotes: []Remote{
