@@ -60,18 +60,22 @@ func TestResolveAccessToken_CallerCancelDuringRefreshKeepsRotatedToken(t *testin
 
 	requestCtx, cancelRequest := context.WithCancel(ctx)
 	defer cancelRequest()
-	returned := make(chan struct{})
+	type resolved struct {
+		token string
+		err   error
+	}
+	returned := make(chan resolved, 1)
 	go func() {
-		defer close(returned)
 		token, err := env.mgr.ResolveAccessToken(requestCtx, env.clientID, env.subject, "")
-		require.NoError(t, err)
-		require.Empty(t, token)
+		returned <- resolved{token: token, err: err}
 	}()
 
 	<-arrived
 	cancelRequest()
 	select {
-	case <-returned:
+	case got := <-returned:
+		require.NoError(t, got.err)
+		require.Empty(t, got.token)
 	case <-time.After(5 * time.Second):
 		t.Fatal("the caller must stop waiting when its context ends")
 	}
