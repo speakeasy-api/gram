@@ -1213,14 +1213,17 @@ describe("Connecting a GKE cluster", () => {
     await continueFromAuthentication();
     fireEvent.click(await screen.findByRole("radio", { name: /GKE/ }));
 
+    // Says plainly that the agent signs in through one shared server.
     expect(
       await screen.findByText(
-        "This agent's servers need to share one MCP authentication provider",
+        /signs in through a\s+shared authorization server/,
       ),
     ).toBeTruthy();
+    expect(screen.getByText(/This is the only one available\./)).toBeTruthy();
+    expect(screen.getByText("These servers aren't on shared")).toBeTruthy();
     expect(
       screen.getByText(
-        "Uses its own MCP authentication provider, so it won't accept the token this setup gives the agent.",
+        "Uses its own sign-in, not a shared authorization server.",
       ),
     ).toBeTruthy();
     expect(
@@ -1249,7 +1252,7 @@ describe("Connecting a GKE cluster", () => {
 
       expect(
         await screen.findByText(
-          "Checking which MCP authentication provider the servers use…",
+          "Checking which shared authorization server the servers use…",
         ),
       ).toBeTruthy();
       expect(
@@ -1302,11 +1305,7 @@ describe("Connecting a GKE cluster", () => {
       ).toBe("usi_shared"),
     );
     await waitFor(() =>
-      expect(
-        screen.queryByText(
-          "This agent's servers need to share one MCP authentication provider",
-        ),
-      ).toBeNull(),
+      expect(screen.queryByText("These servers aren't on shared")).toBeNull(),
     );
     expect(
       screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
@@ -1335,17 +1334,15 @@ describe("Connecting a GKE cluster", () => {
     );
 
     await screen.findByRole("radio", { name: /GitHub Actions/, checked: true });
-    expect(
-      screen.queryByText(
-        "This agent's servers need to share one MCP authentication provider",
-      ),
-    ).toBeNull();
+    expect(screen.queryByText(/These servers aren't on/)).toBeNull();
+    // The device agent gets its own tokens, so no shared server is chosen.
+    expect(screen.queryByLabelText("Shared authorization server")).toBeNull();
     expect(
       screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
     ).toBe(false);
   });
 
-  it("will not set up an agent whose servers use different providers", async () => {
+  it("offers to move servers on another shared server to the recommended one", async () => {
     mocks.platforms.mockReturnValue([gke]);
     mocks.tokenEndpoints.mockReturnValue([
       sharedServer,
@@ -1380,8 +1377,11 @@ describe("Connecting a GKE cluster", () => {
     await continueFromAuthentication();
     fireEvent.click(await screen.findByRole("radio", { name: /GKE/ }));
 
-    expect(await screen.findByText("Uses shared.")).toBeTruthy();
-    expect(screen.getByText("Uses other.")).toBeTruthy();
+    // One server each, so the organization's first is recommended, and the
+    // server on the other one can move there.
+    expect(await screen.findByText("Uses other.")).toBeTruthy();
+    expect(screen.queryByText("Uses shared.")).toBeNull();
+    expect(screen.getByRole("button", { name: "Move to shared" })).toBeTruthy();
     expect(
       screen.getByRole("button", { name: "Continue" }).hasAttribute("disabled"),
     ).toBe(true);

@@ -65,7 +65,7 @@ import {
   type JobScope,
 } from "./githubActions";
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
-import { ProviderMismatchNotice } from "./SetupFields";
+import { SharedServerChoice } from "./SetupFields";
 import { CUSTOM_PLATFORM_KEY } from "./CustomSetupInstructions";
 import {
   CONNECT_SCOPE,
@@ -1927,9 +1927,9 @@ export function CredentialsWizard({
             />
             {credential === "workload" &&
               platformKey !== null &&
-              workload.exchange.mismatch !== null && (
-                <ProviderMismatchNotice
-                  mismatch={workload.exchange.mismatch}
+              !workload.ownTokenExchange && (
+                <SharedServerChoice
+                  setupValues={workload.exchange}
                   onMoved={inventory.refetch}
                 />
               )}
@@ -2107,14 +2107,14 @@ export function CredentialsWizard({
             workload.exchange.mismatch !== null;
           if (mismatched && !refused) {
             note =
-              "Move this agent's servers onto one MCP authentication provider, or remove the ones that aren't, to continue.";
+              "Move this agent's servers onto the shared authorization server you chose, or remove the ones that aren't, to continue.";
           }
           // Until the providers load, a mismatch can't be ruled out.
           const checkingProviders =
             !editing && platformKey !== null && workload.exchange.checking;
           if (checkingProviders && !refused && !mismatched) {
             note =
-              "Checking which MCP authentication provider the servers use…";
+              "Checking which shared authorization server the servers use…";
           }
           return (
             <WizardFooter

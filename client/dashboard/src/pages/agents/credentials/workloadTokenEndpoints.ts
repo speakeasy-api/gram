@@ -23,9 +23,15 @@ export interface SetupValues {
   onEndpointChange: (id: string) => void;
   refreshAndSelect: (id: string) => Promise<void>;
   /**
-   * Why the agent's servers can't all take one token, or null when they can.
-   * An agent running on a platform gets a single token, from one MCP
-   * authentication provider, and only that provider's servers accept it.
+   * The shared authorization server recommended for this agent: the one most
+   * of its servers already use, else the organization's own, else the only
+   * one there is. "" when none is available.
+   */
+  recommendedEndpointId: string;
+  /**
+   * The agent's servers that won't accept tokens from the chosen shared
+   * authorization server, or null when they all will. An agent running on a
+   * platform gets one token, and only servers on that server accept it.
    */
   mismatch: ProviderMismatch | null;
   /**
@@ -35,18 +41,15 @@ export interface SetupValues {
   checking: boolean;
 }
 
-/** How an agent's servers fall short of sharing one provider. */
+/** The agent's servers that the chosen shared authorization server can't sign in to. */
 export interface ProviderMismatch {
-  /** Servers on their own per-server provider, which can't give tokens. */
-  ownProvider: SetupServer[];
-  /** When the servers use several shared providers, each with its servers. */
-  split: { label: string; servers: SetupServer[] }[];
-  /**
-   * The shared provider every server could move to: the one the others
-   * already use, or the only one available. Null when there's a choice to
-   * make, such as servers split across shared providers.
-   */
+  /** The chosen shared authorization server, or null when none is available. */
   target: { id: string; slug: string } | null;
+  /**
+   * Each server not on it, with the shared authorization server it uses now,
+   * or null when it has its own per-server sign-in.
+   */
+  servers: { server: SetupServer; current: string | null }[];
 }
 
 const ORGANIZATION_GROUP = "Organization";
@@ -92,10 +95,11 @@ export function groupTokenEndpoints(
  * user session issuer the operator selects, at the organization level or in a
  * project. Only issuers in shared mode serve one, at /oauth/usi/{id}.
  *
- * A token from a shared issuer is accepted only by the MCP servers that sign
- * in through that issuer, so an agent's servers must all use one. When they
- * do, only that issuer is offered; when they don't, there are no values to
- * show, and `mismatch` says which servers are the problem.
+ * A token from a shared authorization server is accepted only by the MCP
+ * servers that sign in through it, so an agent's servers must all be on the
+ * one chosen. Every one available is offered, the recommended one first
+ * chosen; while some servers aren't on the chosen one there are no values to
+ * show, and `mismatch` names those servers.
  *
  * These come from the server's own derivation, the one its authorization
  * server metadata publishes, and are never assembled here: a second derivation
@@ -123,40 +127,50 @@ export function useSetupValues(
   const shared = new Map(
     inScope.map((endpoint) => [endpoint.userSessionIssuerId, endpoint]),
   );
-  const used = inScope.filter((endpoint) =>
-    signingIn.some(
+  // Recommend the one most of the servers already use, so the fewest move.
+  const usedBy = (endpoint: WorkloadTokenEndpoint) =>
+    signingIn.filter(
       (server) => server.issuerId === endpoint.userSessionIssuerId,
-    ),
+    ).length;
+  const most = Math.max(0, ...inScope.map(usedBy));
+  const favored =
+    most > 0
+      ? inScope.filter((endpoint) => usedBy(endpoint) === most)
+      : inScope;
+  // With servers to move, the organization's own breaks a tie; with none, the
+  // list's own order stands.
+  const recommended =
+    (signingIn.length > 0
+      ? favored.find((endpoint) => endpoint.projectId === "")
+      : undefined) ?? favored[0];
+  const selected =
+    inScope.find((endpoint) => endpoint.userSessionIssuerId === chosenId) ??
+    recommended;
+  const offTarget = signingIn.filter(
+    (server) => server.issuerId !== selected?.userSessionIssuerId,
   );
-  const ownProvider = signingIn.filter(
-    (server) => !shared.has(server.issuerId!),
-  );
-  const split =
-    used.length > 1
-      ? used.map((endpoint) => ({
-          label: endpointLabel(endpoint),
-          servers: signingIn.filter(
-            (server) => server.issuerId === endpoint.userSessionIssuerId,
-          ),
-        }))
-      : [];
-  const candidates = used.length > 0 ? used : inScope;
-  const target =
-    candidates.length === 1
+  const mismatch: ProviderMismatch | null =
+    offTarget.length > 0
       ? {
-          id: candidates[0]!.userSessionIssuerId,
-          slug: endpointLabel(candidates[0]!),
+          target: selected
+            ? {
+                id: selected.userSessionIssuerId,
+                slug: endpointLabel(selected),
+              }
+            : null,
+          servers: offTarget.map((server) => {
+            const current = shared.get(server.issuerId!);
+            return {
+              server,
+              current: current ? endpointLabel(current) : null,
+            };
+          }),
         }
       : null;
-  const mismatch =
-    ownProvider.length > 0 || split.length > 0
-      ? { ownProvider, split, target }
-      : null;
-  const endpoints = used.length > 0 ? used : inScope;
-  const selected =
-    endpoints.find((e) => e.userSessionIssuerId === chosenId) ?? endpoints[0];
+  const endpoints = inScope;
 
   return {
+    recommendedEndpointId: recommended?.userSessionIssuerId ?? "",
     mismatch,
     checking: servers.length > 0 && query.isPending,
     values:
@@ -169,7 +183,7 @@ export function useSetupValues(
           },
     unavailableReason:
       mismatch !== null
-        ? "This agent's servers don't all use one MCP authentication provider that can give tokens to agents, so there is no token endpoint that works for all of them."
+        ? "Some of this agent's servers aren't on the shared authorization server chosen for it, so its token won't work at them."
         : unavailableReason(
             query.isPending,
             query.isError,

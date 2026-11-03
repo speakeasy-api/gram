@@ -118,9 +118,43 @@ export function TextField({
 }
 
 /**
- * Which user session issuer the derived values come from, and why there are
- * none when there are none.
+ * The shared authorization server picker, with the recommended one marked.
+ * Tokens are issued for the organization or project that owns the one chosen.
  */
+function SharedServerSelect({
+  setupValues,
+  id,
+}: {
+  setupValues: SetupValues;
+  id: string;
+}): JSX.Element {
+  return (
+    <Select
+      value={setupValues.selectedEndpointId}
+      onValueChange={setupValues.onEndpointChange}
+    >
+      <SelectTrigger id={id} className="w-full">
+        <SelectValue placeholder="Select a shared authorization server" />
+      </SelectTrigger>
+      <SelectContent>
+        {setupValues.endpointGroups.map((group) => (
+          <SelectGroup key={group.label}>
+            <SelectLabel>{group.label}</SelectLabel>
+            {group.options.map((option) => (
+              <SelectItem key={option.id} value={option.id}>
+                {option.id === setupValues.recommendedEndpointId
+                  ? `${option.label} (recommended)`
+                  : option.label}
+              </SelectItem>
+            ))}
+          </SelectGroup>
+        ))}
+      </SelectContent>
+    </Select>
+  );
+}
+
+/** The shared authorization server behind the values a step shows. */
 export function ComputedStatus({
   setupValues,
 }: {
@@ -138,31 +172,67 @@ export function ComputedStatus({
   }
   return (
     <Stack gap={2}>
-      <Label htmlFor="setup-token-endpoint">MCP authentication provider</Label>
-      <Select
-        value={setupValues.selectedEndpointId}
-        onValueChange={setupValues.onEndpointChange}
-      >
-        <SelectTrigger id="setup-token-endpoint" className="w-full">
-          <SelectValue placeholder="Select a provider" />
-        </SelectTrigger>
-        <SelectContent>
-          {setupValues.endpointGroups.map((group) => (
-            <SelectGroup key={group.label}>
-              <SelectLabel>{group.label}</SelectLabel>
-              {group.options.map((option) => (
-                <SelectItem key={option.id} value={option.id}>
-                  {option.label}
-                </SelectItem>
-              ))}
-            </SelectGroup>
-          ))}
-        </SelectContent>
-      </Select>
+      <Label htmlFor="setup-token-endpoint">Shared authorization server</Label>
+      <SharedServerSelect setupValues={setupValues} id="setup-token-endpoint" />
       <Text muted small>
-        Tokens are issued for the organization or project that owns this
-        provider.
+        Tokens are issued for the organization or project that owns it.
       </Text>
+    </Stack>
+  );
+}
+
+/**
+ * Says that an agent on an OIDC platform signs in through one shared
+ * authorization server, lets the reader choose it, and names the servers that
+ * aren't on it with a way to move them.
+ */
+export function SharedServerChoice({
+  setupValues,
+  onMoved,
+}: {
+  setupValues: SetupValues;
+  onMoved: () => void;
+}): JSX.Element {
+  const count = setupValues.endpointGroups.reduce(
+    (total, group) => total + group.options.length,
+    0,
+  );
+  return (
+    <Stack gap={3}>
+      <Stack gap={1}>
+        <Label htmlFor="agent-shared-server">Shared authorization server</Label>
+        <Text muted small>
+          An agent on GKE, Claude Tag or another platform signs in through a
+          shared authorization server, and every MCP server it uses must be on
+          the one you choose.{" "}
+          {count === 1
+            ? "This is the only one available."
+            : "The recommended one is the server most of this agent's servers already use."}
+        </Text>
+      </Stack>
+      {setupValues.checking ? (
+        <Text muted small>
+          Loading shared authorization servers…
+        </Text>
+      ) : count === 0 ? (
+        <Alert variant="info">
+          <div className="text-sm">
+            {setupValues.unavailableReason ??
+              "No shared authorization server is available yet."}
+          </div>
+        </Alert>
+      ) : (
+        <SharedServerSelect
+          setupValues={setupValues}
+          id="agent-shared-server"
+        />
+      )}
+      {setupValues.mismatch !== null && count > 0 && (
+        <ProviderMismatchNotice
+          mismatch={setupValues.mismatch}
+          onMoved={onMoved}
+        />
+      )}
     </Stack>
   );
 }
@@ -190,9 +260,8 @@ export function SetupWarning({
 }
 
 /**
- * Why an agent running on a platform can't be set up with these servers, and
- * where each one is fixed: its token comes from one MCP authentication
- * provider, and only servers on that provider accept it.
+ * The agent's servers that won't accept tokens from the chosen shared
+ * authorization server, each with a way to move it there.
  */
 export function ProviderMismatchNotice({
   mismatch,
@@ -205,45 +274,43 @@ export function ProviderMismatchNotice({
    */
   onMoved?: () => void;
 }): JSX.Element {
-  const moveTo = onMoved ? mismatch.target : null;
+  const target = mismatch.target;
   return (
     <Alert
       variant="warning"
-      title="This agent's servers need to share one MCP authentication provider"
+      title={
+        target
+          ? `These servers aren't on ${target.slug}`
+          : "These servers need a shared authorization server"
+      }
     >
       <Stack gap={3}>
         <Text small>
-          An agent running on a platform gets one token, which only servers on a
-          single shared MCP authentication provider accept. Move these servers
-          onto one in their authentication settings, or remove them from this
-          agent.
+          {target
+            ? `They won't accept the token this agent gets from ${target.slug}. Move them there, choose another shared authorization server, or remove them from this agent.`
+            : "Set up a shared authorization server for them, or remove them from this agent."}
         </Text>
         <ul className="divide-border w-full divide-y">
-          {mismatch.ownProvider.map((server) => (
+          {mismatch.servers.map(({ server, current }) => (
             <MismatchRow
               key={server.id}
               server={server}
-              reason="Uses its own MCP authentication provider, so it won't accept the token this setup gives the agent."
+              reason={
+                current
+                  ? `Uses ${current}.`
+                  : "Uses its own sign-in, not a shared authorization server."
+              }
               action={
-                moveTo && onMoved ? (
+                target && onMoved ? (
                   <MoveToProvider
                     server={server}
-                    target={moveTo}
+                    target={target}
                     onMoved={onMoved}
                   />
                 ) : undefined
               }
             />
           ))}
-          {mismatch.split.flatMap((group) =>
-            group.servers.map((server) => (
-              <MismatchRow
-                key={server.id}
-                server={server}
-                reason={`Uses ${group.label}.`}
-              />
-            )),
-          )}
         </ul>
       </Stack>
     </Alert>

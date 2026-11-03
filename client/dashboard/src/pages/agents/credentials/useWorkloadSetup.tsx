@@ -52,6 +52,11 @@ import { useSetupValues, type SetupValues } from "./workloadTokenEndpoints";
 
 export interface WorkloadSetup {
   exchange: SetupValues;
+  /**
+   * Whether the platform gets its tokens its own way rather than from a shared
+   * authorization server, so none is chosen for it.
+   */
+  ownTokenExchange: boolean;
   /** The platform's steps, each of which is a step of the wizard. */
   steps: SetupStep[];
   /**
@@ -310,8 +315,8 @@ export function useWorkloadSetup({
     ) {
       setError(
         setupValues.checking
-          ? "Still checking which MCP authentication provider this agent's servers use. Try again in a moment."
-          : "This agent's servers need to share one MCP authentication provider. Go back to Agent sign-in to fix it.",
+          ? "Still checking which shared authorization server this agent's servers use. Try again in a moment."
+          : "Some of this agent's servers aren't on the shared authorization server chosen for it. Go back to Agent sign-in to fix it.",
       );
       return false;
     }
@@ -439,6 +444,7 @@ export function useWorkloadSetup({
 
   return {
     exchange: setupValues,
+    ownTokenExchange: setup?.ownTokenExchange === true,
     steps: setup?.steps ?? [],
     requirements: setup?.requirements ?? null,
     // A disabled fieldset disables every control inside it, the catalog's
