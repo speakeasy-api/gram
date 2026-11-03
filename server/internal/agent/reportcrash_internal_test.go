@@ -115,6 +115,38 @@ func TestRecordCrash_LogsScrubbedReportAndCountsClosedTags(t *testing.T) {
 	require.True(t, point.Attributes.Equals(&want), point.Attributes.Encoded(attribute.DefaultEncoder()))
 }
 
+func TestRecordCrash_GivesARollbackAMessage(t *testing.T) {
+	t.Parallel()
+
+	for name, tc := range map[string]struct {
+		to   *string
+		want string
+	}{
+		"binary rollback": {to: nil, want: "self-rollback from 0.43.0"},
+		"msi rollback":    {to: new("0.42.0"), want: "self-rollback from 0.43.0 to 0.42.0"},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			var logs bytes.Buffer
+			svc := new(Service)
+			svc.logger = slog.New(slog.NewJSONHandler(&logs, nil))
+			report := validReport()
+			report.Kind = "rollback"
+			report.Component = "runtime"
+			report.Message = nil
+			report.Stack = nil
+			report.Rollback = &gen.AgentCrashRollback{From: new("0.43.0"), To: tc.to}
+			svc.recordCrash(t.Context(), "org-a", "", "endpoint", report)
+
+			var entry map[string]any
+			require.NoError(t, json.Unmarshal(logs.Bytes(), &entry))
+			require.Equal(t, "device_agent.rollback", entry["error.kind"])
+			require.Equal(t, tc.want, entry["error.message"])
+		})
+	}
+}
+
 func validReport() *gen.AgentCrashReport {
 	file := "github.com/speakeasy-api/device-agent/core/policy/scheduler.go"
 	line := 204

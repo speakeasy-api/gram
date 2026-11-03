@@ -328,6 +328,9 @@ func (s *Service) recordCrash(ctx context.Context, organizationID, serial, envir
 	if errorMessage == "" {
 		errorMessage = panicType
 	}
+	if errorMessage == "" {
+		errorMessage = rollbackMessage(report.Rollback)
+	}
 	signature := crashSignature(report.Stack)
 
 	attrs := []any{
@@ -373,6 +376,19 @@ func (s *Service) recordCrash(ctx context.Context, organizationID, serial, envir
 			attribute.String("os", goos),
 		))
 	}
+}
+
+// rollbackMessage gives a rollback, which has no panic, a message so Error
+// Tracking can group it.
+func rollbackMessage(rb *gen.AgentCrashRollback) string {
+	if rb == nil {
+		return ""
+	}
+	from := scrubCrashText(conv.PtrValOr(rb.From, ""))
+	if to := scrubCrashText(conv.PtrValOr(rb.To, "")); to != "" {
+		return fmt.Sprintf("self-rollback from %s to %s", from, to)
+	}
+	return "self-rollback from " + from
 }
 
 func closedValue(v string, allowed []string) string {
