@@ -133,7 +133,11 @@ func TestHardQuestionsShareNoKeywordsWithSources(t *testing.T) {
 		hard++
 		// Every hard question needs at least three chats, and they span more
 		// than one search_chats window of 31 days or at least two weeks.
-		require.GreaterOrEqual(t, len(q.Sources), 3, "%s: a hard question needs three or more chats", q.ID)
+		unique := make(map[string]struct{}, len(q.Sources))
+		for _, key := range q.Sources {
+			unique[key] = struct{}{}
+		}
+		require.GreaterOrEqual(t, len(unique), 3, "%s: a hard question needs three or more distinct chats", q.ID)
 		var first, last time.Time
 		for i, key := range q.Sources {
 			chat, ok := c.Chat(key)
