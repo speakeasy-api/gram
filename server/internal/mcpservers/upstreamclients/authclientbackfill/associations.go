@@ -11,12 +11,17 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
-// PreflightServerAssociations takes the gates SyncServerAssociations needs,
-// for a caller that locks rows of its own before calling it. The gates have to
-// come first: a caller holding one of those rows and then asking for a gate
-// another transaction holds — while that one waits for the row — deadlocks the
-// pair. SyncServerAssociations asks for the same gates again, which costs a
-// transaction that already holds them nothing.
+// PreflightServerAssociations takes the registration gates
+// SyncServerAssociations needs, for a caller that locks rows of its own before
+// calling it. The gates have to come first: a caller holding one of those rows
+// and then asking for a gate another transaction holds — while that one waits
+// for the row — deadlocks the pair. SyncServerAssociations asks for the same
+// gates again, which costs a transaction that already holds them nothing.
+//
+// It deliberately stops at the gates. The typed client rows are locked in one
+// ordered pass inside the synchronization, and taking part of that set early
+// would acquire the rest of it out of order afterwards, which is its own
+// deadlock. The gates already exclude the writers that would add to the set.
 //
 // The server set may still grow by the time the synchronization reads it, so
 // this narrows the window rather than closing it; pass every server the caller
@@ -29,14 +34,13 @@ func PreflightServerAssociations(ctx context.Context, tx pgx.Tx, organizationID 
 	if len(servers) == 0 {
 		return nil
 	}
-	_, err := lockOAuthSyncScope(ctx, New(tx), organizationID, servers)
+	_, err := gateOAuthRegistrations(ctx, New(tx), organizationID, servers)
 	return err
 }
 
-// lockOAuthSyncScope serializes the OAuth registrations the given servers
-// reach, and the typed clients those registrations already have, and reports
-// the registrations it gated.
-func lockOAuthSyncScope(ctx context.Context, q *Queries, organizationID string, servers []uuid.UUID) ([]uuid.UUID, error) {
+// gateOAuthRegistrations serializes the OAuth registrations the given servers
+// reach and reports them.
+func gateOAuthRegistrations(ctx context.Context, q *Queries, organizationID string, servers []uuid.UUID) ([]uuid.UUID, error) {
 	// The writer scope expands shared EMA registrations, not organization-wide
 	// OAuth registrations. Serialize the complete OAuth registration set before
 	// any typed client/link write, including clients that do not exist yet.
@@ -46,12 +50,6 @@ func lockOAuthSyncScope(ctx context.Context, q *Queries, organizationID string, 
 	}
 	if err := q.LockOAuthRegistrationSyncScope(ctx, LockOAuthRegistrationSyncScopeParams{OrganizationID: organizationID, RegistrationIds: registrations}); err != nil {
 		return nil, fmt.Errorf("lock OAuth registration synchronization scope: %w", err)
-	}
-	// Lock every existing candidate and stale client in UUID order before any
-	// link insert can acquire a foreign-key lock. Administrator detaches use
-	// this same client-before-link order. The registration gates cover new rows.
-	if err := q.LockServerOAuthClientsForSync(ctx, LockServerOAuthClientsForSyncParams{OrganizationID: organizationID, McpServerIds: servers, RegistrationIds: registrations}); err != nil {
-		return nil, fmt.Errorf("lock OAuth clients for synchronization: %w", err)
 	}
 	return registrations, nil
 }
@@ -120,8 +118,16 @@ func SyncServerAssociations(ctx context.Context, tx pgx.Tx, organizationID strin
 		return nil
 	}
 	q := New(tx)
-	if _, err := lockOAuthSyncScope(ctx, q, organizationID, servers); err != nil {
+	registrations, err := gateOAuthRegistrations(ctx, q, organizationID, servers)
+	if err != nil {
 		return err
+	}
+	// Lock every existing candidate and stale client in UUID order before any
+	// link insert can acquire a foreign-key lock. Administrator detaches use
+	// this same client-before-link order. The registration gates cover new
+	// rows, and gating them above is what lets this stay one ordered pass.
+	if err := q.LockServerOAuthClientsForSync(ctx, LockServerOAuthClientsForSyncParams{OrganizationID: organizationID, McpServerIds: servers, RegistrationIds: registrations}); err != nil {
+		return fmt.Errorf("lock OAuth clients for synchronization: %w", err)
 	}
 	opts := Options{OrganizationID: organizationID, Apply: true, PageSize: 0}
 	// The report is the decision log the backfill keeps for its operator; a

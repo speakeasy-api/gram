@@ -6,6 +6,7 @@ import (
 	"fmt"
 	"log/slog"
 	"net/http"
+	"slices"
 	"strings"
 	"time"
 
@@ -936,6 +937,9 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 		}
 		return oops.E(oops.CodeUnexpected, err, "lock organization admin remote session client for deletion").LogError(ctx, logger)
 	}
+	if err := recheckClientAssociationScope(ctx, dbtx, authCtx.ActiveOrganizationID, clientID, affectedServers); err != nil {
+		return err.LogWarn(ctx, logger)
+	}
 	trustedReferenceCount, err := txRepo.CountTrustedUserSessionIssuersByRemoteSessionClientID(ctx, clientID)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "count identity-provider login references for client").LogError(ctx, logger)
@@ -1106,6 +1110,9 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 	if _, err := txRepo.LockEMAClientForLifecycle(ctx, repo.LockEMAClientForLifecycleParams{ID: clientID, ProjectID: client.ProjectID.UUID, OrganizationID: authCtx.ActiveOrganizationID}); err != nil {
 		return lifecycleLockError(err)
 	}
+	if err := recheckClientAssociationScope(ctx, dbtx, authCtx.ActiveOrganizationID, clientID, affectedServers); err != nil {
+		return err.LogWarn(ctx, logger)
+	}
 
 	affected, err := txRepo.DetachOrganizationRemoteSessionClientFromUserSessionIssuer(ctx, repo.DetachOrganizationRemoteSessionClientFromUserSessionIssuerParams{
 		OrganizationID:        authCtx.ActiveOrganizationID,
@@ -1167,13 +1174,32 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 // Tombstoned associations are included: a server whose association an earlier
 // removal retired may still carry the link derived from it, and deciding it
 // again is how that is repaired rather than left for the offline backfill.
+// recheckClientAssociationScope confirms the servers discovered before the
+// scope was taken are still the servers this removal will prune. Associating a
+// server with a client takes a key-share lock on the client row, so once the
+// caller holds that row exclusively the set can no longer change; what this
+// catches is one that committed in the window between the discovery and that
+// lock. Pruning it without re-deciding it would leave the typed link behind,
+// so the caller is told to retry on the fresh set instead.
+func recheckClientAssociationScope(ctx context.Context, dbtx pgx.Tx, organizationID string, clientID uuid.UUID, discovered []uuid.UUID) *oops.ShareableError {
+	current, _, err := serversLosingClientAssociations(ctx, dbtx, organizationID, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "re-list servers losing the client")
+	}
+	if !slices.Equal(discovered, current) {
+		return oops.E(oops.CodeConflict, nil, "this client's MCP servers changed while it was being removed; reload and retry")
+	}
+	return nil
+}
+
 func serversLosingClientAssociations(ctx context.Context, dbtx pgx.Tx, organizationID string, clientID uuid.UUID) ([]uuid.UUID, []uuid.UUID, error) {
 	rows, err := dbtx.Query(ctx, `
 SELECT DISTINCT a.mcp_server_id, a.project_id
 FROM mcp_server_remote_session_clients AS a
 JOIN mcp_servers AS s ON s.id = a.mcp_server_id AND s.deleted IS FALSE
 WHERE a.remote_session_client_id = $1
-  AND a.organization_id = $2`, clientID, organizationID)
+  AND a.organization_id = $2
+ORDER BY a.mcp_server_id`, clientID, organizationID)
 	if err != nil {
 		return nil, nil, fmt.Errorf("list servers losing client associations: %w", err)
 	}

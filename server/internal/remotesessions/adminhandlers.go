@@ -1323,6 +1323,9 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 	if err := guardEMABindingsForClient(ctx, txRepo, "", uuid.Nil, clientID); err != nil {
 		return err
 	}
+	if err := recheckGlobalClientAssociationScope(ctx, dbtx, clientID, affected); err != nil {
+		return err.LogWarn(ctx, logger)
+	}
 
 	deleted, err := txRepo.DeleteGlobalRemoteSessionClient(ctx, clientID)
 	if err != nil {
@@ -1373,12 +1376,35 @@ type globalClientScope struct {
 // repaired rather than left behind. The
 // removal spans organizations and reports only a count, so the ids are read
 // first and each organization's typed records are decided again on its own.
+// recheckGlobalClientAssociationScope confirms the servers discovered before
+// the scopes were taken are still the servers this deletion will remove.
+// Associating a server with the client takes a key-share lock on its row, so
+// once the EMA guard holds that row the set can no longer change; this catches
+// one that committed in the window before it. Removing it without re-deciding
+// it would leave the typed link behind, so the caller retries on the fresh set.
+func recheckGlobalClientAssociationScope(ctx context.Context, dbtx pgx.Tx, clientID uuid.UUID, discovered map[string]globalClientScope) *oops.ShareableError {
+	current, err := serversLosingGlobalClient(ctx, dbtx, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "re-list servers losing the global client")
+	}
+	if len(current) != len(discovered) {
+		return oops.E(oops.CodeConflict, nil, "this client's MCP servers changed while it was being deleted; reload and retry")
+	}
+	for organizationID, scope := range current {
+		if !slices.Equal(discovered[organizationID].servers, scope.servers) {
+			return oops.E(oops.CodeConflict, nil, "this client's MCP servers changed while it was being deleted; reload and retry")
+		}
+	}
+	return nil
+}
+
 func serversLosingGlobalClient(ctx context.Context, dbtx pgx.Tx, clientID uuid.UUID) (map[string]globalClientScope, error) {
 	rows, err := dbtx.Query(ctx, `
 SELECT DISTINCT a.organization_id, a.mcp_server_id, a.project_id
 FROM mcp_server_remote_session_clients AS a
 JOIN mcp_servers AS s ON s.id = a.mcp_server_id AND s.deleted IS FALSE
-WHERE a.remote_session_client_id = $1`, clientID)
+WHERE a.remote_session_client_id = $1
+ORDER BY a.organization_id, a.mcp_server_id`, clientID)
 	if err != nil {
 		return nil, fmt.Errorf("list servers losing global client: %w", err)
 	}

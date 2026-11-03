@@ -6,6 +6,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -468,6 +469,10 @@ func TestDetachServerClientAssociationGatesRegistrationsBeforeTheServerRow(t *te
 	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, serverID))
 }
 
+// injectedRetirementFailure is what refuseTypedLinkRetirement raises, so the
+// test asserts the handler reported that refusal rather than any error.
+const injectedRetirementFailure = "injected failure retiring a typed link"
+
 // refuseTypedLinkRetirement makes the typed link retirement fail inside
 // whatever transaction reaches it, by refusing updates to the link table. The
 // legacy association removal that runs before it is untouched, so the handler
@@ -481,7 +486,7 @@ func refuseTypedLinkRetirement(t *testing.T, ctx context.Context, conn *pgxpool.
 	_, err := conn.Exec(ctx, `
 CREATE FUNCTION refuse_typed_link_retirement() RETURNS trigger LANGUAGE plpgsql AS $$
 BEGIN
-  RAISE EXCEPTION 'injected failure retiring a typed link';
+  RAISE EXCEPTION '`+injectedRetirementFailure+`';
 END;
 $$;
 CREATE TRIGGER refuse_typed_link_retirement
@@ -523,7 +528,13 @@ func TestDetachServerClientAssociationKeepsBothModelsWhenTypedSyncFails(t *testi
 		McpServerID:           serverID.String(),
 		RemoteSessionClientID: clientID.String(),
 	})
-	require.Error(t, err, "the handler reports the failed typed write rather than committing half of it")
+	// ShareableError.Error stops at its public message, so the refusal is
+	// identified by the PostgreSQL error it wraps rather than by that text.
+	var pgErr *pgconn.PgError
+	require.ErrorAs(t, err, &pgErr,
+		"the handler reports the refused typed write rather than committing half of it")
+	require.Equal(t, injectedRetirementFailure, pgErr.Message,
+		"the refusal reported is the injected one, not some other failure")
 
 	require.Equal(t, associatedBefore, associatedClients(t, ctx, ti.conn, projectID, serverID),
 		"the legacy association is still there because the typed write failed")
