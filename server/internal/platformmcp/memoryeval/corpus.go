@@ -135,7 +135,7 @@ type Corpus struct {
 	// Secrets are the planted sensitive values, one per masking rule.
 	Secrets []Secret
 
-	// Questions are the 40 graded questions.
+	// Questions are the 55 graded questions.
 	Questions []Question
 }
 
