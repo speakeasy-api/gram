@@ -19,7 +19,7 @@ jobs:
   claude:
     name: claude
     # Pull request conversation comments that are the "@claude perf" command go
-    # to claude-perf.yml, which does not run on issues. Its analyse job's if:
+    # to claude-perf.yml, which does not run on issues. Its gate job's if:
     # defines the command, and this test must stay the same as that one, so
     # that "@claude perfect" still comes here.
     if: |
