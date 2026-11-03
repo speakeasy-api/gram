@@ -23,6 +23,8 @@ const mocks = vi.hoisted(() => ({
   listDelegableGrants: vi.fn(),
   checkPolicyGrants: vi.fn(),
   mcpServers: vi.fn(),
+  // Holds the token endpoints in their loading state.
+  tokenEndpointsPending: false,
   getMcpServer: vi.fn(),
   updateMcpServer: vi.fn(),
   toolsets: vi.fn(),
@@ -210,8 +212,10 @@ vi.mock("@gram/client/react-query/workloadIdentities.js", () => ({
 }));
 vi.mock("@gram/client/react-query/workloadTokenEndpoints.js", () => ({
   useWorkloadTokenEndpoints: () => ({
-    data: { items: mocks.tokenEndpoints() },
-    isPending: false,
+    data: mocks.tokenEndpointsPending
+      ? undefined
+      : { items: mocks.tokenEndpoints() },
+    isPending: mocks.tokenEndpointsPending,
     isError: false,
   }),
 }));
@@ -1224,6 +1228,40 @@ describe("Connecting a GKE cluster", () => {
     ).toBe(true);
   });
 
+  it("waits for the providers to load before letting a new agent continue", async () => {
+    mocks.platforms.mockReturnValue([gke]);
+    mocks.tokenEndpoints.mockReturnValue([sharedServer]);
+    mocks.mcpServers.mockResolvedValue({
+      mcpServers: [{ ...githubServer, userSessionIssuerId: "usi_private" }],
+    });
+    mocks.tokenEndpointsPending = true;
+    try {
+      setup();
+      fireEvent.change(screen.getByLabelText("Name"), {
+        target: { value: "Review Agent" },
+      });
+      await nameChecked();
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+      fireEvent.click(await screen.findByRole("checkbox", { name: "GitHub" }));
+      fireEvent.click(screen.getByRole("button", { name: "Continue" }));
+      await continueFromAuthentication();
+      fireEvent.click(await screen.findByRole("radio", { name: /GKE/ }));
+
+      expect(
+        await screen.findByText(
+          "Checking which MCP authentication provider the servers use…",
+        ),
+      ).toBeTruthy();
+      expect(
+        screen
+          .getByRole("button", { name: "Continue" })
+          .hasAttribute("disabled"),
+      ).toBe(true);
+    } finally {
+      mocks.tokenEndpointsPending = false;
+    }
+  });
+
   it("moves a server onto the agent's provider without leaving the wizard", async () => {
     mocks.platforms.mockReturnValue([gke]);
     mocks.tokenEndpoints.mockReturnValue([sharedServer]);
@@ -1355,6 +1393,7 @@ describe("Connecting a GKE cluster", () => {
         ...sharedServer,
         userSessionIssuerId: "usi_first",
         userSessionIssuerSlug: "first",
+        issuer: "https://app.example.test/oauth/usi/usi_first",
         tokenEndpoint: "https://app.example.test/oauth/usi/usi_first/token",
       },
       sharedServer,
@@ -1366,10 +1405,12 @@ describe("Connecting a GKE cluster", () => {
       } as typeof githubServer,
     ]);
 
+    // The organization's first provider has its own issuer, so offering it
+    // would put that issuer on the page instead.
     expect(screen.getAllByText(sharedServer.issuer).length).toBeGreaterThan(0);
     expect(
-      screen.queryByText("https://app.example.test/oauth/usi/usi_first"),
-    ).toBeNull();
+      screen.queryAllByText("https://app.example.test/oauth/usi/usi_first"),
+    ).toHaveLength(0);
   });
 
   it("names the audience, token endpoint and server URL the pod needs", async () => {

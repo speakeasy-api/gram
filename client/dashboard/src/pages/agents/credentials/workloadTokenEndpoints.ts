@@ -28,6 +28,11 @@ export interface SetupValues {
    * authentication provider, and only that provider's servers accept it.
    */
   mismatch: ProviderMismatch | null;
+  /**
+   * True while the providers are still loading for servers that need
+   * checking, when `mismatch` can't be known yet.
+   */
+  checking: boolean;
 }
 
 /** How an agent's servers fall short of sharing one provider. */
@@ -153,6 +158,7 @@ export function useSetupValues(
 
   return {
     mismatch,
+    checking: servers.length > 0 && query.isPending,
     values:
       selected === undefined || mismatch !== null
         ? undefined

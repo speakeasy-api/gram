@@ -56,6 +56,8 @@ export type SetupServer = {
   issuerId?: string;
   /** Where the server's settings live, to link to them. */
   projectSlug?: string;
+  /** The project that owns the server, for project-scoped permissions. */
+  projectId?: string;
   slug?: string;
 };
 

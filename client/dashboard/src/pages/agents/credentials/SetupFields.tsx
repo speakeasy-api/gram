@@ -324,6 +324,7 @@ function MoveToProvider({
     <RequireScope
       scope="mcp:write"
       resourceId={server.resourceId}
+      projectId={server.projectId}
       level="component"
     >
       {({ disabled }) =>

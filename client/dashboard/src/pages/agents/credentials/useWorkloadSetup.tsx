@@ -88,6 +88,7 @@ export function useWorkloadSetup({
   readOnly = false,
   setupOverride,
   targetProjectId,
+  requireOneProvider = false,
   servers = [],
 }: {
   /** The servers the agent may call, for steps that name one to call. */
@@ -96,6 +97,12 @@ export function useWorkloadSetup({
   setupOverride?: PlatformSetup;
   /** An inference exchange cannot use another project’s issuer. */
   targetProjectId?: string;
+  /**
+   * Refuse to connect until the agent's servers share one MCP authentication
+   * provider, rechecked here because the providers may finish loading after
+   * the step that shows the mismatch.
+   */
+  requireOneProvider?: boolean;
   /** The catalog's policy for the platform, absent for a custom one. */
   entry: CatalogEntry | undefined;
   /** The chosen platform, which may be the custom one. Null until chosen. */
@@ -294,6 +301,17 @@ export function useWorkloadSetup({
     if (current?.projectId && keptProjectSlug === undefined) {
       setError(
         "This access rule belongs to a project you cannot open. Ask an organization admin to change it.",
+      );
+      return false;
+    }
+    if (
+      requireOneProvider &&
+      (setupValues.checking || setupValues.mismatch !== null)
+    ) {
+      setError(
+        setupValues.checking
+          ? "Still checking which MCP authentication provider this agent's servers use. Try again in a moment."
+          : "This agent's servers need to share one MCP authentication provider. Go back to Agent sign-in to fix it.",
       );
       return false;
     }

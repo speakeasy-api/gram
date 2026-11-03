@@ -1355,6 +1355,7 @@ export function CredentialsWizard({
   };
 
   const workload = useWorkloadSetup({
+    requireOneProvider: !editing,
     entry: credential === "workload" ? platform : undefined,
     platformKey: credential === "workload" ? platformKey : null,
     agentName: name.trim(),
@@ -1368,6 +1369,7 @@ export function CredentialsWizard({
               mcpUrl: server.mcpUrl,
               issuerId: server.issuerId,
               projectSlug: server.projectSlug,
+              projectId: server.projectId,
               slug: server.slug,
             },
           ]
@@ -2107,6 +2109,13 @@ export function CredentialsWizard({
             note =
               "Move this agent's servers onto one MCP authentication provider, or remove the ones that aren't, to continue.";
           }
+          // Until the providers load, a mismatch can't be ruled out.
+          const checkingProviders =
+            !editing && platformKey !== null && workload.exchange.checking;
+          if (checkingProviders && !refused && !mismatched) {
+            note =
+              "Checking which MCP authentication provider the servers use…";
+          }
           return (
             <WizardFooter
               note={note}
@@ -2114,7 +2123,10 @@ export function CredentialsWizard({
               primary={
                 <Button
                   disabled={
-                    refused || mismatched || workload.steps.length === 0
+                    refused ||
+                    mismatched ||
+                    checkingProviders ||
+                    workload.steps.length === 0
                   }
                   onClick={() => setStep(4)}
                 >
