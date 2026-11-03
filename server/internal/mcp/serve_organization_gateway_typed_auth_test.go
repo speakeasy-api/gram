@@ -31,7 +31,7 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 		required                                bool
 		pending, bound, detached                bool
 	}{
-		{name: "detached_required_caller_header", detached: true, clientType: authz.AuthClientTypeStaticCredential, header: "X-API-Key", source: "X-API-Key", required: true},
+		{name: "detached_required_caller_header", detached: true, bound: true, clientType: authz.AuthClientTypeStaticCredential, header: "X-API-Key", source: "X-API-Key", required: true},
 		{name: "detached_unbound_oauth", detached: true, clientType: authz.AuthClientTypeRemoteSession},
 		{name: "detached_bound_oauth", detached: true, bound: true, clientType: authz.AuthClientTypeRemoteSession},
 		{name: "legacy_pending_bound", pending: true, bound: true},
@@ -71,7 +71,7 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 				}
 				client, err := clients.CreateAuthClient(ctx, clientParams)
 				require.NoError(t, err)
-				if tc.name == "required_caller_header" || tc.name == "admin_header_override" {
+				if tc.name == "required_caller_header" || tc.name == "admin_header_override" || tc.name == "detached_required_caller_header" {
 					header := authclientsrepo.CreateAuthClientHeaderParams{AuthClientID: client.ID, OrganizationID: ac.ActiveOrganizationID, Name: "X-API-Key", IsRequired: true}
 					if tc.name == "admin_header_override" {
 						header.Value = conv.ToPGText("configured-client-key")
@@ -119,7 +119,7 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 					mcp.ResetAuthEnforcementForTest(ti.service.Service)
 					ti.features.SetFlag(feature.FlagAuthClientResolver, ac.ActiveOrganizationID, false)
 					ti.features.SetFlag(feature.FlagAuthClientResolverShadow, ac.ActiveOrganizationID, mode == "shadow")
-					visible := tc.bound || tc.name == "static_header" || (!tc.pending && !tc.detached && mode == "enforced" && tc.name != "required_caller_header")
+					visible := (tc.bound && tc.name != "detached_required_caller_header") || tc.name == "static_header" || (!tc.pending && !tc.detached && mode == "enforced" && tc.name != "required_caller_header")
 					w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, token, listServersBody(t))
 					require.NoError(t, err)
 					require.Equal(t, http.StatusOK, w.Code, w.Body.String())
