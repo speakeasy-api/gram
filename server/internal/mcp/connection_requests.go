@@ -16,9 +16,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// Per-request rows record refusals and failures only. A request that is served
-// writes nothing: at tool-call rates, success rows would fill the recorder's
-// write budget and leave the failures to drop.
+// Per-request rows record refusals and failures only: a served request writes nothing.
 
 // errRiskPolicyDenied marks a tools/call a risk policy stopped.
 var errRiskPolicyDenied = errors.New("risk policy denied the call")
@@ -34,10 +32,7 @@ func requestApp(ctx context.Context) mcpconnectionattempts.App {
 	return mcpconnectionattempts.AppUnverified
 }
 
-// recordGateRejection records a bearer the gate refused, once it proves a real
-// flow on this server. No bearer and an expired one are how a healthy client
-// learns to sign in or refresh. A bearer that is not ours, or was minted for
-// another server, could come from anyone. A caller going away says nothing.
+// recordGateRejection records only a bearer that proves a real flow on this server.
 func (s *Service) recordGateRejection(ctx context.Context, endpoint *ResolvedMcpEndpoint, token, reason string, valErr error) {
 	if valErr == nil || errors.Is(valErr, jwt.ErrTokenExpired) || errors.Is(valErr, jwt.ErrTokenInvalidAudience) || errors.Is(ctx.Err(), context.Canceled) {
 		return
@@ -69,9 +64,7 @@ func gateHappened(valErr error) mcpconnectionattempts.Code {
 	return mcpconnectionattempts.CodeAuthCheckUnavailable
 }
 
-// directConnectionOptions records a directly served proxy's tool calls under its
-// server, for a caller who presented a credential. An anonymous caller on a public
-// server proves no flow, so those calls stay in the proxy's metrics.
+// directConnectionOptions records a caller who presented a credential; anonymous calls stay in metrics.
 func directConnectionOptions(ctx context.Context, organizationID string, projectID, serverID uuid.UUID, upstream remotesessions.UpstreamToken) []remotemcp.BuildOption {
 	if authCtx, ok := contextvalues.GetAuthContext(ctx); !ok || authCtx == nil {
 		return nil
@@ -145,8 +138,7 @@ func (s *Service) recordMemberFailure(ctx context.Context, gate *metaGateContext
 	s.connections.Once(ctx, gate.connectionScope(ctx), mcpconnectionattempts.StepMCPRequest, what, mcpconnectionattempts.Member(member.serverID), gate.connectionSubject(ctx))
 }
 
-// memberNoCredentialHappened says why a member had no credential to send: its
-// setup, or why partial resolution left its client out. Otherwise the person has to connect it.
+// memberNoCredentialHappened says why a member had no credential to send.
 func (g *metaGateContext) memberNoCredentialHappened(member metaMember) mcpconnectionattempts.Code {
 	if member.authClient != nil && member.authClient.outcome == authClientGap {
 		return authClientGapHappened(member.authClient.reason)
@@ -216,8 +208,7 @@ func killswitchHappened(err error) mcpconnectionattempts.Code {
 	return mcpconnectionattempts.CodeKillswitchCheckUnavailable
 }
 
-// upstreamRefreshCheck is what refresh learned about the upstream behind a
-// session. Its values name the reason the refresh row records.
+// upstreamRefreshCheck is what refresh learned about a session's upstream; values name the row's reason.
 type upstreamRefreshCheck string
 
 const (
@@ -258,8 +249,7 @@ func refuseInboundRefresh(ctx context.Context, tracker *mcpconnectionattempts.Tr
 	tracker.Refuse(ctx, code, append(opts, mcpconnectionattempts.Detail(reason))...)
 }
 
-// inboundRefreshHappened leaves out what proves no real session: a malformed
-// request, one naming another server, and a token no live session holds. An unknown reason is ours.
+// inboundRefreshHappened leaves out what proves no real session; an unknown reason is ours.
 func inboundRefreshHappened(reason string) (mcpconnectionattempts.Code, bool) {
 	switch reason {
 	case "refresh_token_resource_mismatch":

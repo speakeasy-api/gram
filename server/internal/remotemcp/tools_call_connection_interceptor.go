@@ -27,8 +27,7 @@ type ConnectionAttribution struct {
 	SelfCredential bool
 }
 
-// toolsCallConnections records tools/call requests that were refused or failed.
-// A call that succeeds never reaches it. Nil records nothing and adds no interceptor.
+// toolsCallConnections records refused and failed tool calls; nil adds no interceptor.
 type toolsCallConnections struct {
 	ConnectionAttribution
 
@@ -110,8 +109,7 @@ type UpstreamCredential struct {
 	Self bool
 }
 
-// UpstreamFailureHappened classifies a failed upstream call, for direct servers and gateway members.
-// A 401 with no credential attached is the upstream's sign-in challenge, not a rejection.
+// UpstreamFailureHappened classifies a failed upstream call for direct servers and gateway members.
 func UpstreamFailureHappened(status int, credential UpstreamCredential, tunneled bool) (mcpconnectionattempts.Code, bool) {
 	var none mcpconnectionattempts.Code
 	switch {
@@ -138,8 +136,7 @@ func UpstreamFailureHappened(status int, credential UpstreamCredential, tunneled
 	return none, false
 }
 
-// refusalHappened classifies what an interceptor refused. An unknown error is
-// ours. A call held for approval is not an end state: the agent asks and retries.
+// refusalHappened classifies a refusal; an unknown error is ours and a held call is not an end state.
 func refusalHappened(err error) (mcpconnectionattempts.Code, bool) {
 	if _, held := errors.AsType[*proxy.ToolResultError](err); held {
 		var none mcpconnectionattempts.Code

@@ -14,8 +14,7 @@ import (
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
 
-// RefreshAttribution says where a refresh's connection row goes. Every caller
-// that can trigger a refresh names it, so no path files a row by accident.
+// RefreshAttribution says where a refresh's connection row goes; every refreshing path names one.
 type RefreshAttribution struct {
 	scope   mcpconnectionattempts.Scope
 	attempt mcpconnectionattempts.Attempt
@@ -39,9 +38,7 @@ func (a RefreshAttribution) NotingSkips(skipped *SkippedClients) RefreshAttribut
 	return a
 }
 
-// SkippedClients holds why clients were left out of a partial resolution, keyed
-// by remote session issuer. It sits beside the token map because an entry in that
-// map changes how members route. Nil ignores everything.
+// SkippedClients holds why partial resolution left clients out, since a token map entry changes routing.
 type SkippedClients struct {
 	mu      sync.Mutex
 	reasons map[uuid.UUID]error
@@ -100,18 +97,14 @@ func (s *RefreshService) recordRefresh(
 	s.connections.Once(ctx, attribution.scope, mcpconnectionattempts.StepProviderRefresh, what, opts...)
 }
 
-// canReregister reports whether a registration can be replaced by dynamic
-// registration: a CIMD client's client_id is its document URL, a managed client's
-// registration belongs to its connection, a private_key_jwt client's is bound to a
-// key set, and a self client's uses a grant the replacement does not request.
+// canReregister reports whether dynamic registration can reproduce this client.
 func canReregister(clientIDMetadataURI pgtype.Text, identityProviderConnectionID uuid.NullUUID, authMethod pgtype.Text, owner string) bool {
 	return !clientIDMetadataURI.Valid && !identityProviderConnectionID.Valid &&
 		TokenEndpointAuthMethod(authMethod.String) != TokenEndpointAuthMethodPrivateKeyJWT &&
 		CredentialOwner(owner) != CredentialOwnerSelf
 }
 
-// refreshHappened maps a metric outcome to what the row says. A session revoked
-// mid-refresh and a caller that went away are neither success nor failure.
+// refreshHappened maps a metric outcome to the row; revoked mid-refresh and canceled write none.
 func refreshHappened(outcome remotesessionmetrics.RefreshOutcome, client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow, err error) (mcpconnectionattempts.Happened, bool) {
 	if client.TunneledMcpServerID.Valid && refreshReachedNoTunnel(outcome, err) {
 		return mcpconnectionattempts.CodeTunnelUnavailable, true
@@ -156,8 +149,7 @@ func refreshHappened(outcome remotesessionmetrics.RefreshOutcome, client remotes
 	return nil, false
 }
 
-// refreshReachedNoTunnel reports a refresh through a tunnel that is down: no
-// transport for it, the POST unanswered, or the tunnel gateway's 502.
+// refreshReachedNoTunnel reports a refresh through a tunnel that is down.
 func refreshReachedNoTunnel(outcome remotesessionmetrics.RefreshOutcome, err error) bool {
 	if errors.Is(err, errRefreshTunnelTransport) || outcome == remotesessionmetrics.RefreshOutcomeUnreachable {
 		return true
