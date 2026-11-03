@@ -3,7 +3,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useRBAC } from "@/hooks/useRBAC";
 import { DEFAULT_ASSISTANT_MODEL } from "@/lib/models";
 import { defineFrontendTool, type FrontendTool } from "@/elements";
-import { Gram } from "@gram/client";
+import type { Gram } from "@gram/client";
 import type { AssistantSkillRef } from "@gram/client/models/components/assistantskillref.js";
 import type { Skill } from "@gram/client/models/components/skill.js";
 import { ToolCallMessagePartComponent } from "@assistant-ui/react";

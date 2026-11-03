@@ -167,3 +167,40 @@ WHERE organization_id = @organization_id
   AND workload_issuer_id = @workload_issuer_id
   AND subject = @subject
   AND deleted IS FALSE;
+
+-- name: SeedWorkloadIssuerFixture :one
+-- Test fixture: this package is read-only; issuer writes belong to the
+-- management API. created_at is explicit so oldest-first tie-breaks can be
+-- asserted.
+INSERT INTO workload_issuers (organization_id, project_id, name, issuer, jwks_uri, created_at)
+VALUES (@organization_id, sqlc.narg(project_id), @name, @issuer, @jwks_uri, @created_at)
+RETURNING id;
+
+-- name: SetWorkloadIssuerAllowWildcardAdmissionFixture :exec
+UPDATE workload_issuers SET allow_wildcard_admission = @allow_wildcard_admission WHERE id = @id;
+
+-- name: SeedWorkloadAdmissionFixture :one
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject)
+VALUES (@organization_id, sqlc.narg(project_id), @workload_issuer_id, @subject)
+RETURNING id;
+
+-- name: SeedWorkloadAdmissionRuleFixture :one
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, match_kind)
+VALUES (@organization_id, sqlc.narg(project_id), @workload_issuer_id, @subject, @match_kind)
+RETURNING id;
+
+-- name: WithdrawWorkloadAdmissionFixture :exec
+UPDATE workload_identity_admissions SET deleted_at = clock_timestamp() WHERE id = @id;
+
+-- name: SeedWorkloadAgentAssignmentFixture :one
+INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, agent_id)
+VALUES (@organization_id, @workload_issuer_id, @subject, @agent_id)
+RETURNING id;
+
+-- name: SeedWorkloadAgentAssignmentRuleFixture :one
+INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, match_kind, agent_id)
+VALUES (@organization_id, @workload_issuer_id, @subject, @match_kind, @agent_id)
+RETURNING id;
+
+-- name: UnassignWorkloadAgentFixture :exec
+UPDATE workload_agent_assignments SET deleted_at = clock_timestamp() WHERE id = @id;

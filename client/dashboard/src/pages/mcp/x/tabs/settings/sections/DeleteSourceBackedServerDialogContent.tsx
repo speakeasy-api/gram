@@ -1,4 +1,5 @@
 import { RemoveMcpSourceDialogContent } from "@/components/mcp/RemoveMcpSourceDialog";
+import { ServerUsageImpactById } from "@/components/mcp-server-usage/ServerUsageConfirmation";
 import { useDeleteRemoteMcpSource } from "@/pages/sources/remote-mcp/hooks";
 import { useDeleteTunneledMcpSource } from "@/pages/sources/tunneled-mcp/hooks";
 import { useDeleteUnproxiedMcpSource } from "@/pages/sources/unproxied-mcp/hooks";
@@ -62,6 +63,23 @@ export function DeleteSourceBackedServerDialogContent({
       onClose={onClose}
       onSuccess={onSuccess}
       onConfirm={confirm}
+      usage={
+        linkedMcpServers.length > 0 && (
+          <div className="grid max-h-96 gap-4 overflow-y-auto">
+            {linkedMcpServers.map((server) => (
+              <ServerUsageImpactById
+                key={server.id}
+                mcpServerId={server.id}
+                heading={
+                  linkedMcpServers.length > 1
+                    ? `Who uses ${server.name}`
+                    : undefined
+                }
+              />
+            ))}
+          </div>
+        )
+      }
     />
   );
 }

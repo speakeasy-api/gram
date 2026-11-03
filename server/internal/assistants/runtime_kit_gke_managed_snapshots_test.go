@@ -71,7 +71,7 @@ func TestKitGKEManagedSelectUsesDocumentedTriggerResult(t *testing.T) {
 	require.NoError(t, err)
 	trigger.SetUID("trigger-uid")
 	trigger.SetGeneration(1)
-	trigger.Object["status"] = map[string]any{"observedGeneration": int64(1), "snapshotCreated": "selected-snapshot"}
+	trigger.Object["status"] = map[string]any{"observedGeneration": int64(1), "snapshotCreated": map[string]any{"name": "selected-snapshot"}}
 	snapshot := kitObject("PodSnapshot", "podsnapshot.gke.io/v1", "selected-snapshot", identity)
 	snapshot.SetUID("snapshot-uid")
 	snapshot.SetGeneration(1)
@@ -88,6 +88,15 @@ func TestKitGKEManagedSelectUsesDocumentedTriggerResult(t *testing.T) {
 	for _, a := range client.Actions() {
 		require.Equal(t, "get", a.GetVerb())
 	}
+	legacy := trigger.DeepCopy()
+	legacy.Object["status"] = map[string]any{"observedGeneration": int64(1), "snapshotCreated": "selected-snapshot"}
+	_, err = client.Resource(kitGKETriggerGVR).Namespace(identity.Namespace).Update(t.Context(), legacy, metav1.UpdateOptions{})
+	require.NoError(t, err)
+	selected, err = driver.Select(t.Context(), legacy, binding)
+	require.NoError(t, err)
+	require.Equal(t, snapshot.GetUID(), selected.GetUID())
+	_, err = client.Resource(kitGKETriggerGVR).Namespace(identity.Namespace).Update(t.Context(), trigger, metav1.UpdateOptions{})
+	require.NoError(t, err)
 
 	for _, tc := range []struct {
 		name   string
@@ -99,6 +108,9 @@ func TestKitGKEManagedSelectUsesDocumentedTriggerResult(t *testing.T) {
 		}},
 		{"wrong result type", func(u *unstructured.Unstructured) {
 			_ = unstructured.SetNestedField(u.Object, int64(3), "status", "snapshotCreated")
+		}},
+		{"wrong result name type", func(u *unstructured.Unstructured) {
+			_ = unstructured.SetNestedField(u.Object, int64(3), "status", "snapshotCreated", "name")
 		}},
 		{"wrong target", func(u *unstructured.Unstructured) {
 			_ = unstructured.SetNestedField(u.Object, "other", "spec", "targetPod")

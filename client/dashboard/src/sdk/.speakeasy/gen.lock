@@ -114,6 +114,7 @@ trackedFiles:
   src/funcs/agentListAiScanTargets.ts: {}
   src/funcs/agentListSyncedUsers.ts: {}
   src/funcs/agentReportAIScan.ts: {}
+  src/funcs/agentReportCrash.ts: {}
   src/funcs/agentReportSessionMoved.ts: {}
   src/funcs/agentReportState.ts: {}
   src/funcs/agentUnhideMcpServer.ts: {}
@@ -415,6 +416,7 @@ trackedFiles:
   src/funcs/mcpServersDelete.ts: {}
   src/funcs/mcpServersDeleteToolMetadata.ts: {}
   src/funcs/mcpServersGet.ts: {}
+  src/funcs/mcpServersGetUsageImpact.ts: {}
   src/funcs/mcpServersList.ts: {}
   src/funcs/mcpServersListForOrg.ts: {}
   src/funcs/mcpServersListToolFilters.ts: {}
@@ -928,6 +930,10 @@ trackedFiles:
   src/models/components/admitworkloadsubjectform.ts: {}
   src/models/components/agentconnectionblock.ts: {}
   src/models/components/agentconnectionblockidform.ts: {}
+  src/models/components/agentcrashbuild.ts: {}
+  src/models/components/agentcrashframe.ts: {}
+  src/models/components/agentcrashreport.ts: {}
+  src/models/components/agentcrashrollback.ts: {}
   src/models/components/agentdelegatedgrant.ts: {}
   src/models/components/agentdelegatedpolicy.ts: {}
   src/models/components/agentexpectedpolicy.ts: {}
@@ -1626,6 +1632,8 @@ trackedFiles:
   src/models/components/mcpserveractivity.ts: {}
   src/models/components/mcpserverauthentication.ts: {}
   src/models/components/mcpservertoolsetsummary.ts: {}
+  src/models/components/mcpserverusageimpact.ts: {}
+  src/models/components/mcpserverusagesubject.ts: {}
   src/models/components/mcpsetupguide.ts: {}
   src/models/components/mcpsetupguideremote.ts: {}
   src/models/components/metamcpdiscoveryfunnel.ts: {}
@@ -1789,6 +1797,8 @@ trackedFiles:
   src/models/components/rendertemplateresult.ts: {}
   src/models/components/replaceidentityproviderconnectionclientsecretrequestbody.ts: {}
   src/models/components/reportaiscanrequestbody.ts: {}
+  src/models/components/reportcrashrequestbody.ts: {}
+  src/models/components/reportcrashresult.ts: {}
   src/models/components/reportsessionmovedrequestbody.ts: {}
   src/models/components/reportstaterequestbody.ts: {}
   src/models/components/reportstateresult.ts: {}
@@ -2534,6 +2544,7 @@ trackedFiles:
   src/models/operations/getmcpserveractivity.ts: {}
   src/models/operations/getmcpserverauthentication.ts: {}
   src/models/operations/getmcpserverdetails.ts: {}
+  src/models/operations/getmcpserverusageimpact.ts: {}
   src/models/operations/getmcpsetupdocs.ts: {}
   src/models/operations/getmetamcpserver.ts: {}
   src/models/operations/getmetamcpserverusage.ts: {}
@@ -2891,6 +2902,7 @@ trackedFiles:
   src/models/operations/repairplatformmcponboardingpublication.ts: {}
   src/models/operations/replaceidentityproviderconnectionclientsecret.ts: {}
   src/models/operations/reportagentaiscan.ts: {}
+  src/models/operations/reportagentcrash.ts: {}
   src/models/operations/reportagentsessionmoved.ts: {}
   src/models/operations/reportagentstate.ts: {}
   src/models/operations/requestaccess.ts: {}
@@ -3748,6 +3760,8 @@ trackedFiles:
   src/react-query/mcpServerAuthClientChoices.ts: {}
   src/react-query/mcpServerAuthentication.core.ts: {}
   src/react-query/mcpServerAuthentication.ts: {}
+  src/react-query/mcpServerUsageImpact.core.ts: {}
+  src/react-query/mcpServerUsageImpact.ts: {}
   src/react-query/mcpServers.core.ts: {}
   src/react-query/mcpServers.ts: {}
   src/react-query/members.core.ts: {}
@@ -3924,6 +3938,7 @@ trackedFiles:
   src/react-query/repairPlatformMCPOnboardingPublication.ts: {}
   src/react-query/replaceIdentityProviderConnectionClientSecret.ts: {}
   src/react-query/reportAgentAIScan.ts: {}
+  src/react-query/reportAgentCrash.ts: {}
   src/react-query/reportAgentSessionMoved.ts: {}
   src/react-query/reportAgentState.ts: {}
   src/react-query/requestAccess.ts: {}
@@ -7921,6 +7936,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  getMcpServerUsageImpact:
+    speakeasy-default-get-mcp-server-usage-impact:
+      parameters:
+        query:
+          id: "1e4d4229-9b89-4fea-9f40-dd22a7df14d4"
+      responses:
+        "200":
+          application/json: {"active_connection_count": 140209, "active_subject_count": 308901, "server_name": "<value>", "shared_connection_count": 676322, "shared_sign_in": false, "sign_in_required": true, "subjects": [], "subjects_truncated": false}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
   getMetaMcpServer:
     speakeasy-default-get-meta-mcp-server:
       parameters:
@@ -12226,6 +12253,17 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": true}
+  reportAgentCrash:
+    speakeasy-default-report-agent-crash:
+      requestBody:
+        application/json: {"reports": [{"build": {"binary": "<value>", "version": "<value>"}, "component": "<value>", "count": 637573, "id": "<id>", "kind": "<value>", "occurred_at": "2025-09-20T09:51:38.764Z", "schema_version": 104481}]}
+      responses:
+        "200":
+          application/json: {"accepted": 571289}
+        "400":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
+        "500":
+          application/json: {"fault": false, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": false}
   reportAgentSessionMoved:
     speakeasy-default-report-agent-session-moved:
       requestBody:

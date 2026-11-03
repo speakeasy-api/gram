@@ -13,6 +13,34 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+const activateCustomDomainFixture = `-- name: ActivateCustomDomainFixture :exec
+UPDATE custom_domains SET verified = TRUE, activated = TRUE WHERE id = $1
+`
+
+// Test fixture: makes a domain addressable without exercising domain provisioning.
+func (q *Queries) ActivateCustomDomainFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, activateCustomDomainFixture, id)
+	return err
+}
+
+const activateCustomDomainWithNameFixture = `-- name: ActivateCustomDomainWithNameFixture :execrows
+UPDATE custom_domains SET domain = $1, verified = TRUE, activated = TRUE WHERE id = $2
+`
+
+type ActivateCustomDomainWithNameFixtureParams struct {
+	Domain string
+	ID     uuid.UUID
+}
+
+// Test fixture: makes a domain addressable without exercising domain provisioning.
+func (q *Queries) ActivateCustomDomainWithNameFixture(ctx context.Context, arg ActivateCustomDomainWithNameFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, activateCustomDomainWithNameFixture, arg.Domain, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const addGatewayPluginServer = `-- name: AddGatewayPluginServer :one
 INSERT INTO plugin_servers (plugin_id, project_id, meta_mcp_server_id, display_name, policy, sort_order)
 SELECT p.id, p.project_id, $1, $2, $3, $4
@@ -167,6 +195,27 @@ UPDATE projects SET created_at = '2000-01-01' WHERE id = $1
 func (q *Queries) AgeRoleSetupProjectFixture(ctx context.Context, id uuid.UUID) error {
 	_, err := q.db.Exec(ctx, ageRoleSetupProjectFixture, id)
 	return err
+}
+
+const clearPublishedMCPFingerprintsFixture = `-- name: ClearPublishedMCPFingerprintsFixture :exec
+UPDATE plugin_github_connections SET published_mcp_fingerprints = NULL WHERE project_id = $1
+`
+
+// Test fixture: models a pre-fingerprint publication without changing the last-published timestamp.
+func (q *Queries) ClearPublishedMCPFingerprintsFixture(ctx context.Context, projectID uuid.UUID) error {
+	_, err := q.db.Exec(ctx, clearPublishedMCPFingerprintsFixture, projectID)
+	return err
+}
+
+const countLiveMCPEndpointsForMetaMCPServerFixture = `-- name: CountLiveMCPEndpointsForMetaMCPServerFixture :one
+SELECT count(*) FROM mcp_endpoints WHERE meta_mcp_server_id = $1::uuid AND deleted IS FALSE
+`
+
+func (q *Queries) CountLiveMCPEndpointsForMetaMCPServerFixture(ctx context.Context, metaMcpServerID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, countLiveMCPEndpointsForMetaMCPServerFixture, metaMcpServerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
 }
 
 const countLivePluginServersByMCPServerIDFixture = `-- name: CountLivePluginServersByMCPServerIDFixture :one
@@ -377,6 +426,20 @@ func (q *Queries) DeletePlugin(ctx context.Context, arg DeletePluginParams) erro
 	return err
 }
 
+const deletePluginAssignmentFixture = `-- name: DeletePluginAssignmentFixture :exec
+DELETE FROM plugin_assignments WHERE plugin_id = $1 AND principal_urn = $2
+`
+
+type DeletePluginAssignmentFixtureParams struct {
+	PluginID     uuid.UUID
+	PrincipalUrn string
+}
+
+func (q *Queries) DeletePluginAssignmentFixture(ctx context.Context, arg DeletePluginAssignmentFixtureParams) error {
+	_, err := q.db.Exec(ctx, deletePluginAssignmentFixture, arg.PluginID, arg.PrincipalUrn)
+	return err
+}
+
 const deleteRoleSetupCatalogRegistrationFixture = `-- name: DeleteRoleSetupCatalogRegistrationFixture :exec
 DELETE FROM platform_mcp_catalog_registrations WHERE mcp_server_id = $1 AND project_id = $2
 `
@@ -471,6 +534,36 @@ type ForgetPublishedMarketplaceNameParams struct {
 func (q *Queries) ForgetPublishedMarketplaceName(ctx context.Context, arg ForgetPublishedMarketplaceNameParams) error {
 	_, err := q.db.Exec(ctx, forgetPublishedMarketplaceName, arg.ProjectID, arg.ClearedOverride)
 	return err
+}
+
+const gatewayDistributedToPrincipal = `-- name: GatewayDistributedToPrincipal :one
+SELECT EXISTS (
+  SELECT 1 FROM plugin_servers ps
+  JOIN plugins p ON p.id = ps.plugin_id AND p.organization_id = $1 AND p.project_id = $2 AND p.deleted IS FALSE
+  JOIN plugin_assignments pa ON pa.plugin_id = p.id AND pa.organization_id = p.organization_id AND pa.principal_urn = $3
+  WHERE ps.meta_mcp_server_id = $4 AND ps.deleted IS FALSE
+)
+`
+
+type GatewayDistributedToPrincipalParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	PrincipalUrn   string
+	GatewayID      uuid.NullUUID
+}
+
+// Whether a live plugin in the project attaches the gateway and is assigned
+// to the principal.
+func (q *Queries) GatewayDistributedToPrincipal(ctx context.Context, arg GatewayDistributedToPrincipalParams) (bool, error) {
+	row := q.db.QueryRow(ctx, gatewayDistributedToPrincipal,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.PrincipalUrn,
+		arg.GatewayID,
+	)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
 }
 
 const getDefaultPlugin = `-- name: GetDefaultPlugin :one
@@ -830,6 +923,36 @@ func (q *Queries) GetPluginForUpdate(ctx context.Context, arg GetPluginForUpdate
 		&i.Deleted,
 	)
 	return i, err
+}
+
+const getPluginGatewayNetworkAccessMode = `-- name: GetPluginGatewayNetworkAccessMode :one
+SELECT g.network_access_mode
+FROM meta_mcp_servers g
+JOIN plugins p ON p.organization_id = g.organization_id AND p.project_id = g.project_id AND p.deleted IS FALSE
+WHERE p.id = $1
+  AND g.id = $2
+  AND g.organization_id = $3
+  AND g.project_id = $4
+  AND g.deleted IS FALSE
+`
+
+type GetPluginGatewayNetworkAccessModeParams struct {
+	PluginID       uuid.UUID
+	GatewayID      uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) GetPluginGatewayNetworkAccessMode(ctx context.Context, arg GetPluginGatewayNetworkAccessModeParams) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getPluginGatewayNetworkAccessMode,
+		arg.PluginID,
+		arg.GatewayID,
+		arg.OrganizationID,
+		arg.ProjectID,
+	)
+	var network_access_mode pgtype.Text
+	err := row.Scan(&network_access_mode)
+	return network_access_mode, err
 }
 
 const getPluginServerByBackend = `-- name: GetPluginServerByBackend :one
@@ -1516,6 +1639,45 @@ func (q *Queries) ListCanonicalWrapperIDs(ctx context.Context, arg ListCanonical
 	return items, nil
 }
 
+const listCompletePluginAudience = `-- name: ListCompletePluginAudience :many
+SELECT assignment.principal_urn
+FROM plugin_assignments AS assignment
+JOIN plugins AS plugin
+  ON plugin.id = assignment.plugin_id
+ AND plugin.organization_id = assignment.organization_id
+ AND plugin.deleted IS FALSE
+WHERE assignment.plugin_id = $1
+  AND assignment.organization_id = $2
+  AND plugin.project_id = $3
+ORDER BY assignment.principal_urn
+`
+
+type ListCompletePluginAudienceParams struct {
+	PluginID       uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+func (q *Queries) ListCompletePluginAudience(ctx context.Context, arg ListCompletePluginAudienceParams) ([]string, error) {
+	rows, err := q.db.Query(ctx, listCompletePluginAudience, arg.PluginID, arg.OrganizationID, arg.ProjectID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []string
+	for rows.Next() {
+		var principal_urn string
+		if err := rows.Scan(&principal_urn); err != nil {
+			return nil, err
+		}
+		items = append(items, principal_urn)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listDeliveryToolsetToolURNs = `-- name: ListDeliveryToolsetToolURNs :many
 SELECT latest.tool_urns
 FROM toolsets t
@@ -1560,6 +1722,43 @@ func (q *Queries) ListDeliveryToolsetToolURNs(ctx context.Context, arg ListDeliv
 			return nil, err
 		}
 		items = append(items, tool_urns)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listOrganizationMarketplaceProjectsPage = `-- name: ListOrganizationMarketplaceProjectsPage :many
+SELECT c.project_id
+FROM plugin_github_connections c
+JOIN projects p ON p.id = c.project_id
+WHERE p.organization_id = $1
+  AND p.deleted IS FALSE
+  AND c.project_id > $2
+ORDER BY c.project_id ASC
+LIMIT $3
+`
+
+type ListOrganizationMarketplaceProjectsPageParams struct {
+	OrganizationID string
+	Cursor         uuid.UUID
+	PageLimit      int32
+}
+
+func (q *Queries) ListOrganizationMarketplaceProjectsPage(ctx context.Context, arg ListOrganizationMarketplaceProjectsPageParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOrganizationMarketplaceProjectsPage, arg.OrganizationID, arg.Cursor, arg.PageLimit)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var project_id uuid.UUID
+		if err := rows.Scan(&project_id); err != nil {
+			return nil, err
+		}
+		items = append(items, project_id)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -1799,6 +1998,42 @@ func (q *Queries) ListPluginEnvironmentConfigsForProject(ctx context.Context, ar
 			return nil, err
 		}
 		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listPluginGatewayNetworkAccessModes = `-- name: ListPluginGatewayNetworkAccessModes :many
+SELECT g.network_access_mode
+FROM plugin_servers ps
+JOIN plugins p ON p.id = ps.plugin_id AND p.organization_id = $1 AND p.project_id = $2 AND p.deleted IS FALSE
+JOIN meta_mcp_servers g ON g.id = ps.meta_mcp_server_id AND g.organization_id = p.organization_id AND g.project_id = p.project_id AND g.deleted IS FALSE
+WHERE ps.plugin_id = $3
+  AND ps.deleted IS FALSE
+  AND g.visibility <> 'disabled'
+`
+
+type ListPluginGatewayNetworkAccessModesParams struct {
+	OrganizationID string
+	ProjectID      uuid.UUID
+	PluginID       uuid.UUID
+}
+
+func (q *Queries) ListPluginGatewayNetworkAccessModes(ctx context.Context, arg ListPluginGatewayNetworkAccessModesParams) ([]pgtype.Text, error) {
+	rows, err := q.db.Query(ctx, listPluginGatewayNetworkAccessModes, arg.OrganizationID, arg.ProjectID, arg.PluginID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []pgtype.Text
+	for rows.Next() {
+		var network_access_mode pgtype.Text
+		if err := rows.Scan(&network_access_mode); err != nil {
+			return nil, err
+		}
+		items = append(items, network_access_mode)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -2836,6 +3071,59 @@ func (q *Queries) LockPlatformCleanupMemberships(ctx context.Context, arg LockPl
 	return items, nil
 }
 
+const lockPluginForAssignments = `-- name: LockPluginForAssignments :one
+SELECT id, organization_id, project_id, name, slug, description, is_default, auto_created, created_at, updated_at, deleted_at, deleted
+FROM plugins
+WHERE id = $1
+  AND organization_id = $2
+  AND project_id = $3
+  AND deleted IS FALSE
+FOR UPDATE
+`
+
+type LockPluginForAssignmentsParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+}
+
+type LockPluginForAssignmentsRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	ProjectID      uuid.UUID
+	Name           string
+	Slug           string
+	Description    pgtype.Text
+	IsDefault      pgtype.Bool
+	AutoCreated    bool
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	DeletedAt      pgtype.Timestamptz
+	Deleted        bool
+}
+
+// Locks one exact live plugin. Dashboard and Platform MCP assignment writes
+// share this lock so concurrent replacements are serialized.
+func (q *Queries) LockPluginForAssignments(ctx context.Context, arg LockPluginForAssignmentsParams) (LockPluginForAssignmentsRow, error) {
+	row := q.db.QueryRow(ctx, lockPluginForAssignments, arg.ID, arg.OrganizationID, arg.ProjectID)
+	var i LockPluginForAssignmentsRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.ProjectID,
+		&i.Name,
+		&i.Slug,
+		&i.Description,
+		&i.IsDefault,
+		&i.AutoCreated,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.DeletedAt,
+		&i.Deleted,
+	)
+	return i, err
+}
+
 const lockPluginPackageContent = `-- name: LockPluginPackageContent :exec
 SELECT pg_advisory_xact_lock(hashtextextended('plugin-package-content:' || $1::text, 0))
 `
@@ -2928,6 +3216,29 @@ type PluginServerDisplayNameExistsParams struct {
 // Joins plugins to scope by project_id as defense-in-depth against IDOR.
 func (q *Queries) PluginServerDisplayNameExists(ctx context.Context, arg PluginServerDisplayNameExistsParams) (bool, error) {
 	row := q.db.QueryRow(ctx, pluginServerDisplayNameExists, arg.PluginID, arg.ProjectID, arg.DisplayName)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
+const projectHasMarketplaceConnection = `-- name: ProjectHasMarketplaceConnection :one
+SELECT EXISTS (
+  SELECT 1
+  FROM plugin_github_connections c
+  JOIN projects p ON p.id = c.project_id
+  WHERE c.project_id = $1
+    AND p.organization_id = $2
+    AND p.deleted IS FALSE
+)
+`
+
+type ProjectHasMarketplaceConnectionParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) ProjectHasMarketplaceConnection(ctx context.Context, arg ProjectHasMarketplaceConnectionParams) (bool, error) {
+	row := q.db.QueryRow(ctx, projectHasMarketplaceConnection, arg.ProjectID, arg.OrganizationID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -3307,6 +3618,37 @@ func (q *Queries) RevokeSkillDistributionsByPlugin(ctx context.Context, arg Revo
 	return items, nil
 }
 
+const setMCPEndpointDomainRootFixture = `-- name: SetMCPEndpointDomainRootFixture :execrows
+UPDATE mcp_endpoints SET is_domain_root = TRUE WHERE id = $1
+`
+
+// Test fixture: gateway root endpoints are not supported by the public root setter yet.
+func (q *Queries) SetMCPEndpointDomainRootFixture(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, setMCPEndpointDomainRootFixture, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setMetaMCPServerUserSessionIssuerFixture = `-- name: SetMetaMCPServerUserSessionIssuerFixture :execrows
+UPDATE meta_mcp_servers SET user_session_issuer_id = $1 WHERE id = $2
+`
+
+type SetMetaMCPServerUserSessionIssuerFixtureParams struct {
+	UserSessionIssuerID uuid.NullUUID
+	ID                  uuid.UUID
+}
+
+// Test fixture: a NULL issuer models a gateway whose required issuer disappeared after attachment.
+func (q *Queries) SetMetaMCPServerUserSessionIssuerFixture(ctx context.Context, arg SetMetaMCPServerUserSessionIssuerFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setMetaMCPServerUserSessionIssuerFixture, arg.UserSessionIssuerID, arg.ID)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const setPluginAutoCreatedFixture = `-- name: SetPluginAutoCreatedFixture :exec
 UPDATE plugins SET auto_created = $1 WHERE id = $2 AND project_id = $3
 `
@@ -3480,6 +3822,21 @@ func (q *Queries) SoftDeletePluginServersByMCPServerID(ctx context.Context, arg 
 		return nil, err
 	}
 	return items, nil
+}
+
+const softDeleteToolsetVersionFixture = `-- name: SoftDeleteToolsetVersionFixture :exec
+UPDATE toolset_versions SET deleted_at = clock_timestamp() WHERE toolset_id = $1 AND version = $2
+`
+
+type SoftDeleteToolsetVersionFixtureParams struct {
+	ToolsetID uuid.UUID
+	Version   int64
+}
+
+// Test fixture: no production API soft-deletes an individual historical version.
+func (q *Queries) SoftDeleteToolsetVersionFixture(ctx context.Context, arg SoftDeleteToolsetVersionFixtureParams) error {
+	_, err := q.db.Exec(ctx, softDeleteToolsetVersionFixture, arg.ToolsetID, arg.Version)
+	return err
 }
 
 const syncMcpServerDisplayName = `-- name: SyncMcpServerDisplayName :execrows
