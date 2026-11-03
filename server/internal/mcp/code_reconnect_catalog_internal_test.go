@@ -19,10 +19,15 @@ func TestReconnectCatalogChanges(t *testing.T) {
 	for _, tool := range []*toolListEntry{{Name: "source--added"}, {Name: "source--changed", Description: "new"}, {Name: "source--same"}} {
 		inventory.Tools = append(inventory.Tools, consentInventoryTool{Name: tool.Name, Definition: tool, DefinitionHash: consentEvidenceHash(tool)})
 	}
-	changes := compareCatalogInventory(old, inventory)
-	require.Equal(t, []string{"source--added"}, changes.Added)
-	require.Equal(t, []string{"source--removed"}, changes.Removed)
-	require.Equal(t, []string{"source--changed"}, changes.Changed)
+	changes, err := compareCatalogInventory(old, inventory)
+	require.NoError(t, err)
+	require.Len(t, changes.Added, 1)
+	require.Equal(t, "source--added", changes.Added[0].Name)
+	require.Len(t, changes.Removed, 1)
+	require.Equal(t, "source--removed", changes.Removed[0].Name)
+	require.Len(t, changes.Changed, 1)
+	require.Equal(t, "source--changed", changes.Changed[0].Name)
+	require.Equal(t, []catalogFieldChange{{Name: "description", Before: "old", After: "new", HasBefore: true, HasAfter: true}}, changes.Changed[0].Fields)
 }
 
 func TestFreezeConnectionCatalogRejectsInvalidDefinitions(t *testing.T) {

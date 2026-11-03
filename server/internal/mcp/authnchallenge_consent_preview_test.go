@@ -2,6 +2,7 @@ package mcp
 
 import (
 	"bytes"
+	"encoding/json"
 	"fmt"
 	"html/template"
 	"net/http/httptest"
@@ -108,6 +109,27 @@ func TestConsentPagePreview(t *testing.T) {
 		data consentTemplateData
 	}{
 		{"no-services", base},
+		{"tool-definition-diff", func() consentTemplateData {
+			d := base
+			d.ClientName = "Coding assistant"
+			d.MCPSlug = "team-tools"
+			before := &connectionCatalog{Tools: []*toolListEntry{
+				{Name: "issues--search", Description: "Search issues by title", InputSchema: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"},"limit":{"type":"integer","maximum":10}},"required":["query"]}`)},
+				{Name: "issues--archive", Description: "Archive a resolved issue", InputSchema: json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"}},"required":["id"]}`)},
+			}}
+			var inventory consentToolInventory
+			for _, tool := range []*toolListEntry{
+				{Name: "issues--search", Description: "Search issues by title and description", InputSchema: json.RawMessage(`{"type":"object","properties":{"query":{"type":"string"},"limit":{"type":"integer","maximum":100}},"required":["query"]}`)},
+				{Name: "issues--assign", Description: "Assign an issue to a team member", InputSchema: json.RawMessage(`{"type":"object","properties":{"id":{"type":"string"},"assignee":{"type":"string"}},"required":["id","assignee"]}`)},
+			} {
+				inventory.Tools = append(inventory.Tools, consentInventoryTool{Name: tool.Name, Definition: tool, DefinitionHash: consentEvidenceHash(tool)})
+			}
+			changes, err := compareCatalogInventory(before, inventory)
+			require.NoError(t, err)
+			d.CatalogChanges = &changes
+			return d
+		}()},
+
 		{"no-services-tool-picker", withIsland(base)},
 		{"single-service-connected", withIsland(withCards(base, connectedCard))},
 		// The only way a single unlinked service renders at all: auto-connect

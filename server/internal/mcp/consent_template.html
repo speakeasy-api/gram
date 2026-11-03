@@ -670,9 +670,9 @@
                 <span class="text-eyebrow shrink-0 group-open:hidden" aria-hidden="true">View tools</span>
                 <span class="text-eyebrow hidden shrink-0 group-open:inline" aria-hidden="true">Collapse</span>
               </summary>
-              <ul class="max-h-64 overflow-y-auto divide-y">
+              <ul class="divide-y">
                 {{range .Added}}
-                <li class="px-4 py-3 font-mono text-xs break-all">{{.}}</li>
+                {{template "catalogToolDiff" .}}
                 {{end}}
               </ul>
             </details>
@@ -686,9 +686,9 @@
                 <span class="text-eyebrow shrink-0 group-open:hidden" aria-hidden="true">View tools</span>
                 <span class="text-eyebrow hidden shrink-0 group-open:inline" aria-hidden="true">Collapse</span>
               </summary>
-              <ul class="max-h-64 overflow-y-auto divide-y">
+              <ul class="divide-y">
                 {{range .Removed}}
-                <li class="px-4 py-3 font-mono text-xs break-all">{{.}}</li>
+                {{template "catalogToolDiff" .}}
                 {{end}}
               </ul>
             </details>
@@ -702,9 +702,9 @@
                 <span class="text-eyebrow shrink-0 group-open:hidden" aria-hidden="true">View tools</span>
                 <span class="text-eyebrow hidden shrink-0 group-open:inline" aria-hidden="true">Collapse</span>
               </summary>
-              <ul class="max-h-64 overflow-y-auto divide-y">
+              <ul class="divide-y">
                 {{range .Changed}}
-                <li class="px-4 py-3 font-mono text-xs break-all">{{.}}</li>
+                {{template "catalogToolDiff" .}}
                 {{end}}
               </ul>
             </details>
@@ -1103,5 +1103,31 @@
       {{end}}
     </span>
   </span>
+</li>
+{{end}}
+
+{{define "catalogToolDiff"}}
+<li>
+  <details>
+    <summary class="interact:bg-accent list-item list-inside cursor-pointer px-4 py-3 font-mono text-xs break-all">{{.Name}}</summary>
+    <dl class="divide-y border-t">
+      {{range .Fields}}
+      <div class="px-4 py-3">
+        <dt class="text-muted-foreground mb-2 font-mono text-xs">{{.Name}}</dt>
+        <dd class="grid min-w-0 gap-2 {{if and .HasBefore .HasAfter}}sm:grid-cols-2{{end}}">
+          {{if .HasBefore}}<div class="min-w-0 bg-red-50 px-3 py-2 text-red-700 dark:bg-red-950 dark:text-red-400">
+            <span class="mb-1 block text-xs font-medium">− Before</span>
+            <pre class="max-h-64 overflow-y-auto whitespace-pre-wrap [overflow-wrap:anywhere] font-mono text-xs">{{.Before}}</pre>
+          </div>
+          {{end}}
+          {{if .HasAfter}}<div class="min-w-0 bg-emerald-50 px-3 py-2 text-emerald-700 dark:bg-emerald-950 dark:text-emerald-400">
+            <span class="mb-1 block text-xs font-medium">+ After</span>
+            <pre class="max-h-64 overflow-y-auto whitespace-pre-wrap [overflow-wrap:anywhere] font-mono text-xs">{{.After}}</pre>
+          </div>{{end}}
+        </dd>
+      </div>
+      {{end}}
+    </dl>
+  </details>
 </li>
 {{end}}

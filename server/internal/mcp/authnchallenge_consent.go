@@ -917,7 +917,10 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		if readErr != nil {
 			return fmt.Errorf("read captured review inventory: %w", readErr)
 		}
-		diff := compareCatalogInventory(previous, inventory)
+		diff, diffErr := compareCatalogInventory(previous, inventory)
+		if diffErr != nil {
+			return fmt.Errorf("compare tool definitions: %w", diffErr)
+		}
 		changes = &diff
 		prefillAttr = consentPrefillAttr(policy.Selection, policy.Catalog)
 	}

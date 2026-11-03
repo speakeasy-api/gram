@@ -74,32 +74,6 @@ func (s *Service) completeCodeReconnect(r *http.Request, grant remotesessions.Re
 	return s.updateCodeReconnect(r.Context(), state, binding)
 }
 
-type catalogChanges struct{ Added, Removed, Changed []string }
-
-func compareCatalogInventory(previous *connectionCatalog, inventory consentToolInventory) catalogChanges {
-	changes := catalogChanges{Added: []string{}, Removed: []string{}, Changed: []string{}}
-	old := map[string]string{}
-	for _, tool := range previous.Tools {
-		old[tool.Name] = consentEvidenceHash(tool)
-	}
-	for _, tool := range inventory.Tools {
-		hash, found := old[tool.Name]
-		if !found {
-			changes.Added = append(changes.Added, tool.Name)
-		} else if hash != tool.DefinitionHash {
-			changes.Changed = append(changes.Changed, tool.Name)
-		}
-		delete(old, tool.Name)
-	}
-	for name := range old {
-		changes.Removed = append(changes.Removed, name)
-	}
-	slices.Sort(changes.Added)
-	slices.Sort(changes.Removed)
-	slices.Sort(changes.Changed)
-	return changes
-}
-
 func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, inventory *consentToolInventory, selection *toolfilter.SessionSelection, mode toolfilter.CatalogMode) error {
 	ctx := contextvalues.SetOAuthClientID(r.Context(), state.CodeReconnect.ClientID)
 	if inventory == nil || !state.CodeReconnect.reviewReady() {
