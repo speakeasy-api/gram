@@ -2283,7 +2283,9 @@ ORDER BY tb.original_trigger_id;
 
 -- name: RecordUpstreamClientSelections :execrows
 -- Records, for one inbound credential, the upstream OAuth client it uses for
--- every MCP server it can reach, or an explicit no-auth choice. An existing
+-- every MCP server it can reach, or an explicit no-auth choice. A NULL
+-- scope_mcp_server_ids keeps issuance-wide reach; a supplied array restricts
+-- recording to those servers, and an empty array records nothing. An existing
 -- client choice is never replaced. An existing no-auth choice is replaced
 -- only once the server has an associated client and one is decided for the
 -- credential: the no-auth choice is unusable by then, and recording the
@@ -2341,6 +2343,8 @@ reachable AS (
     JOIN session_issuer AS si
       ON p.organization_id = si.organization_id
     WHERE s.deleted IS FALSE
+      AND (sqlc.narg('scope_mcp_server_ids')::uuid[] IS NULL
+           OR s.id = ANY(sqlc.narg('scope_mcp_server_ids')::uuid[]))
       AND (s.remote_mcp_server_id IS NOT NULL OR s.tunneled_mcp_server_id IS NOT NULL)
       AND (
         s.user_session_issuer_id = si.id
@@ -2984,3 +2988,48 @@ ORDER BY members.name, members.id, ri.slug, ri.id;
 -- temporarily make the gateway unavailable for new connections.
 SELECT id FROM user_session_issuers
 WHERE organization_id = @organization_id AND project_id IS NULL AND deleted IS FALSE;
+
+-- name: GetReconnectSessionPolicy :one
+-- Resolve the original credential across refresh rotation, without reviving
+-- revoked/expired connections or borrowing another client's catalogue.
+SELECT us.tool_selection
+FROM user_sessions AS us
+JOIN user_session_clients AS c ON c.id = us.user_session_client_id
+WHERE COALESCE(us.credential_id, us.id) = @credential_id::uuid
+  AND us.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND us.organization_id = @organization_id::text
+  AND us.project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND c.user_session_issuer_id = us.user_session_issuer_id
+  AND us.subject_urn = @subject_urn
+  AND c.client_id = @client_id::text
+  AND c.deleted IS FALSE
+  AND us.deleted IS FALSE
+  AND (us.expires_at > clock_timestamp() OR us.refresh_expires_at > clock_timestamp())
+ORDER BY us.created_at DESC
+LIMIT 1
+FOR UPDATE OF us;
+
+-- name: SoftDeleteReconnectUpstreamChoices :exec
+-- Retire only active choices in the reviewed scope; preserve prior history.
+UPDATE upstream_client_selections
+SET deleted_at = clock_timestamp(), updated_at = clock_timestamp()
+WHERE credential_kind = 'user_session'
+  AND credential_id = @credential_id::uuid
+  AND organization_id = @organization_id::text
+  AND mcp_server_id = ANY(@mcp_server_ids::uuid[])
+  AND deleted IS FALSE;
+
+-- name: UpdateReconnectSessionPolicy :many
+UPDATE user_sessions AS us SET tool_selection = @tool_selection, updated_at = clock_timestamp()
+WHERE COALESCE(us.credential_id, us.id) = @credential_id::uuid
+  AND us.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND us.organization_id = @organization_id::text
+  AND us.project_id IS NOT DISTINCT FROM sqlc.narg('project_id')::uuid
+  AND us.subject_urn = @subject_urn
+  AND us.tool_selection -> 'catalog' ->> 'id' = @catalog_id::text
+  AND EXISTS (SELECT 1 FROM user_session_clients AS c
+    WHERE c.id = us.user_session_client_id AND c.client_id = @client_id::text
+      AND c.user_session_issuer_id = us.user_session_issuer_id AND c.deleted IS FALSE)
+  AND us.deleted IS FALSE
+  AND (us.expires_at > clock_timestamp() OR us.refresh_expires_at > clock_timestamp())
+RETURNING us.jti;

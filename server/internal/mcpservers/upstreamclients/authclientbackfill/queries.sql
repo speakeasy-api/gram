@@ -2716,6 +2716,17 @@ JOIN projects p ON p.id = s.project_id
 WHERE s.id = @server_id::uuid AND p.organization_id = @organization_id::text
 FOR UPDATE OF s;
 
+-- name: LockServersForAuthClientSync :exec
+-- Locks the servers a synchronization is about to link in UUID order, which is
+-- the order LockEMAPreparationServer walks them in. The link insert takes a
+-- foreign-key lock on each server it records, and it records them in
+-- association order, so without this the two orders disagree and deadlock.
+SELECT s.id FROM mcp_servers s
+JOIN projects p ON p.id = s.project_id
+WHERE s.id = ANY(@mcp_server_ids::uuid[]) AND p.organization_id = @organization_id::text
+ORDER BY s.id
+FOR UPDATE OF s;
+
 -- name: GetEMABindingLockScope :one
 SELECT b.project_id, b.remote_session_issuer_id, b.remote_session_client_id
 FROM remote_session_ema_bindings b

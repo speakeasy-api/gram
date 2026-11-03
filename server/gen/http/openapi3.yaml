@@ -3768,7 +3768,7 @@ paths:
             tags:
                 - admin
             summary: setStripeSubscription admin
-            description: Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.
+            description: Links an eligible existing Stripe subscription and atomically activates PAYG for free organizations or unconverted enterprise trials. Existing PAYG organizations retain their access policy. Verifies customer ownership, preserves existing subscription links and redeemed partner anchors, and accepts same-subscription retries.
             operationId: adminSetStripeSubscription
             requestBody:
                 required: true
@@ -4126,7 +4126,7 @@ paths:
             tags:
                 - admin
             summary: getStripeSubscriptionCandidate admin
-            description: Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.
+            description: Returns eligible live Stripe subscription details before linking it to a free, PAYG, or unconverted enterprise trial organization with a matching Stripe customer.
             operationId: adminGetStripeSubscriptionCandidate
             parameters:
                 - name: organization_id
@@ -23318,6 +23318,17 @@ paths:
                     format: date-time
                     type: string
                 - allowEmptyValue: true
+                  description: 'Category of entries to list: ''configuration'' (the default) for changes to the platform''s configuration, or ''security'' for machine access and other security-relevant activity such as workloads admitting themselves.'
+                  in: query
+                  name: category
+                  schema:
+                    default: configuration
+                    description: 'Category of entries to list: ''configuration'' (the default) for changes to the platform''s configuration, or ''security'' for machine access and other security-relevant activity such as workloads admitting themselves.'
+                    enum:
+                        - configuration
+                        - security
+                    type: string
+                - allowEmptyValue: true
                   description: API Key header
                   in: header
                   name: Gram-Key
@@ -23420,6 +23431,17 @@ paths:
                   name: project_slug
                   schema:
                     description: Project slug to filter facet values to a specific project.
+                    type: string
+                - allowEmptyValue: true
+                  description: Category of entries to compute facet values from, matching the list being filtered. Defaults to 'configuration'.
+                  in: query
+                  name: category
+                  schema:
+                    default: configuration
+                    description: Category of entries to compute facet values from, matching the list being filtered. Defaults to 'configuration'.
+                    enum:
+                        - configuration
+                        - security
                     type: string
                 - allowEmptyValue: true
                   description: API Key header
@@ -95569,7 +95591,7 @@ components:
                     description: The device agent version grid. Empty for days before versions were recorded.
                 from_cache:
                     type: boolean
-                    description: True when the grids came from the cache rather than a fresh ClickHouse read. Cached grids last 24 hours and refresh in the background once an hour old.
+                    description: True when the grids came from the cache rather than a fresh ClickHouse read. Cached grids last 48 hours and refresh in the background once an hour old. The default window is also refreshed nightly.
                 inference:
                     type: array
                     items:
@@ -100288,6 +100310,12 @@ components:
                     type: string
                 after_snapshot: {}
                 before_snapshot: {}
+                category:
+                    type: string
+                    description: 'What kind of event the entry records: ''configuration'' for a change to the platform''s configuration, ''security'' for machine access and other security-relevant activity that is not a configuration decision. Always present in responses; optional in the schema so clients built against it still read responses from servers that predate it.'
+                    enum:
+                        - configuration
+                        - security
                 created_at:
                     type: string
                     description: The creation date of the audit log.
@@ -112884,6 +112912,13 @@ components:
         ListAuditLogFacetsForm:
             type: object
             properties:
+                category:
+                    type: string
+                    description: Category of entries to compute facet values from, matching the list being filtered. Defaults to 'configuration'.
+                    default: configuration
+                    enum:
+                        - configuration
+                        - security
                 project_slug:
                     type: string
                     description: Project slug to filter facet values to a specific project.
@@ -112921,6 +112956,13 @@ components:
                 actor_id:
                     type: string
                     description: Actor ID to filter audit logs to a specific actor.
+                category:
+                    type: string
+                    description: 'Category of entries to list: ''configuration'' (the default) for changes to the platform''s configuration, or ''security'' for machine access and other security-relevant activity such as workloads admitting themselves.'
+                    default: configuration
+                    enum:
+                        - configuration
+                        - security
                 cursor:
                     type: string
                     description: The cursor for paginating through audit logs.

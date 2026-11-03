@@ -4218,6 +4218,28 @@ func (q *Queries) LockServerOAuthClientsForSync(ctx context.Context, arg LockSer
 	return err
 }
 
+const lockServersForAuthClientSync = `-- name: LockServersForAuthClientSync :exec
+SELECT s.id FROM mcp_servers s
+JOIN projects p ON p.id = s.project_id
+WHERE s.id = ANY($1::uuid[]) AND p.organization_id = $2::text
+ORDER BY s.id
+FOR UPDATE OF s
+`
+
+type LockServersForAuthClientSyncParams struct {
+	McpServerIds   []uuid.UUID
+	OrganizationID string
+}
+
+// Locks the servers a synchronization is about to link in UUID order, which is
+// the order LockEMAPreparationServer walks them in. The link insert takes a
+// foreign-key lock on each server it records, and it records them in
+// association order, so without this the two orders disagree and deadlock.
+func (q *Queries) LockServersForAuthClientSync(ctx context.Context, arg LockServersForAuthClientSyncParams) error {
+	_, err := q.db.Exec(ctx, lockServersForAuthClientSync, arg.McpServerIds, arg.OrganizationID)
+	return err
+}
+
 const lockTunneledCredentialSource = `-- name: LockTunneledCredentialSource :one
 SELECT t.id
 FROM tunneled_mcp_servers AS t

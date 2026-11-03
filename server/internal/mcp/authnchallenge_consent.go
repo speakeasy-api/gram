@@ -116,6 +116,7 @@ type consentApprovalError struct {
 
 // consentTemplateData is the field set the consent template renders against.
 type consentTemplateData struct {
+	CatalogChanges *catalogChanges
 	// GatewayDefaultMode labels the gateway default when choosing discovery.
 	GatewayDefaultMode string
 	// CodeModeUnavailable explains a stored code choice that is currently served as Progressive.
@@ -564,15 +565,15 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		return s.completeFederatedBrowserHandoff(w, r, challengeState)
 	}
 
-	// First-party challenges (minted by ServeFirstPartyConnect) have no
-	// DCR-registered client; the connect page is the dashboard linking the
-	// user's own upstream sessions. Skip the client lookup and label the page
-	// generically.
+	catalogReview := challengeState.CodeReconnect.reviewReady()
+	if catalogReview {
+		challengeState.ClientID = challengeState.CodeReconnect.ClientID
+	}
 	clientName := "Speakeasy"
 	clientIDOrigin := ""
 	loopbackRedirectWarning := false
 	var clientRowID uuid.UUID
-	if !challengeState.FirstParty {
+	if !challengeState.FirstParty || catalogReview {
 		client, err := s.resolveUserSessionClient(ctx, logger, endpoint, challengeState.ClientID, lookupClientOnly)
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
@@ -651,6 +652,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	focusServer := ""
 	if endpoint.MetaMcpServerID.Valid {
 		focus := challengeState.FocusServer
+		if catalogReview {
+			focus = ""
+		}
 		if challengeState.CodeReconnect == nil && r.URL.Query().Has("server") {
 			focus = r.URL.Query().Get("server")
 		}
@@ -665,6 +669,14 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		cards = focused
 		if view.Focus != nil {
 			focusServer = view.Focus.Slug
+		}
+	}
+
+	catalogFallback := challengeState.CodeReconnect != nil && r.URL.Query().Get("catalog_reconnect") == "required"
+	if challengeState.CodeReconnect.catalogPending() && !catalogReview && !catalogFallback {
+		for i := range cards {
+			cards[i].Connected = false
+			cards[i].AttachmentReconnect = true
 		}
 	}
 
@@ -777,8 +789,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			}
 		}
 	}
+
 	autoConnect := gateway == nil || (gateway.Focus != nil && challengeState.FirstParty && challengeState.FocusServer == gateway.Focus.Slug)
-	if len(agentOptions) == 0 && autoConnect {
+	if len(agentOptions) == 0 && autoConnect && !catalogFallback && !catalogReview {
 		if redirected, err := s.maybeAutoConnect(ctx, w, r, logger, endpoint, challengeState, autoConnectCards, focusServer); err != nil {
 			return err
 		} else if redirected {
@@ -804,7 +817,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	// Modern single-server endpoints offer optional tool selection. Gateways
 	// require a complete capture before approving any discovery mode.
 	showToolsIsland := false
-	if !challengeState.FirstParty && focusServer == "" {
+	if (!challengeState.FirstParty || catalogReview) && focusServer == "" {
 		var eligibilityErr error
 		showToolsIsland, eligibilityErr = s.consentToolPickerEligible(ctx, endpoint)
 		if eligibilityErr != nil {
@@ -813,6 +826,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 	var gatewayInventory string
 	var approvalError *consentApprovalError
+	if catalogFallback {
+		approvalError = &consentApprovalError{Message: "Session expired. Please reconnect.", ActionURL: "", ActionLabel: ""}
+	}
 	if showToolsIsland && gateway != nil {
 		lockedDown, lockErr := s.endpointCustomDomainLockdown(ctx, logger, endpoint)
 		if lockErr != nil {
@@ -899,6 +915,23 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			prefillAttr = consentPrefillAttr(policy.Selection, policy.Catalog)
 		}
 	}
+	var changes *catalogChanges
+	if catalogReview && approvalError == nil {
+		policy, previous, readErr := s.loadReconnectConnection(ctx, usersessions_repo.New(s.db), endpoint, challengeState, time.Now())
+		if readErr != nil {
+			return readErr
+		}
+		inventory, readErr := s.consentToolInventoryCache.Get(ctx, consentToolInventoryCacheKey(stateID, "", endpointToolSelectionResource(endpoint)))
+		if readErr != nil {
+			return fmt.Errorf("read captured review inventory: %w", readErr)
+		}
+		diff, diffErr := compareCatalogInventory(previous, inventory)
+		if diffErr != nil {
+			return fmt.Errorf("compare tool definitions: %w", diffErr)
+		}
+		changes = &diff
+		prefillAttr = consentPrefillAttr(policy.Selection, policy.Catalog)
+	}
 	inventoryDeferred := gateway == nil && consentInventoryDeferred(cards, prefillAttr != "")
 	showDiscoveryMode := !challengeState.FirstParty && focusServer == "" && gatewayDiscoveryOptionsOffered(endpoint)
 	var prefillDiscoveryMode metamcp.DiscoveryMode
@@ -950,10 +983,11 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		ConsentEnabled:          consentEnabled,
 		ApprovalError:           approvalError,
 		SelfApprovalError:       selfApprovalError,
-		FirstParty:              challengeState.FirstParty,
+		FirstParty:              challengeState.FirstParty && !catalogReview,
+		CatalogChanges:          changes,
 		ClientIDOrigin:          clientIDOrigin,
 		LoopbackRedirectWarning: loopbackRedirectWarning,
-		AutoClose:               shouldAutoCloseFirstParty(challengeState.FirstParty, cards),
+		AutoClose:               !challengeState.CodeReconnect.catalogPending() && shouldAutoCloseFirstParty(challengeState.FirstParty, cards),
 		SessionDurationOptions:  durationOptions,
 		AutoRefreshPolicy:       autoRefreshPolicy,
 		AutoRefreshOn:           autoRefreshOn,
@@ -1044,6 +1078,25 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		return oops.E(oops.CodeBadRequest, nil, `action must be "approve", "approve_agent", "reuse", or "deny"`).LogError(ctx, logger)
 	}
 
+	catalogReview := challengeState.CodeReconnect.reviewReady()
+	if catalogReview {
+		if action == "deny" {
+			completed := *challengeState.CodeReconnect
+			completed.CatalogComplete = true
+			if err := s.updateCodeReconnect(ctx, challengeState, completed); err != nil {
+				return err
+			}
+			w.Header().Set("Content-Type", "text/html; charset=utf-8")
+			_, err := w.Write([]byte("<!doctype html><title>Connection unchanged</title><p>No tool changes were approved. You can close this tab.</p>"))
+			if err != nil {
+				return fmt.Errorf("write cancelled review: %w", err)
+			}
+			return nil
+		}
+		if action != "approve" || r.PostForm.Get("agent_id") != "" {
+			return oops.E(oops.CodeBadRequest, nil, "approve or cancel this gateway review")
+		}
+	}
 	reuse := action == "reuse"
 	if reuse {
 		if !consentReuseEligible(endpoint, challengeState) || !consentBrowserMatches(r, challengeState, time.Now()) {
@@ -1157,7 +1210,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 
 	// Gateway approval always binds to a complete attempt, including live
 	// discovery: only successfully discovered members may be authorized.
-	materializeGateway := endpoint.MetaMcpServerID.Valid && !challengeState.FirstParty && selectedAgentID == ""
+	materializeGateway := endpoint.MetaMcpServerID.Valid && (!challengeState.FirstParty || catalogReview) && selectedAgentID == ""
 	var boundInventory *consentToolInventory
 	if reuse {
 		boundInventory, err = s.consentReuseInventory(ctx, endpoint, challengeState, r.PostForm.Get("tool_inventory_id"))
@@ -1225,6 +1278,9 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		if toolSelection != nil && catalogMode != toolfilter.CatalogModeCached {
 			return oops.E(oops.CodeBadRequest, nil, "Specific tools requires a cached catalog").LogWarn(ctx, logger)
 		}
+	}
+	if catalogReview {
+		return s.approveCodeReconnect(w, r, endpoint, challengeState, boundInventory, toolSelection, catalogMode)
 	}
 	toolPolicy, err := s.consentGatewayPolicy(ctx, endpoint, challengeState, selectedAgentID, r.PostForm.Get("discovery_mode"))
 	if err != nil {
@@ -1300,7 +1356,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 
 	if materializeGateway {
-		reference, err := s.publishConnectionCatalog(ctx, endpoint, challengeState, boundInventory, toolSelection, catalogMode, r.PostForm.Get("tool_filtering") != "on", upstreamPicks, duration, time.Now())
+		reference, err := s.approveInitialConnectionCatalog(ctx, endpoint, challengeState, boundInventory, toolSelection, catalogMode, r.PostForm.Get("tool_filtering") != "on", upstreamPicks, duration, time.Now())
 		if err != nil {
 			if errors.Is(err, errConnectionCatalogTooLarge) {
 				return oops.E(oops.CodeInvalid, err, "Selected tool definitions are too large to approve. Choose fewer tools or contact an administrator.").LogWarn(ctx, logger)
@@ -1457,11 +1513,7 @@ func (s *Service) validateConsentChallenge(ctx context.Context, endpoint *Resolv
 	if challengeState.CSRFToken == "" || subtle.ConstantTimeCompare([]byte(csrfToken), []byte(challengeState.CSRFToken)) != 1 {
 		return oops.E(oops.CodeBadRequest, nil, "invalid consent csrf token")
 	}
-	// First-party challenges have no MCP client to grant to: linking the
-	// cards is terminal, so there is no approve/deny POST. The template
-	// omits the form; reject any crafted submission rather than falling into
-	// the client-grant path with an empty ClientID.
-	if challengeState.FirstParty {
+	if challengeState.FirstParty && !challengeState.CodeReconnect.reviewReady() {
 		return oops.E(oops.CodeBadRequest, nil, "first-party connect challenges have no approval step")
 	}
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {

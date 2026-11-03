@@ -847,7 +847,7 @@ WHERE organization_id = @organization_id
 -- name: GetSessionHandoffLinkFixture :one
 -- Test-only inspection of a minted session-handoff link, so tests can assert a
 -- consumed link keeps its burn bookkeeping without keeping the blob pointer.
-SELECT blob_url, consumed_at
+SELECT blob_url, consumed_at, session_id
 FROM session_handoff_links
 WHERE token = @token;
 
@@ -858,6 +858,12 @@ WHERE token = @token;
 INSERT INTO chats (id, project_id, organization_id, user_id, external_chat_id, title, cwd, user_account_id)
 VALUES (@id, @project_id, @organization_id, @user_id, sqlc.narg(external_chat_id), @title, sqlc.narg(cwd), sqlc.narg(user_account_id))
 RETURNING id;
+
+-- name: SetCapturedAgentChatSummaryFixture :exec
+-- Test-only fixture: stores a summary so callers can prove metadata reads do not disclose it.
+UPDATE chats
+SET summary = @summary
+WHERE id = @id AND project_id = @project_id;
 
 -- name: SeedCapturedAgentChatMessageFixture :one
 -- Test-only fixture: inserts a captured transcript row with the full recall

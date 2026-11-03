@@ -56,6 +56,9 @@ icon: /access-hub/github-actions.svg
 # Off until a stable speakeasyd release supports GitHub Actions (device-agent
 # #296): the workflow installs the latest stable release, and every release
 # before that one stops the job at "did not pick up the GitHub identity".
+# Before then, the workload-platform-github-actions feature flag offers it to
+# the organizations it is on for, so it can be tried in production with a
+# speakeasyd built from source.
 enabled: false
 
 issuer:

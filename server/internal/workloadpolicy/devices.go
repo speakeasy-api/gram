@@ -431,6 +431,7 @@ func (s *Service) deviceIssuer(ctx context.Context, dbtx pgx.Tx, org string, act
 			IssuerURN:           urn.NewWorkloadIssuer(issuer.ID),
 			IssuerName:          issuer.Name,
 			IssuerSnapshotAfter: IssuerSnapshot(issuer),
+			Metadata:            nil,
 		}); err != nil {
 			return repo.WorkloadIssuer{}, oops.E(oops.CodeUnexpected, err, "error recording the device issuer").LogError(ctx, s.logger)
 		}

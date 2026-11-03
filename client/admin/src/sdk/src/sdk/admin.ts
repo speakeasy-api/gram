@@ -995,7 +995,7 @@ export class Admin extends ClientSDK {
    * setStripeSubscription admin
    *
    * @remarks
-   * Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.
+   * Links an eligible existing Stripe subscription and atomically activates PAYG for free organizations or unconverted enterprise trials. Existing PAYG organizations retain their access policy. Verifies customer ownership, preserves existing subscription links and redeemed partner anchors, and accepts same-subscription retries.
    */
   async setStripeSubscription(
     request: SetStripeSubscriptionRequestBody,
@@ -1063,7 +1063,7 @@ export class Admin extends ClientSDK {
    * getStripeSubscriptionCandidate admin
    *
    * @remarks
-   * Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.
+   * Returns eligible live Stripe subscription details before linking it to a free, PAYG, or unconverted enterprise trial organization with a matching Stripe customer.
    */
   async getStripeSubscriptionCandidate(
     request: AdminGetStripeSubscriptionCandidateRequest,

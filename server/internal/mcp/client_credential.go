@@ -141,13 +141,17 @@ func clientCredentialRoutingError(w http.ResponseWriter, err error) error {
 }
 
 // metaMemberClientCredentialError is the member-scoped answer for a gateway
-// member whose credential could not be obtained.
+// member whose credential could not be obtained. An outage is a discovery
+// failure that is not retryable: a request resolves its token map once, so an
+// outage read from that map is the same on every describe attempt. Only an
+// outage recorded by an exchange the attempt itself made can clear on a retry,
+// and the caller that observed that exchange marks it retryable.
 func metaMemberClientCredentialError(member metaMember, err error) error {
 	if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
 		if _, session := errors.AsType[*remotesessions.SessionOutageError](err); session {
 			return linkedMemberOutage(member, err, "")
 		}
-		return memberUnavailableError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q can't get its credential because its provider isn't responding. Retry shortly. If it keeps happening, ask the MCP server's administrator", member.slug)}, session: nil}
+		return newMemberUnavailableError(fmt.Sprintf("server %q can't get its credential because its provider isn't responding. Retry shortly. If it keeps happening, ask the MCP server's administrator", member.slug), nil)
 	}
 
 	return &metaMemberError{message: fmt.Sprintf("server %q has an upstream credential that is misconfigured or was rejected; contact the MCP server administrator", member.slug)}
@@ -161,7 +165,7 @@ func linkedMemberOutage(member metaMember, err error, connectURL string) error {
 	}
 	// A tunnel-bound provider's connect page has no Reconnect: it would take the same path.
 	if remotesessions.OutageKindOf(err) == remotesessions.RefreshOutageTunnel {
-		return memberUnavailableError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q is not reachable right now. %s If it keeps happening, ask your administrator to check that it's running", member.slug, retry)}, session: err}
+		return newMemberUnavailableError(fmt.Sprintf("server %q is not reachable right now. %s If it keeps happening, ask your administrator to check that it's running", member.slug, retry), err)
 	}
 	fallback := "If it keeps happening, ask your administrator"
 	if connectURL != "" {
@@ -171,7 +175,7 @@ func linkedMemberOutage(member metaMember, err error, connectURL string) error {
 	if remotesessions.OutageKindOf(err) == remotesessions.RefreshOutageNone {
 		cause = "right now"
 	}
-	return memberUnavailableError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q can't renew its sign-in %s. %s %s", member.slug, cause, retry, fallback)}, session: err}
+	return newMemberUnavailableError(fmt.Sprintf("server %q can't renew its sign-in %s. %s %s", member.slug, cause, retry, fallback), err)
 }
 
 // withMemberConnectLink adds the member's connect page to a connection outage.

@@ -134,6 +134,11 @@ func (s *seeder) postflightCore(ctx context.Context) error {
 		read("risk findings", &findingCount, byOrg(s.q.PostflightCountFindings)),
 		read("members", &memberCount, byOrg(s.q.PostflightCountMembers)),
 		{
+			what:  "security audit logs",
+			count: byOrg(s.q.PostflightCountSecurityAuditLogs),
+			fail:  postflightMustEqual(6, "expected 6 security audit logs, found %d"),
+		},
+		{
 			what:  "auth client associations",
 			count: byOrg(s.q.PostflightCountAuthClientAssociations),
 			fail:  postflightMustEqual(4, "expected 4 auth client associations, found %d"),

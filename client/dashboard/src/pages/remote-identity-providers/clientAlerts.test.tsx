@@ -1,5 +1,11 @@
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
-import type { ReactNode } from "react";
+import {
+  cleanup,
+  fireEvent,
+  render as renderView,
+  screen,
+} from "@testing-library/react";
+import type { ReactElement } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { LegacyCallbackAlert } from "./clientAlerts";
 
@@ -9,14 +15,8 @@ const rbac = vi.hoisted(() => ({
   isPlatformAdmin: true,
 }));
 
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    remoteIdentityProviders: {
-      issuerDetail: {
-        settings: { href: (id: string) => `/providers/${id}/settings` },
-      },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({
@@ -29,11 +29,8 @@ vi.mock("@/hooks/useRBAC", () => ({
 vi.mock("@/contexts/Auth", () => ({
   useIsPlatformAdmin: () => rbac.isPlatformAdmin,
 }));
-vi.mock("react-router", () => ({
-  Link: ({ to, children }: { to: string; children: ReactNode }) => (
-    <a href={to}>{children}</a>
-  ),
-}));
+
+const render = (ui: ReactElement) => renderView(ui, { wrapper: MemoryRouter });
 
 afterEach(() => {
   cleanup();

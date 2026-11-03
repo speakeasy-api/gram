@@ -54,25 +54,6 @@ vi.mock("@/hooks/useRBAC", () => ({
     isLoading: false,
   }),
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    killswitch: {
-      href: () => "/acme/killswitch",
-      detail: { href: (id: string) => `/acme/killswitch/${id}` },
-    },
-  }),
-  // The member and actor names link to their identity pages, which live under
-  // the project.
-  useRoutes: () => ({
-    identities: {
-      href: () => "/acme/identities",
-      detail: {
-        overview: { href: (urn: string) => `/acme/identities/${urn}/overview` },
-        access: { href: (urn: string) => `/acme/identities/${urn}/access` },
-      },
-    },
-  }),
-}));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-query")>()),
   useQueryClient: () => ({}),

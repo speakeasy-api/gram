@@ -81,6 +81,13 @@ func newWorkloadGrantFixtureOn(t *testing.T, logger *slog.Logger, serverURL stri
 func newWorkloadGrantFixtureWithPool(t *testing.T, logger *slog.Logger, serverURL string, configurePool func(*pgxpool.Config)) workloadGrantFixture {
 	t.Helper()
 
+	return newWorkloadGrantFixtureWithIdentity(t, logger, serverURL, configurePool, "", "repo:acme/payments-api:ref:refs/heads/main")
+}
+
+// The issuer identity may differ from the local HTTPS server publishing its keys.
+func newWorkloadGrantFixtureWithIdentity(t *testing.T, logger *slog.Logger, serverURL string, configurePool func(*pgxpool.Config), issuerURL, subject string) workloadGrantFixture {
+	t.Helper()
+
 	issuer := devidptest.Launch(t, devidptest.LaunchOpts{EnableWorkOS: false, Key: nil, TLS: true})
 	jwksURI := oauthtest.DiscoverWorkloadJWKSURI(t, issuer)
 
@@ -96,13 +103,15 @@ func newWorkloadGrantFixtureWithPool(t *testing.T, logger *slog.Logger, serverUR
 	agent := createConsentAgent(t, ctx, ti, fx, "Workload deploy agent")
 	seedPrincipalMCPConnectGrant(t, ctx, ti, fx.orgID, urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), fx.target.MCPResourceID)
 
-	subject := "repo:acme/payments-api:ref:refs/heads/main"
+	if issuerURL == "" {
+		issuerURL = issuer.OAuth21URL
+	}
 	fixtures := testrepo.New(ti.conn)
 	issuerID, err := fixtures.CreateWorkloadIssuerFixture(ctx, testrepo.CreateWorkloadIssuerFixtureParams{
 		OrganizationID: fx.orgID,
 		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
 		Name:           "grant-issuer",
-		Issuer:         issuer.OAuth21URL,
+		Issuer:         issuerURL,
 		JwksUri:        jwksURI,
 	})
 	require.NoError(t, err)

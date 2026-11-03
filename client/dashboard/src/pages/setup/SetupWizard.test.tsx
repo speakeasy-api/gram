@@ -29,11 +29,6 @@ vi.mock("react-router", () => ({
   useSearchParams: () => [mocks.searchParams, mocks.setSearchParams],
   useNavigate: () => mocks.navigate,
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({
-    setup: { href: () => "/org/setup" },
-  }),
-}));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => <>{children}</>,
 }));

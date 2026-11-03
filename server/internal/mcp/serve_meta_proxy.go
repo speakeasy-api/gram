@@ -182,15 +182,22 @@ type memberCredentialError struct{ *metaMemberError }
 
 func (e memberCredentialError) Unwrap() error { return e.metaMemberError }
 
-// memberUnavailableError is a member failure a retry should clear.
+// memberUnavailableError is an outage: discovery records it like any member it couldn't list.
 type memberUnavailableError struct {
-	*metaMemberError
+	memberDiscoveryError
 
 	// session is the refresh failure when the outage hit a person's connection.
 	session error
 }
 
-func (e memberUnavailableError) Unwrap() error { return e.metaMemberError }
+func (e memberUnavailableError) Unwrap() error { return e.memberDiscoveryError }
+
+func newMemberUnavailableError(message string, session error) memberUnavailableError {
+	return memberUnavailableError{
+		memberDiscoveryError: memberDiscoveryError{metaMemberError: &metaMemberError{message: message}, status: 0, retryable: false, retryAfter: 0},
+		session:              session,
+	}
+}
 
 // chainMetaMember chains a member with no routed credential or one in an outage, which otherwise stands.
 func chainMetaMember(ctx context.Context, gate metaGateContext, member metaMember, resource string, routed remotesessions.UpstreamToken, routeErr error) (remotesessions.UpstreamToken, string, error) {
@@ -651,7 +658,7 @@ func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *m
 			NextCursor string           `json:"nextCursor"`
 		}
 		if uerr := json.Unmarshal(upstreamResult, &listing); uerr != nil {
-			return nil, &metaMemberError{message: fmt.Sprintf("server %q returned a tool listing the meta MCP could not read", member.slug)}
+			return nil, memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q returned a tool listing the meta MCP could not read", member.slug)}, status: 0, retryable: false, retryAfter: 0}
 		}
 		for _, entry := range listing.Tools {
 			if entry == nil || entry.Name == "" {
@@ -675,7 +682,7 @@ func listMemberSessionTools(ctx context.Context, logger *slog.Logger, session *m
 			break
 		}
 		if listing.NextCursor == cursor || seenCursors[listing.NextCursor] {
-			return nil, &metaMemberError{message: fmt.Sprintf("server %q returned a repeated tool listing cursor", member.slug)}
+			return nil, memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q returned a repeated tool listing cursor", member.slug)}, status: 0, retryable: false, retryAfter: 0}
 		}
 		seenCursors[listing.NextCursor] = true
 		cursor = listing.NextCursor

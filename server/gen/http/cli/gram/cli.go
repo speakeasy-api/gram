@@ -934,11 +934,13 @@ func ParseEndpoint(
 		auditlogsListActingSurfaceFlag = auditlogsListFlags.String("acting-surface", "", "")
 		auditlogsListFromFlag          = auditlogsListFlags.String("from", "", "")
 		auditlogsListToFlag            = auditlogsListFlags.String("to", "", "")
+		auditlogsListCategoryFlag      = auditlogsListFlags.String("category", "configuration", "")
 		auditlogsListApikeyTokenFlag   = auditlogsListFlags.String("apikey-token", "", "")
 		auditlogsListSessionTokenFlag  = auditlogsListFlags.String("session-token", "", "")
 
 		auditlogsListFacetsFlags            = flag.NewFlagSet("list-facets", flag.ExitOnError)
 		auditlogsListFacetsProjectSlugFlag  = auditlogsListFacetsFlags.String("project-slug", "", "")
+		auditlogsListFacetsCategoryFlag     = auditlogsListFacetsFlags.String("category", "configuration", "")
 		auditlogsListFacetsApikeyTokenFlag  = auditlogsListFacetsFlags.String("apikey-token", "", "")
 		auditlogsListFacetsSessionTokenFlag = auditlogsListFacetsFlags.String("session-token", "", "")
 
@@ -10619,10 +10621,10 @@ func ParseEndpoint(
 			switch epn {
 			case "list":
 				endpoint = c.List()
-				data, err = auditlogsc.BuildListPayload(*auditlogsListCursorFlag, *auditlogsListProjectSlugFlag, *auditlogsListActorIDFlag, *auditlogsListActionFlag, *auditlogsListSubjectTypeFlag, *auditlogsListSubjectIDFlag, *auditlogsListSubjectIdsFlag, *auditlogsListActingSurfaceFlag, *auditlogsListFromFlag, *auditlogsListToFlag, *auditlogsListApikeyTokenFlag, *auditlogsListSessionTokenFlag)
+				data, err = auditlogsc.BuildListPayload(*auditlogsListCursorFlag, *auditlogsListProjectSlugFlag, *auditlogsListActorIDFlag, *auditlogsListActionFlag, *auditlogsListSubjectTypeFlag, *auditlogsListSubjectIDFlag, *auditlogsListSubjectIdsFlag, *auditlogsListActingSurfaceFlag, *auditlogsListFromFlag, *auditlogsListToFlag, *auditlogsListCategoryFlag, *auditlogsListApikeyTokenFlag, *auditlogsListSessionTokenFlag)
 			case "list-facets":
 				endpoint = c.ListFacets()
-				data, err = auditlogsc.BuildListFacetsPayload(*auditlogsListFacetsProjectSlugFlag, *auditlogsListFacetsApikeyTokenFlag, *auditlogsListFacetsSessionTokenFlag)
+				data, err = auditlogsc.BuildListFacetsPayload(*auditlogsListFacetsProjectSlugFlag, *auditlogsListFacetsCategoryFlag, *auditlogsListFacetsApikeyTokenFlag, *auditlogsListFacetsSessionTokenFlag)
 			}
 		case "auth":
 			c := authc.NewClient(scheme, host, doer, enc, dec, restore)
@@ -16615,6 +16617,7 @@ func auditlogsListUsage() {
 	fmt.Fprint(os.Stderr, " -acting-surface STRING")
 	fmt.Fprint(os.Stderr, " -from STRING")
 	fmt.Fprint(os.Stderr, " -to STRING")
+	fmt.Fprint(os.Stderr, " -category STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
@@ -16634,18 +16637,20 @@ func auditlogsListUsage() {
 	fmt.Fprintln(os.Stderr, `    -acting-surface STRING: `)
 	fmt.Fprintln(os.Stderr, `    -from STRING: `)
 	fmt.Fprintln(os.Stderr, `    -to STRING: `)
+	fmt.Fprintln(os.Stderr, `    -category STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auditlogs list --cursor \"abc123\" --project-slug \"abc123\" --actor-id \"abc123\" --action \"abc123\" --subject-type \"abc123\" --subject-id \"abc123\" --subject-ids '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --acting-surface \"abc123\" --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auditlogs list --cursor \"abc123\" --project-slug \"abc123\" --actor-id \"abc123\" --action \"abc123\" --subject-type \"abc123\" --subject-id \"abc123\" --subject-ids '[\n      \"abc123\",\n      \"abc123\",\n      \"abc123\"\n   ]' --acting-surface \"abc123\" --from \"1970-01-01T00:00:01Z\" --to \"1970-01-01T00:00:01Z\" --category \"security\" --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 func auditlogsListFacetsUsage() {
 	// Header with flags
 	fmt.Fprintf(os.Stderr, "%s [flags] auditlogs list-facets", os.Args[0])
 	fmt.Fprint(os.Stderr, " -project-slug STRING")
+	fmt.Fprint(os.Stderr, " -category STRING")
 	fmt.Fprint(os.Stderr, " -apikey-token STRING")
 	fmt.Fprint(os.Stderr, " -session-token STRING")
 	fmt.Fprintln(os.Stderr)
@@ -16656,12 +16661,13 @@ func auditlogsListFacetsUsage() {
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -project-slug STRING: `)
+	fmt.Fprintln(os.Stderr, `    -category STRING: `)
 	fmt.Fprintln(os.Stderr, `    -apikey-token STRING: `)
 	fmt.Fprintln(os.Stderr, `    -session-token STRING: `)
 
 	fmt.Fprintln(os.Stderr)
 	fmt.Fprintln(os.Stderr, "Example:")
-	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auditlogs list-facets --project-slug \"abc123\" --apikey-token \"abc123\" --session-token \"abc123\"")
+	fmt.Fprintf(os.Stderr, "    %s %s\n", os.Args[0], "auditlogs list-facets --project-slug \"abc123\" --category \"security\" --apikey-token \"abc123\" --session-token \"abc123\"")
 }
 
 // authUsage displays the usage of the auth command and its subcommands.
@@ -33252,8 +33258,8 @@ func adminUsage() {
 	fmt.Fprintln(os.Stderr, `    list-signup-offers: List staff-managed signup offers. Stripe owns all promotion terms.`)
 	fmt.Fprintln(os.Stderr, `    create-signup-offer: Create a disabled signup offer mapped to an exact Stripe promotion code ID.`)
 	fmt.Fprintln(os.Stderr, `    update-signup-offer: Edit, enable or disable a signup offer. Existing accepted promotion applications are unchanged.`)
-	fmt.Fprintln(os.Stderr, `    get-stripe-subscription-candidate: Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.`)
-	fmt.Fprintln(os.Stderr, `    set-stripe-subscription: Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.`)
+	fmt.Fprintln(os.Stderr, `    get-stripe-subscription-candidate: Returns eligible live Stripe subscription details before linking it to a free, PAYG, or unconverted enterprise trial organization with a matching Stripe customer.`)
+	fmt.Fprintln(os.Stderr, `    set-stripe-subscription: Links an eligible existing Stripe subscription and atomically activates PAYG for free organizations or unconverted enterprise trials. Existing PAYG organizations retain their access policy. Verifies customer ownership, preserves existing subscription links and redeemed partner anchors, and accepts same-subscription retries.`)
 	fmt.Fprintln(os.Stderr, `    list-customer-usage: Returns estimated usage at current PAYG list prices for every active paying organization: enterprise organizations not on a running or ending trial, and pro or payg organizations that never trialled.`)
 	fmt.Fprintln(os.Stderr, `    list-upstreamoauth-migration-organizations: Lists every organization the upstream OAuth migration applies to, so staff can check and migrate them one by one.`)
 	fmt.Fprintln(os.Stderr, `    get-upstreamoauth-migration-status: Reports where one organization stands in the upstream OAuth migration from a dry run that writes nothing.`)
@@ -35251,7 +35257,7 @@ func adminGetStripeSubscriptionCandidateUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Returns live Stripe subscription details for confirmation before recording the subscription on a PAYG organization that has a customer and no subscription.`)
+	fmt.Fprintln(os.Stderr, `Returns eligible live Stripe subscription details before linking it to a free, PAYG, or unconverted enterprise trial organization with a matching Stripe customer.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -organization-id STRING: `)
@@ -35272,7 +35278,7 @@ func adminSetStripeSubscriptionUsage() {
 
 	// Description
 	fmt.Fprintln(os.Stderr)
-	fmt.Fprintln(os.Stderr, `Records a Stripe subscription ID on a PAYG organization when its subscription ID is empty, after verifying the subscription belongs to the organization's Stripe customer.`)
+	fmt.Fprintln(os.Stderr, `Links an eligible existing Stripe subscription and atomically activates PAYG for free organizations or unconverted enterprise trials. Existing PAYG organizations retain their access policy. Verifies customer ownership, preserves existing subscription links and redeemed partner anchors, and accepts same-subscription retries.`)
 
 	// Flags list
 	fmt.Fprintln(os.Stderr, `    -body JSON: `)
