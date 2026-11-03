@@ -25,7 +25,7 @@ export type OrgMemorySession = {
    */
   summary: string;
   /**
-   * Session title.
+   * Session title. Empty unless the caller also holds chat:read on the project.
    */
   title: string;
 };

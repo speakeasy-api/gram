@@ -92,8 +92,8 @@ type CountRememberedSessionsParams struct {
 // read applies the same eligibility as team memory search and the digest
 // rollup: a chat counts only when its summary came from the redacted
 // transcript, it is not excluded, not deleted, and not owned through a
-// personal account. Chat titles are returned here because every caller holds
-// an unrestricted chat:read grant and already sees them in Agent Sessions.
+// personal account. Chat titles are selected here, but the service returns
+// them only to callers who also hold chat:read on the project.
 func (q *Queries) CountRememberedSessions(ctx context.Context, arg CountRememberedSessionsParams) (int64, error) {
 	row := q.db.QueryRow(ctx, countRememberedSessions, arg.ProjectID, arg.OrganizationID, arg.Since)
 	var column_1 int64

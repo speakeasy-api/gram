@@ -15,8 +15,8 @@ import (
 )
 
 // Browse a project's Organizational Memory: digests, the sessions and memos
-// they fold, and recent activity. Requires an unrestricted chat:read grant on
-// the project and the org-memory rollout.
+// they fold, and recent activity. Requires memory:read on the project and the
+// org-memory rollout.
 type Service interface {
 	// Summarize the project's Organizational Memory over a recent window.
 	GetOrgMemoryOverview(context.Context, *GetOrgMemoryOverviewPayload) (res *GetOrgMemoryOverviewResult, err error)
@@ -178,7 +178,7 @@ type OrgMemoryMemo struct {
 type OrgMemorySession struct {
 	// Chat ID.
 	ID string
-	// Session title.
+	// Session title. Empty unless the caller also holds chat:read on the project.
 	Title string
 	// Masked session summary.
 	Summary string
