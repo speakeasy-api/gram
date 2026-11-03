@@ -1334,8 +1334,8 @@ func (s *Service) writeRemoteSessionReconnectChallenge(ctx context.Context, w ht
 }
 
 // subjectReauthorizesToReconnect reports a person at the client who can repair
-// a connection on the consent page. Enforced auth clients offer an anonymous
-// subject no personal connection, so reauthorizing would strand it.
+// a connection on the consent page. Enforced auth clients can offer an anonymous
+// subject no personal connection, so reauthorizing could strand it.
 func (s *Service) subjectReauthorizesToReconnect(ctx context.Context, organizationID string, subject urn.SessionSubject) bool {
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:
