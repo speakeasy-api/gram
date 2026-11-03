@@ -235,6 +235,7 @@ describe("unknown external MCP authentication", () => {
             <MCPAuthenticationTab toolset={toolset} />
           </TooltipProvider>
         </QueryClientProvider>,
+        { wrapper: MemoryRouter },
       );
       expect(
         screen.getByText("Upstream authentication requirements are unknown"),
