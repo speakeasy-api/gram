@@ -11,6 +11,8 @@ import (
 
 // Exercise the generated HTTP boundary, not just the persistence layer.
 func TestClientAudienceHTTPValidation(t *testing.T) {
+	t.Parallel()
+
 	issuerID := "00000000-0000-4000-8000-000000000001"
 	clientID := "test-client"
 	validators := []struct {
@@ -39,6 +41,8 @@ func TestClientAudienceHTTPValidation(t *testing.T) {
 	}
 	for _, v := range validators {
 		t.Run(v.name, func(t *testing.T) {
+			t.Parallel()
+
 			if err := v.validate(nil); err != nil {
 				t.Fatalf("omitted audience: %v", err)
 			}
@@ -56,6 +60,8 @@ func TestClientAudienceHTTPValidation(t *testing.T) {
 				{"non ASCII", "audienceé", false},
 			} {
 				t.Run(tc.name, func(t *testing.T) {
+					t.Parallel()
+
 					err := v.validate(&tc.value)
 					if (err == nil) != tc.valid {
 						t.Fatalf("valid = %v; error = %v", tc.valid, err)

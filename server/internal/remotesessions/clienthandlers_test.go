@@ -594,9 +594,9 @@ func TestUpdateRemoteSessionClient(t *testing.T) {
 func TestUpdateRemoteSessionClient_Audience(t *testing.T) {
 	t.Parallel()
 
-	for _, clear := range []bool{false, true} {
+	for _, clearAudience := range []bool{false, true} {
 		name := "omitted preserves existing"
-		if clear {
+		if clearAudience {
 			name = "empty clears to null"
 		}
 		t.Run(name, func(t *testing.T) {
@@ -615,21 +615,20 @@ func TestUpdateRemoteSessionClient_Audience(t *testing.T) {
 			require.Equal(t, &audience, created.Audience)
 
 			payload := &clientsgen.UpdateRemoteSessionClientPayload{ID: created.ID}
-			if clear {
+			if clearAudience {
 				empty := ""
 				payload.Audience = &empty
 			}
 			updated, err := ti.service.UpdateRemoteSessionClient(ctx, payload)
 			require.NoError(t, err)
 
-			var stored pgtype.Text
-			err = ti.conn.QueryRow(ctx, "SELECT audience FROM remote_session_clients WHERE id = $1", created.ID).Scan(&stored)
+			stored, err := repo.New(ti.conn).GetRemoteSessionClientWithIssuerByID(ctx, uuid.MustParse(created.ID))
 			require.NoError(t, err)
-			if clear {
-				require.False(t, stored.Valid, "cleared audience must be SQL NULL")
+			if clearAudience {
+				require.False(t, stored.ClientAudience.Valid, "cleared audience must be SQL NULL")
 				require.Nil(t, updated.Audience)
 			} else {
-				require.Equal(t, pgtype.Text{String: audience, Valid: true}, stored)
+				require.Equal(t, pgtype.Text{String: audience, Valid: true}, stored.ClientAudience)
 				require.Equal(t, &audience, updated.Audience)
 			}
 		})
