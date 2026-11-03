@@ -42,7 +42,7 @@ import { Result } from "../types/fp.js";
  * @remarks
  * Enable or disable the temporary provider setup rollout for one organization. Staff only; disabled by default. Existing credential storage and OAuth flows are unaffected.
  */
-export function adminAdminSetOrganizationProviderSetup(
+export function adminSetOrganizationProviderSetup(
   client: GramCore,
   request: SetOrganizationProviderSetupRequestBody,
   options?: RequestOptions,

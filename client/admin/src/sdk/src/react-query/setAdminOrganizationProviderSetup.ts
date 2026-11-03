@@ -8,7 +8,7 @@ import {
   UseMutationResult,
 } from "@tanstack/react-query";
 import { GramCore } from "../core.js";
-import { adminAdminSetOrganizationProviderSetup } from "../funcs/adminAdminSetOrganizationProviderSetup.js";
+import { adminSetOrganizationProviderSetup } from "../funcs/adminSetOrganizationProviderSetup.js";
 import { combineSignals } from "../lib/primitives.js";
 import { RequestOptions } from "../lib/sdks.js";
 import { ProductFeatures } from "../models/components/productfeatures.js";
@@ -71,7 +71,7 @@ export function useSetAdminOrganizationProviderSetupMutation(
 }
 
 export function mutationKeySetAdminOrganizationProviderSetup(): MutationKey {
-  return ["@gram/admin-client", "admin", "adminSetOrganizationProviderSetup"];
+  return ["@gram/admin-client", "admin", "setOrganizationProviderSetup"];
 }
 
 export function buildSetAdminOrganizationProviderSetupMutation(
@@ -101,7 +101,7 @@ export function buildSetAdminOrganizationProviderSetupMutation(
           ),
         },
       };
-      return unwrapAsync(adminAdminSetOrganizationProviderSetup(
+      return unwrapAsync(adminSetOrganizationProviderSetup(
         client$,
         request,
         mergedOptions,

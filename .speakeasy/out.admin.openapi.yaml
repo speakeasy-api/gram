@@ -3406,6 +3406,7 @@ paths:
         - admin
       x-speakeasy-react-hook:
         name: SetAdminOrganizationProviderSetup
+      x-speakeasy-name-override: setOrganizationProviderSetup
   /admin/organization.repairInferenceKey:
     post:
       tags:
