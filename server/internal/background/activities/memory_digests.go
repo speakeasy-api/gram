@@ -20,10 +20,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/memorydigest"
 	"github.com/speakeasy-api/gram/server/internal/memorydigest/repo"
-	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
+	"github.com/speakeasy-api/gram/server/internal/memorygate"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -69,16 +68,14 @@ type MemoryDigests struct {
 	db         *pgxpool.Pool
 	repo       *repo.Queries
 	chatClient openrouter.CompletionClient
-	flags      feature.Provider
 }
 
-func NewMemoryDigests(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter.CompletionClient, flags feature.Provider) *MemoryDigests {
+func NewMemoryDigests(logger *slog.Logger, db *pgxpool.Pool, chatClient openrouter.CompletionClient) *MemoryDigests {
 	return &MemoryDigests{
 		logger:     logger.With(attr.SlogComponent("memory_digests")),
 		db:         db,
 		repo:       repo.New(db),
 		chatClient: chatClient,
-		flags:      flags,
 	}
 }
 
@@ -260,8 +257,9 @@ func (m *MemoryDigests) listCandidates(ctx context.Context, level memorydigest.L
 }
 
 // enabledOrganizations lists the organizations with team memory activity in
-// the lookback whose rollout flag is on. It fails closed: an org whose flag
-// cannot be evaluated is left out of this run and retried on the next.
+// the lookback that have Organizational Memory turned on in the staff admin
+// dashboard. It fails closed: an org whose setting cannot be read is left
+// out of this run and retried on the next.
 func (m *MemoryDigests) enabledOrganizations(ctx context.Context, now time.Time) ([]string, error) {
 	orgIDs, err := m.repo.ListMemoryOrganizations(ctx, pgtype.Timestamptz{Time: now.Add(-MemoryDigestLookback), Valid: true, InfinityModifier: pgtype.Finite})
 	if err != nil {
@@ -270,14 +268,9 @@ func (m *MemoryDigests) enabledOrganizations(ctx context.Context, now time.Time)
 
 	enabled := make([]string, 0, len(orgIDs))
 	for _, orgID := range orgIDs {
-		org, err := orgrepo.New(m.db).GetOrganizationMetadata(ctx, orgID)
+		on, err := memorygate.Enabled(ctx, m.db, orgID)
 		if err != nil {
-			m.logger.WarnContext(ctx, "resolve organization slug for team memory flag", attr.SlogError(err), attr.SlogOrganizationID(orgID))
-			continue
-		}
-		on, err := m.flags.IsFlagEnabled(ctx, feature.FlagOrgMemory, orgID, feature.OrgProjectGroups(org.Slug, ""))
-		if err != nil {
-			m.logger.WarnContext(ctx, "evaluate team memory flag", attr.SlogError(err), attr.SlogOrganizationID(orgID))
+			m.logger.WarnContext(ctx, "read organizational memory setting", attr.SlogError(err), attr.SlogOrganizationID(orgID))
 			continue
 		}
 		if on {
