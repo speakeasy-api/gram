@@ -8,6 +8,7 @@ import (
 	"strings"
 
 	"go.opentelemetry.io/contrib/instrumentation/net/http/otelhttp"
+	"go.opentelemetry.io/otel/propagation"
 	"golang.org/x/oauth2"
 	"golang.org/x/oauth2/google"
 	"k8s.io/client-go/dynamic"
@@ -64,7 +65,7 @@ func NewRemoteDynamicClient(ctx context.Context, endpoint string, caCert []byte,
 	}
 	config.QPS, config.Burst = options.QPS, options.Burst
 	config.Wrap(func(rt http.RoundTripper) http.RoundTripper {
-		return otelhttp.NewTransport(&oauth2.Transport{Source: tokenSource, Base: rt})
+		return otelhttp.NewTransport(&oauth2.Transport{Source: tokenSource, Base: rt}, otelhttp.WithPropagators(propagation.TraceContext{}))
 	})
 
 	client, err := dynamic.NewForConfig(config)

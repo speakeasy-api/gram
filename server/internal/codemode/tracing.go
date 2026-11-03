@@ -43,3 +43,23 @@ func recordRuntimeOutcome(span trace.Span, err error) (codes.Code, string) {
 	}
 	return codes.Unset, ""
 }
+
+// runtimeExecutionError maps untrusted runner codes to the same bounded
+// categories as acquisition and transport errors, without recording the message.
+func runtimeExecutionError(failure *ExecutionError) error {
+	if failure == nil {
+		return nil
+	}
+	switch failure.Code {
+	case "deadline_exceeded":
+		return context.DeadlineExceeded
+	case "cancelled":
+		return context.Canceled
+	case "capacity_exceeded":
+		return ErrCapacity
+	case "runtime_unavailable":
+		return ErrRuntimeUnavailable
+	default:
+		return errors.New("execution failed")
+	}
+}

@@ -8,6 +8,7 @@ import (
 	"syscall"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/stretchr/testify/require"
 	"go.opentelemetry.io/otel/codes"
@@ -42,4 +43,50 @@ func TestRunnerConnectionTraceOmitsTransportErrorDetails(t *testing.T) {
 	require.Len(t, span.Attributes(), 1)
 	require.Equal(t, attr.CodeOutcome("error"), span.Attributes()[0])
 	require.Empty(t, span.Events(), "transport errors must not become exception events")
+}
+
+func TestRunnerTraceClassifiesExecutionFailures(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		code    string
+		outcome string
+		started bool
+	}{
+		{code: "deadline_exceeded", outcome: "timeout", started: true},
+		{code: "cancelled", outcome: "cancelled", started: true},
+		{code: "capacity_exceeded", outcome: "capacity", started: false},
+		{code: "runtime_unavailable", outcome: "unavailable", started: false},
+		{code: "untrusted-runner-code", outcome: "error", started: true},
+	} {
+		t.Run(tc.code, func(t *testing.T) {
+			t.Parallel()
+			recorder := tracetest.NewSpanRecorder()
+			provider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+			t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
+			ctx, parent := provider.Tracer("test").Start(t.Context(), "request")
+			defer parent.End()
+			endpoint := startedRunner(t, tc.started, func(string) []runnerMessage {
+				return []runnerMessage{{Type: "error", Code: tc.code, Message: "sensitive-runner-message"}}
+			}, func(runnerMessage) bool { return false })
+			client, err := NewRunnerClient(endpoint, strings.Repeat("t", 32), &net.Dialer{})
+			require.NoError(t, err)
+			t.Cleanup(func() { require.NoError(t, client.Close()) })
+			result := client.Run(ctx, uuid.New(), "1", func(context.Context) (Host, error) { return idleHost{}, nil })
+			require.NotNil(t, result.Error)
+			require.Equal(t, tc.code, result.Error.Code)
+			found := false
+			for _, span := range recorder.Ended() {
+				if span.Name() != "codemode.runner.run" {
+					continue
+				}
+				found = true
+				require.Equal(t, codes.Error, span.Status().Code)
+				require.Equal(t, tc.outcome, span.Status().Description)
+				require.Len(t, span.Attributes(), 1)
+				require.Equal(t, attr.CodeOutcome(tc.outcome), span.Attributes()[0])
+				require.Empty(t, span.Events())
+			}
+			require.True(t, found)
+		})
+	}
 }

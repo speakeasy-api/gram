@@ -20,7 +20,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/wide"
 	"go.opentelemetry.io/otel/codes"
 )
 
@@ -140,15 +139,24 @@ func codeExecutionScope(ctx context.Context, gate *metaGateContext, id mcpjsonrp
 
 func (s *Service) executeMetaCode(ctx context.Context, logger *slog.Logger, endpoint *endpointrepo.McpEndpoint, server *metamcprepo.MetaMcpServer, gate *metaGateContext, members []metaMember, req *rawRequest, params toolsCallParams) (_ json.RawMessage, retErr error) {
 	ctx, span := s.tracer.Start(ctx, "gateway.code.execute")
+	started := time.Now()
+	outcome := "error"
+	var execution *codemode.ExecutionResult
+	var timing *codeExecutionTiming
 	defer func() {
 		if retErr != nil {
-			span.SetAttributes(attr.CodeOutcome("error"))
-			span.SetStatus(codes.Error, "execution failed")
-			wide.Push(ctx, attr.SlogCodeOutcome("error"))
+			outcome = "error"
+		}
+		if timing == nil {
+			timing = new(newCodeExecutionTiming(started, execution))
+		}
+		recordCodeExecutionTiming(ctx, *timing, outcome)
+		var shareable *oops.ShareableError
+		if outcome != "ok" && (!errors.As(retErr, &shareable) || !shareable.SpanHandled()) {
+			span.SetStatus(codes.Error, outcome)
 		}
 		span.End()
 	}()
-	started := time.Now()
 	if !s.codeExecutor.Enabled() || gate.discoveryMode != metamcp.DiscoveryModeCode {
 		return nil, oops.E(oops.CodeUnavailable, nil, "code mode is unavailable")
 	}
@@ -184,19 +192,23 @@ func (s *Service) executeMetaCode(ctx context.Context, logger *slog.Logger, endp
 	factory := codemode.HostFactory(func(runCtx context.Context) (codemode.Host, error) {
 		return codemode.NewHost(runCtx, backend, gate.metaServerID.String(), selected)
 	})
-	execution, err := s.codeExecutor.Execute(ctx, scope, args.Code, factory)
+	execution, err = s.codeExecutor.Execute(ctx, scope, args.Code, factory)
 	if err != nil {
 		refusal := newCodeAdmissionRefusal(err)
 		if refusal.Error.Code == codeRefusalUnexpected {
 			logger.WarnContext(ctx, "code execution was not admitted", attr.SlogError(err))
 		}
-		return marshalCodeAdmissionRefusal(ctx, logger, req.ID, refusal, recordCodeExecutionTiming(ctx, started, nil))
+		outcome = "refused"
+		timing = new(newCodeExecutionTiming(started, nil))
+		return marshalCodeAdmissionRefusal(ctx, logger, req.ID, refusal, *timing)
 	}
 	// The runner refused before the program started: report it in the same
 	// structured, retryable shape as a coordinator refusal.
 	if execution.Error != nil && len(execution.ToolCalls) == 0 {
 		if refused := runnerRefusal(execution.Error.Code); refused != nil {
-			return marshalCodeAdmissionRefusal(ctx, logger, req.ID, newCodeAdmissionRefusal(refused), recordCodeExecutionTiming(ctx, started, execution))
+			outcome = "refused"
+			timing = new(newCodeExecutionTiming(started, execution))
+			return marshalCodeAdmissionRefusal(ctx, logger, req.ID, newCodeAdmissionRefusal(refused), *timing)
 		}
 	}
 	structured, err := json.Marshal(execution)
@@ -207,9 +219,13 @@ func (s *Service) executeMetaCode(ctx context.Context, logger *slog.Logger, endp
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize code content").LogError(ctx, logger)
 	}
-	body, err := json.Marshal(&result[codeToolCallResult]{ID: req.ID, Result: codeToolCallResult{toolCallResult: toolCallResult{Content: []json.RawMessage{chunk}, StructuredContent: structured, IsError: execution.Error != nil}, Meta: map[string]codeExecutionTiming{codeTimingMetaKey: recordCodeExecutionTiming(ctx, started, execution)}}, serverIdentity: serverInfoMetaServer, cacheHints: nil})
+	timing = new(newCodeExecutionTiming(started, execution))
+	body, err := json.Marshal(&result[codeToolCallResult]{ID: req.ID, Result: codeToolCallResult{toolCallResult: toolCallResult{Content: []json.RawMessage{chunk}, StructuredContent: structured, IsError: execution.Error != nil}, Meta: map[string]codeExecutionTiming{codeTimingMetaKey: *timing}}, serverIdentity: serverInfoMetaServer, cacheHints: nil})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize code response").LogError(ctx, logger)
+	}
+	if execution.Error == nil {
+		outcome = "ok"
 	}
 	return body, nil
 }
