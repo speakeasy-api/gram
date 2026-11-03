@@ -156,35 +156,38 @@ type leaseSpyCache struct {
 	lost      bool
 	onRelease func()
 	mu        sync.Mutex
+	owner     string
 	ttl       time.Duration
 	released  bool
 }
 
-func (c *leaseSpyCache) AcquireLease(_ context.Context, _, _ string, ttl time.Duration) (bool, error) {
+func (c *leaseSpyCache) AcquireLease(_ context.Context, _, owner string, ttl time.Duration) (bool, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
+	c.owner = owner
 	c.ttl = ttl
 	return true, nil
 }
 
-func (c *leaseSpyCache) RenewLease(_ context.Context, _, _ string, ttl time.Duration) (bool, error) {
+func (c *leaseSpyCache) RenewLease(_ context.Context, _, owner string, ttl time.Duration) (bool, error) {
 	c.mu.Lock()
 	defer c.mu.Unlock()
-	if c.lost {
+	if c.lost || owner != c.owner {
 		return false, nil
 	}
 	c.ttl = ttl
 	return true, nil
 }
 
-func (c *leaseSpyCache) ReleaseLeaseIfOwner(context.Context, string, string) (bool, error) {
+func (c *leaseSpyCache) ReleaseLeaseIfOwner(_ context.Context, _, owner string) (bool, error) {
 	c.mu.Lock()
-	c.released = true
+	matched := owner == c.owner
+	c.released = c.released || matched
 	c.mu.Unlock()
-	if c.onRelease != nil {
+	if matched && c.onRelease != nil {
 		c.onRelease()
 	}
-	return true, nil
+	return matched, nil
 }
 
 func (c *leaseSpyCache) state() (time.Duration, bool) {
