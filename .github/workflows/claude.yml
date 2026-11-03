@@ -18,10 +18,16 @@ permissions: {}
 jobs:
   claude:
     name: claude
-    # Pull request conversation comments that start with "@claude perf" go to
-    # claude-perf.yml, which does not run on issues.
+    # Pull request conversation comments that are the "@claude perf" command go
+    # to claude-perf.yml, which does not run on issues. Its analyse job's if:
+    # defines the command, and this test must stay the same as that one, so
+    # that "@claude perfect" still comes here.
     if: |
-      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude') && !(github.event.issue.pull_request && startsWith(github.event.comment.body, '@claude perf'))) ||
+      (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude') && !(github.event.issue.pull_request && (
+        github.event.comment.body == '@claude perf' ||
+        startsWith(github.event.comment.body, '@claude perf ') ||
+        startsWith(github.event.comment.body, fromJSON('"@claude perf\n"')) ||
+        startsWith(github.event.comment.body, fromJSON('"@claude perf\r"'))))) ||
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||
       (github.event_name == 'pull_request_review' && contains(github.event.review.body, '@claude')) ||
       (github.event_name == 'issues' && (contains(github.event.issue.body, '@claude') || contains(github.event.issue.title, '@claude')))

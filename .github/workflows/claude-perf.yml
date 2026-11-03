@@ -4,8 +4,8 @@ name: Claude perf review
 # Claude reviews the diff for performance and reads production baselines from
 # the MCP servers that Speakeasy delivers to this job's agent (Datadog). A
 # second job, with no MCP access, posts one sticky comment. claude.yml skips
-# conversation comments that start with "@claude perf", so only this workflow
-# answers those; inline review comments still go to claude.yml.
+# the comments that this workflow answers; inline review comments still go to
+# claude.yml.
 #
 # Never set ACTIONS_STEP_DEBUG on this repository: it turns on
 # claude-code-action's full output, which would print MCP results into public
@@ -18,18 +18,31 @@ permissions: {}
 
 # One review per pull request at a time; a newer request waits for the current
 # one. GitHub keeps only the newest pending run in a group, so every other
-# comment gets a group of its own and cannot replace a queued review.
+# comment gets a group of its own and cannot replace a queued review. The
+# command test is the analyse job's.
 concurrency:
-  group: ${{ github.workflow }}-${{ startsWith(github.event.comment.body, '@claude perf') && github.event.issue.number || github.run_id }}
+  group: >-
+    ${{ github.workflow }}-${{ (github.event.comment.body == '@claude perf' ||
+    startsWith(github.event.comment.body, '@claude perf ') ||
+    startsWith(github.event.comment.body, fromJSON('"@claude perf\n"')) ||
+    startsWith(github.event.comment.body, fromJSON('"@claude perf\r"')))
+    && github.event.issue.number || github.run_id }}
   cancel-in-progress: false
 
 jobs:
   analyse:
     name: analyse
-    # author_association is a cheap pre-filter; the gate step is the real check.
+    # The command is "@claude perf", in any case, then a space, a line break or
+    # the end of the comment. GitHub expressions have no regex, so each ending
+    # is spelled out; claude.yml skips what this matches, and the gate step
+    # matches it again. author_association is a cheap pre-filter; the gate
+    # step is the real check.
     if: >-
       github.event.issue.pull_request &&
-      startsWith(github.event.comment.body, '@claude perf') &&
+      (github.event.comment.body == '@claude perf' ||
+      startsWith(github.event.comment.body, '@claude perf ') ||
+      startsWith(github.event.comment.body, fromJSON('"@claude perf\n"')) ||
+      startsWith(github.event.comment.body, fromJSON('"@claude perf\r"'))) &&
       contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association)
     runs-on: blacksmith-4vcpu-ubuntu-2404
     environment: speakeasy-perf # the only subject the Speakeasy agent's rule admits
@@ -45,7 +58,7 @@ jobs:
       # Before anything touches Speakeasy: device-agent-action checks no
       # commenter, and on issue_comment it cannot tell a fork pull request
       # (github.event.pull_request is empty), while the OIDC token is available.
-      - name: Refuse non-writers, forks and closed pull requests
+      - name: Refuse other comments, non-writers, forks and closed pull requests
         id: gate
         env:
           GH_TOKEN: ${{ github.token }}
@@ -54,6 +67,13 @@ jobs:
           PR: ${{ github.event.issue.number }}
         run: |
           set -euo pipefail
+          # The job's command test, on the body read from the event file
+          # rather than interpolated into this script.
+          command_re=$'^@claude perf( |\r|\n|$)'
+          body=$(jq -r .comment.body "$GITHUB_EVENT_PATH")
+          shopt -s nocasematch
+          [[ $body =~ $command_re ]] || { echo "::error::The comment is not an \"@claude perf\" command."; exit 1; }
+          shopt -u nocasematch
           perm=$(gh api "repos/$REPO/collaborators/$ACTOR/permission" --jq .permission)
           case "$perm" in
             admin | write) ;;
