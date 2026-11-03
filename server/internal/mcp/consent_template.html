@@ -921,6 +921,9 @@
           Connection complete. This tab will close automatically.
         </p>
         {{else if and .ApprovalError .Gateway .Gateway.Focus}}
+        <div class="px-6 py-6 sm:px-8">
+          <a href="{{.ConsentPath}}?state={{.State}}&server=" class="underline" data-gateway-back>Back to all servers</a>
+        </div>
         {{else if and .Gateway .Gateway.Focus}}
         <div class="flex flex-col gap-4 px-6 py-6 sm:px-8" data-gateway-focus-footer>
           <p class="text-sm text-muted-foreground">

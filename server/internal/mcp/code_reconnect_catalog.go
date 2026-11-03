@@ -120,10 +120,6 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, e
 	if err != nil {
 		return err
 	}
-	expected, err := previous.marshal()
-	if err != nil {
-		return err
-	}
 	cards, err := s.buildRemoteSessionCards(ctx, endpoint, state, s.resolveAutoRefreshPolicy(ctx, endpoint.OrganizationID))
 	if err != nil {
 		return err
@@ -138,13 +134,12 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, e
 	if err != nil {
 		return err
 	}
-	frozen.ID = previous.ID
 	replacement, err := frozen.marshal()
 	if err != nil {
 		return err
 	}
 	b := state.CodeReconnect
-	if err := q.ClearReconnectUpstreamChoices(ctx, usersessionsrepo.ClearReconnectUpstreamChoicesParams{CredentialID: b.CredentialID, OrganizationID: endpoint.OrganizationID}); err != nil {
+	if err := q.ClearReconnectUpstreamChoices(ctx, usersessionsrepo.ClearReconnectUpstreamChoicesParams{CredentialID: b.CredentialID, OrganizationID: endpoint.OrganizationID, McpServerIds: reconnectMemberIDs(previous, frozen)}); err != nil {
 		return fmt.Errorf("replace upstream choices: %w", err)
 	}
 	var servers, clients, authClients []uuid.UUID
@@ -159,6 +154,7 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, e
 		return fmt.Errorf("record upstream choices: %w", err)
 	}
 	policy.Selection = selection
+	policy.Catalog.ID = frozen.ID
 	policy.Catalog.AllTools = selection == nil
 	policy.Catalog.Mode = mode
 	rawPolicy, err := policy.MarshalJSON()
@@ -172,7 +168,7 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, e
 	if len(jtis) == 0 {
 		return fmt.Errorf("reconnect connection is no longer active")
 	}
-	conditional, ok := s.connectionCatalogCache.(cache.CompareAndSwapCache)
+	conditional, ok := s.connectionCatalogCache.(cache.ConditionalCache)
 	if !ok {
 		return fmt.Errorf("catalogue store does not support reconnect")
 	}
@@ -180,12 +176,15 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, e
 	if ttl <= 0 {
 		return errConnectionCatalogExpired
 	}
-	swapped, err := conditional.CompareAndSwap(ctx, previous.CacheKey(), expected, replacement, ttl)
+	// Publish an immutable snapshot before committing its reference. A failed or
+	// ambiguous commit leaves the old policy and catalogue consistent; an
+	// unreferenced snapshot expires naturally at the original deadline.
+	stored, err := conditional.SetIfAbsent(ctx, frozen.CacheKey(), replacement, ttl)
 	if err != nil {
 		return fmt.Errorf("replace catalogue: %w", err)
 	}
-	if !swapped {
-		return fmt.Errorf("catalogue changed; reload the review before approving")
+	if !stored {
+		return fmt.Errorf("catalogue publication conflict; reload the review before approving")
 	}
 	if err := tx.Commit(ctx); err != nil {
 		return fmt.Errorf("commit catalogue approval: %w", err)
@@ -203,4 +202,17 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, e
 	s.evictConsentToolInventory(ctx, state.ID)
 	http.Redirect(w, r, endpoint.consentPath()+"?state="+state.ID, http.StatusSeeOther)
 	return nil
+}
+
+// Include removed members so their stale choices cannot survive approval.
+func reconnectMemberIDs(catalogs ...*connectionCatalog) []uuid.UUID {
+	var ids []uuid.UUID
+	for _, catalog := range catalogs {
+		for _, member := range catalog.Members {
+			if !slices.Contains(ids, member.ServerID) {
+				ids = append(ids, member.ServerID)
+			}
+		}
+	}
+	return ids
 }

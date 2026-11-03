@@ -501,9 +501,11 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 		revoke           bool
 		evictCatalog     bool
 		revokeAtApproval bool
+		commitFailure    bool
 		cancel           bool
 	}{
 		{name: "all tools"},
+		{name: "commit failure preserves catalogue", commitFailure: true},
 		{name: "selected tools", selection: []string{"other-tracker--tool_000"}},
 		{name: "typed auth client", typedAuth: true},
 		{name: "revoked during consent", revoke: true},
@@ -564,6 +566,11 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 				require.Error(t, err)
 			}
 			_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{UserSessionIssuerID: issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: sessionPolicy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{member.mcpServerID}, PickedClientIds: []uuid.UUID{client}})
+			require.NoError(t, err)
+			unrelatedGateway := createMetaMcpEndpoint(t, ctx, ti.conn, *auth.ProjectID, auth.ActiveOrganizationID, "unrelated-"+uuid.NewString(), issuer)
+			unrelated := createMetaMember(t, ctx, ti.conn, *auth.ProjectID, unrelatedGateway.ID, "unrelated", upstream.url, conv.ToNullUUID(remoteIssuer), 0)
+			selection.associate(t, ctx, unrelated.mcpServerID, client)
+			_, err = usersessionsrepo.New(ti.conn).RecordUpstreamClientSelections(ctx, usersessionsrepo.RecordUpstreamClientSelectionsParams{UserSessionIssuerID: issuer, CredentialKind: upstreamclients.CredentialKindUserSession, CredentialID: sessionPolicy.CredentialID, Source: upstreamclients.SelectionSourceIssuance, PickedMcpServerIds: []uuid.UUID{unrelated.mcpServerID}, PickedClientIds: []uuid.UUID{client}})
 			require.NoError(t, err)
 			execute := func(code string, restricted bool) codemode.ExecutionResult {
 				t.Helper()
@@ -716,6 +723,19 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 				require.Equal(t, originalCatalog, after)
 				return
 			}
+			if tc.commitFailure {
+				_, err := ti.conn.Exec(ctx, `CREATE FUNCTION reject_reconnect_commit() RETURNS trigger LANGUAGE plpgsql AS $$ BEGIN RAISE EXCEPTION 'injected reconnect commit failure'; END $$;
+                CREATE CONSTRAINT TRIGGER reject_reconnect_commit AFTER UPDATE ON user_sessions DEFERRABLE INITIALLY DEFERRED FOR EACH ROW EXECUTE FUNCTION reject_reconnect_commit();`)
+				require.NoError(t, err)
+				require.ErrorContains(t, ti.service.ServeConsent(approved, approvedRequest, endpoint), "injected reconnect commit failure")
+				var unchanged []byte
+				require.NoError(t, ti.cacheAdapter.Get(ctx, catalogKey, &unchanged))
+				require.Equal(t, originalCatalog, unchanged)
+				afterPolicy, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuer, Jti: claims.ID})
+				require.NoError(t, err)
+				require.Equal(t, sessionPolicy.ToolSelection, afterPolicy.ToolSelection)
+				return
+			}
 			require.NoError(t, ti.service.ServeConsent(approved, approvedRequest, endpoint))
 			require.Equal(t, http.StatusSeeOther, approved.Code, approved.Body.String())
 			if permitCallers != nil {
@@ -726,29 +746,28 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 				}
 			}
 
-			var updatedCatalog []byte
-			require.NoError(t, ti.cacheAdapter.Get(ctx, catalogKey, &updatedCatalog))
+			updatedSession, err := usersessionsrepo.New(ti.conn).GetUserSessionPolicyByJTI(ctx, usersessionsrepo.GetUserSessionPolicyByJTIParams{UserSessionIssuerID: issuer, Jti: claims.ID})
+			require.NoError(t, err)
+			updatedPolicy, err := toolfilter.ParseSessionPolicy(updatedSession.ToolSelection)
+			require.NoError(t, err)
+			var unrelatedChoices int
+			require.NoError(t, ti.conn.QueryRow(ctx, `SELECT count(*) FROM upstream_client_selections WHERE credential_id = $1 AND mcp_server_id = $2 AND deleted_at IS NULL`, sessionPolicy.CredentialID, unrelated.mcpServerID).Scan(&unrelatedChoices))
+			require.Equal(t, 1, unrelatedChoices, "approval must preserve choices outside this gateway")
+			var unchanged, updatedCatalog []byte
+			require.NoError(t, ti.cacheAdapter.Get(ctx, catalogKey, &unchanged))
+			require.Equal(t, originalCatalog, unchanged)
+			require.NoError(t, ti.cacheAdapter.Get(ctx, "mcpConnectionCatalog:v1:"+auth.ActiveOrganizationID+":"+updatedPolicy.Catalog.ID.String(), &updatedCatalog))
 			var beforeJSON, afterJSON map[string]json.RawMessage
 			require.NoError(t, json.Unmarshal(originalCatalog, &beforeJSON))
 			require.NoError(t, json.Unmarshal(updatedCatalog, &afterJSON))
 			require.Equal(t, beforeJSON["expires_at"], afterJSON["expires_at"])
-			require.Equal(t, beforeJSON["id"], afterJSON["id"])
+			require.NotEqual(t, beforeJSON["id"], afterJSON["id"])
 			completedState, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
 			require.NoError(t, err)
 			require.True(t, completedState.CodeReconnect.CatalogComplete)
 			page := consentGetPageWithContext(t, ctx, ti, slug, stateID)
 			require.Contains(t, page, "data-auto-close")
 			require.NotContains(t, page, ">other-tracker</span>")
-			retryState := completedState
-			retryBinding := *completedState.CodeReconnect
-			retryBinding.CatalogComplete = false
-			retryBinding.ReviewReady = false
-			retryState.CodeReconnect = &retryBinding
-			retryState.AutoConnectDone = true
-			require.NoError(t, ti.authnChallengeCache.Store(ctx, retryState))
-			retryPage := consentGetPageWithContext(t, ctx, ti, slug, stateID)
-			require.Contains(t, retryPage, `value="connect"`)
-			require.NotContains(t, retryPage, "data-auto-close")
 
 			require.NotNil(t, exchanged.Load(), "real token POST reached owned OAuth provider")
 			t.Log("HANDOFF: original user identified; member-scoped OAuth callback exchanges a code and stores the upstream grant.")

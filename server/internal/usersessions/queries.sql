@@ -3009,7 +3009,8 @@ FOR UPDATE OF us;
 DELETE FROM upstream_client_selections
 WHERE credential_kind = 'user_session'
   AND credential_id = @credential_id::uuid
-  AND organization_id = @organization_id::text;
+  AND organization_id = @organization_id::text
+  AND mcp_server_id = ANY(@mcp_server_ids::uuid[]);
 
 -- name: UpdateReconnectSessionPolicy :many
 UPDATE user_sessions AS us SET tool_selection = @tool_selection, updated_at = clock_timestamp()

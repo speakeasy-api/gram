@@ -34,15 +34,17 @@ DELETE FROM upstream_client_selections
 WHERE credential_kind = 'user_session'
   AND credential_id = $1::uuid
   AND organization_id = $2::text
+  AND mcp_server_id = ANY($3::uuid[])
 `
 
 type ClearReconnectUpstreamChoicesParams struct {
 	CredentialID   uuid.UUID
 	OrganizationID string
+	McpServerIds   []uuid.UUID
 }
 
 func (q *Queries) ClearReconnectUpstreamChoices(ctx context.Context, arg ClearReconnectUpstreamChoicesParams) error {
-	_, err := q.db.Exec(ctx, clearReconnectUpstreamChoices, arg.CredentialID, arg.OrganizationID)
+	_, err := q.db.Exec(ctx, clearReconnectUpstreamChoices, arg.CredentialID, arg.OrganizationID, arg.McpServerIds)
 	return err
 }
 

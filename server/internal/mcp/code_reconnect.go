@@ -97,8 +97,8 @@ func (s *Service) codeReconnectTicket(r *http.Request, endpoint *ResolvedMcpEndp
 	return b, nil
 }
 
-// completeCatalogConsent closes the focused page only after publication. A
-// connected upstream card alone is insufficient evidence of catalogue consent.
+// updateCodeReconnect advances review flags without regressing concurrent
+// approval or overwriting the current connection binding.
 func (s *Service) updateCodeReconnect(ctx context.Context, state AuthnChallengeState, binding CodeReconnectBinding) error {
 	for range 3 {
 		current, err := s.authnChallengeCache.Get(ctx, state.CacheKey())
@@ -109,7 +109,10 @@ func (s *Service) updateCodeReconnect(ctx context.Context, state AuthnChallengeS
 			return fmt.Errorf("reconnect challenge changed")
 		}
 		updated := current
-		updated.CodeReconnect = &binding
+		merged := *current.CodeReconnect
+		merged.ReviewReady = merged.ReviewReady || binding.ReviewReady
+		merged.CatalogComplete = merged.CatalogComplete || binding.CatalogComplete
+		updated.CodeReconnect = &merged
 		done, err := s.authnChallengeCache.CompareAndSwap(ctx, current, updated)
 		if err != nil {
 			return fmt.Errorf("complete reconnect challenge: %w", err)
