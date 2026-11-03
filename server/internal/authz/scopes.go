@@ -119,6 +119,13 @@ var adminScopes = []Scope{
 	// to see it gets an explicit grant through a custom role.
 	ScopeWorkloadRead,
 	ScopeWorkloadWrite,
+	// Organizational Memory is an org-level capability that admins turn on and
+	// curate, so org:admin gets memory:read and memory:write by default.
+	// Members still need an explicit grant: team memory summarizes every
+	// member's sessions in a project, so reading it is sensitive. memory:write
+	// satisfies memory:read via scopeExpansions.
+	ScopeMemoryRead,
+	ScopeMemoryWrite,
 	// chat:read and chat:write are intentionally NOT defaults for any system
 	// role: reading other members' session transcripts is sensitive, and
 	// mutating them (rename, feedback, delete) is destructive, so both must be
@@ -133,11 +140,6 @@ var adminScopes = []Scope{
 	// logs carry tool arguments, results, prompt text, and hook payloads from
 	// every member of a project, so viewing them must be granted explicitly per
 	// project. Neither project:* nor org:admin implies it.
-	//
-	// memory:read and memory:write are NOT defaults either: team memory
-	// summarizes every member's sessions in a project, so reading it is as
-	// sensitive as reading their transcripts. Both are granted explicitly per
-	// project. memory:write satisfies memory:read via scopeExpansions.
 }
 
 // scopeVisibilityByScope is the source of truth for whether a scope is exposed

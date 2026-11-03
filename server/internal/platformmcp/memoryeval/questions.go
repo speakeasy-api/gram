@@ -21,7 +21,21 @@ const (
 	// QuestionIsolation asks about something that exists only in a private
 	// session or in the other project.
 	QuestionIsolation QuestionKind = "isolation"
+
+	// QuestionParaphrase asks for one decision without using any of its
+	// source chat's words, so keyword search on the question finds nothing.
+	QuestionParaphrase QuestionKind = "paraphrase"
+
+	// QuestionSynthesis needs facts from several chats that share no
+	// keywords with the question.
+	QuestionSynthesis QuestionKind = "synthesis"
 )
+
+// Hard reports whether the kind is in the hard set, which keyword search on
+// the question text alone cannot answer.
+func (k QuestionKind) Hard() bool {
+	return k == QuestionParaphrase || k == QuestionSynthesis
+}
 
 // NotFound is the answer key for questions memory must not answer.
 const NotFound = "Not found: nothing in the project's team history answers this."
@@ -85,12 +99,21 @@ func timeline(id, text, answer string, sources []string, evidence ...[]string) Q
 	return Question{ID: id, Kind: QuestionTimeline, Text: text, Answer: answer, Sources: sources, Evidence: evidence}
 }
 
+func paraphrase(id, text, answer, source string, evidence ...string) Question {
+	return Question{ID: id, Kind: QuestionParaphrase, Text: text, Answer: answer, Sources: []string{source}, Evidence: [][]string{evidence}}
+}
+
+func synthesis(id, text, answer string, sources []string, evidence ...[]string) Question {
+	return Question{ID: id, Kind: QuestionSynthesis, Text: text, Answer: answer, Sources: sources, Evidence: evidence}
+}
+
 func notFound(id string, kind QuestionKind, text string) Question {
 	return Question{ID: id, Kind: kind, Text: text, Answer: NotFound, Sources: nil, Evidence: nil}
 }
 
-// questions returns the 40 graded questions: 15 point lookups, 8 timelines,
-// 7 reversals, 5 negatives and 5 isolation probes.
+// questions returns the 55 graded questions: 15 point lookups, 8 timelines,
+// 7 reversals, 5 negatives, 5 isolation probes, and a hard set of 10
+// paraphrases and 5 syntheses.
 func questions() []Question {
 	return []Question{
 		lookup("q01", "Which system did we pick to run customer webhook retries, and when do they give up?",
@@ -205,5 +228,57 @@ func questions() []Question {
 		notFound("q38", QuestionIsolation, "Has anyone raised concerns about a contractor's performance?"),
 		notFound("q39", QuestionIsolation, "What hero headline did we pick for the marketing landing page?"),
 		notFound("q40", QuestionIsolation, "How much does our most expensive pricing tier cost per month?"),
+
+		paraphrase("q41", "When a new job is assigned, how does the courier's phone get alerted?",
+			"Through the Expo push service, which the driver app uses for pickup notifications.",
+			"decision-push-notifications", "Expo"),
+		paraphrase("q42", "Where are the stickers we print for parcels kept, and for how long can someone open them?",
+			"Shipping label PDFs are stored in the S3 labels bucket in eu-west-1 and served through presigned links that expire after 7 days.",
+			"decision-label-storage", "presigned", "7 days"),
+		paraphrase("q43", "What data type holds prices and charges in our schema?",
+			"Integer cents in bigint columns, with a separate ISO currency code column; never floats.",
+			"decision-money", "cents", "bigint"),
+		paraphrase("q44", "Which day and hour do emergency responsibilities change hands?",
+			"Monday at 10am; the on-call rotation is weekly with a written handoff note.",
+			"decision-oncall", "Monday", "10am"),
+		paraphrase("q45", "Can I release to customers on the last workday afternoon?",
+			"Not after 2pm on Fridays; production deploys after that need approval from whoever is on call.",
+			"decision-deploy-freeze", "2pm"),
+		paraphrase("q46", "What kind of identifier do fresh records get?",
+			"UUIDv7 primary keys for all new tables.",
+			"decision-id-format", "UUIDv7"),
+		paraphrase("q47", "Where do crashes and exceptions from all our products get reported?",
+			"Sentry, for the backend, frontend and driver app.",
+			"decision-error-tracking", "Sentry"),
+		paraphrase("q48", "How big can an instant spreadsheet get before someone has to wait for it in their inbox?",
+			"50,000 rows; larger CSV exports run in the background and email a link.",
+			"decision-csv-export", "50,000"),
+		paraphrase("q49", "Which clock does the interface use when it prints when a parcel gets collected?",
+			"The pickup location's local timezone, stored in UTC.",
+			"decision-timezones", "pickup", "local"),
+		paraphrase("q50", "What engine handles misspelled lookups in the finder now?",
+			"Typesense, synced from the outbox; it replaced Postgres full-text search.",
+			"reversal-shipment-search", "Typesense"),
+
+		synthesis("q51", "Which tooling changes were made to save money?",
+			"Application log retention was cut from 30 to 14 days when the Datadog bill doubled; Cloudflare Images was replaced by self-hosted imgproxy; the API docs moved from Mintlify to Docusaurus after its pricing jumped.",
+			[]string{"reversal-log-retention", "reversal-image-cdn", "reversal-docs-site"},
+			[]string{"14 days"}, []string{"imgproxy"}, []string{"Docusaurus"}),
+		synthesis("q52", "Which vendors did we drop for something we run ourselves?",
+			"Cloudflare Images, replaced by self-hosted imgproxy in front of S3, and Mintlify, replaced by self-hosted Docusaurus.",
+			[]string{"reversal-image-cdn", "reversal-docs-site"},
+			[]string{"imgproxy"}, []string{"Docusaurus"}),
+		synthesis("q53", "What have we decided about the mobile product couriers carry?",
+			"Notifications go through the Expo push service, and crashes go to Sentry like the other apps.",
+			[]string{"decision-push-notifications", "decision-error-tracking"},
+			[]string{"Expo"}, []string{"Sentry"}),
+		synthesis("q54", "For what period do we hold onto each kind of information before deleting it?",
+			"Application logs 14 days, raw tracking events 90 days, audit logs 1 year, daily rollups 2 years.",
+			[]string{"reversal-log-retention", "decision-event-ttl"},
+			[]string{"14 days"}, []string{"90 days"}),
+		synthesis("q55", "Which rules did we add because something broke?",
+			"No production deploys after 2pm on Fridays, after a Friday evening rollback; and query count budget tests in CI plus a pool saturation alert, after the tracking outage.",
+			[]string{"decision-deploy-freeze", "timeline-outage-followups"},
+			[]string{"2pm"}, []string{"query count budget"}),
 	}
 }

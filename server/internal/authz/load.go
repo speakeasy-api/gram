@@ -43,32 +43,43 @@ func LoadGrants(ctx context.Context, db accessrepo.DBTX, organizationID string, 
 		})
 	}
 
-	assistantDefaults, err := assistantSystemRoleDefaults(ctx, db, principals, grantRows)
+	defaults, err := lateSystemRoleDefaults(ctx, db, principals, grantRows)
 	if err != nil {
 		return nil, err
 	}
 
-	return withAssistantSystemRoleDefaults(grantRows, assistantDefaults), nil
+	return withSystemRoleDefaults(grantRows, defaults), nil
 }
 
-// assistantSystemRoleDefaults returns the assistant scopes each built-in role
-// principal holds by default, keyed by the principals that lack stored
-// assistant grants. Organizations seeded before the assistant scopes existed
-// have no persisted rows for them, and system-role grants are immutable, so the
-// defaults are supplied at load time instead. The global roles are only looked
-// up when such a principal is present, which keeps the extra query off
-// organizations seeded with the current defaults.
-func assistantSystemRoleDefaults(ctx context.Context, db accessrepo.DBTX, principals []urn.Principal, grants []Grant) (map[string][]Scope, error) {
-	missing := make(map[string]struct{})
+// lateDefaultGroups are system-role default scopes added after organizations
+// were already seeded. Each group is supplied at load time to a built-in role
+// principal that holds no stored grant in that group.
+var lateDefaultGroups = []func(Scope) bool{
+	// Assistant scopes.
+	func(scope Scope) bool { return ResourceKindForScope(scope) == ResourceKindAssistant },
+	// Organizational Memory scopes, an org:admin default.
+	func(scope Scope) bool { return scope == ScopeMemoryRead || scope == ScopeMemoryWrite },
+}
+
+// lateSystemRoleDefaults returns the late-added default scopes each built-in
+// role principal holds, keyed by principal. Organizations seeded before these
+// scopes became defaults have no persisted rows for them, and system-role
+// grants are immutable, so the defaults are supplied at load time instead. The
+// global roles are only looked up when a principal lacks a group, which keeps
+// the extra query off organizations seeded with the current defaults.
+func lateSystemRoleDefaults(ctx context.Context, db accessrepo.DBTX, principals []urn.Principal, grants []Grant) (map[string][]Scope, error) {
+	missing := make(map[string][]int)
 	for _, principal := range principals {
 		if principal.Type != urn.PrincipalTypeRole || !strings.HasPrefix(principal.ID, "global:") {
 			continue
 		}
 		key := principal.String()
-		if !slices.ContainsFunc(grants, func(grant Grant) bool {
-			return grant.PrincipalUrn == key && ResourceKindForScope(grant.Scope) == ResourceKindAssistant
-		}) {
-			missing[key] = struct{}{}
+		for i, inGroup := range lateDefaultGroups {
+			if !slices.ContainsFunc(grants, func(grant Grant) bool {
+				return grant.PrincipalUrn == key && inGroup(grant.Scope)
+			}) {
+				missing[key] = append(missing[key], i)
+			}
 		}
 	}
 	if len(missing) == 0 {
@@ -83,11 +94,13 @@ func assistantSystemRoleDefaults(ctx context.Context, db accessrepo.DBTX, princi
 	for _, role := range roles {
 		roleGrants, ok := SystemRoleGrants[role.WorkosSlug]
 		key := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+role.ID.String()).String()
-		if _, isMissing := missing[key]; !ok || !isMissing || role.Deleted || role.WorkosDeleted {
+		groups, isMissing := missing[key]
+		if !ok || !isMissing || role.Deleted || role.WorkosDeleted {
 			continue
 		}
 		for _, grant := range roleGrants {
-			if scope := Scope(grant.Scope); ResourceKindForScope(scope) == ResourceKindAssistant {
+			scope := Scope(grant.Scope)
+			if slices.ContainsFunc(groups, func(i int) bool { return lateDefaultGroups[i](scope) }) {
 				defaults[key] = append(defaults[key], scope)
 			}
 		}
@@ -95,7 +108,7 @@ func assistantSystemRoleDefaults(ctx context.Context, db accessrepo.DBTX, princi
 	return defaults, nil
 }
 
-func withAssistantSystemRoleDefaults(grants []Grant, scopesByPrincipal map[string][]Scope) []Grant {
+func withSystemRoleDefaults(grants []Grant, scopesByPrincipal map[string][]Scope) []Grant {
 	for principal, scopes := range scopesByPrincipal {
 		for _, scope := range scopes {
 			grant := NewGrant(scope, WildcardResource)
