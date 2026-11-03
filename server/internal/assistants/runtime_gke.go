@@ -52,10 +52,7 @@ const (
 // The Kit runtime addresses the same Agent Sandbox resources.
 const gkeClaimUIDLabel = sandbox.ClaimUIDLabel
 
-var (
-	gkeSandboxClaimGVR = sandbox.Claims
-	gkePodGVR          = sandbox.Pods
-)
+var gkePodGVR = sandbox.Pods
 
 // GKERuntimeConfig configures the GKE Agent Sandbox runtime backend. The dynamic
 // client targets the (separate) assistant cluster and is built from its endpoint
