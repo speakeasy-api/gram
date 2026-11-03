@@ -49,6 +49,32 @@ func (q *Queries) ActivateVerifiedCustomDomain(ctx context.Context, arg Activate
 	return result.RowsAffected(), nil
 }
 
+const assignCustomDomainDNSTargetToken = `-- name: AssignCustomDomainDNSTargetToken :one
+UPDATE custom_domains
+SET
+    dns_target_token = $1::text,
+    updated_at = clock_timestamp()
+WHERE id = $2
+  AND deleted IS FALSE
+  AND dns_target_token IS NULL
+RETURNING dns_target_token
+`
+
+type AssignCustomDomainDNSTargetTokenParams struct {
+	DnsTargetToken string
+	ID             uuid.UUID
+}
+
+// Tokens are immutable once set: only a live row without one is updated, so
+// concurrent assigners cannot overwrite each other. No row means the domain
+// already has a token or is no longer live.
+func (q *Queries) AssignCustomDomainDNSTargetToken(ctx context.Context, arg AssignCustomDomainDNSTargetTokenParams) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, assignCustomDomainDNSTargetToken, arg.DnsTargetToken, arg.ID)
+	var dns_target_token pgtype.Text
+	err := row.Scan(&dns_target_token)
+	return dns_target_token, err
+}
+
 const clearDeletedCustomDomainResourceNames = `-- name: ClearDeletedCustomDomainResourceNames :exec
 UPDATE custom_domains
 SET
@@ -148,11 +174,15 @@ func (q *Queries) CreateCustomDomain(ctx context.Context, arg CreateCustomDomain
 
 const deleteCustomDomain = `-- name: DeleteCustomDomain :exec
 UPDATE custom_domains
-SET deleted_at = clock_timestamp()
+SET
+    deleted_at = clock_timestamp(),
+    dns_target_token = NULL
 WHERE organization_id = $1
   AND deleted IS FALSE
 `
 
+// Clearing the DNS target token frees it from the live-row unique index and
+// stops the tombstone from claiming a per-domain target.
 func (q *Queries) DeleteCustomDomain(ctx context.Context, organizationID string) error {
 	_, err := q.db.Exec(ctx, deleteCustomDomain, organizationID)
 	return err
@@ -429,6 +459,20 @@ func (q *Queries) GetCustomDomainByOrganization(ctx context.Context, organizatio
 	return i, err
 }
 
+const getCustomDomainDNSTargetToken = `-- name: GetCustomDomainDNSTargetToken :one
+SELECT dns_target_token
+FROM custom_domains
+WHERE id = $1
+  AND deleted IS FALSE
+`
+
+func (q *Queries) GetCustomDomainDNSTargetToken(ctx context.Context, id uuid.UUID) (pgtype.Text, error) {
+	row := q.db.QueryRow(ctx, getCustomDomainDNSTargetToken, id)
+	var dns_target_token pgtype.Text
+	err := row.Scan(&dns_target_token)
+	return dns_target_token, err
+}
+
 const getCustomDomainRouteConfig = `-- name: GetCustomDomainRouteConfig :one
 SELECT
     d.id,
@@ -441,6 +485,7 @@ SELECT
     d.provisioner_kind,
     d.ip_allowlist,
     d.deleted,
+    d.dns_target_token,
     COALESCE(root_endpoint.id, '00000000-0000-0000-0000-000000000000'::uuid) AS root_mcp_endpoint_id,
     COALESCE(root_endpoint.slug, '')::text AS root_slug
 FROM custom_domains AS d
@@ -473,6 +518,7 @@ type GetCustomDomainRouteConfigRow struct {
 	ProvisionerKind   string
 	IpAllowlist       []string
 	Deleted           bool
+	DnsTargetToken    pgtype.Text
 	RootMcpEndpointID uuid.UUID
 	RootSlug          string
 }
@@ -493,6 +539,7 @@ func (q *Queries) GetCustomDomainRouteConfig(ctx context.Context, id uuid.UUID) 
 		&i.ProvisionerKind,
 		&i.IpAllowlist,
 		&i.Deleted,
+		&i.DnsTargetToken,
 		&i.RootMcpEndpointID,
 		&i.RootSlug,
 	)

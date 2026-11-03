@@ -38,6 +38,17 @@ func customDomainFlags() []cli.Flag {
 				return nil
 			},
 		},
+		&cli.StringFlag{
+			Name:    "custom-domain-target-suffix",
+			Usage:   "Parent DNS name of per-domain CNAME targets (<token>.<suffix>, e.g., domains.speakeasy.com). Unset disables per-domain targets.",
+			EnvVars: []string{"GRAM_CUSTOM_DOMAIN_TARGET_SUFFIX"},
+			Action: func(_ *cli.Context, value string) error {
+				if _, err := customdomains.ParseDNSTargetSuffix(value); err != nil {
+					return fmt.Errorf("invalid --custom-domain-target-suffix: %w", err)
+				}
+				return nil
+			},
+		},
 	}
 }
 

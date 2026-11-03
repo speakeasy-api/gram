@@ -282,6 +282,16 @@ func (s *Service) CreateDomain(ctx context.Context, payload *gen.CreateDomainPay
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get custom domain").LogError(ctx, s.logger)
 	}
 
+	// New rows get their token here; a reverify backfills a row created before
+	// tokens existed.
+	if !domain.DnsTargetToken.Valid {
+		token, err := EnsureDNSTargetToken(ctx, dbtx, domain.ID, NewDNSTargetToken)
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "failed to assign custom domain dns target").LogError(ctx, s.logger)
+		}
+		domain.DnsTargetToken = conv.ToPGTextEmpty(token)
+	}
+
 	if err := dbtx.Commit(ctx); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to save custom domain").LogError(ctx, s.logger)
 	}

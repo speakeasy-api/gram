@@ -16,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/background/activities"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/dns"
 	orgRepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
@@ -230,6 +231,8 @@ func TestVerifyCustomDomain_LegacyArgsWithoutIDCreateMissingRow(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, orgID, got.OrganizationID)
 	require.True(t, got.Verified)
+	require.True(t, got.DnsTargetToken.Valid)
+	require.Len(t, got.DnsTargetToken.String, customdomains.DNSTargetTokenLength)
 }
 
 func TestVerifyCustomDomain_LegacyArgsWithoutIDVerifyByHostname(t *testing.T) {
