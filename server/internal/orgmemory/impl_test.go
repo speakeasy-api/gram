@@ -8,6 +8,7 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
@@ -47,7 +48,7 @@ type fixture struct {
 	db        *pgxpool.Pool
 	service   *orgmemory.Service
 	flags     *feature.InMemory
-	ctx       context.Context
+	ctx       context.Context //nolint:containedctx // the authenticated session each test derives grants from
 	orgID     string
 	projectID uuid.UUID
 }
@@ -103,28 +104,27 @@ func (f fixture) summarizedChat(t *testing.T, title, summary string, at time.Tim
 
 func (f fixture) memo(t *testing.T, content string, chatID *uuid.UUID, at time.Time) uuid.UUID {
 	t.Helper()
-	var id uuid.UUID
-	err := f.db.QueryRow(t.Context(),
-		`INSERT INTO memory_memos (organization_id, project_id, chat_id, content, created_at) VALUES ($1, $2, $3, $4, $5) RETURNING id`,
-		f.orgID, f.projectID, chatID, content, at).Scan(&id)
+	chat := uuid.NullUUID{}
+	if chatID != nil {
+		chat = uuid.NullUUID{UUID: *chatID, Valid: true}
+	}
+	id, err := testrepo.New(f.db).InsertMemoryMemoAtFixture(t.Context(), testrepo.InsertMemoryMemoAtFixtureParams{
+		OrganizationID: f.orgID, ProjectID: f.projectID, ChatID: chat, Content: content, CreatedAt: conv.ToPGTimestamptz(at),
+	})
 	require.NoError(t, err)
 	return id
 }
 
 func (f fixture) digest(t *testing.T, level string, start, end time.Time, content string, chats, memos, children []uuid.UUID) uuid.UUID {
 	t.Helper()
-	orEmpty := func(ids []uuid.UUID) []uuid.UUID {
-		if ids == nil {
-			return []uuid.UUID{}
-		}
-		return ids
+	date := func(d time.Time) pgtype.Date {
+		return pgtype.Date{Time: d, InfinityModifier: pgtype.Finite, Valid: true}
 	}
-	chats, memos, children = orEmpty(chats), orEmpty(memos), orEmpty(children)
-	var id uuid.UUID
-	err := f.db.QueryRow(t.Context(),
-		`INSERT INTO memory_digests (organization_id, project_id, level, period_start, period_end, content, chat_ids, memo_ids, child_digest_ids)
-		 VALUES ($1, $2, $3, $4, $5, $6, $7, $8, $9) RETURNING id`,
-		f.orgID, f.projectID, level, start, end, content, chats, memos, children).Scan(&id)
+	id, err := testrepo.New(f.db).InsertMemoryDigestSourcesFixture(t.Context(), testrepo.InsertMemoryDigestSourcesFixtureParams{
+		OrganizationID: f.orgID, ProjectID: f.projectID, Level: level,
+		PeriodStart: date(start), PeriodEnd: date(end), Content: content,
+		ChatIds: chats, MemoIds: memos, ChildDigestIds: children,
+	})
 	require.NoError(t, err)
 	return id
 }
