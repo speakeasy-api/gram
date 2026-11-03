@@ -61,7 +61,7 @@ type Service struct {
 	db           *pgxpool.Pool
 	auth         *auth.Auth
 	sessions     *sessions.Manager
-	authz        *authz.Engine
+	authz        *authz.Client
 	enc          *encryption.Client
 	environments *environments.EnvironmentEntries
 	policy       *guardian.Policy
@@ -119,7 +119,7 @@ var (
 	_ adminrsgen.Auther      = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, auditLogger *audit.Logger, serverURL *url.URL, identity *IdentityCommitter, refresher *RefreshService, productFeatures *productfeatures.Client, protectedResources *protectedresource.Prober) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterProvider metric.MeterProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, authorization *authz.Client, enc *encryption.Client, env *environments.EnvironmentEntries, policy *guardian.Policy, tunnels *tunnelrouting.HTTPClient, auditLogger *audit.Logger, serverURL *url.URL, identity *IdentityCommitter, refresher *RefreshService, productFeatures *productfeatures.Client, protectedResources *protectedresource.Prober) *Service {
 	logger = logger.With(attr.SlogComponent("remotesessions"))
 	revoker := NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, enc, policy, tunnels, refresher.assertions)
 	registrationTelemetry := registration.NewMetrics(logger, meterProvider)
@@ -132,7 +132,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		db:                db,
 		auth:              auth.New(logger, db, sessionManager, authzEngine),
 		sessions:          sessionManager,
-		authz:             authzEngine,
+		authz:             authorization,
 		enc:               enc,
 		environments:      env,
 		policy:            policy,

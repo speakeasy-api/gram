@@ -285,14 +285,10 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 		// Project authorization resolves the requested project before enforcing
 		// project:read. Organization administrators may legitimately lack that
 		// project grant, so admit them only when resolution succeeded inside their
-		// active organization; RequireAny below still gates the mutation itself.
+		// active organization; the write-or-administer check below still gates the
+		// mutation itself.
 		resolved, ok := contextvalues.GetAuthContext(authedCtx)
-		if !ok || resolved == nil || resolved.ProjectID == nil || s.authz.Require(authedCtx, authz.Check{
-			Scope:        authz.ScopeOrgAdmin,
-			ResourceKind: "",
-			ResourceID:   resolved.ActiveOrganizationID,
-			Dimensions:   nil,
-		}) != nil {
+		if !ok || resolved == nil || resolved.ProjectID == nil || s.authz.Require(authedCtx, authz.Organization(resolved.ActiveOrganizationID).Administer()) != nil {
 			return oops.E(oops.CodeUnauthorized, err, "unauthorized access").LogError(authedCtx, s.logger)
 		}
 	}
@@ -301,20 +297,7 @@ func (s *Service) handleProxyRegister(w http.ResponseWriter, r *http.Request) er
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {
 		return oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.RequireAny(ctx,
-		authz.Check{
-			Scope:        authz.ScopeProjectWrite,
-			ResourceKind: "",
-			ResourceID:   authCtx.ProjectID.String(),
-			Dimensions:   nil,
-		},
-		authz.Check{
-			Scope:        authz.ScopeOrgAdmin,
-			ResourceKind: "",
-			ResourceID:   authCtx.ActiveOrganizationID,
-			Dimensions:   nil,
-		},
-	); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).WriteOrAdminister()); err != nil {
 		return err
 	}
 

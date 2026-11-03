@@ -168,13 +168,15 @@ func newTestServiceWithConfig(t *testing.T, cfg testServiceConfig) (context.Cont
 		prober = nil
 	}
 
+	engine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	svc := remotesessions.NewService(
 		logger,
 		tracerProvider,
 		testenv.NewMeterProvider(t),
 		conn,
 		sessionManager,
-		authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()),
+		engine,
+		authztest.NewParityClient(t, engine),
 		enc,
 		envEntries,
 		guardianPolicy,

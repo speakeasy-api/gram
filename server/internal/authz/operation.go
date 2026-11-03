@@ -163,6 +163,15 @@ func (p ProjectRef) PublishPlugin() Operation {
 	)
 }
 
+// WriteOrAdminister asks to change the project or to administer its
+// organization. A block on one alternative does not stop the other.
+func (p ProjectRef) WriteOrAdminister() Operation {
+	return newAlternatives("project", "write_or_administer",
+		p.Write(),
+		Organization(p.organizationID).Administer(),
+	)
+}
+
 // typedOperations lists one instance of every operation the typed
 // constructors build. NewClient rejects a registry that does not declare
 // each of them, so a constructor can never name a missing permission at
@@ -173,5 +182,6 @@ func typedOperations() []Operation {
 	return []Operation{
 		org.Read(), org.Administer(),
 		project.Read(), project.Write(), project.PublishPlugin(),
+		project.WriteOrAdminister(),
 	}
 }

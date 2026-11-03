@@ -48,6 +48,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
@@ -238,6 +239,10 @@ type ChallengeManager struct {
 	refresher *RefreshService
 	serverURL *url.URL
 
+	// authorization decides whether a workload's owner still reaches the
+	// project whose upstream credential the workload asks for.
+	authorization *authz.Client
+
 	// origins pins the redirect_uri and client identity URLs each client was
 	// registered with, independent of serverURL.
 	origins CallbackOrigins
@@ -334,6 +339,13 @@ func WithPrivateAuthorityValidator(validator PrivateAuthorityValidator) Challeng
 	return func(m *ChallengeManager) {
 		m.privateAuthorityValidator = validator
 	}
+}
+
+// WithAuthorization sets the authorization client that checks a workload
+// owner's live project access before the owner's upstream credential is
+// used. Without it, workload credential resolution fails closed.
+func WithAuthorization(client *authz.Client) ChallengeManagerOption {
+	return func(m *ChallengeManager) { m.authorization = client }
 }
 
 // WithRegistrationAuditLogger records automatic client registration rotations
