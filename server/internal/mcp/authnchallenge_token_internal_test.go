@@ -36,7 +36,7 @@ func TestWriteRefreshTokenReplayRejectsDifferentCacheKey(t *testing.T) {
 	r := httptest.NewRequest(http.MethodPost, "/mcp/test/token", nil)
 	err := service.writeRefreshTokenReplay(
 		t.Context(),
-nil,
+		nil,
 		w,
 		r,
 		endpoint,
@@ -60,7 +60,7 @@ func TestWriteRefreshTokenReplayRejectsExpiredCredentials(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
 	err := service.writeRefreshTokenReplay(
 		t.Context(),
-nil,
+		nil,
 		w,
 		r,
 		endpoint,
@@ -163,7 +163,7 @@ func TestWriteRefreshTokenReplayRecordsServedEvent(t *testing.T) {
 	logger := slog.New(slog.NewJSONHandler(&logs, nil))
 	err := service.writeRefreshTokenReplay(
 		t.Context(),
-nil,
+		nil,
 		w,
 		r,
 		endpoint,
