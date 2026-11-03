@@ -160,7 +160,7 @@ func (s *ServiceCore) RecordCompactedGeneration(ctx context.Context, projectID, 
 		return oops.E(oops.CodeUnexpected, err, "begin compaction transaction").LogError(ctx, s.logger, logAttrs...)
 	}
 	defer o11y.NoLogDefer(func() error { return tx.Rollback(ctx) })
-	if err := chatrepo.New(tx).LockChatForCompaction(ctx, threadRow.ChatID); err != nil {
+	if err := chatrepo.New(tx).LockChatForCompaction(ctx, chatrepo.LockChatForCompactionParams{ID: threadRow.ChatID, ProjectID: projectID}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock chat for compaction").LogError(ctx, s.logger, logAttrs...)
 	}
 	currentGen, err := chatrepo.New(tx).GetMaxGenerationForChat(ctx, chatrepo.GetMaxGenerationForChatParams{ChatID: threadRow.ChatID, ProjectID: projectID})

@@ -2051,7 +2051,7 @@ UPDATE mcp_endpoints SET deleted_at = clock_timestamp() WHERE mcp_server_id = @m
 
 -- name: SoftDeleteCustomDomainFixture :exec
 -- Test fixture: soft-deletes a custom domain under its endpoints.
-UPDATE custom_domains SET deleted_at = clock_timestamp() WHERE id = @id;
+UPDATE custom_domains SET deleted_at = clock_timestamp() WHERE id = @id AND organization_id = @organization_id;
 
 -- name: BackdateMCPEndpointBySlugFixture :exec
 -- Test fixture: makes one endpoint a day older than when it was created.

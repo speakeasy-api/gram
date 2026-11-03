@@ -4036,12 +4036,17 @@ func (q *Queries) ListUserFeedbackForChat(ctx context.Context, arg ListUserFeedb
 }
 
 const lockChatForCompaction = `-- name: LockChatForCompaction :exec
-SELECT 1 FROM chats WHERE id = $1 FOR UPDATE
+SELECT 1 FROM chats WHERE id = $1 AND project_id = $2 FOR UPDATE
 `
 
+type LockChatForCompactionParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
 // Serializes compaction writes for one chat. A missing chat is not an error.
-func (q *Queries) LockChatForCompaction(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, lockChatForCompaction, id)
+func (q *Queries) LockChatForCompaction(ctx context.Context, arg LockChatForCompactionParams) error {
+	_, err := q.db.Exec(ctx, lockChatForCompaction, arg.ID, arg.ProjectID)
 	return err
 }
 

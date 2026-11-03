@@ -167,8 +167,8 @@ type InsertExternalOAuthServerMetadataSourceFixtureParams struct {
 	AuthorizationServerIssuer pgtype.Text
 }
 
-// Test fixture: inserts any metadata/issuer combination, including ones the
-// source constraint rejects.
+// Test fixture: inserts the given metadata/issuer pair as-is, so constraint
+// tests can assert which combinations the source check accepts.
 func (q *Queries) InsertExternalOAuthServerMetadataSourceFixture(ctx context.Context, arg InsertExternalOAuthServerMetadataSourceFixtureParams) error {
 	_, err := q.db.Exec(ctx, insertExternalOAuthServerMetadataSourceFixture,
 		arg.ProjectID,

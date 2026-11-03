@@ -1301,22 +1301,6 @@ func (q *Queries) HasRoleDeliveryMembership(ctx context.Context, arg HasRoleDeli
 	return exists, err
 }
 
-const insertPluginAssignmentFixture = `-- name: InsertPluginAssignmentFixture :exec
-INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn) VALUES ($1, $2, $3)
-`
-
-type InsertPluginAssignmentFixtureParams struct {
-	PluginID       uuid.UUID
-	OrganizationID string
-	PrincipalUrn   string
-}
-
-// Test fixture: models a pre-existing assignment written outside the admission checks.
-func (q *Queries) InsertPluginAssignmentFixture(ctx context.Context, arg InsertPluginAssignmentFixtureParams) error {
-	_, err := q.db.Exec(ctx, insertPluginAssignmentFixture, arg.PluginID, arg.OrganizationID, arg.PrincipalUrn)
-	return err
-}
-
 const isDefaultProject = `-- name: IsDefaultProject :one
 SELECT (
   SELECT p.id

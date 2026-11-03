@@ -216,7 +216,7 @@ func TestGatewayPluginAttachmentWithEnabledGate(t *testing.T) {
 	require.Equal(t, oops.CodeConflict, privateAudience.Code)
 	require.ErrorIs(t, err, admission.ErrPrivateGatewayAudience)
 
-	err = pluginsrepo.New(ti.conn).InsertPluginAssignmentFixture(ctx, pluginsrepo.InsertPluginAssignmentFixtureParams{PluginID: uuid.MustParse(plugin.ID), OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: "*"})
+	err = testrepo.New(ti.conn).InsertPluginAssignmentFixture(ctx, testrepo.InsertPluginAssignmentFixtureParams{PluginID: uuid.MustParse(plugin.ID), OrganizationID: ac.ActiveOrganizationID, PrincipalUrn: "*"})
 	require.NoError(t, err)
 	_, err = ti.service.PublishPlugins(ctx, &gen.PublishPluginsPayload{})
 	require.ErrorIs(t, err, admission.ErrPrivateGatewayAudience)

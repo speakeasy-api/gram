@@ -930,17 +930,17 @@ func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrants
 	return items, nil
 }
 
-const getRemoteSessionRowJSONFixture = `-- name: GetRemoteSessionRowJSONFixture :one
-SELECT row_to_json(s)::text AS row_json FROM remote_sessions s WHERE s.id = $1
+const getRemoteSessionRowDigestFixture = `-- name: GetRemoteSessionRowDigestFixture :one
+SELECT md5(row_to_json(s)::text) AS row_digest FROM remote_sessions s WHERE s.id = $1
 `
 
-// Test fixture: the whole stored row, so a test can prove it was not touched
-// without reading any credential column into a typed field.
-func (q *Queries) GetRemoteSessionRowJSONFixture(ctx context.Context, id uuid.UUID) (string, error) {
-	row := q.db.QueryRow(ctx, getRemoteSessionRowJSONFixture, id)
-	var row_json string
-	err := row.Scan(&row_json)
-	return row_json, err
+// Test fixture: a digest of the whole stored row, so a test can prove it was
+// not touched without reading any credential value.
+func (q *Queries) GetRemoteSessionRowDigestFixture(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getRemoteSessionRowDigestFixture, id)
+	var row_digest string
+	err := row.Scan(&row_digest)
+	return row_digest, err
 }
 
 const insertChallengeResolutions = `-- name: InsertChallengeResolutions :many

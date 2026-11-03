@@ -1178,7 +1178,7 @@ func TestService_SetResourceAudience_AgentRestrictionOverridesBroadAllow(t *test
 		require.NoError(t, err)
 	}
 	// Capture the shared credential without logging it.
-	beforeSession, err := accessrepo.New(ti.conn).GetRemoteSessionRowJSONFixture(ctx, sessionID)
+	beforeSession, err := accessrepo.New(ti.conn).GetRemoteSessionRowDigestFixture(ctx, sessionID)
 	require.NoError(t, err)
 	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
 		ResourceKind: "mcp", ResourceID: serverID,
@@ -1195,7 +1195,7 @@ func TestService_SetResourceAudience_AgentRestrictionOverridesBroadAllow(t *test
 	require.NoError(t, err)
 	require.True(t, allowed)
 	// Server-local policy removal leaves shared upstream authority intact.
-	afterSession, err := accessrepo.New(ti.conn).GetRemoteSessionRowJSONFixture(ctx, sessionID)
+	afterSession, err := accessrepo.New(ti.conn).GetRemoteSessionRowDigestFixture(ctx, sessionID)
 	require.NoError(t, err)
 	require.Equal(t, beforeSession, afterSession, "shared upstream session must be unchanged")
 }

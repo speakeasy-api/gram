@@ -110,7 +110,7 @@ func TestAssistantServerDomainGate(t *testing.T) {
 			f.retirePlatformEndpoints(t)
 			f.addRemoteEndpoint(t, uuid.NullUUID{UUID: domainID, Valid: true}, "remote-on-domain")
 			if tc.drop {
-				err := assistantrepo.New(f.db).SoftDeleteCustomDomainFixture(t.Context(), domainID)
+				err := assistantrepo.New(f.db).SoftDeleteCustomDomainFixture(t.Context(), assistantrepo.SoftDeleteCustomDomainFixtureParams{ID: domainID, OrganizationID: "org-test"})
 				require.NoError(t, err)
 			}
 

@@ -2229,7 +2229,7 @@ WHERE id = @api_key_id AND project_id = @project_id;
 
 -- name: LockChatForCompaction :exec
 -- Serializes compaction writes for one chat. A missing chat is not an error.
-SELECT 1 FROM chats WHERE id = @id FOR UPDATE;
+SELECT 1 FROM chats WHERE id = @id AND project_id = @project_id FOR UPDATE;
 
 -- name: AcquireToolCallSummaryLock :exec
 -- Session-level: the caller must release it on the same connection.

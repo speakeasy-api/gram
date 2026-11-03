@@ -209,3 +209,15 @@ func (q *Queries) AdminSeedUpsertOrganization(ctx context.Context, arg AdminSeed
 	)
 	return err
 }
+
+const lockAdminSeedIdentities = `-- name: LockAdminSeedIdentities :exec
+LOCK TABLE public.organization_metadata, public.users,
+  public.organization_user_relationships IN SHARE ROW EXCLUSIVE MODE
+`
+
+// Blocks other writers to the local-only fixture tables, including inserts
+// into absent reserved IDs, until the transaction ends.
+func (q *Queries) LockAdminSeedIdentities(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, lockAdminSeedIdentities)
+	return err
+}

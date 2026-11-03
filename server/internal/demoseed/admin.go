@@ -136,9 +136,7 @@ func runAdminSeed(ctx context.Context, db *pgxpool.Pool, now time.Time) error {
 	// The advisory lock only serializes seeders. Lock the local-only fixture
 	// tables against other writers too, including inserts into currently absent
 	// reserved IDs, so ownership cannot change between validation and upsert.
-	// sqlc cannot express LOCK TABLE, so this one statement stays inline.
-	if _, err := tx.Exec(ctx, `LOCK TABLE public.organization_metadata, public.users,
- public.organization_user_relationships IN SHARE ROW EXCLUSIVE MODE`); err != nil {
+	if err := q.LockAdminSeedIdentities(ctx); err != nil {
 		return fmt.Errorf("lock admin seed identities: %w", err)
 	}
 	fixtures := adminSeedFixtures(now)

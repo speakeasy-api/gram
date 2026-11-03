@@ -5,6 +5,12 @@
 -- Serializes concurrent admin seed invocations for the transaction.
 SELECT pg_advisory_xact_lock(890001);
 
+-- name: LockAdminSeedIdentities :exec
+-- Blocks other writers to the local-only fixture tables, including inserts
+-- into absent reserved IDs, until the transaction ends.
+LOCK TABLE public.organization_metadata, public.users,
+  public.organization_user_relationships IN SHARE ROW EXCLUSIVE MODE;
+
 -- name: AdminSeedOrganizationCollision :one
 SELECT EXISTS (
  SELECT 1 FROM public.organization_metadata WHERE id= @organization_id::text

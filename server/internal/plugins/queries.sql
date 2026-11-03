@@ -1424,10 +1424,6 @@ UPDATE custom_domains SET verified = TRUE, activated = TRUE WHERE id = @id;
 -- Test fixture: gateway root endpoints are not supported by the public root setter yet.
 UPDATE mcp_endpoints SET is_domain_root = TRUE WHERE id = @id;
 
--- name: InsertPluginAssignmentFixture :exec
--- Test fixture: models a pre-existing assignment written outside the admission checks.
-INSERT INTO plugin_assignments (plugin_id, organization_id, principal_urn) VALUES (@plugin_id, @organization_id, @principal_urn);
-
 -- name: DeletePluginAssignmentFixture :exec
 DELETE FROM plugin_assignments WHERE plugin_id = @plugin_id AND principal_urn = @principal_urn;
 

@@ -5034,12 +5034,17 @@ func (q *Queries) SoftDeleteAssistantThread(ctx context.Context, arg SoftDeleteA
 }
 
 const softDeleteCustomDomainFixture = `-- name: SoftDeleteCustomDomainFixture :exec
-UPDATE custom_domains SET deleted_at = clock_timestamp() WHERE id = $1
+UPDATE custom_domains SET deleted_at = clock_timestamp() WHERE id = $1 AND organization_id = $2
 `
 
+type SoftDeleteCustomDomainFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
 // Test fixture: soft-deletes a custom domain under its endpoints.
-func (q *Queries) SoftDeleteCustomDomainFixture(ctx context.Context, id uuid.UUID) error {
-	_, err := q.db.Exec(ctx, softDeleteCustomDomainFixture, id)
+func (q *Queries) SoftDeleteCustomDomainFixture(ctx context.Context, arg SoftDeleteCustomDomainFixtureParams) error {
+	_, err := q.db.Exec(ctx, softDeleteCustomDomainFixture, arg.ID, arg.OrganizationID)
 	return err
 }
 
