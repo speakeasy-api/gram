@@ -224,9 +224,7 @@ func (s *Service) executeMetaCode(ctx context.Context, logger *slog.Logger, endp
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize code response").LogError(ctx, logger)
 	}
-	if execution.Error == nil {
-		outcome = "ok"
-	}
+	outcome = codemode.ExecutionOutcome(execution.Error)
 	return body, nil
 }
 

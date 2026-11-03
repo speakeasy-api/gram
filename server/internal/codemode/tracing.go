@@ -37,29 +37,33 @@ func recordRuntimeOutcome(span trace.Span, err error) (codes.Code, string) {
 	default:
 		outcome = "error"
 	}
+	return recordOutcome(span, outcome)
+}
+
+func recordOutcome(span trace.Span, outcome string) (codes.Code, string) {
 	span.SetAttributes(attr.CodeOutcome(outcome))
-	if err != nil && outcome != "pending" {
+	if outcome != "ok" && outcome != "pending" {
 		return codes.Error, outcome
 	}
 	return codes.Unset, ""
 }
 
-// runtimeExecutionError maps untrusted runner codes to the same bounded
-// categories as acquisition and transport errors, without recording the message.
-func runtimeExecutionError(failure *ExecutionError) error {
+// ExecutionOutcome classifies runner results for runtime spans and gateway
+// telemetry. Unknown codes remain a bounded error outcome; messages are omitted.
+func ExecutionOutcome(failure *ExecutionError) string {
 	if failure == nil {
-		return nil
+		return "ok"
 	}
 	switch failure.Code {
 	case "deadline_exceeded":
-		return context.DeadlineExceeded
+		return "timeout"
 	case "cancelled":
-		return context.Canceled
+		return "cancelled"
 	case "capacity_exceeded":
-		return ErrCapacity
+		return "capacity"
 	case "runtime_unavailable":
-		return ErrRuntimeUnavailable
+		return "unavailable"
 	default:
-		return errors.New("execution failed")
+		return "error"
 	}
 }

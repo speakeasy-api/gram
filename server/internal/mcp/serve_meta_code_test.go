@@ -482,20 +482,24 @@ func mintGatewayTestSession(t *testing.T, ctx context.Context, ti *testInstance,
 func TestCodeModeFailureReportsTiming(t *testing.T) {
 	t.Parallel()
 	for _, tc := range []struct {
-		name   string
-		code   string
-		value  json.RawMessage
-		status string
+		name    string
+		code    string
+		value   json.RawMessage
+		status  string
+		failure *codemode.ExecutionError
+		outcome string
 	}{
-		{name: "invalid source", code: "", value: json.RawMessage("2"), status: "error"},
-		{name: "serialize failure", code: "1+1", value: json.RawMessage("invalid-json"), status: "serialize code execution"},
+		{name: "invalid source", code: "", value: json.RawMessage("2"), status: "error", outcome: "error"},
+		{name: "serialize failure", code: "1+1", value: json.RawMessage("invalid-json"), status: "serialize code execution", outcome: "error"},
+		{name: "runner timeout", code: "1", value: json.RawMessage("null"), failure: &codemode.ExecutionError{Code: "deadline_exceeded", Message: "execution timed out"}, status: "timeout", outcome: "timeout"},
+		{name: "runner cancellation", code: "1", value: json.RawMessage("null"), failure: &codemode.ExecutionError{Code: "cancelled", Message: "execution cancelled"}, status: "cancelled", outcome: "cancelled"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			ctx, ti, recorder := newTestMCPServiceWithScanSpans(t)
 			fx := seedOrganizationGateway(t, ctx, ti)
 			executor := &recordingCodeExecutor{run: func(context.Context, string, codemode.Host) (*codemode.ExecutionResult, error) {
-				return &codemode.ExecutionResult{Value: tc.value, Timing: codemode.ExecutionTiming{Admission: 3 * time.Millisecond, Run: 12 * time.Millisecond}}, nil
+				return &codemode.ExecutionResult{Value: tc.value, Error: tc.failure, Timing: codemode.ExecutionTiming{Admission: 3 * time.Millisecond, Run: 12 * time.Millisecond}}, nil
 			}}
 			mcp.SetTestCodeExecutor(ti.service.Service, executor)
 			enableCodeMode(t, ctx, ti)
@@ -512,7 +516,7 @@ func TestCodeModeFailureReportsTiming(t *testing.T) {
 				found = true
 				require.Equal(t, codes.Error, span.Status().Code)
 				require.Contains(t, span.Status().Description, tc.status, "preserve LogError's span treatment")
-				require.Contains(t, span.Attributes(), attr.CodeOutcome("error"))
+				require.Contains(t, span.Attributes(), attr.CodeOutcome(tc.outcome))
 				for _, field := range span.Attributes() {
 					if field.Key == attr.CodeServerMSKey {
 						require.GreaterOrEqual(t, field.Value.AsInt64(), int64(0))
@@ -528,7 +532,7 @@ func TestCodeModeFailureReportsTiming(t *testing.T) {
 				}
 			}
 			require.Equal(t, 1, serverTimings, "every return records one server duration")
-			require.Contains(t, wide.Emit(requestCtx), attr.SlogCodeOutcome("error"))
+			require.Contains(t, wide.Emit(requestCtx), attr.SlogCodeOutcome(tc.outcome))
 		})
 	}
 }

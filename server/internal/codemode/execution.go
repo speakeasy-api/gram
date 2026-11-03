@@ -146,7 +146,7 @@ func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code stri
 	ctx, span := runtimeTracer(ctx).Start(ctx, "codemode.runner.run")
 	result := &ExecutionResult{Value: json.RawMessage("null"), Output: "", OutputTruncated: false, Error: nil, ToolCalls: []CallOutcome{}, Timing: ExecutionTiming{Admission: 0, Run: 0}}
 	defer span.End()
-	defer func() { span.SetStatus(recordRuntimeOutcome(span, runtimeExecutionError(result.Error))) }()
+	defer func() { span.SetStatus(recordOutcome(span, ExecutionOutcome(result.Error))) }()
 	fail := func(code, message string) { result.Error = &ExecutionError{Code: code, Message: message} }
 	if len(code) == 0 || len(code) > MaxSourceBytes || factory == nil {
 		fail("invalid_program", "code must contain 1 to 65536 UTF-8 bytes")
