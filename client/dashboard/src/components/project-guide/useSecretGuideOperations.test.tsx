@@ -1,4 +1,9 @@
-import { act, renderHook, waitFor } from "@testing-library/react";
+import {
+  act,
+  renderHook as baseRenderHook,
+  waitFor,
+} from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import type { RiskPolicy } from "@gram/client/models/components/riskpolicy.js";
 import type { RiskResult } from "@gram/client/models/components/riskresult.js";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
@@ -22,6 +27,7 @@ const rbac = vi.hoisted(() => ({
 
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "request-project",
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "request-project" }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "organization-id" }),
@@ -29,11 +35,6 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/hooks/useRBAC", () => ({ useRBAC: () => rbac }));
 vi.mock("@/contexts/Fetcher", () => ({
   useFetcher: () => ({ fetch: authFetch }),
-}));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    riskEvents: { href: () => "/projects/request-project/security/events" },
-  }),
 }));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@tanstack/react-query")>()),
@@ -145,6 +146,10 @@ beforeEach(() => {
 afterEach(() => {
   vi.useRealTimers();
 });
+
+function renderHook<Result>(callback: () => Result) {
+  return baseRenderHook(callback, { wrapper: MemoryRouter });
+}
 
 describe("useSecretGuideOperations", () => {
   it("starts without a selected client", () => {

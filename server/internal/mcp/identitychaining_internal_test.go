@@ -207,6 +207,32 @@ func TestMetaMemberChainer(t *testing.T) {
 	}
 }
 
+// A transient failure that is safe to repeat is retried within a listing,
+// unless the attempt's own context ended, since its time is already spent.
+func TestMetaMemberChainerRetriesSafeTransientFailuresWhileTheAttemptLives(t *testing.T) {
+	t.Parallel()
+	project := uuid.New()
+	gate := &metaGateContext{projectID: project, organizationID: chainingTestOrg, userSessionIssuerID: uuid.New()}
+	member := metaMember{slug: "docs", projectID: project, chosenClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
+	transient := identitychaining.Outcome{Stage: identitychaining.StageExchange, Reason: identitychaining.ReasonTransientFailure, Confidence: identitychaining.ConfidenceInferred, Retryable: true, Cached: false, Provider: ""}
+
+	for name, ended := range map[string]bool{"live attempt": false, "ended attempt": true} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, cancel := context.WithCancel(humanChainingContext(t, "user-1", chainingTestOrg))
+			defer cancel()
+			if ended {
+				cancel()
+			}
+			chain := chainingService(t, &recordingChainer{outcome: transient}).metaMemberChainer(gate, member, mcpidentity.KindUserSession, uuid.Nil)
+			_, err := chain(ctx, "https://docs.example.test/mcp")
+			failure, ok := errors.AsType[memberDiscoveryError](err)
+			require.True(t, ok, "%v", err)
+			require.Equal(t, !ended, failure.retryable)
+		})
+	}
+}
+
 func TestIdentityChainingRequest_TunnelRoutesByOwnIssuer(t *testing.T) {
 	t.Parallel()
 	project, issuer, tunnelIssuer := uuid.New(), uuid.New(), uuid.New()

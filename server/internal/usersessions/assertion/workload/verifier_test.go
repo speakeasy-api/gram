@@ -276,6 +276,17 @@ func TestVerifyAcceptsBearerTypes(t *testing.T) {
 	}
 }
 
+func TestVerifyRefusesConfirmationBoundAssertions(t *testing.T) {
+	t.Parallel()
+	for _, cnf := range []any{nil, map[string]any{"x5t#S256": "AAAA"}, map[string]any{"jkt": "AAAA"}, ""} {
+		signer := newTestSigner(t, "JWT")
+		verifier, _, guard, expect := newTestVerifier(t, signer)
+		_, err := verifier.Verify(t.Context(), signer.sign(t, testClaims(), map[string]any{"cnf": cnf}), expect)
+		require.Equal(t, ReasonTypeNotBearer, ReasonOf(err), "cnf %v", cnf)
+		require.Empty(t, guard.seen, "cnf %v must be refused before its identifier is spent", cnf)
+	}
+}
+
 func TestVerifyRefusesNonStringType(t *testing.T) {
 	t.Parallel()
 	signer := newTestSigner(t, 42)

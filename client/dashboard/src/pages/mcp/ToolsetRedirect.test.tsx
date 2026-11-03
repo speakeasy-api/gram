@@ -14,8 +14,11 @@ const mocks = vi.hoisted(() => ({
   servers: [] as unknown[],
 }));
 
+// Redirect targets resolve under their own org slug so the landing route can
+// never be confused with the toolset and server routes the redirect left.
 vi.mock("@/contexts/Sdk", () => ({
   useProjectSlugForRequests: () => "default",
+  useSlugs: () => ({ orgSlug: "landed", projectSlug: "default" }),
 }));
 vi.mock("@/hooks/toolTypes", () => ({
   useToolset: () => ({
@@ -40,31 +43,6 @@ vi.mock("@/components/page-layout", () => {
   (Page.Header as unknown as { Breadcrumbs: () => null }).Breadcrumbs = () =>
     null;
   return { Page };
-});
-vi.mock("@/routes", () => {
-  const tab = (name: string) => ({
-    href: (slug: string) => `/landed/${slug}/${name}`,
-  });
-  return {
-    useRoutes: () => ({
-      mcp: {
-        Link: ({ children }: { children: React.ReactNode }) => (
-          <a href="/mcp">{children}</a>
-        ),
-        details: {
-          overview: tab("overview"),
-          tools: tab("tools"),
-          resources: tab("resources"),
-          prompts: tab("prompts"),
-          inspect: tab("inspect"),
-          teamAccess: tab("team-access"),
-          guardrails: tab("guardrails"),
-          sessions: tab("sessions"),
-          settings: tab("settings"),
-        },
-      },
-    }),
-  };
 });
 
 import {
@@ -134,17 +112,26 @@ afterEach(cleanup);
 
 describe("ToolsetRedirectPage", () => {
   it.each([
-    ["", "/landed/my-server/overview"],
-    ["/overview", "/landed/my-server/overview"],
-    ["/tools", "/landed/my-server/tools"],
-    ["/resources", "/landed/my-server/resources"],
-    ["/prompts", "/landed/my-server/prompts"],
-    ["/authentication", "/landed/my-server/settings#authentication"],
-    ["/performance", "/landed/my-server/settings#performance"],
-    ["/team-access", "/landed/my-server/team-access"],
-    ["/sessions", "/landed/my-server/sessions"],
-    ["/settings", "/landed/my-server/settings"],
-    ["#authentication", "/landed/my-server/settings#authentication"],
+    ["", "/landed/projects/default/mcp/my-server/overview"],
+    ["/overview", "/landed/projects/default/mcp/my-server/overview"],
+    ["/tools", "/landed/projects/default/mcp/my-server/tools"],
+    ["/resources", "/landed/projects/default/mcp/my-server/resources"],
+    ["/prompts", "/landed/projects/default/mcp/my-server/prompts"],
+    [
+      "/authentication",
+      "/landed/projects/default/mcp/my-server/settings#authentication",
+    ],
+    [
+      "/performance",
+      "/landed/projects/default/mcp/my-server/settings#performance",
+    ],
+    ["/team-access", "/landed/projects/default/mcp/my-server/team-access"],
+    ["/sessions", "/landed/projects/default/mcp/my-server/sessions"],
+    ["/settings", "/landed/projects/default/mcp/my-server/settings"],
+    [
+      "#authentication",
+      "/landed/projects/default/mcp/my-server/settings#authentication",
+    ],
   ])("sends %s to %s", (suffix, target) => {
     visit(`/acme/projects/default/mcp/my-tools${suffix}`);
     expect(screen.getByTestId("landed").textContent).toBe(target);
@@ -153,7 +140,7 @@ describe("ToolsetRedirectPage", () => {
   it("keeps the query string", () => {
     visit("/acme/projects/default/mcp/my-tools/tools?q=search");
     expect(screen.getByTestId("landed").textContent).toBe(
-      "/landed/my-server/tools?q=search",
+      "/landed/projects/default/mcp/my-server/tools?q=search",
     );
   });
 
@@ -173,7 +160,9 @@ describe("ToolsetRedirectPage", () => {
       },
     ];
     visit("/acme/projects/default/mcp/my-tools/tools");
-    expect(screen.getByTestId("landed").textContent).toBe("/landed/host/tools");
+    expect(screen.getByTestId("landed").textContent).toBe(
+      "/landed/projects/default/mcp/host/tools",
+    );
   });
 
   it("says so when no server hosts the toolset", () => {
@@ -202,7 +191,7 @@ describe("ToolsetRedirectPage", () => {
     mocks.toolset = { ...TOOLSET, slug: "x" };
     visit("/acme/projects/default/mcp/x/tools");
     expect(screen.getByTestId("landed").textContent).toBe(
-      "/landed/my-server/tools",
+      "/landed/projects/default/mcp/my-server/tools",
     );
   });
 
@@ -243,9 +232,12 @@ describe("ToolsetRedirectPage", () => {
   });
 
   it.each([
-    ["", "/landed/my-server/overview"],
-    ["/tools?q=1", "/landed/my-server/tools?q=1"],
-    ["#performance", "/landed/my-server/settings#performance"],
+    ["", "/landed/projects/default/mcp/my-server/overview"],
+    ["/tools?q=1", "/landed/projects/default/mcp/my-server/tools?q=1"],
+    [
+      "#performance",
+      "/landed/projects/default/mcp/my-server/settings#performance",
+    ],
   ])("resolves the explicit toolset route %s", (suffix, target) => {
     visit(`/acme/projects/default/toolsets/my-tools${suffix}`);
     expect(screen.getByTestId("landed").textContent).toBe(target);
@@ -262,7 +254,7 @@ describe("ToolsetRedirectPage", () => {
     ];
     visit("/acme/projects/default/toolsets/my-tools/tools");
     expect(screen.getByTestId("landed").textContent).toBe(
-      "/landed/my-tools/tools",
+      "/landed/projects/default/mcp/my-tools/tools",
     );
   });
 });

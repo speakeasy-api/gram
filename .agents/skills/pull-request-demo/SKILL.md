@@ -30,7 +30,7 @@ Reviewers judge a change by how it fits its page: its position next to the exist
 
   Expect at least one row, every row reading `gram_account_type = 'enterprise'`. Two rows is normal, because your dev org and the demo org each own a `default` project. Run `mise run seed` only on zero rows or a non-enterprise tier.
 
-- Invoke Playwright only through `mise run playwright`. The task uses the repo configuration and installs Chromium on demand.
+- Invoke Playwright only through `mise run playwright`. The task uses the repo configuration and launches the system Google Chrome with its sandbox enabled. It does not install Chrome; if Chrome is missing, ask the user to install it.
 - Use `./tools/ffmpeg` for the trim, frame-extraction, and GIF steps. The PNG path needs no conversion.
 
 The login flow is credential-less: open the dashboard, click **Login** if redirected, and wait for `/speakeasy`. If the first load is blank after a fresh browser install, navigate to the URL again.

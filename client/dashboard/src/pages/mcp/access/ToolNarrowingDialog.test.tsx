@@ -79,3 +79,59 @@ describe("ToolNarrowingDialog", () => {
     expect(onSave).not.toHaveBeenCalled();
   });
 });
+
+it("keeps discovery retry available after searching for an unknown tool", async () => {
+  const user = userEvent.setup();
+  const retry = vi.fn<() => void>();
+  render(
+    <ToolNarrowingDialog
+      serverId="server-a"
+      serverName="Example server"
+      toolSource={{ status: "error", retry }}
+      tools={[]}
+      dispositions={[]}
+      pending={false}
+      onSave={vi.fn<ComponentProps<typeof ToolNarrowingDialog>["onSave"]>()}
+      onClose={vi.fn<() => void>()}
+    />,
+  );
+  const dialog = within(screen.getByRole("dialog"));
+  await user.click(dialog.getByRole("button", { name: "By tool" }));
+  await user.type(dialog.getByPlaceholderText("Search tools"), "unlisted_tool");
+  expect(dialog.getByText("Couldn't load this server's tools.")).toBeTruthy();
+  await user.click(dialog.getByRole("button", { name: "Retry" }));
+  expect(retry).toHaveBeenCalledOnce();
+});
+
+it("keeps loading discovery visible while a tool search is active", async () => {
+  const user = userEvent.setup();
+  const props: ComponentProps<typeof ToolNarrowingDialog> = {
+    serverId: "server-a",
+    serverName: "Example server",
+    tools: [],
+    dispositions: [],
+    pending: false,
+    onSave: vi.fn<ComponentProps<typeof ToolNarrowingDialog>["onSave"]>(),
+    onClose: vi.fn<() => void>(),
+  };
+  const { rerender } = render(
+    <ToolNarrowingDialog {...props} toolSource={{ status: "loading" }} />,
+  );
+  const dialog = within(screen.getByRole("dialog"));
+  await user.click(dialog.getByRole("button", { name: "By tool" }));
+  await user.type(dialog.getByPlaceholderText("Search tools"), "unlisted_tool");
+  expect(dialog.getByText("Loading tools…")).toBeTruthy();
+  expect(dialog.queryByText("No matching tools or servers")).toBeNull();
+
+  rerender(
+    <ToolNarrowingDialog
+      {...props}
+      catalog={catalog}
+      toolSource={{ status: "ready", tools: [] }}
+    />,
+  );
+  expect(dialog.queryByText("Loading tools…")).toBeNull();
+  expect(dialog.getByText("No matching tools or servers")).toBeTruthy();
+  expect(dialog.queryByRole("checkbox", { name: "read_records" })).toBeNull();
+  expect(dialog.queryByRole("checkbox", { name: "search_records" })).toBeNull();
+});

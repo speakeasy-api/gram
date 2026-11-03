@@ -614,6 +614,916 @@ WHERE d.organization_id = @organization_id
 ORDER BY d.id DESC
 LIMIT @page_limit;
 
+-- The fleet is every device the organization can see: each MDM device,
+-- classified as above, plus each agent machine no MDM inventory holds. It is
+-- what the Devices page lists, so an organization that never connects an MDM
+-- still sees its agents.
+--
+-- Agent machines no inventory holds come in two kinds:
+--
+--   agent_serial  a machine that reports its serial, from its heartbeat or a
+--                 state report; matched against inventory on serial, so it
+--                 merges into the MDM row whenever one exists
+--   agent_user    an agent that reports no serial; dropped when an MDM device
+--                 already counts its user through the email fallback
+--
+-- Both are only ever agent_active or agent_stale, and their policy_state uses
+-- the same CASE as an MDM row. ListFleetDevices and GetFleetCoverageCounts
+-- share the CTE between fleet:begin and fleet:end byte for byte, and the
+-- bucket and policy CASEs inside it match GetCoverageCounts; fleet_sql_test.go
+-- holds them to that. Rows are ordered by row_id, a UUIDv7 from whichever
+-- table the row comes from, so one cursor pages across both kinds.
+
+-- name: ListFleetDevices :many
+WITH
+-- fleet:begin
+-- Every MDM device, classified exactly as ListManagedDevices classifies it.
+-- via_email marks a device whose bucket came from its assigned user's email
+-- rather than its own serial, which is what lets agent_user below drop a
+-- serial-less agent the MDM row already counts.
+mdm AS (
+  SELECT
+      d.id AS row_id
+    , true AS in_inventory
+    , c.provider::text AS provider
+    , d.external_id::text AS external_id
+    , d.serial_number
+    , d.hostname
+    , d.os_name
+    , d.os_version
+    , d.user_email
+    , d.user_id
+    , d.mdm_last_check_in_at
+    , (CASE
+        WHEN @device_level::boolean AND (dads.id IS NOT NULL OR rpt.by_serial) THEN GREATEST(dads.last_seen_at, CASE WHEN rpt.by_serial THEN rpt.reported_at END)
+        ELSE GREATEST(das.last_seen_at, rpt.reported_at)
+      END)::timestamptz AS agent_last_seen_at
+    , cov.coverage_bucket::text AS coverage_bucket
+    , pol.policy_state::text AS policy_state
+    , (cov.coverage_bucket = 'agent_active' AND @device_level::boolean AND coalesce(GREATEST(dads.last_seen_at, CASE WHEN rpt.by_serial THEN rpt.reported_at END) >= @active_cutoff::timestamptz, false))::boolean AS device_attested
+    , (cov.coverage_bucket IN ('agent_active', 'agent_stale') AND NOT (@device_level::boolean AND (dads.id IS NOT NULL OR coalesce(rpt.by_serial, false))))::boolean AS via_email
+    , d.missing_since
+    , d.first_seen_at
+    , d.last_seen_at
+    , rpt.id AS report_id
+    , coalesce(rpt.by_serial, false)::boolean AS report_by_serial
+    , rpt.reported_at AS report_reported_at
+    , rpt.applied_etag AS report_applied_etag
+    , rpt.applied_at AS report_applied_at
+    , rpt.enforcement_halted AS report_enforcement_halted
+    , rpt.current_blocked AS report_current_blocked
+    , rpt.speakeasyd_version AS report_speakeasyd_version
+    , rpt.speakeasy_version AS report_speakeasy_version
+    , rpt.speakeasy_ui_version AS report_speakeasy_ui_version
+    , rpt.os AS report_os
+    , rpt.arch AS report_arch
+    , rpt.tools AS report_tools
+    , rpt.drift_counting_since AS report_drift_counting_since
+    , rpt.auto_update AS report_auto_update
+    , rpt.update_channel AS report_update_channel
+    , rpt.pinned_target AS report_pinned_target
+    , rpt.last_rollback_at AS report_last_rollback_at
+    , rpt.last_rollback_from AS report_last_rollback_from
+    , rpt.last_rollback_to AS report_last_rollback_to
+  FROM mdm_devices d
+  JOIN device_integration_configs c
+    ON c.id = d.device_integration_config_id
+   AND c.deleted IS FALSE
+  LEFT JOIN device_agent_syncs das
+    ON das.organization_id = d.organization_id
+   AND LOWER(das.email) = LOWER(d.user_email)
+  LEFT JOIN device_agent_device_syncs dads
+    ON dads.organization_id = d.organization_id
+   AND LOWER(dads.serial_number) = LOWER(d.serial_number)
+  -- The state report that answers for this device; see the header for which.
+  LEFT JOIN LATERAL (
+    SELECT
+        r.id
+      , r.email
+      , r.reported_at
+      , r.applied_etag
+      , r.applied_at
+      , r.enforcement_halted
+      , r.current_blocked
+      , r.speakeasyd_version
+      , r.speakeasy_version
+      , r.speakeasy_ui_version
+      , r.os
+      , r.arch
+      , r.tools
+      , r.drift_counting_since
+      , r.auto_update
+      , r.update_channel
+      , r.pinned_target
+      , r.last_rollback_at
+      , r.last_rollback_from
+      , r.last_rollback_to
+      , coalesce(@device_level::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number), false) AS by_serial
+    FROM device_agent_state_reports r
+    WHERE r.organization_id = d.organization_id
+      AND (
+        (@device_level::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number))
+        OR (NOT (@device_level::boolean AND dads.id IS NOT NULL) AND LOWER(r.email) = LOWER(d.user_email))
+      )
+    ORDER BY
+        coalesce(@device_level::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number), false) DESC
+      , coalesce(LOWER(r.email) = LOWER(d.user_email), false) DESC
+      , r.reported_at DESC
+    LIMIT 1
+  ) rpt ON TRUE
+  LEFT JOIN device_agent_syncs served
+    ON served.organization_id = d.organization_id
+   AND LOWER(served.email) = LOWER(rpt.email)
+  LEFT JOIN LATERAL (
+    SELECT 1 AS found
+    FROM device_agent_device_syncs o
+    WHERE o.organization_id = d.organization_id
+      AND LOWER(o.email) = LOWER(d.user_email)
+      AND LOWER(o.serial_number) IS DISTINCT FROM LOWER(d.serial_number)
+      AND o.last_seen_at >= @active_cutoff::timestamptz
+    LIMIT 1
+  ) other ON TRUE
+  CROSS JOIN LATERAL (
+    -- bucket:begin
+    SELECT CASE
+      WHEN d.missing_since IS NOT NULL THEN 'missing'
+      -- Device-level: this machine's own heartbeat or report answers for it, and
+      -- outranks everything email-based including no_email — a device the MDM
+      -- records with no assigned user is still legible when its own agent
+      -- reports in. GREATEST ignores the NULL of whichever signal is absent.
+      WHEN @device_level::boolean AND GREATEST(dads.last_seen_at, CASE WHEN rpt.by_serial THEN rpt.reported_at END) >= @active_cutoff::timestamptz THEN 'agent_active'
+      WHEN @device_level::boolean AND (dads.id IS NOT NULL OR rpt.by_serial) THEN 'agent_stale'
+      -- Device-level only, and it requires POSITIVE evidence: the assigned user
+      -- has a fresh heartbeat from a different serial-identified machine, so
+      -- this one is a real gap. Without that evidence we must NOT land here —
+      -- an agent that reports no serial is indistinguishable from one running
+      -- on another machine, and guessing "elsewhere" would tell an admin to
+      -- reinstall on a device already running the agent.
+      WHEN @device_level::boolean AND dads.id IS NULL AND other.found IS NOT NULL THEN 'agent_other_device'
+      -- Shared fallback, identical in both modes. This is what keeps the two
+      -- consistent: a device with only a user-level heartbeat stays
+      -- agent_active (the evidence push says the same thing, at "user"
+      -- attestation), so enabling device-level matching can never demote a
+      -- covered fleet to 0%. A serial-matched report returned above, so rpt
+      -- here is the assigned user's.
+      WHEN coalesce(d.user_email, '') = '' THEN 'no_email'
+      WHEN GREATEST(das.last_seen_at, rpt.reported_at) >= @active_cutoff::timestamptz THEN 'agent_active'
+      WHEN das.id IS NOT NULL OR rpt.id IS NOT NULL THEN 'agent_stale'
+      WHEN d.user_id IS NOT NULL THEN 'no_agent'
+      ELSE 'unresolved_email'
+    END AS coverage_bucket
+    -- bucket:end
+  ) cov
+  CROSS JOIN LATERAL (
+    -- policy:begin
+    SELECT CASE
+      WHEN cov.coverage_bucket <> 'agent_active' THEN NULL
+      WHEN rpt.id IS NULL OR rpt.reported_at < @active_cutoff::timestamptz THEN 'unreported'
+      WHEN rpt.enforcement_halted THEN 'halted'
+      WHEN rpt.applied_etag = served.served_etag THEN 'attested'
+      -- Includes a user the server has not served since it began recording
+      -- served etags; every poll records one, so that lasts one poll.
+      ELSE 'outdated'
+    END AS policy_state
+    -- policy:end
+  ) pol
+  WHERE d.organization_id = @organization_id
+)
+-- An agent machine that reports its serial, when no MDM inventory holds that
+-- serial. It is one row however many people use it: the heartbeat's user
+-- answers for it, as the assigned user does on a shared MDM device. Its id is
+-- the oldest of its heartbeat and report rows, so it holds still as the other
+-- one arrives.
+, agent_serial AS (
+  SELECT
+      LEAST(dads.id, fr.id) AS row_id
+    , false AS in_inventory
+    , NULL::text AS provider
+    , NULL::text AS external_id
+    , coalesce(dads.serial_number, rpt.serial_number) AS serial_number
+    , coalesce(dads.hostname, rpt.hostname) AS hostname
+    , NULL::text AS os_name
+    , NULL::text AS os_version
+    , coalesce(dads.email, rpt.email) AS user_email
+    , mem.id AS user_id
+    , NULL::timestamptz AS mdm_last_check_in_at
+    , GREATEST(dads.last_seen_at, rpt.reported_at)::timestamptz AS agent_last_seen_at
+    , cov.coverage_bucket::text AS coverage_bucket
+    , pol.policy_state::text AS policy_state
+    , (cov.coverage_bucket = 'agent_active')::boolean AS device_attested
+    , false AS via_email
+    , NULL::timestamptz AS missing_since
+    , LEAST(dads.first_seen_at, fr.created_at)::timestamptz AS first_seen_at
+    , GREATEST(dads.last_seen_at, rpt.reported_at)::timestamptz AS last_seen_at
+    , rpt.id AS report_id
+    , true AS report_by_serial
+    , rpt.reported_at AS report_reported_at
+    , rpt.applied_etag AS report_applied_etag
+    , rpt.applied_at AS report_applied_at
+    , rpt.enforcement_halted AS report_enforcement_halted
+    , rpt.current_blocked AS report_current_blocked
+    , rpt.speakeasyd_version AS report_speakeasyd_version
+    , rpt.speakeasy_version AS report_speakeasy_version
+    , rpt.speakeasy_ui_version AS report_speakeasy_ui_version
+    , rpt.os AS report_os
+    , rpt.arch AS report_arch
+    , rpt.tools AS report_tools
+    , rpt.drift_counting_since AS report_drift_counting_since
+    , rpt.auto_update AS report_auto_update
+    , rpt.update_channel AS report_update_channel
+    , rpt.pinned_target AS report_pinned_target
+    , rpt.last_rollback_at AS report_last_rollback_at
+    , rpt.last_rollback_from AS report_last_rollback_from
+    , rpt.last_rollback_to AS report_last_rollback_to
+  FROM (
+    SELECT LOWER(s.serial_number) AS serial
+    FROM device_agent_device_syncs s
+    WHERE s.organization_id = @organization_id
+    UNION
+    SELECT LOWER(s.serial_number) AS serial
+    FROM device_agent_state_reports s
+    WHERE s.organization_id = @organization_id
+      AND s.serial_number IS NOT NULL
+  ) m
+  LEFT JOIN device_agent_device_syncs dads
+    ON dads.organization_id = @organization_id
+   AND LOWER(dads.serial_number) = m.serial
+  LEFT JOIN LATERAL (
+    SELECT r.id, r.created_at
+    FROM device_agent_state_reports r
+    WHERE r.organization_id = @organization_id
+      AND LOWER(r.serial_number) = m.serial
+    ORDER BY r.id
+    LIMIT 1
+  ) fr ON TRUE
+  -- Prefers the heartbeat's user's daemon on a shared machine, then the latest.
+  LEFT JOIN LATERAL (
+    SELECT r.*
+    FROM device_agent_state_reports r
+    WHERE r.organization_id = @organization_id
+      AND LOWER(r.serial_number) = m.serial
+    ORDER BY
+        coalesce(LOWER(r.email) = LOWER(dads.email), false) DESC
+      , r.reported_at DESC
+    LIMIT 1
+  ) rpt ON TRUE
+  LEFT JOIN device_agent_syncs served
+    ON served.organization_id = @organization_id
+   AND LOWER(served.email) = LOWER(rpt.email)
+  LEFT JOIN LATERAL (
+    SELECT u.id
+    FROM users u
+    JOIN organization_user_relationships our
+      ON our.user_id = u.id
+    WHERE our.organization_id = @organization_id
+      AND our.deleted IS FALSE
+      AND LOWER(u.email) = LOWER(coalesce(dads.email, rpt.email))
+      AND u.deleted_at IS NULL
+    ORDER BY u.id
+    LIMIT 1
+  ) mem ON TRUE
+  CROSS JOIN LATERAL (
+    SELECT CASE
+      WHEN GREATEST(dads.last_seen_at, rpt.reported_at) >= @active_cutoff::timestamptz THEN 'agent_active'
+      ELSE 'agent_stale'
+    END AS coverage_bucket
+  ) cov
+  CROSS JOIN LATERAL (
+    -- policy:begin
+    SELECT CASE
+      WHEN cov.coverage_bucket <> 'agent_active' THEN NULL
+      WHEN rpt.id IS NULL OR rpt.reported_at < @active_cutoff::timestamptz THEN 'unreported'
+      WHEN rpt.enforcement_halted THEN 'halted'
+      WHEN rpt.applied_etag = served.served_etag THEN 'attested'
+      -- Includes a user the server has not served since it began recording
+      -- served etags; every poll records one, so that lasts one poll.
+      ELSE 'outdated'
+    END AS policy_state
+    -- policy:end
+  ) pol
+  -- A missing MDM row still holds its serial, so a retired device keeps one
+  -- row rather than reappearing as an agent-only machine.
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM mdm_devices d
+    JOIN device_integration_configs c
+      ON c.id = d.device_integration_config_id
+     AND c.deleted IS FALSE
+    WHERE d.organization_id = @organization_id
+      AND LOWER(d.serial_number) = m.serial
+  )
+)
+-- An agent that reports no serial: a report sent without one, or a user's
+-- heartbeat with no serial-reporting machine behind it, from agents that
+-- predate serial reporting. Dropped when an MDM device already counts that
+-- user through the email fallback, so one agent is never two rows.
+, agent_user AS (
+  SELECT
+      LEAST(rpt.id, das.id) AS row_id
+    , false AS in_inventory
+    , NULL::text AS provider
+    , NULL::text AS external_id
+    , NULL::text AS serial_number
+    , rpt.hostname
+    , NULL::text AS os_name
+    , NULL::text AS os_version
+    , coalesce(das.email, rpt.email) AS user_email
+    , mem.id AS user_id
+    , NULL::timestamptz AS mdm_last_check_in_at
+    , GREATEST(das.last_seen_at, rpt.reported_at)::timestamptz AS agent_last_seen_at
+    , cov.coverage_bucket::text AS coverage_bucket
+    , pol.policy_state::text AS policy_state
+    , false AS device_attested
+    , false AS via_email
+    , NULL::timestamptz AS missing_since
+    , LEAST(das.first_seen_at, rpt.created_at)::timestamptz AS first_seen_at
+    , GREATEST(das.last_seen_at, rpt.reported_at)::timestamptz AS last_seen_at
+    , rpt.id AS report_id
+    , false AS report_by_serial
+    , rpt.reported_at AS report_reported_at
+    , rpt.applied_etag AS report_applied_etag
+    , rpt.applied_at AS report_applied_at
+    , rpt.enforcement_halted AS report_enforcement_halted
+    , rpt.current_blocked AS report_current_blocked
+    , rpt.speakeasyd_version AS report_speakeasyd_version
+    , rpt.speakeasy_version AS report_speakeasy_version
+    , rpt.speakeasy_ui_version AS report_speakeasy_ui_version
+    , rpt.os AS report_os
+    , rpt.arch AS report_arch
+    , rpt.tools AS report_tools
+    , rpt.drift_counting_since AS report_drift_counting_since
+    , rpt.auto_update AS report_auto_update
+    , rpt.update_channel AS report_update_channel
+    , rpt.pinned_target AS report_pinned_target
+    , rpt.last_rollback_at AS report_last_rollback_at
+    , rpt.last_rollback_from AS report_last_rollback_from
+    , rpt.last_rollback_to AS report_last_rollback_to
+  FROM (
+    SELECT LOWER(s.email) AS email
+    FROM device_agent_state_reports s
+    WHERE s.organization_id = @organization_id
+      AND s.serial_number IS NULL
+    UNION
+    SELECT LOWER(a.email) AS email
+    FROM device_agent_syncs a
+    WHERE a.organization_id = @organization_id
+      AND NOT EXISTS (
+        SELECT 1
+        FROM device_agent_device_syncs s
+        WHERE s.organization_id = @organization_id
+          AND LOWER(s.email) = LOWER(a.email)
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM device_agent_state_reports s
+        WHERE s.organization_id = @organization_id
+          AND s.serial_number IS NOT NULL
+          AND LOWER(s.email) = LOWER(a.email)
+      )
+  ) m
+  LEFT JOIN device_agent_syncs das
+    ON das.organization_id = @organization_id
+   AND LOWER(das.email) = m.email
+  -- At most one: reports are unique per (serial, email), NULL serials alike.
+  LEFT JOIN device_agent_state_reports rpt
+    ON rpt.organization_id = @organization_id
+   AND rpt.serial_number IS NULL
+   AND LOWER(rpt.email) = m.email
+  LEFT JOIN device_agent_syncs served
+    ON served.organization_id = @organization_id
+   AND LOWER(served.email) = m.email
+  LEFT JOIN LATERAL (
+    SELECT u.id
+    FROM users u
+    JOIN organization_user_relationships our
+      ON our.user_id = u.id
+    WHERE our.organization_id = @organization_id
+      AND our.deleted IS FALSE
+      AND LOWER(u.email) = m.email
+      AND u.deleted_at IS NULL
+    ORDER BY u.id
+    LIMIT 1
+  ) mem ON TRUE
+  CROSS JOIN LATERAL (
+    SELECT CASE
+      WHEN GREATEST(das.last_seen_at, rpt.reported_at) >= @active_cutoff::timestamptz THEN 'agent_active'
+      ELSE 'agent_stale'
+    END AS coverage_bucket
+  ) cov
+  CROSS JOIN LATERAL (
+    -- policy:begin
+    SELECT CASE
+      WHEN cov.coverage_bucket <> 'agent_active' THEN NULL
+      WHEN rpt.id IS NULL OR rpt.reported_at < @active_cutoff::timestamptz THEN 'unreported'
+      WHEN rpt.enforcement_halted THEN 'halted'
+      WHEN rpt.applied_etag = served.served_etag THEN 'attested'
+      -- Includes a user the server has not served since it began recording
+      -- served etags; every poll records one, so that lasts one poll.
+      ELSE 'outdated'
+    END AS policy_state
+    -- policy:end
+  ) pol
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM mdm
+    WHERE mdm.via_email
+      AND LOWER(mdm.user_email) = m.email
+  )
+)
+, fleet AS (
+  SELECT * FROM mdm
+  UNION ALL
+  SELECT * FROM agent_serial
+  UNION ALL
+  SELECT * FROM agent_user
+)
+-- fleet:end
+-- Empty rather than NULL for the MDM-only text columns and policy_state, and
+-- has_report rather than the report id: the union's first arm sets sqlc's
+-- types, so a column only the agent arms leave NULL has to be coalesced here.
+SELECT
+    f.row_id
+  , f.in_inventory
+  , coalesce(f.provider, '')::text AS provider
+  , coalesce(f.external_id, '')::text AS external_id
+  , f.serial_number
+  , f.hostname
+  , f.os_name
+  , f.os_version
+  , f.user_email
+  , f.user_id
+  , f.mdm_last_check_in_at
+  , f.agent_last_seen_at
+  , f.coverage_bucket
+  , coalesce(f.policy_state, '')::text AS policy_state
+  , f.missing_since
+  , f.first_seen_at
+  , f.last_seen_at
+  , (f.report_id IS NOT NULL)::boolean AS has_report
+  , f.report_by_serial
+  , f.report_reported_at
+  , f.report_applied_etag
+  , f.report_applied_at
+  , coalesce(f.report_enforcement_halted, false)::boolean AS report_enforcement_halted
+  , coalesce(f.report_current_blocked, false)::boolean AS report_current_blocked
+  , f.report_speakeasyd_version
+  , f.report_speakeasy_version
+  , f.report_speakeasy_ui_version
+  , f.report_os
+  , f.report_arch
+  , f.report_tools
+  , f.report_drift_counting_since
+  , f.report_auto_update
+  , f.report_update_channel
+  , f.report_pinned_target
+  , f.report_last_rollback_at
+  , f.report_last_rollback_from
+  , f.report_last_rollback_to
+FROM fleet f
+WHERE (sqlc.narg('provider')::text IS NULL OR f.provider = sqlc.narg('provider')::text)
+  AND (sqlc.narg('in_inventory')::boolean IS NULL OR f.in_inventory = sqlc.narg('in_inventory')::boolean)
+  AND (sqlc.narg('cursor_id')::uuid IS NULL OR f.row_id < sqlc.narg('cursor_id')::uuid)
+  AND (sqlc.narg('bucket')::text IS NULL OR sqlc.narg('bucket')::text = f.coverage_bucket)
+  AND (sqlc.narg('policy_state')::text IS NULL OR sqlc.narg('policy_state')::text = f.policy_state)
+  -- One person's devices, with both legs for the reason ListManagedDevices
+  -- gives.
+  AND (
+    (COALESCE(cardinality(@user_ids::text[]), 0) = 0 AND COALESCE(cardinality(@user_emails::text[]), 0) = 0)
+    OR f.user_id = ANY(@user_ids::text[])
+    OR LOWER(f.user_email) = ANY(ARRAY(SELECT LOWER(e) FROM unnest(@user_emails::text[]) AS e))
+  )
+ORDER BY f.row_id DESC
+LIMIT @page_limit;
+
+-- name: GetFleetCoverageCounts :one
+WITH
+-- fleet:begin
+-- Every MDM device, classified exactly as ListManagedDevices classifies it.
+-- via_email marks a device whose bucket came from its assigned user's email
+-- rather than its own serial, which is what lets agent_user below drop a
+-- serial-less agent the MDM row already counts.
+mdm AS (
+  SELECT
+      d.id AS row_id
+    , true AS in_inventory
+    , c.provider::text AS provider
+    , d.external_id::text AS external_id
+    , d.serial_number
+    , d.hostname
+    , d.os_name
+    , d.os_version
+    , d.user_email
+    , d.user_id
+    , d.mdm_last_check_in_at
+    , (CASE
+        WHEN @device_level::boolean AND (dads.id IS NOT NULL OR rpt.by_serial) THEN GREATEST(dads.last_seen_at, CASE WHEN rpt.by_serial THEN rpt.reported_at END)
+        ELSE GREATEST(das.last_seen_at, rpt.reported_at)
+      END)::timestamptz AS agent_last_seen_at
+    , cov.coverage_bucket::text AS coverage_bucket
+    , pol.policy_state::text AS policy_state
+    , (cov.coverage_bucket = 'agent_active' AND @device_level::boolean AND coalesce(GREATEST(dads.last_seen_at, CASE WHEN rpt.by_serial THEN rpt.reported_at END) >= @active_cutoff::timestamptz, false))::boolean AS device_attested
+    , (cov.coverage_bucket IN ('agent_active', 'agent_stale') AND NOT (@device_level::boolean AND (dads.id IS NOT NULL OR coalesce(rpt.by_serial, false))))::boolean AS via_email
+    , d.missing_since
+    , d.first_seen_at
+    , d.last_seen_at
+    , rpt.id AS report_id
+    , coalesce(rpt.by_serial, false)::boolean AS report_by_serial
+    , rpt.reported_at AS report_reported_at
+    , rpt.applied_etag AS report_applied_etag
+    , rpt.applied_at AS report_applied_at
+    , rpt.enforcement_halted AS report_enforcement_halted
+    , rpt.current_blocked AS report_current_blocked
+    , rpt.speakeasyd_version AS report_speakeasyd_version
+    , rpt.speakeasy_version AS report_speakeasy_version
+    , rpt.speakeasy_ui_version AS report_speakeasy_ui_version
+    , rpt.os AS report_os
+    , rpt.arch AS report_arch
+    , rpt.tools AS report_tools
+    , rpt.drift_counting_since AS report_drift_counting_since
+    , rpt.auto_update AS report_auto_update
+    , rpt.update_channel AS report_update_channel
+    , rpt.pinned_target AS report_pinned_target
+    , rpt.last_rollback_at AS report_last_rollback_at
+    , rpt.last_rollback_from AS report_last_rollback_from
+    , rpt.last_rollback_to AS report_last_rollback_to
+  FROM mdm_devices d
+  JOIN device_integration_configs c
+    ON c.id = d.device_integration_config_id
+   AND c.deleted IS FALSE
+  LEFT JOIN device_agent_syncs das
+    ON das.organization_id = d.organization_id
+   AND LOWER(das.email) = LOWER(d.user_email)
+  LEFT JOIN device_agent_device_syncs dads
+    ON dads.organization_id = d.organization_id
+   AND LOWER(dads.serial_number) = LOWER(d.serial_number)
+  -- The state report that answers for this device; see the header for which.
+  LEFT JOIN LATERAL (
+    SELECT
+        r.id
+      , r.email
+      , r.reported_at
+      , r.applied_etag
+      , r.applied_at
+      , r.enforcement_halted
+      , r.current_blocked
+      , r.speakeasyd_version
+      , r.speakeasy_version
+      , r.speakeasy_ui_version
+      , r.os
+      , r.arch
+      , r.tools
+      , r.drift_counting_since
+      , r.auto_update
+      , r.update_channel
+      , r.pinned_target
+      , r.last_rollback_at
+      , r.last_rollback_from
+      , r.last_rollback_to
+      , coalesce(@device_level::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number), false) AS by_serial
+    FROM device_agent_state_reports r
+    WHERE r.organization_id = d.organization_id
+      AND (
+        (@device_level::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number))
+        OR (NOT (@device_level::boolean AND dads.id IS NOT NULL) AND LOWER(r.email) = LOWER(d.user_email))
+      )
+    ORDER BY
+        coalesce(@device_level::boolean AND LOWER(r.serial_number) = LOWER(d.serial_number), false) DESC
+      , coalesce(LOWER(r.email) = LOWER(d.user_email), false) DESC
+      , r.reported_at DESC
+    LIMIT 1
+  ) rpt ON TRUE
+  LEFT JOIN device_agent_syncs served
+    ON served.organization_id = d.organization_id
+   AND LOWER(served.email) = LOWER(rpt.email)
+  LEFT JOIN LATERAL (
+    SELECT 1 AS found
+    FROM device_agent_device_syncs o
+    WHERE o.organization_id = d.organization_id
+      AND LOWER(o.email) = LOWER(d.user_email)
+      AND LOWER(o.serial_number) IS DISTINCT FROM LOWER(d.serial_number)
+      AND o.last_seen_at >= @active_cutoff::timestamptz
+    LIMIT 1
+  ) other ON TRUE
+  CROSS JOIN LATERAL (
+    -- bucket:begin
+    SELECT CASE
+      WHEN d.missing_since IS NOT NULL THEN 'missing'
+      -- Device-level: this machine's own heartbeat or report answers for it, and
+      -- outranks everything email-based including no_email — a device the MDM
+      -- records with no assigned user is still legible when its own agent
+      -- reports in. GREATEST ignores the NULL of whichever signal is absent.
+      WHEN @device_level::boolean AND GREATEST(dads.last_seen_at, CASE WHEN rpt.by_serial THEN rpt.reported_at END) >= @active_cutoff::timestamptz THEN 'agent_active'
+      WHEN @device_level::boolean AND (dads.id IS NOT NULL OR rpt.by_serial) THEN 'agent_stale'
+      -- Device-level only, and it requires POSITIVE evidence: the assigned user
+      -- has a fresh heartbeat from a different serial-identified machine, so
+      -- this one is a real gap. Without that evidence we must NOT land here —
+      -- an agent that reports no serial is indistinguishable from one running
+      -- on another machine, and guessing "elsewhere" would tell an admin to
+      -- reinstall on a device already running the agent.
+      WHEN @device_level::boolean AND dads.id IS NULL AND other.found IS NOT NULL THEN 'agent_other_device'
+      -- Shared fallback, identical in both modes. This is what keeps the two
+      -- consistent: a device with only a user-level heartbeat stays
+      -- agent_active (the evidence push says the same thing, at "user"
+      -- attestation), so enabling device-level matching can never demote a
+      -- covered fleet to 0%. A serial-matched report returned above, so rpt
+      -- here is the assigned user's.
+      WHEN coalesce(d.user_email, '') = '' THEN 'no_email'
+      WHEN GREATEST(das.last_seen_at, rpt.reported_at) >= @active_cutoff::timestamptz THEN 'agent_active'
+      WHEN das.id IS NOT NULL OR rpt.id IS NOT NULL THEN 'agent_stale'
+      WHEN d.user_id IS NOT NULL THEN 'no_agent'
+      ELSE 'unresolved_email'
+    END AS coverage_bucket
+    -- bucket:end
+  ) cov
+  CROSS JOIN LATERAL (
+    -- policy:begin
+    SELECT CASE
+      WHEN cov.coverage_bucket <> 'agent_active' THEN NULL
+      WHEN rpt.id IS NULL OR rpt.reported_at < @active_cutoff::timestamptz THEN 'unreported'
+      WHEN rpt.enforcement_halted THEN 'halted'
+      WHEN rpt.applied_etag = served.served_etag THEN 'attested'
+      -- Includes a user the server has not served since it began recording
+      -- served etags; every poll records one, so that lasts one poll.
+      ELSE 'outdated'
+    END AS policy_state
+    -- policy:end
+  ) pol
+  WHERE d.organization_id = @organization_id
+)
+-- An agent machine that reports its serial, when no MDM inventory holds that
+-- serial. It is one row however many people use it: the heartbeat's user
+-- answers for it, as the assigned user does on a shared MDM device. Its id is
+-- the oldest of its heartbeat and report rows, so it holds still as the other
+-- one arrives.
+, agent_serial AS (
+  SELECT
+      LEAST(dads.id, fr.id) AS row_id
+    , false AS in_inventory
+    , NULL::text AS provider
+    , NULL::text AS external_id
+    , coalesce(dads.serial_number, rpt.serial_number) AS serial_number
+    , coalesce(dads.hostname, rpt.hostname) AS hostname
+    , NULL::text AS os_name
+    , NULL::text AS os_version
+    , coalesce(dads.email, rpt.email) AS user_email
+    , mem.id AS user_id
+    , NULL::timestamptz AS mdm_last_check_in_at
+    , GREATEST(dads.last_seen_at, rpt.reported_at)::timestamptz AS agent_last_seen_at
+    , cov.coverage_bucket::text AS coverage_bucket
+    , pol.policy_state::text AS policy_state
+    , (cov.coverage_bucket = 'agent_active')::boolean AS device_attested
+    , false AS via_email
+    , NULL::timestamptz AS missing_since
+    , LEAST(dads.first_seen_at, fr.created_at)::timestamptz AS first_seen_at
+    , GREATEST(dads.last_seen_at, rpt.reported_at)::timestamptz AS last_seen_at
+    , rpt.id AS report_id
+    , true AS report_by_serial
+    , rpt.reported_at AS report_reported_at
+    , rpt.applied_etag AS report_applied_etag
+    , rpt.applied_at AS report_applied_at
+    , rpt.enforcement_halted AS report_enforcement_halted
+    , rpt.current_blocked AS report_current_blocked
+    , rpt.speakeasyd_version AS report_speakeasyd_version
+    , rpt.speakeasy_version AS report_speakeasy_version
+    , rpt.speakeasy_ui_version AS report_speakeasy_ui_version
+    , rpt.os AS report_os
+    , rpt.arch AS report_arch
+    , rpt.tools AS report_tools
+    , rpt.drift_counting_since AS report_drift_counting_since
+    , rpt.auto_update AS report_auto_update
+    , rpt.update_channel AS report_update_channel
+    , rpt.pinned_target AS report_pinned_target
+    , rpt.last_rollback_at AS report_last_rollback_at
+    , rpt.last_rollback_from AS report_last_rollback_from
+    , rpt.last_rollback_to AS report_last_rollback_to
+  FROM (
+    SELECT LOWER(s.serial_number) AS serial
+    FROM device_agent_device_syncs s
+    WHERE s.organization_id = @organization_id
+    UNION
+    SELECT LOWER(s.serial_number) AS serial
+    FROM device_agent_state_reports s
+    WHERE s.organization_id = @organization_id
+      AND s.serial_number IS NOT NULL
+  ) m
+  LEFT JOIN device_agent_device_syncs dads
+    ON dads.organization_id = @organization_id
+   AND LOWER(dads.serial_number) = m.serial
+  LEFT JOIN LATERAL (
+    SELECT r.id, r.created_at
+    FROM device_agent_state_reports r
+    WHERE r.organization_id = @organization_id
+      AND LOWER(r.serial_number) = m.serial
+    ORDER BY r.id
+    LIMIT 1
+  ) fr ON TRUE
+  -- Prefers the heartbeat's user's daemon on a shared machine, then the latest.
+  LEFT JOIN LATERAL (
+    SELECT r.*
+    FROM device_agent_state_reports r
+    WHERE r.organization_id = @organization_id
+      AND LOWER(r.serial_number) = m.serial
+    ORDER BY
+        coalesce(LOWER(r.email) = LOWER(dads.email), false) DESC
+      , r.reported_at DESC
+    LIMIT 1
+  ) rpt ON TRUE
+  LEFT JOIN device_agent_syncs served
+    ON served.organization_id = @organization_id
+   AND LOWER(served.email) = LOWER(rpt.email)
+  LEFT JOIN LATERAL (
+    SELECT u.id
+    FROM users u
+    JOIN organization_user_relationships our
+      ON our.user_id = u.id
+    WHERE our.organization_id = @organization_id
+      AND our.deleted IS FALSE
+      AND LOWER(u.email) = LOWER(coalesce(dads.email, rpt.email))
+      AND u.deleted_at IS NULL
+    ORDER BY u.id
+    LIMIT 1
+  ) mem ON TRUE
+  CROSS JOIN LATERAL (
+    SELECT CASE
+      WHEN GREATEST(dads.last_seen_at, rpt.reported_at) >= @active_cutoff::timestamptz THEN 'agent_active'
+      ELSE 'agent_stale'
+    END AS coverage_bucket
+  ) cov
+  CROSS JOIN LATERAL (
+    -- policy:begin
+    SELECT CASE
+      WHEN cov.coverage_bucket <> 'agent_active' THEN NULL
+      WHEN rpt.id IS NULL OR rpt.reported_at < @active_cutoff::timestamptz THEN 'unreported'
+      WHEN rpt.enforcement_halted THEN 'halted'
+      WHEN rpt.applied_etag = served.served_etag THEN 'attested'
+      -- Includes a user the server has not served since it began recording
+      -- served etags; every poll records one, so that lasts one poll.
+      ELSE 'outdated'
+    END AS policy_state
+    -- policy:end
+  ) pol
+  -- A missing MDM row still holds its serial, so a retired device keeps one
+  -- row rather than reappearing as an agent-only machine.
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM mdm_devices d
+    JOIN device_integration_configs c
+      ON c.id = d.device_integration_config_id
+     AND c.deleted IS FALSE
+    WHERE d.organization_id = @organization_id
+      AND LOWER(d.serial_number) = m.serial
+  )
+)
+-- An agent that reports no serial: a report sent without one, or a user's
+-- heartbeat with no serial-reporting machine behind it, from agents that
+-- predate serial reporting. Dropped when an MDM device already counts that
+-- user through the email fallback, so one agent is never two rows.
+, agent_user AS (
+  SELECT
+      LEAST(rpt.id, das.id) AS row_id
+    , false AS in_inventory
+    , NULL::text AS provider
+    , NULL::text AS external_id
+    , NULL::text AS serial_number
+    , rpt.hostname
+    , NULL::text AS os_name
+    , NULL::text AS os_version
+    , coalesce(das.email, rpt.email) AS user_email
+    , mem.id AS user_id
+    , NULL::timestamptz AS mdm_last_check_in_at
+    , GREATEST(das.last_seen_at, rpt.reported_at)::timestamptz AS agent_last_seen_at
+    , cov.coverage_bucket::text AS coverage_bucket
+    , pol.policy_state::text AS policy_state
+    , false AS device_attested
+    , false AS via_email
+    , NULL::timestamptz AS missing_since
+    , LEAST(das.first_seen_at, rpt.created_at)::timestamptz AS first_seen_at
+    , GREATEST(das.last_seen_at, rpt.reported_at)::timestamptz AS last_seen_at
+    , rpt.id AS report_id
+    , false AS report_by_serial
+    , rpt.reported_at AS report_reported_at
+    , rpt.applied_etag AS report_applied_etag
+    , rpt.applied_at AS report_applied_at
+    , rpt.enforcement_halted AS report_enforcement_halted
+    , rpt.current_blocked AS report_current_blocked
+    , rpt.speakeasyd_version AS report_speakeasyd_version
+    , rpt.speakeasy_version AS report_speakeasy_version
+    , rpt.speakeasy_ui_version AS report_speakeasy_ui_version
+    , rpt.os AS report_os
+    , rpt.arch AS report_arch
+    , rpt.tools AS report_tools
+    , rpt.drift_counting_since AS report_drift_counting_since
+    , rpt.auto_update AS report_auto_update
+    , rpt.update_channel AS report_update_channel
+    , rpt.pinned_target AS report_pinned_target
+    , rpt.last_rollback_at AS report_last_rollback_at
+    , rpt.last_rollback_from AS report_last_rollback_from
+    , rpt.last_rollback_to AS report_last_rollback_to
+  FROM (
+    SELECT LOWER(s.email) AS email
+    FROM device_agent_state_reports s
+    WHERE s.organization_id = @organization_id
+      AND s.serial_number IS NULL
+    UNION
+    SELECT LOWER(a.email) AS email
+    FROM device_agent_syncs a
+    WHERE a.organization_id = @organization_id
+      AND NOT EXISTS (
+        SELECT 1
+        FROM device_agent_device_syncs s
+        WHERE s.organization_id = @organization_id
+          AND LOWER(s.email) = LOWER(a.email)
+      )
+      AND NOT EXISTS (
+        SELECT 1
+        FROM device_agent_state_reports s
+        WHERE s.organization_id = @organization_id
+          AND s.serial_number IS NOT NULL
+          AND LOWER(s.email) = LOWER(a.email)
+      )
+  ) m
+  LEFT JOIN device_agent_syncs das
+    ON das.organization_id = @organization_id
+   AND LOWER(das.email) = m.email
+  -- At most one: reports are unique per (serial, email), NULL serials alike.
+  LEFT JOIN device_agent_state_reports rpt
+    ON rpt.organization_id = @organization_id
+   AND rpt.serial_number IS NULL
+   AND LOWER(rpt.email) = m.email
+  LEFT JOIN device_agent_syncs served
+    ON served.organization_id = @organization_id
+   AND LOWER(served.email) = m.email
+  LEFT JOIN LATERAL (
+    SELECT u.id
+    FROM users u
+    JOIN organization_user_relationships our
+      ON our.user_id = u.id
+    WHERE our.organization_id = @organization_id
+      AND our.deleted IS FALSE
+      AND LOWER(u.email) = m.email
+      AND u.deleted_at IS NULL
+    ORDER BY u.id
+    LIMIT 1
+  ) mem ON TRUE
+  CROSS JOIN LATERAL (
+    SELECT CASE
+      WHEN GREATEST(das.last_seen_at, rpt.reported_at) >= @active_cutoff::timestamptz THEN 'agent_active'
+      ELSE 'agent_stale'
+    END AS coverage_bucket
+  ) cov
+  CROSS JOIN LATERAL (
+    -- policy:begin
+    SELECT CASE
+      WHEN cov.coverage_bucket <> 'agent_active' THEN NULL
+      WHEN rpt.id IS NULL OR rpt.reported_at < @active_cutoff::timestamptz THEN 'unreported'
+      WHEN rpt.enforcement_halted THEN 'halted'
+      WHEN rpt.applied_etag = served.served_etag THEN 'attested'
+      -- Includes a user the server has not served since it began recording
+      -- served etags; every poll records one, so that lasts one poll.
+      ELSE 'outdated'
+    END AS policy_state
+    -- policy:end
+  ) pol
+  WHERE NOT EXISTS (
+    SELECT 1
+    FROM mdm
+    WHERE mdm.via_email
+      AND LOWER(mdm.user_email) = m.email
+  )
+)
+, fleet AS (
+  SELECT * FROM mdm
+  UNION ALL
+  SELECT * FROM agent_serial
+  UNION ALL
+  SELECT * FROM agent_user
+)
+-- fleet:end
+SELECT
+    count(*) FILTER (WHERE f.coverage_bucket = 'missing') AS missing
+  , count(*) FILTER (WHERE f.coverage_bucket = 'no_email') AS no_email
+  , count(*) FILTER (WHERE f.coverage_bucket = 'agent_active') AS agent_active
+  , count(*) FILTER (WHERE f.coverage_bucket = 'agent_stale') AS agent_stale
+  , count(*) FILTER (WHERE f.coverage_bucket = 'agent_other_device') AS agent_other_device
+  , count(*) FILTER (WHERE f.device_attested) AS agent_active_device_attested
+  , count(*) FILTER (WHERE f.coverage_bucket = 'no_agent') AS no_agent
+  , count(*) FILTER (WHERE f.coverage_bucket = 'unresolved_email') AS unresolved_email
+  , count(*) FILTER (WHERE f.policy_state = 'attested') AS policy_attested
+  , count(*) FILTER (WHERE f.policy_state = 'outdated') AS policy_outdated
+  , count(*) FILTER (WHERE f.policy_state = 'unreported') AS policy_unreported
+  , count(*) FILTER (WHERE f.policy_state = 'halted') AS enforcement_halted
+  , count(*) FILTER (WHERE NOT f.in_inventory) AS agent_only
+  , count(*) AS total
+  , EXISTS (
+      SELECT 1
+      FROM device_integration_configs c
+      WHERE c.organization_id = @organization_id
+        AND c.deleted IS FALSE
+        AND (sqlc.narg('provider')::text IS NULL OR c.provider = sqlc.narg('provider')::text)
+    )::boolean AS mdm_connected
+FROM fleet f
+WHERE (sqlc.narg('provider')::text IS NULL OR f.provider = sqlc.narg('provider')::text);
+
 -- Scheduling: the Temporal coordinator selects due syncs, and the sync runner
 -- records outcomes. Workflow payloads carry only sync ids — the runner loads
 -- config and decrypts credentials inside the activity, never in Temporal

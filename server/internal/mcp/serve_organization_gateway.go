@@ -431,7 +431,7 @@ func (g *metaGateContext) memberTokens(ctx context.Context, member metaMember) (
 	}
 	tokens, err := g.projectTokens.get(ctx, member.projectID)
 	if err != nil {
-		return nil, &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug)}
+		return nil, memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug)}, status: 0, retryable: false, retryAfter: 0}
 	}
 	return tokens, nil
 }
@@ -553,7 +553,7 @@ func (s *Service) consentSubjectMembers(ctx context.Context, endpoint *ResolvedM
 	if err := s.withTypedMemberRegistrations(ctx, endpoint.OrganizationID, members); err != nil {
 		return nil, err
 	}
-	if binding := challengeState.CodeReconnect; binding != nil {
+	if binding := challengeState.CodeReconnect; binding != nil && !binding.reviewReady() {
 		hidden, err := hiddenmcpservers.HiddenServerIDs(ctx, s.db, endpoint.OrganizationID, binding.UserID)
 		if err != nil {
 			return nil, fmt.Errorf("check connection visibility: %w", err)

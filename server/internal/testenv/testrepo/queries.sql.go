@@ -2598,7 +2598,7 @@ func (q *Queries) GetRemoteSessionEMABindingFixture(ctx context.Context, id uuid
 }
 
 const getSessionHandoffLinkFixture = `-- name: GetSessionHandoffLinkFixture :one
-SELECT blob_url, consumed_at
+SELECT blob_url, consumed_at, session_id
 FROM session_handoff_links
 WHERE token = $1
 `
@@ -2606,6 +2606,7 @@ WHERE token = $1
 type GetSessionHandoffLinkFixtureRow struct {
 	BlobUrl    string
 	ConsumedAt pgtype.Timestamptz
+	SessionID  string
 }
 
 // Test-only inspection of a minted session-handoff link, so tests can assert a
@@ -2613,7 +2614,7 @@ type GetSessionHandoffLinkFixtureRow struct {
 func (q *Queries) GetSessionHandoffLinkFixture(ctx context.Context, token string) (GetSessionHandoffLinkFixtureRow, error) {
 	row := q.db.QueryRow(ctx, getSessionHandoffLinkFixture, token)
 	var i GetSessionHandoffLinkFixtureRow
-	err := row.Scan(&i.BlobUrl, &i.ConsumedAt)
+	err := row.Scan(&i.BlobUrl, &i.ConsumedAt, &i.SessionID)
 	return i, err
 }
 
@@ -6168,6 +6169,24 @@ func (q *Queries) SetAttachmentSourceSubjectFixture(ctx context.Context, arg Set
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setCapturedAgentChatSummaryFixture = `-- name: SetCapturedAgentChatSummaryFixture :exec
+UPDATE chats
+SET summary = $1
+WHERE id = $2 AND project_id = $3
+`
+
+type SetCapturedAgentChatSummaryFixtureParams struct {
+	Summary   pgtype.Text
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+}
+
+// Test-only fixture: stores a summary so callers can prove metadata reads do not disclose it.
+func (q *Queries) SetCapturedAgentChatSummaryFixture(ctx context.Context, arg SetCapturedAgentChatSummaryFixtureParams) error {
+	_, err := q.db.Exec(ctx, setCapturedAgentChatSummaryFixture, arg.Summary, arg.ID, arg.ProjectID)
+	return err
 }
 
 const setDeploymentFunctionInfraOverrides = `-- name: SetDeploymentFunctionInfraOverrides :exec
