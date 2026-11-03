@@ -28,15 +28,15 @@ type temporaryGrantAuditMetadata struct {
 	Scope        string `json:"scope"`
 	ExpiresAt    string `json:"expires_at"`
 	Reason       string `json:"reason,omitempty"`
-	// SelfGranted marks an event whose actor is the grant's recipient: a
-	// self-grant, a self-renewal or a recipient ending their own grant.
+	// SelfGranted marks an event whose audited actor is the grant's
+	// recipient. Creating and renewing take org:admin, so on those events it
+	// means an administrator gave or extended access to themselves (for
+	// example mcp:connect). On revoke it also covers a member ending a grant
+	// given directly to them.
 	SelfGranted bool `json:"self_granted"`
 }
 
 func temporaryGrantMetadata(actor urn.Principal, grant *accessgen.TemporaryGrant, reason string) ([]byte, error) {
-	if grant == nil {
-		return nil, nil
-	}
 	return marshalAuditPayload(temporaryGrantAuditMetadata{
 		RecipientURN: grant.PrincipalUrn,
 		Scope:        grant.Scope,
@@ -154,16 +154,13 @@ func temporaryGrantAuditParams(
 	afterSnapshot []byte,
 	metadata []byte,
 ) repo.InsertAuditLogParams {
-	displayName := ""
-	if grant != nil {
-		// A member is named by email; any other principal (a role, an agent,
-		// everyone) by its URN.
-		recipient := recipientEmail
-		if recipient == "" {
-			recipient = grant.PrincipalUrn
-		}
-		displayName = grant.Scope + " for " + recipient
+	// A member is named by email; any other principal (a role, an agent,
+	// everyone) by its URN.
+	recipient := recipientEmail
+	if recipient == "" {
+		recipient = grant.PrincipalUrn
 	}
+	displayName := grant.Scope + " for " + recipient
 
 	return repo.InsertAuditLogParams{
 		OrganizationID: organizationID,

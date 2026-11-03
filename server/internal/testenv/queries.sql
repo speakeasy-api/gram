@@ -2426,7 +2426,7 @@ WHERE id = @id
 -- Test-only fixture: moves a temporary grant's deadline into the past so
 -- tests can observe expiry without waiting for it.
 UPDATE principal_grants
-SET expires_at = clock_timestamp() - interval '1 second'
+SET expires_at = clock_timestamp()
 WHERE id = @id
   AND expires_at IS NOT NULL;
 

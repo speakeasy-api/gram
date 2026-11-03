@@ -1641,7 +1641,7 @@ func (q *Queries) ExpirePlatformMCPSetupHandoffFixture(ctx context.Context, id u
 
 const expirePrincipalGrantFixture = `-- name: ExpirePrincipalGrantFixture :execrows
 UPDATE principal_grants
-SET expires_at = clock_timestamp() - interval '1 second'
+SET expires_at = clock_timestamp()
 WHERE id = $1
   AND expires_at IS NOT NULL
 `
