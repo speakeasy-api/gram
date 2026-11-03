@@ -215,7 +215,7 @@ describe("ServerUrlSection", () => {
     });
     fireEvent.click(screen.getByLabelText("Save address"));
     expect(screen.getByText("Change this address?")).toBeTruthy();
-    expect(screen.getByText(/2 active connections from 1 user/)).toBeTruthy();
+    expect(screen.getByText(/2 active connections from 1 caller/)).toBeTruthy();
     const confirm = screen.getByRole("button", { name: "Change address" });
     expect((confirm as HTMLButtonElement).disabled).toBe(true);
     expect(updateEndpoint).not.toHaveBeenCalled();

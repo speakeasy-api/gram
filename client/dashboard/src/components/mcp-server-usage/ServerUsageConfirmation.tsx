@@ -45,7 +45,7 @@ export function ServerUsageConfirmation({
   );
 }
 
-export function ServerUsageImpactPanel({
+function ServerUsageImpactPanel({
   impact,
   heading,
 }: {
@@ -133,7 +133,8 @@ function UsageSummary({ data }: { data: McpServerUsageImpact }): JSX.Element {
           "active connection",
           "active connections",
         )}{" "}
-        from {plural(data.activeSubjectCount, "user", "users")} will be affected
+        from {plural(data.activeSubjectCount, "caller", "callers")} will be
+        affected
         {data.lastUsedAt
           ? `, most recently ${connectionActivityLabel(data.lastUsedAt)}`
           : ""}
@@ -141,7 +142,7 @@ function UsageSummary({ data }: { data: McpServerUsageImpact }): JSX.Element {
       </Alert>
       {data.sharedSignIn && data.sharedConnectionCount > 0 && (
         <Text small muted>
-          This server shares its sign-in with other servers. Users marked{" "}
+          This server shares its sign-in with other servers. Callers marked{" "}
           <strong>Shared sign-in</strong> signed in once for all of them, so
           they may be using another server rather than this one.
         </Text>
@@ -150,7 +151,7 @@ function UsageSummary({ data }: { data: McpServerUsageImpact }): JSX.Element {
         <table className="w-full text-sm">
           <thead className="bg-muted/50 sticky top-0">
             <tr className="text-left">
-              <th className="px-3 py-2 font-medium">User</th>
+              <th className="px-3 py-2 font-medium">Caller</th>
               <th className="px-3 py-2 text-right font-medium">Connections</th>
               <th className="px-3 py-2 font-medium">Last used</th>
             </tr>
@@ -164,7 +165,7 @@ function UsageSummary({ data }: { data: McpServerUsageImpact }): JSX.Element {
       </div>
       {data.subjectsTruncated && hidden > 0 && (
         <Text small muted>
-          and {plural(hidden, "more user", "more users")}.
+          and {plural(hidden, "more caller", "more callers")}.
         </Text>
       )}
     </div>

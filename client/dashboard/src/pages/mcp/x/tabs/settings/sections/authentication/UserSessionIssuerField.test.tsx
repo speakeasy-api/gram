@@ -291,7 +291,9 @@ describe("UserSessionIssuerField", () => {
 
     chooseCandidateAndSave();
 
-    expect(screen.getByText(/3 active connections from 2 users/)).toBeDefined();
+    expect(
+      screen.getByText(/3 active connections from 2 callers/),
+    ).toBeDefined();
     expect(screen.getByText("Alice")).toBeDefined();
     expect(screen.getByText("bob@example.com")).toBeDefined();
     // The row badge, and the note explaining it.

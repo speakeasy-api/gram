@@ -1012,7 +1012,10 @@ WITH grouped AS (
          array_remove(array_agg(DISTINCT c.client_name), NULL)::text[] AS client_names
   FROM user_sessions AS s
   LEFT JOIN user_session_clients AS c
-    ON c.id = s.user_session_client_id AND c.organization_id = s.organization_id
+    ON c.id = s.user_session_client_id
+    AND c.organization_id = s.organization_id
+    AND c.user_session_issuer_id = s.user_session_issuer_id
+    AND c.deleted IS FALSE
   WHERE s.organization_id = @organization_id::text
     AND s.user_session_issuer_id = @user_session_issuer_id::uuid
     AND s.deleted IS FALSE

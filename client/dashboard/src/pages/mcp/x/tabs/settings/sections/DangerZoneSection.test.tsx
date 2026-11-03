@@ -1,6 +1,12 @@
 import type { McpServer } from "@gram/client/models/components/mcpserver.js";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
-import { cleanup, fireEvent, render, screen } from "@testing-library/react";
+import {
+  cleanup,
+  fireEvent,
+  render,
+  screen,
+  waitFor,
+} from "@testing-library/react";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { DangerZoneSection } from "./DangerZoneSection";
@@ -23,6 +29,17 @@ vi.mock("@/contexts/Sdk", () => ({
 }));
 const deleteServer = vi.hoisted(() => vi.fn());
 const updateServer = vi.hoisted(() => vi.fn());
+const usagePreview = vi.hoisted(() => ({ failed: false }));
+const latestServer = vi.hoisted(() => ({ current: undefined as unknown }));
+vi.mock("@gram/client/react-query/getMcpServer.js", async (importOriginal) => ({
+  ...(await importOriginal<
+    typeof import("@gram/client/react-query/getMcpServer.js")
+  >()),
+  buildGetMcpServerQuery: (_client: unknown, request: { id: string }) => ({
+    queryKey: ["test-get-mcp-server", request.id],
+    queryFn: async () => latestServer.current,
+  }),
+}));
 vi.mock("@gram/client/react-query/mcpServerUsageImpact.js", () => ({
   useMcpServerUsageImpact: (
     _request: unknown,
@@ -37,31 +54,39 @@ vi.mock("@gram/client/react-query/mcpServerUsageImpact.js", () => ({
           isError: false,
           fetchStatus: "idle",
         }
-      : {
-          data: {
-            serverName: "Example server",
-            signInRequired: true,
-            sharedSignIn: false,
-            activeConnectionCount: 1,
-            activeSubjectCount: 1,
-            sharedConnectionCount: 0,
-            subjects: [
-              {
-                subjectUrn: "user:alice",
-                subjectType: "user",
-                displayName: "Alice",
-                connectionCount: 1,
-                clientNames: [],
-                sharedSignIn: false,
-              },
-            ],
-            subjectsTruncated: false,
+      : usagePreview.failed
+        ? {
+            data: undefined,
+            isFetching: false,
+            isPending: false,
+            isError: true,
+            fetchStatus: "idle",
+          }
+        : {
+            data: {
+              serverName: "Example server",
+              signInRequired: true,
+              sharedSignIn: false,
+              activeConnectionCount: 1,
+              activeSubjectCount: 1,
+              sharedConnectionCount: 0,
+              subjects: [
+                {
+                  subjectUrn: "user:alice",
+                  subjectType: "user",
+                  displayName: "Alice",
+                  connectionCount: 1,
+                  clientNames: [],
+                  sharedSignIn: false,
+                },
+              ],
+              subjectsTruncated: false,
+            },
+            isFetching: false,
+            isPending: false,
+            isError: false,
+            fetchStatus: "idle",
           },
-          isFetching: false,
-          isPending: false,
-          isError: false,
-          fetchStatus: "idle",
-        },
 }));
 vi.mock("@gram/client/react-query/deleteMcpServer.js", () => ({
   useDeleteMcpServerMutation: () => ({
@@ -103,6 +128,8 @@ afterEach(() => {
   cleanup();
   deleteServer.mockReset();
   updateServer.mockReset();
+  usagePreview.failed = false;
+  latestServer.current = undefined;
 });
 
 describe("DangerZoneSection availability", () => {
@@ -185,19 +212,49 @@ describe("DangerZoneSection usage confirmation", () => {
     expect(deleteServer).toHaveBeenCalledWith({ request: { id: "server-1" } });
   });
 
-  it("waits for the server name before disabling", () => {
-    renderSection({
+  it("waits for the server name before disabling", async () => {
+    const server = {
       ...base,
       id: "server-1",
       visibility: "private",
-    } as McpServer);
+    } as McpServer;
+    latestServer.current = server;
+    renderSection(server);
 
     fireEvent.click(screen.getByRole("switch", { name: "Enable MCP server" }));
-    expect(screen.getByText(/1 active connection from 1 user/)).toBeTruthy();
+    expect(screen.getByText(/1 active connection from 1 caller/)).toBeTruthy();
     const confirm = screen.getByRole("button", { name: "Continue" });
     expect(confirm).toHaveProperty("disabled", true);
 
     typeServerName();
     expect(confirm).toHaveProperty("disabled", false);
+
+    fireEvent.click(confirm);
+    await waitFor(() =>
+      expect(updateServer).toHaveBeenCalledWith({
+        request: {
+          updateMcpServerForm: expect.objectContaining({
+            id: "server-1",
+            visibility: "disabled",
+          }),
+        },
+      }),
+    );
+  });
+
+  it("warns when usage is unavailable and still asks for the server name", () => {
+    usagePreview.failed = true;
+    renderSection({ ...base, id: "server-1" } as McpServer);
+
+    fireEvent.click(screen.getByRole("button", { name: /Delete MCP server/ }));
+    expect(
+      screen.getByText(/Couldn't check who uses this server/),
+    ).toBeTruthy();
+    const confirm = screen.getByRole("button", { name: "Delete MCP server" });
+    expect(confirm).toHaveProperty("disabled", true);
+
+    typeServerName();
+    fireEvent.click(confirm);
+    expect(deleteServer).toHaveBeenCalledWith({ request: { id: "server-1" } });
   });
 });

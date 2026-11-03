@@ -388,7 +388,13 @@ function ServerAvailabilityDialog({
   onConfirm: () => void;
 }) {
   const isOpen = targetVisibility != null;
-  const enabling = targetVisibility !== "disabled";
+  // Keep the last target through the close animation so the dialog doesn't
+  // switch to its enable layout while it fades out.
+  const [lastTarget, setLastTarget] = useState(targetVisibility);
+  if (targetVisibility != null && targetVisibility !== lastTarget) {
+    setLastTarget(targetVisibility);
+  }
+  const enabling = (targetVisibility ?? lastTarget) !== "disabled";
   // Only disabling cuts clients off; enabling needs no usage check.
   const usage = useServerUsageConfirmation({
     mcpServerId: mcpServer.id,

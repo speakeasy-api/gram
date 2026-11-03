@@ -139,7 +139,15 @@ function DeleteRemoteIdentityProviderDialogBody({
         </Dialog.Description>
       </Dialog.Header>
 
-      {mcpServerId && <ServerUsageImpactById mcpServerId={mcpServerId} />}
+      {mcpServerId && (
+        <div className="grid gap-2">
+          <ServerUsageImpactById mcpServerId={mcpServerId} />
+          <Text small muted>
+            Counts cover every sign-in to this server, including through its
+            other authorization servers.
+          </Text>
+        </div>
+      )}
 
       <div className="grid gap-2">
         <Text small>

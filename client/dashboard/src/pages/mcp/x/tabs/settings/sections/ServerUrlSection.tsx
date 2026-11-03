@@ -185,12 +185,25 @@ export function ServerUrlSection({
   // An enabled hosted server cannot lose its last address that can serve; it must be disabled first.
   const mustDisableBeforeLastRemoval =
     !!hostedServerId && mcpServer?.visibility !== "disabled";
+  // A private-only hosted server serves only on its ingress namespace. Until the ingress is known, every address counts.
+  const privateOnlyIngress =
+    hostedServerId &&
+    mcpServer?.networkAccessMode === McpServerNetworkAccessMode.PrivateOnly
+      ? ingress
+      : undefined;
   // Only addresses that can serve count toward the last one: the platform, or a verified, activated domain.
   // Every address counts while domains load or fail to load, so a removal is never left unconfirmed.
   const servableIds = useMemo(
     () =>
       new Set(
         endpoints
+          .filter((e) =>
+            privateOnlyIngress
+              ? privateOnlyIngress.endpointNamespaceKind === "platform"
+                ? !e.customDomainId
+                : e.customDomainId === privateOnlyIngress.customDomainId
+              : true,
+          )
           .filter(
             (e) =>
               isLoadingDomains ||
@@ -202,7 +215,13 @@ export function ServerUrlSection({
           )
           .map((e) => e.id),
       ),
-    [endpoints, availableDomains, isLoadingDomains, domainsError],
+    [
+      endpoints,
+      availableDomains,
+      isLoadingDomains,
+      domainsError,
+      privateOnlyIngress,
+    ],
   );
   const isLast = (endpoint: McpEndpoint) =>
     servableIds.size === 1 && servableIds.has(endpoint.id);
@@ -289,6 +308,7 @@ export function ServerUrlSection({
                     endpoint={endpoint}
                     isLastEndpoint={isLast(endpoint)}
                     servable={servableIds.has(endpoint.id)}
+                    serverName={mcpServer?.name}
                     mustDisableFirst={mustDisableBeforeLastRemoval}
                     onSaved={followHostedServer}
                   />
@@ -359,6 +379,7 @@ export function ServerUrlSection({
                     domains={availableDomains}
                     isLastEndpoint={isLast(endpoint)}
                     servable={servableIds.has(endpoint.id)}
+                    serverName={mcpServer?.name}
                     mustDisableFirst={mustDisableBeforeLastRemoval}
                     canManageDomainRoot={canManageDomains}
                     hosted={!!hostedServerId}
@@ -471,6 +492,7 @@ function AddressRow({
   domains,
   isLastEndpoint,
   servable = true,
+  serverName,
   mustDisableFirst = false,
   canManageDomainRoot = false,
   hosted = false,
@@ -483,6 +505,8 @@ function AddressRow({
   /** Whether clients can reach the server on this address at all; changing
    * one that cannot serve cuts nobody off, so it skips the usage check. */
   servable?: boolean;
+  /** Typed to confirm a rename or removal when the usage preview fails. */
+  serverName?: string;
   mustDisableFirst?: boolean;
   canManageDomainRoot?: boolean;
   hosted?: boolean;
@@ -692,6 +716,7 @@ function AddressRow({
         <AddressChangeDialog
           change={pendingChange}
           mcpServerId={usageServerId}
+          serverName={serverName}
           currentUrl={`${baseUrlPrefix}${endpoint.slug}`}
           nextUrl={`${baseUrlPrefix}${fullSlug}`}
           isLastEndpoint={isLastEndpoint}
@@ -713,6 +738,7 @@ function AddressRow({
 function AddressChangeDialog({
   change,
   mcpServerId,
+  serverName,
   currentUrl,
   nextUrl,
   isLastEndpoint,
@@ -722,6 +748,7 @@ function AddressChangeDialog({
 }: {
   change: "rename" | "remove" | null;
   mcpServerId: string;
+  serverName?: string;
   currentUrl: string;
   nextUrl: string;
   isLastEndpoint: boolean;
@@ -730,7 +757,11 @@ function AddressChangeDialog({
   onConfirm: () => void;
 }) {
   const isOpen = change !== null;
-  const usage = useServerUsageConfirmation({ mcpServerId, open: isOpen });
+  const usage = useServerUsageConfirmation({
+    mcpServerId,
+    serverName,
+    open: isOpen,
+  });
   const renaming = change === "rename";
   let title = "Remove this address?";
   if (renaming) title = "Change this address?";
