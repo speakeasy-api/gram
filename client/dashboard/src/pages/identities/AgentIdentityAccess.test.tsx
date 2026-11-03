@@ -93,6 +93,27 @@ vi.mock("./GrantOnBehalfOf", () => ({
     <span>{`on behalf of, for ${resourceId}`}</span>
   ),
 }));
+vi.mock("@gram/client/react-query/listAgentPolicyScopes.js", () => ({
+  useListAgentPolicyScopes: () => ({
+    data: {
+      scopes: [
+        {
+          slug: "inference:execute",
+          label: "Run inference",
+          description: "Run inference in selected projects.",
+          resourceType: "inference",
+          category: "inference",
+          visibility: "user_visible",
+          agentEligible: true,
+          sensitive: false,
+          subScopes: [],
+        },
+      ],
+    },
+    isLoading: false,
+    isError: false,
+  }),
+}));
 vi.mock("@/pages/access/useResourceLinkMaps", () => ({
   useResourceLinkMaps: () => ({
     projectMap: new Map([

@@ -15,8 +15,8 @@ import {
 import { invalidateAllAgentsListPolicyGrants } from "@gram/client/react-query/agentsListPolicyGrants.js";
 import type { ManagedAgent } from "@gram/client/models/components/managedagent.js";
 import type { AgentPolicyGrant } from "@gram/client/models/components/agentpolicygrant.js";
+import { categoryCopy } from "@/pages/access/roleMatrixModel";
 import {
-  AGENT_POLICY_SCOPES,
   agentPolicyViewFromGrants,
   agentPolicyGrantsFromDraft,
   agentPolicyFingerprint,
@@ -25,6 +25,7 @@ import {
   invalidateAgentPolicy,
   isAgentPolicyNarrowable,
 } from "./agent-policy-grants";
+import { useAgentPolicyScopes } from "./useAgentPolicyScopes";
 
 /** The role permission picker and resource drawer, applied to an agent's policy. */
 export function AgentPermissionEditor({
@@ -47,19 +48,25 @@ export function AgentPermissionEditor({
   const [draft, setDraft] = useState(view.draft);
   const [changedScopes, setChangedScopes] = useState<Set<string>>(new Set());
   const [editingScope, setEditingScope] = useState<string | null>(null);
-  const scope = AGENT_POLICY_SCOPES.find((item) => item.slug === editingScope);
+  // The permissions an agent may hold come from the server, so their names
+  // and descriptions are the role editor's; nothing here is a copy.
+  const {
+    scopes: policyScopes,
+    isLoading: scopesLoading,
+    isError: scopesError,
+  } = useAgentPolicyScopes();
+  const scope = policyScopes.find((item) => item.slug === editingScope);
   const groups: ScopeGroup[] = [];
-  for (const definition of AGENT_POLICY_SCOPES) {
+  for (const definition of policyScopes) {
     if (view.preservedScopes.includes(definition.slug)) continue;
-    const existing = groups.find(
-      (group) => group.resourceType === definition.resourceType,
-    );
+    const copy = categoryCopy(definition.category ?? definition.resourceType);
+    const existing = groups.find((group) => group.label === copy.label);
     if (existing) existing.scopes.push(definition);
     else
       groups.push({
-        label: definition.resourceType,
+        label: copy.label,
         resourceType: definition.resourceType,
-        description: definition.description,
+        description: copy.description,
         scopes: [definition],
       });
   }
@@ -199,6 +206,17 @@ export function AgentPermissionEditor({
             {view.preservedScopes.join(", ")}.
           </Text>
         )}
+        {scopesLoading && (
+          <Text small muted>
+            Loading the permissions an agent can hold…
+          </Text>
+        )}
+        {scopesError && (
+          <Text role="alert" destructive>
+            The permissions an agent can hold could not be loaded. Reload this
+            page before making changes.
+          </Text>
+        )}
         <RolePermissionsSection
           groups={groups}
           subjectLabel="this agent"
@@ -207,6 +225,8 @@ export function AgentPermissionEditor({
             save.isPending ||
             reload.isPending ||
             needsReload ||
+            scopesLoading ||
+            scopesError ||
             !agent.permissions.write
           }
           onToggleScope={(slug) => {
@@ -214,6 +234,8 @@ export function AgentPermissionEditor({
               save.isPending ||
               reload.isPending ||
               needsReload ||
+              scopesLoading ||
+              scopesError ||
               !agent.permissions.write
             )
               return;
@@ -222,7 +244,7 @@ export function AgentPermissionEditor({
               const next = { ...previous };
               if (slug in next) delete next[slug];
               else {
-                const definition = AGENT_POLICY_SCOPES.find(
+                const definition = policyScopes.find(
                   (item) => item.slug === slug,
                 );
                 next[slug] =
@@ -234,7 +256,7 @@ export function AgentPermissionEditor({
             });
           }}
           renderScopeRule={(definition) => {
-            const resource = AGENT_POLICY_SCOPES.find(
+            const resource = policyScopes.find(
               (item) => item.slug === definition.slug,
             );
             if (!resource || !isAgentPolicyNarrowable(resource.resourceType))

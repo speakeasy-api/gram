@@ -47,6 +47,43 @@ vi.mock("@/contexts/Sdk", () => ({
     },
   }),
 }));
+const policyScope = (
+  slug: string,
+  resourceType: string,
+  label: string,
+  subScopes: string[] = [],
+) => ({
+  slug,
+  label,
+  description: `${label}.`,
+  resourceType,
+  category: resourceType,
+  visibility: "user_visible",
+  agentEligible: true,
+  sensitive: false,
+  subScopes,
+});
+vi.mock("@gram/client/react-query/listAgentPolicyScopes.js", () => ({
+  useListAgentPolicyScopes: () => ({
+    data: {
+      scopes: [
+        policyScope("inference:execute", "inference", "Run inference"),
+        policyScope("mcp:connect", "mcp", "Connect to MCP servers"),
+        policyScope("mcp:read", "mcp", "View MCP servers", ["mcp:connect"]),
+        policyScope("mcp:write", "mcp", "Manage MCP servers", ["mcp:read"]),
+        policyScope("project:read", "project", "View projects"),
+        policyScope(
+          "org:device_agent_sync",
+          "org",
+          "Sync device agent plugins",
+        ),
+        policyScope("org:hooks_ingest", "org", "Send hook events"),
+      ],
+    },
+    isLoading: false,
+    isError: false,
+  }),
+}));
 vi.mock("@/pages/access/useOrgMcpServers", () => ({
   useOrgMcpServers: () => ({
     groups: [],
