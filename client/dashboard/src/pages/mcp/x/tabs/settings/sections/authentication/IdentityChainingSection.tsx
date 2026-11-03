@@ -30,6 +30,9 @@ import { useSpeakeasyIssuerStatus } from "./useSpeakeasyIssuerStatus";
 
 export const IDENTITY_CHAINING_SECTION_ID = "identity-chaining";
 
+// Chaining signs each person in, so a shared service account never applies.
+const PER_PERSON_CREDENTIALS = new Set<string>(["remote_session", "ema"]);
+
 // Speakeasy could vouch once an admin sets its issuer up.
 const SPEAKEASY_SETUP = new Set(["setup_required", "verified_domain_required"]);
 
@@ -124,7 +127,10 @@ export function IdentityChainingSection({
   const credentialRegistrationIds = new Set(
     (enforced ? (credentialsQuery.data?.clients ?? []) : []).flatMap(
       (client) =>
-        client.remoteSessionClientId ? [client.remoteSessionClientId] : [],
+        client.remoteSessionClientId &&
+        PER_PERSON_CREDENTIALS.has(client.clientType)
+          ? [client.remoteSessionClientId]
+          : [],
     ),
   );
   const registrationsQuery = useAllRemoteSessionClients(
