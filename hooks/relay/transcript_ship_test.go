@@ -26,6 +26,8 @@ type transcriptServer struct {
 	headers  []http.Header
 	requests atomic.Int32
 	status   func(n int) int
+	// body, when set, replaces the endpoint's JSON acknowledgement.
+	body func(n int) []byte
 }
 
 func newTranscriptServer(t *testing.T) *transcriptServer {
@@ -47,7 +49,15 @@ func newTranscriptServer(t *testing.T) *transcriptServer {
 		ts.uploads = append(ts.uploads, upload)
 		ts.headers = append(ts.headers, r.Header.Clone())
 		ts.mu.Unlock()
-		w.WriteHeader(ts.status(n))
+		status := ts.status(n)
+		if ts.body != nil {
+			w.WriteHeader(status)
+			_, _ = w.Write(ts.body(n))
+			return
+		}
+		w.Header().Set("Content-Type", "application/json")
+		w.WriteHeader(status)
+		_ = json.NewEncoder(w).Encode(map[string]int{"stored": len(upload.Entries)})
 	}))
 	t.Cleanup(ts.Close)
 	return ts
@@ -183,6 +193,27 @@ func TestTranscriptOnlyRetriesUnsettledUpload(t *testing.T) {
 
 	uploads, _ := ts.recorded()
 	require.Len(t, uploads, 2, "the failed chunk is resent once, then settled")
+	require.Equal(t, entryUUIDs(t, uploads[0]), entryUUIDs(t, uploads[1]))
+}
+
+// TestTranscriptOnlyKeepsChunkWithoutAcknowledgement: a 200 that is not the
+// endpoint's acknowledgement, such as a single-page app answering an
+// unrouted path, must not move the offset.
+func TestTranscriptOnlyKeepsChunkWithoutAcknowledgement(t *testing.T) {
+	t.Setenv("XDG_STATE_HOME", t.TempDir())
+	ts := newTranscriptServer(t)
+	ts.body = func(int) []byte { return []byte("<!doctype html><html></html>") }
+	cfg := transcriptOnlyConfig(t, ts.URL)
+	transcript := claudeTranscriptFile(t)
+	appendTranscript(t, transcript, transcriptUser)
+
+	invokeClaude(t, cfg, claudeStop(transcript))
+	ts.body = nil
+	invokeClaude(t, cfg, claudeStop(transcript))
+	invokeClaude(t, cfg, claudeStop(transcript))
+
+	uploads, _ := ts.recorded()
+	require.Len(t, uploads, 2, "the unacknowledged chunk is resent, then settled")
 	require.Equal(t, entryUUIDs(t, uploads[0]), entryUUIDs(t, uploads[1]))
 }
 

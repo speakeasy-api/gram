@@ -34,7 +34,7 @@ import (
 )
 
 const (
-	transcriptUploadPath = "/hooks/claude-transcript"
+	transcriptUploadPath = "/transcript"
 	transcriptSchemaV1   = "claude.transcript.v1"
 	// transcriptChunkBytes bounds the raw transcript bytes batched into one
 	// upload. Uploads are gzip-compressed, well under the server's body cap.
@@ -50,7 +50,7 @@ const (
 // shipped on the next Stop. A var so tests can shrink it.
 var transcriptShipBudget = 15 * time.Second
 
-// transcriptUpload is the request body of POST /hooks/claude-transcript.
+// transcriptUpload is the request body of POST /transcript.
 type transcriptUpload struct {
 	SchemaVersion string            `json:"schema_version"`
 	SessionID     string            `json:"session_id"`
@@ -268,7 +268,10 @@ func transcriptConversationEntry(line []byte) (json.RawMessage, bool) {
 }
 
 // postTranscript sends one gzip-compressed upload and returns the HTTP status,
-// or 0 when no response arrived.
+// or 0 when no response arrived. A 2xx counts only when it carries the
+// endpoint's JSON acknowledgement: a request routed anywhere else (a proxy or
+// a single-page app answering every path) could answer 200 without storing
+// anything, and moving the offset past it would lose those lines for good.
 func postTranscript(ctx context.Context, c creds, upload transcriptUpload) (int, error) {
 	body, err := json.Marshal(upload)
 	if err != nil {
@@ -308,7 +311,16 @@ func postTranscript(ctx context.Context, c creds, upload transcriptUpload) (int,
 		return 0, fmt.Errorf("send transcript upload: %w", err)
 	}
 	defer func() { _ = resp.Body.Close() }()
-	_, _ = io.Copy(io.Discard, io.LimitReader(resp.Body, transcriptResponseLimit))
+	respBody, _ := io.ReadAll(io.LimitReader(resp.Body, transcriptResponseLimit))
+	if resp.StatusCode < 200 || resp.StatusCode >= 300 {
+		return resp.StatusCode, nil
+	}
+	var ack struct {
+		Stored *int64 `json:"stored"`
+	}
+	if json.Unmarshal(respBody, &ack) != nil || ack.Stored == nil {
+		return 0, fmt.Errorf("transcript upload answered %d without an acknowledgement from %s", resp.StatusCode, endpoint)
+	}
 	return resp.StatusCode, nil
 }
 

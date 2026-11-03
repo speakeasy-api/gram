@@ -35,8 +35,10 @@ import (
 )
 
 const (
-	// ClaudeTranscriptPath receives transcript uploads from the hooks binary.
-	ClaudeTranscriptPath = "/hooks/claude-transcript"
+	// TranscriptPath receives transcript uploads from the hooks binary. The
+	// path names no harness: the body's schema_version selects the transcript
+	// format, and Claude Code JSONL is the only one accepted so far.
+	TranscriptPath = "/transcript"
 
 	claudeTranscriptSchemaV1 = "claude.transcript.v1"
 	// claudeTranscriptOrigin marks rows stored from an uploaded transcript.
@@ -77,13 +79,13 @@ type claudeTranscriptResult struct {
 	Stored int64 `json:"stored"`
 }
 
-// AttachClaudeTranscript mounts the transcript intake endpoint. It
+// AttachTranscript mounts the transcript intake endpoint. It
 // authenticates with the hooks API key the same way the AHP endpoint does.
-func AttachClaudeTranscript(mux goahttp.Muxer, s *Service) {
-	mux.Handle(http.MethodPost, ClaudeTranscriptPath, s.ahpAuthenticate(http.HandlerFunc(s.serveClaudeTranscript)).ServeHTTP)
+func AttachTranscript(mux goahttp.Muxer, s *Service) {
+	mux.Handle(http.MethodPost, TranscriptPath, s.ahpAuthenticate(http.HandlerFunc(s.serveTranscript)).ServeHTTP)
 }
 
-func (s *Service) serveClaudeTranscript(w http.ResponseWriter, r *http.Request) {
+func (s *Service) serveTranscript(w http.ResponseWriter, r *http.Request) {
 	ctx := r.Context()
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.ProjectID == nil {

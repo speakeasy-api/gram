@@ -96,7 +96,7 @@ func claudeTranscriptRequest(t *testing.T, h http.Handler, upload map[string]any
 	_, err = gz.Write(b)
 	require.NoError(t, err)
 	require.NoError(t, gz.Close())
-	r := httptest.NewRequest(http.MethodPost, ClaudeTranscriptPath, &body)
+	r := httptest.NewRequest(http.MethodPost, TranscriptPath, &body)
 	r.Header.Set("Content-Type", "application/json")
 	r.Header.Set("Content-Encoding", "gzip")
 	for k, v := range headers {
@@ -142,7 +142,7 @@ func TestClaudeTranscriptEndpointStoresIdempotently(t *testing.T) {
 	authCtx := hookAuthContext(t, ctx)
 	ti.service.auth = &ahpTestAuthorizer{authCtx: authCtx}
 	ti.service.productFeatures = alwaysEnabledFeatures{}
-	h := ti.service.ahpAuthenticate(http.HandlerFunc(ti.service.serveClaudeTranscript))
+	h := ti.service.ahpAuthenticate(http.HandlerFunc(ti.service.serveTranscript))
 
 	sessionID := uuid.NewString()
 	lines := claudeTranscriptFixture()
@@ -177,7 +177,7 @@ func TestClaudeTranscriptEndpointSkipsWhenCaptureDisabled(t *testing.T) {
 	ctx, ti := newTestHooksService(t)
 	authCtx := hookAuthContext(t, ctx)
 	ti.service.auth = &ahpTestAuthorizer{authCtx: authCtx}
-	h := ti.service.ahpAuthenticate(http.HandlerFunc(ti.service.serveClaudeTranscript))
+	h := ti.service.ahpAuthenticate(http.HandlerFunc(ti.service.serveTranscript))
 
 	sessionID := uuid.NewString()
 	require.Equal(t, int64(0), claudeTranscriptStored(t, claudeTranscriptRequest(t, h, claudeTranscriptUploadBody(sessionID, claudeTranscriptFixture()), ahpAuthHeaders)))
@@ -193,7 +193,7 @@ func TestClaudeTranscriptEndpointRejectsInvalidRequests(t *testing.T) {
 		logger: testenv.NewLogger(t),
 		auth:   &ahpTestAuthorizer{authCtx: &contextvalues.AuthContext{ActiveOrganizationID: "org_example", ProjectID: &project}},
 	}
-	h := s.ahpAuthenticate(http.HandlerFunc(s.serveClaudeTranscript))
+	h := s.ahpAuthenticate(http.HandlerFunc(s.serveTranscript))
 	valid := claudeTranscriptUploadBody(uuid.NewString(), nil)
 
 	require.Equal(t, http.StatusUnauthorized, claudeTranscriptRequest(t, h, valid, map[string]string{"Gram-Project": "chosen"}).Code)
