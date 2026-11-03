@@ -101921,7 +101921,7 @@ components:
                     format: int64
                 memory_state:
                     type: string
-                    description: 'Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it.'
+                    description: 'Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it, and only while Business Memory Extraction is on for the organization.'
                     enum:
                         - remembered
                         - not_summarized
@@ -102256,7 +102256,7 @@ components:
                     description: True when the session's traffic was observed by the LiteLLM proxy, including sessions whose transcript is owned by the agent's own hook stream
                 memory_state:
                     type: string
-                    description: 'Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it.'
+                    description: 'Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it, and only while Business Memory Extraction is on for the organization.'
                     enum:
                         - remembered
                         - not_summarized

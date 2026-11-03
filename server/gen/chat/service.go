@@ -236,7 +236,8 @@ type Chat struct {
 	// Whether Organizational Memory reads this session: remembered (its masked
 	// summary is in memory), not_summarized (no masked summary yet), excluded
 	// (someone kept it out), or personal (it came from a personal or unclassified
-	// AI account). Only listings populate it.
+	// AI account). Only listings populate it, and only while Business Memory
+	// Extraction is on for the organization.
 	MemoryState *string
 	// Persisted LLM summary of the session transcript, if one has been generated
 	Summary *string
@@ -412,7 +413,8 @@ type ChatOverview struct {
 	// Whether Organizational Memory reads this session: remembered (its masked
 	// summary is in memory), not_summarized (no masked summary yet), excluded
 	// (someone kept it out), or personal (it came from a personal or unclassified
-	// AI account). Only listings populate it.
+	// AI account). Only listings populate it, and only while Business Memory
+	// Extraction is on for the organization.
 	MemoryState *string
 	// Persisted LLM summary of the session transcript, if one has been generated
 	Summary *string

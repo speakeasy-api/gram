@@ -23,7 +23,7 @@ import { ChatTotals, ChatTotals$inboundSchema } from "./chattotals.js";
 import { RiskSegment, RiskSegment$inboundSchema } from "./risksegment.js";
 
 /**
- * Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it.
+ * Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it, and only while Business Memory Extraction is on for the organization.
  */
 export const ChatMemoryState1 = {
   Remembered: "remembered",
@@ -32,7 +32,7 @@ export const ChatMemoryState1 = {
   Personal: "personal",
 } as const;
 /**
- * Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it.
+ * Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it, and only while Business Memory Extraction is on for the organization.
  */
 export type ChatMemoryState1 = OpenEnum<typeof ChatMemoryState1>;
 
@@ -111,7 +111,7 @@ export type Chat = {
    */
   maxGeneration: number;
   /**
-   * Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it.
+   * Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it, and only while Business Memory Extraction is on for the organization.
    */
   memoryState?: ChatMemoryState1 | undefined;
   /**

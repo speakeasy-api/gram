@@ -88,7 +88,7 @@ func TestChatMemoryReviewerCanExcludeButNotInclude(t *testing.T) {
 	require.True(t, got.CanInclude)
 }
 
-func TestChatMemoryNotFoundWhenRolloutOff(t *testing.T) {
+func TestChatMemoryHiddenWhenMemoryOff(t *testing.T) {
 	t.Parallel()
 	ti := newTestChatService(t)
 	ctx, userID := memberSessionCtx(t, ti)
@@ -99,4 +99,9 @@ func TestChatMemoryNotFoundWhenRolloutOff(t *testing.T) {
 
 	_, err := ti.service.GetMemory(ctx, &gen.GetMemoryPayload{ID: id.String()})
 	requireOopsCode(t, err, oops.CodeNotFound)
+
+	list, err := ti.service.ListChats(ctx, &gen.ListChatsPayload{Limit: 10, SortBy: "last_message_timestamp", SortOrder: "desc"})
+	require.NoError(t, err)
+	require.Len(t, list.Chats, 1)
+	require.Nil(t, list.Chats[0].MemoryState, "listings leave memory state out while memory is off")
 }

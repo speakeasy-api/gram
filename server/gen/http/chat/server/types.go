@@ -182,7 +182,8 @@ type LoadChatOverviewResponseBody struct {
 	// Whether Organizational Memory reads this session: remembered (its masked
 	// summary is in memory), not_summarized (no masked summary yet), excluded
 	// (someone kept it out), or personal (it came from a personal or unclassified
-	// AI account). Only listings populate it.
+	// AI account). Only listings populate it, and only while Business Memory
+	// Extraction is on for the organization.
 	MemoryState *string `form:"memory_state,omitempty" json:"memory_state,omitempty" xml:"memory_state,omitempty"`
 	// Persisted LLM summary of the session transcript, if one has been generated
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
@@ -303,7 +304,8 @@ type LoadChatResponseBody struct {
 	// Whether Organizational Memory reads this session: remembered (its masked
 	// summary is in memory), not_summarized (no masked summary yet), excluded
 	// (someone kept it out), or personal (it came from a personal or unclassified
-	// AI account). Only listings populate it.
+	// AI account). Only listings populate it, and only while Business Memory
+	// Extraction is on for the organization.
 	MemoryState *string `form:"memory_state,omitempty" json:"memory_state,omitempty" xml:"memory_state,omitempty"`
 	// Persisted LLM summary of the session transcript, if one has been generated
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`
@@ -3408,7 +3410,8 @@ type ChatOverviewResponseBody struct {
 	// Whether Organizational Memory reads this session: remembered (its masked
 	// summary is in memory), not_summarized (no masked summary yet), excluded
 	// (someone kept it out), or personal (it came from a personal or unclassified
-	// AI account). Only listings populate it.
+	// AI account). Only listings populate it, and only while Business Memory
+	// Extraction is on for the organization.
 	MemoryState *string `form:"memory_state,omitempty" json:"memory_state,omitempty" xml:"memory_state,omitempty"`
 	// Persisted LLM summary of the session transcript, if one has been generated
 	Summary *string `form:"summary,omitempty" json:"summary,omitempty" xml:"summary,omitempty"`

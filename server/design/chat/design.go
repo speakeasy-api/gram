@@ -700,7 +700,7 @@ var ChatOverview = Type("ChatOverview", func() {
 	Attribute("account_type", String, "Account type that produced the chat ('team', 'personal', or empty), resolved from the linked AI account.")
 	Attribute("account_email", String, "Email of the AI account that produced the chat, resolved from the linked AI account. May differ from the employee's work email (e.g. a personal account).")
 	Attribute("pinned", Boolean, "True when the chat is pinned")
-	Attribute("memory_state", String, "Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it.", func() {
+	Attribute("memory_state", String, "Whether Organizational Memory reads this session: remembered (its masked summary is in memory), not_summarized (no masked summary yet), excluded (someone kept it out), or personal (it came from a personal or unclassified AI account). Only listings populate it, and only while Business Memory Extraction is on for the organization.", func() {
 		Enum("remembered", "not_summarized", "excluded", "personal")
 	})
 	Attribute("summary", String, "Persisted LLM summary of the session transcript, if one has been generated")
