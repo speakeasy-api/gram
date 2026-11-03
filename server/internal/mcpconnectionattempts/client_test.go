@@ -66,6 +66,8 @@ func TestFromRequest_SetsTheClient(t *testing.T) {
 	req.Header.Set("User-Agent", "claude-code/2.0.14 (cli)")
 	row, err := RowAt(Begin(testScope()), StepMCPRequest, ResultAllowed, false, time.Now(), FromRequest(req))
 	require.NoError(t, err)
+	require.Empty(t, row.ClientFamily, "nothing is parsed on the request path")
+	(&Recorder{}).stampClient(&row)
 	require.Equal(t, FamilyClaudeCode, row.ClientFamily)
 	require.Equal(t, "2.0.14", row.ClientVersion)
 }
@@ -75,6 +77,104 @@ func TestFromRequest_NoRequestSetsNothing(t *testing.T) {
 
 	row, err := RowAt(Begin(testScope()), StepProviderRefresh, ResultRefreshed, true, time.Now(), FromRequest(nil))
 	require.NoError(t, err)
+	(&Recorder{}).stampClient(&row)
 	require.Empty(t, row.ClientFamily)
 	require.Empty(t, row.ClientVersion)
+}
+
+// hostileUserAgents are values a caller can send. Ⱥ grows when lowercased, which once moved offsets.
+var hostileUserAgents = []string{
+	"Ⱥcursor",
+	"ȺȺȺȺcursor/1.0",
+	"ȺCURSOR/1.0",
+	"cursorȺ/1.0",
+	"\xff\xfe\xfdcursor/1.0",
+	"cursor/\xff\xfe",
+	"cursor/1.0\xff",
+	"\x00\x01\x7fcursor/1\x00",
+	"curl/1.0\r\nX-Injected: yes",
+	"cursor/" + strings.Repeat("1", 1000),
+	"cursor/" + strings.Repeat("1.", 100),
+	strings.Repeat("Ⱥ", 1000) + "cursor/1.0",
+	strings.Repeat("\xff", 10_000),
+	"cursor",
+	"cursor/",
+	"/",
+	"",
+}
+
+func requireBoundedClient(t *testing.T, family, version string) {
+	t.Helper()
+
+	require.Contains(t, []string{FamilyCodexCLI, FamilyClaudeCode, FamilyClaudeAI, FamilyOpenAIConnector, FamilyCursor, FamilyVSCode, FamilyPerplexity, FamilyScript, FamilyBrowser, FamilyOther}, family)
+	require.LessOrEqual(t, len(version), maxClientVersionBytes)
+	if version != "" {
+		require.Regexp(t, clientVersionShape, version)
+	}
+}
+
+func TestClassifyUserAgent_HostileValues(t *testing.T) {
+	t.Parallel()
+
+	for _, userAgent := range hostileUserAgents {
+		family, version := classifyUserAgent(userAgent)
+		requireBoundedClient(t, family, version)
+	}
+
+	family, version := classifyUserAgent("ȺCURSOR/1.0")
+	require.Equal(t, FamilyCursor, family)
+	require.Equal(t, "1.0", version, "the offset still lands right after the marker")
+}
+
+func FuzzClassifyUserAgent(f *testing.F) {
+	for _, userAgent := range hostileUserAgents {
+		f.Add(userAgent)
+	}
+	f.Fuzz(func(t *testing.T, userAgent string) {
+		family, version := classifyUserAgent(userAgent)
+		requireBoundedClient(t, family, version)
+	})
+}
+
+// Hostile headers reach the writer and the row, and neither the request nor the writer breaks.
+func TestFromRequest_HostileHeadersNeverPanic(t *testing.T) {
+	t.Parallel()
+
+	recorder := &Recorder{deviceKeys: testDeviceKeys(testDeviceSecret)}
+	for _, value := range hostileUserAgents {
+		req := httptest.NewRequest(http.MethodGet, "/", nil)
+		req.Header["User-Agent"] = []string{value}
+		req.Header["X-Forwarded-For"] = []string{value}
+		row, err := RowAt(Begin(testScope()), StepMCPRequest, ResultAllowed, false, time.Now(), FromRequest(req))
+		require.NoError(t, err)
+		require.LessOrEqual(t, len(row.client.userAgent), maxUserAgentBytes)
+		require.LessOrEqual(t, len(row.client.forwardedFor), maxForwardedForBytes)
+
+		recorder.stampClient(&row)
+		requireBoundedClient(t, row.ClientFamily, row.ClientVersion)
+		require.Empty(t, row.DeviceKey, "none of these is an address")
+	}
+}
+
+// The other normalizers lowercase too, and must hold up to the same values.
+func TestNormalizers_HostileValues(t *testing.T) {
+	t.Parallel()
+
+	for _, value := range hostileUserAgents {
+		for _, input := range []string{value, "https://" + value, "https://" + value + "/path"} {
+			require.LessOrEqual(t, len(NormalizeProviderHost(input)), maxProviderHostBytes)
+			require.LessOrEqual(t, len(AppOf(input).String()), maxProviderHostBytes)
+		}
+	}
+}
+
+func FuzzNormalizers(f *testing.F) {
+	for _, value := range hostileUserAgents {
+		f.Add(value)
+		f.Add("https://" + value)
+	}
+	f.Fuzz(func(t *testing.T, value string) {
+		require.LessOrEqual(t, len(NormalizeProviderHost(value)), maxProviderHostBytes)
+		require.LessOrEqual(t, len(AppOf(value).String()), maxProviderHostBytes)
+	})
 }

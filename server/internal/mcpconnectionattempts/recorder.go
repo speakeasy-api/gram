@@ -205,8 +205,8 @@ type Row struct {
 	Repeats               uint32
 	DeviceKey             string
 
-	// clientIP waits here for the writer to hash it. It is never stored or logged.
-	clientIP string
+	// client waits here for the writer to read it. It is never stored or logged.
+	client requestClient
 }
 
 var errInvalidEvent = errors.New("invalid connection event")
@@ -280,7 +280,7 @@ func RowAt(attempt Attempt, step Step, what Happened, final bool, at time.Time, 
 		ClientVersion:         "",
 		Repeats:               0,
 		DeviceKey:             "",
-		clientIP:              "",
+		client:                requestClient{present: false, userAgent: "", forwardedFor: ""},
 	}
 	for _, opt := range opts {
 		if opt.apply != nil {
@@ -347,7 +347,7 @@ type Recorder struct {
 	conn        driver.Conn
 	limiter     *onceLimiter
 	logsEnabled func(context.Context, string) (bool, error)
-	deviceKey   []byte
+	deviceKeys  DeriveKey
 	capture     func(Row)
 	cfg         config
 	steps       metric.Int64Counter
@@ -390,7 +390,7 @@ func newDropCounters() map[dropReason]*atomic.Int64 {
 // NewRecorder starts a recorder. Stop it with Shutdown. Without logsEnabled
 // nothing is written.
 func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn driver.Conn, logsEnabled func(context.Context, string) (bool, error), opts ...RecorderOption) *Recorder {
-	return newRecorder(logger, meterProvider, conn, logsEnabled, recorderDeviceKey(opts), config{
+	return newRecorder(logger, meterProvider, conn, logsEnabled, config{
 		table:            eventsTable,
 		queueSize:        defaultQueueSize,
 		maxBatch:         defaultMaxBatch,
@@ -398,10 +398,10 @@ func NewRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 		insertTimeout:    defaultInsertTimeout,
 		logsCheckTimeout: defaultLogsCheckTimeout,
 		repeatsInterval:  defaultRepeatsInterval,
-	})
+	}, opts...)
 }
 
-func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn driver.Conn, logsEnabled func(context.Context, string) (bool, error), deviceKey []byte, cfg config) *Recorder {
+func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn driver.Conn, logsEnabled func(context.Context, string) (bool, error), cfg config, opts ...RecorderOption) *Recorder {
 	logger = logger.With(attr.SlogComponent("mcp_connection_attempts"))
 	meter := meterProvider.Meter(meterScope)
 
@@ -423,7 +423,7 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 		conn:        conn,
 		limiter:     newOnceLimiter(),
 		logsEnabled: logsEnabled,
-		deviceKey:   deviceKey,
+		deviceKeys:  nil,
 		capture:     nil,
 		cfg:         cfg,
 		steps:       steps,
@@ -438,6 +438,9 @@ func newRecorder(logger *slog.Logger, meterProvider metric.MeterProvider, conn d
 		unfinished:  atomic.Int64{},
 		dropTotals:  newDropCounters(),
 	}
+	for _, opt := range opts {
+		opt(r)
+	}
 	go r.run()
 	return r
 }
@@ -450,7 +453,7 @@ func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (
 		conn:        nil,
 		limiter:     nil,
 		logsEnabled: logsEnabled,
-		deviceKey:   nil,
+		deviceKeys:  nil,
 		capture:     capture,
 		cfg:         config{table: "", queueSize: 0, maxBatch: 0, flushInterval: 0, insertTimeout: 0, logsCheckTimeout: time.Second, repeatsInterval: 0},
 		steps:       nil,
@@ -488,6 +491,12 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 	if r == nil || attempt.IsZero() {
 		return
 	}
+	// Recording must never panic a request.
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			r.drop(ctx, dropPanic, 1, fmt.Errorf("connection events record: %v", recovered))
+		}
+	}()
 	row, err := RowAt(attempt, step, what, final, time.Now(), opts...)
 	if err != nil {
 		r.drop(ctx, dropInvalidEvent, 1, err)
@@ -513,7 +522,7 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 	r.countStep(ctx, row)
 	if r.capture != nil {
 		if reason, _ := r.organizationAllowed(row.OrganizationID); reason == "" {
-			r.stampDevice(&row)
+			r.stampClient(&row)
 			r.capture(row)
 		}
 		return
@@ -656,7 +665,7 @@ func (r *Recorder) run() {
 				r.drop(context.Background(), reason, 1, nil)
 				return
 			}
-			r.stampDevice(&row)
+			r.stampClient(&row)
 			batch = append(batch, row)
 		})
 		if len(batch) == pending {

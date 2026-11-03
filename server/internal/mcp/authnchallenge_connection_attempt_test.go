@@ -2,6 +2,9 @@ package mcp_test
 
 import (
 	"context"
+	"crypto/hmac"
+	"crypto/sha256"
+	"encoding/hex"
 	"encoding/json"
 	"net/http"
 	"net/http/httptest"
@@ -25,6 +28,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/risk"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
@@ -110,6 +114,61 @@ func TestAuthorize_BeginsTheConnectionAttempt(t *testing.T) {
 	require.Empty(t, rows[0].ProviderHost, "Speakeasy sign-in has no provider")
 	require.Equal(t, mcpconnectionattempts.FamilyClaudeCode, rows[0].ClientFamily)
 	require.Equal(t, "2.0.14", rows[0].ClientVersion)
+}
+
+// With the real keyring, the row gets a device key from the ingress hop and never the address.
+func TestAuthorize_DeviceKeyFromTheRiskKeyring(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti, _ := newTestMCPServiceWithDevIDP(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	keyring, err := risk.ParsePepperKeyRing([]byte(`{"current":"v1","keys":{"v1":"MDEyMzQ1Njc4OWFiY2RlZjAxMjM0NTY3ODlhYmNkZWY="}}`))
+	require.NoError(t, err)
+	conn, err := infra.NewClickhouseClient(t)
+	require.NoError(t, err)
+	recorder := mcpconnectionattempts.NewRecorder(testenv.NewLogger(t), testenv.NewMeterProvider(t), conn, mcpconnectionattemptstest.LogsOn, mcpconnectionattempts.WithDeviceKeys(keyring.DeriveCurrentKey))
+	t.Cleanup(func() {
+		cleanupCtx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
+		defer cancel()
+		_ = recorder.Shutdown(cleanupCtx)
+	})
+	ti.service.SetConnectionRecorder(recorder)
+
+	slug := "attempt-device-" + uuid.New().String()[:8]
+	_, issuer := createPrivateIssuerGatedToolset(t, ctx, ti, authCtx, slug)
+	clientID := "attempt-device-client"
+	insertUserSessionClient(t, ctx, ti.conn, issuer.ID, clientID)
+
+	q := url.Values{"response_type": {"code"}, "client_id": {clientID}, "redirect_uri": {"http://example.com/cb"}, "state": {"state-123"}, "code_challenge": {"challenge"}, "code_challenge_method": {"S256"}}
+	req := httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/authorize?"+q.Encode(), nil)
+	req.Header.Set("X-Forwarded-For", "198.51.100.1, 203.0.113.7")
+	rctx := chi.NewRouteContext()
+	rctx.URLParams.Add("mcpSlug", slug)
+	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
+
+	w := httptest.NewRecorder()
+	require.NoError(t, ti.service.HandleAuthorize(w, req))
+	require.Equal(t, http.StatusFound, w.Code)
+	require.NoError(t, recorder.Shutdown(ctx))
+
+	loc, err := url.Parse(w.Header().Get("Location"))
+	require.NoError(t, err)
+	_, authnCache := buildChallengeManagerForTest(t, ti)
+	stored, err := authnCache.Get(ctx, "authnChallenge:"+loc.Query().Get("state"))
+	require.NoError(t, err)
+	attemptID, err := uuid.Parse(stored.FlowID)
+	require.NoError(t, err)
+
+	key, err := keyring.DeriveCurrentKey("gram/connection/device", authCtx.ActiveOrganizationID)
+	require.NoError(t, err)
+	mac := hmac.New(sha256.New, key)
+	mac.Write([]byte("203.0.113.7"))
+
+	var deviceKey string
+	require.NoError(t, conn.QueryRow(ctx, `SELECT device_key FROM mcp_connection_events WHERE attempt_id = ?`, attemptID).Scan(&deviceKey))
+	require.Equal(t, hex.EncodeToString(mac.Sum(nil)[:16]), deviceKey)
 }
 
 // The organization gateway belongs to no project, and its rows name the gateway.

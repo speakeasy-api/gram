@@ -2,6 +2,7 @@ package mcpconnectionattempts
 
 import (
 	"context"
+	"errors"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -14,6 +15,13 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
+
+// testDeviceKeys stands in for the keyring: one key per secret, info and organization.
+func testDeviceKeys(secret string) DeriveKey {
+	return func(info, organizationID string) ([]byte, error) {
+		return []byte(secret + "|" + info + "|" + organizationID), nil
+	}
+}
 
 const testDeviceSecret = "test-device-key-secret"
 
@@ -48,7 +56,7 @@ func TestConnectionIP_OnlyTheHopOurIngressAppended(t *testing.T) {
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
-			require.Equal(t, tc.want, connectionIP(requestFrom(tc.lines...)))
+			require.Equal(t, tc.want, connectionIP(lastForwardedFor(requestFrom(tc.lines...))))
 		})
 	}
 }
@@ -56,7 +64,7 @@ func TestConnectionIP_OnlyTheHopOurIngressAppended(t *testing.T) {
 // RemoteAddr is the ingress, so it never stands in for the client.
 func TestConnectionIP_NeverFallsBackToTheConnection(t *testing.T) {
 	t.Parallel()
-	require.Empty(t, connectionIP(requestFrom()))
+	require.Empty(t, connectionIP(lastForwardedFor(requestFrom())))
 }
 
 // Private network traffic doesn't pass through the ingress that overwrites the header.
@@ -65,7 +73,7 @@ func TestConnectionIP_PrivateNetworkIsUnsure(t *testing.T) {
 
 	req := requestFrom("203.0.113.7")
 	req = req.WithContext(requestorigin.WithContext(req.Context(), requestorigin.Origin{Surface: requestorigin.SurfacePrivateNetwork, BaseURL: "", OrganizationID: ""}))
-	require.Empty(t, connectionIP(req))
+	require.Empty(t, connectionIP(lastForwardedFor(req)))
 }
 
 func stampedDeviceKey(t *testing.T, secret, organizationID string, r *http.Request) string {
@@ -73,9 +81,12 @@ func stampedDeviceKey(t *testing.T, secret, organizationID string, r *http.Reque
 
 	row, err := RowAt(Begin(ServerScope(organizationID, uuid.New(), uuid.New(), AppDCR)), StepMCPRequest, ResultAllowed, false, time.Now(), FromRequest(r))
 	require.NoError(t, err)
-	recorder := &Recorder{deviceKey: []byte(secret)}
-	recorder.stampDevice(&row)
-	require.Empty(t, row.clientIP, "the address doesn't outlive the hash")
+	recorder := &Recorder{}
+	if secret != "" {
+		recorder.deviceKeys = testDeviceKeys(secret)
+	}
+	recorder.stampClient(&row)
+	require.False(t, row.client.present, "the request's values don't outlive the writer")
 	return row.DeviceKey
 }
 
@@ -104,7 +115,7 @@ func TestDeviceKey_LandsOnEventsOnly(t *testing.T) {
 	t.Parallel()
 
 	conn := clickhouseConn(t)
-	recorder := NewRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, logsOn, WithDeviceKeySecret(testDeviceSecret))
+	recorder := NewRecorder(testenv.NewLogger(t), sdkmetric.NewMeterProvider(), conn, logsOn, WithDeviceKeys(testDeviceKeys(testDeviceSecret)))
 	t.Cleanup(func() {
 		ctx, cancel := context.WithTimeout(context.Background(), 30*time.Second)
 		defer cancel()
@@ -139,7 +150,32 @@ func TestDeviceKey_LogsOffHashesNothing(t *testing.T) {
 
 	captured := 0
 	recorder := NewCapturing(func(Row) { captured++ }, func(context.Context, string) (bool, error) { return false, nil })
-	recorder.deviceKey = []byte(testDeviceSecret)
+	derived := 0
+	recorder.deviceKeys = func(string, string) ([]byte, error) {
+		derived++
+		return nil, errors.New("no key")
+	}
 	recorder.End(t.Context(), Begin(testScope()), StepInboundConsent, CodeCanceled, FromRequest(requestFrom("203.0.113.7")))
 	require.Zero(t, captured)
+	require.Zero(t, derived, "no key is derived for an organization with logs off")
+}
+
+// An unusable keyring leaves the key empty and the row intact.
+func TestDeviceKey_UnusableKeyLeavesItEmpty(t *testing.T) {
+	t.Parallel()
+
+	recorder := &Recorder{deviceKeys: func(string, string) ([]byte, error) { return nil, errors.New("no keyring") }}
+	require.Empty(t, recorder.deviceKeyFor("org-a", "203.0.113.7"))
+}
+
+func TestDeviceKey_AsksForItsOwnPurpose(t *testing.T) {
+	t.Parallel()
+
+	var infos []string
+	recorder := &Recorder{deviceKeys: func(info, _ string) ([]byte, error) {
+		infos = append(infos, info)
+		return []byte("key"), nil
+	}}
+	require.NotEmpty(t, recorder.deviceKeyFor("org-a", "203.0.113.7"))
+	require.Equal(t, []string{"gram/connection/device"}, infos)
 }
