@@ -18,11 +18,13 @@ permissions: {}
 
 # One review per pull request at a time; a newer request waits for the current
 # one. GitHub keeps only the newest pending run in a group, so every other
-# comment gets a group of its own and cannot replace a queued review. The
-# command test is the analyse job's.
+# comment, including a command from an author the analyse job skips, gets a
+# group of its own and cannot replace a queued review. The tests are the
+# analyse job's.
 concurrency:
   group: >-
-    ${{ github.workflow }}-${{ (github.event.comment.body == '@claude perf' ||
+    ${{ github.workflow }}-${{ contains(fromJSON('["OWNER","MEMBER","COLLABORATOR"]'), github.event.comment.author_association) &&
+    (github.event.comment.body == '@claude perf' ||
     startsWith(github.event.comment.body, '@claude perf ') ||
     startsWith(github.event.comment.body, fromJSON('"@claude perf\n"')) ||
     startsWith(github.event.comment.body, fromJSON('"@claude perf\r"')))
