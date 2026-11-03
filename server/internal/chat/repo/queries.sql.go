@@ -1000,6 +1000,7 @@ LEFT JOIN LATERAL (
   WHERE dd.project_id = c.project_id
     AND dd.level = 'day'
     AND dd.chat_ids @> ARRAY[c.id]
+  ORDER BY dd.period_start DESC
   LIMIT 1
 ) d ON TRUE
 WHERE c.id = $1 AND c.project_id = $2 AND c.deleted IS FALSE

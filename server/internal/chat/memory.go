@@ -86,9 +86,14 @@ func (s *Service) chatMemory(ctx context.Context, authCtx *contextvalues.AuthCon
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "load chat memory").LogError(ctx, s.logger)
 	}
-	memos, err := s.repo.ListChatMemoryMemos(ctx, repo.ListChatMemoryMemosParams{ChatID: uuid.NullUUID{UUID: chat.ID, Valid: true}, ProjectID: *authCtx.ProjectID})
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "list chat memos").LogError(ctx, s.logger)
+	// Memos of an excluded or personal session are out of memory with it, so
+	// they are not listed either.
+	var memos []repo.ListChatMemoryMemosRow
+	if row.MemoryState == "remembered" || row.MemoryState == "not_summarized" {
+		memos, err = s.repo.ListChatMemoryMemos(ctx, repo.ListChatMemoryMemosParams{ChatID: uuid.NullUUID{UUID: chat.ID, Valid: true}, ProjectID: *authCtx.ProjectID})
+		if err != nil {
+			return nil, oops.E(oops.CodeUnexpected, err, "list chat memos").LogError(ctx, s.logger)
+		}
 	}
 
 	result := &gen.ChatMemory{
