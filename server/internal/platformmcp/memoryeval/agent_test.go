@@ -423,7 +423,7 @@ func summarize(corpus *memoryeval.Corpus, runs int, arms []arm, answers []answer
 func renderReport(corpus *memoryeval.Corpus, answerModel, judgeModel string, runs int, arms []arm, stats map[string]*armStats) string {
 	var b strings.Builder
 	fmt.Fprintf(&b, "# Team memory eval\n\nAnswer model %s, judge %s, %d runs per arm, %d questions.\n\n", answerModel, judgeModel, runs, len(corpus.Questions))
-	b.WriteString("| Arm | Accuracy (mean, range) | Hard set | Point | Timeline | Reversal | Paraphrase | Synthesis | Negative | Isolation | Valid citations | Leaks | Isolation violations | Not found on negatives | Tool tokens/question | Misses (retrieval/reasoning/error) |\n")
+	b.WriteString("| Arm | Accuracy (mean, range) | Hard set | Point | Timeline | Reversal | Temporal | Synthesis | Negative | Isolation | Valid citations | Leaks | Isolation violations | Not found on negatives | Tool tokens/question | Misses (retrieval/reasoning/error) |\n")
 	b.WriteString("| --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- | --- |\n")
 	for _, a := range arms {
 		s := stats[a.name]
@@ -439,16 +439,16 @@ func renderReport(corpus *memoryeval.Corpus, answerModel, judgeModel string, run
 		if s.answerable > 0 && len(a.tools) > 0 {
 			citations = fmt.Sprintf("%.0f%%", 100*float64(s.validCited)/float64(s.answerable))
 		}
-		hardCorrect := s.correctByKind[memoryeval.QuestionParaphrase] + s.correctByKind[memoryeval.QuestionSynthesis]
-		hardTotal := s.totalByKind[memoryeval.QuestionParaphrase] + s.totalByKind[memoryeval.QuestionSynthesis]
+		hardCorrect := s.correctByKind[memoryeval.QuestionTemporal] + s.correctByKind[memoryeval.QuestionSynthesis]
+		hardTotal := s.totalByKind[memoryeval.QuestionTemporal] + s.totalByKind[memoryeval.QuestionSynthesis]
 		fmt.Fprintf(&b, "| %s | %.0f%% (%.0f–%.0f%%) | %.0f%% | %s | %s | %s | %s | %s | %s | %s | %s | %d %v | %d %v | %d/%d | %d | %d/%d/%d |\n",
 			a.name, 100*mean, 100*lo, 100*hi, 100*float64(hardCorrect)/float64(max(hardTotal, 1)),
 			kind(memoryeval.QuestionPointLookup), kind(memoryeval.QuestionTimeline), kind(memoryeval.QuestionReversal),
-			kind(memoryeval.QuestionParaphrase), kind(memoryeval.QuestionSynthesis), kind(memoryeval.QuestionNegative), kind(memoryeval.QuestionIsolation),
+			kind(memoryeval.QuestionTemporal), kind(memoryeval.QuestionSynthesis), kind(memoryeval.QuestionNegative), kind(memoryeval.QuestionIsolation),
 			citations, len(s.leaks), sortedKeys(s.leaks), len(s.isolation), sortedKeys(s.isolation),
 			s.notFound, s.negatives, s.toolTokens/max(s.answers, 1), s.retrievalMisses, s.reasoningMisses, s.errors)
 	}
-	b.WriteString("\nCounts in the kind columns are summed across runs. Hard set is accuracy on the paraphrase and synthesis questions, which share no keywords with their sources. Valid citations is the share of answerable questions whose answer cites at least one source and only sources that contain the answer.\n")
+	b.WriteString("\nCounts in the kind columns are summed across runs. Hard set is accuracy on the temporal and synthesis questions, which share no keywords with their sources and each need three or more chats weeks apart. Valid citations is the share of answerable questions whose answer cites at least one source and only sources that contain the answer.\n")
 	return b.String()
 }
 

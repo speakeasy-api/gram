@@ -22,19 +22,20 @@ const (
 	// session or in the other project.
 	QuestionIsolation QuestionKind = "isolation"
 
-	// QuestionParaphrase asks for one decision without using any of its
-	// source chat's words, so keyword search on the question finds nothing.
-	QuestionParaphrase QuestionKind = "paraphrase"
+	// QuestionTemporal asks what was true at the moment of another event, so
+	// the answer needs the anchor event, the decision in force then and the
+	// later change, which sit weeks apart.
+	QuestionTemporal QuestionKind = "temporal"
 
-	// QuestionSynthesis needs facts from several chats that share no
-	// keywords with the question.
+	// QuestionSynthesis needs facts from three or more chats spread over
+	// weeks.
 	QuestionSynthesis QuestionKind = "synthesis"
 )
 
-// Hard reports whether the kind is in the hard set, which keyword search on
-// the question text alone cannot answer.
+// Hard reports whether the kind is in the hard set. Hard questions share no
+// keywords with their sources and need several chats far apart in time.
 func (k QuestionKind) Hard() bool {
-	return k == QuestionParaphrase || k == QuestionSynthesis
+	return k == QuestionTemporal || k == QuestionSynthesis
 }
 
 // NotFound is the answer key for questions memory must not answer.
@@ -99,8 +100,8 @@ func timeline(id, text, answer string, sources []string, evidence ...[]string) Q
 	return Question{ID: id, Kind: QuestionTimeline, Text: text, Answer: answer, Sources: sources, Evidence: evidence}
 }
 
-func paraphrase(id, text, answer, source string, evidence ...string) Question {
-	return Question{ID: id, Kind: QuestionParaphrase, Text: text, Answer: answer, Sources: []string{source}, Evidence: [][]string{evidence}}
+func temporal(id, text, answer string, sources []string, evidence ...[]string) Question {
+	return Question{ID: id, Kind: QuestionTemporal, Text: text, Answer: answer, Sources: sources, Evidence: evidence}
 }
 
 func synthesis(id, text, answer string, sources []string, evidence ...[]string) Question {
@@ -112,8 +113,8 @@ func notFound(id string, kind QuestionKind, text string) Question {
 }
 
 // questions returns the 55 graded questions: 15 point lookups, 8 timelines,
-// 7 reversals, 5 negatives, 5 isolation probes, and a hard set of 10
-// paraphrases and 5 syntheses.
+// 7 reversals, 5 negatives, 5 isolation probes, and a hard set of 7
+// temporal and 8 synthesis questions.
 func questions() []Question {
 	return []Question{
 		lookup("q01", "Which system did we pick to run customer webhook retries, and when do they give up?",
@@ -229,56 +230,66 @@ func questions() []Question {
 		notFound("q39", QuestionIsolation, "What hero headline did we pick for the marketing landing page?"),
 		notFound("q40", QuestionIsolation, "How much does our most expensive pricing tier cost per month?"),
 
-		paraphrase("q41", "When a new job is assigned, how does the courier's phone get alerted?",
-			"Through the Expo push service, which the driver app uses for pickup notifications.",
-			"decision-push-notifications", "Expo"),
-		paraphrase("q42", "Where are the stickers we print for parcels kept, and for how long can someone open them?",
-			"Shipping label PDFs are stored in the S3 labels bucket in eu-west-1 and served through presigned links that expire after 7 days.",
-			"decision-label-storage", "presigned", "7 days"),
-		paraphrase("q43", "What data type holds prices and charges in our schema?",
-			"Integer cents in bigint columns, with a separate ISO currency code column; never floats.",
-			"decision-money", "cents", "bigint"),
-		paraphrase("q44", "Which day and hour do emergency responsibilities change hands?",
-			"Monday at 10am; the on-call rotation is weekly with a written handoff note.",
-			"decision-oncall", "Monday", "10am"),
-		paraphrase("q45", "Can I release to customers on the last workday afternoon?",
-			"Not after 2pm on Fridays; production deploys after that need approval from whoever is on call.",
-			"decision-deploy-freeze", "2pm"),
-		paraphrase("q46", "What kind of identifier do fresh records get?",
-			"UUIDv7 primary keys for all new tables.",
-			"decision-id-format", "UUIDv7"),
-		paraphrase("q47", "Where do crashes and exceptions from all our products get reported?",
-			"Sentry, for the backend, frontend and driver app.",
-			"decision-error-tracking", "Sentry"),
-		paraphrase("q48", "How big can an instant spreadsheet get before someone has to wait for it in their inbox?",
-			"50,000 rows; larger CSV exports run in the background and email a link.",
-			"decision-csv-export", "50,000"),
-		paraphrase("q49", "Which clock does the interface use when it prints when a parcel gets collected?",
-			"The pickup location's local timezone, stored in UTC.",
-			"decision-timezones", "pickup", "local"),
-		paraphrase("q50", "What engine handles misspelled lookups in the finder now?",
-			"Typesense, synced from the outbox; it replaced Postgres full-text search.",
-			"reversal-shipment-search", "Typesense"),
+		temporal("q41", "Which middleware sat ahead of our main database when customers couldn't look up deliveries and got failures?",
+			"PgBouncer in transaction mode. The tracking page outage after release r412 was 33 days ago, and PgCat only replaced PgBouncer 20 days ago.",
+			[]string{"decision-pooler", "timeline-outage-detect", "reversal-pooler"},
+			[]string{"PgBouncer"}, []string{"r412"}, []string{"PgCat"}),
+		temporal("q42", "How did staff log on to the web console when the delivery lookup broke, and what has changed afterwards?",
+			"At the time of the r412 outage the dashboard still used the OAuth implicit flow. Since then authorization code with PKCE replaced it, refresh token rotation shipped, and session lifetime was cut from 12 hours to 8 hours.",
+			[]string{"timeline-outage-detect", "timeline-auth-pkce", "timeline-auth-rotation", "timeline-auth-lifetime"},
+			[]string{"r412"}, []string{"PKCE"}, []string{"rotation"}, []string{"8 hours"}),
+		temporal("q43", "What call ceiling did each partner key have when we finished moving our biggest courier integration off its old protocol?",
+			"600 requests per minute per API key. FedEx label creation moved to REST 30 days ago, and the limit was only raised to 1,200 five days later.",
+			[]string{"decision-rate-limit", "timeline-fedex-labels", "reversal-rate-limit"},
+			[]string{"600"}, []string{"FedEx", "label"}, []string{"1,200"}),
+		temporal("q44", "Which calendar utility did the web client rely on when we originally outsourced resizing pictures of signed handovers?",
+			"date-fns. Proof-of-delivery photos moved to Cloudflare Images 48 days ago, and Luxon only replaced date-fns 16 days ago.",
+			[]string{"decision-date-library", "decision-image-cdn", "reversal-date-library"},
+			[]string{"date-fns"}, []string{"Cloudflare Images"}, []string{"Luxon"}),
+		temporal("q45", "When the slimmer registration launched, how was money collected from clients?",
+			"Through dual-write: every invoice went to both the in-house cron and Stripe Billing, with a nightly diff of the totals. The 3 steps signup shipped 37 days ago, a day after dual-write started, and the cut over to Stripe alone came 22 days ago.",
+			[]string{"timeline-onboarding-steps", "timeline-billing-dualwrite", "timeline-billing-cutover"},
+			[]string{"3 steps"}, []string{"dual-write"}, []string{"cut over"}),
+		temporal("q46", "Where did warnings about late couriers go, and what set them off, once staff got logged out sooner?",
+			"To #carrier-ops in Slack, using per-lane thresholds based on each lane's 90 day baseline. Sessions were cut to 8 hours 5 days ago, after both of those changes.",
+			[]string{"timeline-auth-lifetime", "timeline-sla-slack", "timeline-sla-lanes"},
+			[]string{"8 hours"}, []string{"#carrier-ops"}, []string{"per-lane"}),
+		temporal("q47", "Which modelling toolkit powered arrival predictions while the old and new charging setups ran in parallel?",
+			"XGBoost. Billing dual-write ran from 38 to 22 days ago, and LightGBM only replaced XGBoost 7 days ago.",
+			[]string{"decision-eta-model", "timeline-billing-dualwrite", "reversal-eta-model"},
+			[]string{"XGBoost"}, []string{"dual-write"}, []string{"LightGBM"}),
 
-		synthesis("q51", "Which tooling changes were made to save money?",
-			"Application log retention was cut from 30 to 14 days when the Datadog bill doubled; Cloudflare Images was replaced by self-hosted imgproxy; the API docs moved from Mintlify to Docusaurus after its pricing jumped.",
-			[]string{"reversal-log-retention", "reversal-image-cdn", "reversal-docs-site"},
-			[]string{"14 days"}, []string{"imgproxy"}, []string{"Docusaurus"}),
-		synthesis("q52", "Which vendors did we drop for something we run ourselves?",
-			"Cloudflare Images, replaced by self-hosted imgproxy in front of S3, and Mintlify, replaced by self-hosted Docusaurus.",
-			[]string{"reversal-image-cdn", "reversal-docs-site"},
-			[]string{"imgproxy"}, []string{"Docusaurus"}),
-		synthesis("q53", "What have we decided about the mobile product couriers carry?",
-			"Notifications go through the Expo push service, and crashes go to Sentry like the other apps.",
-			[]string{"decision-push-notifications", "decision-error-tracking"},
-			[]string{"Expo"}, []string{"Sentry"}),
-		synthesis("q54", "For what period do we hold onto each kind of information before deleting it?",
-			"Application logs 14 days, raw tracking events 90 days, audit logs 1 year, daily rollups 2 years.",
-			[]string{"reversal-log-retention", "decision-event-ttl"},
-			[]string{"14 days"}, []string{"90 days"}),
-		synthesis("q55", "Which rules did we add because something broke?",
-			"No production deploys after 2pm on Fridays, after a Friday evening rollback; and query count budget tests in CI plus a pool saturation alert, after the tracking outage.",
-			[]string{"decision-deploy-freeze", "timeline-outage-followups"},
-			[]string{"2pm"}, []string{"query count budget"}),
+		synthesis("q48", "Which earlier choices did we later undo, and what replaced each?",
+			"Eight: PgBouncer to PgCat, date-fns to Luxon, log retention from 30 to 14 days, Cloudflare Images to imgproxy, Postgres full-text search to Typesense, Mintlify to Docusaurus, XGBoost to LightGBM, and the API rate limit from 600 to 1,200 per minute.",
+			[]string{"reversal-pooler", "reversal-date-library", "reversal-log-retention", "reversal-image-cdn", "reversal-shipment-search", "reversal-docs-site", "reversal-eta-model", "reversal-rate-limit"},
+			[]string{"PgCat"}, []string{"Luxon"}, []string{"14 days"}, []string{"imgproxy"}, []string{"Typesense"}, []string{"Docusaurus"}, []string{"LightGBM"}, []string{"1,200"}),
+		synthesis("q49", "What did we do to make logins and outbound notifications harder to abuse, oldest first?",
+			"1) Dashboard login moved to authorization code with PKCE; 2) outgoing webhooks were signed with HMAC-SHA256; 3) refresh token rotation shipped; 4) sessions were cut from 12 to 8 hours.",
+			[]string{"timeline-auth-pkce", "decision-webhook-signature", "timeline-auth-rotation", "timeline-auth-lifetime"},
+			[]string{"PKCE"}, []string{"HMAC-SHA256"}, []string{"rotation"}, []string{"8 hours"}),
+		synthesis("q50", "What have we decided about the experience of couriers out on the road?",
+			"Crashes go to Sentry; shipment times show in the pickup location's local timezone; new pickups arrive through the Expo push service; and proof-of-delivery photos are served by self-hosted imgproxy, which replaced Cloudflare Images.",
+			[]string{"decision-error-tracking", "decision-timezones", "reversal-image-cdn", "decision-push-notifications"},
+			[]string{"Sentry"}, []string{"pickup"}, []string{"imgproxy"}, []string{"Expo"}),
+		synthesis("q51", "Which rules did we add because something broke?",
+			"No production deploys after 2pm on Fridays, after a Friday rollback; query count budget tests in CI and a pool saturation alert, after the N+1 query outage; money stored as integer cents with a lint check against float fields, after reports were off by a cent; and synchronous CSV exports capped at 50,000 rows, after exports timed out.",
+			[]string{"decision-csv-export", "decision-deploy-freeze", "timeline-outage-cause", "timeline-outage-followups", "decision-money"},
+			[]string{"50,000"}, []string{"2pm"}, []string{"N+1"}, []string{"query count budget"}, []string{"cents"}),
+		synthesis("q52", "Which two long-running moves off outside providers' legacy setups did we complete, and how long did each take?",
+			"The FedEx move from SOAP to the REST API, from 59 to 30 days ago (about four weeks), and invoicing from the in-house cron to Stripe Billing, from 54 to 22 days ago (about four and a half weeks).",
+			[]string{"timeline-fedex-start", "timeline-fedex-labels", "timeline-billing-plan", "timeline-billing-cutover"},
+			[]string{"SOAP"}, []string{"Stripe Billing"}),
+		synthesis("q53", "Which product metrics improved recently, and by how much?",
+			"Shipments dashboard p95 went from 4.2s to 900ms, and activation went from 31% to 44%.",
+			[]string{"timeline-dashboard-pagination", "timeline-dashboard-counts", "timeline-onboarding-result"},
+			[]string{"4.2s"}, []string{"900ms"}, []string{"44%"}),
+		synthesis("q54", "What did we change about alerting and who gets woken up at night?",
+			"Carrier SLA alerts started at a 92% on-time threshold by email, moved to #carrier-ops in Slack, then switched to per-lane thresholds; on-call became a weekly rotation with a Monday 10am handoff; and a pool saturation alert was added after the tracking outage.",
+			[]string{"timeline-sla-threshold", "timeline-sla-slack", "timeline-sla-lanes", "decision-oncall", "timeline-outage-followups"},
+			[]string{"92%"}, []string{"#carrier-ops"}, []string{"per-lane"}, []string{"Monday"}, []string{"saturation"}),
+		synthesis("q55", "What must an outside developer calling us understand about paging, throttling, verifying our callbacks and where the manual lives?",
+			"Lists use opaque base64 cursors with page sizes up to 200; the limit is 1,200 requests per minute per key with a burst of 200, with enterprise overrides up to 5,000; webhooks are signed with HMAC-SHA256 in X-Lumen-Signature; the docs are self-hosted on Docusaurus.",
+			[]string{"decision-pagination", "decision-webhook-signature", "reversal-rate-limit", "timeline-rate-limit-override", "reversal-docs-site"},
+			[]string{"cursors"}, []string{"HMAC-SHA256"}, []string{"1,200"}, []string{"5,000"}, []string{"Docusaurus"}),
 	}
 }
