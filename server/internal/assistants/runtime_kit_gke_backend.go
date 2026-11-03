@@ -19,6 +19,7 @@ import (
 
 	"github.com/distribution/reference"
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 	"github.com/speakeasy-api/gram/server/internal/sandbox"
 
 	apierrors "k8s.io/apimachinery/pkg/api/errors"
@@ -436,6 +437,26 @@ func (k *KitGKERuntimeBackend) Ensure(ctx context.Context, r assistantRuntimeRec
 // Terminal failures cannot reuse the recorded resources or their startup authority.
 type kitGKEAdmissionTerminalError struct{ error }
 
+// errKitRuntimeUnrecoverable marks a runtime whose lifecycle can never progress
+// again. The caller retires it so the next admission starts a fresh runtime.
+var errKitRuntimeUnrecoverable = errors.New("kit runtime cannot recover")
+
+type kitLifecycleTxKey struct{}
+
+// keepKitLifecycleAlive runs a trivial statement on the held lifecycle
+// transaction. Kubernetes waits can outlast Postgres's idle-in-transaction
+// timeout, which would otherwise terminate the connection mid-operation.
+func keepKitLifecycleAlive(ctx context.Context) error {
+	tx, ok := ctx.Value(kitLifecycleTxKey{}).(pgx.Tx)
+	if !ok || tx == nil {
+		return nil
+	}
+	if _, err := tx.Exec(ctx, "SELECT 1"); err != nil {
+		return fmt.Errorf("keep Kit lifecycle transaction alive: %w", err)
+	}
+	return nil
+}
+
 func (e kitGKEAdmissionTerminalError) Unwrap() error { return e.error }
 
 // The caller persists exact create-response UIDs before waiting for a process.
@@ -491,6 +512,9 @@ func (k *KitGKERuntimeBackend) finishColdProvision(ctx context.Context, r assist
 		if _, err = k.protocol(readyCtx, r); err == nil {
 			break
 		}
+		if err := keepKitLifecycleAlive(readyCtx); err != nil {
+			return RuntimeBackendEnsureResult{ColdStart: false, BackendMetadataJSON: raw}, err
+		}
 		select {
 		case <-readyCtx.Done():
 			return RuntimeBackendEnsureResult{ColdStart: false, BackendMetadataJSON: raw}, fmt.Errorf("wait for authenticated Kit gateway: %w", err)
@@ -542,6 +566,9 @@ func (k *KitGKERuntimeBackend) waitPod(ctx context.Context, r assistantRuntimeRe
 			if phase == "Failed" || phase == "Succeeded" {
 				return nil, kitGKEAdmissionTerminalError{fmt.Errorf("kit GKE process exited; cold replacement requires explicit fenced reset")}
 			}
+		}
+		if err := keepKitLifecycleAlive(ctx); err != nil {
+			return nil, err
 		}
 		select {
 		case <-ctx.Done():

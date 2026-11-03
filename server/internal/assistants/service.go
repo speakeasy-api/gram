@@ -1774,6 +1774,27 @@ func (s *ServiceCore) UpdateAssistant(
 		return assistantRecord{}, fmt.Errorf("lock assistant update: %w", err)
 	}
 
+	// Compare canonical persisted attachments inside this transaction, after
+	// normal resolution. Full-form no-op saves are safe; actual Kit connection
+	// changes must roll back until the resident runtime has been retired.
+	var kitAttachmentsBefore []assistantrepo.LoadAssistantMcpServersRow
+	checkKitAttachments := false
+	if toolsets != nil || mcpServers != nil {
+		runtimes, err := queries.ListAssistantRuntimesForSwitch(ctx, assistantrepo.ListAssistantRuntimesForSwitchParams{ProjectID: projectID, AssistantID: assistantID})
+		if err != nil {
+			return assistantRecord{}, fmt.Errorf("check Kit attachment edit safety: %w", err)
+		}
+		for _, runtime := range runtimes {
+			checkKitAttachments = checkKitAttachments || runtime.RuntimeVersion == 3
+		}
+		if checkKitAttachments {
+			kitAttachmentsBefore, err = loadAssistantMcpServers(ctx, tx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
+			if err != nil {
+				return assistantRecord{}, fmt.Errorf("read Kit attachments before edit: %w", err)
+			}
+		}
+	}
+
 	resolved, err := s.resolveToolsetRefsForWrite(ctx, tx, projectID, toolsets, mcpServers)
 	if err != nil {
 		return assistantRecord{}, err
@@ -1829,6 +1850,16 @@ func (s *ServiceCore) UpdateAssistant(
 	if toolsets != nil || mcpServers != nil {
 		if err := writeAssistantAttachments(ctx, tx, record.ID, projectID, resolved, toolsets != nil, resolvedMcpServers, mcpServers != nil); err != nil {
 			return assistantRecord{}, err
+		}
+	}
+
+	if checkKitAttachments {
+		after, err := loadAssistantMcpServers(ctx, tx, assistantrepo.LoadAssistantMcpServersParams{ProjectID: projectID, AssistantIds: []uuid.UUID{assistantID}})
+		if err != nil {
+			return assistantRecord{}, fmt.Errorf("read Kit attachments after edit: %w", err)
+		}
+		if !kitAttachmentSetsEqual(kitAttachmentsBefore, after) {
+			return assistantRecord{}, fmt.Errorf("%w: retire the Kit runtime before changing MCP attachments", errAssistantValidation)
 		}
 	}
 
@@ -3031,9 +3062,9 @@ func (s *ServiceCore) ProcessThreadEvents(ctx context.Context, projectID, thread
 	}
 	ensureResult, err := s.runtime.Ensure(ensureCtx, runtimeRecord)
 	if err != nil {
-		if kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) {
-			// A failed restore must not retire the canonical Kit session owner
-			// or silently create a fresh conversation on the next admission.
+		if kitProductionRuntime(runtimeRecord.RuntimeVersion, runtimeRecord.Backend) && !errors.Is(err, errKitRuntimeUnrecoverable) {
+			// A retryable failure keeps the Kit session owner; only an
+			// unrecoverable runtime is retired and replaced below.
 			return ProcessThreadEventsResult{}, fmt.Errorf("ensure Kit runtime without retiring session authority: %w", err)
 		}
 		// Ensure failed: mark the runtime row failed so the coordinator's

@@ -61,13 +61,14 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 			URL     string            `json:"url"`
 			Headers map[string]string `json:"headers,omitempty"`
 			Auth    struct {
-				Type          string `json:"type"`
-				TokenFile     string `json:"tokenFile"`
-				TokenEndpoint string `json:"tokenEndpoint"`
-				EndpointMode  string `json:"endpointMode"`
-				Grant         string `json:"grant"`
-				Resource      string `json:"resource"`
-				Scope         string `json:"scope"`
+				Type          string            `json:"type"`
+				TokenFile     string            `json:"tokenFile"`
+				TokenEndpoint string            `json:"tokenEndpoint"`
+				EndpointMode  string            `json:"endpointMode"`
+				Grant         string            `json:"grant"`
+				Resource      string            `json:"resource"`
+				Scope         string            `json:"scope"`
+				Extensions    map[string]string `json:"extensions,omitempty"`
 			} `json:"auth"`
 		}
 		decoder := json.NewDecoder(strings.NewReader(string(raw)))
@@ -77,6 +78,9 @@ func validateKitBootstrap(b KitLocalBootstrap) error {
 		}
 		if server.Type != "streamable-http" || server.Auth.Type != "workload_identity" || server.Auth.TokenFile != b.AssertionFile || server.Auth.TokenEndpoint != b.Workload.Audience+"/token" || server.Auth.EndpointMode != "explicit" || server.Auth.Grant != "jwtBearer" || server.Auth.Resource != server.URL {
 			return fmt.Errorf("kit MCP requires the bound generic workload assertion")
+		}
+		if len(server.Auth.Extensions) != 0 && (len(server.Auth.Extensions) != 1 || server.Auth.Extensions["project_id"] != b.Workload.Identity.ProjectID.String()) {
+			return fmt.Errorf("kit MCP extensions must name the workload project")
 		}
 		u, err := url.Parse(server.URL)
 		if err != nil || u.Scheme != "https" || u.Host == "" || u.User != nil || u.Fragment != "" || u.RawQuery != "" {

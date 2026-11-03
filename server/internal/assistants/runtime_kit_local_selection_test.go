@@ -19,6 +19,7 @@ func TestKitLocalCompositionSelectsOnlyNewAssistants(t *testing.T) {
 	require.NoError(t, err)
 	project, existing, _, _ := insertAssistantFixture(t, db)
 	core := newProvisioningCore(t, db)
+	core.serverURL = &url.URL{Scheme: "https", Host: "api.example"}
 	core.guardianPolicy = guardian.NewDefaultPolicy(testenv.NewTracerProvider(t))
 	core.chatWriter = new(chat.ChatMessageWriter)
 	core.assistantTokens = assistanttokens.New("test", db, nil, nil, nil)
@@ -31,6 +32,7 @@ func TestKitLocalCompositionSelectsOnlyNewAssistants(t *testing.T) {
 		WorkloadJWKSURL: "https://external.example/jwks", WorkloadIssuerURL: "https://external.example", WorkloadIssuerBaseURL: "https://issuer.example", WorkloadSubject: "operator-subject", WorkloadAssertionFile: "/run/assertion",
 	}
 	require.NoError(t, core.InstallKitLocalRuntime(config))
+	require.NotEqual(t, origin.String(), core.runtime.ServerURL().String())
 	created, err := core.CreateAssistant(t.Context(), "org-test", project, "user-1", "Local Kit", "openai/gpt-4o-mini", "", nil, nil, 300, 1, StatusActive, false, nil)
 	require.NoError(t, err)
 	require.EqualValues(t, 3, created.RuntimeVersion)

@@ -12,7 +12,6 @@ import (
 	"path/filepath"
 	"slices"
 	"strconv"
-	"strings"
 	"sync"
 	"time"
 
@@ -134,14 +133,13 @@ func newKitLocalRuntimeBackend(config KitLocalRuntimeConfig, engine kitLocalEngi
 	if config.Env == nil {
 		config.Env = make(map[string]string)
 	}
-	origin := strings.TrimRight(config.ServerURL.String(), "/")
+	// Management traffic uses ServerURL; inference always uses the dedicated
+	// provider origin. Never route management MCP discovery to that provider.
+	origin := "https://ai.speakeasy.com"
 	if supplied := config.Env["SPEAKEASY_ORIGIN"]; supplied != "" && supplied != origin {
-		return nil, fmt.Errorf("kit inference origin must match server URL")
+		return nil, fmt.Errorf("kit requires the HTTPS Speakeasy inference origin")
 	}
 	config.Env["SPEAKEASY_ORIGIN"] = origin
-	if config.ServerURL.Scheme == "http" {
-		config.Env["SPEAKEASY_ALLOW_INSECURE_HTTP"] = "1"
-	}
 	serverURL := *config.ServerURL
 	config.ServerURL = &serverURL
 	encoded, err := json.Marshal(map[string]any{"image": config.Image, "command": config.Command, "args": config.Args, "env": config.Env, "port": config.GuestPort, "ca": config.ExtraCACertFile, "network": config.Network, "assertion_directory": filepath.Dir(config.WorkloadAssertionFile)})

@@ -457,7 +457,14 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 	if k.config.Snapshots == nil {
 		return empty, fmt.Errorf("%s", kitGKECheckpointUnavailable)
 	}
-	if state.Phase != "stopped" {
+	switch state.Phase {
+	case "stopped":
+	case "restoring", "closing", "retired":
+		// No lifecycle step resumes these phases: an interrupted restore or close
+		// cannot be adopted safely. The conversation is dropped and a fresh
+		// runtime replaces this one.
+		return empty, fmt.Errorf("%w: Kit GKE phase %s cannot be restored", errKitRuntimeUnrecoverable, state.Phase)
+	default:
 		return empty, fmt.Errorf("kit GKE phase %s is not safely restorable; finish checkpoint or reconcile fenced attempt", state.Phase)
 	}
 	if state.Source == nil || state.SnapshotUID == "" || state.SnapshotName == "" {
@@ -743,6 +750,9 @@ func (k *KitGKERuntimeBackend) restore(ctx context.Context, r assistantRuntimeRe
 		status, statusErr := protocol.Status(readyCtx, r)
 		if statusErr == nil && status.Configured {
 			break
+		}
+		if err := keepKitLifecycleAlive(readyCtx); err != nil {
+			return empty, err
 		}
 		select {
 		case <-readyCtx.Done():

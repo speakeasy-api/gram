@@ -40,16 +40,17 @@ func NewRememberTool(svc Service) *RememberTool {
 	return &RememberTool{
 		svc: svc,
 		descriptor: core.ToolDescriptor{
-			SourceSlug:  platformtools.SourceMemory,
-			HandlerName: handlerRemember,
-			Name:        platformtools.ToolNameMemoryRemember,
-			Description: "Persist a memory for the current assistant. Deduplicates against the nearest existing memory and may supersede a contradicting one. Requires assistant runtime auth.",
-			InputSchema: core.BuildInputSchema[rememberInput](),
-			Variables:   nil,
-			Annotations: memoryToolAnnotations(readOnly, destructive, idempotent, openWorld),
-			Managed:     true,
-			OwnerKind:   nil,
-			OwnerID:     nil,
+			SourceSlug:    platformtools.SourceMemory,
+			ThreadContext: core.ThreadContextRequired,
+			HandlerName:   handlerRemember,
+			Name:          platformtools.ToolNameMemoryRemember,
+			Description:   "Persist a memory for the current assistant. Deduplicates against the nearest existing memory and may supersede a contradicting one. Requires assistant runtime auth.",
+			InputSchema:   core.BuildInputSchema[rememberInput](),
+			Variables:     nil,
+			Annotations:   memoryToolAnnotations(readOnly, destructive, idempotent, openWorld),
+			Managed:       true,
+			OwnerKind:     nil,
+			OwnerID:       nil,
 		},
 	}
 }
@@ -59,7 +60,7 @@ func (t *RememberTool) Descriptor() core.ToolDescriptor {
 }
 
 func (t *RememberTool) Call(ctx context.Context, _ toolconfig.ToolCallEnv, payload io.Reader, wr io.Writer) error {
-	principal, ok := contextvalues.GetAssistantPrincipal(ctx)
+	principal, ok := contextvalues.GetAssistantToolTarget(ctx)
 	if !ok {
 		return oops.E(oops.CodeUnauthorized, nil, "memory tools require an assistant principal")
 	}
