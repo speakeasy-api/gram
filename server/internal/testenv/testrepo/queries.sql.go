@@ -1639,6 +1639,23 @@ func (q *Queries) ExpirePlatformMCPSetupHandoffFixture(ctx context.Context, id u
 	return err
 }
 
+const expirePrincipalGrantFixture = `-- name: ExpirePrincipalGrantFixture :execrows
+UPDATE principal_grants
+SET expires_at = clock_timestamp() - interval '1 second'
+WHERE id = $1
+  AND expires_at IS NOT NULL
+`
+
+// Test-only fixture: moves a temporary grant's deadline into the past so
+// tests can observe expiry without waiting for it.
+func (q *Queries) ExpirePrincipalGrantFixture(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, expirePrincipalGrantFixture, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const expireRemoteSessionAccessTokenFixture = `-- name: ExpireRemoteSessionAccessTokenFixture :exec
 UPDATE remote_sessions
 SET access_expires_at = clock_timestamp() - interval '1 minute'
@@ -2497,6 +2514,18 @@ func (q *Queries) GetPreparationFixtureRegistration(ctx context.Context, arg Get
 		&i.ClientSecretEncrypted,
 	)
 	return i, err
+}
+
+const getPrincipalGrantExpiresAtFixture = `-- name: GetPrincipalGrantExpiresAtFixture :one
+SELECT expires_at FROM principal_grants WHERE id = $1
+`
+
+// Test-only fixture: reads a grant row's deadline (NULL when permanent).
+func (q *Queries) GetPrincipalGrantExpiresAtFixture(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getPrincipalGrantExpiresAtFixture, id)
+	var expires_at pgtype.Timestamptz
+	err := row.Scan(&expires_at)
+	return expires_at, err
 }
 
 const getPrincipalRemoteSessionBindingIssuerFixture = `-- name: GetPrincipalRemoteSessionBindingIssuerFixture :one

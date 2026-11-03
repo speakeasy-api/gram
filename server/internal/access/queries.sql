@@ -176,7 +176,9 @@ WHERE organization_id = @organization_id
   AND expires_at IS NULL;
 
 -- name: DeletePrincipalGrantsByResource :execrows
--- Removes grant rows for a single resource selector.
+-- Removes permanent grant rows for a single resource selector. Used by
+-- audience replacement writes; temporary grants are not part of an audience
+-- and survive.
 DELETE FROM principal_grants
 WHERE organization_id = @organization_id
   AND scope = @scope
@@ -184,7 +186,8 @@ WHERE organization_id = @organization_id
     'resource_kind', sqlc.arg(resource_kind)::text,
     'resource_id', sqlc.arg(resource_id)::text
   )
-  AND principal_type <> 'api_key';
+  AND principal_type <> 'api_key'
+  AND expires_at IS NULL;
 
 -- name: DeletePrincipalGrantsByPrincipal :execrows
 -- Removes all grants for a specific principal within an org.

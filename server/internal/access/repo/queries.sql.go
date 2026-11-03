@@ -218,6 +218,7 @@ WHERE organization_id = $1
     'resource_id', $4::text
   )
   AND principal_type <> 'api_key'
+  AND expires_at IS NULL
 `
 
 type DeletePrincipalGrantsByResourceParams struct {
@@ -227,7 +228,9 @@ type DeletePrincipalGrantsByResourceParams struct {
 	ResourceID     string
 }
 
-// Removes grant rows for a single resource selector.
+// Removes permanent grant rows for a single resource selector. Used by
+// audience replacement writes; temporary grants are not part of an audience
+// and survive.
 func (q *Queries) DeletePrincipalGrantsByResource(ctx context.Context, arg DeletePrincipalGrantsByResourceParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deletePrincipalGrantsByResource,
 		arg.OrganizationID,

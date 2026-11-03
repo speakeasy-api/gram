@@ -2438,7 +2438,7 @@ var CreateTemporaryGrantForm = Type("CreateTemporaryGrantForm", func() {
 	Required("user_id", "scope", "expires_at")
 
 	Attribute("user_id", String, "The organization member receiving the access.")
-	Attribute("scope", String, "The scope to give, e.g. chat:read or log:read. Only scopes that grant access to read, use or manage resources can be given temporarily; blocklist, auth client, risk policy and machine scopes cannot.")
+	Attribute("scope", String, "The scope to give, e.g. chat:read or log:read. Only scopes that grant access to read, use or manage resources can be given temporarily; org:admin, blocklist, auth client, risk policy and machine scopes cannot.")
 	Attribute("selector", SelectorModel, "The resource or activity boundary. Omit to cover every resource of the scope's kind.")
 	Attribute("expires_at", String, "When the grant stops authorizing new requests. At least five minutes and at most 30 days from now.", func() {
 		Format(FormatDateTime)

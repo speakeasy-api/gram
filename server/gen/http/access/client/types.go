@@ -217,8 +217,8 @@ type CreateTemporaryGrantRequestBody struct {
 	// The organization member receiving the access.
 	UserID string `form:"user_id" json:"user_id" xml:"user_id"`
 	// The scope to give, e.g. chat:read or log:read. Only scopes that grant access
-	// to read, use or manage resources can be given temporarily; blocklist, auth
-	// client, risk policy and machine scopes cannot.
+	// to read, use or manage resources can be given temporarily; org:admin,
+	// blocklist, auth client, risk policy and machine scopes cannot.
 	Scope string `form:"scope" json:"scope" xml:"scope"`
 	// The resource or activity boundary. Omit to cover every resource of the
 	// scope's kind.

@@ -105008,7 +105008,7 @@ components:
                     maxLength: 1000
                 scope:
                     type: string
-                    description: The scope to give, e.g. chat:read or log:read. Only scopes that grant access to read, use or manage resources can be given temporarily; blocklist, auth client, risk policy and machine scopes cannot.
+                    description: The scope to give, e.g. chat:read or log:read. Only scopes that grant access to read, use or manage resources can be given temporarily; org:admin, blocklist, auth client, risk policy and machine scopes cannot.
                 selector:
                     $ref: '#/components/schemas/Selector'
                 user_id:

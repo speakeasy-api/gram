@@ -2421,3 +2421,15 @@ UPDATE api_keys
 SET created_by_user_id = @created_by_user_id
 WHERE id = @id
   AND organization_id = @organization_id;
+
+-- name: ExpirePrincipalGrantFixture :execrows
+-- Test-only fixture: moves a temporary grant's deadline into the past so
+-- tests can observe expiry without waiting for it.
+UPDATE principal_grants
+SET expires_at = clock_timestamp() - interval '1 second'
+WHERE id = @id
+  AND expires_at IS NOT NULL;
+
+-- name: GetPrincipalGrantExpiresAtFixture :one
+-- Test-only fixture: reads a grant row's deadline (NULL when permanent).
+SELECT expires_at FROM principal_grants WHERE id = @id;

@@ -21,6 +21,9 @@ export const AUDIT_ACTIONS = [
   "access_role:create",
   "access_role:delete",
   "access_role:update",
+  "access_temporary_grant:create",
+  "access_temporary_grant:renew",
+  "access_temporary_grant:revoke",
   "agent:connection_block_create",
   "agent:connection_block_delete",
   "agent:create",
@@ -404,6 +407,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated access role";
     case "access_role:delete":
       return "deleted access role";
+    case "access_temporary_grant:create":
+      return "gave temporary access to";
+    case "access_temporary_grant:renew":
+      return "renewed temporary access for";
+    case "access_temporary_grant:revoke":
+      return "revoked temporary access for";
 
     case "agent:connection_block_create":
       return "blocked connection access for agent";

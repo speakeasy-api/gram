@@ -44,6 +44,8 @@ const (
 
 // temporaryGrantScopes are the scopes that can be given temporarily: the
 // read, use and manage permissions an onboarding or investigation needs.
+// org:admin is left out: it authorizes role, member and audience changes, so a
+// temporary holder could turn it into permanent access before it expires.
 // Blocklist scopes only withdraw access. mcp:auth is provisioned through auth
 // client audiences and its backfill. Risk policy, plugin, inference, agent
 // credential and machine scopes are left out because other subsystems derive
@@ -51,7 +53,6 @@ const (
 // leave stale.
 var temporaryGrantScopes = []authz.Scope{
 	authz.ScopeOrgRead,
-	authz.ScopeOrgAdmin,
 	authz.ScopeProjectRead,
 	authz.ScopeProjectWrite,
 	authz.ScopeMCPRead,
@@ -304,18 +305,24 @@ func (s *Service) RenewTemporaryGrant(ctx context.Context, payload *gen.RenewTem
 		ID:             id,
 		OrganizationID: ac.ActiveOrganizationID,
 	})
-	if err != nil {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// The deadline passed between the lock and the update.
+		return nil, temporaryGrantExpiredConflict()
+	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "renew temporary grant").LogError(ctx, logger)
 	}
 	after := temporaryGrantRow(renewed)
 
-	beforeView, err := temporaryGrantView(before, temporaryGrantStatusActive, nil)
-	if err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "render temporary grant").LogError(ctx, logger)
-	}
+	// Renewal changes only the deadline, so the other routes to the same
+	// access are the same before and after.
 	otherAccess, err := newTemporaryGrantExplainer(dbtx).otherAccess(ctx, after)
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "explain other access").LogError(ctx, logger)
+	}
+	beforeView, err := temporaryGrantView(before, temporaryGrantStatusActive, otherAccess)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "render temporary grant").LogError(ctx, logger)
 	}
 	afterView, err := temporaryGrantView(after, temporaryGrantStatus(after), otherAccess)
 	if err != nil {
@@ -394,7 +401,11 @@ func (s *Service) RevokeTemporaryGrant(ctx context.Context, payload *gen.RevokeT
 		ID:             id,
 		OrganizationID: ac.ActiveOrganizationID,
 	})
-	if err != nil {
+	switch {
+	case errors.Is(err, pgx.ErrNoRows):
+		// The deadline passed between the lock and the delete.
+		return nil, temporaryGrantExpiredConflict()
+	case err != nil:
 		return nil, oops.E(oops.CodeUnexpected, err, "revoke temporary grant").LogError(ctx, logger)
 	}
 	after := temporaryGrantRow(revoked)
@@ -446,9 +457,13 @@ func lockActiveTemporaryGrant(ctx context.Context, dbtx database.DBTX, organizat
 	}
 	row := temporaryGrantRow(locked)
 	if temporaryGrantStatus(row) != temporaryGrantStatusActive {
-		return temporaryGrantRow{}, oops.E(oops.CodeConflict, nil, "temporary grant has expired; give it again instead")
+		return temporaryGrantRow{}, temporaryGrantExpiredConflict()
 	}
 	return row, nil
+}
+
+func temporaryGrantExpiredConflict() error {
+	return oops.E(oops.CodeConflict, nil, "temporary grant has expired; give it again instead")
 }
 
 func temporaryGrantRecipientEmail(ctx context.Context, dbtx database.DBTX, principal urn.Principal) (string, error) {
