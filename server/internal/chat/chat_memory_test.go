@@ -4,6 +4,7 @@ import (
 	"testing"
 	"time"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/chat"
@@ -34,8 +35,10 @@ func TestChatMemoryLifecycleForOwner(t *testing.T) {
 	require.NoError(t, testrepo.New(ti.conn).SetChatMemorySummaryFixture(ctx, testrepo.SetChatMemorySummaryFixtureParams{
 		ID: id, Summary: conv.ToPGText("Rotated the staging deploy key."), SummaryGeneratedAt: conv.ToPGTimestamptz(at),
 	}))
-	_, err = ti.conn.Exec(ctx, `INSERT INTO memory_memos (organization_id, project_id, chat_id, content) VALUES ($1, $2, $3, $4)`,
-		ti.orgID, ti.projectID, id, "Staging key rotates every 30 days.")
+	_, err = testrepo.New(ti.conn).InsertMemoryMemoAtFixture(ctx, testrepo.InsertMemoryMemoAtFixtureParams{
+		OrganizationID: ti.orgID, ProjectID: ti.projectID, ChatID: uuid.NullUUID{UUID: id, Valid: true},
+		Content: "Staging key rotates every 30 days.", CreatedAt: conv.ToPGTimestamptz(at),
+	})
 	require.NoError(t, err)
 
 	got, err = ti.service.GetMemory(ctx, &gen.GetMemoryPayload{ID: id.String()})
