@@ -44,6 +44,15 @@ func (s *Service) ClaudeWebObservabilityPlugin(ctx context.Context, orgID, orgSl
 	defer func() { _ = tx.Rollback(ctx) }()
 
 	keys := keysrepo.New(tx)
+	// Serialize this member's downloads: without the lock, two racing
+	// transactions could each miss the other's uncommitted key and both
+	// stay live.
+	if err := keys.LockMemberClaudeWebHooksAPIKeys(ctx, keysrepo.LockMemberClaudeWebHooksAPIKeysParams{
+		OrganizationID:  orgID,
+		CreatedByUserID: userID,
+	}); err != nil {
+		return nil, fmt.Errorf("lock member hooks api keys: %w", err)
+	}
 	created, err := keys.CreateAPIKey(ctx, keysrepo.CreateAPIKeyParams{
 		OrganizationID:  orgID,
 		Name:            candidate.keyName,

@@ -39,7 +39,8 @@ func TestGetClaudeObservabilityPlugin_RendersForVouchedMember(t *testing.T) {
 
 	require.Equal(t, "zip", string(data))
 	require.Equal(t, "application/zip", res.ContentType)
-	require.Equal(t, `attachment; filename="`+stub.orgSlug+`-observability-claude.zip"`, res.ContentDisposition)
+	require.Equal(t, mockidp.MockOrgSlug, stub.orgSlug, "the archive is named for the org's real slug")
+	require.Equal(t, `attachment; filename="`+mockidp.MockOrgSlug+`-observability-claude.zip"`, res.ContentDisposition)
 	require.Equal(t, mockidp.MockUserID, stub.userID, "the key is minted for the vouched member")
 	require.Equal(t, ti.projectID, stub.projectID)
 }
@@ -79,11 +80,28 @@ func TestGetClaudeObservabilityPlugin_RefusesNonMember(t *testing.T) {
 	require.Empty(t, stub.userID, "no key is minted for a non-member")
 }
 
+func TestGetClaudeObservabilityPlugin_RefusesAgentIdentity(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestAgentService(t)
+	publishMarketplace(t, ctx, ti.conn, ti.projectID, "tok")
+	stub := &stubClaudePlugins{}
+	ti.service.WithClaudeObservabilityPlugins(stub)
+	agentCtx, _ := withAgentKeyAuth(t, ctx, ti, "CI agent")
+
+	_, _, err := ti.service.GetClaudeObservabilityPlugin(agentCtx, &gen.GetClaudeObservabilityPluginPayload{Email: new(mockidp.MockUserEmail)})
+	requireCode(t, err, oops.CodeForbidden)
+	require.Empty(t, stub.userID, "no key is minted for an agent identity")
+}
+
 func TestGetClaudeObservabilityPlugin_NotFoundWithoutObservabilityPlugin(t *testing.T) {
 	t.Parallel()
 	cases := map[string]func(t *testing.T, ctx context.Context, ti *testInstance){
 		"unpublished": func(t *testing.T, _ context.Context, _ *testInstance) {
 			t.Helper()
+		},
+		"empty marketplace token": func(t *testing.T, ctx context.Context, ti *testInstance) {
+			t.Helper()
+			publishMarketplace(t, ctx, ti.conn, ti.projectID, "")
 		},
 		"disabled": func(t *testing.T, ctx context.Context, ti *testInstance) {
 			t.Helper()

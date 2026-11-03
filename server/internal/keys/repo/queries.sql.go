@@ -780,6 +780,23 @@ func (q *Queries) ListAgentAPIKeys(ctx context.Context, arg ListAgentAPIKeysPara
 	return items, nil
 }
 
+const lockMemberClaudeWebHooksAPIKeys = `-- name: LockMemberClaudeWebHooksAPIKeys :exec
+SELECT pg_advisory_xact_lock(hashtextextended('claude-web-hooks:' || $1::text || ':' || $2::text, 0))
+`
+
+type LockMemberClaudeWebHooksAPIKeysParams struct {
+	OrganizationID  string
+	CreatedByUserID string
+}
+
+// First statement of the mint-and-revoke transaction: serializes a member's
+// Claude web key downloads so each revoke sees every earlier committed key,
+// and racing downloads cannot both stay live.
+func (q *Queries) LockMemberClaudeWebHooksAPIKeys(ctx context.Context, arg LockMemberClaudeWebHooksAPIKeysParams) error {
+	_, err := q.db.Exec(ctx, lockMemberClaudeWebHooksAPIKeys, arg.OrganizationID, arg.CreatedByUserID)
+	return err
+}
+
 const repairOrphanedAPIKeyCreators = `-- name: RepairOrphanedAPIKeyCreators :execrows
 UPDATE api_keys k
 SET
@@ -825,6 +842,7 @@ WHERE organization_id = $1
   AND created_at < $4
   AND scopes @> ARRAY['hooks']::text[]
   AND name ~ '^plugins-claude-web-hooks-[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
+  AND right(key_prefix, 5) = left(substring(name from '[0-9a-f]{6}$'), 5)
 RETURNING id, project_id, name
 `
 
@@ -842,9 +860,10 @@ type RevokeMemberClaudeWebHooksAPIKeysRow struct {
 }
 
 // Retires a member's earlier Claude web observability keys once a newer one is
-// minted, so repeated downloads leave one live key per member. Only keys
-// created before the replacement are revoked: when two downloads race, the
-// later one survives.
+// minted, so repeated downloads leave one live key per member. Callers hold
+// LockMemberClaudeWebHooksAPIKeys, so downloads for one member run one at a
+// time. The key_prefix check proves a key was minted by this flow, as the
+// project rotation queries do, so a user-chosen name is never revoked.
 func (q *Queries) RevokeMemberClaudeWebHooksAPIKeys(ctx context.Context, arg RevokeMemberClaudeWebHooksAPIKeysParams) ([]RevokeMemberClaudeWebHooksAPIKeysRow, error) {
 	rows, err := q.db.Query(ctx, revokeMemberClaudeWebHooksAPIKeys,
 		arg.OrganizationID,

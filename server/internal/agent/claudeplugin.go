@@ -10,11 +10,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/agent"
 	"github.com/speakeasy-api/gram/server/internal/agent/repo"
-	"github.com/speakeasy-api/gram/server/internal/auth/deviceagenttoken"
-	"github.com/speakeasy-api/gram/server/internal/contextvalues"
-	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/plugins"
 )
 
 // ClaudeObservabilityPlugins renders a member's Claude observability plugin
@@ -34,27 +30,17 @@ func (s *Service) WithClaudeObservabilityPlugins(renderer ClaudeObservabilityPlu
 // installs locally, packaged for claude.ai: Claude's cloud environment runs no
 // device agent to report the user, so the plugin's own key identifies them.
 func (s *Service) GetClaudeObservabilityPlugin(ctx context.Context, payload *gen.GetClaudeObservabilityPluginPayload) (*gen.GetClaudeObservabilityPluginResult, io.ReadCloser, error) {
-	authCtx, ok := contextvalues.GetAuthContext(ctx)
-	if !ok || authCtx == nil {
-		return nil, nil, oops.C(oops.CodeUnauthorized)
-	}
-	if _, ok := deviceagenttoken.EffectiveAgent(ctx); ok {
-		return nil, nil, oops.E(oops.CodeForbidden, nil, "the Claude observability plugin belongs to a person; an agent identity has none")
-	}
-	email, err := pollingEmail(authCtx, conv.PtrValOr(payload.Email, ""))
+	// resolveMember refuses agent identities, requires a vouched email for
+	// the org install key, and charges the member's getMyConnections budget,
+	// so repeated downloads cannot mint and revoke keys without limit.
+	member, err := s.resolveMember(ctx, payload.Email, "the Claude observability plugin")
 	if err != nil {
 		return nil, nil, err
 	}
-
-	organizationID := authCtx.ActiveOrganizationID
-	principals, err := plugins.ResolveDeliveryPrincipals(ctx, s.db, organizationID, email, "")
-	if err != nil {
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "error resolving agent plugin delivery principals").LogError(ctx, s.logger)
-	}
-	userID := memberUserID(principals)
-	if userID == "" {
+	if member.userID == "" {
 		return nil, nil, oops.E(oops.CodeForbidden, nil, "the enrolled user is not a member of this organization")
 	}
+	organizationID, userID, principals := member.organizationID, member.userID, member.principals
 
 	rows, err := s.repo.GetAgentPluginSet(ctx, repo.GetAgentPluginSetParams{
 		OrganizationID: organizationID,
@@ -79,11 +65,12 @@ func (s *Service) GetClaudeObservabilityPlugin(ctx context.Context, payload *gen
 }
 
 // observabilityProject picks the project whose observability plugin the
-// device is delivered: the first published one that has not disabled it. Rows
+// device is delivered: the first published one (a non-empty marketplace token,
+// as the agent plugin view requires) that has not disabled it. Rows
 // arrive default project first.
 func observabilityProject(rows []repo.GetAgentPluginSetRow) *repo.GetAgentPluginSetRow {
 	for i := range rows {
-		if rows[i].MarketplaceToken.Valid && rows[i].ObservabilityEnabled {
+		if rows[i].MarketplaceToken.Valid && rows[i].MarketplaceToken.String != "" && rows[i].ObservabilityEnabled {
 			return &rows[i]
 		}
 	}

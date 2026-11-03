@@ -141,11 +141,18 @@ WHERE organization_id = @organization_id
 -- for. Callers must report these rather than their own requested deadline.
 RETURNING id, organization_id, project_id, name, key_prefix, scopes, expires_at;
 
+-- name: LockMemberClaudeWebHooksAPIKeys :exec
+-- First statement of the mint-and-revoke transaction: serializes a member's
+-- Claude web key downloads so each revoke sees every earlier committed key,
+-- and racing downloads cannot both stay live.
+SELECT pg_advisory_xact_lock(hashtextextended('claude-web-hooks:' || @organization_id::text || ':' || @created_by_user_id::text, 0));
+
 -- name: RevokeMemberClaudeWebHooksAPIKeys :many
 -- Retires a member's earlier Claude web observability keys once a newer one is
--- minted, so repeated downloads leave one live key per member. Only keys
--- created before the replacement are revoked: when two downloads race, the
--- later one survives.
+-- minted, so repeated downloads leave one live key per member. Callers hold
+-- LockMemberClaudeWebHooksAPIKeys, so downloads for one member run one at a
+-- time. The key_prefix check proves a key was minted by this flow, as the
+-- project rotation queries do, so a user-chosen name is never revoked.
 UPDATE api_keys
 SET deleted_at = clock_timestamp()
 WHERE organization_id = @organization_id
@@ -155,6 +162,7 @@ WHERE organization_id = @organization_id
   AND created_at < @replacement_created_at
   AND scopes @> ARRAY['hooks']::text[]
   AND name ~ '^plugins-claude-web-hooks-[0-9]{8}-[0-9]{6}-[0-9a-f]{6}$'
+  AND right(key_prefix, 5) = left(substring(name from '[0-9a-f]{6}$'), 5)
 RETURNING id, project_id, name;
 
 -- name: ListAPIKeysByOrganization :many
