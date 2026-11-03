@@ -320,7 +320,7 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		{scope: authz.ScopeChatWrite, description: "Rename, delete, and give feedback on other members' agent sessions. Everyone keeps their own.", resourceType: "chat"},
 		{scope: authz.ScopeInferenceExecute, description: "Run model inference without accessing chat transcripts.", resourceType: "inference"},
 		{scope: authz.ScopeLogRead, description: "View the project's tool-call logs and traces, including tool arguments, results, and prompt text from every member. Not implied by project or organization admin access.", resourceType: "project"},
-		{scope: authz.ScopeMemoryRead, description: "Search and recall the project's team memory: masked session summaries, memos and digests from every member. Not implied by project or organization admin access.", resourceType: "project"},
+		{scope: authz.ScopeMemoryRead, description: "Search and recall the project's team memory: masked session summaries, memos and digests from every member. Organization admins hold it by default; members need an explicit grant.", resourceType: "project"},
 		{scope: authz.ScopeMemoryWrite, description: "Save memos to the project's team memory, attributed to you.", resourceType: "project"},
 		{scope: authz.ScopeAgentRead, description: "View agents.", resourceType: "agent"},
 		{scope: authz.ScopeAgentWrite, description: "Create, configure, and manage agents.", resourceType: "agent"},
