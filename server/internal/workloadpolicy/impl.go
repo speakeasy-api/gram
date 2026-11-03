@@ -17,6 +17,7 @@ import (
 	"log/slog"
 	"net"
 	"net/url"
+	"slices"
 	"strings"
 	"unicode/utf8"
 
@@ -43,6 +44,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/mv"
@@ -77,6 +79,10 @@ type Service struct {
 	// catalog is the platforms the Access Hub offers to trust.
 	catalog catalog.Source
 
+	// features evaluates the flags that offer a catalog entry which is not
+	// enabled to some organizations. Nil offers none of them.
+	features feature.Provider
+
 	// sharedHosts are the hosts the deployment serves shared authorization
 	// servers on, which the token endpoints it lists are derived from.
 	sharedHosts authserver.Hosts
@@ -100,17 +106,19 @@ func NewService(
 	auditLogger *audit.Logger,
 	sharedHosts authserver.Hosts,
 	limitStore ratelimit.Store,
+	features feature.Provider,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("workloadpolicy.api"))
 	return &Service{
-		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/workloadpolicy"),
-		logger:  logger,
-		db:      db,
-		auth:    auth.New(logger, db, sessions, authzEngine),
-		authz:   authzEngine,
-		audit:   auditLogger,
-		repo:    repo.New(db),
-		catalog: catalog.Embedded(),
+		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/workloadpolicy"),
+		logger:   logger,
+		db:       db,
+		auth:     auth.New(logger, db, sessions, authzEngine),
+		authz:    authzEngine,
+		audit:    auditLogger,
+		repo:     repo.New(db),
+		catalog:  catalog.Embedded(),
+		features: features,
 
 		sharedHosts: sharedHosts,
 
@@ -140,10 +148,11 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 // dashboard session reads and writes the organization tier alone unless it
 // explicitly selects an authorized project. API keys are already project-bound.
 type tenancy struct {
-	organizationID string
-	projectID      uuid.NullUUID
-	actor          urn.Principal
-	actorEmail     *string
+	organizationID   string
+	organizationSlug string
+	projectID        uuid.NullUUID
+	actor            urn.Principal
+	actorEmail       *string
 }
 
 func (s *Service) resolve(ctx context.Context, scope authz.Scope, explicitProject *string) (tenancy, error) {
@@ -196,10 +205,11 @@ func (s *Service) resolve(ctx context.Context, scope authz.Scope, explicitProjec
 	}
 
 	return tenancy{
-		organizationID: authCtx.ActiveOrganizationID,
-		projectID:      projectID,
-		actor:          urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
-		actorEmail:     authCtx.Email,
+		organizationID:   authCtx.ActiveOrganizationID,
+		organizationSlug: authCtx.OrganizationSlug,
+		projectID:        projectID,
+		actor:            urn.NewPrincipal(urn.PrincipalTypeUser, authCtx.UserID),
+		actorEmail:       authCtx.Email,
 	}, nil
 }
 
@@ -265,7 +275,8 @@ func (s *Service) List(ctx context.Context, payload *gen.ListPayload) (*gen.Work
 }
 
 func (s *Service) ListPlatforms(ctx context.Context, payload *gen.ListPlatformsPayload) (*gen.WorkloadPlatformCatalog, error) {
-	if _, err := s.resolve(ctx, authz.ScopeWorkloadRead, payload.ProjectSlugInput); err != nil {
+	t, err := s.resolve(ctx, authz.ScopeWorkloadRead, payload.ProjectSlugInput)
+	if err != nil {
 		return nil, err
 	}
 
@@ -274,7 +285,29 @@ func (s *Service) ListPlatforms(ctx context.Context, payload *gen.ListPlatformsP
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to load the platform catalog").LogError(ctx, s.logger)
 	}
 
-	return mv.BuildWorkloadPlatformCatalogView(platforms), nil
+	return mv.BuildWorkloadPlatformCatalogView(s.offeredPlatforms(ctx, t, platforms)), nil
+}
+
+// offeredPlatforms resolves Enabled for the caller's organization: an entry
+// that names a feature flag, which only one that is not enabled may, is
+// enabled where the flag is on. The flag is targeted by organization group, as
+// the dashboard's flags are, and an off, missing or failing flag leaves the
+// entry not enabled. Every request shares the catalog's slice, so it is copied
+// rather than changed.
+func (s *Service) offeredPlatforms(ctx context.Context, t tenancy, platforms []catalog.Platform) []catalog.Platform {
+	offered := slices.Clone(platforms)
+	for i := range offered {
+		platform := &offered[i]
+		if platform.FeatureFlag == "" {
+			continue
+		}
+		evaluation, err := feature.EvaluateFlag(ctx, s.features, platform.FeatureFlag, t.organizationID, feature.OrgProjectGroups(t.organizationSlug, ""))
+		if err != nil {
+			s.logger.WarnContext(ctx, "evaluate workload platform feature flag, keeping the platform coming soon", attr.SlogError(err), attr.SlogOrganizationID(t.organizationID))
+		}
+		platform.Enabled = evaluation == feature.EvaluationEnabled
+	}
+	return offered
 }
 
 func (s *Service) GetCustomFlows(ctx context.Context, payload *gen.GetCustomFlowsPayload) (*gen.WorkloadCustomFlows, error) {

@@ -9,6 +9,7 @@ import (
 
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/workloadpolicy/catalog"
 )
 
@@ -93,9 +94,11 @@ func TestEmbeddedGitHubActionsPinsOneRepository(t *testing.T) {
 
 	github := embeddedPlatform(t, "github-actions")
 	// Listed but not offered until a stable speakeasyd release supports
-	// GitHub Actions. The rest of this test, the API tests that read the
-	// catalog, and the dashboard's own fixtures keep the setup covered.
+	// GitHub Actions, except to organizations its feature flag is on for.
+	// The rest of this test, the API tests that read the catalog, and the
+	// dashboard's own fixtures keep the setup covered.
 	require.False(t, github.Enabled)
+	require.Equal(t, feature.FlagWorkloadPlatformGitHubActions, github.FeatureFlag)
 	require.Equal(t, "https://token.actions.githubusercontent.com", github.Issuer.Value)
 	require.Equal(t, "https://token.actions.githubusercontent.com/.well-known/jwks", github.JWKSURI.Value)
 	require.Equal(t, "repo:{owner}/{repo}:", github.Subject.Template)
@@ -168,6 +171,15 @@ func TestParseAcceptsAValidPlatform(t *testing.T) {
 	require.Equal(t, "example", platform.Key)
 }
 
+func TestParseAcceptsAFeatureFlagOnAnEntryNotEnabled(t *testing.T) {
+	t.Parallel()
+
+	platform, err := catalog.Parse([]byte(strings.Replace(validPlatform, "enabled: true", "enabled: false\nfeature_flag: workload-platform-example", 1)))
+	require.NoError(t, err)
+	require.False(t, platform.Enabled)
+	require.Equal(t, feature.Flag("workload-platform-example"), platform.FeatureFlag)
+}
+
 func TestParseRefusesInvalidPlatforms(t *testing.T) {
 	t.Parallel()
 
@@ -195,6 +207,8 @@ func TestParseRefusesInvalidPlatforms(t *testing.T) {
 		{name: "flag group in pattern", from: `pattern: "[a-z0-9-]+"`, to: `pattern: "(?i)[a-z0-9-]+"`, wantErr: "(?:...) groups"},
 		{name: "unicode class in pattern", from: `pattern: "[a-z0-9-]+"`, to: `pattern: "\\pL+"`, wantErr: "Go and JavaScript"},
 		{name: "posix class in pattern", from: `pattern: "[a-z0-9-]+"`, to: `pattern: "[[:alnum:]-]+"`, wantErr: "POSIX"},
+		{name: "feature flag on an enabled entry", from: "enabled: true", to: "enabled: true\nfeature_flag: workload-platform-example", wantErr: "only for an entry that is not enabled"},
+		{name: "feature flag not hyphenated", from: "enabled: true", to: "enabled: false\nfeature_flag: Workload_Platform", wantErr: "lowercase words joined by hyphens"},
 	}
 	for _, tc := range tests {
 		t.Run(tc.name, func(t *testing.T) {
