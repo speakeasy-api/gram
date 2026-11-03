@@ -65,9 +65,13 @@ type Arm struct {
 	Tools        []Tool
 	Call         func(ctx context.Context, tool, arguments string) (string, error)
 	Instructions string
+
+	// Sources resolves memo and digest citations to their source chats so
+	// they can be checked. Nil for arms whose tools only return chats.
+	Sources SourcesFunc
 }
 
 // NoMemoryArm is arm A: the agent answers without tools.
 func NoMemoryArm() Arm {
-	return Arm{Name: "A: no memory", Search: nil, Sweep: nil, Tools: nil, Call: nil, Instructions: ""}
+	return Arm{Name: "A: no memory", Search: nil, Sweep: nil, Tools: nil, Call: nil, Instructions: "", Sources: nil}
 }

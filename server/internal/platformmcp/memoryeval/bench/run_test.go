@@ -7,6 +7,7 @@ import (
 	"time"
 
 	or "github.com/OpenRouterTeam/go-sdk/models/components"
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -148,4 +149,57 @@ func TestSomeSucceeded(t *testing.T) {
 	require.NoError(t, someSucceeded("answer", len(errs), func(i int) error { return errs[i] }))
 	errs = []error{errors.New("rate limited"), errors.New("bad key")}
 	require.ErrorContains(t, someSucceeded("answer", len(errs), func(i int) error { return errs[i] }), "every answer call failed")
+}
+
+// TestMemoAndDigestCitationsCountThroughTheirChats checks that a memo or
+// digest citation is valid when one of its source chats backs the answer,
+// invalid when none does or it resolves to nothing, and unchecked when the
+// arm can't resolve it.
+func TestMemoAndDigestCitationsCountThroughTheirChats(t *testing.T) {
+	t.Parallel()
+	corpus := memoryeval.Build(testNow)
+	var q memoryeval.Question
+	for _, candidate := range corpus.Questions {
+		if candidate.ID == "q24" {
+			q = candidate
+		}
+	}
+	require.Equal(t, []string{"reversal-pooler"}, q.Sources)
+	source, _ := corpus.Chat("reversal-pooler")
+	superseded, _ := corpus.Chat("decision-pooler")
+
+	digest := func(chats ...uuid.UUID) citation {
+		return citation{kind: "digest", id: uuid.New(), resolved: true, chats: chats}
+	}
+	valid, checked := citationValid(corpus, q, digest(superseded.ID, source.ID))
+	require.True(t, valid)
+	require.True(t, checked)
+	valid, checked = citationValid(corpus, q, digest(superseded.ID))
+	require.False(t, valid, "the superseded chat doesn't back the current answer")
+	require.True(t, checked)
+	valid, checked = citationValid(corpus, q, citation{kind: "memo", id: uuid.New(), resolved: true, chats: nil})
+	require.False(t, valid, "a made-up memo resolves to no chats")
+	require.True(t, checked)
+	_, checked = citationValid(corpus, q, citation{kind: "memo", id: uuid.New(), resolved: false, chats: nil})
+	require.False(t, checked)
+
+	a := Arm{Name: "C: search_team_memory", Search: nil, Sweep: nil, Tools: []Tool{{Name: "search_team_memory", Description: "", Schema: "{}"}}, Call: nil, Instructions: "", Sources: nil}
+	cfg := Config{AnswerModels: []string{"anthropic/claude-sonnet-5.5"}, JudgeModel: "openai/gpt-5.5", Runs: 1, Concurrency: 1}
+	cited := func(cs ...citation) answer {
+		return answer{model: cfg.AnswerModels[0], arm: a.Name, run: 0, question: q, text: "PgCat", citations: cs}
+	}
+	answers := []answer{
+		cited(digest(source.ID)),
+		cited(digest(superseded.ID)),
+		cited(citation{kind: "memo", id: uuid.New(), resolved: false, chats: nil}),
+		cited(citation{kind: "memo", id: uuid.New(), resolved: false, chats: nil}, citation{kind: "chat", id: source.ID, resolved: false, chats: nil}),
+	}
+	verdicts := make([]verdict, len(answers))
+	for i := range verdicts {
+		verdicts[i] = verdict{Correct: true, Miss: "", Reason: "ok"}
+	}
+	s := summarize(corpus, cfg, []Arm{a}, answers, verdicts).Scores[0]
+	require.Equal(t, 4, s.CitedAnswers)
+	require.Equal(t, 2, s.ValidCited, "the source digest, and the source chat beside an unchecked memo")
+	require.Equal(t, 4, s.MemoOrDigestCited)
 }

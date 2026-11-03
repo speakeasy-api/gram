@@ -177,6 +177,7 @@ func HybridTeamMemoryArm(ctx context.Context, logger *slog.Logger, embedder Embe
 		},
 		Call:         call,
 		Instructions: searcher.instructions(),
+		Sources:      MemorySources(target),
 	}, nil
 }
 
