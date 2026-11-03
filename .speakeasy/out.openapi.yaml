@@ -120326,8 +120326,8 @@ components:
       properties:
         audience:
           type: string
-          description: Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.
-          pattern: ^[!-~]+$
+          description: Replace the upstream OAuth audience sent for this client. Pass an empty string to clear it. Omit to leave unchanged.
+          pattern: ^[!-~]*$
           maxLength: 512
         client_secret:
           type: string
@@ -120815,8 +120815,8 @@ components:
       properties:
         audience:
           type: string
-          description: Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.
-          pattern: ^[!-~]+$
+          description: Replace the upstream OAuth audience sent for this client. Pass an empty string to clear it. Omit to leave unchanged.
+          pattern: ^[!-~]*$
           maxLength: 512
         client_id:
           type: string
