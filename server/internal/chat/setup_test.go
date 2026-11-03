@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/memorygate"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/risk/chatfindings"
@@ -118,6 +119,9 @@ func newTestChatServiceWithOptions(t *testing.T, completionClient openrouter.Com
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	assetStorage := assetstest.NewTestBlobStore(t)
+	// Organizational Memory is on by default so its per-chat endpoints run in
+	// the shared authorization tables; summaries stay on the legacy path.
+	require.NoError(t, memorygate.Set(ctx, conn, orgID, true))
 	svc := chat.NewService(logger, tp, conn, mgr, nil, nil, completionClient, nil, nil, nil, assetStorage, authzEngine, nil, billingClient, audit.NewLogger()).
 		WithRiskFindings(chatfindings.New(conn, riskchrepo.New(chConn)))
 

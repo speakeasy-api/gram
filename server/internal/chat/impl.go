@@ -453,8 +453,17 @@ func (s *Service) chatOverviews(ctx context.Context, authCtx *contextvalues.Auth
 		return nil, oops.E(oops.CodeUnexpected, err, "count chat findings").LogError(ctx, s.logger)
 	}
 
+	// Memory state is only meaningful while Organizational Memory is on for the
+	// organization. Leaving it out otherwise is how the dashboard knows to
+	// hide the memory column.
+	memoryOn := OrgMemoryEnabled(ctx, s.logger, s.db, authCtx.ActiveOrganizationID)
+
 	result := make([]*gen.ChatOverview, 0, len(rows))
 	for _, row := range rows {
+		memoryState := ""
+		if memoryOn {
+			memoryState = row.MemoryState
+		}
 		lastMessageTimestamp := row.CreatedAt.Time.Format(time.RFC3339)
 		if row.LastMessageTimestamp.Valid {
 			lastMessageTimestamp = row.LastMessageTimestamp.Time.Format(time.RFC3339)
@@ -486,6 +495,7 @@ func (s *Service) chatOverviews(ctx context.Context, authCtx *contextvalues.Auth
 			AccountType:          conv.PtrEmpty(row.AccountType),
 			AccountEmail:         conv.PtrEmpty(row.AccountEmail),
 			Pinned:               &pinned,
+			MemoryState:          conv.PtrEmpty(memoryState),
 			// List responses omit summary text to keep pages light; loadChat /
 			// summarize return the persisted summary when present.
 			Summary:            nil,
@@ -1641,6 +1651,7 @@ func (s *Service) LoadChat(ctx context.Context, payload *gen.LoadChatPayload) (*
 		AccountType:          conv.PtrEmpty(chat.AccountType),
 		AccountEmail:         conv.PtrEmpty(chat.AccountEmail),
 		Pinned:               &pinned,
+		MemoryState:          nil,
 		Summary:              conv.FromPGText[string](chat.Summary),
 		SummaryGeneratedAt:   formatOptionalTimestamptz(chat.SummaryGeneratedAt),
 		Messages:             resultMessages,

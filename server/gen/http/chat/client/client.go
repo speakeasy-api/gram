@@ -53,6 +53,14 @@ type Client struct {
 	// endpoint.
 	SetPinnedDoer goahttp.Doer
 
+	// GetMemory Doer is the HTTP client used to make requests to the getMemory
+	// endpoint.
+	GetMemoryDoer goahttp.Doer
+
+	// SetMemoryExcluded Doer is the HTTP client used to make requests to the
+	// setMemoryExcluded endpoint.
+	SetMemoryExcludedDoer goahttp.Doer
+
 	// Summarize Doer is the HTTP client used to make requests to the summarize
 	// endpoint.
 	SummarizeDoer goahttp.Doer
@@ -102,6 +110,8 @@ func NewClient(
 		CreditUsageDoer:                doer,
 		DeleteChatDoer:                 doer,
 		SetPinnedDoer:                  doer,
+		GetMemoryDoer:                  doer,
+		SetMemoryExcludedDoer:          doer,
 		SummarizeDoer:                  doer,
 		SummarizeToolCallDoer:          doer,
 		SubmitFeedbackDoer:             doer,
@@ -326,6 +336,54 @@ func (c *Client) SetPinned() goa.Endpoint {
 		resp, err := c.SetPinnedDoer.Do(req)
 		if err != nil {
 			return nil, goahttp.ErrRequestError("chat", "setPinned", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// GetMemory returns an endpoint that makes HTTP requests to the chat service
+// getMemory server.
+func (c *Client) GetMemory() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeGetMemoryRequest(c.encoder)
+		decodeResponse = DecodeGetMemoryResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildGetMemoryRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.GetMemoryDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("chat", "getMemory", err)
+		}
+		return decodeResponse(resp)
+	}
+}
+
+// SetMemoryExcluded returns an endpoint that makes HTTP requests to the chat
+// service setMemoryExcluded server.
+func (c *Client) SetMemoryExcluded() goa.Endpoint {
+	var (
+		encodeRequest  = EncodeSetMemoryExcludedRequest(c.encoder)
+		decodeResponse = DecodeSetMemoryExcludedResponse(c.decoder, c.RestoreResponseBody)
+	)
+	return func(ctx context.Context, v any) (any, error) {
+		req, err := c.BuildSetMemoryExcludedRequest(ctx, v)
+		if err != nil {
+			return nil, err
+		}
+		err = encodeRequest(req, v)
+		if err != nil {
+			return nil, err
+		}
+		resp, err := c.SetMemoryExcludedDoer.Do(req)
+		if err != nil {
+			return nil, goahttp.ErrRequestError("chat", "setMemoryExcluded", err)
 		}
 		return decodeResponse(resp)
 	}

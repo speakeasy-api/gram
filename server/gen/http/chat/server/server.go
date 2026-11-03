@@ -28,6 +28,8 @@ type Server struct {
 	CreditUsage                http.Handler
 	DeleteChat                 http.Handler
 	SetPinned                  http.Handler
+	GetMemory                  http.Handler
+	SetMemoryExcluded          http.Handler
 	Summarize                  http.Handler
 	SummarizeToolCall          http.Handler
 	SubmitFeedback             http.Handler
@@ -71,6 +73,8 @@ func New(
 			{"CreditUsage", "GET", "/rpc/chat.creditUsage"},
 			{"DeleteChat", "DELETE", "/rpc/chat.delete"},
 			{"SetPinned", "POST", "/rpc/chat.setPinned"},
+			{"GetMemory", "GET", "/rpc/chat.getMemory"},
+			{"SetMemoryExcluded", "POST", "/rpc/chat.setMemoryExcluded"},
 			{"Summarize", "POST", "/rpc/chat.summarize"},
 			{"SummarizeToolCall", "POST", "/rpc/chat.summarizeToolCall"},
 			{"SubmitFeedback", "POST", "/rpc/chat.submitFeedback"},
@@ -86,6 +90,8 @@ func New(
 		CreditUsage:                NewCreditUsageHandler(e.CreditUsage, mux, decoder, encoder, errhandler, formatter),
 		DeleteChat:                 NewDeleteChatHandler(e.DeleteChat, mux, decoder, encoder, errhandler, formatter),
 		SetPinned:                  NewSetPinnedHandler(e.SetPinned, mux, decoder, encoder, errhandler, formatter),
+		GetMemory:                  NewGetMemoryHandler(e.GetMemory, mux, decoder, encoder, errhandler, formatter),
+		SetMemoryExcluded:          NewSetMemoryExcludedHandler(e.SetMemoryExcluded, mux, decoder, encoder, errhandler, formatter),
 		Summarize:                  NewSummarizeHandler(e.Summarize, mux, decoder, encoder, errhandler, formatter),
 		SummarizeToolCall:          NewSummarizeToolCallHandler(e.SummarizeToolCall, mux, decoder, encoder, errhandler, formatter),
 		SubmitFeedback:             NewSubmitFeedbackHandler(e.SubmitFeedback, mux, decoder, encoder, errhandler, formatter),
@@ -108,6 +114,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.CreditUsage = m(s.CreditUsage)
 	s.DeleteChat = m(s.DeleteChat)
 	s.SetPinned = m(s.SetPinned)
+	s.GetMemory = m(s.GetMemory)
+	s.SetMemoryExcluded = m(s.SetMemoryExcluded)
 	s.Summarize = m(s.Summarize)
 	s.SummarizeToolCall = m(s.SummarizeToolCall)
 	s.SubmitFeedback = m(s.SubmitFeedback)
@@ -129,6 +137,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountCreditUsageHandler(mux, h.CreditUsage)
 	MountDeleteChatHandler(mux, h.DeleteChat)
 	MountSetPinnedHandler(mux, h.SetPinned)
+	MountGetMemoryHandler(mux, h.GetMemory)
+	MountSetMemoryExcludedHandler(mux, h.SetMemoryExcluded)
 	MountSummarizeHandler(mux, h.Summarize)
 	MountSummarizeToolCallHandler(mux, h.SummarizeToolCall)
 	MountSubmitFeedbackHandler(mux, h.SubmitFeedback)
@@ -596,6 +606,112 @@ func NewSetPinnedHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "setPinned")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "chat")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountGetMemoryHandler configures the mux to serve the "chat" service
+// "getMemory" endpoint.
+func MountGetMemoryHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/chat.getMemory", f)
+}
+
+// NewGetMemoryHandler creates a HTTP handler which loads the HTTP request and
+// calls the "chat" service "getMemory" endpoint.
+func NewGetMemoryHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeGetMemoryRequest(mux, decoder)
+		encodeResponse = EncodeGetMemoryResponse(encoder)
+		encodeError    = EncodeGetMemoryError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "getMemory")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "chat")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetMemoryExcludedHandler configures the mux to serve the "chat" service
+// "setMemoryExcluded" endpoint.
+func MountSetMemoryExcludedHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/chat.setMemoryExcluded", f)
+}
+
+// NewSetMemoryExcludedHandler creates a HTTP handler which loads the HTTP
+// request and calls the "chat" service "setMemoryExcluded" endpoint.
+func NewSetMemoryExcludedHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetMemoryExcludedRequest(mux, decoder)
+		encodeResponse = EncodeSetMemoryExcludedResponse(encoder)
+		encodeError    = EncodeSetMemoryExcludedError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setMemoryExcluded")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "chat")
 		payload, err := decodeRequest(r)
 		if err != nil {

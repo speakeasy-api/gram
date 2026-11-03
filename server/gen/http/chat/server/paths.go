@@ -52,6 +52,16 @@ func SetPinnedChatPath() string {
 	return "/rpc/chat.setPinned"
 }
 
+// GetMemoryChatPath returns the URL path to the chat service getMemory HTTP endpoint.
+func GetMemoryChatPath() string {
+	return "/rpc/chat.getMemory"
+}
+
+// SetMemoryExcludedChatPath returns the URL path to the chat service setMemoryExcluded HTTP endpoint.
+func SetMemoryExcludedChatPath() string {
+	return "/rpc/chat.setMemoryExcluded"
+}
+
 // SummarizeChatPath returns the URL path to the chat service summarize HTTP endpoint.
 func SummarizeChatPath() string {
 	return "/rpc/chat.summarize"

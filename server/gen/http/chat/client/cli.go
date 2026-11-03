@@ -667,6 +667,75 @@ func BuildSetPinnedPayload(chatSetPinnedBody string, chatSetPinnedSessionToken s
 	return v, nil
 }
 
+// BuildGetMemoryPayload builds the payload for the chat getMemory endpoint
+// from CLI flags.
+func BuildGetMemoryPayload(chatGetMemoryID string, chatGetMemorySessionToken string, chatGetMemoryProjectSlugInput string) (*chat.GetMemoryPayload, error) {
+	var err error
+	var id string
+	{
+		id = chatGetMemoryID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if chatGetMemorySessionToken != "" {
+			sessionToken = &chatGetMemorySessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatGetMemoryProjectSlugInput != "" {
+			projectSlugInput = &chatGetMemoryProjectSlugInput
+		}
+	}
+	v := &chat.GetMemoryPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
+// BuildSetMemoryExcludedPayload builds the payload for the chat
+// setMemoryExcluded endpoint from CLI flags.
+func BuildSetMemoryExcludedPayload(chatSetMemoryExcludedBody string, chatSetMemoryExcludedSessionToken string, chatSetMemoryExcludedProjectSlugInput string) (*chat.SetMemoryExcludedPayload, error) {
+	var err error
+	var body SetMemoryExcludedRequestBody
+	{
+		err = json.Unmarshal([]byte(chatSetMemoryExcludedBody), &body)
+		if err != nil {
+			return nil, fmt.Errorf("invalid JSON for body, \nerror: %s, \nexample of valid JSON:\n%s", err, "'{\n      \"excluded\": false,\n      \"id\": \"550e8400-e29b-41d4-a716-446655440000\"\n   }'")
+		}
+		err = goa.MergeErrors(err, goa.ValidateFormat("body.id", body.ID, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if chatSetMemoryExcludedSessionToken != "" {
+			sessionToken = &chatSetMemoryExcludedSessionToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if chatSetMemoryExcludedProjectSlugInput != "" {
+			projectSlugInput = &chatSetMemoryExcludedProjectSlugInput
+		}
+	}
+	v := &chat.SetMemoryExcludedPayload{
+		ID:       body.ID,
+		Excluded: body.Excluded,
+	}
+	v.SessionToken = sessionToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}
+
 // BuildSummarizePayload builds the payload for the chat summarize endpoint
 // from CLI flags.
 func BuildSummarizePayload(chatSummarizeBody string, chatSummarizeSessionToken string, chatSummarizeProjectSlugInput string) (*chat.SummarizePayload, error) {

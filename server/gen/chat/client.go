@@ -24,6 +24,8 @@ type Client struct {
 	CreditUsageEndpoint                goa.Endpoint
 	DeleteChatEndpoint                 goa.Endpoint
 	SetPinnedEndpoint                  goa.Endpoint
+	GetMemoryEndpoint                  goa.Endpoint
+	SetMemoryExcludedEndpoint          goa.Endpoint
 	SummarizeEndpoint                  goa.Endpoint
 	SummarizeToolCallEndpoint          goa.Endpoint
 	SubmitFeedbackEndpoint             goa.Endpoint
@@ -32,7 +34,7 @@ type Client struct {
 }
 
 // NewClient initializes a "chat" service client given the endpoints.
-func NewClient(listChats, getAssistantSessionSummary, getWorkUnitsTrend, loadChatOverview, loadChat, generateTitle, creditUsage, deleteChat, setPinned, summarize, summarizeToolCall, submitFeedback, listSources, listSessionLinks goa.Endpoint) *Client {
+func NewClient(listChats, getAssistantSessionSummary, getWorkUnitsTrend, loadChatOverview, loadChat, generateTitle, creditUsage, deleteChat, setPinned, getMemory, setMemoryExcluded, summarize, summarizeToolCall, submitFeedback, listSources, listSessionLinks goa.Endpoint) *Client {
 	return &Client{
 		ListChatsEndpoint:                  listChats,
 		GetAssistantSessionSummaryEndpoint: getAssistantSessionSummary,
@@ -43,6 +45,8 @@ func NewClient(listChats, getAssistantSessionSummary, getWorkUnitsTrend, loadCha
 		CreditUsageEndpoint:                creditUsage,
 		DeleteChatEndpoint:                 deleteChat,
 		SetPinnedEndpoint:                  setPinned,
+		GetMemoryEndpoint:                  getMemory,
+		SetMemoryExcludedEndpoint:          setMemoryExcluded,
 		SummarizeEndpoint:                  summarize,
 		SummarizeToolCallEndpoint:          summarizeToolCall,
 		SubmitFeedbackEndpoint:             submitFeedback,
@@ -241,6 +245,51 @@ func (c *Client) DeleteChat(ctx context.Context, p *DeleteChatPayload) (err erro
 func (c *Client) SetPinned(ctx context.Context, p *SetPinnedPayload) (err error) {
 	_, err = c.SetPinnedEndpoint(ctx, p)
 	return
+}
+
+// GetMemory calls the "getMemory" endpoint of the "chat" service.
+// GetMemory may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) GetMemory(ctx context.Context, p *GetMemoryPayload) (res *ChatMemory, err error) {
+	var ires any
+	ires, err = c.GetMemoryEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ChatMemory), nil
+}
+
+// SetMemoryExcluded calls the "setMemoryExcluded" endpoint of the "chat"
+// service.
+// SetMemoryExcluded may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetMemoryExcluded(ctx context.Context, p *SetMemoryExcludedPayload) (res *ChatMemory, err error) {
+	var ires any
+	ires, err = c.SetMemoryExcludedEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ChatMemory), nil
 }
 
 // Summarize calls the "summarize" endpoint of the "chat" service.
