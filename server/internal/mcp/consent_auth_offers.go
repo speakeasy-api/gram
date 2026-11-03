@@ -112,6 +112,7 @@ type gatewayOfferMetadata struct {
 
 func (s *Service) loadGatewayOfferMetadata(ctx context.Context, organizationID string, members []metaMember, offers map[uuid.UUID]configuredAuthOffer) (gatewayOfferMetadata, error) {
 	metadata := gatewayOfferMetadata{
+		headers:       nil,
 		source:        make(map[uuid.UUID][]proxy.ConfiguredHeader),
 		nonCredential: make(map[uuid.UUID][]proxy.ConfiguredHeader),
 		selections:    make(map[[2]uuid.UUID]upstreamclientsrepo.GetAuthClientSelectionRow),
@@ -151,7 +152,7 @@ func (s *Service) loadGatewayOfferMetadata(ctx context.Context, organizationID s
 			metadata.nonCredential[row.RemoteMcpServerID] = append(metadata.nonCredential[row.RemoteMcpServerID], header)
 		}
 	}
-	selections, err := upstreamclientsrepo.New(s.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{Proposed: true, ProposeAllClients: true, CredentialID: uuid.Nil, ProposedRegistrationID: uuid.NullUUID{}, ProposedAuthClientID: uuid.NullUUID{}, CredentialKind: upstreamclients.CredentialKindUserSession, McpServerIds: serverIDs, OrganizationID: organizationID})
+	selections, err := upstreamclientsrepo.New(s.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{Proposed: true, ProposeAllClients: true, CredentialID: uuid.Nil, ProposedRegistrationID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ProposedAuthClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, CredentialKind: upstreamclients.CredentialKindUserSession, McpServerIds: serverIDs, OrganizationID: organizationID})
 	if err != nil {
 		return metadata, fmt.Errorf("resolve gateway offer header sources: %w", err)
 	}

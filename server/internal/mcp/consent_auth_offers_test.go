@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -221,7 +222,7 @@ func TestGatewayOfferMetadataDetachedClientRetainsSourceRequirements(t *testing.
 	// A stored secret must not be decrypted, even after the last link is removed.
 	f.requireSourceHeader(f.sourceHeader("X-Other-Key", true, text("not-ciphertext"), pgtype.Text{}))
 	id := f.adminClient(authClientTypeStaticCredential, uuid.NullUUID{})
-	_, err = pool.Exec(t.Context(), `UPDATE mcp_server_auth_clients SET deleted_at = clock_timestamp() WHERE project_id = $1 AND mcp_server_id = $2 AND auth_client_id = $3`, f.projectID, f.serverID, id)
+	_, err = authclientsrepo.New(pool).DetachAuthClientFromServer(t.Context(), authclientsrepo.DetachAuthClientFromServerParams{OrganizationID: f.orgID, McpServerID: f.serverID, AuthClientID: id})
 	require.NoError(t, err)
 	offers, err := f.service.configuredAuthOffers(t.Context(), f.orgID, []uuid.UUID{f.serverID})
 	require.NoError(t, err)
