@@ -157,6 +157,11 @@ var consumerEntryPoints = map[string]consumerCategory{
 	"NewProvisioner":                categoryWiring,
 	"SetUpstreamSelectorWriteGate":  categoryWiring,
 	"WithUpstreamSelectorWriteGate": categoryWiring,
+	"NewClient":                     categoryWiring,
+	"NewDefaultClient":              categoryWiring,
+	"DefaultRegistry":               categoryWiring,
+	"DefaultRegistryConfig":         categoryWiring,
+	"DefaultDeclarations":           categoryWiring,
 
 	// Value constructors: not inventoried.
 	"NewGrant":                     "",
@@ -172,6 +177,11 @@ var consumerEntryPoints = map[string]consumerCategory{
 	"NamesUpstreamClient":          "",
 	"Denied":                       "",
 	"InvalidCheck":                 "",
+
+	// Typed operations: a consumer that uses them has migrated, so they are
+	// not inventoried.
+	"Organization": "",
+	"Project":      "",
 }
 
 // engineEntryPoints are Engine methods whose names are distinctive enough to

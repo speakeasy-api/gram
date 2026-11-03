@@ -33,3 +33,16 @@ Review follow-ups adopted on #8442 (each fails closed):
 - An auth-client permission for a represented user other than the actor, with no represented policies, is an error. A user acting for themselves is already limited by their own live policies. No permission may reach an auth client through `Via`, so the represented ceiling always applies by the requested type.
 - A standing veto block denies even when another veto check is undecided.
 - An absent `bool` fact stays unresolved for `IsFalse` rather than reading as false. `bool` facts are declared for NOT NULL columns, so absence means the value was not established.
+
+## F5 (AIS-835): typed client
+
+### Decided without reviewer input
+
+1. **The default registry grows one slice at a time.** `DefaultRegistry()` starts with the organization, project, MCP server and MCP auth-client types, whose compiled scopes already reproduce the frozen scope tables; those declarations moved from tests into `declarations.go`. Each migration ticket adds its own types. *If reversed:* declaring every type up front would need every scope's semantics settled before any service moves, which the per-slice tickets exist to do.
+2. **The client wraps the engine.** Admission, grant loading, the enforcement profile, challenge logging and error mapping are the engine's; only the decision moves to the registry evaluator. *If reversed:* the client would duplicate admission, which the ticket says to reuse.
+3. **No ad-hoc `RequireAny` on the client.** The client answers named alternatives the registry declares, as the RFC describes. A service that today calls `RequireAny` declares an `Alternatives` set in its migration. *If reversed:* add `Client.RequireAny(ops...)`; callers could then combine arbitrary permissions again.
+4. **Callers without an authenticated actor act as `system:unattributed`.** Assistant tokens, embedded chat sessions and similar callers have no admitted actor. Their attribution never becomes a user, so ownership facts never match them, matching the RFC's rule that attribution never selects a human caller profile. *If reversed:* those callers would match `Is(owner)` facts for their minting user.
+5. **An admission with no policies denies.** The engine denies a prepared context with no policies; the client keeps that instead of returning `ErrNoPolicies`. A missing admission is still an error.
+6. **Startup compiles the client; services receive it as they migrate.** `start.go` builds the default client and stops startup if the registry fails to compile. No service holds the client yet, so there is no unused injection; the first migration ticket passes it to its service.
+7. **Typed constructors are not inventoried.** A consumer that calls `authz.Project(...).Read()` has migrated, so it drops out of `consumers.csv`. The inventory shrinking to wiring rows is the migration's progress signal.
+8. **Typed operations take their resource kind from the declared type.** The kind-override fixture is skipped with that reason, as F3 already approved for the evaluator.

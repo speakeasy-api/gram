@@ -7,6 +7,7 @@ cmd/gram/mcp.go,runMCPServer,wiring,NewEngine,,,1,F5 AIS-835
 cmd/gram/private_ingress_runtime.go,newPrivateIngressRuntime,wiring,ChallengeLoggingEnabled,,,1,F5 AIS-835
 cmd/gram/private_ingress_runtime.go,newPrivateIngressRuntime,wiring,NewEngine,,,1,F5 AIS-835
 cmd/gram/start.go,newStartCommand,wiring,ChallengeLoggingEnabled,,,1,F5 AIS-835
+cmd/gram/start.go,newStartCommand,wiring,NewDefaultClient,,,1,F5 AIS-835
 cmd/gram/start.go,newStartCommand,wiring,NewEngine,,,1,F5 AIS-835
 cmd/gram/start.go,newStartCommand,wiring,NewProvisioner,,,1,F5 AIS-835
 cmd/gram/start.go,newStartCommand,wiring,SetUpstreamSelectorWriteGate,,,1,F5 AIS-835
