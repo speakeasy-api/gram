@@ -272,9 +272,9 @@ type Client struct {
 	// getHookClients endpoint.
 	GetHookClientsDoer goahttp.Doer
 
-	// GetOrganizationHookFleet Doer is the HTTP client used to make requests to
-	// the getOrganizationHookFleet endpoint.
-	GetOrganizationHookFleetDoer goahttp.Doer
+	// ListCustomDomains Doer is the HTTP client used to make requests to the
+	// listCustomDomains endpoint.
+	ListCustomDomainsDoer goahttp.Doer
 
 	// ListRegistryPromotionCandidates Doer is the HTTP client used to make
 	// requests to the listRegistryPromotionCandidates endpoint.
@@ -532,7 +532,7 @@ func NewClient(
 		SetMcpServerScopePinDoer:                    doer,
 		GetMcpServerToolCallsDoer:                   doer,
 		GetHookClientsDoer:                          doer,
-		GetOrganizationHookFleetDoer:                doer,
+		ListCustomDomainsDoer:                       doer,
 		ListRegistryPromotionCandidatesDoer:         doer,
 		GetRegistryPromotionCandidateDoer:           doer,
 		PromoteRegistryCandidateDoer:                doer,
@@ -2125,15 +2125,15 @@ func (c *Client) GetHookClients() goa.Endpoint {
 	}
 }
 
-// GetOrganizationHookFleet returns an endpoint that makes HTTP requests to the
-// admin service getOrganizationHookFleet server.
-func (c *Client) GetOrganizationHookFleet() goa.Endpoint {
+// ListCustomDomains returns an endpoint that makes HTTP requests to the admin
+// service listCustomDomains server.
+func (c *Client) ListCustomDomains() goa.Endpoint {
 	var (
-		encodeRequest  = EncodeGetOrganizationHookFleetRequest(c.encoder)
-		decodeResponse = DecodeGetOrganizationHookFleetResponse(c.decoder, c.RestoreResponseBody)
+		encodeRequest  = EncodeListCustomDomainsRequest(c.encoder)
+		decodeResponse = DecodeListCustomDomainsResponse(c.decoder, c.RestoreResponseBody)
 	)
 	return func(ctx context.Context, v any) (any, error) {
-		req, err := c.BuildGetOrganizationHookFleetRequest(ctx, v)
+		req, err := c.BuildListCustomDomainsRequest(ctx, v)
 		if err != nil {
 			return nil, err
 		}
@@ -2141,9 +2141,9 @@ func (c *Client) GetOrganizationHookFleet() goa.Endpoint {
 		if err != nil {
 			return nil, err
 		}
-		resp, err := c.GetOrganizationHookFleetDoer.Do(req)
+		resp, err := c.ListCustomDomainsDoer.Do(req)
 		if err != nil {
-			return nil, goahttp.ErrRequestError("admin", "getOrganizationHookFleet", err)
+			return nil, goahttp.ErrRequestError("admin", "listCustomDomains", err)
 		}
 		return decodeResponse(resp)
 	}

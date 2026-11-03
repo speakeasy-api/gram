@@ -22,16 +22,17 @@ import (
 // It is an ordinary Spec, the same mechanism production uses to seed the local
 // development org, so the two cannot drift.
 var otherTenantSpec = Spec{
-	OrgID:       "org_gram_othr_workspace",
-	OrgSlug:     "acme-othr",
-	OrgName:     "Acme Othr Org",
-	UUIDPrefix:  "0ddba110",
-	UserPrefix:  "user_othr_",
-	EmailDomain: "@othr.getgram.ai",
-	NameSeed:    "gram-othr-",
-	GroupPrefix: "othr_grp_",
-	WorkOSOrgID: "workos_gram_othr_unlinked",
-	Marker:      "othr-seed",
+	CustomDomain: "mcp.other.example.com",
+	OrgID:        "org_gram_othr_workspace",
+	OrgSlug:      "acme-othr",
+	OrgName:      "Acme Othr Org",
+	UUIDPrefix:   "0ddba110",
+	UserPrefix:   "user_othr_",
+	EmailDomain:  "@othr.getgram.ai",
+	NameSeed:     "gram-othr-",
+	GroupPrefix:  "othr_grp_",
+	WorkOSOrgID:  "workos_gram_othr_unlinked",
+	Marker:       "othr-seed",
 }
 
 // TestDemoSeedSafety is the generic cross-table guard for the demo seed. With

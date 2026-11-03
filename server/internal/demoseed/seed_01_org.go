@@ -2,8 +2,10 @@ package demoseed
 
 import (
 	"context"
+	"encoding/base32"
 	"errors"
 	"fmt"
+	"strings"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -44,6 +46,12 @@ func (s *seeder) seedOrg(ctx context.Context) error {
 	}
 	if err := s.orgFeaturesAndUsers(ctx); err != nil {
 		return err
+	}
+	domainID := s.det("custom-domain")
+	// Ten base32 characters give each tenant a stable, valid DNS target label.
+	targetToken := strings.ToLower(base32.StdEncoding.EncodeToString(domainID[:]))[:10]
+	if err := s.q.OrgSeedCustomDomain(ctx, repo.OrgSeedCustomDomainParams{ID: domainID, OrgID: s.orgID(), Domain: s.spec.CustomDomain, DnsTargetToken: pgtype.Text{String: targetToken, Valid: true}}); err != nil {
+		return fmt.Errorf("seed custom domain diagnostics: %w", err)
 	}
 	return s.orgMemberships(ctx)
 }
@@ -208,6 +216,7 @@ func (s *seeder) orgPurge(ctx context.Context) error {
 			return s.q.OrgDeleteRemoteSessionIssuers(ctx, repo.OrgDeleteRemoteSessionIssuersParams{ProjectID: proj, OrgID: org})
 		}},
 		{"delete mcp servers", func() error { return s.q.OrgDeleteMCPServers(ctx, org) }},
+		{"delete custom domains", func() error { return s.q.OrgDeleteCustomDomains(ctx, org) }},
 		{"delete remote protected resources", func() error { return s.q.OrgDeleteRemoteProtectedResources(ctx, proj) }},
 		{"delete meta mcp servers", func() error { return s.q.OrgDeleteMetaMCPServers(ctx, org) }},
 		// meta_mcp_servers RESTRICTs its issuer, so issuers clear after it.

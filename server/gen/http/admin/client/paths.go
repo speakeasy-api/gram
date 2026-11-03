@@ -327,9 +327,9 @@ func GetHookClientsAdminPath() string {
 	return "/admin/hookClients.get"
 }
 
-// GetOrganizationHookFleetAdminPath returns the URL path to the admin service getOrganizationHookFleet HTTP endpoint.
-func GetOrganizationHookFleetAdminPath() string {
-	return "/admin/organizationHookFleet.get"
+// ListCustomDomainsAdminPath returns the URL path to the admin service listCustomDomains HTTP endpoint.
+func ListCustomDomainsAdminPath() string {
+	return "/admin/customDomains.list"
 }
 
 // ListRegistryPromotionCandidatesAdminPath returns the URL path to the admin service listRegistryPromotionCandidates HTTP endpoint.

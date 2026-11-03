@@ -1357,3 +1357,32 @@ LIMIT @row_limit;
 -- Test fixture: the Platform MCP writer sets its own timestamps and rate limits.
 INSERT INTO platform_mcp_feedback (organization_id, subject_urn, category, rating, tool_name, note, idempotency_key, input_hash, created_at, expires_at)
 VALUES (@organization_id, @subject_urn, @category, @rating, @tool_name, @note, @idempotency_key, 'fixture', @created_at, @expires_at);
+
+-- name: AdminListCustomDomains :many
+-- Staff-wide read across organizations. A domain with no observed routing
+-- method matches the unknown filter, since no supported method was observed.
+SELECT
+    d.id,
+    d.organization_id,
+    om.name AS organization_name,
+    om.slug AS organization_slug,
+    d.domain,
+    d.verified,
+    d.activated,
+    d.dns_target_token,
+    d.dns_routing_method,
+    d.dns_configuration_status,
+    d.dns_checked_at,
+    d.health_status,
+    d.health_issue,
+    d.health_checked_at,
+    d.created_at
+FROM custom_domains d
+JOIN organization_metadata om ON om.id = d.organization_id
+WHERE d.deleted IS FALSE
+  AND (sqlc.narg(organization_id)::text IS NULL OR d.organization_id = sqlc.narg(organization_id)::text)
+  AND (
+    sqlc.narg(dns_routing_method)::text IS NULL
+    OR COALESCE(d.dns_routing_method, 'unknown') = sqlc.narg(dns_routing_method)::text
+  )
+ORDER BY d.domain, d.id;

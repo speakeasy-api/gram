@@ -125,6 +125,9 @@ type Service struct {
 
 	hookFleet         HookFleetReader
 	hookFleetVersions HookFleetVersions
+	// customDomainTargetSuffix is the normalized parent DNS name of per-domain
+	// CNAME targets. Empty leaves targets out of listCustomDomains.
+	customDomainTargetSuffix string
 }
 
 type BillingOperations interface {
@@ -281,13 +284,14 @@ func NewService(
 			adminCache,
 			cache.SuffixNone,
 		),
-		trial:             trialNotifier,
-		billing:           billing,
-		supportCoverage:   supportCoverage,
-		mcpServerHealth:   mcpServerHealth,
-		HookClientsCache:  NewHookClientsCache(logger, adminCache, nil, nil),
-		hookFleet:         nil,
-		hookFleetVersions: HookFleetVersions{Latest: nil, Minimum: nil},
+		trial:                    trialNotifier,
+		billing:                  billing,
+		supportCoverage:          supportCoverage,
+		mcpServerHealth:          mcpServerHealth,
+		HookClientsCache:         NewHookClientsCache(logger, adminCache, nil, nil),
+		hookFleet:                nil,
+		hookFleetVersions:        HookFleetVersions{Latest: nil, Minimum: nil},
+		customDomainTargetSuffix: "",
 	}
 }
 

@@ -2392,28 +2392,22 @@ func BuildGetHookClientsPayload(adminGetHookClientsWindowDays string, adminGetHo
 	return v, nil
 }
 
-// BuildGetOrganizationHookFleetPayload builds the payload for the admin
-// getOrganizationHookFleet endpoint from CLI flags.
-func BuildGetOrganizationHookFleetPayload(adminGetOrganizationHookFleetOrganizationID string, adminGetOrganizationHookFleetWindowDays string, adminGetOrganizationHookFleetAdminSessionToken string) (*admin.GetOrganizationHookFleetPayload, error) {
+// BuildListCustomDomainsPayload builds the payload for the admin
+// listCustomDomains endpoint from CLI flags.
+func BuildListCustomDomainsPayload(adminListCustomDomainsOrganizationID string, adminListCustomDomainsDNSRoutingMethod string, adminListCustomDomainsAdminSessionToken string) (*admin.ListCustomDomainsPayload, error) {
 	var err error
-	var organizationID string
+	var organizationID *string
 	{
-		organizationID = adminGetOrganizationHookFleetOrganizationID
+		if adminListCustomDomainsOrganizationID != "" {
+			organizationID = &adminListCustomDomainsOrganizationID
+		}
 	}
-	var windowDays int
+	var dnsRoutingMethod *string
 	{
-		if adminGetOrganizationHookFleetWindowDays != "" {
-			var v int64
-			v, err = strconv.ParseInt(adminGetOrganizationHookFleetWindowDays, 10, strconv.IntSize)
-			windowDays = int(v)
-			if err != nil {
-				return nil, fmt.Errorf("invalid value for windowDays, must be INT")
-			}
-			if windowDays < 1 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 1, true))
-			}
-			if windowDays > 89 {
-				err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 89, false))
+		if adminListCustomDomainsDNSRoutingMethod != "" {
+			dnsRoutingMethod = &adminListCustomDomainsDNSRoutingMethod
+			if !(*dnsRoutingMethod == "per_domain_cname" || *dnsRoutingMethod == "shared_cname" || *dnsRoutingMethod == "a_record" || *dnsRoutingMethod == "unknown") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("dns_routing_method", *dnsRoutingMethod, []any{"per_domain_cname", "shared_cname", "a_record", "unknown"}))
 			}
 			if err != nil {
 				return nil, err
@@ -2422,13 +2416,13 @@ func BuildGetOrganizationHookFleetPayload(adminGetOrganizationHookFleetOrganizat
 	}
 	var adminSessionToken *string
 	{
-		if adminGetOrganizationHookFleetAdminSessionToken != "" {
-			adminSessionToken = &adminGetOrganizationHookFleetAdminSessionToken
+		if adminListCustomDomainsAdminSessionToken != "" {
+			adminSessionToken = &adminListCustomDomainsAdminSessionToken
 		}
 	}
-	v := &admin.GetOrganizationHookFleetPayload{}
+	v := &admin.ListCustomDomainsPayload{}
 	v.OrganizationID = organizationID
-	v.WindowDays = windowDays
+	v.DNSRoutingMethod = dnsRoutingMethod
 	v.AdminSessionToken = adminSessionToken
 
 	return v, nil

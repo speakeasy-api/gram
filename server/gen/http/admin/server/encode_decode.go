@@ -13915,51 +13915,42 @@ func EncodeGetHookClientsError(encoder func(context.Context, http.ResponseWriter
 	}
 }
 
-// EncodeGetOrganizationHookFleetResponse returns an encoder for responses
-// returned by the admin getOrganizationHookFleet endpoint.
-func EncodeGetOrganizationHookFleetResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
+// EncodeListCustomDomainsResponse returns an encoder for responses returned by
+// the admin listCustomDomains endpoint.
+func EncodeListCustomDomainsResponse(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder) func(context.Context, http.ResponseWriter, any) error {
 	return func(ctx context.Context, w http.ResponseWriter, v any) error {
-		res, _ := v.(*admin.AdminHookFleetResult)
+		res, _ := v.(*admin.AdminListCustomDomainsResult)
 		enc := encoder(ctx, w)
-		body := NewGetOrganizationHookFleetResponseBody(res)
+		body := NewListCustomDomainsResponseBody(res)
 		w.WriteHeader(http.StatusOK)
 		return enc.Encode(body)
 	}
 }
 
-// DecodeGetOrganizationHookFleetRequest returns a decoder for requests sent to
-// the admin getOrganizationHookFleet endpoint.
-func DecodeGetOrganizationHookFleetRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.GetOrganizationHookFleetPayload, error) {
-	return func(r *http.Request) (*admin.GetOrganizationHookFleetPayload, error) {
-		var payload *admin.GetOrganizationHookFleetPayload
+// DecodeListCustomDomainsRequest returns a decoder for requests sent to the
+// admin listCustomDomains endpoint.
+func DecodeListCustomDomainsRequest(mux goahttp.Muxer, decoder func(*http.Request) goahttp.Decoder) func(*http.Request) (*admin.ListCustomDomainsPayload, error) {
+	return func(r *http.Request) (*admin.ListCustomDomainsPayload, error) {
+		var payload *admin.ListCustomDomainsPayload
 		var (
-			organizationID    string
-			windowDays        int
+			organizationID    *string
+			dnsRoutingMethod  *string
 			adminSessionToken *string
 			err               error
 		)
 		qp := r.URL.Query()
-		organizationID = qp.Get("organization_id")
-		if organizationID == "" {
-			err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "query string"))
+		organizationIDRaw := qp.Get("organization_id")
+		if organizationIDRaw != "" {
+			organizationID = &organizationIDRaw
 		}
-		{
-			windowDaysRaw := qp.Get("window_days")
-			if windowDaysRaw == "" {
-				windowDays = 30
-			} else {
-				v, err2 := strconv.ParseInt(windowDaysRaw, 10, strconv.IntSize)
-				if err2 != nil {
-					err = goa.MergeErrors(err, goa.InvalidFieldTypeError("window_days", windowDaysRaw, "integer"))
-				}
-				windowDays = int(v)
+		dnsRoutingMethodRaw := qp.Get("dns_routing_method")
+		if dnsRoutingMethodRaw != "" {
+			dnsRoutingMethod = &dnsRoutingMethodRaw
+		}
+		if dnsRoutingMethod != nil {
+			if !(*dnsRoutingMethod == "per_domain_cname" || *dnsRoutingMethod == "shared_cname" || *dnsRoutingMethod == "a_record" || *dnsRoutingMethod == "unknown") {
+				err = goa.MergeErrors(err, goa.InvalidEnumValueError("dns_routing_method", *dnsRoutingMethod, []any{"per_domain_cname", "shared_cname", "a_record", "unknown"}))
 			}
-		}
-		if windowDays < 1 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 1, true))
-		}
-		if windowDays > 89 {
-			err = goa.MergeErrors(err, goa.InvalidRangeError("window_days", windowDays, 89, false))
 		}
 		adminSessionTokenRaw := r.Header.Get("Authorization")
 		if adminSessionTokenRaw != "" {
@@ -13968,7 +13959,7 @@ func DecodeGetOrganizationHookFleetRequest(mux goahttp.Muxer, decoder func(*http
 		if err != nil {
 			return payload, err
 		}
-		payload = NewGetOrganizationHookFleetPayload(organizationID, windowDays, adminSessionToken)
+		payload = NewListCustomDomainsPayload(organizationID, dnsRoutingMethod, adminSessionToken)
 		if payload.AdminSessionToken != nil {
 			if strings.Contains(*payload.AdminSessionToken, " ") {
 				// Remove authorization scheme prefix (e.g. "Bearer")
@@ -13981,9 +13972,9 @@ func DecodeGetOrganizationHookFleetRequest(mux goahttp.Muxer, decoder func(*http
 	}
 }
 
-// EncodeGetOrganizationHookFleetError returns an encoder for errors returned
-// by the getOrganizationHookFleet admin endpoint.
-func EncodeGetOrganizationHookFleetError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
+// EncodeListCustomDomainsError returns an encoder for errors returned by the
+// listCustomDomains admin endpoint.
+func EncodeListCustomDomainsError(encoder func(context.Context, http.ResponseWriter) goahttp.Encoder, formatter func(ctx context.Context, err error) goahttp.Statuser) func(context.Context, http.ResponseWriter, error) error {
 	encodeError := goahttp.ErrorEncoder(encoder, formatter)
 	return func(ctx context.Context, w http.ResponseWriter, v error) error {
 		var en goa.GoaErrorNamer
@@ -14000,7 +13991,7 @@ func EncodeGetOrganizationHookFleetError(encoder func(context.Context, http.Resp
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationHookFleetUnauthorizedResponseBody(res)
+				body = NewListCustomDomainsUnauthorizedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnauthorized)
@@ -14014,7 +14005,7 @@ func EncodeGetOrganizationHookFleetError(encoder func(context.Context, http.Resp
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationHookFleetForbiddenResponseBody(res)
+				body = NewListCustomDomainsForbiddenResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusForbidden)
@@ -14028,7 +14019,7 @@ func EncodeGetOrganizationHookFleetError(encoder func(context.Context, http.Resp
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationHookFleetBadRequestResponseBody(res)
+				body = NewListCustomDomainsBadRequestResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadRequest)
@@ -14042,7 +14033,7 @@ func EncodeGetOrganizationHookFleetError(encoder func(context.Context, http.Resp
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationHookFleetNotFoundResponseBody(res)
+				body = NewListCustomDomainsNotFoundResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusNotFound)
@@ -14056,7 +14047,7 @@ func EncodeGetOrganizationHookFleetError(encoder func(context.Context, http.Resp
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationHookFleetConflictResponseBody(res)
+				body = NewListCustomDomainsConflictResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusConflict)
@@ -14070,7 +14061,7 @@ func EncodeGetOrganizationHookFleetError(encoder func(context.Context, http.Resp
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationHookFleetUnsupportedMediaResponseBody(res)
+				body = NewListCustomDomainsUnsupportedMediaResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnsupportedMediaType)
@@ -14084,7 +14075,7 @@ func EncodeGetOrganizationHookFleetError(encoder func(context.Context, http.Resp
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationHookFleetInvalidResponseBody(res)
+				body = NewListCustomDomainsInvalidResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusUnprocessableEntity)
@@ -14098,7 +14089,7 @@ func EncodeGetOrganizationHookFleetError(encoder func(context.Context, http.Resp
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationHookFleetInvariantViolationResponseBody(res)
+				body = NewListCustomDomainsInvariantViolationResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -14112,7 +14103,7 @@ func EncodeGetOrganizationHookFleetError(encoder func(context.Context, http.Resp
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationHookFleetUnexpectedResponseBody(res)
+				body = NewListCustomDomainsUnexpectedResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusInternalServerError)
@@ -14126,7 +14117,7 @@ func EncodeGetOrganizationHookFleetError(encoder func(context.Context, http.Resp
 			if formatter != nil {
 				body = formatter(ctx, res)
 			} else {
-				body = NewGetOrganizationHookFleetGatewayErrorResponseBody(res)
+				body = NewListCustomDomainsGatewayErrorResponseBody(res)
 			}
 			w.Header().Set("goa-error", res.GoaErrorName())
 			w.WriteHeader(http.StatusBadGateway)
@@ -24402,50 +24393,27 @@ func marshalAdminAdminDeviceAgentCellToAdminDeviceAgentCellResponseBody(v *admin
 	return res
 }
 
-// marshalAdminAdminHookFleetVersionToAdminHookFleetVersionResponseBody builds
-// a value of type *AdminHookFleetVersionResponseBody from a value of type
-// *admin.AdminHookFleetVersion.
-func marshalAdminAdminHookFleetVersionToAdminHookFleetVersionResponseBody(v *admin.AdminHookFleetVersion) *AdminHookFleetVersionResponseBody {
-	res := &AdminHookFleetVersionResponseBody{
-		Version:  v.Version,
-		Status:   v.Status,
-		Installs: v.Installs,
-	}
-
-	return res
-}
-
-// marshalAdminAdminHookFleetBucketToAdminHookFleetBucketResponseBody builds a
-// value of type *AdminHookFleetBucketResponseBody from a value of type
-// *admin.AdminHookFleetBucket.
-func marshalAdminAdminHookFleetBucketToAdminHookFleetBucketResponseBody(v *admin.AdminHookFleetBucket) *AdminHookFleetBucketResponseBody {
-	res := &AdminHookFleetBucketResponseBody{
-		Value:    v.Value,
-		Installs: v.Installs,
-		Events:   v.Events,
-	}
-
-	return res
-}
-
-// marshalAdminAdminHookFleetInstallToAdminHookFleetInstallResponseBody builds
-// a value of type *AdminHookFleetInstallResponseBody from a value of type
-// *admin.AdminHookFleetInstall.
-func marshalAdminAdminHookFleetInstallToAdminHookFleetInstallResponseBody(v *admin.AdminHookFleetInstall) *AdminHookFleetInstallResponseBody {
-	res := &AdminHookFleetInstallResponseBody{
-		ProjectID:          v.ProjectID,
-		UserEmail:          v.UserEmail,
-		Hostname:           v.Hostname,
-		Harness:            v.Harness,
-		Version:            v.Version,
-		VersionStatus:      v.VersionStatus,
-		EndpointGeneration: v.EndpointGeneration,
-		InstallRoute:       v.InstallRoute,
-		FirstSeen:          v.FirstSeen,
-		LastSeen:           v.LastSeen,
-		Events:             v.Events,
-		Errors:             v.Errors,
-		Quiet:              v.Quiet,
+// marshalAdminAdminCustomDomainToAdminCustomDomainResponseBody builds a value
+// of type *AdminCustomDomainResponseBody from a value of type
+// *admin.AdminCustomDomain.
+func marshalAdminAdminCustomDomainToAdminCustomDomainResponseBody(v *admin.AdminCustomDomain) *AdminCustomDomainResponseBody {
+	res := &AdminCustomDomainResponseBody{
+		ID:                     v.ID,
+		OrganizationID:         v.OrganizationID,
+		OrganizationName:       v.OrganizationName,
+		OrganizationSlug:       v.OrganizationSlug,
+		Domain:                 v.Domain,
+		Verified:               v.Verified,
+		Activated:              v.Activated,
+		DNSTargetToken:         v.DNSTargetToken,
+		DNSTarget:              v.DNSTarget,
+		DNSRoutingMethod:       v.DNSRoutingMethod,
+		DNSConfigurationStatus: v.DNSConfigurationStatus,
+		DNSCheckedAt:           v.DNSCheckedAt,
+		HealthStatus:           v.HealthStatus,
+		HealthIssue:            v.HealthIssue,
+		HealthCheckedAt:        v.HealthCheckedAt,
+		CreatedAt:              v.CreatedAt,
 	}
 
 	return res

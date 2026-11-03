@@ -15512,14 +15512,13 @@ func DecodeGetHookClientsResponse(decoder func(*http.Response) goahttp.Decoder, 
 	}
 }
 
-// BuildGetOrganizationHookFleetRequest instantiates a HTTP request object with
-// method and path set to call the "admin" service "getOrganizationHookFleet"
-// endpoint
-func (c *Client) BuildGetOrganizationHookFleetRequest(ctx context.Context, v any) (*http.Request, error) {
-	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetOrganizationHookFleetAdminPath()}
+// BuildListCustomDomainsRequest instantiates a HTTP request object with method
+// and path set to call the "admin" service "listCustomDomains" endpoint
+func (c *Client) BuildListCustomDomainsRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListCustomDomainsAdminPath()}
 	req, err := http.NewRequest("GET", u.String(), nil)
 	if err != nil {
-		return nil, goahttp.ErrInvalidURL("admin", "getOrganizationHookFleet", u.String(), err)
+		return nil, goahttp.ErrInvalidURL("admin", "listCustomDomains", u.String(), err)
 	}
 	if ctx != nil {
 		req = req.WithContext(ctx)
@@ -15528,30 +15527,34 @@ func (c *Client) BuildGetOrganizationHookFleetRequest(ctx context.Context, v any
 	return req, nil
 }
 
-// EncodeGetOrganizationHookFleetRequest returns an encoder for requests sent
-// to the admin getOrganizationHookFleet server.
-func EncodeGetOrganizationHookFleetRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+// EncodeListCustomDomainsRequest returns an encoder for requests sent to the
+// admin listCustomDomains server.
+func EncodeListCustomDomainsRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
 	return func(req *http.Request, v any) error {
-		p, ok := v.(*admin.GetOrganizationHookFleetPayload)
+		p, ok := v.(*admin.ListCustomDomainsPayload)
 		if !ok {
-			return goahttp.ErrInvalidType("admin", "getOrganizationHookFleet", "*admin.GetOrganizationHookFleetPayload", v)
+			return goahttp.ErrInvalidType("admin", "listCustomDomains", "*admin.ListCustomDomainsPayload", v)
 		}
 		if p.AdminSessionToken != nil {
 			head := *p.AdminSessionToken
 			req.Header.Set("Authorization", head)
 		}
 		values := req.URL.Query()
-		values.Add("organization_id", p.OrganizationID)
-		values.Add("window_days", fmt.Sprintf("%v", p.WindowDays))
+		if p.OrganizationID != nil {
+			values.Add("organization_id", *p.OrganizationID)
+		}
+		if p.DNSRoutingMethod != nil {
+			values.Add("dns_routing_method", *p.DNSRoutingMethod)
+		}
 		req.URL.RawQuery = values.Encode()
 		return nil
 	}
 }
 
-// DecodeGetOrganizationHookFleetResponse returns a decoder for responses
-// returned by the admin getOrganizationHookFleet endpoint. restoreBody
-// controls whether the response body should be restored after having been read.
-// DecodeGetOrganizationHookFleetResponse may return the following errors:
+// DecodeListCustomDomainsResponse returns a decoder for responses returned by
+// the admin listCustomDomains endpoint. restoreBody controls whether the
+// response body should be restored after having been read.
+// DecodeListCustomDomainsResponse may return the following errors:
 //   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
 //   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
 //   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
@@ -15563,7 +15566,7 @@ func EncodeGetOrganizationHookFleetRequest(encoder func(*http.Request) goahttp.E
 //   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
 //   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
 //   - error: internal error
-func DecodeGetOrganizationHookFleetResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+func DecodeListCustomDomainsResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
 	return func(resp *http.Response) (any, error) {
 		if restoreBody {
 			b, err := io.ReadAll(resp.Body)
@@ -15580,169 +15583,169 @@ func DecodeGetOrganizationHookFleetResponse(decoder func(*http.Response) goahttp
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				body GetOrganizationHookFleetResponseBody
+				body ListCustomDomainsResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+				return nil, goahttp.ErrDecodingError("admin", "listCustomDomains", err)
 			}
-			err = ValidateGetOrganizationHookFleetResponseBody(&body)
+			err = ValidateListCustomDomainsResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+				return nil, goahttp.ErrValidationError("admin", "listCustomDomains", err)
 			}
-			res := NewGetOrganizationHookFleetAdminHookFleetResultOK(&body)
+			res := NewListCustomDomainsAdminListCustomDomainsResultOK(&body)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
-				body GetOrganizationHookFleetUnauthorizedResponseBody
+				body ListCustomDomainsUnauthorizedResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+				return nil, goahttp.ErrDecodingError("admin", "listCustomDomains", err)
 			}
-			err = ValidateGetOrganizationHookFleetUnauthorizedResponseBody(&body)
+			err = ValidateListCustomDomainsUnauthorizedResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+				return nil, goahttp.ErrValidationError("admin", "listCustomDomains", err)
 			}
-			return nil, NewGetOrganizationHookFleetUnauthorized(&body)
+			return nil, NewListCustomDomainsUnauthorized(&body)
 		case http.StatusForbidden:
 			var (
-				body GetOrganizationHookFleetForbiddenResponseBody
+				body ListCustomDomainsForbiddenResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+				return nil, goahttp.ErrDecodingError("admin", "listCustomDomains", err)
 			}
-			err = ValidateGetOrganizationHookFleetForbiddenResponseBody(&body)
+			err = ValidateListCustomDomainsForbiddenResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+				return nil, goahttp.ErrValidationError("admin", "listCustomDomains", err)
 			}
-			return nil, NewGetOrganizationHookFleetForbidden(&body)
+			return nil, NewListCustomDomainsForbidden(&body)
 		case http.StatusBadRequest:
 			var (
-				body GetOrganizationHookFleetBadRequestResponseBody
+				body ListCustomDomainsBadRequestResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+				return nil, goahttp.ErrDecodingError("admin", "listCustomDomains", err)
 			}
-			err = ValidateGetOrganizationHookFleetBadRequestResponseBody(&body)
+			err = ValidateListCustomDomainsBadRequestResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+				return nil, goahttp.ErrValidationError("admin", "listCustomDomains", err)
 			}
-			return nil, NewGetOrganizationHookFleetBadRequest(&body)
+			return nil, NewListCustomDomainsBadRequest(&body)
 		case http.StatusNotFound:
 			var (
-				body GetOrganizationHookFleetNotFoundResponseBody
+				body ListCustomDomainsNotFoundResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+				return nil, goahttp.ErrDecodingError("admin", "listCustomDomains", err)
 			}
-			err = ValidateGetOrganizationHookFleetNotFoundResponseBody(&body)
+			err = ValidateListCustomDomainsNotFoundResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+				return nil, goahttp.ErrValidationError("admin", "listCustomDomains", err)
 			}
-			return nil, NewGetOrganizationHookFleetNotFound(&body)
+			return nil, NewListCustomDomainsNotFound(&body)
 		case http.StatusConflict:
 			var (
-				body GetOrganizationHookFleetConflictResponseBody
+				body ListCustomDomainsConflictResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+				return nil, goahttp.ErrDecodingError("admin", "listCustomDomains", err)
 			}
-			err = ValidateGetOrganizationHookFleetConflictResponseBody(&body)
+			err = ValidateListCustomDomainsConflictResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+				return nil, goahttp.ErrValidationError("admin", "listCustomDomains", err)
 			}
-			return nil, NewGetOrganizationHookFleetConflict(&body)
+			return nil, NewListCustomDomainsConflict(&body)
 		case http.StatusUnsupportedMediaType:
 			var (
-				body GetOrganizationHookFleetUnsupportedMediaResponseBody
+				body ListCustomDomainsUnsupportedMediaResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+				return nil, goahttp.ErrDecodingError("admin", "listCustomDomains", err)
 			}
-			err = ValidateGetOrganizationHookFleetUnsupportedMediaResponseBody(&body)
+			err = ValidateListCustomDomainsUnsupportedMediaResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+				return nil, goahttp.ErrValidationError("admin", "listCustomDomains", err)
 			}
-			return nil, NewGetOrganizationHookFleetUnsupportedMedia(&body)
+			return nil, NewListCustomDomainsUnsupportedMedia(&body)
 		case http.StatusUnprocessableEntity:
 			var (
-				body GetOrganizationHookFleetInvalidResponseBody
+				body ListCustomDomainsInvalidResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+				return nil, goahttp.ErrDecodingError("admin", "listCustomDomains", err)
 			}
-			err = ValidateGetOrganizationHookFleetInvalidResponseBody(&body)
+			err = ValidateListCustomDomainsInvalidResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+				return nil, goahttp.ErrValidationError("admin", "listCustomDomains", err)
 			}
-			return nil, NewGetOrganizationHookFleetInvalid(&body)
+			return nil, NewListCustomDomainsInvalid(&body)
 		case http.StatusInternalServerError:
 			en := resp.Header.Get("goa-error")
 			switch en {
 			case "invariant_violation":
 				var (
-					body GetOrganizationHookFleetInvariantViolationResponseBody
+					body ListCustomDomainsInvariantViolationResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+					return nil, goahttp.ErrDecodingError("admin", "listCustomDomains", err)
 				}
-				err = ValidateGetOrganizationHookFleetInvariantViolationResponseBody(&body)
+				err = ValidateListCustomDomainsInvariantViolationResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+					return nil, goahttp.ErrValidationError("admin", "listCustomDomains", err)
 				}
-				return nil, NewGetOrganizationHookFleetInvariantViolation(&body)
+				return nil, NewListCustomDomainsInvariantViolation(&body)
 			case "unexpected":
 				var (
-					body GetOrganizationHookFleetUnexpectedResponseBody
+					body ListCustomDomainsUnexpectedResponseBody
 					err  error
 				)
 				err = decoder(resp).Decode(&body)
 				if err != nil {
-					return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+					return nil, goahttp.ErrDecodingError("admin", "listCustomDomains", err)
 				}
-				err = ValidateGetOrganizationHookFleetUnexpectedResponseBody(&body)
+				err = ValidateListCustomDomainsUnexpectedResponseBody(&body)
 				if err != nil {
-					return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+					return nil, goahttp.ErrValidationError("admin", "listCustomDomains", err)
 				}
-				return nil, NewGetOrganizationHookFleetUnexpected(&body)
+				return nil, NewListCustomDomainsUnexpected(&body)
 			default:
 				body, _ := io.ReadAll(resp.Body)
-				return nil, goahttp.ErrInvalidResponse("admin", "getOrganizationHookFleet", resp.StatusCode, string(body))
+				return nil, goahttp.ErrInvalidResponse("admin", "listCustomDomains", resp.StatusCode, string(body))
 			}
 		case http.StatusBadGateway:
 			var (
-				body GetOrganizationHookFleetGatewayErrorResponseBody
+				body ListCustomDomainsGatewayErrorResponseBody
 				err  error
 			)
 			err = decoder(resp).Decode(&body)
 			if err != nil {
-				return nil, goahttp.ErrDecodingError("admin", "getOrganizationHookFleet", err)
+				return nil, goahttp.ErrDecodingError("admin", "listCustomDomains", err)
 			}
-			err = ValidateGetOrganizationHookFleetGatewayErrorResponseBody(&body)
+			err = ValidateListCustomDomainsGatewayErrorResponseBody(&body)
 			if err != nil {
-				return nil, goahttp.ErrValidationError("admin", "getOrganizationHookFleet", err)
+				return nil, goahttp.ErrValidationError("admin", "listCustomDomains", err)
 			}
-			return nil, NewGetOrganizationHookFleetGatewayError(&body)
+			return nil, NewListCustomDomainsGatewayError(&body)
 		default:
 			body, _ := io.ReadAll(resp.Body)
-			return nil, goahttp.ErrInvalidResponse("admin", "getOrganizationHookFleet", resp.StatusCode, string(body))
+			return nil, goahttp.ErrInvalidResponse("admin", "listCustomDomains", resp.StatusCode, string(body))
 		}
 	}
 }
@@ -27099,50 +27102,27 @@ func unmarshalAdminDeviceAgentCellResponseBodyToAdminAdminDeviceAgentCell(v *Adm
 	return res
 }
 
-// unmarshalAdminHookFleetVersionResponseBodyToAdminAdminHookFleetVersion
-// builds a value of type *admin.AdminHookFleetVersion from a value of type
-// *AdminHookFleetVersionResponseBody.
-func unmarshalAdminHookFleetVersionResponseBodyToAdminAdminHookFleetVersion(v *AdminHookFleetVersionResponseBody) *admin.AdminHookFleetVersion {
-	res := &admin.AdminHookFleetVersion{
-		Version:  *v.Version,
-		Status:   *v.Status,
-		Installs: *v.Installs,
-	}
-
-	return res
-}
-
-// unmarshalAdminHookFleetBucketResponseBodyToAdminAdminHookFleetBucket builds
-// a value of type *admin.AdminHookFleetBucket from a value of type
-// *AdminHookFleetBucketResponseBody.
-func unmarshalAdminHookFleetBucketResponseBodyToAdminAdminHookFleetBucket(v *AdminHookFleetBucketResponseBody) *admin.AdminHookFleetBucket {
-	res := &admin.AdminHookFleetBucket{
-		Value:    *v.Value,
-		Installs: *v.Installs,
-		Events:   *v.Events,
-	}
-
-	return res
-}
-
-// unmarshalAdminHookFleetInstallResponseBodyToAdminAdminHookFleetInstall
-// builds a value of type *admin.AdminHookFleetInstall from a value of type
-// *AdminHookFleetInstallResponseBody.
-func unmarshalAdminHookFleetInstallResponseBodyToAdminAdminHookFleetInstall(v *AdminHookFleetInstallResponseBody) *admin.AdminHookFleetInstall {
-	res := &admin.AdminHookFleetInstall{
-		ProjectID:          *v.ProjectID,
-		UserEmail:          *v.UserEmail,
-		Hostname:           *v.Hostname,
-		Harness:            *v.Harness,
-		Version:            *v.Version,
-		VersionStatus:      *v.VersionStatus,
-		EndpointGeneration: *v.EndpointGeneration,
-		InstallRoute:       *v.InstallRoute,
-		FirstSeen:          *v.FirstSeen,
-		LastSeen:           *v.LastSeen,
-		Events:             *v.Events,
-		Errors:             *v.Errors,
-		Quiet:              *v.Quiet,
+// unmarshalAdminCustomDomainResponseBodyToAdminAdminCustomDomain builds a
+// value of type *admin.AdminCustomDomain from a value of type
+// *AdminCustomDomainResponseBody.
+func unmarshalAdminCustomDomainResponseBodyToAdminAdminCustomDomain(v *AdminCustomDomainResponseBody) *admin.AdminCustomDomain {
+	res := &admin.AdminCustomDomain{
+		ID:                     *v.ID,
+		OrganizationID:         *v.OrganizationID,
+		OrganizationName:       *v.OrganizationName,
+		OrganizationSlug:       *v.OrganizationSlug,
+		Domain:                 *v.Domain,
+		Verified:               *v.Verified,
+		Activated:              *v.Activated,
+		DNSTargetToken:         v.DNSTargetToken,
+		DNSTarget:              v.DNSTarget,
+		DNSRoutingMethod:       v.DNSRoutingMethod,
+		DNSConfigurationStatus: v.DNSConfigurationStatus,
+		DNSCheckedAt:           v.DNSCheckedAt,
+		HealthStatus:           v.HealthStatus,
+		HealthIssue:            v.HealthIssue,
+		HealthCheckedAt:        v.HealthCheckedAt,
+		CreatedAt:              *v.CreatedAt,
 	}
 
 	return res

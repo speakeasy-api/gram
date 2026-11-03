@@ -14,6 +14,14 @@ import (
 // postflight asserts the demo data landed and nothing leaked outside the demo
 // org. Any failure rolls the whole Postgres seed back.
 func (s *seeder) postflight(ctx context.Context) error {
+	domains, err := s.q.OrgCountCustomDomainDiagnostics(ctx, repo.OrgCountCustomDomainDiagnosticsParams{OrgID: s.orgID(), Domain: s.spec.CustomDomain})
+	if err != nil {
+		return fmt.Errorf("count custom domain diagnostics: %w", err)
+	}
+	if domains != 1 {
+		return fmt.Errorf("expected one illustrative custom domain, got %d", domains)
+	}
+
 	count, err := s.q.PostflightCountRegistryPromotionCandidates(ctx, repo.PostflightCountRegistryPromotionCandidatesParams{OrgID: s.orgID(), ProjectID: s.projectID()})
 	if err != nil {
 		return fmt.Errorf("count synthetic catalogue promotion candidates: %w", err)

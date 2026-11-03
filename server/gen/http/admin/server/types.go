@@ -2317,41 +2317,12 @@ type GetHookClientsResponseBody struct {
 	DeviceAgents []*AdminDeviceAgentCellResponseBody `form:"device_agents" json:"device_agents" xml:"device_agents"`
 }
 
-// GetOrganizationHookFleetResponseBody is the type of the "admin" service
-// "getOrganizationHookFleet" endpoint HTTP response body.
-type GetOrganizationHookFleetResponseBody struct {
-	// The organization ID.
-	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
-	// Length of the window in days.
-	WindowDays int `form:"window_days" json:"window_days" xml:"window_days"`
-	// Start of the window. Counts cover the whole UTC day it falls on.
-	Since string `form:"since" json:"since" xml:"since"`
-	// The hooks release Speakeasy currently ships. Versions below it are behind.
-	LatestVersion string `form:"latest_version" json:"latest_version" xml:"latest_version"`
-	// The oldest supported hooks version. Versions below it are unsupported.
-	// Absent when no minimum is set.
-	MinimumVersion *string `form:"minimum_version,omitempty" json:"minimum_version,omitempty" xml:"minimum_version,omitempty"`
-	// Days without traffic after which an install counts as quiet.
-	QuietAfterDays int `form:"quiet_after_days" json:"quiet_after_days" xml:"quiet_after_days"`
-	// True when the organization has more installs than the response holds.
-	// Breakdowns then cover only the installs returned.
-	Truncated bool `form:"truncated" json:"truncated" xml:"truncated"`
-	// Installs returned. Not the organization's full install count when truncated
-	// is true.
-	TotalInstalls int64 `form:"total_installs" json:"total_installs" xml:"total_installs"`
-	// Returned installs that have gone quiet. Only a window longer than
-	// quiet_after_days can return quiet installs.
-	QuietInstalls int64 `form:"quiet_installs" json:"quiet_installs" xml:"quiet_installs"`
-	// Hook events sent to the legacy endpoints in the window.
-	LegacyEvents int64 `form:"legacy_events" json:"legacy_events" xml:"legacy_events"`
-	// Installs per version, newest version first.
-	Versions []*AdminHookFleetVersionResponseBody `form:"versions" json:"versions" xml:"versions"`
-	// Installs per install route, largest first.
-	Routes []*AdminHookFleetBucketResponseBody `form:"routes" json:"routes" xml:"routes"`
-	// Installs and events per endpoint generation, largest first.
-	Generations []*AdminHookFleetBucketResponseBody `form:"generations" json:"generations" xml:"generations"`
-	// Installs, most recently seen first.
-	Installs []*AdminHookFleetInstallResponseBody `form:"installs" json:"installs" xml:"installs"`
+// ListCustomDomainsResponseBody is the type of the "admin" service
+// "listCustomDomains" endpoint HTTP response body.
+type ListCustomDomainsResponseBody struct {
+	// Every matching live custom domain, ordered by domain name. Organizations
+	// have at most one live custom domain, so the list is not paginated.
+	CustomDomains []*AdminCustomDomainResponseBody `form:"custom_domains" json:"custom_domains" xml:"custom_domains"`
 }
 
 // ListRegistryPromotionCandidatesResponseBody is the type of the "admin"
@@ -15374,10 +15345,9 @@ type GetHookClientsGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationHookFleetUnauthorizedResponseBody is the type of the "admin"
-// service "getOrganizationHookFleet" endpoint HTTP response body for the
-// "unauthorized" error.
-type GetOrganizationHookFleetUnauthorizedResponseBody struct {
+// ListCustomDomainsUnauthorizedResponseBody is the type of the "admin" service
+// "listCustomDomains" endpoint HTTP response body for the "unauthorized" error.
+type ListCustomDomainsUnauthorizedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -15393,10 +15363,9 @@ type GetOrganizationHookFleetUnauthorizedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationHookFleetForbiddenResponseBody is the type of the "admin"
-// service "getOrganizationHookFleet" endpoint HTTP response body for the
-// "forbidden" error.
-type GetOrganizationHookFleetForbiddenResponseBody struct {
+// ListCustomDomainsForbiddenResponseBody is the type of the "admin" service
+// "listCustomDomains" endpoint HTTP response body for the "forbidden" error.
+type ListCustomDomainsForbiddenResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -15412,10 +15381,9 @@ type GetOrganizationHookFleetForbiddenResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationHookFleetBadRequestResponseBody is the type of the "admin"
-// service "getOrganizationHookFleet" endpoint HTTP response body for the
-// "bad_request" error.
-type GetOrganizationHookFleetBadRequestResponseBody struct {
+// ListCustomDomainsBadRequestResponseBody is the type of the "admin" service
+// "listCustomDomains" endpoint HTTP response body for the "bad_request" error.
+type ListCustomDomainsBadRequestResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -15431,10 +15399,9 @@ type GetOrganizationHookFleetBadRequestResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationHookFleetNotFoundResponseBody is the type of the "admin"
-// service "getOrganizationHookFleet" endpoint HTTP response body for the
-// "not_found" error.
-type GetOrganizationHookFleetNotFoundResponseBody struct {
+// ListCustomDomainsNotFoundResponseBody is the type of the "admin" service
+// "listCustomDomains" endpoint HTTP response body for the "not_found" error.
+type ListCustomDomainsNotFoundResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -15450,10 +15417,9 @@ type GetOrganizationHookFleetNotFoundResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationHookFleetConflictResponseBody is the type of the "admin"
-// service "getOrganizationHookFleet" endpoint HTTP response body for the
-// "conflict" error.
-type GetOrganizationHookFleetConflictResponseBody struct {
+// ListCustomDomainsConflictResponseBody is the type of the "admin" service
+// "listCustomDomains" endpoint HTTP response body for the "conflict" error.
+type ListCustomDomainsConflictResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -15469,10 +15435,10 @@ type GetOrganizationHookFleetConflictResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationHookFleetUnsupportedMediaResponseBody is the type of the
-// "admin" service "getOrganizationHookFleet" endpoint HTTP response body for
-// the "unsupported_media" error.
-type GetOrganizationHookFleetUnsupportedMediaResponseBody struct {
+// ListCustomDomainsUnsupportedMediaResponseBody is the type of the "admin"
+// service "listCustomDomains" endpoint HTTP response body for the
+// "unsupported_media" error.
+type ListCustomDomainsUnsupportedMediaResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -15488,10 +15454,9 @@ type GetOrganizationHookFleetUnsupportedMediaResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationHookFleetInvalidResponseBody is the type of the "admin"
-// service "getOrganizationHookFleet" endpoint HTTP response body for the
-// "invalid" error.
-type GetOrganizationHookFleetInvalidResponseBody struct {
+// ListCustomDomainsInvalidResponseBody is the type of the "admin" service
+// "listCustomDomains" endpoint HTTP response body for the "invalid" error.
+type ListCustomDomainsInvalidResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -15507,10 +15472,10 @@ type GetOrganizationHookFleetInvalidResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationHookFleetInvariantViolationResponseBody is the type of the
-// "admin" service "getOrganizationHookFleet" endpoint HTTP response body for
-// the "invariant_violation" error.
-type GetOrganizationHookFleetInvariantViolationResponseBody struct {
+// ListCustomDomainsInvariantViolationResponseBody is the type of the "admin"
+// service "listCustomDomains" endpoint HTTP response body for the
+// "invariant_violation" error.
+type ListCustomDomainsInvariantViolationResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -15526,10 +15491,9 @@ type GetOrganizationHookFleetInvariantViolationResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationHookFleetUnexpectedResponseBody is the type of the "admin"
-// service "getOrganizationHookFleet" endpoint HTTP response body for the
-// "unexpected" error.
-type GetOrganizationHookFleetUnexpectedResponseBody struct {
+// ListCustomDomainsUnexpectedResponseBody is the type of the "admin" service
+// "listCustomDomains" endpoint HTTP response body for the "unexpected" error.
+type ListCustomDomainsUnexpectedResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -15545,10 +15509,10 @@ type GetOrganizationHookFleetUnexpectedResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
-// GetOrganizationHookFleetGatewayErrorResponseBody is the type of the "admin"
-// service "getOrganizationHookFleet" endpoint HTTP response body for the
-// "gateway_error" error.
-type GetOrganizationHookFleetGatewayErrorResponseBody struct {
+// ListCustomDomainsGatewayErrorResponseBody is the type of the "admin" service
+// "listCustomDomains" endpoint HTTP response body for the "gateway_error"
+// error.
+type ListCustomDomainsGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -24643,60 +24607,51 @@ type AdminDeviceAgentCellResponseBody struct {
 	Machines int64 `form:"machines" json:"machines" xml:"machines"`
 }
 
-// AdminHookFleetVersionResponseBody is used to define fields on response body
+// AdminCustomDomainResponseBody is used to define fields on response body
 // types.
-type AdminHookFleetVersionResponseBody struct {
-	// The hooks binary version, or empty for installs with no version.
-	Version string `form:"version" json:"version" xml:"version"`
-	// How the version compares to the release Speakeasy ships.
-	Status string `form:"status" json:"status" xml:"status"`
-	// Installs whose latest version is this one.
-	Installs int64 `form:"installs" json:"installs" xml:"installs"`
-}
-
-// AdminHookFleetBucketResponseBody is used to define fields on response body
-// types.
-type AdminHookFleetBucketResponseBody struct {
-	// The route or endpoint generation. Empty when unknown.
-	Value string `form:"value" json:"value" xml:"value"`
-	// Installs whose latest value is this one.
-	Installs int64 `form:"installs" json:"installs" xml:"installs"`
-	// Hook events sent with this value across every install. Zero for routes.
-	Events int64 `form:"events" json:"events" xml:"events"`
-}
-
-// AdminHookFleetInstallResponseBody is used to define fields on response body
-// types.
-type AdminHookFleetInstallResponseBody struct {
-	// The project the install reports to. Empty for traffic that named no project.
-	ProjectID string `form:"project_id" json:"project_id" xml:"project_id"`
-	// The user the install reports as. Empty when the install sent no identity.
-	UserEmail string `form:"user_email" json:"user_email" xml:"user_email"`
-	// The machine's hostname. Empty when the install sent none.
-	Hostname string `form:"hostname" json:"hostname" xml:"hostname"`
-	// The agent the hooks run in, such as claude, codex or cursor.
-	Harness string `form:"harness" json:"harness" xml:"harness"`
-	// The hooks binary version. Empty for the legacy curl hooks and for installs
-	// that sent no version.
-	Version string `form:"version" json:"version" xml:"version"`
-	// How the version compares to the release Speakeasy ships.
-	VersionStatus string `form:"version_status" json:"version_status" xml:"version_status"`
-	// The hooks endpoint the install last sent to: legacy_unkeyed, legacy_keyed,
-	// ingest_script or ingest_binary. Empty for delivery failure reports only.
-	EndpointGeneration string `form:"endpoint_generation" json:"endpoint_generation" xml:"endpoint_generation"`
-	// How the hooks were installed, such as marketplace or download. Empty when
-	// unknown.
-	InstallRoute string `form:"install_route" json:"install_route" xml:"install_route"`
-	// First hook in the window.
-	FirstSeen string `form:"first_seen" json:"first_seen" xml:"first_seen"`
-	// Most recent hook.
-	LastSeen string `form:"last_seen" json:"last_seen" xml:"last_seen"`
-	// Hook events recorded in the window.
-	Events int64 `form:"events" json:"events" xml:"events"`
-	// Delivery failures the install reported in the window.
-	Errors int64 `form:"errors" json:"errors" xml:"errors"`
-	// True when the install has sent nothing for quiet_after_days or longer.
-	Quiet bool `form:"quiet" json:"quiet" xml:"quiet"`
+type AdminCustomDomainResponseBody struct {
+	// The custom domain ID.
+	ID string `form:"id" json:"id" xml:"id"`
+	// The organization that owns the domain.
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	// The organization name.
+	OrganizationName string `form:"organization_name" json:"organization_name" xml:"organization_name"`
+	// The organization slug.
+	OrganizationSlug string `form:"organization_slug" json:"organization_slug" xml:"organization_slug"`
+	// The custom domain name.
+	Domain string `form:"domain" json:"domain" xml:"domain"`
+	// Whether the domain passed DNS verification.
+	Verified bool `form:"verified" json:"verified" xml:"verified"`
+	// Whether the domain is provisioned in ingress.
+	Activated bool `form:"activated" json:"activated" xml:"activated"`
+	// The random DNS label of the domain's designated CNAME target. Absent until
+	// assigned.
+	DNSTargetToken *string `form:"dns_target_token,omitempty" json:"dns_target_token,omitempty" xml:"dns_target_token,omitempty"`
+	// The domain's designated CNAME target (<dns_target_token>.<suffix>). Absent
+	// when the admin server has no target suffix configured or the token is not
+	// yet assigned.
+	DNSTarget *string `form:"dns_target,omitempty" json:"dns_target,omitempty" xml:"dns_target,omitempty"`
+	// How the latest health check observed the domain's DNS routing traffic. One
+	// of: per_domain_cname, shared_cname, a_record (also covers flattened CNAME,
+	// ALIAS and ANAME records, which resolve to addresses), unknown. Absent until
+	// the first health check.
+	DNSRoutingMethod *string `form:"dns_routing_method,omitempty" json:"dns_routing_method,omitempty" xml:"dns_routing_method,omitempty"`
+	// Advisory public DNS observation: matched, wrong_target, unconfirmed,
+	// not_found, check_failed, or not_configured. Does not establish endpoint
+	// availability.
+	DNSConfigurationStatus *string `form:"dns_configuration_status,omitempty" json:"dns_configuration_status,omitempty" xml:"dns_configuration_status,omitempty"`
+	// When DNS configuration was observed. Absent until a DNS observation has run.
+	DNSCheckedAt *string `form:"dns_checked_at,omitempty" json:"dns_checked_at,omitempty" xml:"dns_checked_at,omitempty"`
+	// Infrastructure and certificate status: unknown, healthy, or unhealthy.
+	// Unknown until a complete observation has run, or when an older worker has
+	// overwritten the health result.
+	HealthStatus *string `form:"health_status,omitempty" json:"health_status,omitempty" xml:"health_status,omitempty"`
+	// Why the domain was last observed as unhealthy.
+	HealthIssue *string `form:"health_issue,omitempty" json:"health_issue,omitempty" xml:"health_issue,omitempty"`
+	// When the domain health was last checked.
+	HealthCheckedAt *string `form:"health_checked_at,omitempty" json:"health_checked_at,omitempty" xml:"health_checked_at,omitempty"`
+	// When the domain was registered.
+	CreatedAt string `form:"created_at" json:"created_at" xml:"created_at"`
 }
 
 // AdminRegistryPromotionCandidateResponseBody is used to define fields on
@@ -26963,68 +26918,21 @@ func NewGetHookClientsResponseBody(res *admin.AdminHookClientsResult) *GetHookCl
 	return body
 }
 
-// NewGetOrganizationHookFleetResponseBody builds the HTTP response body from
-// the result of the "getOrganizationHookFleet" endpoint of the "admin" service.
-func NewGetOrganizationHookFleetResponseBody(res *admin.AdminHookFleetResult) *GetOrganizationHookFleetResponseBody {
-	body := &GetOrganizationHookFleetResponseBody{
-		OrganizationID: res.OrganizationID,
-		WindowDays:     res.WindowDays,
-		Since:          res.Since,
-		LatestVersion:  res.LatestVersion,
-		MinimumVersion: res.MinimumVersion,
-		QuietAfterDays: res.QuietAfterDays,
-		Truncated:      res.Truncated,
-		TotalInstalls:  res.TotalInstalls,
-		QuietInstalls:  res.QuietInstalls,
-		LegacyEvents:   res.LegacyEvents,
-	}
-	if res.Versions != nil {
-		body.Versions = make([]*AdminHookFleetVersionResponseBody, len(res.Versions))
-		for i, val := range res.Versions {
+// NewListCustomDomainsResponseBody builds the HTTP response body from the
+// result of the "listCustomDomains" endpoint of the "admin" service.
+func NewListCustomDomainsResponseBody(res *admin.AdminListCustomDomainsResult) *ListCustomDomainsResponseBody {
+	body := &ListCustomDomainsResponseBody{}
+	if res.CustomDomains != nil {
+		body.CustomDomains = make([]*AdminCustomDomainResponseBody, len(res.CustomDomains))
+		for i, val := range res.CustomDomains {
 			if val == nil {
-				body.Versions[i] = nil
+				body.CustomDomains[i] = nil
 				continue
 			}
-			body.Versions[i] = marshalAdminAdminHookFleetVersionToAdminHookFleetVersionResponseBody(val)
+			body.CustomDomains[i] = marshalAdminAdminCustomDomainToAdminCustomDomainResponseBody(val)
 		}
 	} else {
-		body.Versions = []*AdminHookFleetVersionResponseBody{}
-	}
-	if res.Routes != nil {
-		body.Routes = make([]*AdminHookFleetBucketResponseBody, len(res.Routes))
-		for i, val := range res.Routes {
-			if val == nil {
-				body.Routes[i] = nil
-				continue
-			}
-			body.Routes[i] = marshalAdminAdminHookFleetBucketToAdminHookFleetBucketResponseBody(val)
-		}
-	} else {
-		body.Routes = []*AdminHookFleetBucketResponseBody{}
-	}
-	if res.Generations != nil {
-		body.Generations = make([]*AdminHookFleetBucketResponseBody, len(res.Generations))
-		for i, val := range res.Generations {
-			if val == nil {
-				body.Generations[i] = nil
-				continue
-			}
-			body.Generations[i] = marshalAdminAdminHookFleetBucketToAdminHookFleetBucketResponseBody(val)
-		}
-	} else {
-		body.Generations = []*AdminHookFleetBucketResponseBody{}
-	}
-	if res.Installs != nil {
-		body.Installs = make([]*AdminHookFleetInstallResponseBody, len(res.Installs))
-		for i, val := range res.Installs {
-			if val == nil {
-				body.Installs[i] = nil
-				continue
-			}
-			body.Installs[i] = marshalAdminAdminHookFleetInstallToAdminHookFleetInstallResponseBody(val)
-		}
-	} else {
-		body.Installs = []*AdminHookFleetInstallResponseBody{}
+		body.CustomDomains = []*AdminCustomDomainResponseBody{}
 	}
 	return body
 }
@@ -37722,11 +37630,10 @@ func NewGetHookClientsGatewayErrorResponseBody(res *goa.ServiceError) *GetHookCl
 	return body
 }
 
-// NewGetOrganizationHookFleetUnauthorizedResponseBody builds the HTTP response
-// body from the result of the "getOrganizationHookFleet" endpoint of the
-// "admin" service.
-func NewGetOrganizationHookFleetUnauthorizedResponseBody(res *goa.ServiceError) *GetOrganizationHookFleetUnauthorizedResponseBody {
-	body := &GetOrganizationHookFleetUnauthorizedResponseBody{
+// NewListCustomDomainsUnauthorizedResponseBody builds the HTTP response body
+// from the result of the "listCustomDomains" endpoint of the "admin" service.
+func NewListCustomDomainsUnauthorizedResponseBody(res *goa.ServiceError) *ListCustomDomainsUnauthorizedResponseBody {
+	body := &ListCustomDomainsUnauthorizedResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -37737,11 +37644,10 @@ func NewGetOrganizationHookFleetUnauthorizedResponseBody(res *goa.ServiceError) 
 	return body
 }
 
-// NewGetOrganizationHookFleetForbiddenResponseBody builds the HTTP response
-// body from the result of the "getOrganizationHookFleet" endpoint of the
-// "admin" service.
-func NewGetOrganizationHookFleetForbiddenResponseBody(res *goa.ServiceError) *GetOrganizationHookFleetForbiddenResponseBody {
-	body := &GetOrganizationHookFleetForbiddenResponseBody{
+// NewListCustomDomainsForbiddenResponseBody builds the HTTP response body from
+// the result of the "listCustomDomains" endpoint of the "admin" service.
+func NewListCustomDomainsForbiddenResponseBody(res *goa.ServiceError) *ListCustomDomainsForbiddenResponseBody {
+	body := &ListCustomDomainsForbiddenResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -37752,11 +37658,10 @@ func NewGetOrganizationHookFleetForbiddenResponseBody(res *goa.ServiceError) *Ge
 	return body
 }
 
-// NewGetOrganizationHookFleetBadRequestResponseBody builds the HTTP response
-// body from the result of the "getOrganizationHookFleet" endpoint of the
-// "admin" service.
-func NewGetOrganizationHookFleetBadRequestResponseBody(res *goa.ServiceError) *GetOrganizationHookFleetBadRequestResponseBody {
-	body := &GetOrganizationHookFleetBadRequestResponseBody{
+// NewListCustomDomainsBadRequestResponseBody builds the HTTP response body
+// from the result of the "listCustomDomains" endpoint of the "admin" service.
+func NewListCustomDomainsBadRequestResponseBody(res *goa.ServiceError) *ListCustomDomainsBadRequestResponseBody {
+	body := &ListCustomDomainsBadRequestResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -37767,11 +37672,10 @@ func NewGetOrganizationHookFleetBadRequestResponseBody(res *goa.ServiceError) *G
 	return body
 }
 
-// NewGetOrganizationHookFleetNotFoundResponseBody builds the HTTP response
-// body from the result of the "getOrganizationHookFleet" endpoint of the
-// "admin" service.
-func NewGetOrganizationHookFleetNotFoundResponseBody(res *goa.ServiceError) *GetOrganizationHookFleetNotFoundResponseBody {
-	body := &GetOrganizationHookFleetNotFoundResponseBody{
+// NewListCustomDomainsNotFoundResponseBody builds the HTTP response body from
+// the result of the "listCustomDomains" endpoint of the "admin" service.
+func NewListCustomDomainsNotFoundResponseBody(res *goa.ServiceError) *ListCustomDomainsNotFoundResponseBody {
+	body := &ListCustomDomainsNotFoundResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -37782,11 +37686,10 @@ func NewGetOrganizationHookFleetNotFoundResponseBody(res *goa.ServiceError) *Get
 	return body
 }
 
-// NewGetOrganizationHookFleetConflictResponseBody builds the HTTP response
-// body from the result of the "getOrganizationHookFleet" endpoint of the
-// "admin" service.
-func NewGetOrganizationHookFleetConflictResponseBody(res *goa.ServiceError) *GetOrganizationHookFleetConflictResponseBody {
-	body := &GetOrganizationHookFleetConflictResponseBody{
+// NewListCustomDomainsConflictResponseBody builds the HTTP response body from
+// the result of the "listCustomDomains" endpoint of the "admin" service.
+func NewListCustomDomainsConflictResponseBody(res *goa.ServiceError) *ListCustomDomainsConflictResponseBody {
+	body := &ListCustomDomainsConflictResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -37797,26 +37700,11 @@ func NewGetOrganizationHookFleetConflictResponseBody(res *goa.ServiceError) *Get
 	return body
 }
 
-// NewGetOrganizationHookFleetUnsupportedMediaResponseBody builds the HTTP
-// response body from the result of the "getOrganizationHookFleet" endpoint of
-// the "admin" service.
-func NewGetOrganizationHookFleetUnsupportedMediaResponseBody(res *goa.ServiceError) *GetOrganizationHookFleetUnsupportedMediaResponseBody {
-	body := &GetOrganizationHookFleetUnsupportedMediaResponseBody{
-		Name:      res.Name,
-		ID:        res.ID,
-		Message:   res.Message,
-		Temporary: res.Temporary,
-		Timeout:   res.Timeout,
-		Fault:     res.Fault,
-	}
-	return body
-}
-
-// NewGetOrganizationHookFleetInvalidResponseBody builds the HTTP response body
-// from the result of the "getOrganizationHookFleet" endpoint of the "admin"
+// NewListCustomDomainsUnsupportedMediaResponseBody builds the HTTP response
+// body from the result of the "listCustomDomains" endpoint of the "admin"
 // service.
-func NewGetOrganizationHookFleetInvalidResponseBody(res *goa.ServiceError) *GetOrganizationHookFleetInvalidResponseBody {
-	body := &GetOrganizationHookFleetInvalidResponseBody{
+func NewListCustomDomainsUnsupportedMediaResponseBody(res *goa.ServiceError) *ListCustomDomainsUnsupportedMediaResponseBody {
+	body := &ListCustomDomainsUnsupportedMediaResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -37827,11 +37715,10 @@ func NewGetOrganizationHookFleetInvalidResponseBody(res *goa.ServiceError) *GetO
 	return body
 }
 
-// NewGetOrganizationHookFleetInvariantViolationResponseBody builds the HTTP
-// response body from the result of the "getOrganizationHookFleet" endpoint of
-// the "admin" service.
-func NewGetOrganizationHookFleetInvariantViolationResponseBody(res *goa.ServiceError) *GetOrganizationHookFleetInvariantViolationResponseBody {
-	body := &GetOrganizationHookFleetInvariantViolationResponseBody{
+// NewListCustomDomainsInvalidResponseBody builds the HTTP response body from
+// the result of the "listCustomDomains" endpoint of the "admin" service.
+func NewListCustomDomainsInvalidResponseBody(res *goa.ServiceError) *ListCustomDomainsInvalidResponseBody {
+	body := &ListCustomDomainsInvalidResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -37842,11 +37729,11 @@ func NewGetOrganizationHookFleetInvariantViolationResponseBody(res *goa.ServiceE
 	return body
 }
 
-// NewGetOrganizationHookFleetUnexpectedResponseBody builds the HTTP response
-// body from the result of the "getOrganizationHookFleet" endpoint of the
-// "admin" service.
-func NewGetOrganizationHookFleetUnexpectedResponseBody(res *goa.ServiceError) *GetOrganizationHookFleetUnexpectedResponseBody {
-	body := &GetOrganizationHookFleetUnexpectedResponseBody{
+// NewListCustomDomainsInvariantViolationResponseBody builds the HTTP response
+// body from the result of the "listCustomDomains" endpoint of the "admin"
+// service.
+func NewListCustomDomainsInvariantViolationResponseBody(res *goa.ServiceError) *ListCustomDomainsInvariantViolationResponseBody {
+	body := &ListCustomDomainsInvariantViolationResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -37857,11 +37744,24 @@ func NewGetOrganizationHookFleetUnexpectedResponseBody(res *goa.ServiceError) *G
 	return body
 }
 
-// NewGetOrganizationHookFleetGatewayErrorResponseBody builds the HTTP response
-// body from the result of the "getOrganizationHookFleet" endpoint of the
-// "admin" service.
-func NewGetOrganizationHookFleetGatewayErrorResponseBody(res *goa.ServiceError) *GetOrganizationHookFleetGatewayErrorResponseBody {
-	body := &GetOrganizationHookFleetGatewayErrorResponseBody{
+// NewListCustomDomainsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "listCustomDomains" endpoint of the "admin" service.
+func NewListCustomDomainsUnexpectedResponseBody(res *goa.ServiceError) *ListCustomDomainsUnexpectedResponseBody {
+	body := &ListCustomDomainsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewListCustomDomainsGatewayErrorResponseBody builds the HTTP response body
+// from the result of the "listCustomDomains" endpoint of the "admin" service.
+func NewListCustomDomainsGatewayErrorResponseBody(res *goa.ServiceError) *ListCustomDomainsGatewayErrorResponseBody {
+	body := &ListCustomDomainsGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -45181,12 +45081,12 @@ func NewGetHookClientsPayload(windowDays int, refresh bool, adminSessionToken *s
 	return v
 }
 
-// NewGetOrganizationHookFleetPayload builds a admin service
-// getOrganizationHookFleet endpoint payload.
-func NewGetOrganizationHookFleetPayload(organizationID string, windowDays int, adminSessionToken *string) *admin.GetOrganizationHookFleetPayload {
-	v := &admin.GetOrganizationHookFleetPayload{}
+// NewListCustomDomainsPayload builds a admin service listCustomDomains
+// endpoint payload.
+func NewListCustomDomainsPayload(organizationID *string, dnsRoutingMethod *string, adminSessionToken *string) *admin.ListCustomDomainsPayload {
+	v := &admin.ListCustomDomainsPayload{}
 	v.OrganizationID = organizationID
-	v.WindowDays = windowDays
+	v.DNSRoutingMethod = dnsRoutingMethod
 	v.AdminSessionToken = adminSessionToken
 
 	return v

@@ -82,6 +82,8 @@ import type { SetMcpServerScopePinRequestBody } from "@gram/admin-client/models/
 import type { AdminMcpServerResourceScopes } from "@gram/admin-client/models/components/adminmcpserverresourcescopes";
 import { buildAdminChangeTrialEndDateMutation } from "@gram/admin-client/react-query/adminChangeTrialEndDate";
 import type { ChangeTrialEndDateRequestBody } from "@gram/admin-client/models/components/changetrialenddaterequestbody";
+import { buildAdminListCustomDomainsQuery } from "@gram/admin-client/react-query/adminListCustomDomains.core";
+import type { AdminListCustomDomainsRequest } from "@gram/admin-client/models/operations/adminlistcustomdomains";
 import {
   buildAdminUploadPlatformImageMutation,
   type AdminUploadPlatformImageMutationVariables,
@@ -1189,6 +1191,27 @@ export function disableUpstreamAuthEnforcement(
       request: { organizationId: organizationID },
     }),
   );
+}
+
+function createAdminListCustomDomainsQuery(
+  request: AdminListCustomDomainsRequest,
+) {
+  const generated = buildAdminListCustomDomainsQuery(
+    redirectingClient,
+    request,
+  );
+  return queryOptions({
+    ...generated,
+    queryFn: (context) => redirecting(generated.queryFn(context)),
+  });
+}
+
+// Every live custom domain, or the one an organization owns. Both filters are
+// applied by the server, so the query key carries them.
+export function adminListCustomDomainsQuery(
+  request: AdminListCustomDomainsRequest = {},
+): ReturnType<typeof createAdminListCustomDomainsQuery> {
+  return createAdminListCustomDomainsQuery(request);
 }
 
 function createRegistryPromotionCandidatesQuery(
