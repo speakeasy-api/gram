@@ -1,0 +1,480 @@
+agent:authorize
+  visibility: user_visible
+  resource_kind: agent
+  surface: access
+  satisfied_by: []
+  exclusion: -
+  closure: [agent:authorize]
+  sub_scopes: []
+  selector_keys: []
+  roles: [admin]
+agent:read
+  visibility: user_visible
+  resource_kind: agent
+  surface: access
+  satisfied_by: []
+  exclusion: -
+  closure: [agent:read]
+  sub_scopes: []
+  selector_keys: []
+  roles: [admin]
+agent:transfer
+  visibility: user_visible
+  resource_kind: agent
+  surface: access
+  satisfied_by: []
+  exclusion: -
+  closure: [agent:transfer]
+  sub_scopes: []
+  selector_keys: []
+  roles: [admin]
+agent:write
+  visibility: user_visible
+  resource_kind: agent
+  surface: access
+  satisfied_by: []
+  exclusion: -
+  closure: [agent:write]
+  sub_scopes: []
+  selector_keys: []
+  roles: [admin]
+assistant:blocked_read
+  visibility: internal
+  resource_kind: assistant
+  surface: access
+  satisfied_by: []
+  exclusion: -
+  closure: [assistant:blocked_read assistant:blocked_write]
+  sub_scopes: []
+  selector_keys: [project_id]
+  roles: []
+assistant:blocked_write
+  visibility: internal
+  resource_kind: assistant
+  surface: access
+  satisfied_by: [assistant:blocked_read]
+  exclusion: -
+  closure: [assistant:blocked_write]
+  sub_scopes: []
+  selector_keys: [project_id]
+  roles: []
+assistant:read
+  visibility: user_visible
+  resource_kind: assistant
+  surface: access
+  satisfied_by: [assistant:write]
+  exclusion: assistant:blocked_read
+  closure: [assistant:read]
+  sub_scopes: []
+  selector_keys: [project_id]
+  roles: [admin member]
+assistant:write
+  visibility: user_visible
+  resource_kind: assistant
+  surface: access
+  satisfied_by: []
+  exclusion: assistant:blocked_write
+  closure: [assistant:read assistant:write]
+  sub_scopes: [assistant:read]
+  selector_keys: [project_id]
+  roles: [admin]
+chat:read
+  visibility: user_visible
+  resource_kind: chat
+  surface: access
+  satisfied_by: [chat:write]
+  exclusion: -
+  closure: [chat:read]
+  sub_scopes: []
+  selector_keys: []
+  roles: []
+chat:write
+  visibility: user_visible
+  resource_kind: chat
+  surface: access
+  satisfied_by: []
+  exclusion: -
+  closure: [chat:read chat:write]
+  sub_scopes: [chat:read]
+  selector_keys: []
+  roles: []
+environment:blocked_read
+  visibility: internal
+  resource_kind: environment
+  surface: access
+  satisfied_by: []
+  exclusion: -
+  closure: [environment:blocked_read environment:blocked_write]
+  sub_scopes: []
+  selector_keys: [project_id]
+  roles: []
+environment:blocked_write
+  visibility: internal
+  resource_kind: environment
+  surface: access
+  satisfied_by: [environment:blocked_read]
+  exclusion: -
+  closure: [environment:blocked_write]
+  sub_scopes: []
+  selector_keys: [project_id]
+  roles: []
+environment:read
+  visibility: user_visible
+  resource_kind: environment
+  surface: access
+  satisfied_by: [environment:write]
+  exclusion: environment:blocked_read
+  closure: [environment:read]
+  sub_scopes: []
+  selector_keys: [project_id]
+  roles: [admin]
+environment:write
+  visibility: user_visible
+  resource_kind: environment
+  surface: access
+  satisfied_by: []
+  exclusion: environment:blocked_write
+  closure: [environment:read environment:write]
+  sub_scopes: [environment:read]
+  selector_keys: [project_id]
+  roles: [admin]
+inference:execute
+  visibility: user_visible
+  resource_kind: inference
+  surface: access
+  satisfied_by: []
+  exclusion: -
+  closure: [inference:execute]
+  sub_scopes: []
+  selector_keys: [project_id]
+  roles: []
+log:read
+  visibility: user_visible
+  resource_kind: project
+  surface: access
+  satisfied_by: []
+  exclusion: -
+  closure: [log:read]
+  sub_scopes: []
+  selector_keys: []
+  roles: []
+mcp:auth
+  visibility: user_visible
+  resource_kind: mcp_auth_client
+  surface: access
+  satisfied_by: []
+  exclusion: mcp:blocked_auth
+  closure: [mcp:auth]
+  sub_scopes: []
+  selector_keys: [client_type connection_owner project_id upstream_client]
+  roles: [admin member]
+mcp:blocked_auth
+  visibility: internal
+  resource_kind: mcp_auth_client
+  surface: access
+  satisfied_by: []
+  exclusion: -
+  closure: [mcp:blocked_auth]
+  sub_scopes: []
+  selector_keys: [client_type connection_owner project_id upstream_client]
+  roles: []
+mcp:blocked_connect
+  visibility: internal
+  resource_kind: mcp
+  surface: access
+  satisfied_by: []
+  exclusion: -
+  closure: [mcp:blocked_connect]
+  sub_scopes: []
+  selector_keys: [disposition project_id tool]
+  roles: []
+mcp:blocked_read
+  visibility: internal
+  resource_kind: mcp
+  surface: access
+  satisfied_by: []
+  exclusion: -
+  closure: [mcp:blocked_read]
+  sub_scopes: []
+  selector_keys: [disposition project_id tool]
+  roles: []
+mcp:blocked_write
+  visibility: internal
+  resource_kind: mcp
+  surface: access
+  satisfied_by: []
+  exclusion: -
+  closure: [mcp:blocked_write]
+  sub_scopes: []
+  selector_keys: [disposition project_id tool]
+  roles: []
+mcp:connect
+  visibility: user_visible
+  resource_kind: mcp
+  surface: access
+  satisfied_by: [mcp:read mcp:write]
+  exclusion: mcp:blocked_connect
+  closure: [mcp:connect]
+  sub_scopes: []
+  selector_keys: [disposition project_id tool]
+  roles: [admin member]
+mcp:read
+  visibility: user_visible
+  resource_kind: mcp
+  surface: access
+  satisfied_by: [mcp:write]
+  exclusion: mcp:blocked_read
+  closure: [mcp:connect mcp:read]
+  sub_scopes: [mcp:connect]
+  selector_keys: [disposition project_id tool]
+  roles: [admin member]
+mcp:write
+  visibility: user_visible
+  resource_kind: mcp
+  surface: access
+  satisfied_by: []
+  exclusion: mcp:blocked_write
+  closure: [mcp:connect mcp:read mcp:write]
+  sub_scopes: [mcp:connect mcp:read]
+  selector_keys: [disposition project_id tool]
+  roles: [admin]
+org:admin
+  visibility: user_visible
+  resource_kind: org
+  surface: access
+  satisfied_by: []
+  exclusion: org:blocked_admin
+  closure: [org:admin org:device_agent_sync org:hooks_ingest org:read]
+  sub_scopes: [org:device_agent_sync org:hooks_ingest org:read]
+  selector_keys: []
+  roles: [admin]
+org:blocked_admin
+  visibility: internal
+  resource_kind: org
+  surface: access
+  satisfied_by: [org:blocked_read]
+  exclusion: -
+  closure: [org:blocked_admin]
+  sub_scopes: []
+  selector_keys: []
+  roles: []
+org:blocked_read
+  visibility: internal
+  resource_kind: org
+  surface: access
+  satisfied_by: []
+  exclusion: -
+  closure: [org:blocked_admin org:blocked_read]
+  sub_scopes: []
+  selector_keys: []
+  roles: []
+org:device_agent_sync
+  visibility: user_visible
+  resource_kind: org
+  surface: access
+  satisfied_by: [org:admin]
+  exclusion: -
+  closure: [org:device_agent_sync]
+  sub_scopes: []
+  selector_keys: []
+  roles: []
+org:hooks_ingest
+  visibility: user_visible
+  resource_kind: org
+  surface: access
+  satisfied_by: [org:admin]
+  exclusion: -
+  closure: [org:hooks_ingest]
+  sub_scopes: []
+  selector_keys: [project_id]
+  roles: []
+org:read
+  visibility: user_visible
+  resource_kind: org
+  surface: access
+  satisfied_by: [org:admin]
+  exclusion: org:blocked_read
+  closure: [org:read]
+  sub_scopes: []
+  selector_keys: []
+  roles: [admin member]
+plugin:blocked_write
+  visibility: internal
+  resource_kind: project
+  surface: access
+  satisfied_by: []
+  exclusion: -
+  closure: [plugin:blocked_write]
+  sub_scopes: []
+  selector_keys: []
+  roles: []
+plugin:write
+  visibility: user_visible
+  resource_kind: project
+  surface: access
+  satisfied_by: []
+  exclusion: plugin:blocked_write
+  closure: [plugin:write]
+  sub_scopes: []
+  selector_keys: []
+  roles: [admin]
+project:blocked_read
+  visibility: internal
+  resource_kind: project
+  surface: access
+  satisfied_by: []
+  exclusion: -
+  closure: [project:blocked_read project:blocked_write]
+  sub_scopes: []
+  selector_keys: []
+  roles: []
+project:blocked_write
+  visibility: internal
+  resource_kind: project
+  surface: access
+  satisfied_by: [project:blocked_read]
+  exclusion: -
+  closure: [project:blocked_write]
+  sub_scopes: []
+  selector_keys: []
+  roles: []
+project:read
+  visibility: user_visible
+  resource_kind: project
+  surface: access
+  satisfied_by: [project:write]
+  exclusion: project:blocked_read
+  closure: [project:read]
+  sub_scopes: []
+  selector_keys: []
+  roles: [admin member]
+project:write
+  visibility: user_visible
+  resource_kind: project
+  surface: access
+  satisfied_by: []
+  exclusion: project:blocked_write
+  closure: [project:read project:write]
+  sub_scopes: [project:read]
+  selector_keys: []
+  roles: [admin]
+risk_policy:block
+  visibility: user_visible
+  resource_kind: risk_policy
+  surface: risk_policy
+  satisfied_by: []
+  exclusion: -
+  closure: [risk_policy:block]
+  sub_scopes: []
+  selector_keys: [server_identity server_url]
+  roles: []
+risk_policy:bypass
+  visibility: user_visible
+  resource_kind: risk_policy
+  surface: risk_policy
+  satisfied_by: []
+  exclusion: -
+  closure: [risk_policy:bypass]
+  sub_scopes: []
+  selector_keys: [server_identity server_url]
+  roles: []
+risk_policy:evaluate
+  visibility: user_visible
+  resource_kind: risk_policy
+  surface: risk_policy
+  satisfied_by: []
+  exclusion: risk_policy:bypass
+  closure: [risk_policy:evaluate]
+  sub_scopes: []
+  selector_keys: [server_identity server_url]
+  roles: []
+root
+  visibility: internal
+  resource_kind: *
+  surface: access
+  satisfied_by: []
+  exclusion: -
+  closure: [root]
+  sub_scopes: []
+  selector_keys: []
+  roles: []
+skill:blocked_read
+  visibility: internal
+  resource_kind: skill
+  surface: access
+  satisfied_by: []
+  exclusion: -
+  closure: [skill:blocked_read skill:blocked_write]
+  sub_scopes: []
+  selector_keys: []
+  roles: []
+skill:blocked_write
+  visibility: internal
+  resource_kind: skill
+  surface: access
+  satisfied_by: [skill:blocked_read]
+  exclusion: -
+  closure: [skill:blocked_write]
+  sub_scopes: []
+  selector_keys: []
+  roles: []
+skill:read
+  visibility: user_visible
+  resource_kind: skill
+  surface: access
+  satisfied_by: [skill:write]
+  exclusion: skill:blocked_read
+  closure: [skill:read]
+  sub_scopes: []
+  selector_keys: []
+  roles: [admin member]
+skill:write
+  visibility: user_visible
+  resource_kind: skill
+  surface: access
+  satisfied_by: []
+  exclusion: skill:blocked_write
+  closure: [skill:read skill:write]
+  sub_scopes: [skill:read]
+  selector_keys: []
+  roles: [admin]
+workload:blocked_read
+  visibility: internal
+  resource_kind: workload
+  surface: access
+  satisfied_by: []
+  exclusion: -
+  closure: [workload:blocked_read workload:blocked_write]
+  sub_scopes: []
+  selector_keys: []
+  roles: []
+workload:blocked_write
+  visibility: internal
+  resource_kind: workload
+  surface: access
+  satisfied_by: [workload:blocked_read]
+  exclusion: -
+  closure: [workload:blocked_write]
+  sub_scopes: []
+  selector_keys: []
+  roles: []
+workload:read
+  visibility: user_visible
+  resource_kind: workload
+  surface: access
+  satisfied_by: [workload:write]
+  exclusion: workload:blocked_read
+  closure: [workload:read]
+  sub_scopes: []
+  selector_keys: []
+  roles: [admin]
+workload:write
+  visibility: user_visible
+  resource_kind: workload
+  surface: access
+  satisfied_by: []
+  exclusion: workload:blocked_write
+  closure: [workload:read workload:write]
+  sub_scopes: [workload:read]
+  selector_keys: []
+  roles: [admin]

@@ -1,0 +1,665 @@
+{
+  "description": "Direct-user exceptions, own blocks, raw subtraction, alternatives and the RequireAnyUnblocked block veto.",
+  "cases": [
+    {
+      "name": "direct_user_grant_outranks_role_block",
+      "contract": "direct_exceptions",
+      "caller": "human",
+      "operation": "require",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "allow",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "*" }
+        },
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:blocked_connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        },
+        {
+          "principal": "user:user_fixture",
+          "scope": "mcp:connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        }
+      ]
+    },
+    {
+      "name": "direct_user_grant_outranks_all_users_block",
+      "contract": "direct_exceptions",
+      "caller": "human",
+      "operation": "require",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "allow",
+      "grants": [
+        {
+          "principal": "user:all",
+          "scope": "mcp:blocked_connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        },
+        {
+          "principal": "user:user_fixture",
+          "scope": "mcp:connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        }
+      ]
+    },
+    {
+      "name": "direct_wildcard_grant_does_not_outrank_block",
+      "contract": "direct_exceptions",
+      "caller": "human",
+      "operation": "require",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "deny",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:blocked_connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        },
+        {
+          "principal": "user:user_fixture",
+          "scope": "mcp:connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "*" }
+        }
+      ]
+    },
+    {
+      "name": "inferred_direct_grant_does_not_outrank_block",
+      "contract": "direct_exceptions",
+      "caller": "human",
+      "operation": "require",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "deny",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:blocked_connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        },
+        {
+          "principal": "user:user_fixture",
+          "scope": "mcp:connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" },
+          "inferred": true
+        }
+      ]
+    },
+    {
+      "name": "agent_grant_does_not_outrank_block",
+      "contract": "direct_exceptions",
+      "caller": "human",
+      "operation": "require",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "deny",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:blocked_connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        },
+        {
+          "principal": "agent:018f8d7b-58d7-7cc4-bb16-9f8c6b99a001",
+          "scope": "mcp:connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        }
+      ]
+    },
+    {
+      "name": "role_grant_does_not_outrank_block",
+      "contract": "direct_exceptions",
+      "caller": "human",
+      "operation": "require",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "deny",
+      "grants": [
+        {
+          "principal": "user:all",
+          "scope": "mcp:blocked_connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        },
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        }
+      ]
+    },
+    {
+      "name": "direct_tool_grant_reopens_only_that_tool",
+      "contract": "direct_exceptions",
+      "caller": "human",
+      "operation": "require",
+      "checks": [
+        {
+          "scope": "mcp:connect",
+          "resource_id": "srv_1",
+          "dimensions": { "tool": "search" }
+        }
+      ],
+      "want": "allow",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "*" }
+        },
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:blocked_connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        },
+        {
+          "principal": "user:user_fixture",
+          "scope": "mcp:connect",
+          "selector": {
+            "resource_kind": "mcp",
+            "resource_id": "srv_1",
+            "tool": "search"
+          }
+        }
+      ]
+    },
+    {
+      "name": "direct_tool_grant_leaves_other_tools_blocked",
+      "contract": "direct_exceptions",
+      "caller": "human",
+      "operation": "require",
+      "checks": [
+        {
+          "scope": "mcp:connect",
+          "resource_id": "srv_1",
+          "dimensions": { "tool": "delete" }
+        }
+      ],
+      "want": "deny",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "*" }
+        },
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:blocked_connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        },
+        {
+          "principal": "user:user_fixture",
+          "scope": "mcp:connect",
+          "selector": {
+            "resource_kind": "mcp",
+            "resource_id": "srv_1",
+            "tool": "search"
+          }
+        }
+      ]
+    },
+    {
+      "name": "direct_tool_grant_proves_server_level_access",
+      "contract": "direct_exceptions",
+      "caller": "human",
+      "operation": "require",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "allow",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "*" }
+        },
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:blocked_connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        },
+        {
+          "principal": "user:user_fixture",
+          "scope": "mcp:connect",
+          "selector": {
+            "resource_kind": "mcp",
+            "resource_id": "srv_1",
+            "tool": "search"
+          }
+        }
+      ]
+    },
+    {
+      "name": "direct_disposition_grant_does_not_reach_unannotated_tool",
+      "contract": "direct_exceptions",
+      "caller": "human",
+      "operation": "require",
+      "checks": [
+        {
+          "scope": "mcp:connect",
+          "resource_id": "srv_1",
+          "dimensions": { "tool": "anything" }
+        }
+      ],
+      "want": "deny",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "*" }
+        },
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:blocked_connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        },
+        {
+          "principal": "user:user_fixture",
+          "scope": "mcp:connect",
+          "selector": {
+            "resource_kind": "mcp",
+            "resource_id": "srv_1",
+            "disposition": "read_only"
+          }
+        }
+      ]
+    },
+    {
+      "name": "direct_disposition_grant_reaches_matching_annotated_tool",
+      "contract": "direct_exceptions",
+      "caller": "human",
+      "operation": "require",
+      "checks": [
+        {
+          "scope": "mcp:connect",
+          "resource_id": "srv_1",
+          "dimensions": { "tool": "anything", "disposition": "read_only" }
+        }
+      ],
+      "want": "allow",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "*" }
+        },
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:blocked_connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        },
+        {
+          "principal": "user:user_fixture",
+          "scope": "mcp:connect",
+          "selector": {
+            "resource_kind": "mcp",
+            "resource_id": "srv_1",
+            "disposition": "read_only"
+          }
+        }
+      ]
+    },
+    {
+      "name": "own_block_beats_own_grant",
+      "contract": "own_blocks",
+      "caller": "human",
+      "operation": "require",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "deny",
+      "grants": [
+        {
+          "principal": "user:user_fixture",
+          "scope": "mcp:connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        },
+        {
+          "principal": "user:user_fixture",
+          "scope": "mcp:blocked_connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        }
+      ]
+    },
+    {
+      "name": "own_block_beats_role_grant",
+      "contract": "own_blocks",
+      "caller": "human",
+      "operation": "require",
+      "checks": [{ "scope": "project:read", "resource_id": "proj_1" }],
+      "want": "deny",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "project:read",
+          "selector": { "resource_kind": "project", "resource_id": "*" }
+        },
+        {
+          "principal": "user:user_fixture",
+          "scope": "project:blocked_read",
+          "selector": { "resource_kind": "project", "resource_id": "proj_1" }
+        }
+      ]
+    },
+    {
+      "name": "own_block_beats_direct_exception",
+      "contract": "own_blocks",
+      "caller": "human",
+      "operation": "require",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "deny",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:blocked_connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        },
+        {
+          "principal": "user:user_fixture",
+          "scope": "mcp:blocked_connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        },
+        {
+          "principal": "user:user_fixture",
+          "scope": "mcp:connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        }
+      ]
+    },
+    {
+      "name": "risk_policy_applies_without_bypass",
+      "contract": "raw_subtraction",
+      "caller": "human",
+      "operation": "risk_policy_applies",
+      "checks": [
+        {
+          "scope": "risk_policy:evaluate",
+          "resource_id": "pol_1",
+          "dimensions": { "server_url": "https://a.example" }
+        }
+      ],
+      "want": "allow",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "risk_policy:evaluate",
+          "selector": { "resource_kind": "risk_policy", "resource_id": "pol_1" }
+        }
+      ]
+    },
+    {
+      "name": "risk_policy_role_bypass_subtracts",
+      "contract": "raw_subtraction",
+      "caller": "human",
+      "operation": "risk_policy_applies",
+      "checks": [
+        {
+          "scope": "risk_policy:evaluate",
+          "resource_id": "pol_1",
+          "dimensions": { "server_url": "https://a.example" }
+        }
+      ],
+      "want": "deny",
+      "grants": [
+        {
+          "principal": "user:user_fixture",
+          "scope": "risk_policy:evaluate",
+          "selector": { "resource_kind": "risk_policy", "resource_id": "pol_1" }
+        },
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "risk_policy:bypass",
+          "selector": { "resource_kind": "risk_policy", "resource_id": "pol_1" }
+        }
+      ]
+    },
+    {
+      "name": "risk_policy_direct_evaluate_does_not_restore_bypass",
+      "contract": "raw_subtraction",
+      "caller": "human",
+      "operation": "require",
+      "checks": [{ "scope": "risk_policy:evaluate", "resource_id": "pol_1" }],
+      "want": "deny",
+      "grants": [
+        {
+          "principal": "user:user_fixture",
+          "scope": "risk_policy:evaluate",
+          "selector": { "resource_kind": "risk_policy", "resource_id": "pol_1" }
+        },
+        {
+          "principal": "user:all",
+          "scope": "risk_policy:bypass",
+          "selector": { "resource_kind": "risk_policy", "resource_id": "pol_1" }
+        }
+      ]
+    },
+    {
+      "name": "risk_policy_bypass_for_other_server_does_not_subtract",
+      "contract": "raw_subtraction",
+      "caller": "human",
+      "operation": "risk_policy_applies",
+      "checks": [
+        {
+          "scope": "risk_policy:evaluate",
+          "resource_id": "pol_1",
+          "dimensions": { "server_url": "https://b.example" }
+        }
+      ],
+      "want": "allow",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "risk_policy:evaluate",
+          "selector": { "resource_kind": "risk_policy", "resource_id": "pol_1" }
+        },
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "risk_policy:bypass",
+          "selector": {
+            "resource_kind": "risk_policy",
+            "resource_id": "pol_1",
+            "server_url": "https://a.example"
+          }
+        }
+      ]
+    },
+    {
+      "name": "risk_policy_bypass_for_server_subtracts_that_server",
+      "contract": "raw_subtraction",
+      "caller": "human",
+      "operation": "risk_policy_applies",
+      "checks": [
+        {
+          "scope": "risk_policy:evaluate",
+          "resource_id": "pol_1",
+          "dimensions": { "server_url": "https://a.example" }
+        }
+      ],
+      "want": "deny",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "risk_policy:evaluate",
+          "selector": { "resource_kind": "risk_policy", "resource_id": "pol_1" }
+        },
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "risk_policy:bypass",
+          "selector": {
+            "resource_kind": "risk_policy",
+            "resource_id": "pol_1",
+            "server_url": "https://a.example"
+          }
+        }
+      ]
+    },
+    {
+      "name": "require_any_second_alternative_allows",
+      "contract": "alternatives",
+      "caller": "human",
+      "operation": "require_any",
+      "checks": [
+        { "scope": "org:admin", "resource_id": "org_fixture" },
+        { "scope": "project:write", "resource_id": "proj_1" }
+      ],
+      "want": "allow",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "project:write",
+          "selector": { "resource_kind": "project", "resource_id": "proj_1" }
+        }
+      ]
+    },
+    {
+      "name": "require_any_no_alternative_denies",
+      "contract": "alternatives",
+      "caller": "human",
+      "operation": "require_any",
+      "checks": [
+        { "scope": "org:admin", "resource_id": "org_fixture" },
+        { "scope": "project:write", "resource_id": "proj_1" }
+      ],
+      "want": "deny",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "project:read",
+          "selector": { "resource_kind": "project", "resource_id": "proj_1" }
+        }
+      ]
+    },
+    {
+      "name": "require_any_blocked_alternative_falls_through",
+      "contract": "alternatives",
+      "caller": "human",
+      "operation": "require_any",
+      "checks": [
+        { "scope": "project:write", "resource_id": "proj_1" },
+        { "scope": "org:admin", "resource_id": "org_fixture" }
+      ],
+      "want": "allow",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "project:write",
+          "selector": { "resource_kind": "project", "resource_id": "*" }
+        },
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "project:blocked_write",
+          "selector": { "resource_kind": "project", "resource_id": "proj_1" }
+        },
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "org:admin",
+          "selector": { "resource_kind": "org", "resource_id": "*" }
+        }
+      ]
+    },
+    {
+      "name": "require_every_check_must_pass",
+      "contract": "alternatives",
+      "caller": "human",
+      "operation": "require",
+      "checks": [
+        { "scope": "project:read", "resource_id": "proj_1" },
+        {
+          "scope": "environment:write",
+          "resource_id": "env_1",
+          "dimensions": { "project_id": "proj_1" }
+        }
+      ],
+      "want": "deny",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "project:read",
+          "selector": { "resource_kind": "project", "resource_id": "proj_1" }
+        }
+      ]
+    },
+    {
+      "name": "block_veto_rejects_despite_other_alternative",
+      "contract": "block_veto",
+      "caller": "human",
+      "operation": "require_any_unblocked",
+      "checks": [
+        { "scope": "plugin:write", "resource_id": "proj_1" },
+        { "scope": "org:admin", "resource_id": "org_fixture" }
+      ],
+      "want": "deny",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "org:admin",
+          "selector": { "resource_kind": "org", "resource_id": "*" }
+        },
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "plugin:blocked_write",
+          "selector": { "resource_kind": "project", "resource_id": "proj_1" }
+        }
+      ]
+    },
+    {
+      "name": "block_veto_allows_unblocked_alternative",
+      "contract": "block_veto",
+      "caller": "human",
+      "operation": "require_any_unblocked",
+      "checks": [
+        { "scope": "plugin:write", "resource_id": "proj_1" },
+        { "scope": "org:admin", "resource_id": "org_fixture" }
+      ],
+      "want": "allow",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "org:admin",
+          "selector": { "resource_kind": "org", "resource_id": "*" }
+        }
+      ]
+    },
+    {
+      "name": "block_veto_respects_direct_exception",
+      "contract": "block_veto",
+      "caller": "human",
+      "operation": "require_any_unblocked",
+      "checks": [
+        { "scope": "plugin:write", "resource_id": "proj_1" },
+        { "scope": "org:admin", "resource_id": "org_fixture" }
+      ],
+      "want": "allow",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "plugin:blocked_write",
+          "selector": { "resource_kind": "project", "resource_id": "proj_1" }
+        },
+        {
+          "principal": "user:user_fixture",
+          "scope": "plugin:write",
+          "selector": { "resource_kind": "project", "resource_id": "proj_1" }
+        }
+      ]
+    },
+    {
+      "name": "block_veto_absent_from_require_any",
+      "contract": "block_veto",
+      "caller": "human",
+      "operation": "require_any",
+      "checks": [
+        { "scope": "plugin:write", "resource_id": "proj_1" },
+        { "scope": "org:admin", "resource_id": "org_fixture" }
+      ],
+      "want": "allow",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "org:admin",
+          "selector": { "resource_kind": "org", "resource_id": "*" }
+        },
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "plugin:blocked_write",
+          "selector": { "resource_kind": "project", "resource_id": "proj_1" }
+        }
+      ]
+    }
+  ]
+}

@@ -1,0 +1,1170 @@
+{
+  "description": "Caller profiles, independent policies, represented-user binding, enforcement profile, input errors, list projections and mandatory gates.",
+  "cases": [
+    {
+      "name": "credential_all_policies_allow",
+      "contract": "policy_intersection",
+      "caller": "agent_credential",
+      "operation": "require",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "allow",
+      "policies": {
+        "credential": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ],
+        "agent": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ],
+        "owner": [
+          {
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "*" }
+          }
+        ]
+      }
+    },
+    {
+      "name": "credential_owner_policy_lacks_grant",
+      "contract": "policy_intersection",
+      "caller": "agent_credential",
+      "operation": "require",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "deny",
+      "policies": {
+        "credential": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ],
+        "agent": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ],
+        "owner": [
+          {
+            "scope": "project:read",
+            "selector": { "resource_kind": "project", "resource_id": "*" }
+          }
+        ]
+      }
+    },
+    {
+      "name": "credential_empty_agent_policy_denies",
+      "contract": "policy_intersection",
+      "caller": "agent_credential",
+      "operation": "require",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "deny",
+      "policies": {
+        "credential": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ],
+        "agent": [],
+        "owner": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ]
+      }
+    },
+    {
+      "name": "credential_policies_may_use_different_grants",
+      "contract": "policy_intersection",
+      "caller": "agent_credential",
+      "operation": "require",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "allow",
+      "policies": {
+        "credential": [
+          {
+            "scope": "mcp:read",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ],
+        "agent": [
+          {
+            "scope": "mcp:write",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ],
+        "owner": [
+          {
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ]
+      }
+    },
+    {
+      "name": "credential_block_in_one_policy_denies",
+      "contract": "policy_intersection",
+      "caller": "agent_credential",
+      "operation": "require",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "deny",
+      "policies": {
+        "credential": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ],
+        "agent": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ],
+        "owner": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          },
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:blocked_connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ]
+      }
+    },
+    {
+      "name": "credential_owner_direct_exception_applies_inside_owner_policy",
+      "contract": "policy_intersection",
+      "caller": "agent_credential",
+      "operation": "require",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "allow",
+      "policies": {
+        "credential": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ],
+        "agent": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ],
+        "owner": [
+          {
+            "principal": "user:user_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          },
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:blocked_connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ]
+      }
+    },
+    {
+      "name": "credential_agent_grant_never_outranks_block",
+      "contract": "policy_intersection",
+      "caller": "agent_credential",
+      "operation": "require",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "deny",
+      "policies": {
+        "credential": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ],
+        "agent": [
+          {
+            "principal": "agent:018f8d7b-58d7-7cc4-bb16-9f8c6b99a001",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          },
+          {
+            "principal": "user:all",
+            "scope": "mcp:blocked_connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ],
+        "owner": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ]
+      }
+    },
+    {
+      "name": "credential_require_any_needs_one_alternative_in_every_policy",
+      "contract": "policy_intersection",
+      "caller": "agent_credential",
+      "operation": "require_any",
+      "checks": [
+        { "scope": "project:read", "resource_id": "proj_1" },
+        { "scope": "project:read", "resource_id": "proj_2" }
+      ],
+      "want": "deny",
+      "policies": {
+        "credential": [
+          {
+            "scope": "project:read",
+            "selector": { "resource_kind": "project", "resource_id": "proj_1" }
+          }
+        ],
+        "agent": [
+          {
+            "scope": "project:read",
+            "selector": { "resource_kind": "project", "resource_id": "proj_2" }
+          }
+        ],
+        "owner": [
+          {
+            "scope": "project:read",
+            "selector": { "resource_kind": "project", "resource_id": "*" }
+          }
+        ]
+      }
+    },
+    {
+      "name": "principal_api_key_policies_intersect",
+      "contract": "policy_intersection",
+      "caller": "principal_api_key",
+      "operation": "require",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "deny",
+      "policies": {
+        "credential": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ],
+        "agent": [],
+        "owner": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ]
+      }
+    },
+    {
+      "name": "principal_api_key_all_policies_allow",
+      "contract": "policy_intersection",
+      "caller": "principal_api_key",
+      "operation": "require",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "allow",
+      "policies": {
+        "credential": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ],
+        "agent": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ],
+        "owner": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ]
+      }
+    },
+    {
+      "name": "workload_ceiling_limits",
+      "contract": "policy_intersection",
+      "caller": "workload",
+      "operation": "require",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "deny",
+      "policies": {
+        "credential": [
+          {
+            "scope": "project:read",
+            "selector": { "resource_kind": "project", "resource_id": "*" }
+          }
+        ],
+        "agent": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ],
+        "owner": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ]
+      }
+    },
+    {
+      "name": "workload_all_policies_allow",
+      "contract": "policy_intersection",
+      "caller": "workload",
+      "operation": "require",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "allow",
+      "policies": {
+        "credential": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ],
+        "agent": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ],
+        "owner": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ]
+      }
+    },
+    {
+      "name": "credential_without_admission_errors",
+      "contract": "policy_intersection",
+      "caller": "credential_unadmitted",
+      "operation": "require",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "error:unexpected"
+    },
+    {
+      "name": "represented_user_human_uses_own_connection",
+      "contract": "represented_user",
+      "caller": "human",
+      "operation": "require",
+      "checks": [
+        {
+          "scope": "mcp:auth",
+          "resource_id": "client_1",
+          "dimensions": {
+            "client_type": "remote_session",
+            "project_id": "proj_1",
+            "connection_owner": "user_fixture",
+            "upstream_client": "up_1"
+          }
+        }
+      ],
+      "want": "allow",
+      "grants": [
+        {
+          "scope": "mcp:auth",
+          "selector": {
+            "resource_kind": "mcp_auth_client",
+            "resource_id": "*",
+            "client_type": "remote_session",
+            "connection_owner": "$represented_user"
+          }
+        }
+      ]
+    },
+    {
+      "name": "represented_user_human_cannot_use_other_owner",
+      "contract": "represented_user",
+      "caller": "human",
+      "operation": "require",
+      "checks": [
+        {
+          "scope": "mcp:auth",
+          "resource_id": "client_1",
+          "dimensions": {
+            "client_type": "remote_session",
+            "project_id": "proj_1",
+            "connection_owner": "user_other",
+            "upstream_client": "up_1"
+          }
+        }
+      ],
+      "want": "deny",
+      "grants": [
+        {
+          "scope": "mcp:auth",
+          "selector": {
+            "resource_kind": "mcp_auth_client",
+            "resource_id": "*",
+            "client_type": "remote_session",
+            "connection_owner": "$represented_user"
+          }
+        }
+      ]
+    },
+    {
+      "name": "represented_user_embedded_session_binds_nobody",
+      "contract": "represented_user",
+      "caller": "embedded_session",
+      "operation": "require",
+      "checks": [
+        {
+          "scope": "mcp:auth",
+          "resource_id": "client_1",
+          "dimensions": {
+            "client_type": "remote_session",
+            "project_id": "proj_1",
+            "connection_owner": "user_fixture",
+            "upstream_client": "up_1"
+          }
+        }
+      ],
+      "want": "deny",
+      "grants": [
+        {
+          "scope": "mcp:auth",
+          "selector": {
+            "resource_kind": "mcp_auth_client",
+            "resource_id": "*",
+            "client_type": "remote_session",
+            "connection_owner": "$represented_user"
+          }
+        }
+      ]
+    },
+    {
+      "name": "represented_user_assistant_binds_nobody",
+      "contract": "represented_user",
+      "caller": "managed_assistant",
+      "operation": "require",
+      "checks": [
+        {
+          "scope": "mcp:auth",
+          "resource_id": "client_1",
+          "dimensions": {
+            "client_type": "remote_session",
+            "project_id": "proj_1",
+            "connection_owner": "user_fixture",
+            "upstream_client": "up_1"
+          }
+        }
+      ],
+      "want": "deny",
+      "grants": [
+        {
+          "scope": "mcp:auth",
+          "selector": {
+            "resource_kind": "mcp_auth_client",
+            "resource_id": "*",
+            "client_type": "remote_session",
+            "connection_owner": "$represented_user"
+          }
+        }
+      ]
+    },
+    {
+      "name": "represented_user_credential_needs_represented_policy",
+      "contract": "represented_user",
+      "caller": "agent_credential",
+      "operation": "require",
+      "checks": [
+        {
+          "scope": "mcp:auth",
+          "resource_id": "client_1",
+          "dimensions": {
+            "client_type": "remote_session",
+            "project_id": "proj_1",
+            "connection_owner": "user_fixture",
+            "upstream_client": "up_1"
+          }
+        }
+      ],
+      "want": "allow",
+      "policies": {
+        "credential": [
+          {
+            "scope": "mcp:auth",
+            "selector": {
+              "resource_kind": "mcp_auth_client",
+              "resource_id": "*",
+              "client_type": "remote_session",
+              "connection_owner": "$represented_user"
+            }
+          }
+        ],
+        "agent": [
+          {
+            "scope": "mcp:auth",
+            "selector": {
+              "resource_kind": "mcp_auth_client",
+              "resource_id": "*",
+              "client_type": "remote_session",
+              "connection_owner": "$represented_user"
+            }
+          }
+        ],
+        "owner": [
+          {
+            "scope": "mcp:auth",
+            "selector": {
+              "resource_kind": "mcp_auth_client",
+              "resource_id": "*",
+              "client_type": "remote_session",
+              "connection_owner": "$represented_user"
+            }
+          }
+        ],
+        "represented": [
+          {
+            "scope": "mcp:auth",
+            "selector": {
+              "resource_kind": "mcp_auth_client",
+              "resource_id": "*",
+              "client_type": "remote_session",
+              "connection_owner": "$represented_user"
+            }
+          }
+        ]
+      }
+    },
+    {
+      "name": "represented_user_credential_denied_by_represented_policy",
+      "contract": "represented_user",
+      "caller": "agent_credential",
+      "operation": "require",
+      "checks": [
+        {
+          "scope": "mcp:auth",
+          "resource_id": "client_1",
+          "dimensions": {
+            "client_type": "remote_session",
+            "project_id": "proj_1",
+            "connection_owner": "user_fixture",
+            "upstream_client": "up_1"
+          }
+        }
+      ],
+      "want": "deny",
+      "policies": {
+        "credential": [
+          {
+            "scope": "mcp:auth",
+            "selector": {
+              "resource_kind": "mcp_auth_client",
+              "resource_id": "*",
+              "client_type": "remote_session",
+              "connection_owner": "$represented_user"
+            }
+          }
+        ],
+        "agent": [
+          {
+            "scope": "mcp:auth",
+            "selector": {
+              "resource_kind": "mcp_auth_client",
+              "resource_id": "*",
+              "client_type": "remote_session",
+              "connection_owner": "$represented_user"
+            }
+          }
+        ],
+        "owner": [
+          {
+            "scope": "mcp:auth",
+            "selector": {
+              "resource_kind": "mcp_auth_client",
+              "resource_id": "*",
+              "client_type": "remote_session",
+              "connection_owner": "$represented_user"
+            }
+          }
+        ],
+        "represented": []
+      }
+    },
+    {
+      "name": "represented_policy_does_not_limit_ordinary_checks",
+      "contract": "represented_user",
+      "caller": "agent_credential",
+      "operation": "require",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "allow",
+      "policies": {
+        "credential": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ],
+        "agent": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ],
+        "owner": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ],
+        "represented": []
+      }
+    },
+    {
+      "name": "legacy_api_key_skips_enforcement",
+      "contract": "enforcement_profile",
+      "caller": "legacy_api_key",
+      "operation": "require",
+      "checks": [{ "scope": "org:admin", "resource_id": "org_fixture" }],
+      "want": "allow"
+    },
+    {
+      "name": "legacy_api_key_never_uses_auth_clients",
+      "contract": "enforcement_profile",
+      "caller": "legacy_api_key",
+      "operation": "require",
+      "checks": [
+        {
+          "scope": "mcp:auth",
+          "resource_id": "client_1",
+          "dimensions": {
+            "client_type": "service_account",
+            "project_id": "proj_1"
+          }
+        }
+      ],
+      "want": "deny"
+    },
+    {
+      "name": "sessionless_internal_skips_enforcement",
+      "contract": "enforcement_profile",
+      "caller": "sessionless_internal",
+      "operation": "require",
+      "checks": [{ "scope": "org:admin", "resource_id": "org_fixture" }],
+      "want": "allow"
+    },
+    {
+      "name": "sessionless_evaluate_denies_auth_clients",
+      "contract": "enforcement_profile",
+      "caller": "sessionless_internal",
+      "operation": "evaluate",
+      "checks": [
+        {
+          "scope": "mcp:auth",
+          "resource_id": "client_1",
+          "dimensions": {
+            "client_type": "service_account",
+            "project_id": "proj_1"
+          }
+        }
+      ],
+      "want": "deny"
+    },
+    {
+      "name": "platform_mcp_human_is_enforced",
+      "contract": "enforcement_profile",
+      "caller": "platform_mcp_human",
+      "operation": "require",
+      "checks": [{ "scope": "org:admin", "resource_id": "org_fixture" }],
+      "want": "deny",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "org:read",
+          "selector": { "resource_kind": "org", "resource_id": "*" }
+        }
+      ]
+    },
+    {
+      "name": "platform_mcp_human_uses_own_grants",
+      "contract": "enforcement_profile",
+      "caller": "platform_mcp_human",
+      "operation": "require",
+      "checks": [{ "scope": "org:read", "resource_id": "org_fixture" }],
+      "want": "allow",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "org:read",
+          "selector": { "resource_kind": "org", "resource_id": "*" }
+        }
+      ]
+    },
+    {
+      "name": "managed_assistant_is_enforced",
+      "contract": "enforcement_profile",
+      "caller": "managed_assistant",
+      "operation": "require",
+      "checks": [{ "scope": "org:admin", "resource_id": "org_fixture" }],
+      "want": "deny"
+    },
+    {
+      "name": "unauthenticated_request_errors",
+      "contract": "enforcement_profile",
+      "caller": "anonymous",
+      "operation": "require",
+      "checks": [{ "scope": "org:read", "resource_id": "org_fixture" }],
+      "want": "error:unauthorized"
+    },
+    {
+      "name": "org_less_session_holds_no_grants",
+      "contract": "enforcement_profile",
+      "caller": "org_less_session",
+      "operation": "require",
+      "checks": [{ "scope": "org:read", "resource_id": "org_fixture" }],
+      "want": "deny"
+    },
+    {
+      "name": "demo_session_holds_every_visible_scope",
+      "contract": "enforcement_profile",
+      "caller": "demo_session",
+      "operation": "require",
+      "checks": [
+        { "scope": "org:admin", "resource_id": "org_fixture" },
+        { "scope": "chat:write", "resource_id": "chat_1" },
+        { "scope": "log:read", "resource_id": "proj_1" }
+      ],
+      "want": "allow"
+    },
+    {
+      "name": "demo_session_never_uses_auth_clients",
+      "contract": "enforcement_profile",
+      "caller": "demo_session",
+      "operation": "require",
+      "checks": [
+        {
+          "scope": "mcp:auth",
+          "resource_id": "client_1",
+          "dimensions": {
+            "client_type": "service_account",
+            "project_id": "proj_1"
+          }
+        }
+      ],
+      "want": "deny"
+    },
+    {
+      "name": "support_session_holds_every_visible_scope",
+      "contract": "enforcement_profile",
+      "caller": "support_session",
+      "operation": "require",
+      "checks": [
+        { "scope": "org:admin", "resource_id": "org_fixture" },
+        { "scope": "workload:write", "resource_id": "wl_1" }
+      ],
+      "want": "allow"
+    },
+    {
+      "name": "support_session_never_uses_auth_clients",
+      "contract": "enforcement_profile",
+      "caller": "support_session",
+      "operation": "require",
+      "checks": [
+        {
+          "scope": "mcp:auth",
+          "resource_id": "client_1",
+          "dimensions": {
+            "client_type": "service_account",
+            "project_id": "proj_1"
+          }
+        }
+      ],
+      "want": "deny"
+    },
+    {
+      "name": "admin_scope_override_replaces_grants",
+      "contract": "enforcement_profile",
+      "caller": "scope_override_admin",
+      "operation": "require",
+      "checks": [{ "scope": "project:read", "resource_id": "proj_1" }],
+      "want": "allow",
+      "override": "project:read=proj_1"
+    },
+    {
+      "name": "admin_scope_override_limits_grants",
+      "contract": "enforcement_profile",
+      "caller": "scope_override_admin",
+      "operation": "require",
+      "checks": [{ "scope": "org:read", "resource_id": "org_fixture" }],
+      "want": "deny",
+      "override": "project:read=proj_1"
+    },
+    {
+      "name": "member_scope_override_is_ignored",
+      "contract": "enforcement_profile",
+      "caller": "scope_override_member",
+      "operation": "require",
+      "checks": [{ "scope": "org:read", "resource_id": "org_fixture" }],
+      "want": "allow",
+      "override": "project:read=proj_1",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "org:read",
+          "selector": { "resource_kind": "org", "resource_id": "*" }
+        }
+      ]
+    },
+    {
+      "name": "unprepared_context_errors",
+      "contract": "enforcement_profile",
+      "caller": "human_unprepared",
+      "operation": "require",
+      "checks": [{ "scope": "org:read", "resource_id": "org_fixture" }],
+      "want": "error:unexpected"
+    },
+    {
+      "name": "empty_resource_id_errors",
+      "contract": "input_errors",
+      "caller": "human",
+      "operation": "require",
+      "checks": [{ "scope": "project:read", "resource_id": "" }],
+      "want": "error:unexpected",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "project:read",
+          "selector": { "resource_kind": "project", "resource_id": "*" }
+        }
+      ]
+    },
+    {
+      "name": "wildcard_resource_id_errors",
+      "contract": "input_errors",
+      "caller": "human",
+      "operation": "require",
+      "checks": [{ "scope": "project:read", "resource_id": "*" }],
+      "want": "error:unexpected",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "project:read",
+          "selector": { "resource_kind": "project", "resource_id": "*" }
+        }
+      ]
+    },
+    {
+      "name": "no_checks_errors",
+      "contract": "input_errors",
+      "caller": "human",
+      "operation": "require",
+      "checks": [],
+      "want": "error:unexpected",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "project:read",
+          "selector": { "resource_kind": "project", "resource_id": "*" }
+        }
+      ]
+    },
+    {
+      "name": "auth_client_check_without_project_errors",
+      "contract": "input_errors",
+      "caller": "human",
+      "operation": "require",
+      "checks": [
+        {
+          "scope": "mcp:auth",
+          "resource_id": "client_1",
+          "dimensions": { "client_type": "service_account" }
+        }
+      ],
+      "want": "error:unexpected",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:auth",
+          "selector": { "resource_kind": "mcp_auth_client", "resource_id": "*" }
+        }
+      ]
+    },
+    {
+      "name": "auth_client_check_with_wildcard_dimension_errors",
+      "contract": "input_errors",
+      "caller": "human",
+      "operation": "require",
+      "checks": [
+        {
+          "scope": "mcp:auth",
+          "resource_id": "client_1",
+          "dimensions": { "client_type": "service_account", "project_id": "*" }
+        }
+      ],
+      "want": "error:unexpected",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:auth",
+          "selector": { "resource_kind": "mcp_auth_client", "resource_id": "*" }
+        }
+      ]
+    },
+    {
+      "name": "evaluate_invalid_check_errors",
+      "contract": "input_errors",
+      "caller": "human",
+      "operation": "evaluate",
+      "checks": [{ "scope": "project:read", "resource_id": "" }],
+      "want": "error:unexpected",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "project:read",
+          "selector": { "resource_kind": "project", "resource_id": "*" }
+        }
+      ]
+    },
+    {
+      "name": "require_any_invalid_later_check_errors",
+      "contract": "input_errors",
+      "caller": "human",
+      "operation": "require_any",
+      "checks": [
+        { "scope": "project:read", "resource_id": "proj_1" },
+        { "scope": "project:read", "resource_id": "" }
+      ],
+      "want": "error:unexpected",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "project:read",
+          "selector": { "resource_kind": "project", "resource_id": "*" }
+        }
+      ]
+    },
+    {
+      "name": "filter_returns_allowed_ids",
+      "contract": "lists",
+      "caller": "human",
+      "operation": "filter",
+      "checks": [
+        { "scope": "mcp:read", "resource_id": "srv_1" },
+        { "scope": "mcp:read", "resource_id": "srv_2" },
+        { "scope": "mcp:read", "resource_id": "srv_3" }
+      ],
+      "want": "allow",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:read",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        },
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:read",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_3" }
+        }
+      ],
+      "want_ids": ["srv_1", "srv_3"]
+    },
+    {
+      "name": "filter_applies_blocks",
+      "contract": "lists",
+      "caller": "human",
+      "operation": "filter",
+      "checks": [
+        { "scope": "mcp:read", "resource_id": "srv_1" },
+        { "scope": "mcp:read", "resource_id": "srv_2" }
+      ],
+      "want": "allow",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:read",
+          "selector": { "resource_kind": "mcp", "resource_id": "*" }
+        },
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:blocked_read",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_2" }
+        }
+      ],
+      "want_ids": ["srv_1"]
+    },
+    {
+      "name": "filter_unenforced_omits_auth_clients",
+      "contract": "lists",
+      "caller": "sessionless_internal",
+      "operation": "filter",
+      "checks": [
+        { "scope": "project:read", "resource_id": "proj_1" },
+        {
+          "scope": "mcp:auth",
+          "resource_id": "client_1",
+          "dimensions": {
+            "client_type": "service_account",
+            "project_id": "proj_1"
+          }
+        }
+      ],
+      "want": "allow",
+      "want_ids": ["proj_1"]
+    },
+    {
+      "name": "find_matched_keeps_order",
+      "contract": "lists",
+      "caller": "human",
+      "operation": "find_matched",
+      "checks": [
+        {
+          "scope": "mcp:connect",
+          "resource_id": "srv_1",
+          "dimensions": { "tool": "b" }
+        },
+        {
+          "scope": "mcp:connect",
+          "resource_id": "srv_1",
+          "dimensions": { "tool": "a" }
+        },
+        {
+          "scope": "mcp:connect",
+          "resource_id": "srv_2",
+          "dimensions": { "tool": "a" }
+        }
+      ],
+      "want": "allow",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:connect",
+          "selector": {
+            "resource_kind": "mcp",
+            "resource_id": "srv_1",
+            "tool": "a"
+          }
+        }
+      ],
+      "want_matched": [false, true, false]
+    },
+    {
+      "name": "mandatory_public_server_admits_anonymous",
+      "contract": "mandatory_gates",
+      "caller": "anonymous",
+      "operation": "mandatory_server_admission",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "allow",
+      "public": true
+    },
+    {
+      "name": "mandatory_private_server_denies_anonymous",
+      "contract": "mandatory_gates",
+      "caller": "anonymous",
+      "operation": "mandatory_server_admission",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "deny"
+    },
+    {
+      "name": "mandatory_public_server_keeps_human_limits",
+      "contract": "mandatory_gates",
+      "caller": "human",
+      "operation": "mandatory_server_admission",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "deny",
+      "public": true,
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "project:read",
+          "selector": { "resource_kind": "project", "resource_id": "*" }
+        }
+      ]
+    },
+    {
+      "name": "mandatory_human_with_connect_allows",
+      "contract": "mandatory_gates",
+      "caller": "human",
+      "operation": "mandatory",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "allow",
+      "grants": [
+        {
+          "principal": "role:organization:role_fixture",
+          "scope": "mcp:connect",
+          "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+        }
+      ]
+    },
+    {
+      "name": "mandatory_sessionless_is_not_skipped",
+      "contract": "mandatory_gates",
+      "caller": "sessionless_internal",
+      "operation": "mandatory",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "deny"
+    },
+    {
+      "name": "mandatory_unadmitted_credential_denies",
+      "contract": "mandatory_gates",
+      "caller": "credential_unadmitted",
+      "operation": "mandatory",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "deny"
+    },
+    {
+      "name": "mandatory_credential_policies_intersect",
+      "contract": "mandatory_gates",
+      "caller": "agent_credential",
+      "operation": "mandatory",
+      "checks": [{ "scope": "mcp:connect", "resource_id": "srv_1" }],
+      "want": "deny",
+      "policies": {
+        "credential": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ],
+        "agent": [
+          {
+            "principal": "role:organization:role_fixture",
+            "scope": "mcp:connect",
+            "selector": { "resource_kind": "mcp", "resource_id": "srv_1" }
+          }
+        ],
+        "owner": []
+      }
+    }
+  ]
+}
