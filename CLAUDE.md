@@ -98,6 +98,8 @@ The main frontend application lives in `client/dashboard/` (not `client/` direct
 
 Use the `gram-playwright-cli` skill and `mise run playwright` for routine dashboard inspection, page interaction, console or network debugging, and screenshots. The mise task uses the repository Playwright config, launches the system Google Chrome with its sandbox enabled, installs Chrome when missing, and writes ignored artifacts to `.playwright-cli/`.
 
+The Playwright MCP server (`.mcp.json`, `opencode.json`, `.codex/config.toml`) also runs on the system Google Chrome with its sandbox enabled, but it does not install Chrome for you: it fails at startup until Chrome is present. Installing Chrome needs root, so an agent cannot do it on its own. Install it once yourself, from Google's apt repository on Linux (`google-chrome-stable`) or the standard installer on macOS. Do not switch the MCP back to `--browser=chromium`: Playwright's bundled Chromium is pinned to a build that lags upstream security fixes.
+
 Use `pull-request-demo` when a user-visible change needs a shareable PR screenshot, GIF recording, or PR comment. It builds on the same `mise run playwright` workflow and adds the capture and publishing steps. Do not use `npm`, `npx`, or `yarn` for either workflow.
 
 ### Testing Code Mode locally
