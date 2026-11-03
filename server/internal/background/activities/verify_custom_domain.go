@@ -130,6 +130,11 @@ func (d *VerifyCustomDomain) createLegacyDomainRow(ctx context.Context, args Ver
 	if err != nil {
 		return noRow, fmt.Errorf("create legacy custom domain: %w", err)
 	}
+	token, err := customdomains.EnsureDNSTargetToken(ctx, dbtx, domain.ID, customdomains.NewDNSTargetToken)
+	if err != nil {
+		return noRow, fmt.Errorf("assign legacy custom domain dns target token: %w", err)
+	}
+	domain.DnsTargetToken = conv.ToPGTextEmpty(token)
 	if err := d.audit.LogCustomDomainCreate(ctx, dbtx, audit.LogCustomDomainCreateEvent{
 		OrganizationID:   args.OrgID,
 		Actor:            args.CreatedBy,

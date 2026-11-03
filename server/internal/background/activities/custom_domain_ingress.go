@@ -11,6 +11,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/customdomains"
 	customdomainsRepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/k8s"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -26,6 +27,7 @@ const (
 )
 
 type CustomDomainIngress struct {
+	db                 *pgxpool.Pool
 	domains            *customdomainsRepo.Queries
 	logger             *slog.Logger
 	provisionerFactory k8s.ProvisionerFactory
@@ -44,6 +46,7 @@ func WithSetupSleep(d time.Duration) CustomDomainIngressOption {
 
 func NewCustomDomainIngress(logger *slog.Logger, db *pgxpool.Pool, k8sClient k8s.ProvisionerFactory, opts ...CustomDomainIngressOption) *CustomDomainIngress {
 	c := &CustomDomainIngress{
+		db:                 db,
 		domains:            customdomainsRepo.New(db),
 		logger:             logger,
 		provisionerFactory: k8sClient,
@@ -161,6 +164,14 @@ func (c *CustomDomainIngress) ReconcileCustomDomain(ctx context.Context, args Re
 			return oops.E(oops.CodeUnexpected, err, "clear deleted custom domain resource names").LogError(ctx, c.logger)
 		}
 		return nil
+	}
+
+	// Backfill rows created before DNS target tokens existed. Nothing routes on
+	// the token yet, so a failure must not block Apply.
+	if !desired.DnsTargetToken.Valid {
+		if _, err := customdomains.EnsureDNSTargetToken(ctx, c.db, desired.ID, customdomains.NewDNSTargetToken); err != nil {
+			c.logger.WarnContext(ctx, "failed to backfill custom domain dns target token", attr.SlogError(err), attr.SlogURLDomain(desired.Domain))
+		}
 	}
 
 	result, err := provisioner.Apply(ctx, config)
