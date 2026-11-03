@@ -72,7 +72,6 @@ func ObserveDNS(ctx context.Context, resolver dns.Resolver, domain string, targe
 		return result, err
 	}
 	current := normalizeDNSName(domain)
-	target = normalizeDNSName(target)
 	seen := make(map[string]bool)
 	hadAlias := false
 	for hop := 0; ; hop++ {
@@ -136,16 +135,20 @@ func ObserveDNS(ctx context.Context, resolver dns.Resolver, domain string, targe
 			allowed[address.Unmap()] = true
 		}
 	}
-	if len(allowed) == 0 && targetErr != nil {
-		return fail(fmt.Errorf("observe routing target addresses: %w", targetErr))
-	}
-	if len(addresses) == 0 {
-		return result, nil
-	}
+	matched := len(addresses) > 0
 	for _, address := range addresses {
 		if !allowed[address.Unmap()] {
-			return result, nil
+			matched = false
+			break
 		}
+	}
+	if !matched {
+		// A partial target lookup cannot rule out the remaining addresses.
+		// Known addresses can still independently establish a complete match.
+		if targetErr != nil {
+			return fail(fmt.Errorf("observe routing target addresses: %w", targetErr))
+		}
+		return result, nil
 	}
 	result.Status = DNSConfigurationMatched
 	if !hadAlias {

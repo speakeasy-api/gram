@@ -129,7 +129,7 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 	if !token.Valid {
 		value, err := customdomains.EnsureDNSTargetToken(ctx, c.db, domain.OrganizationID, domain.ID, customdomains.NewDNSTargetToken)
 		if err != nil {
-			c.logger.WarnContext(ctx, "backfill custom domain DNS target", attr.SlogError(err))
+			c.logger.WarnContext(ctx, "backfill custom domain DNS target", attr.SlogURLDomain(domain.Domain), attr.SlogError(err))
 		}
 		token = conv.ToPGTextEmpty(value)
 	}
