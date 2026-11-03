@@ -1015,8 +1015,9 @@ type issuerGateAuthentication struct {
 	surface              mcpmetrics.Surface
 	subject              urn.SessionSubject
 
-	// refreshableUserSession reports that the bearer was a Speakeasy-minted user
-	// session from a refreshable grant, not an assistant-runtime token, an
+	// refreshableUserSession reports that the bearer was a Speakeasy-minted
+	// user_sessions row, for a user or an anonymous subject, from a refreshable
+	// grant, not an assistant-runtime token, an
 	// agent API key, or a resource-scoped session. Only such a client can
 	// act on invalid_token by refreshing and then reauthorizing.
 	refreshableUserSession bool
@@ -1343,7 +1344,11 @@ func (s *Service) subjectReauthorizesToReconnect(ctx context.Context, organizati
 		return true
 	case urn.SessionSubjectKindAnonymous:
 		mode, err := s.authClientMode(ctx, organizationID)
-		return err == nil && mode != feature.AuthClientResolverEnforced
+		if err != nil {
+			s.logger.WarnContext(ctx, "read auth client mode for an anonymous reconnect; not asking it to reauthorize", attr.SlogError(err))
+			return false
+		}
+		return mode != feature.AuthClientResolverEnforced
 	default:
 		return false
 	}

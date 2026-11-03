@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessions_repo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
@@ -217,6 +218,9 @@ func TestHandleToken_AnonymousRefreshJudgesTheChosenClientOnAProxiedServer(t *te
 
 			ctx, ti := newTestMCPService(t)
 			ti.service.manual = true
+			// Would serve the refresh if asked; an anonymous subject must not ask.
+			governor := &consentGovernor{t: t, refresh: identitychaining.RefreshServed}
+			ti.service.SetIdentityChainer(governor)
 			authCtx := requireProjectAuthContext(t, ctx)
 			_, issuer, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 			chosen := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
@@ -260,6 +264,7 @@ func TestHandleToken_AnonymousRefreshJudgesTheChosenClientOnAProxiedServer(t *te
 			} else {
 				require.Equal(t, http.StatusOK, res.code, res.body)
 			}
+			require.Empty(t, governor.refreshed, "identity chaining vouches for a known user, which an anonymous subject is not")
 		})
 	}
 }
