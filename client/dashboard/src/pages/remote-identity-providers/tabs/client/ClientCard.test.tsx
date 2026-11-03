@@ -58,6 +58,50 @@ vi.mock("./KeySetField", () => ({
 
 afterEach(cleanup);
 
+describe("client audience updates", () => {
+  it.each([
+    ["cleared", "", ""],
+    ["whitespace-only", "   ", ""],
+    ["changed", "  new-audience  ", "new-audience"],
+  ])("sends the %s audience explicitly", (_label, value, expected) => {
+    testState.admin = true;
+    render(<ClientCard client={client} issuer={issuer} issuerId="issuer-1" />);
+    fireEvent.change(screen.getByLabelText("Audience"), { target: { value } });
+    fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+    expect(testState.mutate).toHaveBeenCalledWith({
+      request: {
+        updateRemoteSessionClientForm: expect.objectContaining({
+          audience: expected,
+        }),
+      },
+    });
+  });
+
+  it.each(["aud", undefined])(
+    "omits unchanged audience %s when saving another field",
+    (audience) => {
+      testState.admin = true;
+      render(
+        <ClientCard
+          client={{ ...client, audience }}
+          issuer={issuer}
+          issuerId="issuer-1"
+        />,
+      );
+      fireEvent.click(screen.getByRole("switch"));
+      fireEvent.click(screen.getByRole("button", { name: "Save changes" }));
+      expect(testState.mutate).toHaveBeenCalledWith({
+        request: {
+          updateRemoteSessionClientForm: expect.objectContaining({
+            audience: undefined,
+            legacyCallbackUrl: true,
+          }),
+        },
+      });
+    },
+  );
+});
+
 const client = {
   id: "client-1",
   clientId: "upstream-client",

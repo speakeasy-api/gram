@@ -595,7 +595,7 @@ describe("client overview settings", () => {
     expect(lastSaved().audience).toBe("api://example");
   });
 
-  it("omits an emptied audience and shows the kept one after saving", async () => {
+  it("clears an emptied audience and shows it empty after saving", async () => {
     renderTab({ client: client(undefined, { audience: "old-aud" }) });
 
     fireEvent.change(screen.getByLabelText("Audience"), {
@@ -603,16 +603,15 @@ describe("client overview settings", () => {
     });
     save();
 
-    expect(lastSaved().audience).toBeUndefined();
+    expect(lastSaved().audience).toBe("");
 
     await act(async () => {
       await mutation.onSuccess?.({
-        audience: "old-aud",
         clientId: "upstream-client",
       });
     });
     expect((screen.getByLabelText("Audience") as HTMLInputElement).value).toBe(
-      "old-aud",
+      "",
     );
   });
 

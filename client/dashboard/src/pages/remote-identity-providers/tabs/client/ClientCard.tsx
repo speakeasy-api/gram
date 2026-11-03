@@ -183,7 +183,6 @@ export function ClientCard({
   const update = useUpdateOrganizationRemoteSessionClientMutation({
     onSuccess: async (saved) => {
       await invalidateClient();
-      // An emptied audience is omitted, so show what was actually kept.
       setAudience(saved.audience ?? "");
       setClientIdDraft(saved.clientId);
       setConfirmClientIdChange(false);
@@ -259,7 +258,8 @@ export function ClientCard({
             ? authAudienceFormat
             : undefined,
           scope: scopeChanged ? scope : undefined,
-          audience: audience.trim() || undefined,
+          audience:
+            audience !== (client.audience ?? "") ? audience.trim() : undefined,
           clientSecret: clientSecretUpdateValue(authMethod, clientSecret),
           legacyCallbackUrl:
             isPlatformAdmin &&
