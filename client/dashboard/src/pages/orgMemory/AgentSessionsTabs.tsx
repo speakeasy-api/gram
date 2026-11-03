@@ -26,7 +26,7 @@ export function AgentSessionsTabs({
     // The page header already closes with its own bottom margin; the strip
     // pulls up into it so the tabs sit with the title.
     <Tabs value={active} className="-mt-6 mb-4 w-full">
-      <div className="border-b">
+      <div className="overflow-x-auto border-b">
         <PageTabsList className="h-auto gap-6 bg-transparent p-0">
           <PageTabsTrigger value="sessions" asChild>
             <Link to={routes.agentSessions.href()}>Sessions</Link>

@@ -31,7 +31,7 @@ import {
   removeVisitsMatching,
   shouldRemoveRestrictedRecents,
 } from "./components/command-palette/recentlyVisited";
-import { useIsPlatformAdmin, useUser } from "./contexts/Auth";
+import { useIsPlatformAdmin, useProject, useUser } from "./contexts/Auth";
 import { useProjectNavRoutes } from "./hooks/useProjectNavRoutes";
 import { useOrgMemoryEnabled } from "./pages/orgMemory/useOrgMemoryEnabled";
 import { useRBAC } from "./hooks/useRBAC";
@@ -167,6 +167,7 @@ const RouteProvider = () => {
   const location = useLocation();
   const projectNavRoutes = useProjectNavRoutes();
   const orgMemoryEnabled = useOrgMemoryEnabled();
+  const { id: projectId } = useProject();
   const { hasAnyScope } = useRBAC();
   const killswitchAccess = useKillswitchAccess();
   // RouteProvider is inside AuthProvider, so reuse the already-fetched session
@@ -323,8 +324,13 @@ const RouteProvider = () => {
       : [];
     // Organizational Memory is a tab of Agent Sessions, not a sidebar page,
     // so it registers on its own behind the same rollout flag and the
-    // chat:read grant its endpoints require.
-    if (projectSlug && orgMemoryEnabled && hasAnyScope(["chat:read"])) {
+    // chat:read grant on this project its endpoints require.
+    if (
+      projectSlug &&
+      projectId &&
+      orgMemoryEnabled &&
+      hasAnyScope(["chat:read"], projectId)
+    ) {
       projectActions.push(
         routeToNavAction(
           routes.agentSessions.memory,
@@ -352,6 +358,7 @@ const RouteProvider = () => {
   }, [
     projectNavRoutes,
     orgMemoryEnabled,
+    projectId,
     routes,
     orgRoutes,
     projectSlug,

@@ -35,5 +35,10 @@ WHERE project_id = @project_id AND summary_redacted IS TRUE AND summary IS NOT N
 -- name: MemoryCountDigests :one
 SELECT count(*) FROM memory_digests WHERE project_id = @project_id;
 
+-- Day and week digests always exist; a month digest depends on the date.
+-- name: MemoryCountDigestLevels :one
+SELECT count(DISTINCT level) FROM memory_digests
+WHERE project_id = @project_id AND level IN ('day', 'week');
+
 -- name: MemoryCountMemos :one
 SELECT count(*) FROM memory_memos WHERE project_id = @project_id;

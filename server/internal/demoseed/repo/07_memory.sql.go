@@ -12,6 +12,19 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+const memoryCountDigestLevels = `-- name: MemoryCountDigestLevels :one
+SELECT count(DISTINCT level) FROM memory_digests
+WHERE project_id = $1 AND level IN ('day', 'week')
+`
+
+// Day and week digests always exist; a month digest depends on the date.
+func (q *Queries) MemoryCountDigestLevels(ctx context.Context, projectID uuid.UUID) (int64, error) {
+	row := q.db.QueryRow(ctx, memoryCountDigestLevels, projectID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const memoryCountDigests = `-- name: MemoryCountDigests :one
 SELECT count(*) FROM memory_digests WHERE project_id = $1
 `

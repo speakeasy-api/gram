@@ -78,14 +78,15 @@ export function OrgMemoryTimeline({
     );
   }
 
-  if (digests.isError) {
+  // Either failure would otherwise read as an empty memory.
+  const loadError = digests.error ?? recent.error;
+  if (loadError) {
     return (
       <InlineEmptyState
         icon="circle-alert"
         heading="Couldn't load Organizational Memory"
         description={
-          digests.error.message ||
-          "Reading memory needs chat:read on this project."
+          loadError.message || "Reading memory needs chat:read on this project."
         }
       />
     );
