@@ -228,6 +228,7 @@ func TestKitGKEProvisionValidation(t *testing.T) {
 		"missing token":                    func(in *KitGKEProvisionInput) { in.GatewayToken = nil },
 		"invalid CIDR":                     func(in *KitGKEProvisionInput) { in.IngressCIDR = "bad" },
 		"missing volume limit":             func(in *KitGKEProvisionInput) { in.WorkSizeLimit = "" },
+		"memory below admitted CPU ratio":  func(in *KitGKEProvisionInput) { in.Resources.Requests[corev1.ResourceCPU] = resource.MustParse("1") },
 		"reset without prior identity":     func(in *KitGKEProvisionInput) { in.ColdReset = true },
 		"reset same lineage":               func(in *KitGKEProvisionInput) { in.ColdReset = true; old := in.Identity; in.PreviousIdentity = &old },
 	}
@@ -550,4 +551,18 @@ func TestKitGKETemplateAndClaimHaveDistinctPolicyNames(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, found)
 	require.Equal(t, objects.WarmPool.GetName(), ref)
+}
+
+func TestKitGKEContainersMeetSandboxAdmissionMemoryRatio(t *testing.T) {
+	t.Parallel()
+	objects, err := RenderKitGKEProvision(kitGKEInput())
+	require.NoError(t, err)
+	pod := kitPodTemplate(t, objects)
+	containers := append(append([]corev1.Container{}, pod.Spec.InitContainers...), pod.Spec.Containers...)
+	require.NotEmpty(t, containers)
+	for _, container := range containers {
+		require.Contains(t, container.Resources.Requests, corev1.ResourceCPU, container.Name)
+		require.Contains(t, container.Resources.Requests, corev1.ResourceMemory, container.Name)
+		require.True(t, kitGKEMemoryCoversCPU(container.Resources.Requests), "%s requests less than 1Gi of memory per vCPU", container.Name)
+	}
 }
