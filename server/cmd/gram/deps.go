@@ -82,6 +82,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/inv"
 	"github.com/speakeasy-api/gram/server/internal/lake"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/metering"
 	"github.com/speakeasy-api/gram/server/internal/must"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -1161,6 +1162,14 @@ func newFeatureChecker(logger *slog.Logger, pf *productfeatures.Client, feat pro
 		}
 		return isEnabled, nil
 	}
+}
+
+// connectionDeviceKeyOption sets the connection recorder's device key secret, and warns when there is none.
+func connectionDeviceKeyOption(ctx context.Context, logger *slog.Logger, secret string) mcpconnectionattempts.RecorderOption {
+	if secret == "" {
+		logger.WarnContext(ctx, "connection device key secret not configured; device_key stays empty on connection events")
+	}
+	return mcpconnectionattempts.WithDeviceKeySecret(secret)
 }
 
 func newTelemetryLogger(
