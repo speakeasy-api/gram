@@ -2235,6 +2235,18 @@ func exchangeFailure(ctx context.Context, logger *slog.Logger, err error, tunnel
 	}
 }
 
+// exchangeRefusalCodes judge the request, so they stay a refusal under a 429; other codes, like slow_down, mean rate limited.
+var exchangeRefusalCodes = map[string]bool{
+	oautherr.CodeAccessDenied:         true,
+	oautherr.CodeInvalidClient:        true,
+	oautherr.CodeInvalidGrant:         true,
+	oautherr.CodeInvalidRequest:       true,
+	oautherr.CodeInvalidScope:         true,
+	oautherr.CodeInvalidTarget:        true,
+	oautherr.CodeUnauthorizedClient:   true,
+	oautherr.CodeUnsupportedGrantType: true,
+}
+
 // exchangeFailureCode answers a provider outage with 503 or 502 rather than blaming the user's credentials with 401.
 func exchangeFailureCode(status int, oauthCode string) oops.Code {
 	switch {
@@ -2242,6 +2254,8 @@ func exchangeFailureCode(status int, oauthCode string) oops.Code {
 		return oops.CodeUnavailable
 	case oauthCode == oautherr.CodeServerError:
 		return oops.CodeGatewayError
+	case status == http.StatusTooManyRequests && !exchangeRefusalCodes[oauthCode]:
+		return oops.CodeUnavailable
 	case oauthCode != "":
 		return oops.CodeUnauthorized
 	case status == http.StatusServiceUnavailable, status == http.StatusTooManyRequests:

@@ -70,6 +70,20 @@ func TestExchangeFailure_FixedReasons(t *testing.T) {
 			wantCode: oops.CodeUnauthorized,
 		},
 		{
+			name:     "slow_down under a 429 is rate limited",
+			err:      newTokenEndpointError(http.StatusTooManyRequests, "429 Too Many Requests", []byte(`{"error":"slow_down"}`)),
+			tunneled: false,
+			want:     "token exchange with the identity provider failed: slow_down",
+			wantCode: oops.CodeUnavailable,
+		},
+		{
+			name:     "vendor rate limit code under a 429 is rate limited",
+			err:      newTokenEndpointError(http.StatusTooManyRequests, "429 Too Many Requests", []byte(`{"error":"rate_limit_exceeded"}`)),
+			tunneled: false,
+			want:     "token exchange with the identity provider failed: HTTP 429",
+			wantCode: oops.CodeUnavailable,
+		},
+		{
 			name:     "no tunnel route",
 			err:      &tokenExchangeUnavailableError{err: fmt.Errorf("post token: %w", tunnelrouting.ErrNoTunnelRoute)},
 			tunneled: true,
