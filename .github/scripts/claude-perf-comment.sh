@@ -1,23 +1,20 @@
 #!/usr/bin/env bash
-# Renders an "@claude perf" review (.github/workflows/claude-perf.yml) as its
+# Renders a perf review (.github/workflows/claude-perf.yml) as its
 # pull request comment and prints it on stdout.
 #
 #   REPORT=<json> MARKER=<html comment> HEAD_SHA=<sha> RUN_URL=<url> \
-#     [LATEST_SHA=<sha>] claude-perf-comment.sh
+#     claude-perf-comment.sh
 #
 # REPORT is Claude's structured output, so it is untrusted, and the comment is
 # public. Its text renders as plain text on one line: no Markdown, HTML, links
 # or @mentions. The script fails closed: when REPORT is not a complete review,
 # or when the report or the rendered comment contains anything shaped like a
 # credential, an email address or a UUID, it prints a "no verdict" notice in
-# place of the review and exits 1. HEAD_SHA is the reviewed commit; when
-# LATEST_SHA, the pull request's head at posting time, differs, the review
-# says so.
+# place of the review and exits 1. HEAD_SHA is the reviewed commit.
 set -euo pipefail
 
 : "${MARKER:?}" "${HEAD_SHA:?}" "${RUN_URL:?}"
 REPORT=${REPORT:-}
-LATEST_SHA=${LATEST_SHA:-}
 
 no_verdict() {
   echo "::error::$1" >&2
@@ -35,7 +32,7 @@ jq -e '
 # check below both use it, so they read every value the same way.
 line_def='def line: tostring | gsub("[[:space:][:cntrl:]]+"; " ");'
 
-body=$(jq -r --arg marker "$MARKER" --arg head "$HEAD_SHA" --arg latest "$LATEST_SHA" --arg run "$RUN_URL" "$line_def"'
+body=$(jq -r --arg marker "$MARKER" --arg head "$HEAD_SHA" --arg run "$RUN_URL" "$line_def"'
   # Every ASCII punctuation character is backslash-escaped, so no Markdown,
   # HTML, entity or autolink survives, and a zero-width space after @ and #
   # stops mentions and cross-references.
@@ -58,9 +55,6 @@ body=$(jq -r --arg marker "$MARKER" --arg head "$HEAD_SHA" --arg latest "$LATEST
       ] | join("\n"))
     else "" end)
   + (if .mcp_status then "\n\n_MCP: \(.mcp_status | text)_" else "" end)
-  + (if $latest != "" and $latest != $head then
-      "\n\n_The pull request is now at \($latest[0:7]), after this review. Comment `@claude perf` to review it._"
-    else "" end)
   + "\n\n<sub>Commit \($head[0:7]) · [run](\($run)) · Claude Code with Speakeasy MCP</sub>"
 ' <<<"$REPORT" 2>/dev/null) || no_verdict "The perf review could not be rendered."
 
