@@ -1038,10 +1038,11 @@ func newStartCommand() *cli.Command {
 					AdmitWorkloadSessionInTx:         runtimepolicy.AdmitWorkloadSessionInTx,
 					DevMode:                          c.String("environment") == "local",
 				})
-			// The typed client must compile its registry and migration units at
+			// The typed client compiles its registry and migration units at
 			// startup; a broken declaration stops the server instead of failing
 			// checks later. Each unit's flag routes it, and every unit starts
-			// with the engine deciding.
+			// with the engine deciding. Services that have moved to typed
+			// operations receive this client.
 			authzRegistry, err := authz.DefaultRegistry()
 			if err != nil {
 				return fmt.Errorf("compile authorization registry: %w", err)
@@ -1050,11 +1051,12 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create authorization migration router: %w", err)
 			}
-			if _, err := authz.NewClient(authzEngine, authzRegistry,
+			authzClient, err := authz.NewClient(authzEngine, authzRegistry,
 				authz.WithMigrationRouter(authzRouter),
 				authz.WithShadowRecorder(authz.NewShadowRecorder(logger, meterProvider)),
 				authz.WithBuildVersion(shortGitSHA()),
-			); err != nil {
+			)
+			if err != nil {
 				return fmt.Errorf("create authorization client: %w", err)
 			}
 
@@ -1700,7 +1702,7 @@ func newStartCommand() *cli.Command {
 				logger.InfoContext(ctx, "marketplace proxy: using local fixture repository")
 			}
 
-			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, temporalEnv, pluginsGitHub != nil))
+			projects.Attach(mux, projects.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, auditLogger, temporalEnv, pluginsGitHub != nil))
 			packages.Attach(mux, packages.NewService(logger, tracerProvider, db, sessionManager, authzEngine))
 
 			var pluginPublisher *plugins.Service
