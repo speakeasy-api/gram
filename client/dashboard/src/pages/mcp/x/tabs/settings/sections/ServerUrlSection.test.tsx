@@ -78,6 +78,37 @@ const slugValidation = vi.hoisted(() => vi.fn((..._args: unknown[]) => null));
 vi.mock("../../../useMcpEndpointSlugValidation", () => ({
   useMcpEndpointSlugValidation: slugValidation,
 }));
+const usageImpact = vi.hoisted(() => ({
+  current: {
+    data: {
+      serverName: "Example server",
+      signInRequired: true,
+      sharedSignIn: false,
+      activeConnectionCount: 2,
+      activeSubjectCount: 1,
+      sharedConnectionCount: 0,
+      subjects: [
+        {
+          subjectUrn: "user:alice",
+          subjectType: "user",
+          displayName: "Alice",
+          connectionCount: 2,
+          clientNames: [],
+          sharedSignIn: false,
+        },
+      ],
+      subjectsTruncated: false,
+    },
+    isFetching: false,
+    isPending: false,
+    isError: false,
+    fetchStatus: "idle",
+  },
+}));
+vi.mock("@gram/client/react-query/mcpServerUsageImpact.js", () => ({
+  useMcpServerUsageImpact: () => usageImpact.current,
+}));
+const updateEndpoint = vi.hoisted(() => vi.fn());
 const deleteEndpoint = vi.hoisted(() => vi.fn());
 vi.mock("@gram/client/react-query/deleteMcpEndpoint.js", () => ({
   useDeleteMcpEndpointMutation: () => ({
@@ -89,7 +120,7 @@ vi.mock("@gram/client/react-query/updateMcpEndpoint.js", () => ({
   useUpdateMcpEndpointMutation: () => ({
     isPending: false,
     isError: false,
-    mutate: vi.fn(),
+    mutate: updateEndpoint,
   }),
 }));
 vi.mock("@tanstack/react-query", async (importOriginal) => ({
@@ -121,6 +152,13 @@ const customEndpoint = {
   customDomainId: "domain-1",
 } as McpEndpoint;
 
+function confirmWithServerName(buttonName: string) {
+  fireEvent.change(screen.getByLabelText("Type the server name to confirm"), {
+    target: { value: "Example server" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: buttonName }));
+}
+
 function renderSection(mcpServer: McpServer, endpoints: McpEndpoint[]) {
   render(
     <TooltipProvider>
@@ -138,6 +176,7 @@ function renderSection(mcpServer: McpServer, endpoints: McpEndpoint[]) {
 afterEach(() => {
   cleanup();
   deleteEndpoint.mockReset();
+  updateEndpoint.mockReset();
   networkIngress.current = undefined;
   domainsOverride.current = undefined;
   domainsError.current = false;
@@ -160,9 +199,29 @@ describe("ServerUrlSection", () => {
 
     expect(screen.getAllByLabelText("Remove address")).toHaveLength(2);
     fireEvent.click(screen.getAllByLabelText("Remove address")[1]!);
+    expect(screen.getByText("Alice")).toBeTruthy();
+    expect(deleteEndpoint).not.toHaveBeenCalled();
+    confirmWithServerName("Remove address");
     expect(deleteEndpoint).toHaveBeenCalledWith({
       request: { id: "endpoint-3" },
     });
+  });
+
+  it("shows who is connected and waits for the server name before renaming an address", () => {
+    renderSection(hosted(), [platformEndpoint]);
+
+    fireEvent.change(screen.getByPlaceholderText("endpoint"), {
+      target: { value: "renamed" },
+    });
+    fireEvent.click(screen.getByLabelText("Save address"));
+    expect(screen.getByText("Change this address?")).toBeTruthy();
+    expect(screen.getByText(/2 active connections from 1 caller/)).toBeTruthy();
+    const confirm = screen.getByRole("button", { name: "Change address" });
+    expect((confirm as HTMLButtonElement).disabled).toBe(true);
+    expect(updateEndpoint).not.toHaveBeenCalled();
+
+    confirmWithServerName("Change address");
+    expect(updateEndpoint).toHaveBeenCalledTimes(1);
   });
 
   it("confirms before removing the last address that can serve", () => {
@@ -313,7 +372,7 @@ describe("ServerUrlSection", () => {
     );
 
     fireEvent.click(screen.getByLabelText("Remove address"));
-    fireEvent.click(screen.getByRole("button", { name: "Remove address" }));
+    confirmWithServerName("Remove address");
     expect(deleteEndpoint).toHaveBeenCalledWith({
       request: { id: "endpoint-1" },
     });

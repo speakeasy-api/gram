@@ -30,6 +30,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 	"go.opentelemetry.io/otel/codes"
 	"go.opentelemetry.io/otel/trace"
+	"golang.org/x/sync/semaphore"
 )
 
 // metaCodeBackend retains admission identity; the runner cannot choose routing
@@ -178,7 +179,7 @@ func (b *metaCodeBackend) currentState(ctx context.Context, execute, recovery bo
 		return ctx, nil, nil, b.revoke()
 	}
 	// The authenticated reference is unchanged, so reuse this execution's
-	// immutable consent record without another Redis read or upstream discovery.
+	// consent snapshot without another Redis read or upstream discovery.
 	expired := b.gate.catalogRecoveryOnly || (b.gate.catalog != nil && !time.Now().Before(b.gate.catalog.ExpiresAt))
 	if expired && !recovery {
 		return ctx, nil, nil, codemode.ErrConsentRequired
@@ -282,9 +283,9 @@ func (b *metaCodeBackend) catalog(ctx context.Context, gate *metaGateContext, me
 	if !ok {
 		return nil, codemode.ErrToolUnavailable
 	}
-	catalog, err := b.service.describeMetaMember(context.WithValue(ctx, codeMemberSessionsKey{}, b.sessions), b.service.logger, gate, member)
+	catalog, err := b.describe(ctx, gate, member)
 	if err != nil {
-		return nil, codeHelperFailure(err)
+		return nil, err
 	}
 	result := &codemode.Catalog{Tools: make([]codemode.Tool, 0, len(catalog.entries)), Incomplete: catalog.incomplete}
 	for _, entry := range catalog.entries {
@@ -297,6 +298,18 @@ func (b *metaCodeBackend) catalog(ctx context.Context, gate *metaGateContext, me
 		result.Tools = append(result.Tools, codemode.Tool{Path: path, Name: entry.Name, Description: entry.Description, Definition: definition, Fingerprint: codeToolFingerprint(member, definition)})
 	}
 	return result, nil
+}
+
+// describe loads a member's catalog over the execution's shared sessions,
+// retrying a transient failure as a Direct listing does. The catalog host
+// already bounds concurrent member listings, so this describe takes its own
+// slot, and a member waiting to retry keeps the host's.
+func (b *metaCodeBackend) describe(ctx context.Context, gate *metaGateContext, member metaMember) (*memberCatalog, error) {
+	described := b.service.describeMetaMemberWithRetry(context.WithValue(ctx, codeMemberSessionsKey{}, b.sessions), b.service.logger, gate, member, semaphore.NewWeighted(1))
+	if described.err != nil || described.catalog == nil {
+		return nil, codeHelperFailure(described.err)
+	}
+	return described.catalog, nil
 }
 
 func (b *metaCodeBackend) Describe(ctx context.Context, path string) (*codemode.Tool, error) {
@@ -312,9 +325,9 @@ func (b *metaCodeBackend) Describe(ctx context.Context, path string) (*codemode.
 	if !ok {
 		return nil, codemode.ErrToolUnavailable
 	}
-	catalog, err := b.service.describeMetaMember(context.WithValue(ctx, codeMemberSessionsKey{}, b.sessions), b.service.logger, gate, member)
+	catalog, err := b.describe(ctx, gate, member)
 	if err != nil {
-		return nil, codeHelperFailure(err)
+		return nil, err
 	}
 	entry, ok := catalog.byName[name]
 	if !ok {

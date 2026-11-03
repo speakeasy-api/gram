@@ -162,7 +162,7 @@ func (f deviceAgentGrantFixture) workloadPolicy(t *testing.T) *workloadpolicy.Se
 	redisClient, err := infra.NewRedisClient(t, 0)
 	require.NoError(t, err)
 	return workloadpolicy.NewService(f.ti.logger, f.ti.tracerProvider, f.ti.conn, f.ti.sessionManager, f.ti.authzEngine, f.ti.audit,
-		authserver.Hosts{ServerURL: f.ti.serverURL.String(), AuthenticationHostBaseURL: "", PlatformHosts: nil}, ratelimit.NewRedisStore(redisClient))
+		authserver.Hosts{ServerURL: f.ti.serverURL.String(), AuthenticationHostBaseURL: "", PlatformHosts: nil}, ratelimit.NewRedisStore(redisClient), nil)
 }
 
 // assertion signs an assertion as the device, addressed to aud.

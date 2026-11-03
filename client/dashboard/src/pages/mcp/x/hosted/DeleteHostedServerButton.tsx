@@ -1,6 +1,8 @@
 import { Button } from "@/components/ui/Button";
 import { Dialog } from "@/components/ui/Dialog";
 import { Text } from "@/components/ui/Text";
+import { ServerUsageConfirmation } from "@/components/mcp-server-usage/ServerUsageConfirmation";
+import { useServerUsageConfirmation } from "@/components/mcp-server-usage/useServerUsageConfirmation";
 import { useSdkClient } from "@/contexts/Sdk";
 import { useTelemetry } from "@/contexts/Telemetry";
 import type { Toolset } from "@/lib/toolTypes";
@@ -31,9 +33,15 @@ export function DeleteHostedServerButton({
   const deployment = deploymentResult?.deployment;
   const [isDeleteDialogOpen, setIsDeleteDialogOpen] = useState(false);
   const [isDeletingMcpServer, setIsDeletingMcpServer] = useState(false);
+  // A toolset's canonical hosted server shares the toolset's id.
+  const usage = useServerUsageConfirmation({
+    mcpServerId: toolset.id,
+    serverName: toolset.name,
+    open: isDeleteDialogOpen,
+  });
 
   const handleDeleteMcpServer = async () => {
-    if (!toolset) return;
+    if (!toolset || !usage.canConfirm) return;
 
     setIsDeletingMcpServer(true);
 
@@ -103,7 +111,7 @@ export function DeleteHostedServerButton({
           if (!isDeletingMcpServer) setIsDeleteDialogOpen(open);
         }}
       >
-        <Dialog.Content>
+        <Dialog.Content className="max-w-2xl!">
           <Dialog.Header>
             <Dialog.Title>Delete MCP Server</Dialog.Title>
           </Dialog.Header>
@@ -116,6 +124,10 @@ export function DeleteHostedServerButton({
               clients will immediately lose access. This action cannot be
               undone.
             </Text>
+            <ServerUsageConfirmation
+              state={usage}
+              disabled={isDeletingMcpServer}
+            />
             <div className="flex justify-end space-x-2">
               <Button
                 variant="secondary"
@@ -127,7 +139,7 @@ export function DeleteHostedServerButton({
               <Button
                 variant="destructive-primary"
                 onClick={() => void handleDeleteMcpServer()}
-                disabled={isDeletingMcpServer}
+                disabled={isDeletingMcpServer || !usage.canConfirm}
               >
                 Delete MCP Server
               </Button>

@@ -5,6 +5,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	assetrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpregistry/repo"
 	"github.com/stretchr/testify/require"
 	"net/url"
 	"strings"
@@ -54,13 +55,20 @@ func TestCatalogIconsAssociation(t *testing.T) {
 		_, err = s.Save(ctx, e.ID, Token(e), bad)
 		require.Error(t, err)
 	}
-	for _, assignment := range []string{"content_type = 'image/png'", "project_id = '00000000-0000-4000-8000-000000000001'", "deleted_at = clock_timestamp()"} {
-		_, err = db.Exec(ctx, "UPDATE assets SET "+assignment+" WHERE id = $1", asset.ID) //nolint:glint // notestingrawsql: exercise invalid asset association states.
-		require.NoError(t, err)
+	fixtures := repo.New(db)
+	for _, invalidate := range []func() error{
+		func() error {
+			return fixtures.SetAssetContentTypeFixture(ctx, repo.SetAssetContentTypeFixtureParams{ContentType: "image/png", ID: asset.ID})
+		},
+		func() error {
+			return fixtures.SetAssetProjectFixture(ctx, repo.SetAssetProjectFixtureParams{ProjectID: uuid.NullUUID{UUID: uuid.MustParse("00000000-0000-4000-8000-000000000001"), Valid: true}, ID: asset.ID})
+		},
+		func() error { return fixtures.SoftDeleteAssetFixture(ctx, asset.ID) },
+	} {
+		require.NoError(t, invalidate())
 		_, err = s.Save(ctx, e.ID, Token(e), raw)
 		require.Error(t, err)
-		_, err = db.Exec(ctx, "UPDATE assets SET content_type = 'image/svg+xml', project_id = NULL, deleted_at = NULL WHERE id = $1", asset.ID) //nolint:glint // notestingrawsql: restore the fixture after each invalid association.
-		require.NoError(t, err)
+		require.NoError(t, fixtures.RestorePlatformIconAssetFixture(ctx, asset.ID))
 	}
 	retained, err := s.Get(ctx, e.ID)
 	require.NoError(t, err)

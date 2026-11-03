@@ -59,7 +59,7 @@ func (c *m3StripeWebhookClient) GetCheckoutSession(context.Context, string) (*st
 	return &state, nil
 }
 
-func (*m3StripeWebhookClient) GetSubscription(context.Context, string) (*stripeclient.SubscriptionState, error) {
+func (*m3StripeWebhookClient) GetSubscription(context.Context, string, ...stripeclient.GetSubscriptionOption) (*stripeclient.SubscriptionState, error) {
 	return nil, errors.New("not implemented")
 }
 
