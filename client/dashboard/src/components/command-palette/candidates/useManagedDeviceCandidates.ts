@@ -7,18 +7,19 @@ import {
 } from "@/pages/org/device-integrations/coverage-states";
 import { useOrgRoutes } from "@/routes";
 import {
-  buildManagedDevicesInfiniteQuery,
-  type ManagedDevicesPageParams,
-} from "@gram/client/react-query/managedDevices.js";
+  buildFleetDevicesInfiniteQuery,
+  type FleetDevicesPageParams,
+} from "@gram/client/react-query/fleetDevices.js";
 import { useInfiniteQuery } from "@tanstack/react-query";
 import { useEffect, useMemo, useRef } from "react";
 import { useNavigate } from "react-router";
 import type { LauncherCandidate } from "./types";
 
 /**
- * MDM-synced devices by hostname or serial, opening the device's panel on its
- * integration page. Hostnames often carry a person's name and every device
- * names its assigned user, so these stay fuzzy-only.
+ * Every device in the fleet by hostname or serial, MDM-synced or reported only
+ * by its agent, opening the device's panel on the Devices tab. Hostnames often
+ * carry a person's name and every device names its user, so these stay
+ * fuzzy-only.
  */
 export function useManagedDeviceCandidates({
   enabled,
@@ -30,7 +31,7 @@ export function useManagedDeviceCandidates({
   const orgRoutes = useOrgRoutes();
   const navigate = useNavigate();
 
-  const devicesQuery = buildManagedDevicesInfiniteQuery(sdk, { limit: 200 });
+  const devicesQuery = buildFleetDevicesInfiniteQuery(sdk, { limit: 200 });
   const {
     data,
     fetchNextPage,
@@ -40,7 +41,7 @@ export function useManagedDeviceCandidates({
   } = useInfiniteQuery({
     ...devicesQuery,
     queryKey: [...devicesQuery.queryKey, organization.id],
-    initialPageParam: undefined as ManagedDevicesPageParams,
+    initialPageParam: undefined as FleetDevicesPageParams,
     getNextPageParam: (page) => page["~next"],
     enabled,
     retry: false,
@@ -70,37 +71,42 @@ export function useManagedDeviceCandidates({
 
   return useMemo(() => {
     if (!enabled) return [];
-    return (data?.pages ?? [])
-      .flatMap((page) => page.result.devices)
-      .filter((device) => isProviderIdVisible(device.provider))
-      .map((device): LauncherCandidate => {
-        const href = orgRoutes.deviceAgent.mdmDetail.href(device.provider);
-        return {
-          id: `managed-device:${device.id}`,
-          kind: "page",
-          title: device.hostname || device.serialNumber || "Unnamed device",
-          detail: ["Device", device.serialNumber, device.userEmail]
-            .filter(Boolean)
-            .join(" · "),
-          keywords: [
-            "device",
-            device.provider,
-            device.serialNumber ?? "",
-            device.externalId,
-            device.userEmail ?? "",
-          ].filter(Boolean),
-          verbs: ["open"],
-          fuzzyOnly: true,
-          icon: "laptop",
-          group: "Devices",
-          run: () => {
-            const state: LinkedDeviceState = { device };
-            void navigate(
-              `${href}?${LINKED_DEVICE_PARAM}=${encodeURIComponent(device.id)}`,
-              { state },
-            );
-          },
-        };
-      });
+    const href = orgRoutes.deviceAgent.devices.href();
+    return (
+      (data?.pages ?? [])
+        .flatMap((page) => page.result.devices)
+        // An agent-only machine has no provider to hide it behind.
+        .filter(
+          (device) => !device.provider || isProviderIdVisible(device.provider),
+        )
+        .map((device): LauncherCandidate => {
+          return {
+            id: `managed-device:${device.id}`,
+            kind: "page",
+            title: device.hostname || device.serialNumber || "Unnamed device",
+            detail: ["Device", device.serialNumber, device.userEmail]
+              .filter(Boolean)
+              .join(" · "),
+            keywords: [
+              "device",
+              device.provider ?? "",
+              device.serialNumber ?? "",
+              device.externalId ?? "",
+              device.userEmail ?? "",
+            ].filter(Boolean),
+            verbs: ["open"],
+            fuzzyOnly: true,
+            icon: "laptop",
+            group: "Devices",
+            run: () => {
+              const state: LinkedDeviceState = { device };
+              void navigate(
+                `${href}?${LINKED_DEVICE_PARAM}=${encodeURIComponent(device.id)}`,
+                { state },
+              );
+            },
+          };
+        })
+    );
   }, [data, navigate, orgRoutes, enabled]);
 }

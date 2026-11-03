@@ -1,4 +1,5 @@
 import { cleanup, render } from "@testing-library/react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import type { GetSkillResult } from "@gram/client/models/components/getskillresult.js";
 const state = vi.hoisted(() => ({
@@ -13,7 +14,9 @@ vi.mock("@/hooks/useRBAC", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/useRBAC")>()),
   useRBAC: () => ({ isLoading: false, grants: state.grants }),
 }));
-vi.mock("@/routes", () => ({ useRoutes: () => ({}) }));
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
+}));
 vi.mock("@gram/client/react-query/skillEfficacyInsights.js", () => ({
   useSkillEfficacyInsights: state.query,
 }));
@@ -37,6 +40,7 @@ describe("skill insight collection permissions", () => {
         versionsLoading={false}
         versionsError={null}
       />,
+      { wrapper: MemoryRouter },
     );
     expect(state.query).toHaveBeenCalledWith(
       { skillIds: ["skill-a"], includeVersions: true },
@@ -54,6 +58,7 @@ describe("skill insight collection permissions", () => {
         versionsLoading={false}
         versionsError={null}
       />,
+      { wrapper: MemoryRouter },
     );
     expect(state.query).toHaveBeenLastCalledWith(
       expect.any(Object),
@@ -70,6 +75,7 @@ describe("skill insight collection permissions", () => {
         versionsLoading={false}
         versionsError={null}
       />,
+      { wrapper: MemoryRouter },
     );
     expect(state.query).toHaveBeenLastCalledWith(
       expect.any(Object),
@@ -89,6 +95,7 @@ describe("skill insight collection permissions", () => {
         versionsLoading={false}
         versionsError={null}
       />,
+      { wrapper: MemoryRouter },
     );
     expect(state.query).toHaveBeenLastCalledWith(
       expect.any(Object),

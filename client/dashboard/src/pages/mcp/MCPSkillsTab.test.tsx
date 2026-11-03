@@ -72,15 +72,8 @@ vi.mock("@/hooks/useRBAC", async (importOriginal) => {
 vi.mock("@gram/client/react-query/requestAccess.js", () => ({
   useRequestAccessMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    skills: { detail: { href: (id: string) => `/skills/${id}` } },
-    mcp: {
-      details: {
-        overview: { href: (slug: string) => `/mcp/${slug}/overview` },
-      },
-    },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@tanstack/react-query", () => ({ useQueryClient: () => ({}) }));
 vi.mock("@gram/client/react-query/skillLinks.js", () => ({
@@ -289,7 +282,7 @@ describe("MCPSkillsTabRoute", () => {
       <MCPSkillsTabRoute mcpServer={mcpServer} mcpServerSlug="toolset-a" />,
     );
     expect(screen.getByTestId("navigate").textContent).toBe(
-      "/mcp/toolset-a/overview",
+      "/org/projects/project/mcp/toolset-a/overview",
     );
     expect(state.links).not.toHaveBeenCalled();
   });

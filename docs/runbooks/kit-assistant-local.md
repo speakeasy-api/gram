@@ -123,9 +123,9 @@ files or command output.
    `expected_runtime_version`. Do not bypass busy-work or stale-version conflicts
    with database edits. A saved selection is not proof of runtime readiness.
 
-Preexisting transcript upgrades are unsupported by the pinned runtime. If a turn
-fails with `ErrKitUpgradeNoticeUnsupported`, use a new test conversation rather
-than importing history or fabricating a successful upgrade notice.
+Kit does not import earlier transcript. A new Kit session in a conversation with
+earlier assistant turns receives a notice in its first prompt that earlier
+messages are unavailable, then answers the current message.
 
 ## Update MCP configuration without removing other servers
 
@@ -245,7 +245,6 @@ credential revocation or a general retry API.
 | MCP is authenticated but discovery reports `subscriptions/listen: Method not found` | Optional subscription capability handling bug in AgentKit 0.11.2                         | Treat subscription/discovery failure separately from authentication. Use a runtime build with corrected optional-capability handling before accepting discovery as healthy; changing credentials does not fix the missing method. |
 | Tool results appear, but saved assistant text or tool calls are missing             | Adapter treats live chunks as transient or treats every tool update as only a result     | Use the chunk-reducing and tool-call-projecting adapter. Recover the resident journal through the guarded projector; do not send another prompt merely to repair saved output.                                                    |
 | Runtime startup reports saved metadata does not match authority                     | Empty reservation metadata is mishandled, or saved metadata belongs to another runtime   | Use the adapter that recognizes the empty reservation sentinel. Investigate nonempty authority mismatches; never clear saved metadata to force reuse.                                                                             |
-| `ErrKitUpgradeNoticeUnsupported`                                                    | The conversation requires a preexisting-transcript upgrade                               | Start a new test conversation. Do not fabricate imported history.                                                                                                                                                                 |
 
 ## Startup files and authority
 

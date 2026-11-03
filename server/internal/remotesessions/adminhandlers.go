@@ -3,7 +3,10 @@ package remotesessions
 import (
 	"context"
 	"errors"
+	"fmt"
 	"log/slog"
+	"maps"
+	"slices"
 	"strings"
 	"time"
 
@@ -16,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -1287,6 +1291,26 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 
 	txRepo := repo.New(dbtx)
 
+	// A platform-global client is reachable from several organizations. Both
+	// the discovery and each organization's scopes precede the first mutation,
+	// so they are held before any row lock is taken. Organizations are taken
+	// in a fixed order: two deletions reaching the same pair must not take
+	// them in opposite orders.
+	affected, err := serversLosingGlobalClient(ctx, dbtx, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list servers losing the global client").LogError(ctx, logger)
+	}
+	organizationIDs := slices.Sorted(maps.Keys(affected))
+	for _, organizationID := range organizationIDs {
+		scope := affected[organizationID]
+		if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, organizationID, scope.projects); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "lock auth client writer scope").LogError(ctx, logger)
+		}
+		if err := authclientbackfill.PreflightServerAssociations(ctx, dbtx, organizationID, scope.servers...); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "lock auth client scope of the affected servers").LogError(ctx, logger)
+		}
+	}
+
 	// Ownership is immutable. Authorize with the global-only lookup before
 	// the EMA guard takes its ID-only row lock.
 	if _, err := repo.New(dbtx).GetGlobalRemoteSessionClientByID(ctx, clientID); err != nil {
@@ -1298,6 +1322,9 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 
 	if err := guardEMABindingsForClient(ctx, txRepo, "", uuid.Nil, clientID); err != nil {
 		return err
+	}
+	if err := recheckGlobalClientAssociationScope(ctx, dbtx, clientID, affected); err != nil {
+		return err.LogWarn(ctx, logger)
 	}
 
 	deleted, err := txRepo.DeleteGlobalRemoteSessionClient(ctx, clientID)
@@ -1316,6 +1343,11 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 	if _, err := upstreamclientsrepo.New(dbtx).RemoveGlobalClientAssociations(ctx, deleted.ID); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "remove deleted client's mcp server associations").LogError(ctx, logger)
 	}
+	for _, organizationID := range organizationIDs {
+		if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, organizationID, affected[organizationID].servers...); err != nil {
+			return oops.E(oops.CodeUnexpected, err, "sync auth clients of the global client's servers").LogError(ctx, logger)
+		}
+	}
 
 	if err := dbtx.Commit(ctx); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "commit transaction").LogError(ctx, logger)
@@ -1329,4 +1361,64 @@ func (s *Service) DeleteGlobalClient(ctx context.Context, payload *adminrsgen.De
 	logGlobalMutation(ctx, logger, authCtx, "delete", "client", deleted.ID.String())
 
 	return nil
+}
+
+// globalClientScope is one organization's servers losing a global client and
+// the projects they sit in, which its writer scope has to name.
+type globalClientScope struct {
+	servers  []uuid.UUID
+	projects []uuid.UUID
+}
+
+// serversLosingGlobalClient is every live MCP server associated with a
+// platform-global client, grouped by the organization that owns it.
+// Tombstoned associations are included so an earlier partial removal is
+// repaired rather than left behind. The
+// removal spans organizations and reports only a count, so the ids are read
+// first and each organization's typed records are decided again on its own.
+// recheckGlobalClientAssociationScope confirms the servers discovered before
+// the scopes were taken are still the servers this deletion will remove.
+// Associating a server with the client takes a key-share lock on its row, so
+// once the EMA guard holds that row the set can no longer change; this catches
+// one that committed in the window before it. Removing it without re-deciding
+// it would leave the typed link behind, so the caller retries on the fresh set.
+func recheckGlobalClientAssociationScope(ctx context.Context, dbtx pgx.Tx, clientID uuid.UUID, discovered map[string]globalClientScope) *oops.ShareableError {
+	current, err := serversLosingGlobalClient(ctx, dbtx, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "re-list servers losing the global client")
+	}
+	if len(current) != len(discovered) {
+		return oops.E(oops.CodeConflict, nil, "this client's MCP servers changed while it was being deleted; reload and retry")
+	}
+	for organizationID, scope := range current {
+		if !slices.Equal(discovered[organizationID].servers, scope.servers) {
+			return oops.E(oops.CodeConflict, nil, "this client's MCP servers changed while it was being deleted; reload and retry")
+		}
+	}
+	return nil
+}
+
+func serversLosingGlobalClient(ctx context.Context, dbtx pgx.Tx, clientID uuid.UUID) (map[string]globalClientScope, error) {
+	rows, err := upstreamclientsrepo.New(dbtx).ListServersAssociatedWithClient(ctx, upstreamclientsrepo.ListServersAssociatedWithClientParams{
+		RemoteSessionClientID: clientID,
+		OrganizationID:        pgtype.Text{String: "", Valid: false},
+	})
+	if err != nil {
+		return nil, fmt.Errorf("list servers losing global client: %w", err)
+	}
+	affected := map[string]globalClientScope{}
+	seen := map[string]map[uuid.UUID]bool{}
+	for _, row := range rows {
+		scope := affected[row.OrganizationID]
+		scope.servers = append(scope.servers, row.McpServerID)
+		if seen[row.OrganizationID] == nil {
+			seen[row.OrganizationID] = map[uuid.UUID]bool{}
+		}
+		if !seen[row.OrganizationID][row.ProjectID] {
+			seen[row.OrganizationID][row.ProjectID] = true
+			scope.projects = append(scope.projects, row.ProjectID)
+		}
+		affected[row.OrganizationID] = scope
+	}
+	return affected, nil
 }

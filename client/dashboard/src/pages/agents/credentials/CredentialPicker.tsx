@@ -22,11 +22,21 @@ const PLATFORM_PREFIX = "platform:";
 
 /** Platforms whose issuer is known but whose preset has not shipped yet. */
 const PLANNED = [
-  { key: "github-actions", displayName: "GitHub Actions" },
   { key: "kubernetes", displayName: "Kubernetes" },
   { key: "spiffe", displayName: "SPIFFE" },
   { key: "gcp", displayName: "Google Cloud" },
 ];
+
+/**
+ * The platforms to name as coming soon: those planned that the catalog does
+ * not list, and those it lists but does not offer yet.
+ */
+function comingSoon(entries: CatalogEntry[]): { displayName: string }[] {
+  const planned = PLANNED.filter(
+    (plan) => !entries.some((entry) => entry.key === plan.key),
+  );
+  return [...planned, ...entries.filter((entry) => !entry.enabled)];
+}
 
 function selectedValue(
   credential: "api-key" | "workload",
@@ -132,6 +142,8 @@ function PlatformPresets({
   return (
     <>
       {entries.map((entry) => {
+        // Not offered yet, so named among the platforms coming soon instead.
+        if (!entry.enabled) return null;
         if (!hasPlatformSetup(entry)) {
           return <UnavailablePreset key={entry.key} entry={entry} />;
         }
@@ -199,12 +211,7 @@ export function CredentialPicker({
   const advancedShown = advancedOpen || customChosen;
   // Only an answered catalog can say which platforms it lacks. While it loads
   // or fails, every planned platform would read as absent.
-  const planned =
-    isPending || isError
-      ? []
-      : PLANNED.filter(
-          (plan) => !entries.some((entry) => entry.key === plan.key),
-        );
+  const planned = isPending || isError ? [] : comingSoon(entries);
 
   return (
     <RadioCardGroup

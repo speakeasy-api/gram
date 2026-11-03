@@ -23,6 +23,8 @@ import (
 // Built-in platform endpoints are intentionally unsupported: no human token or
 // inference bearer is ever substituted for their missing machine-auth contract.
 type KitLocalCompositionConfig struct {
+	// Set only by the native GKE composition, never from token claims.
+	nativeIdentity *KitGKEIdentityConfig
 	// Derived only from the exact persisted attachment during bootstrap.
 	mcpEnvironment string
 	// PersistedMCP derives production machine connections from the assistant attachment.
