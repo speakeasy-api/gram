@@ -100,11 +100,13 @@ func TestLookupCNAMERecordFallsBackAfterServerFailure(t *testing.T) {
 		_ = w.WriteMsg(new(dnswire.Msg).SetRcode(request, dnswire.RcodeServerFailure))
 	})
 	working := startCNAMEServer(t, func(w dnswire.ResponseWriter, request *dnswire.Msg) {
-		_ = w.WriteMsg(new(dnswire.Msg).SetReply(request))
+		reply := new(dnswire.Msg).SetReply(request)
+		reply.Answer = []dnswire.RR{&dnswire.CNAME{Hdr: dnswire.RR_Header{Name: "domain.example.", Rrtype: dnswire.TypeCNAME, Class: dnswire.ClassINET}, Target: "fallback.example."}}
+		_ = w.WriteMsg(reply)
 	})
 	got, err := lookupCNAMERecord(t.Context(), "domain.example", []string{failed, working})
 	require.NoError(t, err)
-	require.Empty(t, got)
+	require.Equal(t, "fallback.example.", got)
 }
 
 func TestLookupCNAMERecordDeadline(t *testing.T) {

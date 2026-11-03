@@ -108,8 +108,8 @@ func DNSTarget(suffix string, token pgtype.Text) (string, bool) {
 // normalized (lowercase, no trailing dot). It reports false when per-domain
 // targets are disabled (empty suffix) or name is not exactly one label under
 // suffix shaped like a token (DNSTargetTokenLength lowercase base32
-// characters), so infrastructure names under the suffix are not mistaken for
-// another domain's target.
+// characters). This is a shape check, not an ownership lookup: an infrastructure
+// label with the same shape is also recognized as a token.
 func ParseDNSTarget(suffix, name string) (string, bool) {
 	if suffix == "" {
 		return "", false

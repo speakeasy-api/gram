@@ -26,9 +26,9 @@ import (
 )
 
 // ErrTypeDNSNotFound is retained for its historical value: older workflow
-// histories carry non-retryable application errors with this type. New code
-// reports missing DNS as a dns_pending result instead so the registration
-// workflow can wait out slow propagation.
+// histories carry non-retryable application errors with this type. Verification
+// reports missing or mismatched ownership TXT records as dns_pending so the
+// workflow can wait out propagation. DNS routing does not gate verification.
 const ErrTypeDNSNotFound = "CustomDomainDNSNotFound"
 
 // ErrTypeCustomDomainInvalid tags non-retryable failures: malformed or
@@ -47,7 +47,7 @@ type VerifyCustomDomainStatus string
 const (
 	// VerifyStatusVerified means ownership was proven and persisted.
 	VerifyStatusVerified VerifyCustomDomainStatus = "verified"
-	// VerifyStatusDNSPending means the required records were missing or wrong
+	// VerifyStatusDNSPending means the ownership TXT record was missing or wrong
 	// in a way indistinguishable from in-flight propagation; the workflow
 	// should re-check later rather than fail.
 	VerifyStatusDNSPending VerifyCustomDomainStatus = "dns_pending"

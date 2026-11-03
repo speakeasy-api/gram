@@ -8,13 +8,15 @@ After that prerequisite, token/API foundations, observation workers, and dashboa
 
 The existing daily sweep refreshes activated, verified domains. No one-time backfill command or manual check is required for rollout. Allow one full daily interval after the new workers have replaced all old workers.
 
-`dns_checked_at` identifies the DNS observation independently of older workers. Infrastructure and DNS belong to the same check only when `dns_checked_at` and `health_checked_at` match. The dashboard and MCP diagnostics show infrastructure as not checked separately when they do not match. A non-matching pair is expected temporarily during a rolling deployment.
+`dns_checked_at` identifies the DNS observation independently of older workers. Infrastructure and DNS belong to the same check only when `dns_checked_at` and `health_checked_at` match. After the product surfaces in #8411 deploy, the dashboard and MCP diagnostics show infrastructure as not checked separately when they do not match. A non-matching pair is expected temporarily during a rolling deployment.
 
 Old workers can still execute the previous automatic-disable behavior until they drain. Do not enable per-domain-target adoption until the new worker rollout is complete. Reverting to the old worker image restores that behavior; prefer a forward fix when possible. Leave the additive schema in place on application rollback.
 
 ## Optional immediate check for one domain
 
-1. Wait for the new worker rollout to complete in the intended environment.
+The instructions below require the dashboard/API surfaces from #8411, which expose separate DNS timestamps and **Check again** for every verified, activated domain. Before #8411 deploys, the existing dashboard offers **Check again** only on the unhealthy card and does not show separate DNS timestamps. Use the fleet refresh below to refresh other active domains without waiting for the surfaces.
+
+1. Wait for the new worker rollout and #8411 surfaces to complete in the intended environment.
 2. Sign in as an organization administrator and open **Organization → Network Access** (`/<org>/domains`).
 3. In the verified, activated custom-domain card, select **Check again**.
 4. Wait for the request to finish. Confirm the DNS check time is after the rollout. The DNS result and infrastructure result are separate; `unconfirmed` can describe a working proxied domain.
@@ -45,6 +47,6 @@ mise exec -- temporal --profile '<PROFILE>' workflow show \
   --workflow-id "$domain_refresh_id"
 ```
 
-The sweep starts detached per-domain children; the parent's completion alone does not establish that every check finished. In Temporal, follow the child workflow links and confirm successful completion. In the dashboard or staff custom-domain view, confirm DNS timestamps are after the rollout and match health timestamps for checked domains. Inactive and unverified rows are intentionally excluded. The sweep also reports orphaned managed resources; it does not delete them.
+The sweep starts detached per-domain children; the parent's completion alone does not establish that every check finished. In Temporal, follow the child workflow links and confirm successful completion. Once #8411 is deployed, in the dashboard or staff custom-domain view, confirm DNS timestamps are after the rollout and match health timestamps for checked domains. Inactive and unverified rows are intentionally excluded. The sweep also reports orphaned managed resources; it does not delete them.
 
 The sweep can send the normal infrastructure-unhealthy notification when it detects a new infrastructure failure. DNS findings alone do not send that notification.
