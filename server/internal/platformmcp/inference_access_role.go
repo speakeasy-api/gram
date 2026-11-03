@@ -110,10 +110,24 @@ func (s *AccessRoleMutationService) ConfigureInference(ctx context.Context, prin
 	}
 	// Only inference grants change here, so role delivery cannot gain MCP Use
 	// access and needs no administrator exposure-approval marker.
+	summary, receipt, current, err := s.updateRoleGrants(ctx, principal, project, workosOrgID, operationConfigureInferenceAccessRole, roleID, input.RoleReference, input.ExpectedVersion, input.IdempotencyKey, normalized, addGrants, removeGrants)
+	if err != nil {
+		return ConfigureInferenceAccessRoleOutput{}, err
+	}
+	return ConfigureInferenceAccessRoleOutput{Role: summary, ProjectID: project.ID.String(), Scope: string(authz.ScopeInferenceExecute), AllProjects: input.AllProjects, ExactGrantPresent: hasInferenceAccessRoleGrant(current, project.ID, input.AllProjects), Receipt: riskMutationToolReceipt(receipt)}, nil
+}
+
+// updateRoleGrants applies one confirmed grant delta to a custom role under
+// the receipt, version and lock safeguards every single-scope role tool shares,
+// then reads the role again: a replayed receipt is a historical write, not live
+// access.
+func (s *AccessRoleMutationService) updateRoleGrants(ctx context.Context, principal Principal, project ResolvedProject, workosOrgID, operation, roleID, roleReference, expectedVersion, idempotencyKey string, normalized any, addGrants, removeGrants []*accessgen.RoleGrant) (AccessRoleMutationSummary, OperationReceipt, *accessgen.Role, error) {
+	var zeroSummary AccessRoleMutationSummary
+	var zeroReceipt OperationReceipt
 	// A replayed receipt must not repeat the role write or reconciliation.
 	var delivery access.RoleReconciliation
-	receipt, err := s.receipts.execute(ctx, principal, project, operationConfigureInferenceAccessRole, input.IdempotencyKey, normalized, s.charge(principal), func(ctx context.Context, tx pgx.Tx) (AccessRoleMutationReceiptResult, error) {
-		if _, err := s.reads.references.Decode(input.RoleReference, principal, subjectKindAccessRole, s.reads.now().UTC()); err != nil {
+	receipt, err := s.receipts.execute(ctx, principal, project, operation, idempotencyKey, normalized, s.charge(principal), func(ctx context.Context, tx pgx.Tx) (AccessRoleMutationReceiptResult, error) {
+		if _, err := s.reads.references.Decode(roleReference, principal, subjectKindAccessRole, s.reads.now().UTC()); err != nil {
 			return AccessRoleMutationReceiptResult{}, accessRoleMutationNotFound()
 		}
 		roleUUID, parseErr := uuid.Parse(roleID)
@@ -133,7 +147,7 @@ func (s *AccessRoleMutationService) ConfigureInference(ctx context.Context, prin
 			return AccessRoleMutationReceiptResult{}, accessRoleMutationNotFound()
 		}
 		version, versionErr := s.roleVersion(current)
-		if versionErr != nil || !hmac.Equal([]byte(version), []byte(input.ExpectedVersion)) {
+		if versionErr != nil || !hmac.Equal([]byte(version), []byte(expectedVersion)) {
 			return AccessRoleMutationReceiptResult{}, accessRoleMutationConflict("The access role changed after it was read. Read it again and retry with the new version.")
 		}
 		result, reconciliation, err := s.backend.UpdateRoleTx(ctx, tx, principal.OrganizationID, workosOrgID, access.RoleAuditActor{Principal: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), DisplayName: nil}, &accessgen.UpdateRolePayload{ApikeyToken: nil, SessionToken: nil, ID: roleID, Name: nil, Description: nil, AddGrants: addGrants, RemoveGrants: removeGrants, MemberIds: nil, AgentIds: nil})
@@ -147,31 +161,30 @@ func (s *AccessRoleMutationService) ConfigureInference(ctx context.Context, prin
 		return s.receiptResult(result.After, result.Slug, "updated", "complete")
 	})
 	if err != nil {
-		return ConfigureInferenceAccessRoleOutput{}, err
+		return zeroSummary, zeroReceipt, nil, err
 	}
 	if !receipt.Replayed {
 		s.backend.ReconcileRoleDelivery(ctx, delivery)
 	}
-	result, err := decodeAccessRoleMutationReceipt(operationConfigureInferenceAccessRole, receipt.ResultPayload)
+	result, err := decodeAccessRoleMutationReceipt(operation, receipt.ResultPayload)
 	if err != nil {
-		return ConfigureInferenceAccessRoleOutput{}, err
+		return zeroSummary, zeroReceipt, nil, err
 	}
 	summary, err := s.outputSummary(principal, result)
 	if err != nil {
-		return ConfigureInferenceAccessRoleOutput{}, err
+		return zeroSummary, zeroReceipt, nil, err
 	}
-	// Verify current state separately: receipt replay is a historical write, not live access.
 	tx, err := s.reads.db.Begin(ctx)
 	if err != nil {
-		return ConfigureInferenceAccessRoleOutput{}, accessRoleMutationUnavailable(err)
+		return zeroSummary, zeroReceipt, nil, accessRoleMutationUnavailable(err)
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 	current, err := s.backend.GetRoleByIDTx(ctx, tx, principal.OrganizationID, roleID)
 	if err != nil {
-		return ConfigureInferenceAccessRoleOutput{}, classifyAccessRoleBackendError(err)
+		return zeroSummary, zeroReceipt, nil, classifyAccessRoleBackendError(err)
 	}
 	if current == nil {
-		return ConfigureInferenceAccessRoleOutput{}, accessRoleMutationNotFound()
+		return zeroSummary, zeroReceipt, nil, accessRoleMutationNotFound()
 	}
-	return ConfigureInferenceAccessRoleOutput{Role: summary, ProjectID: project.ID.String(), Scope: string(authz.ScopeInferenceExecute), AllProjects: input.AllProjects, ExactGrantPresent: hasInferenceAccessRoleGrant(current, project.ID, input.AllProjects), Receipt: riskMutationToolReceipt(receipt)}, nil
+	return summary, receipt, current, nil
 }
