@@ -350,7 +350,7 @@ const RouteProvider = () => {
     const orgActions = orgRoutesToNavActions(
       pagedOrgRoutes,
       showPlatformAdmin,
-      hasAnyScope(["org:read", "org:admin"]),
+      hasAnyScope,
     );
 
     const allActions = [...projectActions, ...orgActions];

@@ -1378,6 +1378,16 @@ func (q *Queries) ExpireActivePlatformMCPOnboardingWorkflow(ctx context.Context,
 	return result.RowsAffected(), nil
 }
 
+const expirePlatformMCPFeedbackFixture = `-- name: ExpirePlatformMCPFeedbackFixture :exec
+UPDATE platform_mcp_feedback SET expires_at = clock_timestamp() - interval '1 second' WHERE id = $1
+`
+
+// Test fixture: backdates retention to simulate expiry.
+func (q *Queries) ExpirePlatformMCPFeedbackFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, expirePlatformMCPFeedbackFixture, id)
+	return err
+}
+
 const getActivePlatformMCPCatalogRegistration = `-- name: GetActivePlatformMCPCatalogRegistration :one
 SELECT id, organization_id, project_id, source_kind, catalog_provider, catalog_reference, status, remote_mcp_server_id, remote_mcp_server_owned, user_session_issuer_id, user_session_issuer_owned, mcp_server_id, mcp_server_owned, mcp_endpoint_id, mcp_endpoint_owned, connection_id, connection_generation, user_id, acting_surface, created_at, updated_at, deleted_at, deleted
 FROM platform_mcp_catalog_registrations
@@ -2654,6 +2664,38 @@ func (q *Queries) GetPlatformMCPFeedbackByIdempotencyKey(ctx context.Context, ar
 		&i.DeliveryState,
 		&i.ExpiresAt,
 		&i.InputHash,
+	)
+	return i, err
+}
+
+const getPlatformMCPFeedbackFixture = `-- name: GetPlatformMCPFeedbackFixture :one
+SELECT organization_id, connection_id, connection_generation, rating, note, delivery_state, expires_at
+FROM platform_mcp_feedback
+WHERE id = $1
+`
+
+type GetPlatformMCPFeedbackFixtureRow struct {
+	OrganizationID       string
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
+	Rating               pgtype.Int4
+	Note                 pgtype.Text
+	DeliveryState        string
+	ExpiresAt            pgtype.Timestamptz
+}
+
+// Test fixture: reads stored feedback columns that no production query returns.
+func (q *Queries) GetPlatformMCPFeedbackFixture(ctx context.Context, id uuid.UUID) (GetPlatformMCPFeedbackFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPFeedbackFixture, id)
+	var i GetPlatformMCPFeedbackFixtureRow
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.ConnectionID,
+		&i.ConnectionGeneration,
+		&i.Rating,
+		&i.Note,
+		&i.DeliveryState,
+		&i.ExpiresAt,
 	)
 	return i, err
 }
@@ -7670,6 +7712,16 @@ func (q *Queries) MarkPlatformMCPConnectionReauthorizationRequired(ctx context.C
 		&i.UpdatedAt,
 	)
 	return i, err
+}
+
+const pingPlatformMCPDatabaseFixture = `-- name: PingPlatformMCPDatabaseFixture :exec
+SELECT 1
+`
+
+// Test fixture: proves a pooled connection is still healthy.
+func (q *Queries) PingPlatformMCPDatabaseFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, pingPlatformMCPDatabaseFixture)
+	return err
 }
 
 const platformMCPOperationReceiptInputClaimed = `-- name: PlatformMCPOperationReceiptInputClaimed :one

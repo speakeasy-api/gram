@@ -680,3 +680,42 @@ func BuildDeleteMcpServerPayload(mcpServersDeleteMcpServerID string, mcpServersD
 
 	return v, nil
 }
+
+// BuildGetMcpServerUsageImpactPayload builds the payload for the mcpServers
+// getMcpServerUsageImpact endpoint from CLI flags.
+func BuildGetMcpServerUsageImpactPayload(mcpServersGetMcpServerUsageImpactID string, mcpServersGetMcpServerUsageImpactSessionToken string, mcpServersGetMcpServerUsageImpactApikeyToken string, mcpServersGetMcpServerUsageImpactProjectSlugInput string) (*mcpservers.GetMcpServerUsageImpactPayload, error) {
+	var err error
+	var id string
+	{
+		id = mcpServersGetMcpServerUsageImpactID
+		err = goa.MergeErrors(err, goa.ValidateFormat("id", id, goa.FormatUUID))
+		if err != nil {
+			return nil, err
+		}
+	}
+	var sessionToken *string
+	{
+		if mcpServersGetMcpServerUsageImpactSessionToken != "" {
+			sessionToken = &mcpServersGetMcpServerUsageImpactSessionToken
+		}
+	}
+	var apikeyToken *string
+	{
+		if mcpServersGetMcpServerUsageImpactApikeyToken != "" {
+			apikeyToken = &mcpServersGetMcpServerUsageImpactApikeyToken
+		}
+	}
+	var projectSlugInput *string
+	{
+		if mcpServersGetMcpServerUsageImpactProjectSlugInput != "" {
+			projectSlugInput = &mcpServersGetMcpServerUsageImpactProjectSlugInput
+		}
+	}
+	v := &mcpservers.GetMcpServerUsageImpactPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v, nil
+}

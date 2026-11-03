@@ -96,6 +96,12 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 	if err != nil {
 		return fmt.Errorf("configure Kit authentication host: %w", err)
 	}
+	// Without an authentication host, shared issuers are served from the server
+	// URL, so that origin is the workload issuer and must pass the same checks.
+	issuerBaseURL := authenticationHost.BaseURL()
+	if issuerBaseURL == "" {
+		issuerBaseURL = (&url.URL{Scheme: serverURL.Scheme, Host: serverURL.Host}).String()
+	}
 	config := assistants.KitLocalCompositionConfig{
 		PersistedMCP: base.Provider != assistants.RuntimeProviderLocal,
 		Environment:  c.String("environment"), Image: c.String("assistant-kit-image"), ExtraCACertFile: c.String("assistant-runtime-local-ca-file"),
@@ -106,7 +112,7 @@ func installKitLocalRuntimeFromCLI(c *cli.Context, core *assistants.ServiceCore,
 		WorkloadSubject:       c.String("assistant-kit-workload-subject"),
 		WorkloadAssertionFile: c.String("assistant-kit-workload-assertion-file"),
 		WorkloadNamespace:     base.GKE.Namespace,
-		WorkloadIssuerBaseURL: authenticationHost.BaseURL(),
+		WorkloadIssuerBaseURL: issuerBaseURL,
 	}
 
 	if base.Provider == assistants.RuntimeProviderLocal {
