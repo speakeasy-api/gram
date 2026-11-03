@@ -145,7 +145,7 @@ func (c *CustomDomainHealth) Check(ctx context.Context, args CheckCustomDomainHe
 	// Backfill rows created before DNS target tokens existed. Nothing checks
 	// the per-domain target yet, so a failure must not fail the health check.
 	if !domain.DnsTargetToken.Valid {
-		if _, err := customdomains.EnsureDNSTargetToken(ctx, c.db, domain.ID, customdomains.NewDNSTargetToken); err != nil {
+		if _, err := customdomains.EnsureDNSTargetToken(ctx, c.db, domain.OrganizationID, domain.ID, customdomains.NewDNSTargetToken); err != nil {
 			c.logger.WarnContext(ctx, "failed to backfill custom domain dns target token", attr.SlogError(err), attr.SlogURLDomain(domain.Domain))
 		}
 	}

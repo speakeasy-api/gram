@@ -169,7 +169,7 @@ func (c *CustomDomainIngress) ReconcileCustomDomain(ctx context.Context, args Re
 	// Backfill rows created before DNS target tokens existed. Nothing routes on
 	// the token yet, so a failure must not block Apply.
 	if !desired.DnsTargetToken.Valid {
-		if _, err := customdomains.EnsureDNSTargetToken(ctx, c.db, desired.ID, customdomains.NewDNSTargetToken); err != nil {
+		if _, err := customdomains.EnsureDNSTargetToken(ctx, c.db, desired.OrganizationID, desired.ID, customdomains.NewDNSTargetToken); err != nil {
 			c.logger.WarnContext(ctx, "failed to backfill custom domain dns target token", attr.SlogError(err), attr.SlogURLDomain(desired.Domain))
 		}
 	}

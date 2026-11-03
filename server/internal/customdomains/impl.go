@@ -285,7 +285,7 @@ func (s *Service) CreateDomain(ctx context.Context, payload *gen.CreateDomainPay
 	// New rows get their token here; a reverify backfills a row created before
 	// tokens existed.
 	if !domain.DnsTargetToken.Valid {
-		token, err := EnsureDNSTargetToken(ctx, dbtx, domain.ID, NewDNSTargetToken)
+		token, err := EnsureDNSTargetToken(ctx, dbtx, domain.OrganizationID, domain.ID, NewDNSTargetToken)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "failed to assign custom domain dns target").LogError(ctx, s.logger)
 		}

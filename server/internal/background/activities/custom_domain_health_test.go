@@ -658,7 +658,7 @@ func TestCustomDomainHealthCheckBackfillsDNSTargetToken(t *testing.T) {
 	require.NoError(t, err)
 	repository := customdomainsrepo.New(conn)
 	domainID := createActivatedCustomDomain(t, repository, "test-organization", "backfill.example.com")
-	before, err := repository.GetCustomDomainDNSTargetToken(t.Context(), domainID)
+	before, err := repository.GetCustomDomainDNSTargetToken(t.Context(), customdomainsrepo.GetCustomDomainDNSTargetTokenParams{ID: domainID, OrganizationID: "test-organization"})
 	require.NoError(t, err)
 	require.False(t, before.Valid)
 
@@ -673,7 +673,7 @@ func TestCustomDomainHealthCheckBackfillsDNSTargetToken(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	token, err := repository.GetCustomDomainDNSTargetToken(t.Context(), domainID)
+	token, err := repository.GetCustomDomainDNSTargetToken(t.Context(), customdomainsrepo.GetCustomDomainDNSTargetTokenParams{ID: domainID, OrganizationID: "test-organization"})
 	require.NoError(t, err)
 	require.True(t, token.Valid)
 	require.Len(t, token.String, customdomains.DNSTargetTokenLength)
