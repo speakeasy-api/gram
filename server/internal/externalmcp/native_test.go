@@ -79,6 +79,8 @@ func TestNativeListSupportsDcr(t *testing.T) {
 		{name: "CIMD", catalog: map[string]any{"supportsCimd": true}, wantCIMD: true, setup: "cimd"},
 		{name: "complete manual", catalog: map[string]any{"supportsDcr": false, "supportsCimd": false, "authSetup": "manual"}, setup: "manual"},
 		{name: "explicit no auth", catalog: map[string]any{"authSetup": "none"}, setup: "none"},
+		{name: "unconfirmed dcr setup", catalog: map[string]any{"authSetup": "dcr"}},
+		{name: "unconfirmed cimd setup", catalog: map[string]any{"authSetup": "cimd", "supportsCimd": false}},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()

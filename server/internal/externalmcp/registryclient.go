@@ -287,7 +287,9 @@ func projectCatalogAuth(catalog *catalogCapabilities) (bool, bool, string) {
 			dcr = *catalog.SupportsDCR
 		}
 		cimd = catalog.SupportsCIMD
-		if catalog.AuthSetup == "none" || catalog.AuthSetup == "manual" || catalog.AuthSetup == "dcr" || catalog.AuthSetup == "cimd" {
+		// dcr and cimd come only from their support flags below, so the setup
+		// classification never contradicts the advertised capabilities.
+		if catalog.AuthSetup == "none" || catalog.AuthSetup == "manual" {
 			setup = catalog.AuthSetup
 		}
 	}
