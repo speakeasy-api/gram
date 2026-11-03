@@ -249,6 +249,9 @@ func TestHandleToken_AnonymousRefreshJudgesTheChosenClientOnAProxiedServer(t *te
 			})
 			require.NoError(t, err)
 			seedAnonymousConnection(t, ctx, ti, issuer.ID, chosen.ID, subject, tc.access, false)
+			// A sibling in the opposite state must not decide.
+			sibling := attachTestRemoteSessionClient(t, ctx, ti, authCtx, issuer.ID)
+			seedAnonymousConnection(t, ctx, ti, issuer.ID, sibling.ID, subject, -tc.access, false)
 
 			res := performRefreshRequest(ctx, ti, slug, client.ClientID, refreshToken)
 			require.NoError(t, res.err)
