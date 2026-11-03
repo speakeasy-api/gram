@@ -353,11 +353,6 @@ func mcpRuntimeFlags() []cli.Flag {
 		pluginPublicationEmitFlag(),
 		platformHostsCLIFlag(),
 		&cli.StringFlag{
-			Name:    "connection-device-key-secret",
-			Usage:   "Key for hashing a client IP into a per-organization device key on connection events. Unset leaves the device key empty.",
-			EnvVars: []string{"GRAM_CONNECTION_DEVICE_KEY_SECRET"},
-		},
-		&cli.StringFlag{
 			Name:    "google-userinfo-url",
 			Usage:   "Google OpenID Connect userinfo endpoint used to confirm a Google sign-in's Workspace domain. Leave unset in production.",
 			EnvVars: []string{"GRAM_GOOGLE_USERINFO_URL"},
@@ -1189,7 +1184,7 @@ func newStartCommand() *cli.Command {
 
 			// One prober per replica, shared by the proxy's on-use refresh and the login's probe.
 			protectedResources := protectedresource.NewProber(db, guardianPolicy)
-			connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled, connectionDeviceKeyOption(ctx, logger, c.String("connection-device-key-secret")))
+			connectionRecorder := mcpconnectionattempts.NewRecorder(logger, meterProvider, chDB, logsEnabled, mcpconnectionattempts.WithDeviceKeys(riskFingerprinter.DeriveCurrentKey))
 			shutdownFuncs = append(shutdownFuncs, connectionRecorder.Shutdown)
 			remoteSessionDeps, err := newMCPRemoteSessionDependencies(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, redisClient, serverURL, callbackOrigins, auditLogger, clientAssertionSigner, protectedResources, featureFlags, connectionRecorder)
 			if err != nil {
