@@ -87,17 +87,46 @@ func RunningPods(ctx context.Context, client dynamic.Interface, namespace, claim
 	return result, nil
 }
 
-// RunningPodsForClaim supports both managed controller layouts. Older
-// controllers label Pods with the claim UID; newer controllers label the
-// Sandbox and expose its pod selector instead. A selector alone is not proof
-// of ownership: the fallback verifies both controller owner references.
+// RunningPodsForClaim lists the live, addressed pods that PodsForClaim
+// attributes to a claim.
 func RunningPodsForClaim(ctx context.Context, client dynamic.Interface, namespace string, claim *unstructured.Unstructured, sandboxes schema.GroupVersionResource) ([]unstructured.Unstructured, error) {
+	pods, err := PodsForClaim(ctx, client, namespace, claim, sandboxes)
+	if err != nil {
+		return nil, err
+	}
+	result := make([]unstructured.Unstructured, 0, len(pods))
+	for _, pod := range pods {
+		phase, _, _ := unstructured.NestedString(pod.Object, "status", "phase")
+		ip, _, _ := unstructured.NestedString(pod.Object, "status", "podIP")
+		if phase == "Running" && ip != "" {
+			result = append(result, pod)
+		}
+	}
+	return result, nil
+}
+
+// PodsForClaim lists the non-terminating pods belonging to a claim in any
+// phase. It supports both managed controller layouts. Older controllers label
+// Pods with the claim UID; newer controllers label the Sandbox and expose its
+// pod selector instead. A selector alone is not proof of ownership: the
+// fallback verifies both controller owner references.
+func PodsForClaim(ctx context.Context, client dynamic.Interface, namespace string, claim *unstructured.Unstructured, sandboxes schema.GroupVersionResource) ([]unstructured.Unstructured, error) {
 	if claim == nil || claim.GetUID() == "" || claim.GetName() == "" || claim.GetNamespace() != namespace || claim.GetDeletionTimestamp() != nil {
 		return nil, fmt.Errorf("live sandbox claim identity is required")
 	}
-	pods, err := RunningPods(ctx, client, namespace, string(claim.GetUID()))
-	if err != nil || len(pods) != 0 {
-		return pods, err
+	claimUID := string(claim.GetUID())
+	labelled, err := client.Resource(Pods).Namespace(namespace).List(ctx, metav1.ListOptions{LabelSelector: ClaimUIDLabel + "=" + claimUID})
+	if err != nil {
+		return nil, fmt.Errorf("list claimed sandbox pods: %w", err)
+	}
+	result := make([]unstructured.Unstructured, 0, len(labelled.Items))
+	for _, pod := range labelled.Items {
+		if pod.GetDeletionTimestamp() == nil && pod.GetLabels()[ClaimUIDLabel] == claimUID {
+			result = append(result, pod)
+		}
+	}
+	if len(result) != 0 {
+		return result, nil
 	}
 	name := AssignedName(claim)
 	if name == "" {
@@ -126,24 +155,21 @@ func RunningPodsForClaim(ctx context.Context, client dynamic.Interface, namespac
 	if resource.GetUID() == "" || !controlledBy(resource, Claims.Group, "SandboxClaim", claim) {
 		return nil, fmt.Errorf("assigned sandbox claim ownership mismatch")
 	}
-	if uid := resource.GetLabels()[ClaimUIDLabel]; uid != "" && uid != string(claim.GetUID()) {
+	if uid := resource.GetLabels()[ClaimUIDLabel]; uid != "" && uid != claimUID {
 		return nil, fmt.Errorf("assigned sandbox claim label mismatch")
 	}
 	candidates, err := client.Resource(Pods).Namespace(namespace).List(ctx, metav1.ListOptions{LabelSelector: selector.String()})
 	if err != nil {
 		return nil, fmt.Errorf("list assigned sandbox pods: %w", err)
 	}
-	result := make([]unstructured.Unstructured, 0, len(candidates.Items))
 	for _, pod := range candidates.Items {
 		if !controlledBy(&pod, Sandboxes.Group, "Sandbox", resource) {
 			continue
 		}
-		if uid := pod.GetLabels()[ClaimUIDLabel]; uid != "" && uid != string(claim.GetUID()) {
+		if uid := pod.GetLabels()[ClaimUIDLabel]; uid != "" && uid != claimUID {
 			continue
 		}
-		phase, _, _ := unstructured.NestedString(pod.Object, "status", "phase")
-		ip, _, _ := unstructured.NestedString(pod.Object, "status", "podIP")
-		if pod.GetUID() != "" && pod.GetDeletionTimestamp() == nil && phase == "Running" && ip != "" {
+		if pod.GetUID() != "" && pod.GetDeletionTimestamp() == nil {
 			result = append(result, pod)
 		}
 	}
