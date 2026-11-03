@@ -250,7 +250,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if refreshErr != nil {
 			switch {
 			case errors.Is(refreshErr, remotesessions.ErrRemoteSessionUnavailable):
-				logger.WarnContext(ctx, "manual refresh deferred by a provider outage", attr.SlogError(refreshErr))
+				logger.WarnContext(ctx, "manual refresh did not finish", attr.SlogError(refreshErr))
 				http.Redirect(w, r, backURL+"&refresh_unavailable="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
 				return nil
 			case errors.Is(refreshErr, remotesessions.ErrRemoteSessionNotRefreshable):

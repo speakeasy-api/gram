@@ -174,6 +174,9 @@ func TestRemoteLoginCallback_ProviderOutagePage(t *testing.T) {
 		{name: "token endpoint 429", handler: failing(http.StatusTooManyRequests, ""), outage: true, external: true},
 		{name: "429 slow_down", handler: failing(http.StatusTooManyRequests, `{"error":"slow_down"}`), outage: true, external: true},
 		{name: "429 rate_limit_exceeded", handler: failing(http.StatusTooManyRequests, `{"error":"rate_limit_exceeded"}`), outage: true, external: true},
+		{name: "500 with a vendor code", handler: failing(http.StatusInternalServerError, `{"error":"internal_failure"}`), outage: true, external: true},
+		{name: "503 with a vendor code", handler: failing(http.StatusServiceUnavailable, `{"error":"maintenance"}`), outage: true, external: true},
+		{name: "500 invalid_grant", handler: failing(http.StatusInternalServerError, `{"error":"invalid_grant"}`), outage: false, external: false},
 		{name: "429 invalid_grant", handler: failing(http.StatusTooManyRequests, `{"error":"invalid_grant"}`), outage: false, external: false},
 		{name: "token endpoint unreachable", handler: func(http.ResponseWriter, *http.Request) { panic(http.ErrAbortHandler) }, outage: true, external: true},
 		{name: "authorize temporarily_unavailable", handler: unused, opts: []syntheticLoginOption{authorizeError(oautherr.CodeTemporarilyUnavailable)}, outage: true, external: true},
@@ -196,13 +199,15 @@ func TestRemoteLoginCallback_ProviderOutagePage(t *testing.T) {
 			page := httptest.NewRecorder()
 			oops.BrowserErrHandle(testenv.NewLogger(t), func(http.ResponseWriter, *http.Request) error { return err }).ServeHTTP(page, httptest.NewRequest(http.MethodGet, "/callback", nil))
 			if !tc.outage {
-				require.NotContains(t, page.Body.String(), "responding right now")
+				require.NotContains(t, page.Body.String(), "available right now")
 				return
 			}
 			require.GreaterOrEqual(t, page.Code, http.StatusInternalServerError)
-			require.Contains(t, page.Body.String(), "responding right now")
-			require.Contains(t, page.Body.String(), "127.0.0.1", "names the provider")
-			require.Contains(t, page.Body.String(), "Try connecting again in a few minutes")
+			require.Contains(t, page.Body.String(), "available right now")
+			require.Contains(t, page.Body.String(), "idp.example.com", "names the issuer")
+			require.NotContains(t, page.Body.String(), "127.0.0.1", "not the token endpoint's host")
+			require.NotContains(t, page.Body.String(), "denied", "an outage isn't a refusal")
+			require.Contains(t, page.Body.String(), "Try connecting again shortly")
 			require.NotContains(t, page.Body.String(), "problem on our side")
 			require.NotContains(t, page.Body.String(), "allowed to connect")
 		})

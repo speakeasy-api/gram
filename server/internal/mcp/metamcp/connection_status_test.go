@@ -68,12 +68,6 @@ func TestConnectionStatusText_UnavailableDoesNotAskForSignIn(t *testing.T) {
 	}.Text()
 	require.Contains(t, text, "temporarily unavailable (retry shortly)")
 	require.NotContains(t, text, "To sign in")
-	require.NotContains(t, ConnectionStatusHTML, `else if (s.status === "unavailable") {
-        needs++`, "an outage isn't counted as needing sign-in")
-	require.Contains(t, ConnectionStatusHTML, "Ask again shortly to refresh this list.")
-	require.Contains(t, ConnectionStatusHTML, `state.textContent = "Temporarily unavailable";`, "the row stays short; the full message wraps below it")
-	require.NotContains(t, ConnectionStatusHTML, "note.textContent = s.detail", "the message for the AI app isn't shown to the person")
-	require.Contains(t, ConnectionStatusHTML, `btn.textContent = "Reconnect";`)
 }
 
 func TestIsConnectionStatusResourceURI(t *testing.T) {

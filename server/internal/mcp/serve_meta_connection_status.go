@@ -214,7 +214,7 @@ func memberFailureSignIn(gate metaGateContext, member metaMember, err error) (st
 	}
 	kind := remotesessions.OutageKindOf(unavailable.session)
 	reconnectURL := ""
-	if kind != remotesessions.RefreshOutageTunnel {
+	if kind == remotesessions.RefreshOutageProvider {
 		reconnectURL = gate.memberConnectURL(member)
 	}
 	return metamcp.SignInUnavailable, memberErrorMessage(err), &metamcp.ConnectionStatusOutage{Message: connectionOutageMessage(name, kind, remotesessions.RetryAfter(unavailable.session)), ReconnectURL: reconnectURL}
@@ -222,26 +222,19 @@ func memberFailureSignIn(gate metaGateContext, member metaMember, err error) (st
 
 // connectionOutageMessage says what's down and when to retry, in words for a person.
 func connectionOutageMessage(name string, kind remotesessions.RefreshOutageKind, wait time.Duration) string {
-	retry := "Try again shortly."
-	switch {
-	case wait >= 90*time.Second:
-		retry = fmt.Sprintf("Try again in about %d minutes.", int(wait.Round(time.Minute).Minutes()))
-	case wait.Round(time.Second) >= 2*time.Second:
-		retry = fmt.Sprintf("Try again in about %d seconds.", int(wait.Round(time.Second).Seconds()))
-	}
+	retry := "Try again " + outageWaitWords(wait) + "."
 	switch kind {
 	case remotesessions.RefreshOutageProvider:
 		possessive := name + "'s"
 		if strings.HasSuffix(strings.ToLower(name), "s") {
 			possessive = name + "'"
 		}
-		return possessive + " provider isn't responding. " + retry
+		return possessive + " provider isn't available right now. " + retry
 	case remotesessions.RefreshOutageTunnel:
 		return name + " can't be reached right now. " + retry
 	case remotesessions.RefreshOutageNone:
-		return name + " can't renew its sign-in right now. " + retry
 	}
-	return name + " isn't available right now. " + retry
+	return name + " can't renew its sign-in right now. " + retry
 }
 
 func memberErrorMessage(err error) string {

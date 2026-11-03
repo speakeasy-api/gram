@@ -9,6 +9,7 @@ import (
 	"slices"
 	"strconv"
 	"strings"
+	"syscall"
 	"time"
 
 	"github.com/jackc/pgx/v5"
@@ -34,6 +35,12 @@ var transientSQLStates = map[string]struct{}{
 // transientSQLStateClasses are SQLSTATE classes a retry can clear: connection exceptions and exhausted resources.
 var transientSQLStateClasses = []string{"08", "53"}
 
+// connectionErrnos are dial or connection failures; a certificate or dial policy refusal never is one.
+var connectionErrnos = []syscall.Errno{
+	syscall.ECONNREFUSED, syscall.ECONNRESET, syscall.ECONNABORTED, syscall.EPIPE, syscall.ETIMEDOUT,
+	syscall.EHOSTUNREACH, syscall.ENETUNREACH, syscall.ENETDOWN, syscall.EADDRNOTAVAIL,
+}
+
 // IsInfrastructureFailure reports a store or network that couldn't answer right now.
 func IsInfrastructureFailure(err error) bool {
 	if err == nil || errors.Is(err, pgx.ErrNoRows) {
@@ -51,7 +58,13 @@ func IsInfrastructureFailure(err error) bool {
 	if errors.Is(err, redis.ErrClosed) || errors.Is(err, redis.ErrPoolTimeout) {
 		return true
 	}
-	if _, ok := errors.AsType[net.Error](err); ok {
+	if netErr, ok := errors.AsType[net.Error](err); ok && netErr.Timeout() {
+		return true
+	}
+	if _, ok := errors.AsType[*net.DNSError](err); ok || errors.Is(err, net.ErrClosed) {
+		return true
+	}
+	if slices.ContainsFunc(connectionErrnos, func(errno syscall.Errno) bool { return errors.Is(err, errno) }) {
 		return true
 	}
 	// Waiting on an exhausted pool ends in a deadline; the caller's own is ruled out by answerOutage.

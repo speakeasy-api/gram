@@ -11,6 +11,9 @@ import (
 	"github.com/google/uuid"
 )
 
+// RefreshLockKey exposes the single-flight key, so a test can hold the lock.
+var RefreshLockKey = refreshLockKey
+
 // WaitIdentityRestatements blocks until every detached identity restatement has finished.
 func (s *RefreshService) WaitIdentityRestatements() { s.restatements.Wait() }
 

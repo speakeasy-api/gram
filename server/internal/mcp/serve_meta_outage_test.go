@@ -29,6 +29,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
@@ -49,6 +50,9 @@ type memberRefreshOutageFixture struct {
 	clientID uuid.UUID
 	down     *atomic.Bool
 	upstream *atomic.Value
+	issuerID uuid.UUID
+	project  uuid.UUID
+	org      string
 
 	// memberCalls counts MCP calls that reached the member.
 	memberCalls *atomic.Int32
@@ -134,6 +138,9 @@ func newMemberRefreshOutageFixture(t *testing.T, ctx context.Context, ti *testIn
 		clientID: clientID,
 		down:     down,
 		upstream: lastAuthorization,
+		issuerID: issuerID,
+		project:  projectID,
+		org:      orgID,
 
 		memberCalls: memberCalls,
 		refreshes:   refreshes,
@@ -178,7 +185,7 @@ func TestServePublic_MetaEndpoint_RefreshOutageIsRetryableThenRecovers(t *testin
 	require.Contains(t, status.Servers[0].Detail, "reconnect at")
 	require.EqualValues(t, 1, f.refreshes.Load(), "retries inside the cooldown never reach the provider")
 	require.NotNil(t, status.Servers[0].Outage)
-	require.Contains(t, status.Servers[0].Outage.Message, "provider isn't responding. Try again in about")
+	require.Contains(t, status.Servers[0].Outage.Message, "provider isn't available right now. Try again in about")
 	require.NotContains(t, status.Servers[0].Outage.Message, "http")
 	require.Contains(t, status.Servers[0].Outage.ReconnectURL, "/connect/first-party?server=member")
 
@@ -218,7 +225,7 @@ func TestServePublic_MetaEndpoint_TunnelBoundOutageDoesNotOfferReconnect(t *test
 
 	text, isError := metaToolResultText(t, executeMetaTool(t, ti, f.metaSlug, f.bearer, "member--ping"))
 	require.True(t, isError)
-	require.Contains(t, text, "is not reachable right now")
+	require.Contains(t, text, "can't be reached right now")
 	require.Contains(t, text, "Retry")
 	require.NotContains(t, text, "reconnect")
 	require.NotContains(t, text, "provider")
@@ -245,6 +252,62 @@ func TestServePublic_MetaEndpoint_RefreshOutageWithoutRecordedResourceIsRetryabl
 	require.NotContains(t, text, "not connected")
 }
 
+// Another request holds the refresh, so no provider failed: nothing blames it or offers a
+// link to a page with no Reconnect button.
+func TestServePublic_MetaEndpoint_RefreshFailureNotFromTheProvider(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := newMemberRefreshOutageFixture(t, ctx, ti, func(upstream string) string { return upstream })
+	held, err := ti.cacheAdapter.Add(ctx, "remotesession:refresh:"+f.subject.String()+":"+f.clientID.String(), time.Minute)
+	require.NoError(t, err)
+	require.True(t, held)
+
+	status := f.connectionStatus(t, ctx)
+	require.Equal(t, metamcp.SignInUnavailable, status.Servers[0].Status)
+	require.Contains(t, status.Servers[0].Detail, "can't renew its sign-in right now")
+	require.NotContains(t, status.Servers[0].Detail, "provider")
+	require.NotContains(t, status.Servers[0].Detail, "reconnect at")
+	require.NotNil(t, status.Servers[0].Outage)
+	require.Contains(t, status.Servers[0].Outage.Message, "member can't renew its sign-in right now. Try again in about")
+	require.Empty(t, status.Servers[0].Outage.ReconnectURL)
+	require.Zero(t, f.refreshes.Load(), "no provider call was made")
+
+	tokens, err := ti.service.RemoteChallengeManager().ResolveAvailableAccessTokens(ctx, f.project, f.org, f.issuerID, f.subject)
+	require.NoError(t, err)
+	require.NotEmpty(t, tokens)
+	for _, token := range tokens {
+		state, instructions := mcp.ConnectionRouteFailureForOutage("member", token.ClientCredentialErr, true)
+		require.Equal(t, "unreachable", state)
+		require.Contains(t, instructions, "This server can't renew its sign-in right now. Retry in about")
+		require.Contains(t, instructions, "ask your administrator")
+		require.NotContains(t, instructions, "tools.connect")
+	}
+}
+
+// A provider that is down keeps the fallback that can help, when the caller can use it, and its wait.
+func TestConnectionRouteFailure_ProviderOutageOffersReconnect(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	f := newMemberRefreshOutageFixture(t, ctx, ti, func(upstream string) string { return upstream })
+	f.down.Store(true)
+
+	tokens, err := ti.service.RemoteChallengeManager().ResolveAvailableAccessTokens(ctx, f.project, f.org, f.issuerID, f.subject)
+	require.NoError(t, err)
+	require.NotEmpty(t, tokens)
+	for _, token := range tokens {
+		state, instructions := mcp.ConnectionRouteFailureForOutage("member", token.ClientCredentialErr, true)
+		require.Equal(t, "unreachable", state)
+		require.Contains(t, instructions, "This server's provider isn't available right now. Retry in about 30 seconds.")
+		require.Contains(t, instructions, "call tools.connect(server=...) to reconnect")
+
+		_, instructions = mcp.ConnectionRouteFailureForOutage("member", token.ClientCredentialErr, false)
+		require.NotContains(t, instructions, "tools.connect", "an agent or anonymous caller can't use it")
+		require.Contains(t, instructions, "ask your administrator")
+	}
+}
+
 // A revocation store outage judges nothing: the app keeps its token and retries
 // the same request, which works once the store is back.
 func TestServePublic_RevocationCheckOutageIsRetryableThenRecovers(t *testing.T) {
@@ -265,6 +328,7 @@ func TestServePublic_RevocationCheckOutageIsRetryableThenRecovers(t *testing.T) 
 	require.NotEmpty(t, w.Header().Get("Retry-After"))
 	require.Empty(t, w.Header().Get("WWW-Authenticate"), "an outage never restarts sign-in")
 	require.Empty(t, w.Header().Get(constants.HeaderProxiedResponse), "our own dependency stays counted")
+	require.Equal(t, "Speakeasy can't check your access right now. Retry shortly.", shareable.Error(), "the check judged nothing, so it promises nothing")
 
 	ti.service.SetChatSessionsManager(ti.chatSessionsManager)
 	w, err = servePublicHTTP(t, ctx, ti, f.metaSlug, body, f.bearer, nil)

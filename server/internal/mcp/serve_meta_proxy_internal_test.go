@@ -347,6 +347,7 @@ func TestMemberTokens_StoreOutageReadsAsUnavailable(t *testing.T) {
 	require.Error(t, err)
 	_, unavailable = errors.AsType[memberUnavailableError](err)
 	require.False(t, unavailable, "a broken query is not an outage: %v", err)
+	require.NotContains(t, err.Error(), "retry", "retrying can't fix a broken query")
 }
 
 func TestChainMetaMember_ChainingServesAnOutage(t *testing.T) {
@@ -392,14 +393,15 @@ func TestConnectionOutageMessage(t *testing.T) {
 		wait time.Duration
 		want string
 	}{
-		{"Fake Docs", remotesessions.RefreshOutageProvider, 30 * time.Second, "Fake Docs' provider isn't responding. Try again in about 30 seconds."},
-		{"Linear", remotesessions.RefreshOutageProvider, 5 * time.Minute, "Linear's provider isn't responding. Try again in about 5 minutes."},
-		{"Linear", remotesessions.RefreshOutageProvider, 0, "Linear's provider isn't responding. Try again shortly."},
-		{"Linear", remotesessions.RefreshOutageProvider, 400 * time.Millisecond, "Linear's provider isn't responding. Try again shortly."},
-		{"Linear", remotesessions.RefreshOutageProvider, time.Second, "Linear's provider isn't responding. Try again shortly."},
-		{"Linear", remotesessions.RefreshOutageProvider, 2 * time.Second, "Linear's provider isn't responding. Try again in about 2 seconds."},
+		{"Fake Docs", remotesessions.RefreshOutageProvider, 30 * time.Second, "Fake Docs' provider isn't available right now. Try again in about 30 seconds."},
+		{"Linear", remotesessions.RefreshOutageProvider, 5 * time.Minute, "Linear's provider isn't available right now. Try again in about 5 minutes."},
+		{"Linear", remotesessions.RefreshOutageProvider, 0, "Linear's provider isn't available right now. Try again shortly."},
+		{"Linear", remotesessions.RefreshOutageProvider, 400 * time.Millisecond, "Linear's provider isn't available right now. Try again shortly."},
+		{"Linear", remotesessions.RefreshOutageProvider, time.Second, "Linear's provider isn't available right now. Try again shortly."},
+		{"Linear", remotesessions.RefreshOutageProvider, 2 * time.Second, "Linear's provider isn't available right now. Try again in about 2 seconds."},
 		{"Linear", remotesessions.RefreshOutageTunnel, 30 * time.Second, "Linear can't be reached right now. Try again in about 30 seconds."},
 		{"Linear", remotesessions.RefreshOutageNone, 0, "Linear can't renew its sign-in right now. Try again shortly."},
+		{"Linear", remotesessions.RefreshOutageNone, 5 * time.Minute, "Linear can't renew its sign-in right now. Try again in about 5 minutes."},
 	} {
 		require.Equal(t, tc.want, connectionOutageMessage(tc.name, tc.kind, tc.wait))
 	}

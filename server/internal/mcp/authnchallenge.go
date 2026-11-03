@@ -434,7 +434,7 @@ const (
 
 	// remoteSessionUnavailableMessage tells the client the failure is
 	// temporary and the request can be retried unchanged.
-	remoteSessionUnavailableMessage = "The upstream authorization server for this MCP server is temporarily unavailable. Retry shortly."
+	remoteSessionUnavailableMessage = "This MCP server can't get the credential it needs right now. Retry shortly."
 )
 
 func issuerGateFailureReason(err error) string {
@@ -469,7 +469,7 @@ func issuerGateFailureReason(err error) string {
 }
 
 // issuerGateCheckUnavailableMessage answers a credential check that could not finish.
-const issuerGateCheckUnavailableMessage = "Speakeasy can't check your sign-in right now. You don't need to sign in again. Retry shortly."
+const issuerGateCheckUnavailableMessage = "Speakeasy can't check your access right now. Retry shortly."
 
 // issuerGateCheckUnavailable reports a credential never judged; a gone row is an answer, not an outage.
 func issuerGateCheckUnavailable(err error) bool {

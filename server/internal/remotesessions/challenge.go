@@ -1611,7 +1611,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		m.recordCIMDAuthorizationFailure(ctx, state, errCode, q.Get("error_description"))
 		// RFC 6749 §4.1.2.1: the provider's own codes for an outage at authorize.
 		if errCode == oautherr.CodeTemporarilyUnavailable || errCode == oautherr.CodeServerError {
-			return none, providerOutageError(oops.E(oops.CodeUnavailable, nil, "remote authn challenge denied: %s", errCode).LogWarn(ctx, logger, attr.SlogOAuthError(errCode)), m.authorizeProviderLabel(ctx, state), true)
+			return none, providerOutageError(oops.E(oops.CodeUnavailable, nil, "The sign-in provider returned an error: %s", errCode).LogWarn(ctx, logger, attr.SlogOAuthError(errCode)), m.providerLabel(ctx, state), true)
 		}
 		return none, denied(ctx, logger, q)
 	}
@@ -1713,11 +1713,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		if !exchangeFailureIsProviderOutage(failure, err) {
 			return none, failure
 		}
-		provider := ""
-		if !clientRow.TunneledMcpServerID.Valid {
-			provider = providerLabel(state.TokenEndpoint)
-		}
-		return none, providerOutageError(failure, provider, true)
+		return none, providerOutageError(failure, m.providerLabel(ctx, state), true)
 	}
 	// The pair is live upstream from this line on, and every path out of here
 	// that does not store it strands it: unreachable through Speakeasy, and outside
@@ -2008,22 +2004,16 @@ func providerOutageError(err *oops.ShareableError, provider string, external boo
 	return fmt.Errorf("complete remote login: %w", presented)
 }
 
-// authorizeProviderLabel keeps a tunneled provider's internal host off the page.
-func (m *ChallengeManager) authorizeProviderLabel(ctx context.Context, state RemoteLoginState) string {
-	row, err := remotesessions_repo.New(m.db).GetRemoteSessionClientByID(ctx, remotesessions_repo.GetRemoteSessionClientByIDParams{
-		ID:             state.RemoteSessionClientID,
-		ProjectID:      state.ProjectID,
-		OrganizationID: state.OrganizationID,
-	})
+// providerLabel is the name a person knows the provider by; a tunneled provider's host stays off the page.
+func (m *ChallengeManager) providerLabel(ctx context.Context, state RemoteLoginState) string {
+	row, err := remotesessions_repo.New(m.db).GetRemoteSessionClientWithIssuerByID(ctx, state.RemoteSessionClientID)
 	if err != nil || row.TunneledMcpServerID.Valid {
 		return ""
 	}
-	return providerLabel(state.TokenEndpoint)
-}
-
-// providerLabel is the token endpoint's host; never call it for a tunneled provider.
-func providerLabel(endpoint string) string {
-	parsed, err := url.Parse(endpoint)
+	if row.ResourceName.Valid && row.ResourceName.String != "" {
+		return row.ResourceName.String
+	}
+	parsed, err := url.Parse(row.IssuerUrl)
 	if err != nil {
 		return ""
 	}
@@ -2235,7 +2225,7 @@ func exchangeFailure(ctx context.Context, logger *slog.Logger, err error, tunnel
 	}
 }
 
-// exchangeRefusalCodes judge the request, so they stay a refusal under a 429; other codes, like slow_down, mean rate limited.
+// exchangeRefusalCodes judge the request, so they stay a refusal under any status; other codes leave it to the status.
 var exchangeRefusalCodes = map[string]bool{
 	oautherr.CodeAccessDenied:         true,
 	oautherr.CodeInvalidClient:        true,
@@ -2254,9 +2244,7 @@ func exchangeFailureCode(status int, oauthCode string) oops.Code {
 		return oops.CodeUnavailable
 	case oauthCode == oautherr.CodeServerError:
 		return oops.CodeGatewayError
-	case status == http.StatusTooManyRequests && !exchangeRefusalCodes[oauthCode]:
-		return oops.CodeUnavailable
-	case oauthCode != "":
+	case exchangeRefusalCodes[oauthCode]:
 		return oops.CodeUnauthorized
 	case status == http.StatusServiceUnavailable, status == http.StatusTooManyRequests:
 		return oops.CodeUnavailable

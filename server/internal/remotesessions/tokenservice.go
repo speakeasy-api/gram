@@ -781,6 +781,18 @@ func OutageKindOf(err error) RefreshOutageKind {
 	return RefreshOutageNone
 }
 
+// TokenEndpointCausedOutage reports a client credential outage the token endpoint caused, not signing or our own stores.
+func TokenEndpointCausedOutage(err error) bool {
+	endpoint, ok := errors.AsType[*TokenEndpointError](err)
+	return ok && !endpoint.Signing
+}
+
+// RefreshBusy reports a refresh that waited on another request and made no call of its own.
+func RefreshBusy(err error) bool {
+	refreshErr, ok := errors.AsType[*RefreshError](err)
+	return ok && refreshErr.Outcome == remotesessionmetrics.RefreshOutcomeDeferred && refreshErr.outageKind == RefreshOutageNone
+}
+
 // SessionUnavailable reports a subject's connection that an outage stopped refreshing.
 func (t UpstreamToken) SessionUnavailable() bool {
 	return t.CredentialOwner == CredentialOwnerSubject && errors.Is(t.ClientCredentialErr, ErrRemoteSessionUnavailable)
@@ -1374,7 +1386,7 @@ func (s *RefreshService) postRefreshGrant(
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if err != nil {
-		return zero, fmt.Errorf("read refresh response: %w", err)
+		return zero, fmt.Errorf("read refresh response: %w: %w", errRefreshUnusableAnswer, err)
 	}
 	if resp.StatusCode/100 != 2 {
 		refreshErr := newTokenRefreshErrorFromHTTP(resp.StatusCode, resp.Status, body)
@@ -1383,7 +1395,7 @@ func (s *RefreshService) postRefreshGrant(
 	}
 	var tok tokenResponse
 	if err := json.Unmarshal(body, &tok); err != nil {
-		return zero, fmt.Errorf("decode refresh response: %w", err)
+		return zero, fmt.Errorf("decode refresh response: %w: %w", errRefreshUnusableAnswer, err)
 	}
 	tok.raw = body
 	if tok.AccessToken == "" {

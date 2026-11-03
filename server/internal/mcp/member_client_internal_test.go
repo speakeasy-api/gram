@@ -401,7 +401,7 @@ func TestMemberClientFailureClassifiesUnansweredExchanges(t *testing.T) {
 		want       string
 		retryable  bool
 	}{
-		"no route":              {unroutable: true, untrusted: false, want: `server "fixture" is not reachable right now`, retryable: false},
+		"no route":              {unroutable: true, untrusted: false, want: `server "fixture" can't be reached right now`, retryable: false},
 		"dropped reply":         {unroutable: false, untrusted: false, want: `server "fixture" did not answer: upstream unreachable or timed out`, retryable: true},
 		"untrusted certificate": {unroutable: false, untrusted: true, want: `server "fixture" did not answer: upstream unreachable or timed out`, retryable: false},
 	} {
@@ -471,7 +471,10 @@ func TestMemberClientFailurePreservesClientCredentialRenewalRemedy(t *testing.T)
 		discovery bool
 		retryable bool
 	}{
-		{name: "outage", err: remotesessions.ErrClientCredentialUnavailable, want: "Retry shortly", discovery: true, retryable: true},
+		{name: "outage nothing ties to the provider", err: remotesessions.ErrClientCredentialUnavailable, want: "can't get its credential right now", discovery: true, retryable: true},
+		{name: "signing outage", err: fmt.Errorf("%w: %w", remotesessions.ErrClientCredentialUnavailable, &remotesessions.TokenEndpointError{Signing: true}), want: "can't get its credential right now", discovery: true, retryable: true},
+		{name: "token endpoint down", err: fmt.Errorf("%w: %w", remotesessions.ErrClientCredentialUnavailable, &remotesessions.TokenEndpointError{StatusCode: http.StatusServiceUnavailable}), want: "because its provider isn't available right now", discovery: true, retryable: true},
+		{name: "token endpoint unreachable", err: fmt.Errorf("%w: %w", remotesessions.ErrClientCredentialUnavailable, &remotesessions.TokenEndpointError{Transport: true}), want: "because its provider isn't available right now", discovery: true, retryable: true},
 		{name: "timed out outage", err: fmt.Errorf("%w: %w", remotesessions.ErrClientCredentialUnavailable, context.DeadlineExceeded), want: "Retry shortly", discovery: true, retryable: false},
 		{name: "rate limited outage", err: fmt.Errorf("%w: %w", remotesessions.ErrClientCredentialUnavailable, &remotesessions.TokenEndpointError{StatusCode: http.StatusTooManyRequests}), want: "Retry shortly", discovery: true, retryable: false},
 		{name: "misconfigured", err: remotesessions.ErrClientCredentialMisconfigured, want: "contact the MCP server administrator", discovery: false, retryable: false},

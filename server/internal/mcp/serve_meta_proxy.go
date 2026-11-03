@@ -199,6 +199,14 @@ func newMemberUnavailableError(message string, session error) memberUnavailableE
 	}
 }
 
+// memberCredentialLoadError says retry only when a retry can help: a broken query needs a fix.
+func memberCredentialLoadError(member metaMember, err error) error {
+	if oops.IsInfrastructureFailure(err) || errors.Is(err, context.Canceled) {
+		return newMemberUnavailableError(fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug), nil)
+	}
+	return memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; ask your administrator", member.slug)}, status: 0, retryable: false, retryAfter: 0}
+}
+
 // chainMetaMember chains a member with no routed credential or one in an outage, which otherwise stands.
 func chainMetaMember(ctx context.Context, gate metaGateContext, member metaMember, resource string, routed remotesessions.UpstreamToken, routeErr error) (remotesessions.UpstreamToken, string, error) {
 	outage := routed.SessionUnavailable()

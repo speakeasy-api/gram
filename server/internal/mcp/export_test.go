@@ -196,6 +196,11 @@ func (s *Service) SetDB(db *pgxpool.Pool) {
 	s.db = db
 }
 
+// ConnectionRouteFailureForOutage is what Code Mode reports for a connection in an outage.
+func ConnectionRouteFailureForOutage(slug string, outage error, canConnect bool) (string, string) {
+	return connectionRouteFailure(linkedMemberOutage(metaMember{slug: slug}, outage, ""), canConnect)
+}
+
 // SetAuthzEngine swaps the authorization engine, to make it fail.
 func (s *Service) SetAuthzEngine(engine *authz.Engine) {
 	s.authz = engine

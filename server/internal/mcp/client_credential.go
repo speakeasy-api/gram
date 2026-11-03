@@ -151,31 +151,42 @@ func metaMemberClientCredentialError(member metaMember, err error) error {
 		if _, session := errors.AsType[*remotesessions.SessionOutageError](err); session {
 			return linkedMemberOutage(member, err, "")
 		}
-		return newMemberUnavailableError(fmt.Sprintf("server %q can't get its credential because its provider isn't responding. Retry shortly. If it keeps happening, ask the MCP server's administrator", member.slug), nil)
+		cause := "right now"
+		if remotesessions.TokenEndpointCausedOutage(err) {
+			cause = "because its provider isn't available right now"
+		}
+		return newMemberUnavailableError(fmt.Sprintf("server %q can't get its credential %s. Retry shortly. If it keeps happening, ask your administrator", member.slug, cause), nil)
 	}
 
 	return &metaMemberError{message: fmt.Sprintf("server %q has an upstream credential that is misconfigured or was rejected; contact the MCP server administrator", member.slug)}
 }
 
-// linkedMemberOutage offers reconnecting as a fallback: a provider can answer 5xx for one bad token.
+// outageWaitWords is when to retry, in words: a provider can ask for minutes.
+func outageWaitWords(wait time.Duration) string {
+	switch {
+	case wait >= 90*time.Second:
+		return fmt.Sprintf("in about %d minutes", int(wait.Round(time.Minute).Minutes()))
+	case wait.Round(time.Second) >= 2*time.Second:
+		return fmt.Sprintf("in about %d seconds", int(wait.Round(time.Second).Seconds()))
+	}
+	return "shortly"
+}
+
+// linkedMemberOutage offers reconnecting only when the connect page has a Reconnect button for it.
 func linkedMemberOutage(member metaMember, err error, connectURL string) error {
-	retry := "Retry shortly."
-	if wait := remotesessions.RetryAfter(err); wait.Round(time.Second) >= 2*time.Second {
-		retry = fmt.Sprintf("Retry in about %d seconds.", int(wait.Round(time.Second).Seconds()))
+	retry := "Retry " + outageWaitWords(remotesessions.RetryAfter(err)) + "."
+	switch remotesessions.OutageKindOf(err) {
+	case remotesessions.RefreshOutageTunnel:
+		return newMemberUnavailableError(fmt.Sprintf("server %q can't be reached right now. %s If it keeps happening, ask your administrator to check that it's running", member.slug, retry), err)
+	case remotesessions.RefreshOutageProvider:
+		fallback := "If it keeps happening, ask your administrator"
+		if connectURL != "" {
+			fallback = "If it keeps happening, reconnect at " + connectURL
+		}
+		return newMemberUnavailableError(fmt.Sprintf("server %q can't renew its sign-in because its provider isn't available right now. %s %s", member.slug, retry, fallback), err)
+	case remotesessions.RefreshOutageNone:
 	}
-	// A tunnel-bound provider's connect page has no Reconnect: it would take the same path.
-	if remotesessions.OutageKindOf(err) == remotesessions.RefreshOutageTunnel {
-		return newMemberUnavailableError(fmt.Sprintf("server %q is not reachable right now. %s If it keeps happening, ask your administrator to check that it's running", member.slug, retry), err)
-	}
-	fallback := "If it keeps happening, ask your administrator"
-	if connectURL != "" {
-		fallback = "If it keeps happening, reconnect at " + connectURL
-	}
-	cause := "because its provider isn't responding"
-	if remotesessions.OutageKindOf(err) == remotesessions.RefreshOutageNone {
-		cause = "right now"
-	}
-	return newMemberUnavailableError(fmt.Sprintf("server %q can't renew its sign-in %s. %s %s", member.slug, cause, retry, fallback), err)
+	return newMemberUnavailableError(fmt.Sprintf("server %q can't renew its sign-in right now. %s If it keeps happening, ask your administrator", member.slug, retry), err)
 }
 
 // withMemberConnectLink adds the member's connect page to a connection outage.

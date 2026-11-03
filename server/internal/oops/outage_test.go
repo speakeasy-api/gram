@@ -2,12 +2,16 @@ package oops_test
 
 import (
 	"context"
+	"crypto/x509"
 	"encoding/json"
 	"errors"
 	"fmt"
+	"net"
 	"net/http"
 	"net/http/httptest"
+	"syscall"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5"
 	"github.com/jackc/pgx/v5/pgconn"
@@ -15,6 +19,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/constants"
+	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -52,6 +57,88 @@ func TestIsInfrastructureFailure(t *testing.T) {
 			require.Equal(t, tc.want, oops.IsInfrastructureFailure(tc.err))
 		})
 	}
+}
+
+// Real failures, not sentinels: what a dropped store and a refused upstream actually return.
+func TestIsInfrastructureFailure_RealNetworkErrors(t *testing.T) {
+	t.Parallel()
+	ctx := t.Context()
+
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	closedAddr := listener.Addr().String()
+	require.NoError(t, listener.Close())
+
+	_, refused := net.Dial("tcp", closedAddr)
+	require.True(t, oops.IsInfrastructureFailure(refused), "dial refused: %v", refused)
+
+	_, pgDown := pgx.Connect(ctx, "postgres://u@"+closedAddr+"/d?connect_timeout=1")
+	require.True(t, oops.IsInfrastructureFailure(pgDown), "postgres down: %v", pgDown)
+
+	redisErr := redis.NewClient(&redis.Options{Addr: closedAddr, MaxRetries: -1}).Ping(ctx).Err()
+	require.True(t, oops.IsInfrastructureFailure(redisErr), "redis down: %v", redisErr)
+
+	require.True(t, oops.IsInfrastructureFailure(droppedConnectionError(t)), "connection reset")
+
+	timeoutConn, timeoutPeer := net.Pipe()
+	t.Cleanup(func() { _ = timeoutPeer.Close(); _ = timeoutConn.Close() })
+	require.NoError(t, timeoutConn.SetReadDeadline(time.Now().Add(-time.Second)))
+	_, timedOut := timeoutConn.Read(make([]byte, 1))
+	require.True(t, oops.IsInfrastructureFailure(timedOut), "read timeout: %v", timedOut)
+
+	// A bad certificate is a real answer: it needs a fix, not a retry.
+	server := httptest.NewTLSServer(http.HandlerFunc(func(http.ResponseWriter, *http.Request) {}))
+	t.Cleanup(server.Close)
+	_, x509Err := http.DefaultClient.Get(server.URL)
+	var unknownAuthority x509.UnknownAuthorityError
+	require.ErrorAs(t, x509Err, &unknownAuthority)
+	require.False(t, oops.IsInfrastructureFailure(x509Err), "x509: %v", x509Err)
+
+	// A dial the policy refused never reached the network.
+	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), []string{"127.0.0.0/8"})
+	require.NoError(t, err)
+	_, denied := policy.Dialer().DialContext(ctx, "tcp", "127.0.0.1:443")
+	require.ErrorIs(t, denied, guardian.ErrBlockedIP)
+	require.False(t, oops.IsInfrastructureFailure(denied), "policy denied: %v", denied)
+
+	for name, cause := range map[string]error{"x509": x509Err, "policy denied": denied} {
+		w := httptest.NewRecorder()
+		oops.ErrHandle(testenv.NewLogger(t), func(http.ResponseWriter, *http.Request) error {
+			return oops.E(oops.CodeUnexpected, cause, "call upstream")
+		}).ServeHTTP(w, httptest.NewRequest(http.MethodGet, "/", nil))
+		require.Equal(t, http.StatusInternalServerError, w.Code, name)
+		w = httptest.NewRecorder()
+		oops.MCPErrHandle(testenv.NewLogger(t), func(http.ResponseWriter, *http.Request) error {
+			return oops.E(oops.CodeUnexpected, cause, "call upstream")
+		}).ServeHTTP(w, httptest.NewRequest(http.MethodPost, "/", nil))
+		require.Equal(t, http.StatusInternalServerError, w.Code, name)
+		require.Empty(t, w.Header().Get("Retry-After"), name)
+	}
+}
+
+// droppedConnectionError reads from a connection its peer reset.
+func droppedConnectionError(t *testing.T) error {
+	t.Helper()
+	listener, err := net.Listen("tcp", "127.0.0.1:0")
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = listener.Close() })
+	accepted := make(chan struct{})
+	go func() {
+		defer close(accepted)
+		conn, aerr := listener.Accept()
+		if aerr != nil {
+			return
+		}
+		_ = conn.(*net.TCPConn).SetLinger(0)
+		_ = conn.Close()
+	}()
+	conn, err := net.Dial("tcp", listener.Addr().String())
+	require.NoError(t, err)
+	t.Cleanup(func() { _ = conn.Close() })
+	<-accepted
+	_, err = conn.Read(make([]byte, 1))
+	require.ErrorIs(t, err, syscall.ECONNRESET)
+	return err
 }
 
 func TestIsStoreFailure(t *testing.T) {

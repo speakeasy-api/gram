@@ -398,7 +398,7 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		return upstreamFailure(fmt.Sprintf("server %q returned a response too large for the meta MCP", member.slug), false)
 	case errors.Is(err, errMemberUnroutable) || errors.Is(exchangeErr, errMemberUnroutable):
 		// A tunnel with no live route is a member outage, not a meta MCP bug.
-		return upstreamFailure(fmt.Sprintf("server %q is not reachable right now", member.slug), false)
+		return upstreamFailure(fmt.Sprintf("server %q can't be reached right now", member.slug), false)
 	case exchangeErr != nil:
 		// A transport failure may clear on a retry, unless it timed out, which
 		// already spent the attempt's time, or no retry can change it: egress

@@ -4,6 +4,7 @@ import (
 	"context"
 	"net/http"
 	"net/http/httptest"
+	"strings"
 	"sync/atomic"
 	"testing"
 	"time"
@@ -379,6 +380,85 @@ func TestResolveAccessTokens_CanceledCallerIsNotAnOutage(t *testing.T) {
 	err := <-result
 	require.ErrorIs(t, err, context.Canceled)
 	require.NotErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+}
+
+// Another request holding the lock is no outage: nothing called the provider.
+func TestRefreshNow_LockContentionIsNotAProviderOutage(t *testing.T) {
+	t.Parallel()
+
+	var refreshAttempts atomic.Int32
+	ctx, env := newExpiredRefreshEnv(t, "refresh-lock-held", func(w http.ResponseWriter, _ *http.Request) {
+		refreshAttempts.Add(1)
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	redisClient, err := infra.NewRedisClient(t, 0)
+	require.NoError(t, err)
+	held, err := cache.NewRedisCacheAdapter(redisClient).Add(ctx, remotesessions.RefreshLockKey(env.subject, env.clientID), time.Minute)
+	require.NoError(t, err)
+	require.True(t, held)
+
+	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
+	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+	require.Equal(t, remotesessions.RefreshOutageNone, remotesessions.OutageKindOf(err))
+	require.True(t, remotesessions.RefreshBusy(err))
+	require.Positive(t, remotesessions.RetryAfter(err))
+	require.Zero(t, refreshAttempts.Load())
+}
+
+// A reply cut off or unreadable is the provider's fault, so the connect page and retries say so.
+func TestRefreshNow_UnusableProviderAnswerIsAProviderOutage(t *testing.T) {
+	t.Parallel()
+
+	for name, handler := range map[string]http.HandlerFunc{
+		"unreadable": func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Type", "application/json")
+			_, _ = w.Write([]byte(`not json`))
+		},
+		"cut off": func(w http.ResponseWriter, _ *http.Request) {
+			w.Header().Set("Content-Length", "100")
+			_, _ = w.Write([]byte(`{"access_token":`))
+		},
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, env := newExpiredRefreshEnv(t, "refresh-unusable-"+strings.ReplaceAll(name, " ", "-"), handler)
+			_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
+			require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+			require.Equal(t, remotesessions.RefreshOutageProvider, remotesessions.OutageKindOf(err))
+			require.Positive(t, remotesessions.RetryAfter(err))
+			kind, _ := env.mgr.ConnectionOutage(ctx, env.subject, env.clientID)
+			require.Equal(t, remotesessions.RefreshOutageProvider, kind)
+		})
+	}
+}
+
+// A cooldown left by a real outage still says what stopped the refresh.
+func TestRefreshNow_CooldownKeepsTheOutageKind(t *testing.T) {
+	t.Parallel()
+
+	ctx, env := newExpiredRefreshEnv(t, "refresh-cooldown-kind", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
+	require.Equal(t, remotesessions.RefreshOutageProvider, remotesessions.OutageKindOf(err))
+	_, err = env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
+	require.Equal(t, remotesessions.RefreshOutageProvider, remotesessions.OutageKindOf(err))
+}
+
+// With the marker unsaved the connect page shows no outage, so the answer can't point there.
+func TestRefreshNow_UnrecordedOutageHasNoKind(t *testing.T) {
+	t.Parallel()
+
+	ctx, env := newExpiredRefreshEnv(t, "refresh-marker-lost", func(w http.ResponseWriter, _ *http.Request) {
+		w.WriteHeader(http.StatusServiceUnavailable)
+	})
+	broken := redis.NewClient(&redis.Options{Addr: "127.0.0.1:1", MaxRetries: -1})
+	require.NoError(t, broken.Close())
+	refresher := env.newRefresher(testenv.NewMeterProvider(t), cache.NewRedisCacheAdapter(broken))
+
+	_, err := refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerRequest)
+	require.ErrorIs(t, err, remotesessions.ErrRemoteSessionUnavailable)
+	require.Equal(t, remotesessions.RefreshOutageNone, remotesessions.OutageKindOf(err))
 }
 
 func TestResolveAccessToken_UpstreamServerErrorIsNoToken(t *testing.T) {

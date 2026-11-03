@@ -859,7 +859,7 @@ func (c *memberChoices) tokens(ctx context.Context, member metaMember) (map[uuid
 		case <-entry.done:
 			return entry.tokens, entry.err
 		case <-ctx.Done():
-			return nil, memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug)}, status: 0, retryable: false, retryAfter: 0}
+			return nil, memberCredentialLoadError(member, ctx.Err())
 		}
 	}
 
@@ -869,10 +869,8 @@ func (c *memberChoices) tokens(ctx context.Context, member metaMember) (map[uuid
 		err = &metaMemberError{message: fmt.Sprintf("server %q needs this gateway to be signed in to again to choose its connection", member.slug)}
 	case errors.Is(err, remotesessions.ErrNoValidToken):
 		err = &metaMemberError{message: fmt.Sprintf("server %q's attached connection is no longer available; it must be attached again", member.slug)}
-	case oops.IsInfrastructureFailure(err):
-		err = newMemberUnavailableError(fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug), nil)
 	case err != nil:
-		err = memberDiscoveryError{metaMemberError: &metaMemberError{message: fmt.Sprintf("server %q could not load its connection credentials; retry shortly", member.slug)}, status: 0, retryable: false, retryAfter: 0}
+		err = memberCredentialLoadError(member, err)
 	}
 	if err != nil {
 		c.mu.Lock()

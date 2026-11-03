@@ -389,18 +389,26 @@ func (s *RefreshService) RecordedOutage(ctx context.Context, sess remotesessions
 // errRefreshTunnelTransport marks a refresh that couldn't reach the tunnel's transport at all.
 var errRefreshTunnelTransport = errors.New("refresh tunnel transport unavailable")
 
+// errRefreshUnusableAnswer marks a provider reply cut off or unreadable: its fault, not ours.
+var errRefreshUnusableAnswer = errors.New("refresh answer unusable")
+
 // refreshOutagePaced reports a failure that clears on its own and isn't helped by asking again now.
 func refreshOutagePaced(outcome remotesessionmetrics.RefreshOutcome, err error) bool {
 	switch outcome {
 	case remotesessionmetrics.RefreshOutcomeUpstreamError, remotesessionmetrics.RefreshOutcomeRateLimited, remotesessionmetrics.RefreshOutcomeUnreachable:
 		return true
 	default:
-		return errors.Is(err, errRefreshTunnelTransport)
+		return errors.Is(err, errRefreshTunnelTransport) || errors.Is(err, errRefreshUnusableAnswer)
 	}
 }
 
 // refreshDeferredError is a refresh that made no upstream call; retry after wait.
-type refreshDeferredError struct{ wait time.Duration }
+type refreshDeferredError struct {
+	wait time.Duration
+
+	// noOutage: nothing failed; another request held the lock, or the lease ran out in setup.
+	noOutage bool
+}
 
 func (e *refreshDeferredError) Error() string {
 	return fmt.Sprintf("refresh deferred, retry after %s", e.wait)
@@ -433,22 +441,24 @@ func (s *RefreshService) refreshCooldownRemaining(ctx context.Context, sess remo
 	return max(time.Until(until), 0)
 }
 
-// startRefreshCooldown paces the binding after an outage answer, records the outage for the connect page, and returns the wait.
-func (s *RefreshService) startRefreshCooldown(ctx context.Context, sess remotesessions_repo.RemoteSession, kind RefreshOutageKind, cause error) time.Duration {
+// startRefreshCooldown paces the binding after an outage answer, records the outage for the connect page, and returns the wait and whether the page can see it.
+func (s *RefreshService) startRefreshCooldown(ctx context.Context, sess remotesessions_repo.RemoteSession, kind RefreshOutageKind, cause error) (time.Duration, bool) {
 	wait := refreshOutageCooldown
 	if tokenErr, ok := errors.AsType[*TokenRefreshError](cause); ok {
 		wait = min(max(wait, tokenErr.retryAfter), refreshOutageCooldownMax)
 	}
 	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
 	defer cancel()
+	recorded := true
 	if err := s.locks.Set(ctx, RefreshOutageKey(sess), kind, refreshOutageTTL); err != nil {
+		recorded = false
 		s.logger.WarnContext(ctx, "remote session refresh outage not recorded", attr.SlogError(err))
 	}
 	if err := s.locks.Set(ctx, RefreshCooldownKey(sess), time.Now().Add(wait), wait); err != nil {
 		s.logger.WarnContext(ctx, "remote session refresh cooldown not stored", attr.SlogError(err))
-		return 0
+		return 0, recorded
 	}
-	return wait
+	return wait, recorded
 }
 
 // clearRefreshOutage ends the pacing and the record once a refresh has worked.
@@ -509,7 +519,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 	if trigger != remotesessionmetrics.RefreshTriggerManual {
 		if wait := s.refreshCooldownRemaining(ctx, sess); wait > 0 {
 			s.metrics.Record(ctx, client.IssuerUrl, trigger, remotesessionmetrics.RefreshOutcomeDeferred)
-			return zero, &RefreshError{IssuerURL: client.IssuerUrl, Outcome: remotesessionmetrics.RefreshOutcomeDeferred, retryAfter: wait, outageKind: kind, err: &refreshDeferredError{wait: wait}}
+			return zero, &RefreshError{IssuerURL: client.IssuerUrl, Outcome: remotesessionmetrics.RefreshOutcomeDeferred, retryAfter: wait, outageKind: kind, err: &refreshDeferredError{wait: wait, noOutage: false}}
 		}
 	}
 
@@ -531,12 +541,17 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 		failureKind := RefreshOutageNone
 		switch {
 		case refreshOutagePaced(outcome, err):
-			failureKind = kind
-			retryAfter = s.startRefreshCooldown(ctx, attempted, kind, err)
+			var recorded bool
+			retryAfter, recorded = s.startRefreshCooldown(ctx, attempted, kind, err)
+			if recorded {
+				failureKind = kind
+			}
 		case outcome == remotesessionmetrics.RefreshOutcomeDeferred:
-			failureKind = kind
 			if deferred, ok := errors.AsType[*refreshDeferredError](err); ok {
 				retryAfter = deferred.wait
+				if !deferred.noOutage {
+					failureKind = kind
+				}
 			}
 		}
 		return zero, &RefreshError{IssuerURL: issuerURL, Outcome: outcome, retryAfter: retryAfter, outageKind: failureKind, err: err}
@@ -642,13 +657,13 @@ func (s *RefreshService) refresh(
 		case ok:
 			return winner, nil, nil, nil
 		case wait > 0:
-			return zero, nil, nil, &refreshDeferredError{wait: wait}
+			return zero, nil, nil, &refreshDeferredError{wait: wait, noOutage: false}
 		}
 		// Never post unserialized: two waiters presenting one token can revoke the family (BCP 4.13.2).
 		lockAcquiredAt = time.Now()
 		held, lockErr = s.locks.Add(ctx, lockKey, refreshLockTTL)
 		if lockErr == nil && !held {
-			return zero, nil, nil, &refreshDeferredError{wait: refreshOutageCooldown}
+			return zero, nil, nil, &refreshDeferredError{wait: refreshOutageCooldown, noOutage: true}
 		}
 	}
 
@@ -750,7 +765,7 @@ func (s *RefreshService) refresh(
 	now := time.Now()
 	postDeadline := refreshPostDeadline(lockAcquiredAt, now)
 	if !postDeadline.After(now) {
-		return zero, &client, nil, &refreshDeferredError{wait: refreshOutageCooldown}
+		return zero, &client, nil, &refreshDeferredError{wait: refreshOutageCooldown, noOutage: true}
 	}
 	updated, tok, refreshErr := s.refreshSessionTokens(ctx, q, client, sess, resource, postDeadline)
 	if refreshErr == nil {

@@ -1404,6 +1404,32 @@ func TestServeConsentAction_ValidateMemberProtocolRevisions(t *testing.T) {
 	}
 }
 
+// Verify while another request holds the refresh is a moment's wait, not a problem on our side.
+func TestServeConsentAction_ValidateWhileRefreshIsBusySaysWait(t *testing.T) {
+	t.Parallel()
+
+	ctx, fx := seedMetaValidationFixture(t, "aim866-busy")
+	sess := storedSession(t, ctx, fx)
+	refresh, err := fx.ti.enc.Encrypt([]byte("live-refresh"))
+	require.NoError(t, err)
+	access, err := fx.ti.enc.Encrypt([]byte("expired"))
+	require.NoError(t, err)
+	_, err = remotesessions_repo.New(fx.ti.conn).UpsertRemoteSession(ctx, remotesessions_repo.UpsertRemoteSessionParams{
+		SubjectUrn: sess.SubjectUrn, UserSessionIssuerID: sess.UserSessionIssuerID, RemoteSessionClientID: sess.RemoteSessionClientID,
+		AccessTokenEncrypted: access, AccessExpiresAt: pgtype.Timestamptz{Time: time.Now().Add(-time.Hour), Valid: true, InfinityModifier: pgtype.Finite},
+		RefreshTokenEncrypted: conv.ToPGText(refresh), Scopes: []string{}, Resource: sess.Resource,
+	})
+	require.NoError(t, err)
+	held, err := fx.ti.cacheAdapter.Add(ctx, "remotesession:refresh:"+sess.SubjectUrn.String()+":"+sess.RemoteSessionClientID.String(), time.Minute)
+	require.NoError(t, err)
+	require.True(t, held)
+
+	w, err := postValidate(t, fx, fx.clientID)
+	require.NoError(t, err)
+	require.Equal(t, http.StatusSeeOther, w.Code)
+	require.Contains(t, w.Header().Get("Location"), "validate_limited=")
+}
+
 // A failing provider reads as an outage on the consent page's Verify, and the
 // grant survives it.
 func TestServeConsentAction_ValidateDuringProviderOutageSaysRetry(t *testing.T) {
@@ -1439,7 +1465,8 @@ func TestServeConsentAction_ValidateDuringProviderOutageSaysRetry(t *testing.T) 
 	require.Equal(t, oops.CodeUnavailable, oopsErr.Code)
 	page := httptest.NewRecorder()
 	oops.BrowserErrHandle(testenv.NewLogger(t), func(http.ResponseWriter, *http.Request) error { return err }).ServeHTTP(page, httptest.NewRequest(http.MethodPost, "/connect", nil))
-	require.Contains(t, page.Body.String(), "responding right now")
+	require.Contains(t, page.Body.String(), "available right now")
+	require.Contains(t, page.Body.String(), "can't get the credential it needs", "Technical details stay true")
 	require.NotContains(t, page.Body.String(), "problem on our side")
 	require.True(t, storedSession(t, ctx, fx).RefreshTokenEncrypted.Valid, "the outage keeps the grant")
 	require.Empty(t, fx.member.drain(), "no probe reached the member")

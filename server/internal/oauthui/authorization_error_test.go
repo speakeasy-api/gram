@@ -225,8 +225,8 @@ func TestAuthorizationErrorPageProviderOutage(t *testing.T) {
 		provider string
 		want     string
 	}{
-		{"named provider", "auth.example.com", "auth.example.com isn't responding right now"},
-		{"unknown provider", "", "The service this connection uses isn't responding right now"},
+		{"named provider", "auth.example.com", "auth.example.com isn't available right now"},
+		{"unknown provider", "", "The service this connection uses isn't available right now"},
 	} {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
@@ -235,7 +235,7 @@ func TestAuthorizationErrorPageProviderOutage(t *testing.T) {
 			page := strings.Join(strings.Fields(response.Body.String()), " ")
 			require.Equal(t, http.StatusServiceUnavailable, response.Code)
 			require.Contains(t, page, tc.want)
-			require.Contains(t, page, "Try connecting again in a few minutes")
+			require.Contains(t, page, "Try connecting again shortly")
 			require.Contains(t, page, "This isn't something you did")
 			require.NotContains(t, page, "problem on our side")
 			require.NotContains(t, page, "isn't allowed")

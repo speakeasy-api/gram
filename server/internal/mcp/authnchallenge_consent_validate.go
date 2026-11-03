@@ -37,7 +37,7 @@ var errRemoteSessionVerdictNotRecorded = errors.New("remote session verdict not 
 // errRemoteSessionMemberOffline: a keepalive found no live tunnel route; no verdict is written so a reconnect is judged promptly.
 var errRemoteSessionMemberOffline = errors.New("remote session member tunnel has no live route")
 
-// errValidationRateLimited marks a verify refused before any probe ran.
+// errValidationRateLimited marks a verify that ran no probe: rate limited, or another refresh is running.
 var errValidationRateLimited = errors.New("remote session validation rate limited")
 
 // validationRate caps verifies per consent challenge.
@@ -46,7 +46,7 @@ var validationRate = ratelimit.PerMinute(6)
 // validationLimitedNotice is the fixed card copy for a rate-limited verify.
 const validationLimitedNotice = "Try again in a moment"
 
-// refreshUnavailableNotice follows a Refresh the provider didn't answer; it says nothing about now.
+// refreshUnavailableNotice follows a Refresh that didn't finish; it says nothing about now.
 const refreshUnavailableNotice = "Your last refresh didn't finish. Try again shortly."
 
 // newValidationLimiter builds the per-challenge verify limiter; nil without Redis.
@@ -119,6 +119,9 @@ func (s *Service) probeRemoteSession(
 		}
 		if candidate, ok := resolved[client.RemoteSessionIssuerID]; ok && candidate.RemoteSessionClientID == client.ID {
 			if candidate.SessionUnavailable() {
+				if remotesessions.RefreshBusy(candidate.ClientCredentialErr) {
+					return errValidationRateLimited
+				}
 				failure := oops.E(oops.CodeUnavailable, candidate.ClientCredentialErr, "%s", remoteSessionUnavailableMessage)
 				if remotesessions.OutageKindOf(candidate.ClientCredentialErr) == remotesessions.RefreshOutageNone {
 					return fmt.Errorf("validate remote session: %w", oops.WithBrowserReason(failure.LogError(ctx, logger), oauthui.ReasonUnavailable))
