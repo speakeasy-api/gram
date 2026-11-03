@@ -676,3 +676,48 @@ func TestDeleteGlobalIssuer_BlockedByGlobalClientOnly(t *testing.T) {
 	require.Contains(t, err.Error(), "delete them here first")
 	require.NotContains(t, err.Error(), "tenant-owned")
 }
+
+// TestDeleteGlobalClient_RetiresTypedClientsPerOrganization proves the staff
+// deletion carries through to the typed records of every organization that
+// reached the client, not only the one the request runs in.
+func TestDeleteGlobalClient_RetiresTypedClientsPerOrganization(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	adminCtx := withAdmin(t, ctx)
+	issuer, err := ti.service.CreateGlobalIssuer(adminCtx, createGlobalIssuer(t, "global-typed"))
+	require.NoError(t, err)
+	client, err := ti.service.CreateGlobalClient(adminCtx, &adminrsgen.CreateGlobalClientPayload{
+		SessionToken:            nil,
+		RemoteSessionIssuerID:   issuer.ID,
+		ClientID:                "global-typed-client",
+		ClientSecret:            nil,
+		TokenEndpointAuthMethod: nil,
+		Scope:                   nil,
+		Audience:                nil,
+	})
+	require.NoError(t, err)
+	clientID, err := uuid.Parse(client.ID)
+	require.NoError(t, err)
+
+	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-global-typed")
+	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "global-typed-server")
+	associate(t, ctx, ti.conn, orgID, projectID, serverID, clientID)
+	recordTypedClients(t, ctx, ti.conn, orgID, serverID)
+	require.NotEmpty(t, typedClients(t, ctx, ti.conn, serverID),
+		"the association must have a typed client to retire")
+
+	require.NoError(t, ti.service.DeleteGlobalClient(adminCtx, &adminrsgen.DeleteGlobalClientPayload{
+		ID:           client.ID,
+		SessionToken: nil,
+	}))
+
+	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, serverID))
+	require.Empty(t, typedClients(t, ctx, ti.conn, serverID),
+		"the consuming organization's typed records go with the global client")
+}

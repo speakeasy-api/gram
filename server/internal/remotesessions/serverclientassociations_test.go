@@ -8,14 +8,20 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
+	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -57,11 +63,44 @@ func typedClients(t *testing.T, ctx context.Context, conn *pgxpool.Pool, serverI
 // associations call for, as every association writer does.
 func recordTypedClients(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, serverIDs ...uuid.UUID) {
 	t.Helper()
-	tx, err := conn.Begin(ctx)
-	require.NoError(t, err)
-	defer func() { _ = tx.Rollback(ctx) }()
+	tx := testenv.BeginTx(t, ctx, conn)
 	require.NoError(t, authclientbackfill.SyncServerAssociations(ctx, tx, organizationID, serverIDs...))
 	require.NoError(t, tx.Commit(ctx))
+}
+
+// enforceUpstreamAuth turns on the organization's upstream auth enforcement,
+// the state in which its servers are served from typed auth clients.
+func enforceUpstreamAuth(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) {
+	t.Helper()
+	_, err := productfeaturesrepo.New(conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
+	})
+	require.NoError(t, err)
+}
+
+// seedAdministratorAuthClient creates a static-credential auth client an
+// administrator owns and offers it on the server, the records the sync must
+// never touch.
+func seedAdministratorAuthClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID, serverID uuid.UUID) uuid.UUID {
+	t.Helper()
+	client, err := authclientsrepo.New(conn).CreateAuthClient(ctx, authclientsrepo.CreateAuthClientParams{
+		OrganizationID:        organizationID,
+		ProjectID:             uuid.NullUUID{UUID: projectID, Valid: true},
+		ClientType:            "static_credential",
+		Name:                  "Administrator credential",
+		CreatedByUserID:       conv.ToPGText("admin-user"),
+		RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ClientAttachmentScope: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	_, err = authclientsrepo.New(conn).AttachAuthClientToServer(ctx, authclientsrepo.AttachAuthClientToServerParams{
+		McpServerID:    serverID,
+		AuthClientID:   client.ID,
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+	return client.ID
 }
 
 func TestMCPServerUpstreamClientAssociations(t *testing.T) {
@@ -299,4 +338,71 @@ func TestCommitServerIdentityConfigurationAssociatesOnlyTheTargetServer(t *testi
 	_, err = ti.service.CommitServerIdentityConfiguration(ctx, existingServerIdentityPayload(targetID, providerID, clientID))
 	require.NoError(t, err, "a repeated commit is idempotent")
 	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, targetID))
+}
+
+// TestDetachServerClientAssociation_EnforcedOrganization proves the older path
+// still works for an organization served by typed auth clients, and that both
+// models move: the write is not refused, and the typed client goes with it.
+func TestDetachServerClientAssociation_EnforcedOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+	enforceUpstreamAuth(t, ctx, ti.conn, orgID)
+
+	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-enforced")
+	first := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "enforced-a")
+	second := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "enforced-b")
+	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-enforced")
+	associate(t, ctx, ti.conn, orgID, projectID, first, clientID)
+	associate(t, ctx, ti.conn, orgID, projectID, second, clientID)
+	recordTypedClients(t, ctx, ti.conn, orgID, first, second)
+	require.NotEmpty(t, typedClients(t, ctx, ti.conn, first))
+
+	require.NoError(t, ti.service.DetachServerClientAssociation(ctx, &gen.DetachServerClientAssociationPayload{
+		McpServerID:           first.String(),
+		RemoteSessionClientID: clientID.String(),
+	}), "an enforced organization is not refused the older path")
+
+	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, first))
+	require.Empty(t, typedClients(t, ctx, ti.conn, first),
+		"both models move together while enforced")
+	require.NotEmpty(t, typedClients(t, ctx, ti.conn, second))
+}
+
+// TestDetachServerClientAssociation_KeepsAdministratorClients proves the sync
+// never reaches records an administrator owns: a client and link they created
+// survive a legacy detach of the registration-derived ones.
+func TestDetachServerClientAssociation_KeepsAdministratorClients(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-adminkeep")
+	first := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "adminkeep-a")
+	second := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "adminkeep-b")
+	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-adminkeep")
+	associate(t, ctx, ti.conn, orgID, projectID, first, clientID)
+	associate(t, ctx, ti.conn, orgID, projectID, second, clientID)
+	recordTypedClients(t, ctx, ti.conn, orgID, first, second)
+
+	adminClientID := seedAdministratorAuthClient(t, ctx, ti.conn, orgID, projectID, first)
+	require.Contains(t, typedClients(t, ctx, ti.conn, first), adminClientID)
+
+	require.NoError(t, ti.service.DetachServerClientAssociation(ctx, &gen.DetachServerClientAssociationPayload{
+		McpServerID:           first.String(),
+		RemoteSessionClientID: clientID.String(),
+	}))
+
+	require.Equal(t, []uuid.UUID{adminClientID}, typedClients(t, ctx, ti.conn, first),
+		"only the record derived from the association is retired")
 }

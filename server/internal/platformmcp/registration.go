@@ -26,6 +26,7 @@ import (
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
 	remotemcprepo "github.com/speakeasy-api/gram/server/internal/remotemcp/repo"
@@ -696,6 +697,12 @@ func (s *RegistrationStore) CompleteRegistrationWithRemoteURL(ctx context.Contex
 }
 
 func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Context, tx pgx.Tx, project ResolvedProject, registration platformrepo.PlatformMcpCatalogRegistration, configuration resolvedCatalogConfiguration) (platformrepo.PlatformMcpCatalogRegistration, error) {
+	// The components below include credential headers, which yield typed auth
+	// clients. Take the writer scope before the first of them, as every other
+	// writer of those records does.
+	if err := authclientbackfill.LockEMAWriterScope(ctx, tx, registration.OrganizationID, []uuid.UUID{project.ID}); err != nil {
+		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("lock platform mcp auth client writer scope: %w", err)
+	}
 	remoteID, err := uuid.NewV7()
 	if err != nil {
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("generate platform mcp remote source id: %w", err)
@@ -793,6 +800,16 @@ func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Cont
 	// A readable slug was locked and checked by claimReadableRegistrationSlug.
 	// The fallback embeds the 64-bit random registration suffix, so it cannot
 	// land on an existing toolsets.mcp_slug and needs no lock or probe.
+	// The source's credential headers and the new server's reach decide the
+	// typed auth clients it offers, recorded here rather than left to the
+	// offline backfill.
+	if err := authclientbackfill.SyncEMAServers(ctx, tx, registration.OrganizationID, []uuid.UUID{server.ID}); err != nil {
+		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("sync platform mcp server EMA clients: %w", err)
+	}
+	if err := authclientbackfill.SyncRemoteSource(ctx, tx, registration.OrganizationID, remote.ID); err != nil {
+		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("sync platform mcp source auth clients: %w", err)
+	}
+
 	endpoint, err := mcpendpointsrepo.New(tx).CreateMCPEndpoint(ctx, mcpendpointsrepo.CreateMCPEndpointParams{
 		ProjectID:   project.ID,
 		McpServerID: uuid.NullUUID{UUID: server.ID, Valid: true},
