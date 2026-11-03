@@ -757,7 +757,7 @@ func TestCodeModeReconnectUpdatesFrozenCatalog(t *testing.T) {
 				require.False(t, pending.CodeReconnect.CatalogComplete)
 				// Reloading and retrying must finish the committed approval, not replace it.
 				retryPage := consentGetPageWithContext(t, ctx, ti, slug, stateID)
-				require.Contains(t, retryPage, "Review updated tools")
+				require.Contains(t, retryPage, `id="consent-approve-button"`)
 				approveForm.Set("tool_inventory_id", gatewayInventoryFromPage(t, retryPage).Attempt)
 				approvedRequest = httptest.NewRequest(http.MethodPost, "/mcp/"+slug+"/connect", strings.NewReader(approveForm.Encode())).WithContext(ctx)
 				approvedRequest.Header.Set("Content-Type", "application/x-www-form-urlencoded")
