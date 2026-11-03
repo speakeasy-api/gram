@@ -36,9 +36,9 @@ func newCodeGKEFixture(t *testing.T, mutate func(*unstructured.Unstructured, *un
 
 func newCodeGKEFixtureWithImage(t *testing.T, image string, mutate func(*unstructured.Unstructured, *unstructured.Unstructured)) (*GKEProvider, *dynamicfake.FakeDynamicClient, Scope) {
 	t.Helper()
-	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{sandbox.Claims: "SandboxClaimList", sandbox.Sandboxes: "SandboxList", sandbox.Pods: "PodList", sandbox.Templates: "SandboxTemplateList"})
-	template := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "extensions.agents.x-k8s.io/v1alpha1", "kind": "SandboxTemplate", "metadata": map[string]any{"name": "code-v1", "namespace": "code"}}}
-	require.NoError(t, client.Tracker().Create(sandbox.Templates, template, "code"))
+	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{sandbox.ClaimsV1Beta1: "SandboxClaimList", sandbox.SandboxesV1Beta1: "SandboxList", sandbox.Pods: "PodList", sandbox.WarmPoolsV1Beta1: "SandboxWarmPoolList"})
+	template := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "extensions.agents.x-k8s.io/v1beta1", "kind": "SandboxWarmPool", "metadata": map[string]any{"name": "code-v1", "namespace": "code"}}}
+	require.NoError(t, client.Tracker().Create(sandbox.WarmPoolsV1Beta1, template, "code"))
 	client.PrependReactor("create", "sandboxclaims", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		create, ok := action.(k8stesting.CreateAction)
 		require.True(t, ok)
@@ -48,19 +48,23 @@ func newCodeGKEFixtureWithImage(t *testing.T, image string, mutate func(*unstruc
 		claim.SetUID(types.UID(uuid.NewString()))
 		name := claim.GetName()
 		claim.Object["status"] = map[string]any{"sandbox": map[string]any{"name": name}}
-		resource := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "agents.x-k8s.io/v1alpha1", "kind": "Sandbox", "metadata": map[string]any{"name": name, "namespace": "code"}, "status": map[string]any{"conditions": []any{map[string]any{"type": "Ready", "status": "True"}}}}}
+		resource := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "agents.x-k8s.io/v1beta1", "kind": "Sandbox", "metadata": map[string]any{"name": name, "namespace": "code"}, "status": map[string]any{"conditions": []any{map[string]any{"type": "Ready", "status": "True"}}}}}
+		resource.SetUID(types.UID(uuid.NewString()))
+		resource.SetOwnerReferences([]metav1.OwnerReference{{APIVersion: claim.GetAPIVersion(), Kind: "SandboxClaim", Name: name, UID: claim.GetUID(), Controller: new(true)}})
+		require.NoError(t, unstructured.SetNestedField(resource.Object, "runner="+name, "status", "selector"))
 		pod := &unstructured.Unstructured{Object: map[string]any{
-			"apiVersion": "v1", "kind": "Pod", "metadata": map[string]any{"name": name, "namespace": "code", "uid": uuid.NewString(), "labels": map[string]any{sandbox.ClaimUIDLabel: string(claim.GetUID())}},
+			"apiVersion": "v1", "kind": "Pod", "metadata": map[string]any{"name": name, "namespace": "code", "uid": uuid.NewString(), "labels": map[string]any{sandbox.ClaimUIDLabel: string(claim.GetUID()), "runner": name}},
 			"spec":   map[string]any{"runtimeClassName": "gvisor", "automountServiceAccountToken": false, "containers": []any{map[string]any{"name": "code-runner", "image": image}}},
 			"status": map[string]any{"phase": "Running", "podIP": "10.52.0.2", "conditions": []any{map[string]any{"type": "Ready", "status": "True"}}, "containerStatuses": []any{map[string]any{"name": "code-runner", "imageID": "containerd://sha256:" + strings.Repeat("a", 64), "ready": true}}},
 		}}
+		pod.SetOwnerReferences([]metav1.OwnerReference{{APIVersion: resource.GetAPIVersion(), Kind: "Sandbox", Name: name, UID: resource.GetUID(), Controller: new(true)}})
 		if mutate != nil {
 			mutate(claim, pod)
 		}
 		for _, item := range []struct {
 			resource schema.GroupVersionResource
 			value    *unstructured.Unstructured
-		}{{sandbox.Sandboxes, resource}, {sandbox.Pods, pod}, {sandbox.Claims, claim}} {
+		}{{sandbox.SandboxesV1Beta1, resource}, {sandbox.Pods, pod}, {sandbox.ClaimsV1Beta1, claim}} {
 			if err := client.Tracker().Create(item.resource, item.value, "code"); err != nil {
 				return true, nil, fmt.Errorf("seed fake controller: %w", err)
 			}
@@ -73,7 +77,7 @@ func newCodeGKEFixtureWithImage(t *testing.T, image string, mutate func(*unstruc
 	require.NoError(t, err)
 	// A tagged image models a preview; released environments pin a digest.
 	allowTag := !strings.Contains(image, "@sha256:")
-	provider, err := NewGKEProvider(t.Context(), GKEConfig{Dynamic: client, Namespace: "code", Template: "code-v1", Image: image, AllowTaggedImage: allowTag, Port: 8081, Token: strings.Repeat("t", 32), Dialer: policy.Dialer(), CIDRs: []*net.IPNet{cidr}, Logger: testenv.NewLogger(t)})
+	provider, err := NewGKEProvider(t.Context(), GKEConfig{Dynamic: client, Namespace: "code", WarmPool: "code-v1", Image: image, AllowTaggedImage: allowTag, Port: 8081, Token: strings.Repeat("t", 32), Dialer: policy.Dialer(), CIDRs: []*net.IPNet{cidr}, Logger: testenv.NewLogger(t)})
 	require.NoError(t, err)
 	provider.capacityWait = 50 * time.Millisecond
 	t.Cleanup(func() {
@@ -84,9 +88,46 @@ func newCodeGKEFixtureWithImage(t *testing.T, image string, mutate func(*unstruc
 	return provider, client, Scope{Organization: "test-org", Project: uuid.New(), Caller: []string{"user-1"}}
 }
 
+func TestCodeGKEClaimsNativeWarmPool(t *testing.T) {
+	t.Parallel()
+	provider, client, scope := newCodeGKEFixture(t, nil)
+	lease, err := provider.Acquire(t.Context(), scope)
+	require.NoError(t, err)
+	require.NoError(t, lease.Release(t.Context()))
+	claims, err := client.Resource(sandbox.ClaimsV1Beta1).Namespace("code").List(t.Context(), metav1.ListOptions{})
+	require.NoError(t, err)
+	require.Len(t, claims.Items, 1)
+	claim := claims.Items[0]
+	require.Equal(t, "extensions.agents.x-k8s.io/v1beta1", claim.GetAPIVersion())
+	pool, _, err := unstructured.NestedString(claim.Object, "spec", "warmPoolRef", "name")
+	require.NoError(t, err)
+	require.Equal(t, "code-v1", pool)
+	spec, _, err := unstructured.NestedMap(claim.Object, "spec")
+	require.NoError(t, err)
+	require.Len(t, spec, 2, "only pool and lifecycle: overrides force a cold start")
+	require.Contains(t, spec, "lifecycle")
+	for _, action := range client.Actions() {
+		if action.GetResource().Group != "" {
+			require.Equal(t, "v1beta1", action.GetResource().Version)
+		}
+	}
+}
+
+func TestCodeGKEDiscoversBetaSandboxOwnedPod(t *testing.T) {
+	t.Parallel()
+	provider, _, scope := newCodeGKEFixture(t, func(_ *unstructured.Unstructured, pod *unstructured.Unstructured) {
+		labels := pod.GetLabels()
+		delete(labels, sandbox.ClaimUIDLabel)
+		pod.SetLabels(labels)
+	})
+	lease, err := provider.Acquire(t.Context(), scope)
+	require.NoError(t, err, "native controller pods are discovered through the assigned sandbox")
+	require.NoError(t, lease.Release(t.Context()))
+}
+
 func TestCodeGKERejectsMutableImage(t *testing.T) {
 	t.Parallel()
-	_, err := NewGKEProvider(t.Context(), GKEConfig{Logger: testenv.NewLogger(t), Dynamic: dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()), Namespace: "code", Template: "code-v1", Image: "registry.example.com/code:0123456789ab", Port: 8081, CIDRs: []*net.IPNet{{}}})
+	_, err := NewGKEProvider(t.Context(), GKEConfig{Logger: testenv.NewLogger(t), Dynamic: dynamicfake.NewSimpleDynamicClient(runtime.NewScheme()), Namespace: "code", WarmPool: "code-v1", Image: "registry.example.com/code:0123456789ab", Port: 8081, CIDRs: []*net.IPNet{{}}})
 	require.ErrorContains(t, err, "SHA-256-pinned image")
 }
 
@@ -199,6 +240,9 @@ func TestCodeGKERejectsUnsafeWarmPod(t *testing.T) {
 			labels[codeOrganizationLabel] = organizationLabel("another-org")
 			claim.SetLabels(labels)
 		}},
+		{"wrong-pool", func(claim, _ *unstructured.Unstructured) {
+			_ = unstructured.SetNestedField(claim.Object, "shadow-pool-code-v1", "spec", "warmPoolRef", "name")
+		}},
 		{"wrong-image", func(_, pod *unstructured.Unstructured) {
 			_ = unstructured.SetNestedSlice(pod.Object, []any{map[string]any{"name": "code-runner", "image": "wrong"}}, "spec", "containers")
 		}},
@@ -217,7 +261,7 @@ func TestCodeGKERejectsUnsafeWarmPod(t *testing.T) {
 			provider, client, scope := newCodeGKEFixture(t, tc.mutate)
 			_, err := provider.Acquire(t.Context(), scope)
 			require.Error(t, err)
-			claims, err := client.Resource(sandbox.Claims).Namespace("code").List(t.Context(), metav1.ListOptions{})
+			claims, err := client.Resource(sandbox.ClaimsV1Beta1).Namespace("code").List(t.Context(), metav1.ListOptions{})
 			require.NoError(t, err)
 			require.Empty(t, claims.Items, "owned invalid claim must be deleted")
 		})
@@ -318,12 +362,12 @@ func TestCodeGKEReconnectRevalidatesOwnership(t *testing.T) {
 	typed, ok := lease.(*gkeLease)
 	require.True(t, ok)
 	entry := typed.entry
-	claim, err := client.Resource(sandbox.Claims).Namespace("code").Get(t.Context(), entry.name, metav1.GetOptions{})
+	claim, err := client.Resource(sandbox.ClaimsV1Beta1).Namespace("code").Get(t.Context(), entry.name, metav1.GetOptions{})
 	require.NoError(t, err)
 	labels := claim.GetLabels()
 	labels[codeOrganizationLabel] = organizationLabel("another-org")
 	claim.SetLabels(labels)
-	_, err = client.Resource(sandbox.Claims).Namespace("code").Update(t.Context(), claim, metav1.UpdateOptions{})
+	_, err = client.Resource(sandbox.ClaimsV1Beta1).Namespace("code").Update(t.Context(), claim, metav1.UpdateOptions{})
 	require.NoError(t, err)
 	require.ErrorContains(t, lease.Client().dialer.ControlContext(t.Context(), "tcp", "10.52.0.2:8081", nil), "ownership")
 }
@@ -361,7 +405,7 @@ func TestCodeGKEConcurrentAdmissionScalesToOrganizationCap(t *testing.T) {
 	for _, streams := range clients {
 		require.Equal(t, RunnerStreams, streams)
 	}
-	claims, err := client.Resource(sandbox.Claims).Namespace("code").List(t.Context(), metav1.ListOptions{})
+	claims, err := client.Resource(sandbox.ClaimsV1Beta1).Namespace("code").List(t.Context(), metav1.ListOptions{})
 	require.NoError(t, err)
 	require.Len(t, claims.Items, defaultMaxOrganizationRunners)
 }
@@ -412,13 +456,13 @@ func TestCodeGKEDrainsBeforeExpiryAndDeletesWithUID(t *testing.T) {
 	require.NoError(t, err)
 	require.NotSame(t, replacement.Client(), lease.Client())
 	defer func() { require.NoError(t, replacement.Release(t.Context())) }()
-	claims, err := client.Resource(sandbox.Claims).Namespace("code").List(t.Context(), metav1.ListOptions{})
+	claims, err := client.Resource(sandbox.ClaimsV1Beta1).Namespace("code").List(t.Context(), metav1.ListOptions{})
 	require.NoError(t, err)
 	require.Len(t, claims.Items, 2, "replacement warms while the active lease drains")
 	require.NoError(t, lease.Release(t.Context()))
 	var deletes int
 	for _, action := range client.Actions() {
-		if action.GetVerb() == "delete" && action.GetResource() == sandbox.Claims {
+		if action.GetVerb() == "delete" && action.GetResource() == sandbox.ClaimsV1Beta1 {
 			deletes++
 			deletion, ok := action.(k8stesting.DeleteAction)
 			require.True(t, ok)
@@ -443,11 +487,11 @@ func TestCodeGKEReplacesAgedPodWhileBusy(t *testing.T) {
 	replacement, err := provider.Acquire(t.Context(), scope)
 	require.NoError(t, err)
 	require.NotSame(t, lease.Client(), replacement.Client(), "a busy pod past its maximum age takes no new executions")
-	claims, err := client.Resource(sandbox.Claims).Namespace("code").List(t.Context(), metav1.ListOptions{})
+	claims, err := client.Resource(sandbox.ClaimsV1Beta1).Namespace("code").List(t.Context(), metav1.ListOptions{})
 	require.NoError(t, err)
 	require.Len(t, claims.Items, 2, "the aged pod keeps its in-flight execution while the replacement serves")
 	require.NoError(t, lease.Release(t.Context()))
-	claims, err = client.Resource(sandbox.Claims).Namespace("code").List(t.Context(), metav1.ListOptions{})
+	claims, err = client.Resource(sandbox.ClaimsV1Beta1).Namespace("code").List(t.Context(), metav1.ListOptions{})
 	require.NoError(t, err)
 	require.Len(t, claims.Items, 1, "the aged pod is released once its last execution ends")
 	require.NoError(t, replacement.Release(t.Context()))
@@ -506,7 +550,7 @@ func TestCodeGKEIdleReapAndShutdown(t *testing.T) {
 	typed.entry.idle = time.Now().Add(-codeIdleTTL)
 	provider.mu.Unlock()
 	provider.reap(t.Context())
-	claims, err := client.Resource(sandbox.Claims).Namespace("code").List(t.Context(), metav1.ListOptions{})
+	claims, err := client.Resource(sandbox.ClaimsV1Beta1).Namespace("code").List(t.Context(), metav1.ListOptions{})
 	require.NoError(t, err)
 	require.Empty(t, claims.Items)
 	require.True(t, lease.Client().closed)
@@ -570,7 +614,7 @@ func TestCodeGKECancelledRequestDoesNotCancelWarmup(t *testing.T) {
 	lease, err := provider.Acquire(t.Context(), scope)
 	require.NoError(t, err)
 	require.NoError(t, lease.Release(t.Context()))
-	claims, err := client.Resource(sandbox.Claims).Namespace("code").List(t.Context(), metav1.ListOptions{})
+	claims, err := client.Resource(sandbox.ClaimsV1Beta1).Namespace("code").List(t.Context(), metav1.ListOptions{})
 	require.NoError(t, err)
 	require.Len(t, claims.Items, 1)
 }
@@ -599,38 +643,38 @@ func TestCodeGKEIdleEvictionAcrossOrganizations(t *testing.T) {
 	require.NoError(t, other.Release(t.Context()))
 }
 
-func TestCodeGKEMissingTemplateIsUnavailable(t *testing.T) {
+func TestCodeGKEMissingWarmPoolIsUnavailable(t *testing.T) {
 	t.Parallel()
 	provider, client, scope := newCodeGKEFixture(t, nil)
 	require.True(t, provider.Available())
-	require.NoError(t, client.Tracker().Delete(sandbox.Templates, "code", "code-v1"))
-	provider.checkTemplate(t.Context())
+	require.NoError(t, client.Tracker().Delete(sandbox.WarmPoolsV1Beta1, "code", "code-v1"))
+	provider.checkWarmPool(t.Context())
 	require.False(t, provider.Available())
 	_, err := provider.Acquire(t.Context(), scope)
 	require.ErrorIs(t, err, ErrRuntimeUnavailable)
-	claims, err := client.Resource(sandbox.Claims).Namespace("code").List(t.Context(), metav1.ListOptions{})
+	claims, err := client.Resource(sandbox.ClaimsV1Beta1).Namespace("code").List(t.Context(), metav1.ListOptions{})
 	require.NoError(t, err)
-	require.Empty(t, claims.Items, "no claim is made while the template is missing")
-	template := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "extensions.agents.x-k8s.io/v1alpha1", "kind": "SandboxTemplate", "metadata": map[string]any{"name": "code-v1", "namespace": "code"}}}
-	require.NoError(t, client.Tracker().Create(sandbox.Templates, template, "code"))
-	provider.checkTemplate(t.Context())
-	require.True(t, provider.Available(), "a late template enables Code Mode")
+	require.Empty(t, claims.Items, "no claim is made while the pool is missing")
+	template := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "extensions.agents.x-k8s.io/v1beta1", "kind": "SandboxWarmPool", "metadata": map[string]any{"name": "code-v1", "namespace": "code"}}}
+	require.NoError(t, client.Tracker().Create(sandbox.WarmPoolsV1Beta1, template, "code"))
+	provider.checkWarmPool(t.Context())
+	require.True(t, provider.Available(), "a late pool enables Code Mode")
 	lease, err := provider.Acquire(t.Context(), scope)
 	require.NoError(t, err)
 	require.NoError(t, lease.Release(t.Context()))
 }
 
-func TestCodeGKEStartupWithoutTemplateIsUnavailable(t *testing.T) {
+func TestCodeGKEStartupWithoutWarmPoolIsUnavailable(t *testing.T) {
 	t.Parallel()
-	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{sandbox.Templates: "SandboxTemplateList"})
+	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{sandbox.WarmPoolsV1Beta1: "SandboxWarmPoolList"})
 	policy, err := guardian.NewUnsafePolicy(testenv.NewTracerProvider(t), nil)
 	require.NoError(t, err)
 	_, cidr, err := net.ParseCIDR("10.52.0.0/16")
 	require.NoError(t, err)
-	provider, err := NewGKEProvider(t.Context(), GKEConfig{Dynamic: client, Namespace: "code", Template: "code-v1", Image: "registry.example.com/code@sha256:" + strings.Repeat("a", 64), Port: 8081, Token: strings.Repeat("t", 32), Dialer: policy.Dialer(), CIDRs: []*net.IPNet{cidr}, Logger: testenv.NewLogger(t)})
+	provider, err := NewGKEProvider(t.Context(), GKEConfig{Dynamic: client, Namespace: "code", WarmPool: "code-v1", Image: "registry.example.com/code@sha256:" + strings.Repeat("a", 64), Port: 8081, Token: strings.Repeat("t", 32), Dialer: policy.Dialer(), CIDRs: []*net.IPNet{cidr}, Logger: testenv.NewLogger(t)})
 	require.NoError(t, err)
 	t.Cleanup(func() { require.NoError(t, provider.Shutdown(context.Background())) })
-	require.False(t, provider.Available(), "a replica without its template serves Code Mode gateways progressively")
+	require.False(t, provider.Available(), "a replica without its pool serves Code Mode gateways progressively")
 }
 
 func TestCodeGKETemplateNotFoundClaimIsUnavailable(t *testing.T) {
@@ -641,9 +685,22 @@ func TestCodeGKETemplateNotFoundClaimIsUnavailable(t *testing.T) {
 	_, err := provider.Acquire(t.Context(), scope)
 	require.ErrorIs(t, err, ErrRuntimeUnavailable)
 	require.False(t, provider.Available())
-	claims, err := client.Resource(sandbox.Claims).Namespace("code").List(t.Context(), metav1.ListOptions{})
+	claims, err := client.Resource(sandbox.ClaimsV1Beta1).Namespace("code").List(t.Context(), metav1.ListOptions{})
 	require.NoError(t, err)
 	require.Empty(t, claims.Items, "a claim that can never start is deleted")
+}
+
+func TestCodeGKEWarmPoolNotFoundClaimIsUnavailable(t *testing.T) {
+	t.Parallel()
+	provider, client, scope := newCodeGKEFixture(t, func(claim, _ *unstructured.Unstructured) {
+		claim.Object["status"] = map[string]any{"conditions": []any{map[string]any{"type": "Ready", "status": "False", "reason": codeWarmPoolNotFoundReason}}}
+	})
+	_, err := provider.Acquire(t.Context(), scope)
+	require.ErrorIs(t, err, ErrRuntimeUnavailable)
+	require.False(t, provider.Available())
+	claims, err := client.Resource(sandbox.ClaimsV1Beta1).Namespace("code").List(t.Context(), metav1.ListOptions{})
+	require.NoError(t, err)
+	require.Empty(t, claims.Items)
 }
 
 func TestCodeGKERenewsClaimsInUse(t *testing.T) {
@@ -661,7 +718,7 @@ func TestCodeGKERenewsClaimsInUse(t *testing.T) {
 	renewed := entry.expires
 	provider.mu.Unlock()
 	require.True(t, renewed.After(initial), "an active pod's claim is extended")
-	claim, err := client.Resource(sandbox.Claims).Namespace("code").Get(t.Context(), entry.name, metav1.GetOptions{})
+	claim, err := client.Resource(sandbox.ClaimsV1Beta1).Namespace("code").Get(t.Context(), entry.name, metav1.GetOptions{})
 	require.NoError(t, err)
 	shutdown, _, _ := unstructured.NestedString(claim.Object, "spec", "lifecycle", "shutdownTime")
 	require.True(t, expiryMatches(shutdown, renewed))
@@ -696,7 +753,7 @@ func TestCodeGKEAmbiguousCreateRecoversOwnedUID(t *testing.T) {
 	})
 	_, err := provider.Acquire(t.Context(), scope)
 	require.ErrorIs(t, err, context.DeadlineExceeded)
-	claims, err := client.Resource(sandbox.Claims).Namespace("code").List(t.Context(), metav1.ListOptions{})
+	claims, err := client.Resource(sandbox.ClaimsV1Beta1).Namespace("code").List(t.Context(), metav1.ListOptions{})
 	require.NoError(t, err)
 	require.Empty(t, claims.Items)
 }
@@ -714,7 +771,7 @@ func TestCodeGKEShutdownDuringWarmupCleansClaim(t *testing.T) {
 	once.Do(func() { close(unblock) })
 	require.NoError(t, provider.Shutdown(t.Context()))
 	require.Error(t, <-done)
-	claims, err := client.Resource(sandbox.Claims).Namespace("code").List(t.Context(), metav1.ListOptions{})
+	claims, err := client.Resource(sandbox.ClaimsV1Beta1).Namespace("code").List(t.Context(), metav1.ListOptions{})
 	require.NoError(t, err)
 	require.Empty(t, claims.Items)
 }
@@ -747,7 +804,7 @@ func TestCodeGKEColdStartSurvivesTransientRead(t *testing.T) {
 	lease, err := provider.Acquire(t.Context(), scope)
 	require.NoError(t, err)
 	require.NoError(t, lease.Release(t.Context()))
-	claims, err := client.Resource(sandbox.Claims).Namespace("code").List(t.Context(), metav1.ListOptions{})
+	claims, err := client.Resource(sandbox.ClaimsV1Beta1).Namespace("code").List(t.Context(), metav1.ListOptions{})
 	require.NoError(t, err)
 	require.Len(t, claims.Items, 1)
 }
@@ -775,12 +832,12 @@ func TestCodeGKEAmbiguousOrphansCountAgainstCapacity(t *testing.T) {
 	}
 	_, err := provider.Acquire(t.Context(), scope)
 	require.ErrorIs(t, err, ErrCapacity)
-	claims, err := client.Resource(sandbox.Claims).Namespace("code").List(t.Context(), metav1.ListOptions{})
+	claims, err := client.Resource(sandbox.ClaimsV1Beta1).Namespace("code").List(t.Context(), metav1.ListOptions{})
 	require.NoError(t, err)
 	require.Len(t, claims.Items, defaultMaxOrganizationRunners)
 	outage.Store(false)
 	provider.reap(t.Context())
-	claims, err = client.Resource(sandbox.Claims).Namespace("code").List(t.Context(), metav1.ListOptions{})
+	claims, err = client.Resource(sandbox.ClaimsV1Beta1).Namespace("code").List(t.Context(), metav1.ListOptions{})
 	require.NoError(t, err)
 	require.Empty(t, claims.Items)
 	provider.mu.Lock()
@@ -788,12 +845,12 @@ func TestCodeGKEAmbiguousOrphansCountAgainstCapacity(t *testing.T) {
 	provider.mu.Unlock()
 }
 
-func TestCodeGKEUnreachableTemplateAPIKeepsAvailability(t *testing.T) {
+func TestCodeGKEUnreachableWarmPoolAPIKeepsAvailability(t *testing.T) {
 	t.Parallel()
 	provider, client, _ := newCodeGKEFixture(t, nil)
-	client.PrependReactor("get", "sandboxtemplates", func(k8stesting.Action) (bool, runtime.Object, error) {
+	client.PrependReactor("get", "sandboxwarmpools", func(k8stesting.Action) (bool, runtime.Object, error) {
 		return true, nil, fmt.Errorf("temporary API outage")
 	})
-	provider.checkTemplate(t.Context())
+	provider.checkWarmPool(t.Context())
 	require.True(t, provider.Available(), "an API outage keeps the last known availability")
 }

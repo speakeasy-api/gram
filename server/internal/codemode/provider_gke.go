@@ -46,17 +46,19 @@ const (
 	// template. It still serves at its own capacity until then, and a
 	// misconfigured template costs one replacement claim per pod per period.
 	codeMismatchedRunnerAge = 2 * time.Minute
-	// codeTemplateRefresh is how often the sandbox template's presence is
+	// codeWarmPoolRefresh is how often the sandbox warm pool's presence is
 	// re-read, so a deploy that installs it late enables Code Mode promptly.
-	codeTemplateRefresh = 15 * time.Second
-	// codeTemplateCheckTimeout bounds one template read.
-	codeTemplateCheckTimeout = 3 * time.Second
+	codeWarmPoolRefresh = 15 * time.Second
+	// codeWarmPoolCheckTimeout bounds one warm-pool read.
+	codeWarmPoolCheckTimeout = 3 * time.Second
 	// codeCapacityWait bounds how long an execution waits for a stream when
 	// its organization's pods are all busy and at their cap.
 	codeCapacityWait = DefaultAdmissionWait
 	// codeTemplateNotFoundReason is the claim condition reason the sandbox
 	// controller reports when the referenced template does not exist.
 	codeTemplateNotFoundReason = "TemplateNotFound"
+	// codeWarmPoolNotFoundReason is reported when the claim's pool is absent.
+	codeWarmPoolNotFoundReason = "WarmPoolNotFound"
 	// codeDrainMargin reserves enough lifetime for execution and stream cleanup.
 	codeDrainMargin = MaxWallTime + 5*time.Second
 	// codePoolSweep bounds idle resource retention without durable background jobs.
@@ -90,7 +92,7 @@ const (
 	codeOwnerLabel = "gram.ai/runtime-owner"
 )
 
-// GKEConfig points at a dedicated code template on the assistants cluster.
+// GKEConfig points at a dedicated code warm pool on the assistants cluster.
 // Credentials, image, namespace and network policy are operator-owned.
 type GKEConfig struct {
 	// Logger records failed cleanup without exposing credentials or program contents.
@@ -100,8 +102,8 @@ type GKEConfig struct {
 	Dynamic dynamic.Interface
 	// Namespace contains only code-purpose claims, templates and warm-pool pods.
 	Namespace string
-	// Template identifies the dedicated code runner SandboxTemplate.
-	Template string
+	// WarmPool identifies the dedicated code runner SandboxWarmPool.
+	WarmPool string
 	// Image is the SHA-256 reference the template runs; the running container
 	// digest must match it. Previews may use a tag instead (AllowTaggedImage).
 	Image string
@@ -192,10 +194,10 @@ type GKEProvider struct {
 	// changed is closed and replaced whenever a stream or pod slot frees, to
 	// wake executions waiting for capacity.
 	changed chan struct{}
-	// available is false once the sandbox template is known to be missing.
+	// available is false once the sandbox pool or its template is known to be missing.
 	available atomic.Bool
-	// templateUnreadable records that a forbidden read was already logged.
-	templateUnreadable atomic.Bool
+	// warmPoolUnreadable records that a forbidden read was already logged.
+	warmPoolUnreadable atomic.Bool
 	// capacityWait bounds the wait for a stream at the organization's cap.
 	capacityWait time.Duration
 	closed       bool
@@ -210,8 +212,8 @@ type GKEProvider struct {
 // NewGKEProvider starts only local resource housekeeping; execution is never queued.
 func NewGKEProvider(ctx context.Context, config GKEConfig) (*GKEProvider, error) {
 	imageOK := validImageReference(config.Image) || (config.AllowTaggedImage && validTaggedImageReference(config.Image))
-	if config.Logger == nil || config.Dynamic == nil || config.Namespace == "" || config.Template == "" || !imageOK || config.Port < 1 || config.Port > 65535 || len(config.CIDRs) == 0 {
-		return nil, fmt.Errorf("code GKE runtime requires a dedicated namespace, template, SHA-256-pinned image (previews may use a tag), port and pod CIDRs")
+	if config.Logger == nil || config.Dynamic == nil || config.Namespace == "" || config.WarmPool == "" || !imageOK || config.Port < 1 || config.Port > 65535 || len(config.CIDRs) == 0 {
+		return nil, fmt.Errorf("code GKE runtime requires a dedicated namespace, warm pool, SHA-256-pinned image (previews may use a tag), port and pod CIDRs")
 	}
 	for _, cidr := range config.CIDRs {
 		if cidr == nil {
@@ -231,41 +233,41 @@ func NewGKEProvider(ctx context.Context, config GKEConfig) (*GKEProvider, error)
 		config.MaxOrganizationRunners = defaultMaxOrganizationRunners
 	}
 	runCtx, cancel := context.WithCancel(ctx)
-	p := &GKEProvider{config: config, owner: uuid.NewString(), now: time.Now, mu: sync.Mutex{}, entries: make(map[runnerScope]*projectRunner), changed: make(chan struct{}), available: atomic.Bool{}, templateUnreadable: atomic.Bool{}, capacityWait: codeCapacityWait, closed: false, ctx: runCtx, cancel: cancel, draining: make(map[*projectRunner]struct{}), workers: sync.WaitGroup{}, leases: sync.WaitGroup{}, done: make(chan struct{})}
-	// Until the template is read, assume it exists: an API brownout at startup
-	// must not disable Code Mode, and a missing template is caught here or by
-	// the first claim's TemplateNotFound condition.
+	p := &GKEProvider{config: config, owner: uuid.NewString(), now: time.Now, mu: sync.Mutex{}, entries: make(map[runnerScope]*projectRunner), changed: make(chan struct{}), available: atomic.Bool{}, warmPoolUnreadable: atomic.Bool{}, capacityWait: codeCapacityWait, closed: false, ctx: runCtx, cancel: cancel, draining: make(map[*projectRunner]struct{}), workers: sync.WaitGroup{}, leases: sync.WaitGroup{}, done: make(chan struct{})}
+	// Until the warm pool is read, assume it exists: an API brownout at startup
+	// must not disable Code Mode, and a missing pool is caught here or by
+	// the first claim's WarmPoolNotFound condition.
 	p.available.Store(true)
-	p.checkTemplate(runCtx)
+	p.checkWarmPool(runCtx)
 	go p.housekeep(runCtx)
 	return p, nil
 }
 
-// Available reports whether the sandbox template is installed. While it is
+// Available reports whether the sandbox warm pool is installed. While it is
 // missing, as during a deploy that has not synced it yet, serving falls back
 // to Progressive discovery instead of refusing every execution.
 func (p *GKEProvider) Available() bool { return p.available.Load() }
 
-func (p *GKEProvider) checkTemplate(ctx context.Context) {
-	ctx, cancel := context.WithTimeout(ctx, codeTemplateCheckTimeout)
+func (p *GKEProvider) checkWarmPool(ctx context.Context) {
+	ctx, cancel := context.WithTimeout(ctx, codeWarmPoolCheckTimeout)
 	defer cancel()
-	_, err := p.config.Dynamic.Resource(sandbox.Templates).Namespace(p.config.Namespace).Get(ctx, p.config.Template, metav1.GetOptions{})
+	_, err := p.config.Dynamic.Resource(sandbox.WarmPoolsV1Beta1).Namespace(p.config.Namespace).Get(ctx, p.config.WarmPool, metav1.GetOptions{})
 	switch {
 	case err == nil:
 		p.available.Store(true)
 	case k8serrors.IsNotFound(err):
 		if p.available.Swap(false) {
-			p.config.Logger.WarnContext(ctx, "code sandbox template is missing; serving Code Mode gateways progressively", attr.SlogError(err))
+			p.config.Logger.WarnContext(ctx, "code sandbox warm pool is missing; serving Code Mode gateways progressively", attr.SlogError(err))
 		}
 	case k8serrors.IsForbidden(err):
-		// Without read access to templates the claim's condition is the only
-		// signal, so assume the template exists.
+		// Without read access to warm pools the claim's condition is the only
+		// signal, so assume the pool exists.
 		p.available.Store(true)
-		if !p.templateUnreadable.Swap(true) {
-			p.config.Logger.WarnContext(ctx, "code sandbox template is unreadable; relying on claim conditions", attr.SlogError(err))
+		if !p.warmPoolUnreadable.Swap(true) {
+			p.config.Logger.WarnContext(ctx, "code sandbox warm pool is unreadable; relying on claim conditions", attr.SlogError(err))
 		}
 	default:
-		p.config.Logger.WarnContext(ctx, "read code sandbox template", attr.SlogError(err))
+		p.config.Logger.WarnContext(ctx, "read code sandbox warm pool", attr.SlogError(err))
 	}
 }
 
@@ -296,7 +298,7 @@ func (p *GKEProvider) Acquire(ctx context.Context, scope Scope) (Lease, error) {
 			return nil, fmt.Errorf("acquire code sandbox: %w", err)
 		}
 		if !p.Available() {
-			return nil, fmt.Errorf("%w: code sandbox template is not installed", ErrRuntimeUnavailable)
+			return nil, fmt.Errorf("%w: code sandbox pool or template is not installed", ErrRuntimeUnavailable)
 		}
 		p.mu.Lock()
 		if p.closed || p.ctx.Err() != nil {
@@ -497,16 +499,16 @@ func (p *GKEProvider) initialize(entry *projectRunner) {
 
 func (p *GKEProvider) create(ctx context.Context, entry *projectRunner) error {
 	claim := &unstructured.Unstructured{Object: map[string]any{
-		"apiVersion": sandbox.Claims.Group + "/" + sandbox.Claims.Version, "kind": "SandboxClaim",
+		"apiVersion": sandbox.ClaimsV1Beta1.Group + "/" + sandbox.ClaimsV1Beta1.Version, "kind": "SandboxClaim",
 		"metadata": map[string]any{"name": entry.name, "namespace": p.config.Namespace, "labels": map[string]any{codePurposeLabel: "code", codeOrganizationLabel: organizationLabel(entry.key.organization), codeOwnerLabel: p.owner}},
-		"spec":     map[string]any{"sandboxTemplateRef": map[string]any{"name": p.config.Template}, "lifecycle": map[string]any{"shutdownPolicy": "Delete", "shutdownTime": entry.expires.Format(time.RFC3339)}},
+		"spec":     map[string]any{"warmPoolRef": map[string]any{"name": p.config.WarmPool}, "lifecycle": map[string]any{"shutdownPolicy": "Delete", "shutdownTime": entry.expires.Format(time.RFC3339)}},
 	}}
-	created, err := p.config.Dynamic.Resource(sandbox.Claims).Namespace(p.config.Namespace).Create(ctx, claim, metav1.CreateOptions{})
+	created, err := p.config.Dynamic.Resource(sandbox.ClaimsV1Beta1).Namespace(p.config.Namespace).Create(ctx, claim, metav1.CreateOptions{})
 	if err != nil {
 		// A timeout can hide a successful Create. Recover only our random-name claim
 		// and record its UID so cleanup cannot delete a replacement.
 		recovery, stop := context.WithTimeout(context.WithoutCancel(ctx), codeCleanupTimeout)
-		existing, readErr := p.config.Dynamic.Resource(sandbox.Claims).Namespace(p.config.Namespace).Get(recovery, entry.name, metav1.GetOptions{})
+		existing, readErr := p.config.Dynamic.Resource(sandbox.ClaimsV1Beta1).Namespace(p.config.Namespace).Get(recovery, entry.name, metav1.GetOptions{})
 		stop()
 		if readErr == nil && existing.GetLabels()[codeOwnerLabel] == p.owner {
 			entry.uid = existing.GetUID()
@@ -528,7 +530,7 @@ func (p *GKEProvider) create(ctx context.Context, entry *projectRunner) error {
 			break
 		}
 		// API brownouts must not discard a warming pod. Only a confirmed identity
-		// mismatch or a missing template aborts before the provider-owned
+		// mismatch or a missing pool or template aborts before the provider-owned
 		// cold-start deadline.
 		if errors.Is(err, errCodeSandboxMismatch) || errors.Is(err, ErrRuntimeUnavailable) {
 			return err
@@ -562,15 +564,15 @@ func (p *GKEProvider) create(ctx context.Context, entry *projectRunner) error {
 
 func (p *GKEProvider) checkClaim(claim *unstructured.Unstructured, entry *projectRunner) error {
 	labels := claim.GetLabels()
-	template, _, _ := unstructured.NestedString(claim.Object, "spec", "sandboxTemplateRef", "name")
+	pool, _, _ := unstructured.NestedString(claim.Object, "spec", "warmPoolRef", "name")
 	expires, _, _ := unstructured.NestedString(claim.Object, "spec", "lifecycle", "shutdownTime")
 	policy, _, _ := unstructured.NestedString(claim.Object, "spec", "lifecycle", "shutdownPolicy")
 	p.mu.Lock()
 	confirmed, renewal := entry.expires, entry.renewal
 	p.mu.Unlock()
 	expiryOK := expiryMatches(expires, confirmed) || (!renewal.IsZero() && expiryMatches(expires, renewal))
-	if claim.GetUID() != entry.uid || claim.GetDeletionTimestamp() != nil || labels[codePurposeLabel] != "code" || labels[codeOrganizationLabel] != organizationLabel(entry.key.organization) || labels[codeOwnerLabel] != p.owner || template != p.config.Template || !expiryOK || policy != "Delete" {
-		return fmt.Errorf("%w: code sandbox claim ownership, purpose, template or expiry mismatch", errCodeSandboxMismatch)
+	if claim.GetUID() != entry.uid || claim.GetDeletionTimestamp() != nil || labels[codePurposeLabel] != "code" || labels[codeOrganizationLabel] != organizationLabel(entry.key.organization) || labels[codeOwnerLabel] != p.owner || pool != p.config.WarmPool || !expiryOK || policy != "Delete" {
+		return fmt.Errorf("%w: code sandbox claim ownership, purpose, warm pool or expiry mismatch", errCodeSandboxMismatch)
 	}
 	if !p.now().Add(codeDrainMargin).Before(confirmed) {
 		return fmt.Errorf("%w: code sandbox claim is expiring", errCodeSandboxMismatch)
@@ -579,7 +581,7 @@ func (p *GKEProvider) checkClaim(claim *unstructured.Unstructured, entry *projec
 }
 
 func (p *GKEProvider) inspect(ctx context.Context, entry *projectRunner, initial bool) error {
-	claim, err := p.config.Dynamic.Resource(sandbox.Claims).Namespace(p.config.Namespace).Get(ctx, entry.name, metav1.GetOptions{})
+	claim, err := p.config.Dynamic.Resource(sandbox.ClaimsV1Beta1).Namespace(p.config.Namespace).Get(ctx, entry.name, metav1.GetOptions{})
 	if k8serrors.IsNotFound(err) {
 		return fmt.Errorf("%w: claim no longer exists", errCodeSandboxMismatch)
 	}
@@ -589,17 +591,17 @@ func (p *GKEProvider) inspect(ctx context.Context, entry *projectRunner, initial
 	if err := p.checkClaim(claim, entry); err != nil {
 		return err
 	}
-	if initial && templateNotFound(claim) {
+	if initial && claimDependencyNotFound(claim) {
 		if p.available.Swap(false) {
-			p.config.Logger.WarnContext(ctx, "code sandbox claim reports a missing template; serving Code Mode gateways progressively")
+			p.config.Logger.WarnContext(ctx, "code sandbox claim reports a missing pool or template; serving Code Mode gateways progressively")
 		}
-		return fmt.Errorf("%w: code sandbox template is not installed", ErrRuntimeUnavailable)
+		return fmt.Errorf("%w: code sandbox pool or template is not installed", ErrRuntimeUnavailable)
 	}
 	name := sandbox.AssignedName(claim)
 	if name == "" {
 		return missingCodeSandbox(initial)
 	}
-	resource, err := p.config.Dynamic.Resource(sandbox.Sandboxes).Namespace(p.config.Namespace).Get(ctx, name, metav1.GetOptions{})
+	resource, err := p.config.Dynamic.Resource(sandbox.SandboxesV1Beta1).Namespace(p.config.Namespace).Get(ctx, name, metav1.GetOptions{})
 	if k8serrors.IsNotFound(err) {
 		return missingCodeSandbox(initial)
 	}
@@ -609,7 +611,7 @@ func (p *GKEProvider) inspect(ctx context.Context, entry *projectRunner, initial
 	if initial && !sandbox.Ready(resource) {
 		return errCodeSandboxPending
 	}
-	pods, err := sandbox.RunningPodsForClaim(ctx, p.config.Dynamic, p.config.Namespace, claim)
+	pods, err := sandbox.RunningPodsForClaim(ctx, p.config.Dynamic, p.config.Namespace, claim, sandbox.SandboxesV1Beta1)
 	if err != nil {
 		return fmt.Errorf("discover code pod: %w", err)
 	}
@@ -717,7 +719,7 @@ func (p *GKEProvider) destroy(ctx context.Context, entry *projectRunner) {
 	}
 	cleanup, stop := context.WithTimeout(context.WithoutCancel(ctx), codeCleanupTimeout)
 	defer stop()
-	claims := p.config.Dynamic.Resource(sandbox.Claims).Namespace(p.config.Namespace)
+	claims := p.config.Dynamic.Resource(sandbox.ClaimsV1Beta1).Namespace(p.config.Namespace)
 	if entry.uid == "" {
 		existing, err := claims.Get(cleanup, entry.name, metav1.GetOptions{})
 		if k8serrors.IsNotFound(err) {
@@ -748,8 +750,8 @@ func (p *GKEProvider) housekeep(ctx context.Context) {
 	defer close(p.done)
 	ticker := time.NewTicker(codePoolSweep)
 	defer ticker.Stop()
-	templates := time.NewTicker(codeTemplateRefresh)
-	defer templates.Stop()
+	pools := time.NewTicker(codeWarmPoolRefresh)
+	defer pools.Stop()
 	for {
 		select {
 		case <-ctx.Done():
@@ -760,8 +762,8 @@ func (p *GKEProvider) housekeep(ctx context.Context) {
 		case <-ticker.C:
 			p.reap(ctx)
 			p.renew(ctx)
-		case <-templates.C:
-			p.checkTemplate(ctx)
+		case <-pools.C:
+			p.checkWarmPool(ctx)
 		}
 	}
 }
@@ -792,7 +794,7 @@ func (p *GKEProvider) renew(ctx context.Context) {
 		due = append(due, renewal{entry: entry, uid: entry.uid, until: entry.renewal})
 	}
 	p.mu.Unlock()
-	claims := p.config.Dynamic.Resource(sandbox.Claims).Namespace(p.config.Namespace)
+	claims := p.config.Dynamic.Resource(sandbox.ClaimsV1Beta1).Namespace(p.config.Namespace)
 	for _, item := range due {
 		patch, err := json.Marshal(map[string]any{"metadata": map[string]any{"uid": string(item.uid)}, "spec": map[string]any{"lifecycle": map[string]any{"shutdownTime": item.until.Format(time.RFC3339)}}})
 		if err != nil {
@@ -912,12 +914,12 @@ func (l *gkeLease) Release(ctx context.Context) error {
 	return nil
 }
 
-// templateNotFound reports the controller's condition for a claim whose
-// template does not exist, which never resolves for that claim.
-func templateNotFound(claim *unstructured.Unstructured) bool {
+// claimDependencyNotFound reports a missing pool or template so discovery
+// can fall back while the runtime resources are being installed.
+func claimDependencyNotFound(claim *unstructured.Unstructured) bool {
 	conditions, _, _ := unstructured.NestedSlice(claim.Object, "status", "conditions")
 	for _, raw := range conditions {
-		if condition, ok := raw.(map[string]any); ok && condition["reason"] == codeTemplateNotFoundReason {
+		if condition, ok := raw.(map[string]any); ok && (condition["reason"] == codeTemplateNotFoundReason || condition["reason"] == codeWarmPoolNotFoundReason) {
 			return true
 		}
 	}
