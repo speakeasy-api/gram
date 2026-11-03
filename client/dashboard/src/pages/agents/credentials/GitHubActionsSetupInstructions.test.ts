@@ -16,7 +16,7 @@ import {
   type WorkflowAgent,
 } from "./githubActions";
 import { githubActionsSetupInstructions } from "./GitHubActionsSetupInstructions";
-import { hasPlatformSetup } from "./platformSetups";
+import { hasPlatformSetup, platformSetup } from "./platformSetups";
 import {
   SUBJECT_CHOICE,
   subjectRule,
@@ -99,6 +99,15 @@ const github: CatalogEntry = {
 describe("GitHub Actions setup", () => {
   it("is offered as a guided setup", () => {
     expect(hasPlatformSetup(github)).toBe(true);
+    expect(platformSetup(github)).toBeDefined();
+  });
+
+  // The server decides per organization, from its catalog file and feature
+  // flag, and the dashboard follows `enabled` alone.
+  it("is not offered while the catalog lists it as not enabled", () => {
+    const comingSoon = { ...github, enabled: false };
+    expect(hasPlatformSetup(comingSoon)).toBe(false);
+    expect(platformSetup(comingSoon)).toBeUndefined();
   });
 
   it("admits the whole repository with one wildcard rule", () => {

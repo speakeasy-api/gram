@@ -1,6 +1,8 @@
 package workloadpolicy_test
 
 import (
+	"context"
+	"errors"
 	"strings"
 	"testing"
 
@@ -8,8 +10,10 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/workload_identities"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
+	"github.com/speakeasy-api/gram/server/internal/workloadpolicy/catalog"
 )
 
 func listPlatformsPayload() *gen.ListPlatformsPayload {
@@ -41,6 +45,112 @@ func TestListPlatforms_ReturnsTheCatalogPolicy(t *testing.T) {
 	// Empty where there are none.
 	require.Empty(t, claudeTag.Subject.Label)
 	require.Empty(t, claudeTag.Subject.Alternatives)
+}
+
+// recordingFlags is an in-memory flag provider that records each evaluation
+// and, with fail set, fails every one.
+type recordingFlags struct {
+	*feature.InMemory
+	fail  error
+	asked []flagEvaluation
+}
+
+type flagEvaluation struct {
+	flag       feature.Flag
+	distinctID string
+	groups     map[string]string
+}
+
+func newRecordingFlags() *recordingFlags {
+	return &recordingFlags{InMemory: &feature.InMemory{}, fail: nil, asked: nil}
+}
+
+func (f *recordingFlags) EvaluateFlag(ctx context.Context, flag feature.Flag, distinctID string, groups map[string]string) (feature.Evaluation, error) {
+	f.asked = append(f.asked, flagEvaluation{flag: flag, distinctID: distinctID, groups: groups})
+	if f.fail != nil {
+		// A failure must read as off even beside an answer that says on.
+		return feature.EvaluationEnabled, f.fail
+	}
+	return f.InMemory.EvaluateFlag(ctx, flag, distinctID, groups) //nolint:wrapcheck // Test double.
+}
+
+// listedEnabled lists the catalog as ctx's caller sees it and reports whether
+// each entry is enabled, by key.
+func listedEnabled(t *testing.T, ctx context.Context, ti *testInstance) map[string]bool {
+	t.Helper()
+
+	result, err := ti.service.ListPlatforms(ctx, listPlatformsPayload())
+	require.NoError(t, err)
+	enabled := make(map[string]bool, len(result.Platforms))
+	for _, platform := range result.Platforms {
+		enabled[platform.Key] = platform.Enabled
+	}
+	return enabled
+}
+
+func TestListPlatforms_OffersGitHubActionsWhereItsFlagIsOn(t *testing.T) {
+	t.Parallel()
+	flags := newRecordingFlags()
+	ctx, ti := newTestServiceWithFlags(t, flags)
+	flags.SetFlag(feature.FlagWorkloadPlatformGitHubActions, ti.orgID, true)
+
+	require.Equal(t, map[string]bool{"claude-tag": true, "github-actions": true, "gke": true}, listedEnabled(t, ctx, ti))
+	// Asked once, for the one entry that names a flag, as the caller's
+	// organization and its organization group, which the flag targets.
+	require.NotEmpty(t, ti.orgSlug)
+	require.Equal(t, []flagEvaluation{{
+		flag:       feature.FlagWorkloadPlatformGitHubActions,
+		distinctID: ti.orgID,
+		groups:     map[string]string{"organization": ti.orgSlug},
+	}}, flags.asked)
+
+	// Turned off, the next listing takes it back: offering it changed the
+	// copy one response is built from, not the catalog every request shares.
+	flags.SetFlag(feature.FlagWorkloadPlatformGitHubActions, ti.orgID, false)
+	require.False(t, listedEnabled(t, ctx, ti)["github-actions"])
+	platforms, err := catalog.Embedded().Platforms(ctx)
+	require.NoError(t, err)
+	for _, platform := range platforms {
+		require.Equal(t, platform.Key != "github-actions", platform.Enabled, platform.Key)
+	}
+}
+
+func TestListPlatforms_KeepsGitHubActionsComingSoonWithoutItsFlag(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name  string
+		setup func(flags *recordingFlags, orgID string)
+	}{
+		{name: "missing", setup: func(*recordingFlags, string) {}},
+		{name: "off", setup: func(flags *recordingFlags, orgID string) {
+			flags.SetFlag(feature.FlagWorkloadPlatformGitHubActions, orgID, false)
+		}},
+		{name: "on for another organization", setup: func(flags *recordingFlags, _ string) {
+			flags.SetFlag(feature.FlagWorkloadPlatformGitHubActions, "another-organization", true)
+		}},
+		{name: "failing", setup: func(flags *recordingFlags, orgID string) {
+			flags.SetFlag(feature.FlagWorkloadPlatformGitHubActions, orgID, true)
+			flags.fail = errors.New("flag service unavailable")
+		}},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			flags := newRecordingFlags()
+			ctx, ti := newTestServiceWithFlags(t, flags)
+			tc.setup(flags, ti.orgID)
+
+			require.Equal(t, map[string]bool{"claude-tag": true, "github-actions": false, "gke": true}, listedEnabled(t, ctx, ti))
+			require.Len(t, flags.asked, 1)
+		})
+	}
+
+	t.Run("no provider", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestService(t)
+
+		require.Equal(t, map[string]bool{"claude-tag": true, "github-actions": false, "gke": true}, listedEnabled(t, ctx, ti))
+	})
 }
 
 func TestListPlatforms_RequiresWorkloadRead(t *testing.T) {

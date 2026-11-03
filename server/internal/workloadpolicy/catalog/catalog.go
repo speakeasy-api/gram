@@ -31,6 +31,7 @@ import (
 
 	"gopkg.in/yaml.v3"
 
+	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/issuerurl"
 )
 
@@ -300,6 +301,11 @@ type Platform struct {
 	// Enabled is false for an entry listed but not offered.
 	Enabled bool `yaml:"enabled"`
 
+	// FeatureFlag offers an entry that is not enabled to the organizations
+	// the flag is on for, so it can be tried before everyone is offered it.
+	// Empty where no flag does.
+	FeatureFlag feature.Flag `yaml:"feature_flag"`
+
 	// Issuer is the issuer identifier its tokens carry.
 	Issuer Constant `yaml:"issuer"`
 
@@ -420,6 +426,14 @@ func validate(p Platform) error {
 	if p.Icon != "" {
 		if err := requireOriginPath(p.Icon, "icon"); err != nil {
 			return err
+		}
+	}
+	if p.FeatureFlag != "" {
+		if p.Enabled {
+			return errors.New("feature_flag is only for an entry that is not enabled: an enabled one is offered to every organization")
+		}
+		if !keyPattern.MatchString(string(p.FeatureFlag)) {
+			return fmt.Errorf("feature_flag %q must be lowercase words joined by hyphens", p.FeatureFlag)
 		}
 	}
 	if err := validateConstant("issuer", p.Issuer); err != nil {

@@ -57,6 +57,9 @@ icon: /access-hub/github-actions.svg
 # #296): the workflow installs the latest stable release, and every release
 # before that one stops the job at "did not pick up the GitHub identity".
 enabled: false
+# Offered before then to organizations this flag is on for, so it can be tried
+# in production with a speakeasyd built from source.
+feature_flag: workload-platform-github-actions
 
 issuer:
   value: https://token.actions.githubusercontent.com
