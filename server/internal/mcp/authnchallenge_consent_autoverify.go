@@ -9,6 +9,7 @@ import (
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 )
@@ -98,7 +99,7 @@ func (s *Service) Shutdown(ctx context.Context) error {
 // is held for at most AutoVerifyWait so a fast member's verdict is on the first
 // render. Best effort: anything that cannot be placed leaves the card at "Not
 // yet verified" for the manual Verify.
-func (s *Service) verifyRemoteGrant(ctx context.Context, grant remotesessions.RemoteGrant) time.Time {
+func (s *Service) verifyRemoteGrant(ctx context.Context, fromRequest mcpconnectionattempts.Option, grant remotesessions.RemoteGrant) time.Time {
 	logger := s.logger.With(attr.SlogRemoteSessionClientID(grant.RemoteSessionClientID.String()))
 	probeCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), s.metaRuntime.ValidationTimeout)
 	deadline, _ := probeCtx.Deadline()
@@ -113,7 +114,7 @@ func (s *Service) verifyRemoteGrant(ctx context.Context, grant remotesessions.Re
 		}()
 		endpoint, challengeState, ok := s.placeRemoteGrant(probeCtx, logger, grant)
 		if ok {
-			s.probeRemoteGrant(probeCtx, logger, endpoint, challengeState, grant)
+			s.probeRemoteGrant(probeCtx, logger, fromRequest, endpoint, challengeState, grant)
 		}
 	})
 	if !admitted {
@@ -159,7 +160,7 @@ func (s *Service) placeRemoteGrant(ctx context.Context, logger *slog.Logger, gra
 }
 
 // probeRemoteGrant runs the probe for the grant's card on the endpoint.
-func (s *Service) probeRemoteGrant(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, grant remotesessions.RemoteGrant) {
+func (s *Service) probeRemoteGrant(ctx context.Context, logger *slog.Logger, fromRequest mcpconnectionattempts.Option, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, grant remotesessions.RemoteGrant) {
 	clients, err := s.listEndpointClients(ctx, endpoint, challengeState)
 	if err != nil {
 		logger.WarnContext(ctx, "new remote grant not verified: list clients", attr.SlogError(err))
@@ -172,7 +173,7 @@ func (s *Service) probeRemoteGrant(ctx context.Context, logger *slog.Logger, end
 		return
 	}
 	// The probe logs its own refusals; this only says the verdict did not land.
-	if err := s.probeRemoteSession(ctx, logger, endpoint, challengeState, *client, &grant, remotesessionmetrics.ValidationTriggerConnect); err != nil {
+	if err := s.probeRemoteSession(ctx, logger, fromRequest, endpoint, challengeState, *client, &grant, remotesessionmetrics.ValidationTriggerConnect); err != nil {
 		logger.InfoContext(ctx, "new remote grant not verified", attr.SlogError(err))
 	}
 }

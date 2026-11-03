@@ -128,10 +128,10 @@ func (s *Service) validateRemoteLoginBrowser(r *http.Request) (retErr error) {
 			return
 		}
 		if parentReconnect.expired(time.Now()) {
-			s.endAttemptOnce(r.Context(), s.logger, remote.Attempt, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeExpired, remote.ConnectionOptions()...)
+			s.endAttemptOnce(r.Context(), s.logger, remote.Attempt, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeExpired, append(remote.ConnectionOptions(), mcpconnectionattempts.FromRequest(r))...)
 			return
 		}
-		s.recordRemoteLoginRefusal(r.Context(), remote, retErr)
+		s.recordRemoteLoginRefusal(r, remote, retErr)
 	}()
 	if recovery, err := s.verifyConnectionRecoveryCompletion(r, remote); recovery {
 		return err

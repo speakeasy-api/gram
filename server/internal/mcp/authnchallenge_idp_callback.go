@@ -130,7 +130,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 	if err := endpoint.ValidateGlobalChallenge(ctx, s.db, challengeState.Endpoint, challengeState.UserSessionIssuerID); err != nil {
 		s.recordPrivateOAuthAuthority(ctx, challengeState.Endpoint.Authority, authorityStarted, err)
 		authorityCode, authorityDetail := remotesessions.AuthorityHappened(err)
-		s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundSignIn, authorityCode, authorityDetail)
+		s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundSignIn, authorityCode, authorityDetail, mcpconnectionattempts.FromRequest(r))
 		if errors.Is(err, networkingress.ErrAuthorityUnavailable) {
 			s.metrics.RecordOAuthAuthorityUnavailable(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 			return oops.E(oops.CodeUnavailable, err, "private OAuth authority lookup is unavailable").LogError(ctx, logger)
@@ -145,7 +145,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 	// prevent the initiating browser from completing its login (including retries).
 	if federation := challengeState.Federation; federation != nil && federation.StartPhase == "ready" {
 		if err := validateChallengeBrowser(r, challengeState, true); err != nil {
-			s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeSessionChanged)
+			s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.CodeSessionChanged, mcpconnectionattempts.FromRequest(r))
 			return s.finishFederatedFailure(w, r, endpoint, challengeState, mcpmetrics.OAuthFlowStageIDPCallback, oops.CodeUnauthorized, remotesessions.ErrFederatedIdentity, "Login browser binding is invalid. Restart login", false)
 		}
 	}
@@ -155,7 +155,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 		return fmt.Errorf("validate sign-in callback: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "authn challenge state not found or expired").LogWarn(ctx, logger), oauthui.ReasonExpired))
 	}
 	// The state is spent, so whatever does not redirect onward ends the attempt.
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID)), mcpconnectionattempts.StepInboundSignIn)
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID)), mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.FromRequest(r))
 	t.Attach(challengeState.connectionAttempt(endpoint))
 	t.Consumed()
 	defer t.Finish(ctx)
@@ -574,7 +574,7 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "build consent URL").LogError(ctx, logger)
 	}
-	s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.ResultSignedIn, mcpconnectionattempts.Subject(&subject))
+	s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.ResultSignedIn, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(&subject))
 	t.Continue()
 	http.Redirect(w, r, consentURL, http.StatusFound)
 	return nil

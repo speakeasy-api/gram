@@ -69,7 +69,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	ctx := r.Context()
 	logger := endpoint.LogWith(s.logger)
 
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepInboundAuthorize)
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.FromRequest(r))
 	defer t.Finish(ctx)
 
 	req := usersessions.AuthorizationRequestFromQuery(r.URL.Query())
@@ -312,6 +312,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	t.Attach(attempt)
 	t.Consumed()
 	s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted,
+		mcpconnectionattempts.FromRequest(r),
 		mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID),
 		mcpconnectionattempts.UserSessionClient(client.ID),
 		mcpconnectionattempts.Subject(subject),

@@ -109,7 +109,7 @@ func (s *Service) recordSharedIDJAGResourceRejection(ctx context.Context, logger
 func (s *Service) rejectTokenClient(ctx context.Context, logger *slog.Logger, r *http.Request, endpoint *ResolvedMcpEndpoint, grantType, clientID, authMethod, reason string, idJAGReason mcpmetrics.IDJAGRejectionReason) {
 	if grantType != oauthwire.GrantTypeJWTBearer {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth token client authentication rejected", clientID, authMethod, grantType, reason)
-		s.recordTokenClientRefusal(ctx, endpoint, grantType, clientID, reason)
+		s.recordTokenClientRefusal(r, endpoint, grantType, clientID, reason)
 		return
 	}
 	exchange, logger := s.startIDJAGExchange(endpoint, logger)
@@ -119,9 +119,9 @@ func (s *Service) rejectTokenClient(ctx context.Context, logger *slog.Logger, r 
 
 // failTokenClient counts an ID-JAG exchange that failed while checking its
 // client as a failed exchange under reason. Other grants are not counted.
-func (s *Service) failTokenClient(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, grantType, clientID string, reason mcpmetrics.IDJAGRejectionReason, err error) {
+func (s *Service) failTokenClient(ctx context.Context, logger *slog.Logger, r *http.Request, endpoint *ResolvedMcpEndpoint, grantType, clientID string, reason mcpmetrics.IDJAGRejectionReason, err error) {
 	if grantType != oauthwire.GrantTypeJWTBearer {
-		s.recordTokenClientFailure(ctx, endpoint, grantType, clientID, reason)
+		s.recordTokenClientFailure(r, endpoint, grantType, clientID, reason)
 		return
 	}
 	issuerID := endpoint.UserSessionIssuerID.String()

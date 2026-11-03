@@ -546,7 +546,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		defer func() { retErr = s.firstPartyBrowserError(retErr) }()
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
-		s.recordWrongConsentBrowser(ctx, endpoint, challengeState)
+		s.recordWrongConsentBrowser(r, endpoint, challengeState)
 		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
@@ -556,7 +556,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 		}
 		return oauthAuthorityError(err).LogError(ctx, logger)
 	}
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID)), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.Subject(challengeState.Subject))
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID)), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.Subject(challengeState.Subject), mcpconnectionattempts.FromRequest(r))
 	t.Attach(challengeState.connectionAttempt(endpoint))
 	defer t.Finish(ctx)
 
@@ -939,12 +939,12 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	if catalogReview && approvalError == nil {
 		policy, previous, readErr := s.loadReconnectConnection(ctx, usersessions_repo.New(s.db), endpoint, challengeState, time.Now())
 		if readErr != nil {
-			s.refuseReconnect(ctx, logger, t, challengeState.connectionAttempt(endpoint), readErr)
+			s.refuseReconnect(r, logger, t, challengeState.connectionAttempt(endpoint), readErr)
 			return readErr
 		}
 		inventory, readErr := s.consentToolInventoryCache.Get(ctx, consentToolInventoryCacheKey(stateID, "", endpointToolSelectionResource(endpoint)))
 		if readErr != nil {
-			s.refuseReconnect(ctx, logger, t, challengeState.connectionAttempt(endpoint), readErr)
+			s.refuseReconnect(r, logger, t, challengeState.connectionAttempt(endpoint), readErr)
 			return fmt.Errorf("read captured review inventory: %w", readErr)
 		}
 		diff, diffErr := compareCatalogInventory(previous, inventory)
@@ -1036,9 +1036,9 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 
 	if catalogReview && approvalError == nil {
-		s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultReviewShown, mcpconnectionattempts.Subject(challengeState.Subject))
+		s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultReviewShown, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(challengeState.Subject))
 	}
-	s.recordConsentPage(ctx, logger, endpoint, challengeState, gateway, cards, consentProblem)
+	s.recordConsentPage(ctx, logger, mcpconnectionattempts.FromRequest(r), endpoint, challengeState, gateway, cards, consentProblem)
 
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.Header().Set("Cache-Control", "no-store")
@@ -1083,7 +1083,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		defer func() { retErr = s.firstPartyBrowserError(retErr) }()
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
-		s.recordWrongConsentBrowser(ctx, endpoint, challengeState)
+		s.recordWrongConsentBrowser(r, endpoint, challengeState)
 		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
@@ -1111,7 +1111,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 
 	// Until the state is consumed the page stays usable, so a refusal does not end the attempt.
 	attempt := challengeState.connectionAttempt(endpoint)
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID)), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.Subject(challengeState.Subject))
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID)), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.Subject(challengeState.Subject), mcpconnectionattempts.FromRequest(r))
 	t.Attach(attempt)
 	defer t.Finish(ctx)
 
@@ -1128,9 +1128,9 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 				return err
 			}
 			if approved {
-				s.endAttemptOnce(ctx, logger, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete, mcpconnectionattempts.Subject(challengeState.Subject), mcpconnectionattempts.Detail("approved_before_cancel"))
+				s.endAttemptOnce(ctx, logger, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(challengeState.Subject), mcpconnectionattempts.Detail("approved_before_cancel"))
 			} else {
-				s.endAttemptOnce(ctx, logger, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeReviewCanceled, mcpconnectionattempts.Subject(challengeState.Subject))
+				s.endAttemptOnce(ctx, logger, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeReviewCanceled, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(challengeState.Subject))
 			}
 			t.Continue()
 			w.Header().Set("Content-Type", "text/html; charset=utf-8")
@@ -1594,7 +1594,7 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "build client redirect").LogError(ctx, logger)
 	}
-	s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultAccepted, mcpconnectionattempts.Subject(&subject), mcpconnectionattempts.UserSessionClient(clientRow.ID))
+	s.connections.Step(ctx, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultAccepted, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(&subject), mcpconnectionattempts.UserSessionClient(clientRow.ID))
 	t.Continue()
 	// 303 See Other (POST → GET): the consent submit is a POST; we want
 	// the user agent to GET the redirect target with NO body re-submission.
@@ -2299,7 +2299,7 @@ func (s *Service) maybeAutoConnect(
 	// autoRefresh is nil: the subject has not been shown the control yet, so
 	// there is no choice to record. The page's own Connect action is what
 	// authors a stored preference.
-	challengeURL, hop, err := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, bound, nil, focusServer)
+	challengeURL, hop, err := s.buildRemoteConnectURL(r, logger, endpoint, challengeState, *client, bound, nil, focusServer)
 	if err != nil {
 		// Already logged. Render the page so the user can connect manually
 		// rather than seeing an error for a step they did not take.

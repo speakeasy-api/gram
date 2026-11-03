@@ -89,11 +89,11 @@ func (s *Service) markReconnectReviewReady(r *http.Request, grant remotesessions
 	attempt := state.connectionAttempt(endpoint)
 	if err := endpoint.ValidateGlobalChallenge(r.Context(), s.db, state.Endpoint, state.UserSessionIssuerID); err != nil {
 		code, detail := remotesessions.AuthorityHappened(err)
-		s.connections.Step(r.Context(), attempt, mcpconnectionattempts.StepProviderSignIn, code, detail)
+		s.connections.Step(r.Context(), attempt, mcpconnectionattempts.StepProviderSignIn, code, detail, mcpconnectionattempts.FromRequest(r))
 		return err
 	}
 	if _, _, err := s.loadReconnectConnection(r.Context(), usersessionsrepo.New(s.db), endpoint, state, time.Now()); err != nil {
-		s.refuseReconnect(r.Context(), s.logger, s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppCodeMode), mcpconnectionattempts.StepProviderSignIn), attempt, err)
+		s.refuseReconnect(r, s.logger, s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppCodeMode), mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.FromRequest(r)), attempt, err)
 		return err
 	}
 	binding := *state.CodeReconnect
@@ -110,7 +110,7 @@ func (s *Service) approveCodeReconnect(w http.ResponseWriter, r *http.Request, t
 	}
 	attempt := state.connectionAttempt(endpoint)
 	fail := func(err error) error {
-		s.refuseReconnect(ctx, s.logger, t, attempt, err)
+		s.refuseReconnect(r, s.logger, t, attempt, err)
 		return err
 	}
 
@@ -198,7 +198,7 @@ func (s *Service) finishCodeReconnectApproval(w http.ResponseWriter, r *http.Req
 		return err
 	}
 	s.evictConsentToolInventory(ctx, state.ID)
-	s.endAttemptOnce(ctx, s.logger, state.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete, mcpconnectionattempts.Subject(state.Subject))
+	s.endAttemptOnce(ctx, s.logger, state.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Subject(state.Subject))
 	t.Continue()
 	http.Redirect(w, r, endpoint.consentPath()+"?state="+state.ID, http.StatusSeeOther)
 	return nil

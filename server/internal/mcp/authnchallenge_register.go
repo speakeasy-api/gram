@@ -85,7 +85,7 @@ func (s *Service) HandleRegister(w http.ResponseWriter, r *http.Request) error {
 // bcrypt hash is persisted in user_session_clients.client_secret_hash.
 func (s *Service) ServeRegister(w http.ResponseWriter, r *http.Request, endpoint *ResolvedMcpEndpoint) error {
 	refused := func(ctx context.Context, code string) {
-		s.connections.Once(ctx, connectionScope(endpoint, mcpconnectionattempts.AppDCR), mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeRegistrationInvalid, mcpconnectionattempts.Detail(code))
+		s.connections.Once(ctx, connectionScope(endpoint, mcpconnectionattempts.AppDCR), mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeRegistrationInvalid, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Detail(code))
 	}
 	return s.serveRegister(w, r, endpoint.LogWith(s.logger).With(attr.SlogToolsetMCPSlug(endpoint.Slug)), endpoint.UserSessionIssuerID, refused)
 }

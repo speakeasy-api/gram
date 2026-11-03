@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
@@ -412,7 +413,7 @@ func (s *Service) recheckRemoteSession(ctx context.Context, logger *slog.Logger,
 			continue
 		}
 		// The probe logs its own refusals; only a dialled probe ends the search.
-		err = s.probeRemoteSession(ctx, logger, endpoint, state, *client, nil, remotesessionmetrics.ValidationTriggerKeepalive)
+		err = s.probeRemoteSession(ctx, logger, mcpconnectionattempts.FromRequest(nil), endpoint, state, *client, nil, remotesessionmetrics.ValidationTriggerKeepalive)
 		switch {
 		case errors.Is(err, errRemoteSessionRecheckRateLimited):
 			// Stay inside this probe's budget; a detached cleanup would extend the shutdown drain.

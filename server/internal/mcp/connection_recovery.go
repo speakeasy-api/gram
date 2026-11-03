@@ -164,7 +164,7 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 	if err != nil || recovery.expired() || recovery.ID != token {
 		return renderConnectionRecoveryPage(w, http.StatusNotFound, connectionRecoveryExpiredPage)
 	}
-	t := s.connections.Track(recoveryScope(recovery), mcpconnectionattempts.StepProviderSignIn)
+	t := s.connections.Track(recoveryScope(recovery), mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.FromRequest(r))
 	defer t.Finish(ctx)
 	if _, err := s.verifyConnectionRecoveryUser(ctx, r, recovery); err != nil {
 		if errors.Is(err, errRecoveryNotSignedIn) {
@@ -236,6 +236,7 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 		BrowserCookieID:     "",
 		BrowserHash:         "",
 		Attempt:             attempt,
+		ClientRequest:       mcpconnectionattempts.FromRequest(r),
 	}, clients[0])
 	if err != nil {
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)

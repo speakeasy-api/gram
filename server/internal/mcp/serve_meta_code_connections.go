@@ -113,7 +113,7 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 		if err := b.bindReconnectCatalog(ctx, gate, member, &ticket); err != nil {
 			b.service.logger.WarnContext(ctx, "catalogue reconnect unavailable; using full gateway reconnect", attr.SlogError(err))
 			b.service.connections.Once(ctx, connectionScope(endpoint, mcpconnectionattempts.AppCodeMode), mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeConsentNotApproved,
-				mcpconnectionattempts.Member(member.serverID), mcpconnectionattempts.Subject(&gate.authentication.subject), mcpconnectionattempts.Detail("full_reconnect"))
+				gate.fromRequest, mcpconnectionattempts.Member(member.serverID), mcpconnectionattempts.Subject(&gate.authentication.subject), mcpconnectionattempts.Detail("full_reconnect"))
 			needsConsent = true
 		}
 	}

@@ -68,7 +68,7 @@ func (s *Service) consumeWorkloadReconnect(r *http.Request, endpoint *ResolvedMc
 	b := state.WorkloadReconnect
 	if b == nil || !b.Ticket || b.ClientID == uuid.Nil || b.OwnerUserID == "" || !time.Now().Before(b.ExpiresAt) {
 		if b != nil {
-			s.recordTicketExpired(r.Context(), endpoint, state, mcpconnectionattempts.AppWorkload)
+			s.recordTicketExpired(r, endpoint, state, mcpconnectionattempts.AppWorkload)
 		}
 		return nil, oops.E(oops.CodeBadRequest, nil, "invalid or expired connection request")
 	}

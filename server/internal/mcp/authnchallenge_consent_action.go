@@ -93,7 +93,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		defer func() { retErr = s.firstPartyBrowserError(retErr) }()
 	}
 	if err := validateChallengeBrowser(r, challengeState, false); err != nil {
-		s.recordWrongConsentBrowser(ctx, endpoint, challengeState)
+		s.recordWrongConsentBrowser(r, endpoint, challengeState)
 		return fmt.Errorf("validate consent request: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, err, "invalid consent browser binding"), oauthui.ReasonSessionChanged))
 	}
 	logger = logger.With(attr.SlogOAuthFlowID(challengeState.FlowID))
@@ -196,7 +196,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 				autoRefresh = &v
 			}
 		}
-		challengeURL, hop, berr := s.buildRemoteConnectURL(ctx, logger, endpoint, challengeState, *client, bound, autoRefresh, focusServer)
+		challengeURL, hop, berr := s.buildRemoteConnectURL(r, logger, endpoint, challengeState, *client, bound, autoRefresh, focusServer)
 		if berr != nil {
 			return berr
 		}
@@ -271,7 +271,7 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 		if cerr != nil {
 			return cerr
 		}
-		err := s.validateRemoteSession(ctx, logger, endpoint, challengeState, *client)
+		err := s.validateRemoteSession(ctx, logger, mcpconnectionattempts.FromRequest(r), endpoint, challengeState, *client)
 		switch {
 		case errors.Is(err, errValidationRateLimited):
 			http.Redirect(w, r, backURL+"&validate_limited="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
@@ -331,7 +331,7 @@ func (s *Service) clientServesHostedMember(ctx context.Context, endpoint *Resolv
 // bound is every client bound to the endpoint, self clients included, since
 // each one's upstream decides what client may claim.
 func (s *Service) buildRemoteConnectURL(
-	ctx context.Context,
+	r *http.Request,
 	logger *slog.Logger,
 	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
@@ -340,8 +340,9 @@ func (s *Service) buildRemoteConnectURL(
 	autoRefresh *bool,
 	focusServer string,
 ) (string, bool, error) {
+	ctx := r.Context()
 	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(challengeState.ClientID)), mcpconnectionattempts.StepProviderSignIn,
-		mcpconnectionattempts.Provider(client.IssuerURL), mcpconnectionattempts.RemoteSessionClient(client.ID), mcpconnectionattempts.Subject(challengeState.Subject))
+		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Provider(client.IssuerURL), mcpconnectionattempts.RemoteSessionClient(client.ID), mcpconnectionattempts.Subject(challengeState.Subject))
 	t.Attach(challengeState.connectionAttempt(endpoint))
 	defer t.Finish(ctx)
 	// endpoint.UpstreamResource only when no other bound client can claim
@@ -425,6 +426,7 @@ func (s *Service) buildRemoteConnectURL(
 		BrowserCookieID:     "",
 		BrowserHash:         "",
 		Attempt:             challengeState.connectionAttempt(endpoint),
+		ClientRequest:       mcpconnectionattempts.FromRequest(r),
 	}
 	challengeURL, hop, berr := s.startRemoteLogin(ctx, challengeState, s.remoteChallengeMgr.RemoteLoginCallbackOrigin(client), parent, func(parent remotesessions.ParentChallenge) (string, error) {
 		return s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, parent, client)

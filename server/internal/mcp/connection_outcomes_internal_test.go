@@ -3,6 +3,8 @@ package mcp
 import (
 	"context"
 	"errors"
+	"net/http"
+	"net/http/httptest"
 	"sync"
 	"testing"
 	"time"
@@ -56,7 +58,7 @@ func TestRecordConsentPage_OneRowPerGatewayMember(t *testing.T) {
 		},
 	}
 
-	service.recordConsentPage(t.Context(), nil, gatewayEndpoint(), openState(), view, nil, nil)
+	service.recordConsentPage(t.Context(), nil, mcpconnectionattempts.FromRequest(nil), gatewayEndpoint(), openState(), view, nil, nil)
 
 	require.Equal(t, connected.String(), rec.RequireStep(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.ResultAllowed).MemberID)
 	row := rec.RequireStep(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeNeedsSignIn)
@@ -72,7 +74,7 @@ func TestRecordConsentPage_ProblemIsAStepOnTheAttempt(t *testing.T) {
 
 	rec := mcpconnectionattemptstest.New(t)
 	service := &Service{connections: rec.Recorder}
-	service.recordConsentPage(t.Context(), nil, directEndpoint(), openState(), nil, []remoteSessionCard{{}}, mcpconnectionattempts.CodeNoServerAccess)
+	service.recordConsentPage(t.Context(), nil, mcpconnectionattempts.FromRequest(nil), directEndpoint(), openState(), nil, []remoteSessionCard{{}}, mcpconnectionattempts.CodeNoServerAccess)
 
 	rec.RequireStep(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeNoServerAccess)
 	rec.RequireNotEnded()
@@ -115,7 +117,7 @@ func TestRecordRemoteSessionVerdict_KeepaliveBelongsToNoAttempt(t *testing.T) {
 
 	rec := mcpconnectionattemptstest.New(t)
 	service := &Service{connections: rec.Recorder}
-	service.recordRemoteSessionVerdict(t.Context(), directEndpoint(), openState(), remotesessions.Client{}, validationTarget{}, uuid.New(), remotesessions.ValidationOutcomeRejectedByMember, remotesessionmetrics.ValidationTriggerKeepalive)
+	service.recordRemoteSessionVerdict(t.Context(), mcpconnectionattempts.FromRequest(nil), directEndpoint(), openState(), remotesessions.Client{}, validationTarget{}, uuid.New(), remotesessions.ValidationOutcomeRejectedByMember, remotesessionmetrics.ValidationTriggerKeepalive)
 	rec.RequireNothing()
 }
 
@@ -137,7 +139,7 @@ func TestTokenClientRefusal(t *testing.T) {
 	} {
 		rec := mcpconnectionattemptstest.New(t)
 		service := &Service{connections: rec.Recorder}
-		service.recordTokenClientRefusal(t.Context(), directEndpoint(), oauthwire.GrantTypeAuthorizationCode, "client", reason)
+		service.recordTokenClientRefusal(tokenRequest(t), directEndpoint(), oauthwire.GrantTypeAuthorizationCode, "client", reason)
 		require.Equal(t, reason, rec.RequireEnded(mcpconnectionattempts.StepInboundToken, what).SubReason)
 	}
 
@@ -145,16 +147,16 @@ func TestTokenClientRefusal(t *testing.T) {
 	service := &Service{connections: rec.Recorder}
 	code := oauthwire.GrantTypeAuthorizationCode
 	for _, reason := range []string{"missing_client_id", "unknown_client_id", clientIDNamesEndpointReason} {
-		service.recordTokenClientRefusal(t.Context(), directEndpoint(), code, "client", reason)
+		service.recordTokenClientRefusal(tokenRequest(t), directEndpoint(), code, "client", reason)
 	}
-	service.recordTokenClientRefusal(t.Context(), directEndpoint(), code, "", "assertion_malformed")
-	service.recordTokenClientRefusal(t.Context(), directEndpoint(), oauthwire.GrantTypeRefreshToken, "client", "client_secret_mismatch")
-	service.recordTokenClientFailure(t.Context(), directEndpoint(), oauthwire.GrantTypeRefreshToken, "https://client.example.com/app.json", mcpmetrics.IDJAGRejectionClientCheckUnavailable)
+	service.recordTokenClientRefusal(tokenRequest(t), directEndpoint(), code, "", "assertion_malformed")
+	service.recordTokenClientRefusal(tokenRequest(t), directEndpoint(), oauthwire.GrantTypeRefreshToken, "client", "client_secret_mismatch")
+	service.recordTokenClientFailure(tokenRequest(t), directEndpoint(), oauthwire.GrantTypeRefreshToken, "https://client.example.com/app.json", mcpmetrics.IDJAGRejectionClientCheckUnavailable)
 	rec.RequireNothing()
 
-	service.recordTokenClientFailure(t.Context(), directEndpoint(), code, "https://client.example.com/app.json", mcpmetrics.IDJAGRejectionClientCheckUnavailable)
+	service.recordTokenClientFailure(tokenRequest(t), directEndpoint(), code, "https://client.example.com/app.json", mcpmetrics.IDJAGRejectionClientCheckUnavailable)
 	rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeAIToolCheckUnavailable)
-	service.recordTokenClientFailure(t.Context(), directEndpoint(), code, "https://client.example.com/app.json", mcpmetrics.IDJAGRejectionClientMetadataUnavailable)
+	service.recordTokenClientFailure(tokenRequest(t), directEndpoint(), code, "https://client.example.com/app.json", mcpmetrics.IDJAGRejectionClientMetadataUnavailable)
 	require.Equal(t, "client.example.com", rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeCIMDFetchFailed).AppKey)
 }
 
@@ -255,7 +257,7 @@ func TestRecordConsentPage_PendingReviewDoesNotComplete(t *testing.T) {
 	state := openState()
 	state.FirstParty = true
 	state.CodeReconnect = &CodeReconnectBinding{CatalogID: uuid.New(), ReviewReady: true}
-	service.recordConsentPage(t.Context(), nil, directEndpoint(), state, nil, nil, nil)
+	service.recordConsentPage(t.Context(), nil, mcpconnectionattempts.FromRequest(nil), directEndpoint(), state, nil, nil, nil)
 	rec.RequireNothing()
 }
 
@@ -339,13 +341,18 @@ func TestRecordConsentPage_CanceledReviewNeverCompletes(t *testing.T) {
 	state.FirstParty = true
 	state.CodeReconnect = &CodeReconnectBinding{CatalogID: uuid.New(), ReviewReady: true, CatalogComplete: true, CatalogCanceled: true}
 
-	service.recordConsentPage(t.Context(), testenv.NewLogger(t), directEndpoint(), state, nil, nil, nil)
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), directEndpoint(), state, nil, nil, nil)
 
 	require.NoError(t, service.attemptEndings.drain(t.Context()))
 	rec.RequireNothing()
 
 	state.CodeReconnect.CatalogCanceled = false
-	service.recordConsentPage(t.Context(), testenv.NewLogger(t), directEndpoint(), state, nil, nil, nil)
+	service.recordConsentPage(t.Context(), testenv.NewLogger(t), mcpconnectionattempts.FromRequest(nil), directEndpoint(), state, nil, nil, nil)
 	require.NoError(t, service.attemptEndings.drain(t.Context()))
 	rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.ResultComplete)
+}
+
+func tokenRequest(t *testing.T) *http.Request {
+	t.Helper()
+	return httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/token", nil)
 }

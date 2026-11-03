@@ -468,7 +468,7 @@ func (s *Service) authenticateTokenClient(
 			if grantType != oauthwire.GrantTypeJWTBearer {
 				logger.InfoContext(ctx, "cimd document fetch failed", attr.SlogError(err))
 			}
-			s.failTokenClient(ctx, logger, endpoint, grantType, clientID, mcpmetrics.IDJAGRejectionClientMetadataUnavailable, err)
+			s.failTokenClient(ctx, logger, r, endpoint, grantType, clientID, mcpmetrics.IDJAGRejectionClientMetadataUnavailable, err)
 			return nil, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "failed to fetch client metadata document")
 		}
 		if errors.Is(err, pgx.ErrNoRows) {
@@ -543,7 +543,7 @@ func (s *Service) authenticateTokenClient(
 			return nil, writeTokenPolicyError(ctx, w, logger, grantType, blockedErr.Description())
 		}
 		if errors.Is(err, ErrAIToolBlockCheckUnavailable) {
-			s.failTokenClient(ctx, logger, endpoint, grantType, clientID, mcpmetrics.IDJAGRejectionClientCheckUnavailable, err)
+			s.failTokenClient(ctx, logger, r, endpoint, grantType, clientID, mcpmetrics.IDJAGRejectionClientCheckUnavailable, err)
 			return nil, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "cannot determine whether this client is permitted right now")
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "check ai tool gateway block").LogError(ctx, logger)
@@ -723,7 +723,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 	issuerID := endpoint.UserSessionIssuerID.String()
 	mcpSlug := endpoint.Slug
 	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientRow.ClientID)), mcpconnectionattempts.StepInboundToken,
-		mcpconnectionattempts.Grant(oauthwire.GrantTypeAuthorizationCode), mcpconnectionattempts.UserSessionClient(clientRow.ID))
+		mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(oauthwire.GrantTypeAuthorizationCode), mcpconnectionattempts.UserSessionClient(clientRow.ID))
 	defer t.Finish(ctx)
 
 	req := usersessions.AuthCodeTokenRequestFromForm(r.PostForm)

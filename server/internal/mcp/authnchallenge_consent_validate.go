@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpversions"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	mcpservers_repo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
@@ -67,6 +68,7 @@ type validationTarget struct {
 func (s *Service) validateRemoteSession(
 	ctx context.Context,
 	logger *slog.Logger,
+	fromRequest mcpconnectionattempts.Option,
 	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
 	client remotesessions.Client,
@@ -81,7 +83,7 @@ func (s *Service) validateRemoteSession(
 			return errValidationRateLimited
 		}
 	}
-	return s.probeRemoteSession(ctx, logger, endpoint, challengeState, client, nil, remotesessionmetrics.ValidationTriggerVerify)
+	return s.probeRemoteSession(ctx, logger, fromRequest, endpoint, challengeState, client, nil, remotesessionmetrics.ValidationTriggerVerify)
 }
 
 // probeRemoteSession presents the card's credential to its upstream and records
@@ -91,6 +93,7 @@ func (s *Service) validateRemoteSession(
 func (s *Service) probeRemoteSession(
 	ctx context.Context,
 	logger *slog.Logger,
+	fromRequest mcpconnectionattempts.Option,
 	endpoint *ResolvedMcpEndpoint,
 	challengeState AuthnChallengeState,
 	client remotesessions.Client,
@@ -180,7 +183,7 @@ func (s *Service) probeRemoteSession(
 	verdict, reason = combineUpstreamVerdict(verdict, reason, upstream, issuerDisplay)
 	logger = logger.With(attr.SlogRemoteSessionID(entry.RemoteSessionID.String()), attr.SlogOutcome(string(verdict)), attr.SlogOAuthValidationTrigger(string(trigger)))
 	s.validationMetrics.Record(ctx, client.IssuerURL, trigger, string(verdict))
-	s.recordRemoteSessionVerdict(ctx, endpoint, challengeState, client, target, entry.RemoteSessionID, verdict, trigger)
+	s.recordRemoteSessionVerdict(ctx, fromRequest, endpoint, challengeState, client, target, entry.RemoteSessionID, verdict, trigger)
 
 	written, err := s.remoteChallengeMgr.RecordRemoteSessionValidation(ctx, ref, remotesessions.RemoteSessionValidation{
 		Status: verdict,
@@ -291,6 +294,7 @@ func (s *Service) metaValidationTarget(
 	}
 	// No inbound negotiation occurred; the SDK chooses the outbound revision.
 	gate := metaGateContext{
+		fromRequest:   mcpconnectionattempts.FromRequest(nil),
 		discoveryMode: "progressive",
 		projectID:     endpoint.ProjectID,
 		metaServerID:  endpoint.MetaMcpServerID.UUID,

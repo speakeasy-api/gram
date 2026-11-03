@@ -126,6 +126,8 @@ type ParentChallenge struct {
 	BrowserHash     string
 	// Attempt is the connection attempt this login belongs to. Zero records nothing.
 	Attempt mcpconnectionattempts.Attempt
+	// ClientRequest is what the request starting this login says about its client.
+	ClientRequest mcpconnectionattempts.Option
 }
 
 // RemoteLoginState is the per-remote-leg Redis state, keyed by the opaque
@@ -230,6 +232,7 @@ func (s RemoteLoginState) parent() ParentChallenge {
 		BrowserCookieID:     s.BrowserCookieID,
 		BrowserHash:         s.BrowserHash,
 		Attempt:             s.Attempt,
+		ClientRequest:       mcpconnectionattempts.FromRequest(nil),
 	}
 }
 
@@ -1469,7 +1472,7 @@ func (m *ChallengeManager) mintAuthorization(
 	if err := m.cache.Store(ctx, state); err != nil {
 		return "", fmt.Errorf("store remote login state: %w", err)
 	}
-	m.connections.Step(ctx, parent.Attempt, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.ResultAccepted, state.ConnectionOptions()...)
+	m.connections.Step(ctx, parent.Attempt, mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.ResultAccepted, append(state.ConnectionOptions(), parent.ClientRequest)...)
 
 	q := u.Query()
 	q.Set("response_type", "code")
@@ -1587,7 +1590,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	// A login with its own destination ends here. One from consent goes back to it, so the person can retry.
 	var t *mcpconnectionattempts.Tracker
 	if !state.Attempt.IsZero() {
-		t = m.connections.Track(mcpconnectionattempts.ProviderSessionScope(state.OrganizationID, state.ProjectID, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepProviderSignIn, state.ConnectionOptions()...)
+		t = m.connections.Track(mcpconnectionattempts.ProviderSessionScope(state.OrganizationID, state.ProjectID, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepProviderSignIn, append(state.ConnectionOptions(), mcpconnectionattempts.FromRequest(r))...)
 		t.Attach(state.Attempt)
 		if state.FinalRedirectURI != "" {
 			t.Consumed()
@@ -1649,7 +1652,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 				Description: truncateForMessage(q.Get("error_description")),
 				URI:         truncateForMessage(q.Get("error_uri")),
 			}
-			return m.retryWithoutResource(ctx, t, logger, state, cause)
+			return m.retryWithoutResource(r, t, logger, state, cause)
 		}
 		t.Refuse(ctx, providerErrorHappened(errCode), mcpconnectionattempts.Detail(oautherr.RegisteredCodeLabel(errCode)))
 		m.recordCIMDAuthorizationFailure(ctx, state, errCode, q.Get("error_description"))
@@ -1762,7 +1765,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 	}, audience, code)
 	if err != nil {
 		if oauthErr, ok := errors.AsType[oautherr.RFC6749Error](err); ok && oauthErr.Code == oautherr.CodeInvalidTarget {
-			return m.retryWithoutResource(ctx, t, logger, state, err)
+			return m.retryWithoutResource(r, t, logger, state, err)
 		}
 		t.At(mcpconnectionattempts.StepProviderToken)
 		t.Refuse(ctx, exchangeHappened(err, clientRow.TunneledMcpServerID.Valid))
@@ -2115,7 +2118,8 @@ func denied(ctx context.Context, logger *slog.Logger, q url.Values) error {
 // invalid_target. Refused when the leg already omitted the resource or is the
 // retry itself, so an issuer cannot loop the user. Persists nothing: the
 // rejection may be of this resource alone, so it stays scoped to this login.
-func (m *ChallengeManager) retryWithoutResource(ctx context.Context, t *mcpconnectionattempts.Tracker, logger *slog.Logger, state RemoteLoginState, cause error) (RemoteLoginResult, error) {
+func (m *ChallengeManager) retryWithoutResource(r *http.Request, t *mcpconnectionattempts.Tracker, logger *slog.Logger, state RemoteLoginState, cause error) (RemoteLoginResult, error) {
+	ctx := r.Context()
 	var none RemoteLoginResult
 	logger = logger.With(attr.SlogOAuthError(oautherr.CodeInvalidTarget))
 	if state.Resource == "" || state.OmitResource || state.ResourceRetried {
@@ -2147,7 +2151,9 @@ func (m *ChallengeManager) retryWithoutResource(ctx context.Context, t *mcpconne
 
 	unsupported := false
 	client.IssuerResourceIndicatorSupported = &unsupported
-	authURL, err := m.mintAuthorization(ctx, state.parent(), client, &state, false)
+	parent := state.parent()
+	parent.ClientRequest = mcpconnectionattempts.FromRequest(r)
+	authURL, err := m.mintAuthorization(ctx, parent, client, &state, false)
 	if err != nil {
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return none, oops.E(oops.CodeUnexpected, err, "build authorization url for retry").LogError(ctx, logger)

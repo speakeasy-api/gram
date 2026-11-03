@@ -931,3 +931,171 @@ func TestConnectionOutcome_ExpiredReviewIsNotAWrongBrowser(t *testing.T) {
 	require.NoError(t, ti.service.DrainConnectionEndings(ctx))
 	rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeExpired)
 }
+
+// Every flow says which client it saw, so no row can miss its family.
+func TestConnectionOutcome_RowsCarryTheClientFamily(t *testing.T) {
+	t.Parallel()
+
+	const userAgent = "claude-code/2.1.0"
+	withAgent := func(req *http.Request) *http.Request {
+		req.Header.Set("User-Agent", userAgent)
+		return req
+	}
+	formRequest := func(ctx context.Context, target string, form url.Values) *http.Request {
+		req := httptest.NewRequestWithContext(ctx, http.MethodPost, target, strings.NewReader(form.Encode()))
+		req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+		return withAgent(req)
+	}
+	requireFamily := func(t *testing.T, rec *mcpconnectionattemptstest.Recording) {
+		t.Helper()
+		require.NotEmpty(t, rec.Rows())
+		for _, row := range rec.Rows() {
+			require.Equal(t, mcpconnectionattempts.FamilyClaudeCode, row.ClientFamily, "%s %s", row.Step, row.StepResult)
+			require.Equal(t, "2.1.0", row.ClientVersion, "%s %s", row.Step, row.StepResult)
+		}
+	}
+	routed := func(ctx context.Context, slug string) context.Context {
+		rctx := chi.NewRouteContext()
+		rctx.URLParams.Add("mcpSlug", slug)
+		return context.WithValue(ctx, chi.RouteCtxKey, rctx)
+	}
+
+	t.Run("authorize", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{buildAuthURLResult: &url.URL{Scheme: "https", Host: "idp.example.com"}})
+		rec := recordConnections(t, ti)
+		toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+		slug := toolset.McpSlug.String
+		q := url.Values{"response_type": {"code"}, "client_id": {client.ClientID}, "redirect_uri": {client.RedirectUris[0]}, "state": {"s"}, "code_challenge": {"challenge"}, "code_challenge_method": {"S256"}}
+		require.NoError(t, ti.service.HandleAuthorize(httptest.NewRecorder(), withAgent(httptest.NewRequestWithContext(routed(ctx, slug), http.MethodGet, "/mcp/"+slug+"/authorize?"+q.Encode(), nil))))
+		rec.RequireStep(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted)
+		q.Set("redirect_uri", "http://other.example/cb")
+		require.NoError(t, ti.service.HandleAuthorize(httptest.NewRecorder(), withAgent(httptest.NewRequestWithContext(routed(ctx, slug), http.MethodGet, "/mcp/"+slug+"/authorize?"+q.Encode(), nil))))
+		rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeRedirectURIMismatch)
+		requireFamily(t, rec)
+	})
+	t.Run("first-party connect", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{buildAuthURLResult: &url.URL{Scheme: "https", Host: "idp.example.com"}})
+		rec := recordConnections(t, ti)
+		toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+		slug := toolset.McpSlug.String
+		require.NoError(t, ti.service.HandleFirstPartyConnect(httptest.NewRecorder(), withAgent(httptest.NewRequestWithContext(routed(ctx, slug), http.MethodGet, "/mcp/"+slug+"/connect/first-party", nil))))
+		requireFamily(t, rec)
+	})
+	t.Run("sign-in callback", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestMCPServiceWithIdentityResolver(t, memberMock())
+		rec := recordConnections(t, ti)
+		challengeID := seedIDPCallbackChallenge(t, ctx, ti)
+		state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+challengeID)
+		require.NoError(t, err)
+		state.FlowID = uuid.NewString()
+		require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
+		req := withAgent(httptest.NewRequestWithContext(ctx, http.MethodGet, "/mcp/idp_callback?state="+challengeID+"&code=c", nil))
+		require.NoError(t, ti.service.HandleIDPCallback(httptest.NewRecorder(), req))
+		rec.RequireStep(mcpconnectionattempts.StepInboundSignIn, mcpconnectionattempts.ResultSignedIn)
+		requireFamily(t, rec)
+	})
+	t.Run("consent and token", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+		rec := recordConnections(t, ti)
+		toolset, _, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+		slug := toolset.McpSlug.String
+		verifier := "verifier-" + uuid.NewString()
+		approved := httptest.NewRecorder()
+		stateID := seedAttemptChallenge(t, ctx, ti, toolset, client, verifier)
+		require.NoError(t, ti.service.HandleConsent(approved, formRequest(routed(ctx, slug), "/mcp/"+slug+"/connect", url.Values{"state": {stateID}, "csrf_token": {"csrf-token"}, "action": {"approve"}})))
+		loc, err := url.Parse(approved.Header().Get("Location"))
+		require.NoError(t, err)
+		require.NoError(t, ti.service.HandleToken(httptest.NewRecorder(), formRequest(routed(ctx, slug), "/mcp/"+slug+"/token", codeGrantForm(client, loc.Query().Get("code"), verifier))))
+		rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.ResultCodeIssued)
+
+		denied := seedAttemptChallenge(t, ctx, ti, toolset, client, verifier)
+		require.NoError(t, ti.service.HandleConsent(httptest.NewRecorder(), formRequest(routed(ctx, slug), "/mcp/"+slug+"/connect", url.Values{"state": {denied}, "csrf_token": {"csrf-token"}, "action": {"deny"}})))
+		rec.RequireEnded(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeCanceled)
+		requireFamily(t, rec)
+	})
+	t.Run("register", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+		rec := recordConnections(t, ti)
+		toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+		router := goahttp.NewMuxer()
+		mcp.Attach(router, ti.service.Service, nil)
+		req := httptest.NewRequestWithContext(ctx, http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/register", strings.NewReader(`{"client_name":"x","redirect_uris":[]}`))
+		req.Header.Set("Content-Type", "application/json")
+		router.ServeHTTP(httptest.NewRecorder(), withAgent(req))
+		requireFamily(t, rec)
+	})
+	t.Run("provider sign-in", func(t *testing.T) {
+		t.Parallel()
+		ctx, fx, _ := seedChainedConsentEndpoint(t, "attempt-family-"+uuid.NewString()[:6])
+		rec := recordConnections(t, fx.ti)
+		remotesessions.WithConnectionRecorder(rec.Recorder)(fx.ti.service.RemoteChallengeManager())
+		state, err := fx.ti.authnChallengeCache.Get(ctx, "authnChallenge:"+fx.stateID)
+		require.NoError(t, err)
+		state.FlowID = uuid.NewString()
+		state.CreatedAt = time.Now()
+		require.NoError(t, fx.ti.authnChallengeCache.Store(ctx, state))
+		sent := httptest.NewRecorder()
+		connect := formRequest(ctx, "/mcp/"+fx.endpoint.Slug+"/connect/remote-session", url.Values{"state": {fx.stateID}, "csrf_token": {"csrf-token"}, "action": {"connect"}, "client_id": {fx.clientA.String()}})
+		require.NoError(t, fx.ti.service.ServeConsentAction(sent, connect, fx.endpoint))
+		authorization, err := url.Parse(sent.Header().Get("Location"))
+		require.NoError(t, err)
+		rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.ResultAccepted)
+		callback := withAgent(httptest.NewRequestWithContext(ctx, http.MethodGet, "/mcp/remote_login_callback?error=access_denied&state="+url.QueryEscape(authorization.Query().Get("state")), nil))
+		require.NoError(t, fx.ti.service.HandleRemoteLoginCallback(httptest.NewRecorder(), callback))
+		rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeProviderDenied)
+		requireFamily(t, rec)
+	})
+	t.Run("recovery link", func(t *testing.T) {
+		t.Parallel()
+		f := newConnectionRecoveryFixture(t)
+		f.userAgent = userAgent
+		rec := mcpconnectionattemptstest.New(t)
+		f.ti.service.SetConnectionRecorder(rec.Recorder)
+		remotesessions.WithConnectionRecorder(rec.Recorder)(f.ti.service.RemoteChallengeManager())
+		path, err := f.ti.service.IssueConnectionRecovery(f.ctx, f.link)
+		require.NoError(t, err)
+		f.open(t, path, f.otherID)
+		rec.RequireEnded(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeSessionChanged)
+		f.start(t, path, f.userID)
+		rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.ResultAccepted)
+		requireFamily(t, rec)
+	})
+	t.Run("consent capture", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+		rec := recordConnections(t, ti)
+		authCtx, ok := contextvalues.GetAuthContext(ctx)
+		require.True(t, ok)
+		_, issuer, client := seedPrivateToolsetWithIssuer(t, ctx, ti)
+		slug := "gateway-consent-" + uuid.NewString()
+		gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, issuer.ID)
+		seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Docs", "docs-"+uuid.NewString()[:8], 1, newRecordingUpstream(t, "search_docs").url)
+		stateID, _ := seedGatewayConsentChallenge(t, ctx, ti, issuer.ID, client, gateway.ID, slug)
+		state, err := ti.authnChallengeCache.Get(ctx, "authnChallenge:"+stateID)
+		require.NoError(t, err)
+		state.FlowID = uuid.NewString()
+		require.NoError(t, ti.authnChallengeCache.Store(ctx, state))
+		require.NoError(t, ti.service.HandleConsent(httptest.NewRecorder(), withAgent(httptest.NewRequestWithContext(routed(ctx, slug), http.MethodGet, "/mcp/"+slug+"/connect?state="+stateID, nil))))
+		rec.RequireStep(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.ResultAllowed)
+		requireFamily(t, rec)
+	})
+	t.Run("direct listing", func(t *testing.T) {
+		t.Parallel()
+		ctx, ti := newTestMCPService(t)
+		rec := recordConnections(t, ti)
+		authCtx, _ := contextvalues.GetAuthContext(ctx)
+		slug := "gateway-" + uuid.NewString()
+		gateway := createMetaMcpEndpoint(t, ctx, ti.conn, *authCtx.ProjectID, authCtx.ActiveOrganizationID, slug, uuid.Nil)
+		seedMetaMemberWithUpstream(t, ctx, ti.conn, *authCtx.ProjectID, gateway.ID, "Down", "down-"+uuid.NewString()[:8], 1, newListingUpstream(t, nil, func() bool { return false }))
+		setGatewayMode(t, ctx, ti, gateway.ID, "direct")
+		_, err := servePublicHTTP(t, t.Context(), ti, slug, makeMetaRPCBody(t, "tools/list", map[string]any{}), "", map[string]string{"User-Agent": userAgent})
+		require.NoError(t, err)
+		rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeMemberToolsMissing)
+		requireFamily(t, rec)
+	})
+}

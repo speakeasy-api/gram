@@ -199,6 +199,7 @@ func (a *Adapter) BeginSetup(ctx context.Context, request platformmcp.ProviderSe
 		BrowserCookieID: "",
 		BrowserHash:     "",
 		Attempt:         mcpconnectionattempts.NoAttempt,
+		ClientRequest:   mcpconnectionattempts.FromRequest(nil),
 	}, client)
 	if err != nil {
 		return platformmcp.ProviderSetupResult{}, fmt.Errorf("build reviewed provider authorization URL: %w", err)

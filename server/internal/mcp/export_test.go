@@ -77,7 +77,7 @@ func AdmitWorkloadAssertion(
 
 // VerifyRemoteGrant exposes the grant hook to tests.
 func (s *Service) VerifyRemoteGrant(ctx context.Context, grant remotesessions.RemoteGrant) time.Time {
-	return s.verifyRemoteGrant(ctx, grant)
+	return s.verifyRemoteGrant(ctx, mcpconnectionattempts.FromRequest(nil), grant)
 }
 
 // VerifyRemoteGrantOn runs the probe step against an endpoint the test resolved itself.
@@ -88,7 +88,7 @@ func (s *Service) VerifyRemoteGrantOn(ctx context.Context, endpoint *ResolvedMcp
 	if err != nil {
 		return
 	}
-	s.probeRemoteGrant(ctx, s.logger, endpoint, challengeState, grant)
+	s.probeRemoteGrant(ctx, s.logger, mcpconnectionattempts.FromRequest(nil), endpoint, challengeState, grant)
 }
 
 // LoadResolvedMcpEndpointByRef resumes a cached challenge's endpoint.

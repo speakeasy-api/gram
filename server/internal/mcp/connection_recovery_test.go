@@ -28,7 +28,8 @@ import (
 )
 
 type connectionRecoveryFixture struct {
-	ti *testInstance
+	userAgent string
+	ti        *testInstance
 	//nolint:containedctx // the test's authenticated context, used by every request it makes
 	ctx      context.Context
 	link     mcp.ConnectionRecoveryLink
@@ -96,6 +97,9 @@ func (f *connectionRecoveryFixture) open(t *testing.T, path, userID string) *htt
 func (f *connectionRecoveryFixture) request(t *testing.T, path, userID string, cookies []*http.Cookie) *httptest.ResponseRecorder {
 	t.Helper()
 	req := httptest.NewRequestWithContext(f.ctx, http.MethodGet, path, nil)
+	if f.userAgent != "" {
+		req.Header.Set("User-Agent", f.userAgent)
+	}
 	if userID != "" {
 		req.AddCookie(&http.Cookie{Name: constants.SessionCookie, Value: userID})
 	}
