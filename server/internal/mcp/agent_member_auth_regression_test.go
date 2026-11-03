@@ -33,6 +33,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
+	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/productfeatures"
 	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
@@ -143,6 +144,10 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 					}
 					clientID = createConsentRemoteClient(t, ctx, ti.conn, projectID, ac.ActiveOrganizationID, "attachment-client", "", issuerIDs)
 					require.NoError(t, upstreamclients.Reconcile(ctx, ti.conn, ac.ActiveOrganizationID, projectID, issuerIDs))
+					configureServerClient(t, ctx, ti, ac.ActiveOrganizationID, projectID, serverID, clientID)
+					if state == "shared_oauth_registration" {
+						configureServerClient(t, ctx, ti, ac.ActiveOrganizationID, projectID, mcpServerBySlug(t, ctx, ti, projectID, fx.denied), clientID)
+					}
 					if state == "sibling_issuer_client" {
 						siblingID := mcpServerBySlug(t, ctx, ti, projectID, fx.denied)
 						_, err := mcpserversrepo.New(ti.conn).UpdateMCPServer(ctx, mcpserversrepo.UpdateMCPServerParams{ID: siblingID, ProjectID: projectID, Name: conv.ToPGText(fx.denied), Slug: conv.ToPGText(fx.denied), RemoteMcpServerID: conv.ToNullUUID(remote.ID), UserSessionIssuerID: conv.ToNullUUID(issuerID), Visibility: mcpservers.VisibilityPrivate})
@@ -380,6 +385,23 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 			})
 		}
 	}
+}
+
+// configureServerClient records clientID on serverID as server setup does.
+// Binding a client to the server's issuer does not offer it under enforcement.
+func configureServerClient(t *testing.T, ctx context.Context, ti *testInstance, organizationID string, projectID, serverID, clientID uuid.UUID) {
+	t.Helper()
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	associated, err := upstreamclientsrepo.New(tx).AssociateMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.AssociateMCPServerRemoteSessionClientParams{
+		OrganizationID:        organizationID,
+		RemoteSessionClientID: clientID,
+		McpServerID:           serverID,
+		ProjectID:             projectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), associated)
+	require.NoError(t, authclientbackfill.SyncServerAssociations(ctx, tx, organizationID, serverID))
+	require.NoError(t, tx.Commit(ctx))
 }
 
 // serveAgentKeyDirect calls a server's own endpoint with an agent key, as an

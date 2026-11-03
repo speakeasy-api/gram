@@ -8,6 +8,8 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -210,6 +212,57 @@ func TestReconcileCapturesAndKeepsGatewayAssociations(t *testing.T) {
 	require.NoError(t, f.q.DeleteClientBindingsFixture(t.Context(), client))
 	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, nil))
 	require.Empty(t, f.associations(member), "no issuer reaching the member binds the client any more")
+}
+
+// enforceUpstreamAuth turns on the organization's upstream auth enforcement.
+func (f *fixture) enforceUpstreamAuth() {
+	f.t.Helper()
+	_, err := productfeaturesrepo.New(f.pool).EnableFeature(f.t.Context(), productfeaturesrepo.EnableFeatureParams{
+		OrganizationID: f.orgID,
+		FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
+	})
+	require.NoError(f.t, err)
+}
+
+// A server moved onto the organization's issuer shares the provider of the
+// one client bound there, whatever its own upstream is. Under enforcement
+// that shared issuer proves nothing about the server's clients.
+func TestReconcileCapturesNoGatewayAssociationUnderEnforcement(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.enforceUpstreamAuth()
+	organizationIssuer := f.organizationIssuer()
+	server := f.server(organizationIssuer, "https://own-upstream.example.com/mcp")
+	_, otherProvider := f.gatewayClient(organizationIssuer)
+	f.derive(server, otherProvider)
+
+	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, []uuid.UUID{organizationIssuer}))
+	require.Empty(t, f.associations(server))
+}
+
+func TestReconcileCapturesNoSoleConsumerAssociationUnderEnforcement(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.enforceUpstreamAuth()
+	issuer := f.userIssuer()
+	server := f.server(issuer, "https://sole.example.com/mcp")
+	f.gatewayClient(issuer)
+
+	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, []uuid.UUID{issuer}))
+	require.Empty(t, f.associations(server))
+}
+
+func TestReconcileKeepsAConfiguredAssociationUnderEnforcement(t *testing.T) {
+	t.Parallel()
+	f := newFixture(t)
+	f.enforceUpstreamAuth()
+	issuer := f.userIssuer()
+	server := f.server(issuer, "https://configured.example.com/mcp")
+	client, _ := f.gatewayClient(issuer)
+	f.associate(server, client, false)
+
+	require.NoError(t, upstreamclients.Reconcile(t.Context(), f.pool, f.orgID, f.projectID, []uuid.UUID{issuer}))
+	require.Equal(t, []uuid.UUID{client}, f.associations(server))
 }
 
 func TestReconcileDoesNotCaptureAGatewayMemberAGrantRoutesElsewhere(t *testing.T) {

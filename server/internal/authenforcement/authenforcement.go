@@ -48,13 +48,23 @@ func (g *Gate) Enforced(ctx context.Context, organizationID string) (bool, error
 	if enforced, ok := g.cache.Get(organizationID); ok {
 		return enforced, nil
 	}
-	enforced, err := repo.New(g.db).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
+	enforced, err := EnforcedIn(ctx, g.db, organizationID)
+	if err != nil {
+		return false, err
+	}
+	g.cache.Add(organizationID, enforced)
+	return enforced, nil
+}
+
+// EnforcedIn reads organizationID's enforcement state through db, uncached,
+// for a write that must decide from the state inside its own transaction.
+func EnforcedIn(ctx context.Context, db repo.DBTX, organizationID string) (bool, error) {
+	enforced, err := repo.New(db).IsFeatureEnabled(ctx, repo.IsFeatureEnabledParams{
 		OrganizationID: organizationID,
 		FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
 	})
 	if err != nil {
 		return false, fmt.Errorf("read auth enforcement: %w", err)
 	}
-	g.cache.Add(organizationID, enforced)
 	return enforced, nil
 }

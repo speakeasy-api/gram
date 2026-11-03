@@ -17,6 +17,7 @@ import (
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
+	"github.com/speakeasy-api/gram/server/internal/authenforcement"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 )
@@ -32,6 +33,11 @@ import (
 // backfill: the gateway capture is the one path that writes them, and only
 // for the single client a gateway issuer binds for a server's derived
 // authorization server.
+//
+// In an organization with upstream auth enforcement a server's clients come
+// only from explicit configuration, so nothing is captured from its issuer
+// and a reconcile only prunes. Sharing an issuer says which authorization
+// endpoint a server challenges with, not which upstream clients it offers.
 //
 // Each statement decides from the bindings as they are when it runs, and the
 // prune runs after the captures, so a reconcile that races a binding change
@@ -64,7 +70,11 @@ func ReconcileInLockedTransaction(ctx context.Context, tx pgx.Tx, organizationID
 		return errors.New("reconcile mcp server upstream clients: no transaction or tenant scope")
 	}
 	q := repo.New(tx)
-	if len(userIssuerIDs) == 0 {
+	enforced, err := authenforcement.EnforcedIn(ctx, tx, organizationID)
+	if err != nil {
+		return fmt.Errorf("reconcile mcp server upstream clients: %w", err)
+	}
+	if enforced || len(userIssuerIDs) == 0 {
 		servers, err := prune(ctx, q, organizationID, projectID)
 		if err != nil {
 			return err
