@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
 	"k8s.io/apimachinery/pkg/runtime"
@@ -36,9 +37,11 @@ func newCodeGKEFixture(t *testing.T, mutate func(*unstructured.Unstructured, *un
 
 func newCodeGKEFixtureWithImage(t *testing.T, image string, mutate func(*unstructured.Unstructured, *unstructured.Unstructured)) (*GKEProvider, *dynamicfake.FakeDynamicClient, Scope) {
 	t.Helper()
-	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{sandbox.ClaimsV1Beta1: "SandboxClaimList", sandbox.SandboxesV1Beta1: "SandboxList", sandbox.Pods: "PodList", sandbox.WarmPoolsV1Beta1: "SandboxWarmPoolList"})
-	template := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "extensions.agents.x-k8s.io/v1beta1", "kind": "SandboxWarmPool", "metadata": map[string]any{"name": "code-v1", "namespace": "code"}}}
-	require.NoError(t, client.Tracker().Create(sandbox.WarmPoolsV1Beta1, template, "code"))
+	client := dynamicfake.NewSimpleDynamicClientWithCustomListKinds(runtime.NewScheme(), map[schema.GroupVersionResource]string{sandbox.ClaimsV1Beta1: "SandboxClaimList", sandbox.SandboxesV1Beta1: "SandboxList", sandbox.Pods: "PodList", sandbox.WarmPoolsV1Beta1: "SandboxWarmPoolList", sandbox.TemplatesV1Beta1: "SandboxTemplateList"})
+	template := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "extensions.agents.x-k8s.io/v1beta1", "kind": "SandboxTemplate", "metadata": map[string]any{"name": "code-template-v1", "namespace": "code"}}}
+	require.NoError(t, client.Tracker().Create(sandbox.TemplatesV1Beta1, template, "code"))
+	pool := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "extensions.agents.x-k8s.io/v1beta1", "kind": "SandboxWarmPool", "metadata": map[string]any{"name": "code-v1", "namespace": "code"}, "spec": map[string]any{"sandboxTemplateRef": map[string]any{"name": "code-template-v1"}}}}
+	require.NoError(t, client.Tracker().Create(sandbox.WarmPoolsV1Beta1, pool, "code"))
 	client.PrependReactor("create", "sandboxclaims", func(action k8stesting.Action) (bool, runtime.Object, error) {
 		create, ok := action.(k8stesting.CreateAction)
 		require.True(t, ok)
@@ -643,25 +646,34 @@ func TestCodeGKEIdleEvictionAcrossOrganizations(t *testing.T) {
 	require.NoError(t, other.Release(t.Context()))
 }
 
-func TestCodeGKEMissingWarmPoolIsUnavailable(t *testing.T) {
+func TestCodeGKEMissingDependencyIsUnavailable(t *testing.T) {
 	t.Parallel()
-	provider, client, scope := newCodeGKEFixture(t, nil)
-	require.True(t, provider.Available())
-	require.NoError(t, client.Tracker().Delete(sandbox.WarmPoolsV1Beta1, "code", "code-v1"))
-	provider.checkWarmPool(t.Context())
-	require.False(t, provider.Available())
-	_, err := provider.Acquire(t.Context(), scope)
-	require.ErrorIs(t, err, ErrRuntimeUnavailable)
-	claims, err := client.Resource(sandbox.ClaimsV1Beta1).Namespace("code").List(t.Context(), metav1.ListOptions{})
-	require.NoError(t, err)
-	require.Empty(t, claims.Items, "no claim is made while the pool is missing")
-	template := &unstructured.Unstructured{Object: map[string]any{"apiVersion": "extensions.agents.x-k8s.io/v1beta1", "kind": "SandboxWarmPool", "metadata": map[string]any{"name": "code-v1", "namespace": "code"}}}
-	require.NoError(t, client.Tracker().Create(sandbox.WarmPoolsV1Beta1, template, "code"))
-	provider.checkWarmPool(t.Context())
-	require.True(t, provider.Available(), "a late pool enables Code Mode")
-	lease, err := provider.Acquire(t.Context(), scope)
-	require.NoError(t, err)
-	require.NoError(t, lease.Release(t.Context()))
+	for _, tc := range []struct {
+		resource schema.GroupVersionResource
+		name     string
+	}{{sandbox.WarmPoolsV1Beta1, "code-v1"}, {sandbox.TemplatesV1Beta1, "code-template-v1"}} {
+		t.Run(tc.resource.Resource, func(t *testing.T) {
+			t.Parallel()
+			provider, client, scope := newCodeGKEFixture(t, nil)
+			require.True(t, provider.Available())
+			dependency, err := client.Tracker().Get(tc.resource, "code", tc.name)
+			require.NoError(t, err)
+			require.NoError(t, client.Tracker().Delete(tc.resource, "code", tc.name))
+			provider.checkWarmPool(t.Context())
+			require.False(t, provider.Available())
+			_, err = provider.Acquire(t.Context(), scope)
+			require.ErrorIs(t, err, ErrRuntimeUnavailable)
+			claims, err := client.Resource(sandbox.ClaimsV1Beta1).Namespace("code").List(t.Context(), metav1.ListOptions{})
+			require.NoError(t, err)
+			require.Empty(t, claims.Items, "no claim is made while a dependency is missing")
+			require.NoError(t, client.Tracker().Create(tc.resource, dependency, "code"))
+			provider.checkWarmPool(t.Context())
+			require.True(t, provider.Available(), "restoring the dependency enables Code Mode")
+			lease, err := provider.Acquire(t.Context(), scope)
+			require.NoError(t, err)
+			require.NoError(t, lease.Release(t.Context()))
+		})
+	}
 }
 
 func TestCodeGKEStartupWithoutWarmPoolIsUnavailable(t *testing.T) {
@@ -679,15 +691,33 @@ func TestCodeGKEStartupWithoutWarmPoolIsUnavailable(t *testing.T) {
 
 func TestCodeGKETemplateNotFoundClaimIsUnavailable(t *testing.T) {
 	t.Parallel()
+	var missing atomic.Bool
+	missing.Store(true)
 	provider, client, scope := newCodeGKEFixture(t, func(claim, _ *unstructured.Unstructured) {
-		claim.Object["status"] = map[string]any{"conditions": []any{map[string]any{"type": "Ready", "status": "False", "reason": codeTemplateNotFoundReason}}}
+		if missing.Load() {
+			claim.Object["status"] = map[string]any{"conditions": []any{map[string]any{"type": "Ready", "status": "False", "reason": codeTemplateNotFoundReason}}}
+		}
 	})
-	_, err := provider.Acquire(t.Context(), scope)
+	template, err := client.Tracker().Get(sandbox.TemplatesV1Beta1, "code", "code-template-v1")
+	require.NoError(t, err)
+	require.NoError(t, client.Tracker().Delete(sandbox.TemplatesV1Beta1, "code", "code-template-v1"))
+	_, err = provider.Acquire(t.Context(), scope)
 	require.ErrorIs(t, err, ErrRuntimeUnavailable)
 	require.False(t, provider.Available())
 	claims, err := client.Resource(sandbox.ClaimsV1Beta1).Namespace("code").List(t.Context(), metav1.ListOptions{})
 	require.NoError(t, err)
 	require.Empty(t, claims.Items, "a claim that can never start is deleted")
+	for range 2 {
+		provider.checkWarmPool(t.Context())
+		require.False(t, provider.Available(), "an existing pool cannot clear a missing-template signal")
+	}
+	require.NoError(t, client.Tracker().Create(sandbox.TemplatesV1Beta1, template, "code"))
+	missing.Store(false)
+	provider.checkWarmPool(t.Context())
+	require.True(t, provider.Available())
+	lease, err := provider.Acquire(t.Context(), scope)
+	require.NoError(t, err)
+	require.NoError(t, lease.Release(t.Context()))
 }
 
 func TestCodeGKEWarmPoolNotFoundClaimIsUnavailable(t *testing.T) {
@@ -845,12 +875,25 @@ func TestCodeGKEAmbiguousOrphansCountAgainstCapacity(t *testing.T) {
 	provider.mu.Unlock()
 }
 
-func TestCodeGKEUnreachableWarmPoolAPIKeepsAvailability(t *testing.T) {
+func TestCodeGKEUnreadableDependenciesKeepAvailability(t *testing.T) {
 	t.Parallel()
-	provider, client, _ := newCodeGKEFixture(t, nil)
-	client.PrependReactor("get", "sandboxwarmpools", func(k8stesting.Action) (bool, runtime.Object, error) {
-		return true, nil, fmt.Errorf("temporary API outage")
-	})
-	provider.checkWarmPool(t.Context())
-	require.True(t, provider.Available(), "an API outage keeps the last known availability")
+	for _, resource := range []schema.GroupVersionResource{sandbox.WarmPoolsV1Beta1, sandbox.TemplatesV1Beta1} {
+		for _, available := range []bool{true, false} {
+			for _, forbidden := range []bool{true, false} {
+				t.Run(fmt.Sprintf("%s/available=%t/forbidden=%t", resource.Resource, available, forbidden), func(t *testing.T) {
+					t.Parallel()
+					provider, client, _ := newCodeGKEFixture(t, nil)
+					provider.available.Store(available)
+					client.PrependReactor("get", resource.Resource, func(k8stesting.Action) (bool, runtime.Object, error) {
+						if forbidden {
+							return true, nil, k8serrors.NewForbidden(resource.GroupResource(), "code-v1", fmt.Errorf("read access denied"))
+						}
+						return true, nil, fmt.Errorf("temporary API outage")
+					})
+					provider.checkWarmPool(t.Context())
+					require.Equal(t, available, provider.Available(), "a failed read keeps the last known availability")
+				})
+			}
+		}
+	}
 }

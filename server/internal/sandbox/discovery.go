@@ -26,6 +26,9 @@ var (
 	// ClaimsV1Beta1 selects native pool-based claims for Code Mode.
 	ClaimsV1Beta1 = schema.GroupVersionResource{Group: "extensions.agents.x-k8s.io", Version: "v1beta1", Resource: "sandboxclaims"}
 
+	// TemplatesV1Beta1 selects the templates referenced by native warm pools.
+	TemplatesV1Beta1 = schema.GroupVersionResource{Group: "extensions.agents.x-k8s.io", Version: "v1beta1", Resource: "sandboxtemplates"}
+
 	// WarmPoolsV1Beta1 selects the pools referenced by native claims.
 	WarmPoolsV1Beta1 = schema.GroupVersionResource{Group: "extensions.agents.x-k8s.io", Version: "v1beta1", Resource: "sandboxwarmpools"}
 

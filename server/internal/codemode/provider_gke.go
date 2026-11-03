@@ -196,8 +196,8 @@ type GKEProvider struct {
 	changed chan struct{}
 	// available is false once the sandbox pool or its template is known to be missing.
 	available atomic.Bool
-	// warmPoolUnreadable records that a forbidden read was already logged.
-	warmPoolUnreadable atomic.Bool
+	// dependencyUnreadable records that a forbidden pool or template read was already logged.
+	dependencyUnreadable atomic.Bool
 	// capacityWait bounds the wait for a stream at the organization's cap.
 	capacityWait time.Duration
 	closed       bool
@@ -233,41 +233,44 @@ func NewGKEProvider(ctx context.Context, config GKEConfig) (*GKEProvider, error)
 		config.MaxOrganizationRunners = defaultMaxOrganizationRunners
 	}
 	runCtx, cancel := context.WithCancel(ctx)
-	p := &GKEProvider{config: config, owner: uuid.NewString(), now: time.Now, mu: sync.Mutex{}, entries: make(map[runnerScope]*projectRunner), changed: make(chan struct{}), available: atomic.Bool{}, warmPoolUnreadable: atomic.Bool{}, capacityWait: codeCapacityWait, closed: false, ctx: runCtx, cancel: cancel, draining: make(map[*projectRunner]struct{}), workers: sync.WaitGroup{}, leases: sync.WaitGroup{}, done: make(chan struct{})}
-	// Until the warm pool is read, assume it exists: an API brownout at startup
-	// must not disable Code Mode, and a missing pool is caught here or by
-	// the first claim's WarmPoolNotFound condition.
+	p := &GKEProvider{config: config, owner: uuid.NewString(), now: time.Now, mu: sync.Mutex{}, entries: make(map[runnerScope]*projectRunner), changed: make(chan struct{}), available: atomic.Bool{}, dependencyUnreadable: atomic.Bool{}, capacityWait: codeCapacityWait, closed: false, ctx: runCtx, cancel: cancel, draining: make(map[*projectRunner]struct{}), workers: sync.WaitGroup{}, leases: sync.WaitGroup{}, done: make(chan struct{})}
+	// Until the warm pool and template are read, assume they exist: an API
+	// brownout at startup must not disable Code Mode, and missing dependencies
+	// are caught here or by the first claim's conditions.
 	p.available.Store(true)
 	p.checkWarmPool(runCtx)
 	go p.housekeep(runCtx)
 	return p, nil
 }
 
-// Available reports whether the sandbox warm pool is installed. While it is
-// missing, as during a deploy that has not synced it yet, serving falls back
+// Available reports whether the sandbox warm pool and its template are installed.
+// While either is missing, as during a deploy that has not synced them yet, serving falls back
 // to Progressive discovery instead of refusing every execution.
 func (p *GKEProvider) Available() bool { return p.available.Load() }
 
 func (p *GKEProvider) checkWarmPool(ctx context.Context) {
 	ctx, cancel := context.WithTimeout(ctx, codeWarmPoolCheckTimeout)
 	defer cancel()
-	_, err := p.config.Dynamic.Resource(sandbox.WarmPoolsV1Beta1).Namespace(p.config.Namespace).Get(ctx, p.config.WarmPool, metav1.GetOptions{})
+	pool, err := p.config.Dynamic.Resource(sandbox.WarmPoolsV1Beta1).Namespace(p.config.Namespace).Get(ctx, p.config.WarmPool, metav1.GetOptions{})
+	if err == nil {
+		template, _, _ := unstructured.NestedString(pool.Object, "spec", "sandboxTemplateRef", "name")
+		_, err = p.config.Dynamic.Resource(sandbox.TemplatesV1Beta1).Namespace(p.config.Namespace).Get(ctx, template, metav1.GetOptions{})
+	}
 	switch {
 	case err == nil:
 		p.available.Store(true)
 	case k8serrors.IsNotFound(err):
 		if p.available.Swap(false) {
-			p.config.Logger.WarnContext(ctx, "code sandbox warm pool is missing; serving Code Mode gateways progressively", attr.SlogError(err))
+			p.config.Logger.WarnContext(ctx, "code sandbox warm pool or template is missing; serving Code Mode gateways progressively", attr.SlogError(err))
 		}
 	case k8serrors.IsForbidden(err):
-		// Without read access to warm pools the claim's condition is the only
-		// signal, so assume the pool exists.
-		p.available.Store(true)
-		if !p.warmPoolUnreadable.Swap(true) {
-			p.config.Logger.WarnContext(ctx, "code sandbox warm pool is unreadable; relying on claim conditions", attr.SlogError(err))
+		// Keep the last known availability when dependency reads are forbidden;
+		// a failed read cannot clear a claim's missing-dependency signal.
+		if !p.dependencyUnreadable.Swap(true) {
+			p.config.Logger.WarnContext(ctx, "code sandbox warm pool or template is unreadable; retaining last known availability", attr.SlogError(err))
 		}
 	default:
-		p.config.Logger.WarnContext(ctx, "read code sandbox warm pool", attr.SlogError(err))
+		p.config.Logger.WarnContext(ctx, "read code sandbox warm pool and template", attr.SlogError(err))
 	}
 }
 
