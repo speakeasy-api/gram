@@ -310,6 +310,9 @@ var errRefreshOutcomeNotStored = errors.New("remotesessions: refresh outcome not
 // same refresh token upstream.
 //
 //	refreshUpstreamTimeout < refreshLockTTL <= refreshWaitBudget
+//
+// The wait budget covers the POST but not a slow store: a holder extends its
+// lease to refreshRotationTimeout, so a waiter can give up while it is held.
 const (
 	// Nothing else bounds the POST: the pooled client sets no Timeout (its 30s
 	// is dial-only) and the MCP mux sets no WriteTimeout.
@@ -352,11 +355,29 @@ func refreshLockKey(subject urn.SessionSubject, clientID uuid.UUID) string {
 // A request-path caller stops waiting when ctx ends, but a POST already started
 // runs on and stores its result; other triggers wait for it.
 func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_repo.RemoteSession, callerResource string, trigger remotesessionmetrics.RefreshTrigger) (RefreshResult, error) {
+	var zero RefreshResult
+	q := remotesessions_repo.New(s.db)
+
+	// Loaded ahead of the lock so the returns that never reach the POST, the
+	// concurrent-loser and inactive early exits below, still carry an issuer
+	// URL. The POST path re-reads the row after the lock and reports the
+	// issuer it actually spoke to, which wins over this label. An active
+	// session whose client or issuer row was soft-deleted fails here and
+	// records internal_error; the refresh would fail on the same lookup
+	// either way.
+	client, err := q.GetRemoteSessionClientWithIssuerByID(ctx, sess.RemoteSessionClientID)
+	if err != nil {
+		err = refreshClientLoadError(err)
+		outcome := refreshOutcomeForError(ctx, err)
+		s.metrics.Record(ctx, "", trigger, outcome)
+		return zero, &RefreshError{IssuerURL: "", Outcome: outcome, err: err}
+	}
+	s.issuerMetadata.NoteUse(ctx, issuerUseFromClientRow(client))
+
 	if trigger != remotesessionmetrics.RefreshTriggerRequest {
-		return s.refreshNow(ctx, sess, callerResource, trigger)
+		return s.refreshNow(ctx, q, client, sess, callerResource, trigger)
 	}
 
-	var zero RefreshResult
 	type refreshed struct {
 		result RefreshResult
 		err    error
@@ -368,13 +389,14 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 			if recovered := recover(); recovered != nil {
 				err := fmt.Errorf("remote session refresh panicked: %v", recovered)
 				s.logger.ErrorContext(ctx, "remote session refresh panicked", attr.SlogError(err))
-				s.metrics.Record(ctx, "", trigger, remotesessionmetrics.RefreshOutcomeInternalError)
-				done <- refreshed{result: zero, err: &RefreshError{IssuerURL: "", Outcome: remotesessionmetrics.RefreshOutcomeInternalError, err: err}}
+				s.metrics.Record(ctx, client.IssuerUrl, trigger, remotesessionmetrics.RefreshOutcomeInternalError)
+				done <- refreshed{result: zero, err: &RefreshError{IssuerURL: client.IssuerUrl, Outcome: remotesessionmetrics.RefreshOutcomeInternalError, err: err}}
 			}
 		}()
-		result, err := s.refreshNow(ctx, sess, callerResource, trigger)
-		if err != nil && ctx.Err() != nil {
-			// The caller that would have logged this has gone.
+		result, err := s.refreshNow(ctx, q, client, sess, callerResource, trigger)
+		var refreshErr *RefreshError
+		if ctx.Err() != nil && errors.As(err, &refreshErr) && refreshErr.Outcome != remotesessionmetrics.RefreshOutcomeCanceled {
+			// The caller that would have logged this has gone. A cancel before the POST is routine.
 			s.logger.WarnContext(ctx, "remote session refresh failed after its caller stopped waiting", refreshFailureAttrs(sess, err)...)
 		}
 		done <- refreshed{result: result, err: err}
@@ -384,7 +406,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 	case out := <-done:
 		return out.result, out.err
 	case <-ctx.Done():
-		return zero, &RefreshError{IssuerURL: "", Outcome: remotesessionmetrics.RefreshOutcomeCanceled, err: ctx.Err()}
+		return zero, &RefreshError{IssuerURL: client.IssuerUrl, Outcome: remotesessionmetrics.RefreshOutcomeCanceled, err: ctx.Err()}
 	}
 }
 
@@ -407,25 +429,8 @@ func (s *RefreshService) DrainRefreshes(ctx context.Context) error {
 }
 
 // refreshNow is RefreshNow's body, on whichever goroutine the trigger requires.
-func (s *RefreshService) refreshNow(ctx context.Context, sess remotesessions_repo.RemoteSession, callerResource string, trigger remotesessionmetrics.RefreshTrigger) (RefreshResult, error) {
+func (s *RefreshService) refreshNow(ctx context.Context, q *remotesessions_repo.Queries, client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow, sess remotesessions_repo.RemoteSession, callerResource string, trigger remotesessionmetrics.RefreshTrigger) (RefreshResult, error) {
 	var zero RefreshResult
-	q := remotesessions_repo.New(s.db)
-
-	// Loaded ahead of the lock so the returns that never reach the POST, the
-	// concurrent-loser and inactive early exits below, still carry an issuer
-	// URL. The POST path re-reads the row after the lock and reports the
-	// issuer it actually spoke to, which wins over this label. An active
-	// session whose client or issuer row was soft-deleted fails here and
-	// records internal_error; the refresh would fail on the same lookup
-	// either way.
-	client, err := q.GetRemoteSessionClientWithIssuerByID(ctx, sess.RemoteSessionClientID)
-	if err != nil {
-		err = refreshClientLoadError(err)
-		outcome := refreshOutcomeForError(ctx, err)
-		s.metrics.Record(ctx, "", trigger, outcome)
-		return zero, &RefreshError{IssuerURL: "", Outcome: outcome, err: err}
-	}
-	s.issuerMetadata.NoteUse(ctx, issuerUseFromClientRow(client))
 
 	result, postLockClient, restatement, err := s.refresh(ctx, q, sess, callerResource)
 	issuerURL := client.IssuerUrl
@@ -528,6 +533,7 @@ func (s *RefreshService) refresh(
 
 	lockKey := refreshLockKey(sess.SubjectUrn, sess.RemoteSessionClientID)
 	lockAcquiredAt := time.Now()
+	// Only a renewable cache holds the lease through the store; Redis is one.
 	leases, renewable := s.locks.(cache.RenewableLeaseCache)
 	leaseOwner := uuid.NewString()
 	var held bool

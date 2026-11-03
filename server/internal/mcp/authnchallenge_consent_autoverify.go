@@ -68,7 +68,8 @@ func (a *autoVerifications) shutdown(ctx context.Context) error {
 // before the database and cache close: the probes detach from their requests
 // and still write verdicts and close upstream sessions.
 func (s *Service) Shutdown(ctx context.Context) error {
-	// Covers a provider POST's 10s timeout and storing its result.
+	// Covers a provider POST's 10s timeout and a normal store, not the longer
+	// wait a stalled database gets while serving, so a stall can't hold up shutdown.
 	const upstreamRefreshDrainBudget = 15 * time.Second
 
 	// Stop automatic verification admission before releasing runtimes.
