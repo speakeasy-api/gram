@@ -153,6 +153,34 @@ func TestRejectedBearer(t *testing.T) {
 	require.Equal(t, authCtx.ActiveOrganizationID, row.OrganizationID)
 }
 
+// A client that aborts during a refresh says nothing about the provider.
+func TestAbortedRefreshRecordsNoRejection(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestMCPService(t)
+	authCtx := requireProjectAuthContext(t, ctx)
+	rec := mcpconnectionattemptstest.New(t)
+	ti.service.SetConnectionRecorder(rec.Recorder)
+	fixture := createRemoteSessionResolverFixture(t, ctx, ti, authCtx, "gate-aborted")
+
+	subject := urn.NewUserSubject("gate-aborted-user-" + uuid.NewString())
+	upsertExpiredRefreshableRemoteSession(t, ctx, ti, fixture.UserSessionIssuer.ID, fixture.RemoteSessionClient.ID, subject)
+	requestCtx, abort := context.WithCancel(context.Background())
+	defer abort()
+	released := make(chan struct{})
+	pointRemoteSessionTokenEndpoint(t, ctx, ti, authCtx, fixture.RemoteSessionClient.ID, func(http.ResponseWriter, *http.Request) {
+		abort()
+		<-released
+	})
+	t.Cleanup(func() { close(released) })
+	bearer := mintUserSessionBearerForSubject(t, ti, fixture.Toolset, subject)
+
+	_, err := servePublicHTTP(t, requestCtx, ti, fixture.Toolset.McpSlug.String, makeInitializeBody(), bearer, nil)
+	require.Error(t, err)
+	require.Error(t, requestCtx.Err(), "the token endpoint must have been reached")
+	rec.RequireNothing()
+}
+
 func TestRemoteSessionRejections(t *testing.T) {
 	t.Parallel()
 

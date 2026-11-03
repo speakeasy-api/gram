@@ -1328,6 +1328,10 @@ func (s *Service) recordRemoteSessionRejection(ctx context.Context, authenticati
 		attr.SlogOAuthFailureReason(reason),
 	)
 	s.metrics.RecordMCPRequestRejected(ctx, reason, authentication.mcpURL, authentication.surface)
+	// A caller that went away says nothing about the remote session.
+	if errors.Is(ctx.Err(), context.Canceled) {
+		return
+	}
 	s.connections.Once(ctx, connectionScope(endpoint, requestApp(ctx)), mcpconnectionattempts.StepMCPRequest, code,
 		mcpconnectionattempts.Detail(reason), mcpconnectionattempts.Subject(&authentication.subject), mcpconnectionattempts.FromRequest(authentication.request))
 }
