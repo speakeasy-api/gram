@@ -18,6 +18,7 @@ permissions: {}
 jobs:
   claude:
     name: claude
+    # Conversation comments that start with "@claude perf" go to claude-perf.yml.
     if: |
       (github.event_name == 'issue_comment' && contains(github.event.comment.body, '@claude') && !startsWith(github.event.comment.body, '@claude perf')) ||
       (github.event_name == 'pull_request_review_comment' && contains(github.event.comment.body, '@claude')) ||

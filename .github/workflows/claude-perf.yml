@@ -4,7 +4,8 @@ name: Claude perf review
 # Claude reviews the diff for performance and reads production baselines from
 # the MCP servers that Speakeasy delivers to this job's agent (Datadog). A
 # second job, with no MCP access, posts one sticky comment. claude.yml skips
-# "@claude perf" comments, so only this workflow answers them.
+# conversation comments that start with "@claude perf", so only this workflow
+# answers those; inline review comments still go to claude.yml.
 #
 # Never set ACTIONS_STEP_DEBUG on this repository: it turns on
 # claude-code-action's full output, which would print MCP results into public
@@ -19,7 +20,7 @@ permissions: {}
 # one. GitHub keeps only the newest pending run in a group, so every other
 # comment gets a group of its own and cannot replace a queued review.
 concurrency:
-  group: ${{ startsWith(github.event.comment.body, '@claude perf') && format('claude-perf-{0}', github.event.issue.number) || github.run_id }}
+  group: ${{ github.workflow }}-${{ startsWith(github.event.comment.body, '@claude perf') && github.event.issue.number || github.run_id }}
   cancel-in-progress: false
 
 jobs:
@@ -38,16 +39,9 @@ jobs:
       pull-requests: read # reads the pull request and its diff
       id-token: write # Speakeasy and the Claude API each exchange the job's OIDC token
     outputs:
-      pr: ${{ steps.gate.outputs.pr }}
       head: ${{ steps.gate.outputs.head }}
       report: ${{ steps.claude.outputs.structured_output }}
     steps:
-      - name: Check out main
-        uses: actions/checkout@3d3c42e5aac5ba805825da76410c181273ba90b1 # v7.0.1
-        with:
-          fetch-depth: 1
-          persist-credentials: false
-
       # Before anything touches Speakeasy: device-agent-action checks no
       # commenter, and on issue_comment it cannot tell a fork pull request
       # (github.event.pull_request is empty), while the OIDC token is available.
@@ -65,17 +59,31 @@ jobs:
             admin | write) ;;
             *) echo "::error::$ACTOR has $perm access; perf reviews need write access."; exit 1 ;;
           esac
-          pr_info=$(gh api "repos/$REPO/pulls/$PR" --jq '[.head.repo.full_name // "a deleted repository", .state, .head.sha] | @tsv')
+          mkdir -p "$RUNNER_TEMP/pr"
+          gh pr view "$PR" -R "$REPO" \
+            --json number,title,body,files,baseRefName,headRefOid,state,headRepository,headRepositoryOwner \
+            >"$RUNNER_TEMP/pr/pr.json"
+          # A deleted head repository reads as "<owner>/null", so it is refused too.
+          pr_info=$(jq -r '["\(.headRepositoryOwner.login)/\(.headRepository.name)", .state, .headRefOid] | @tsv' "$RUNNER_TEMP/pr/pr.json")
           IFS=$'\t' read -r head_repo state head <<<"$pr_info"
           if [ "$head_repo" != "$REPO" ]; then
             echo "::error::Refusing a pull request from $head_repo: forks are not reviewed with production MCP access."
             exit 1
           fi
-          [ "$state" = open ] || { echo "::error::Pull request #$PR is $state."; exit 1; }
-          mkdir -p "$RUNNER_TEMP/pr"
+          [ "$state" = OPEN ] || { echo "::error::Pull request #$PR is $state."; exit 1; }
           gh pr diff "$PR" -R "$REPO" >"$RUNNER_TEMP/pr/diff.patch"
-          gh pr view "$PR" -R "$REPO" --json number,title,body,files,baseRefName,headRefOid >"$RUNNER_TEMP/pr/pr.json"
-          { echo "pr=$PR"; echo "head=$head"; } >>"$GITHUB_OUTPUT"
+          echo "head=$head" >>"$GITHUB_OUTPUT"
+
+      - name: Check out main
+        uses: useblacksmith/checkout@6fd481652155169ed4d2f25ebaf97464f685175f # v1.1
+        with:
+          persist-credentials: false
+
+      # claude-code-action enables every server in the repository's .mcp.json,
+      # and those start local tools, one of them an unpinned npx package. This
+      # job's only MCP servers are the ones Speakeasy delivers.
+      - name: Remove the repository's MCP servers
+        run: rm -f .mcp.json
 
       # speakeasyd writes MCP entries only for the tools it finds installed.
       # Same Claude Code version as the claude-code-action pin below.
@@ -96,10 +104,8 @@ jobs:
           version: 0.1.54
 
       # Names, URLs and connection status only, no tokens: the entry names fill
-      # in the allowlist below. It runs outside the checkout so the repository's
-      # .mcp.json servers are neither listed nor started.
+      # in the allowlist below.
       - name: List the job's MCP servers
-        working-directory: ${{ runner.temp }}
         run: claude mcp list
 
       - name: Review for performance
@@ -134,8 +140,8 @@ jobs:
                latency by resource_name. Prefer APM trace metrics (get_datadog_metric) to span
                aggregation. At most 10 resources. If a server or tool is unavailable, say so in
                mcp_status and finish the static review.
-            3. Everything you return is posted publicly. Aggregates only. Name only gram routes, RPCs,
-               files and tables. Never include organization, project, user, customer, tool or MCP
+            3. Everything you return is posted publicly. Aggregates only. Name only this repository's
+               routes, RPCs, files and tables. Never include organization, project, user, customer, tool or MCP
                server names, emails, IDs, slugs, URLs, tokens, log lines or span attributes.
 
             Report only specific issues with file and line. Use verdict "no-concerns" when there are none.
@@ -149,7 +155,7 @@ jobs:
           claude_args: |
             --max-turns 40
             --add-dir ${{ runner.temp }}/pr
-            --json-schema '{"type":"object","required":["verdict","summary","findings","baselines"],"properties":{"verdict":{"type":"string","enum":["no-concerns","minor","investigate","likely-regression"]},"summary":{"type":"string","maxLength":400},"mcp_status":{"type":"string","maxLength":200},"findings":{"type":"array","maxItems":8,"items":{"type":"object","required":["severity","file","title","detail"],"properties":{"severity":{"type":"string","enum":["high","medium","low"]},"file":{"type":"string"},"line":{"type":"integer"},"title":{"type":"string","maxLength":120},"detail":{"type":"string","maxLength":600},"evidence":{"type":"string","maxLength":400}}}},"baselines":{"type":"array","maxItems":10,"items":{"type":"object","required":["resource","source","query"],"properties":{"resource":{"type":"string"},"requests_per_day":{"type":"number"},"p50_ms":{"type":"number"},"p95_ms":{"type":"number"},"source":{"type":"string"},"query":{"type":"string","maxLength":300}}}}}}'
+            --json-schema '{"type":"object","required":["verdict","summary","findings","baselines"],"properties":{"verdict":{"type":"string","enum":["no-concerns","minor","investigate","likely-regression"]},"summary":{"type":"string","maxLength":400},"mcp_status":{"type":"string","maxLength":200},"findings":{"type":"array","maxItems":8,"items":{"type":"object","required":["severity","file","title","detail"],"properties":{"severity":{"type":"string","enum":["high","medium","low"]},"file":{"type":"string"},"line":{"type":"integer"},"title":{"type":"string","maxLength":120},"detail":{"type":"string","maxLength":600},"evidence":{"type":"string","maxLength":400}}}},"baselines":{"type":"array","maxItems":10,"items":{"type":"object","required":["resource","query"],"properties":{"resource":{"type":"string"},"requests_per_day":{"type":"number"},"p50_ms":{"type":"number"},"p95_ms":{"type":"number"},"query":{"type":"string","maxLength":300}}}}}}'
             --allowedTools "Read,Grep,Glob"
             --disallowedTools "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch"
 
@@ -172,7 +178,7 @@ jobs:
         env:
           GH_TOKEN: ${{ github.token }}
           REPO: ${{ github.repository }}
-          PR: ${{ needs.analyse.outputs.pr }}
+          PR: ${{ github.event.issue.number }}
           MARKER: "<!-- speakeasy-perf-review -->"
           HEAD_SHA: ${{ needs.analyse.outputs.head }}
           REPORT: ${{ needs.analyse.outputs.report }}
@@ -181,7 +187,7 @@ jobs:
           set -euo pipefail
           # Renders the report and fails closed on the redaction check.
           body=$(.github/scripts/claude-perf-comment.sh)
-          ids=$(gh api --paginate "repos/$REPO/issues/$PR/comments" \
+          ids=$(gh api --paginate "repos/$REPO/issues/$PR/comments?per_page=100" \
             --jq ".[] | select(.user.login == \"github-actions[bot]\" and (.body | startswith(\"$MARKER\"))) | .id")
           id=${ids%%$'\n'*}
           if [ -n "$id" ]; then

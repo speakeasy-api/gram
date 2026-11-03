@@ -23,26 +23,25 @@ fi
 
 body=$(jq -r --arg marker "$MARKER" --arg head "$HEAD_SHA" --arg run "$RUN_URL" '
   def cell: tostring | gsub("[|]"; "\\|");
-  def num: if . == null then "?" else tostring end;
-  $marker + "\n### Performance review: `" + .verdict + "`\n\n" + .summary + "\n"
-  + (if (.findings | length) > 0 then
+  "\($marker)\n### Performance review: `\(.verdict)`\n\n\(.summary)\n"
+  + (if .findings != [] then
       "\n#### Findings\n" + ([.findings[] |
-        "- **" + .severity + "** `" + .file + (if .line then ":" + (.line | tostring) else "" end) + "`: "
-        + .title + ". " + .detail + (if .evidence then " _Evidence:_ " + .evidence else "" end)
+        "- **\(.severity)** `\(.file)\(if .line then ":\(.line)" else "" end)`: \(.title). \(.detail)"
+        + (if .evidence then " _Evidence:_ \(.evidence)" else "" end)
       ] | join("\n"))
     else "" end)
-  + (if (.baselines | length) > 0 then
+  + (if .baselines != [] then
       "\n\n#### Production baselines (7 days)\n| Resource | Req/day | p50 ms | p95 ms | Query |\n|---|---|---|---|---|\n"
       + ([.baselines[] |
-        "| `" + (.resource | cell) + "` | " + (.requests_per_day | num) + " | " + (.p50_ms | num)
-        + " | " + (.p95_ms | num) + " | `" + (.query | cell) + "` |"
+        "| `\(.resource | cell)` | \(.requests_per_day // "?") | \(.p50_ms // "?") | \(.p95_ms // "?") | `\(.query | cell)` |"
       ] | join("\n"))
     else "" end)
-  + (if .mcp_status then "\n\n_MCP: " + .mcp_status + "_" else "" end)
-  + "\n\n<sub>Commit " + $head[0:7] + " · [run](" + $run + ") · Claude Code with Speakeasy MCP</sub>"
+  + (if .mcp_status then "\n\n_MCP: \(.mcp_status)_" else "" end)
+  + "\n\n<sub>Commit \($head[0:7]) · [run](\($run)) · Claude Code with Speakeasy MCP</sub>"
 ' <<<"$REPORT")
 
-# JWTs, GitHub tokens, Anthropic keys, Speakeasy keys, emails and UUIDs.
+# JWTs, GitHub tokens, Anthropic keys, Speakeasy API keys (auth.APIKeyPrefix)
+# and device join tokens (workloadpolicy), emails and UUIDs.
 redact='eyJ[a-z0-9_-]{10,}\.|gh[oprsu]_[a-z0-9]{20,}|github_pat_|sk-ant-|gram_(live|test|local|dj)_|[a-z0-9._%+-]+@[a-z0-9.-]+\.[a-z]{2,}|[0-9a-f]{8}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{4}-[0-9a-f]{12}'
 if grep -Eiq "$redact" <<<"$body"; then
   echo "::error::The perf review matched the redaction check, so nothing was posted." >&2
