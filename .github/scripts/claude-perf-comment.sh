@@ -19,7 +19,7 @@ set -euo pipefail
 REPORT=${REPORT:-}
 LATEST_SHA=${LATEST_SHA:-}
 
-notice() {
+no_verdict() {
   echo "::error::$1" >&2
   printf '%s\n### Performance review: no verdict\n\nThe review of commit %s did not produce a report that can be posted. See the [run](%s).\n' \
     "$MARKER" "${HEAD_SHA:0:7}" "$RUN_URL"
@@ -29,7 +29,7 @@ notice() {
 jq -e '
   (.verdict | type) == "string" and (.summary | type) == "string"
   and (.findings | type) == "array" and (.baselines | type) == "array"
-' <<<"$REPORT" >/dev/null 2>&1 || notice "The perf review is missing or incomplete."
+' <<<"$REPORT" >/dev/null 2>&1 || no_verdict "The perf review is missing or incomplete."
 
 body=$(jq -r --arg marker "$MARKER" --arg head "$HEAD_SHA" --arg latest "$LATEST_SHA" --arg run "$RUN_URL" '
   def line: tostring | gsub("[[:space:][:cntrl:]]+"; " ");
@@ -59,7 +59,7 @@ body=$(jq -r --arg marker "$MARKER" --arg head "$HEAD_SHA" --arg latest "$LATEST
       "\n\n_The pull request is now at \($latest[0:7]), after this review. Comment `@claude perf` to review it._"
     else "" end)
   + "\n\n<sub>Commit \($head[0:7]) · [run](\($run)) · Claude Code with Speakeasy MCP</sub>"
-' <<<"$REPORT" 2>/dev/null) || notice "The perf review could not be rendered."
+' <<<"$REPORT" 2>/dev/null) || no_verdict "The perf review could not be rendered."
 
 patterns=(
   'eyJ[a-z0-9_-]{10,}\.'                                         # JWTs
@@ -79,8 +79,12 @@ patterns=(
 # Every value of the report as it reads in the comment, on one line and before
 # escaping, which would split an email address or a token; then the comment.
 values=$(jq -r '.. | scalars | tostring | gsub("[[:space:][:cntrl:]]+"; " ")' <<<"$REPORT")
-if grep -Eiq -f <(printf '%s\n' "${patterns[@]}") <<<"$values"$'\n'"$body"; then
-  notice "The perf review matched the redaction check."
-fi
+found=0
+grep -Eiq -f <(printf '%s\n' "${patterns[@]}") <<<"$values"$'\n'"$body" || found=$?
+case $found in
+  1) ;;
+  0) no_verdict "The perf review matched the redaction check." ;;
+  *) no_verdict "The redaction check could not run." ;;
+esac
 
 printf '%s\n' "$body"
