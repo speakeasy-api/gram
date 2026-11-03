@@ -53,9 +53,9 @@ type LogAccessTemporaryGrantCreateEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	TemporaryGrantID uuid.UUID
-	RecipientEmail   string
-	Reason           string
+	TemporaryGrantURN urn.TemporaryGrant
+	RecipientEmail    string
+	Reason            string
 
 	TemporaryGrantSnapshotAfter *accessgen.TemporaryGrant
 }
@@ -72,7 +72,7 @@ func (l *Logger) LogAccessTemporaryGrantCreate(ctx context.Context, dbtx repo.DB
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: temporaryGrantAuditParams(action, event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.TemporaryGrantID, event.TemporaryGrantSnapshotAfter, event.RecipientEmail, nil, afterSnapshot, metadata), OutboxEvent: events.AccessTemporaryGrantV1})
+	return l.log(ctx, dbtx, auditEntry{Params: temporaryGrantAuditParams(action, event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.TemporaryGrantURN, event.TemporaryGrantSnapshotAfter, event.RecipientEmail, nil, afterSnapshot, metadata), OutboxEvent: events.AccessTemporaryGrantV1})
 }
 
 type LogAccessTemporaryGrantRenewEvent struct {
@@ -82,8 +82,8 @@ type LogAccessTemporaryGrantRenewEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	TemporaryGrantID uuid.UUID
-	RecipientEmail   string
+	TemporaryGrantURN urn.TemporaryGrant
+	RecipientEmail    string
 
 	TemporaryGrantSnapshotBefore *accessgen.TemporaryGrant
 	TemporaryGrantSnapshotAfter  *accessgen.TemporaryGrant
@@ -105,7 +105,7 @@ func (l *Logger) LogAccessTemporaryGrantRenew(ctx context.Context, dbtx repo.DBT
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: temporaryGrantAuditParams(action, event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.TemporaryGrantID, event.TemporaryGrantSnapshotAfter, event.RecipientEmail, beforeSnapshot, afterSnapshot, metadata), OutboxEvent: events.AccessTemporaryGrantV1})
+	return l.log(ctx, dbtx, auditEntry{Params: temporaryGrantAuditParams(action, event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.TemporaryGrantURN, event.TemporaryGrantSnapshotAfter, event.RecipientEmail, beforeSnapshot, afterSnapshot, metadata), OutboxEvent: events.AccessTemporaryGrantV1})
 }
 
 type LogAccessTemporaryGrantRevokeEvent struct {
@@ -115,8 +115,8 @@ type LogAccessTemporaryGrantRevokeEvent struct {
 	ActorDisplayName *string
 	ActorSlug        *string
 
-	TemporaryGrantID uuid.UUID
-	RecipientEmail   string
+	TemporaryGrantURN urn.TemporaryGrant
+	RecipientEmail    string
 
 	TemporaryGrantSnapshotBefore *accessgen.TemporaryGrant
 	TemporaryGrantSnapshotAfter  *accessgen.TemporaryGrant
@@ -138,7 +138,7 @@ func (l *Logger) LogAccessTemporaryGrantRevoke(ctx context.Context, dbtx repo.DB
 		return fmt.Errorf("marshal %s metadata: %w", action, err)
 	}
 
-	return l.log(ctx, dbtx, auditEntry{Params: temporaryGrantAuditParams(action, event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.TemporaryGrantID, event.TemporaryGrantSnapshotAfter, event.RecipientEmail, beforeSnapshot, afterSnapshot, metadata), OutboxEvent: events.AccessTemporaryGrantV1})
+	return l.log(ctx, dbtx, auditEntry{Params: temporaryGrantAuditParams(action, event.OrganizationID, event.Actor, event.ActorDisplayName, event.ActorSlug, event.TemporaryGrantURN, event.TemporaryGrantSnapshotAfter, event.RecipientEmail, beforeSnapshot, afterSnapshot, metadata), OutboxEvent: events.AccessTemporaryGrantV1})
 }
 
 func temporaryGrantAuditParams(
@@ -147,7 +147,7 @@ func temporaryGrantAuditParams(
 	actor urn.Principal,
 	actorDisplayName *string,
 	actorSlug *string,
-	grantID uuid.UUID,
+	grantURN urn.TemporaryGrant,
 	grant *accessgen.TemporaryGrant,
 	recipientEmail string,
 	beforeSnapshot []byte,
@@ -176,7 +176,7 @@ func temporaryGrantAuditParams(
 
 		Action: string(action),
 
-		SubjectID:          grantID.String(),
+		SubjectID:          grantURN.ID.String(),
 		SubjectType:        string(subjectTypeAccessTemporaryGrant),
 		SubjectDisplayName: conv.ToPGTextEmpty(displayName),
 		SubjectSlug:        conv.ToPGTextEmpty(""),
