@@ -89,13 +89,20 @@ export async function fetchConsentInventory(
     new URL(toolsUrl, window.location.origin),
     {
       // The SDK replaces requestInit.signal with its own controller. Combine
-      // the deadline at the fetch boundary so discovery and DELETE both stop.
+      // the discovery deadline at the fetch boundary. Session termination must
+      // survive discovery cancellation, but gets its own bounded deadline.
       fetch: (input, init) =>
         fetch(input, {
           ...init,
-          signal: signal
-            ? AbortSignal.any([signal, ...(init?.signal ? [init.signal] : [])])
-            : init?.signal,
+          signal:
+            init?.method === "DELETE"
+              ? AbortSignal.timeout(2000)
+              : signal
+                ? AbortSignal.any([
+                    signal,
+                    ...(init?.signal ? [init.signal] : []),
+                  ])
+                : init?.signal,
         }),
       requestInit: {
         credentials: "omit",
