@@ -180,7 +180,7 @@ func TestNativeListIgnoresStaleLegacyLifecycle(t *testing.T) {
 	require.Equal(t, "deleted", nativeTestMap(t, nativeTestMap(t, result.Servers[0].Meta)["com.pulsemcp/server-version"])["status"])
 }
 
-func TestNativeListIgnoresLegacyToolsPreservingExtensions(t *testing.T) {
+func TestNativeListPrunesToolsPreservingMetadata(t *testing.T) {
 	t.Parallel()
 	var record map[string]any
 	require.NoError(t, json.Unmarshal([]byte(nativeRecord), &record))
@@ -192,10 +192,12 @@ func TestNativeListIgnoresLegacyToolsPreservingExtensions(t *testing.T) {
 	}
 	raw, err := json.Marshal(record)
 	require.NoError(t, err)
+	original := string(raw)
 	source := &nativeTestSource{pages: []mcpregistry.DiscoveryPage{{Records: []json.RawMessage{raw}}}}
 	result, err := NewNativeRegistryReader(source).ListServers(t.Context(), Registry{ID: uuid.New()}, ListServersParams{})
 	require.NoError(t, err)
 	require.Len(t, result.Servers, 1)
+	require.JSONEq(t, original, string(source.pages[0].Records[0]), "listing must not modify the stored record")
 	row := result.Servers[0]
 	require.Nil(t, row.ToolCount)
 	require.Nil(t, row.IsReadOnly)
@@ -205,7 +207,7 @@ func TestNativeListIgnoresLegacyToolsPreservingExtensions(t *testing.T) {
 	require.Equal(t, meta["io.modelcontextprotocol.registry/official"], got["io.modelcontextprotocol.registry/official"])
 	for _, key := range []string{"remotes[0]", "remotes[1]", "remotes[2]", "remotes[3]", "remotes[4]", "remotes[5]", "remotes[12]"} {
 		remote := nativeTestMap(t, nativeTestMap(t, got["com.pulsemcp/server-version"])[key])
-		require.NotEmpty(t, remote["tools"], key)
+		require.NotContains(t, remote, "tools", key)
 		require.Equal(t, auth, remote["authOptions"])
 		require.Equal(t, "retained", remote["custom"])
 	}

@@ -4,6 +4,7 @@ import (
 	"context"
 	"encoding/json"
 	"fmt"
+	"strings"
 
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 )
@@ -52,6 +53,19 @@ func (r *NativeRegistryReader) ListServers(ctx context.Context, registry Registr
 			}
 			if err := json.Unmarshal(raw, &full); err != nil {
 				return ListServersResult{}, fmt.Errorf("decode native registry metadata: %w", err)
+			}
+			// List responses drop the tool payloads that older records carry under
+			// remotes[N], so each listing does not ship full tool schemas. Stored
+			// records and every other metadata field are left as they are.
+			if version, ok := full.Meta["com.pulsemcp/server-version"].(map[string]any); ok {
+				for key, value := range version {
+					if !strings.HasPrefix(key, "remotes[") || !strings.HasSuffix(key, "]") {
+						continue
+					}
+					if remote, ok := value.(map[string]any); ok {
+						delete(remote, "tools")
+					}
+				}
 			}
 			server.Meta = full.Meta
 			result.Servers = append(result.Servers, server)
