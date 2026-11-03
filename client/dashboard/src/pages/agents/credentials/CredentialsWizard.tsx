@@ -87,6 +87,7 @@ import type { AgentPolicyGrantCheck } from "@gram/client/models/components/agent
 import { useAgentAdmissions } from "@/pages/agents/agentAdmissions";
 import {
   catalogEntryForIssuer,
+  SUBJECT_CHOICE,
   useCatalogEntries,
   valuesFromIssuer,
   valuesFromSubject,
@@ -204,6 +205,7 @@ const SUMMARY_ROW_FOR_FIELD = new Map<string, string>([
   ["org_id", "Anthropic organization"],
   ["owner", "Repository"],
   ["repo", "Repository"],
+  [SUBJECT_CHOICE, "Jobs"],
   ["branch", "Branch"],
   ["environment", "Environment"],
   ["project", "Cluster"],
