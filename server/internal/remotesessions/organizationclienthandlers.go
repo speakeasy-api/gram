@@ -910,6 +910,17 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	txRepo := repo.New(dbtx)
+
+	// Discovery and the writer scope both precede the first mutation: the
+	// scope has to name every project whose typed records this removal
+	// re-decides, and it must be held before any row lock is taken.
+	affectedServers, affectedProjects, err := serversLosingClientAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list servers losing the client").LogError(ctx, logger)
+	}
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, affectedProjects); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock auth client writer scope").LogError(ctx, logger)
+	}
 	if _, err := txRepo.LockOrganizationRemoteSessionClientForAuthMethodWrite(ctx, repo.LockOrganizationRemoteSessionClientForAuthMethodWriteParams{
 		ID:             clientID,
 		OrganizationID: conv.ToPGText(authCtx.ActiveOrganizationID),
@@ -963,10 +974,6 @@ func (s *Service) DeleteClient(ctx context.Context, payload *orgclientsgen.Delet
 		return oops.E(oops.CodeUnexpected, err, "soft-delete dependent remote sessions").LogError(ctx, logger)
 	}
 
-	affectedServers, err := serversLosingClientAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, deleted.ID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list servers losing the deleted client").LogError(ctx, logger)
-	}
 	if _, err := upstreamclientsrepo.New(dbtx).PruneRemoteSessionClientAssociations(ctx, upstreamclientsrepo.PruneRemoteSessionClientAssociationsParams{
 		RemoteSessionClientID: deleted.ID,
 		OrganizationID:        authCtx.ActiveOrganizationID,
@@ -1034,6 +1041,17 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 
 	txRepo := repo.New(dbtx)
 
+	// Discovery and the writer scope both precede the first mutation: the
+	// scope has to name every project whose typed records this removal
+	// re-decides, and it must be held before any row lock is taken.
+	affectedServers, affectedProjects, err := serversLosingClientAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, clientID)
+	if err != nil {
+		return oops.E(oops.CodeUnexpected, err, "list servers losing the client").LogError(ctx, logger)
+	}
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, affectedProjects); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock auth client writer scope").LogError(ctx, logger)
+	}
+
 	// Establish org ownership of the client before detaching the MCP server.
 	clientRow, err := txRepo.GetOrganizationRemoteSessionClientByID(ctx, repo.GetOrganizationRemoteSessionClientByIDParams{
 		ID:             clientID,
@@ -1095,10 +1113,6 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 
 	// The binding is removed for every server on the issuer, in any project,
 	// so their associations with this client go with it.
-	affectedServers, err := serversLosingClientAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, clientID)
-	if err != nil {
-		return oops.E(oops.CodeUnexpected, err, "list servers losing the detached client").LogError(ctx, logger)
-	}
 	if _, err := upstreamclientsrepo.New(dbtx).PruneRemoteSessionClientAssociations(ctx, upstreamclientsrepo.PruneRemoteSessionClientAssociationsParams{
 		RemoteSessionClientID: clientID,
 		OrganizationID:        authCtx.ActiveOrganizationID,
@@ -1132,33 +1146,41 @@ func (s *Service) RemoveClientFromMcpServer(ctx context.Context, payload *orgcli
 	return nil
 }
 
-// serversLosingClientAssociations is every live MCP server whose association
-// with the client the caller is about to remove. Read before the removal, in
-// the same transaction, because the pruning statements report only a count:
-// the typed auth clients and links derived from those associations are
-// re-decided from the server, so the ids are what keeps both models in step.
-func serversLosingClientAssociations(ctx context.Context, dbtx pgx.Tx, organizationID string, clientID uuid.UUID) ([]uuid.UUID, error) {
+// serversLosingClientAssociations is every live MCP server that has an
+// association with the client the caller is about to remove, with the project
+// it sits in. Read before the removal and before the writer scope lock,
+// because the pruning statements report only a count and the scope has to
+// name the projects it covers.
+//
+// Tombstoned associations are included: a server whose association an earlier
+// removal retired may still carry the link derived from it, and deciding it
+// again is how that is repaired rather than left for the offline backfill.
+func serversLosingClientAssociations(ctx context.Context, dbtx pgx.Tx, organizationID string, clientID uuid.UUID) ([]uuid.UUID, []uuid.UUID, error) {
 	rows, err := dbtx.Query(ctx, `
-SELECT DISTINCT a.mcp_server_id
+SELECT DISTINCT a.mcp_server_id, a.project_id
 FROM mcp_server_remote_session_clients AS a
 JOIN mcp_servers AS s ON s.id = a.mcp_server_id AND s.deleted IS FALSE
 WHERE a.remote_session_client_id = $1
-  AND a.organization_id = $2
-  AND a.deleted IS FALSE`, clientID, organizationID)
+  AND a.organization_id = $2`, clientID, organizationID)
 	if err != nil {
-		return nil, fmt.Errorf("list servers losing client associations: %w", err)
+		return nil, nil, fmt.Errorf("list servers losing client associations: %w", err)
 	}
 	defer rows.Close()
-	var servers []uuid.UUID
+	var servers, projects []uuid.UUID
+	seen := map[uuid.UUID]bool{}
 	for rows.Next() {
-		var id uuid.UUID
-		if err := rows.Scan(&id); err != nil {
-			return nil, fmt.Errorf("scan server losing client association: %w", err)
+		var serverID, projectID uuid.UUID
+		if err := rows.Scan(&serverID, &projectID); err != nil {
+			return nil, nil, fmt.Errorf("scan server losing client association: %w", err)
 		}
-		servers = append(servers, id)
+		servers = append(servers, serverID)
+		if !seen[projectID] {
+			seen[projectID] = true
+			projects = append(projects, projectID)
+		}
 	}
 	if err := rows.Err(); err != nil {
-		return nil, fmt.Errorf("read servers losing client associations: %w", err)
+		return nil, nil, fmt.Errorf("read servers losing client associations: %w", err)
 	}
-	return servers, nil
+	return servers, projects, nil
 }

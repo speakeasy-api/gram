@@ -2,14 +2,17 @@ package remotesessions_test
 
 import (
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	adminrsgen "github.com/speakeasy-api/gram/server/gen/admin_remote_sessions"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
 // createGlobalIssuer builds a CreateGlobalIssuer payload for the given slug. The
@@ -708,9 +711,33 @@ func TestDeleteGlobalClient_StopsServersOfferingItPerOrganization(t *testing.T) 
 	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-global-typed")
 	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "global-typed-server")
 	associate(t, ctx, ti.conn, orgID, projectID, serverID, clientID)
+
+	// A second organization reaching the same platform-global client: the
+	// grouping is what this test is for, so one organization is not enough.
+	otherOrgID := "org-global-typed-" + uuid.NewString()[:8]
+	fixtures := testrepo.New(ti.conn)
+	require.NoError(t, fixtures.CreateOrganizationMetadataFixture(ctx, testrepo.CreateOrganizationMetadataFixtureParams{
+		ID: otherOrgID, Name: "Second consumer", Slug: otherOrgID,
+		GramAccountType: "enterprise", WorkosID: pgtype.Text{}, Whitelisted: true,
+		FreeTrialStartedAt: pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+		FreeTrialEndsAt:    pgtype.Timestamptz{Time: time.Now().UTC().Add(24 * time.Hour), Valid: true},
+		DisabledAt:         pgtype.Timestamptz{},
+		CreatedAt:          pgtype.Timestamptz{Time: time.Now().UTC(), Valid: true},
+	}))
+	otherProjectID, err := fixtures.CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{
+		ID: uuid.New(), Name: "Second project", Slug: otherOrgID + "-project", OrganizationID: otherOrgID,
+	})
+	require.NoError(t, err)
+	otherIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, otherProjectID, "usi-global-typed-second")
+	otherServerID := seedServerOnIssuer(t, ctx, ti.conn, otherProjectID, otherIssuerID, "global-typed-server-second")
+	associate(t, ctx, ti.conn, otherOrgID, otherProjectID, otherServerID, clientID)
+
 	recordTypedClients(t, ctx, ti.conn, orgID, serverID)
+	recordTypedClients(t, ctx, ti.conn, otherOrgID, otherServerID)
 	require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, serverID),
 		"the association must be offered through a link to retire")
+	require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, otherServerID),
+		"the second organization's association must be offered too")
 
 	require.NoError(t, ti.service.DeleteGlobalClient(adminCtx, &adminrsgen.DeleteGlobalClientPayload{
 		ID:           client.ID,
@@ -720,4 +747,7 @@ func TestDeleteGlobalClient_StopsServersOfferingItPerOrganization(t *testing.T) 
 	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, serverID))
 	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, serverID),
 		"the consuming organization's link goes with the global client")
+	require.Empty(t, associatedClients(t, ctx, ti.conn, otherProjectID, otherServerID))
+	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, otherServerID),
+		"a second organization on the same global client is reconciled too")
 }

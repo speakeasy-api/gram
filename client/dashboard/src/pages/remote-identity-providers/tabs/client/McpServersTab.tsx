@@ -60,7 +60,7 @@ export function McpServersTab({ clientId }: { clientId: string }): JSX.Element {
   // An organization whose servers are served by typed auth clients changes
   // what a server offers under its own Identity, so removing the attachment
   // from here would edit a binding its servers no longer read. Until the
-  // state is known the action waits rather than guessing either way.
+  // state is known neither action is offered, rather than guessing either way.
   const upstreamAuth = useUpstreamAuthEnforcement();
   const navigate = useNavigate();
   const { data, isLoading, isError } =
@@ -125,22 +125,24 @@ export function McpServersTab({ clientId }: { clientId: string }): JSX.Element {
                   },
                 ]
               : []
-            : [
-                {
-                  label: "Remove from server",
-                  destructive: true,
-                  disabled: remove.isPending || upstreamAuth !== "legacy",
-                  onClick: () =>
-                    remove.mutate({
-                      request: {
-                        removeClientFromMcpServerRequestBody: {
-                          clientId,
-                          mcpServerId: server.id,
+            : upstreamAuth === "legacy"
+              ? [
+                  {
+                    label: "Remove from server",
+                    destructive: true,
+                    disabled: remove.isPending,
+                    onClick: () =>
+                      remove.mutate({
+                        request: {
+                          removeClientFromMcpServerRequestBody: {
+                            clientId,
+                            mcpServerId: server.id,
+                          },
                         },
-                      },
-                    }),
-                },
-              ];
+                      }),
+                  },
+                ]
+              : [];
         return (
           <TableRowContextMenu
             key={server.id}

@@ -1,4 +1,4 @@
-import { MemoryRouter } from "react-router";
+import { MemoryRouter, useLocation } from "react-router";
 import { cleanup, render, screen } from "@testing-library/react";
 import userEvent from "@testing-library/user-event";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
@@ -9,6 +9,15 @@ import type { ReactNode } from "react";
 import { afterEach, expect, it, vi } from "vitest";
 
 import { McpServersTab } from "./McpServersTab";
+
+// LocationProbe publishes the router location so a navigating action can be
+// asserted on its destination rather than on the click alone.
+function LocationProbe() {
+  const location = useLocation();
+  return (
+    <span data-testid="location">{`${location.pathname}${location.hash}`}</span>
+  );
+}
 import type { UpstreamAuthEnforcementStatus } from "@/hooks/useUpstreamAuthEnforcement";
 
 const enforcement = vi.hoisted(() => ({
@@ -71,7 +80,10 @@ function setup() {
     wrapper: ({ children }) => (
       <QueryClientProvider client={queryClient}>
         <GramProvider client={client}>
-          <MemoryRouter>{children}</MemoryRouter>
+          <MemoryRouter>
+            {children}
+            <LocationProbe />
+          </MemoryRouter>
         </GramProvider>
       </QueryClientProvider>
     ),
@@ -99,23 +111,27 @@ it("sends an enforced organization to the server's own Identity", async () => {
   enforcement.status = "enforced";
   const { user } = setup();
   await openRowMenu(user);
-  expect(await screen.findByText("Manage in Identity")).toBeTruthy();
   expect(
     screen.queryByText("Remove from server"),
     "an enforced organization never sees the legacy binding control",
   ).toBeNull();
+
+  await user.click(await screen.findByText("Manage in Identity"));
+  expect(screen.getByTestId("location").textContent).toBe(
+    "/org/projects/proj/mcp/example-server/settings#authentication",
+  );
 });
 
 it.each(["loading", "error"] as const)(
-  "withholds the legacy removal while the state is %s",
+  "offers neither action while the state is %s",
   async (status) => {
     enforcement.status = status;
     const { user } = setup();
     await openRowMenu(user);
-    const removal = screen.queryByText("Remove from server");
-    if (removal) {
-      expect(removal.closest("[aria-disabled], button")).toBeTruthy();
-    }
+    expect(
+      screen.queryByText("Remove from server"),
+      "an unknown state never offers the legacy binding control",
+    ).toBeNull();
     expect(screen.queryByText("Manage in Identity")).toBeNull();
   },
 );

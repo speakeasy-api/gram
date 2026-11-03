@@ -420,6 +420,69 @@ func TestDetachServerClientAssociation_KeepsAdministratorClients(t *testing.T) {
 		"only the link derived from the association is retired")
 }
 
+// refuseTypedLinkRetirement makes the typed link retirement fail inside
+// whatever transaction reaches it, by refusing updates to the link table. The
+// legacy association removal that runs before it is untouched, so the handler
+// fails between its two writes — the case both models have to survive
+// together. The database is this test's own clone, so the refusal is scoped to
+// it.
+func refuseTypedLinkRetirement(t *testing.T, ctx context.Context, conn *pgxpool.Pool) {
+	t.Helper()
+
+	//nolint:glint // notestingrawsql: injecting a write failure is schema-level DDL, which has no SQLc-generated equivalent.
+	_, err := conn.Exec(ctx, `
+CREATE FUNCTION refuse_typed_link_retirement() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION 'injected failure retiring a typed link';
+END;
+$$;
+CREATE TRIGGER refuse_typed_link_retirement
+BEFORE UPDATE ON mcp_server_auth_clients
+FOR EACH ROW EXECUTE FUNCTION refuse_typed_link_retirement();`)
+	require.NoError(t, err)
+}
+
+// TestDetachServerClientAssociationKeepsBothModelsWhenTypedSyncFails drives
+// the handler with the typed write refused, which is the failure the shared
+// transaction exists for: the legacy association the dashboard removed has to
+// come back rather than outlive the typed records derived from it.
+func TestDetachServerClientAssociationKeepsBothModelsWhenTypedSyncFails(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-sync-fails")
+	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "sync-fails-a")
+	otherID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "sync-fails-b")
+	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-fails")
+	associate(t, ctx, ti.conn, orgID, projectID, serverID, clientID)
+	associate(t, ctx, ti.conn, orgID, projectID, otherID, clientID)
+	recordTypedClients(t, ctx, ti.conn, orgID, serverID, otherID)
+
+	associatedBefore := associatedClients(t, ctx, ti.conn, projectID, serverID)
+	offeredBefore := offeredAuthClients(t, ctx, ti.conn, serverID)
+	require.NotEmpty(t, associatedBefore)
+	require.NotEmpty(t, offeredBefore, "the server offers a typed client the sync would retire")
+
+	refuseTypedLinkRetirement(t, ctx, ti.conn)
+
+	err := ti.service.DetachServerClientAssociation(ctx, &gen.DetachServerClientAssociationPayload{
+		McpServerID:           serverID.String(),
+		RemoteSessionClientID: clientID.String(),
+	})
+	require.Error(t, err, "the handler reports the failed typed write rather than committing half of it")
+
+	require.Equal(t, associatedBefore, associatedClients(t, ctx, ti.conn, projectID, serverID),
+		"the legacy association is still there because the typed write failed")
+	require.Equal(t, offeredBefore, offeredAuthClients(t, ctx, ti.conn, serverID),
+		"the typed link is still there with it")
+}
+
 // TestLegacyRemovalAndTypedSyncRollBackTogether proves the two writes are
 // mutually revertible: the legacy association removal and the typed link
 // retirement share one transaction, so a failure after either leaves both
@@ -458,6 +521,13 @@ func TestLegacyRemovalAndTypedSyncRollBackTogether(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, int64(1), removed)
 	require.NoError(t, authclientbackfill.SyncServerAssociations(ctx, tx, orgID, first))
+
+	// Both writes are visible inside the transaction, so the rollback below is
+	// reverting real work rather than passing on a sync that did nothing.
+	inFlight, err := authclientbackfill.New(tx).ListServerAuthClientsFixture(ctx, first)
+	require.NoError(t, err)
+	require.Empty(t, inFlight, "the link is retired inside the transaction")
+
 	// Whatever fails after this point — the audit write, the commit — takes
 	// both writes with it.
 	require.NoError(t, tx.Rollback(ctx))

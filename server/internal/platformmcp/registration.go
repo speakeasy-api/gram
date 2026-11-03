@@ -571,6 +571,13 @@ func (s *RegistrationStore) CompleteRegistration(ctx context.Context, principal 
 	if storedReceipt.Status != receiptStatusPending {
 		return OperationReceipt{}, ErrRegistrationInvalid
 	}
+	// Components written below include credential headers, which yield typed
+	// auth clients. Normal server creation takes this scope before the
+	// project row lock, so this does too: the reverse order lets a concurrent
+	// creation hold the project row while waiting for the scope.
+	if err := authclientbackfill.LockEMAWriterScope(ctx, tx, principal.OrganizationID, []uuid.UUID{project.ID}); err != nil {
+		return OperationReceipt{}, fmt.Errorf("lock platform mcp auth client writer scope: %w", err)
+	}
 	if _, err := q.LockLivePlatformMCPProjectForRegistration(ctx, platformrepo.LockLivePlatformMCPProjectForRegistrationParams{
 		ProjectID:      project.ID,
 		OrganizationID: principal.OrganizationID,
@@ -697,12 +704,6 @@ func (s *RegistrationStore) CompleteRegistrationWithRemoteURL(ctx context.Contex
 }
 
 func (s *RegistrationStore) createPrivateRegistrationComponents(ctx context.Context, tx pgx.Tx, project ResolvedProject, registration platformrepo.PlatformMcpCatalogRegistration, configuration resolvedCatalogConfiguration) (platformrepo.PlatformMcpCatalogRegistration, error) {
-	// The components below include credential headers, which yield typed auth
-	// clients. Take the writer scope before the first of them, as every other
-	// writer of those records does.
-	if err := authclientbackfill.LockEMAWriterScope(ctx, tx, registration.OrganizationID, []uuid.UUID{project.ID}); err != nil {
-		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("lock platform mcp auth client writer scope: %w", err)
-	}
 	remoteID, err := uuid.NewV7()
 	if err != nil {
 		return platformrepo.PlatformMcpCatalogRegistration{}, fmt.Errorf("generate platform mcp remote source id: %w", err)
