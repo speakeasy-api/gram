@@ -659,6 +659,7 @@
         {{end}}
 
         {{with .CatalogChanges}}
+        {{if or .Added .Removed .Changed}}
         <section class="flex flex-col gap-3 border-b px-6 py-6 sm:px-8" data-catalog-changes aria-labelledby="catalog-changes-heading">
           <h2 class="text-eyebrow" id="catalog-changes-heading">Review updated tools</h2>
           <p class="text-sm text-muted-foreground">Changes apply only after you approve. Your current tool selection is preselected.</p>
@@ -676,8 +677,6 @@
                 {{end}}
               </ul>
             </details>
-            {{else}}
-            <div class="text-sm text-muted-foreground px-4 py-3">Added <span class="font-mono">0</span></div>
             {{end}}
             {{if .Removed}}
             <details class="group">
@@ -692,8 +691,6 @@
                 {{end}}
               </ul>
             </details>
-            {{else}}
-            <div class="text-sm text-muted-foreground px-4 py-3">Removed <span class="font-mono">0</span></div>
             {{end}}
             {{if .Changed}}
             <details class="group">
@@ -708,11 +705,10 @@
                 {{end}}
               </ul>
             </details>
-            {{else}}
-            <div class="text-sm text-muted-foreground px-4 py-3">Changed <span class="font-mono">0</span></div>
             {{end}}
           </div>
         </section>
+        {{end}}
         {{end}}
         {{with .ApprovalError}}
         <div role="alert" class="border-b px-6 py-6 text-sm sm:px-8">
