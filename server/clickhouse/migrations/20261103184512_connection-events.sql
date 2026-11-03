@@ -108,8 +108,8 @@ CREATE TABLE `gram`.`mcp_connection_events` (
 @access: restricted',
   `client_family` LowCardinality(String) COMMENT 'Kind of client from the User-Agent, from a fixed list, otherwise other. Empty when no client made the request.
 @access: confidential',
-  `client_version` LowCardinality(String) COMMENT 'Client version from the User-Agent when it looks like a version, otherwise empty.
-@access: confidential',
+  `client_version` String COMMENT 'Client version from the User-Agent when it looks like a version, otherwise empty.
+@access: confidential' CODEC(ZSTD(1)),
   `repeats` UInt32 COMMENT 'Rows like this one that the limiter held back, which this row stands for. Failures for a key are attempts plus repeats.
 @access: confidential',
   `device_key` String COMMENT 'Keyed hash of the client IP, unique per organization. Cannot be reversed without the key. Identifies a device or network, not a person. Kept 30 days.
