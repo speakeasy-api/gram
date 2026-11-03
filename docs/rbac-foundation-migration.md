@@ -184,6 +184,6 @@ The corpus freezes these as they are. Changing any of them is a product decision
 ## Using this in later tickets
 
 - F6 compares shadow decisions against this corpus, not against new compiler output.
-- F3's grant evaluator (`authz.RegistryEvaluator`) runs every ordinary-human `require`, `require_any` and `risk_policy_applies` fixture through compiled test declarations (`TestRegistryEvaluatorFoundationCorpus`). Fixtures it cannot express are listed with a reason in `corpusSkips`; the test fails if one drops out silently.
+- The grant evaluator (`authz.RegistryEvaluator`) runs every ordinary-human `require`, `require_any` and `risk_policy_applies` fixture through compiled test declarations (`TestRegistryEvaluatorFoundationCorpus`). Fixtures it cannot express are listed with a reason in `corpusSkips`; the test fails if one drops out silently.
 - Each migration child adds fixtures for its operations when the existing ones do not cover them, and moves its consumers out of `consumers.csv` only by changing the code they point at.
 - A PR that changes an expectation here is an access change and needs its own approval, per the AIS-830 release gate.

@@ -13,8 +13,8 @@ import (
 	s "github.com/speakeasy-api/gram/server/internal/authz/schema"
 )
 
-// evaluatorSliceDeclarations extends the frozen F2 slice with the types the
-// F1 decision corpus also exercises. Like frozenSliceDeclarations they exist
+// evaluatorSliceDeclarations extends the frozen schema slice with the types the
+// frozen decision corpus also exercises. Like frozenSliceDeclarations they exist
 // only in tests; TestRegistryEvaluatorSliceMatchesFrozenTables keeps them
 // honest against scope_tables.golden.
 func evaluatorSliceDeclarations() []s.TypeDecl {
@@ -97,22 +97,23 @@ func TestRegistryEvaluatorSliceMatchesFrozenTables(t *testing.T) {
 	}
 }
 
-// corpusSkips lists every selected F1 fixture the grant evaluator does not
+// corpusSkips lists every selected frozen fixture the grant evaluator does not
 // run, and why. The test fails when a fixture is skipped without an entry or
 // an entry no longer applies, so nothing drops out silently.
 var corpusSkips = map[string]string{
 	"allow_explicit_kind_override_must_match_grant_kind": "typed permissions take the resource kind from the declared type; a caller cannot override it",
-	"no_checks_errors": "an empty check list is a client concern (F5), not a permission evaluation",
+	"no_checks_errors": "an empty check list is a concern of the client that combines checks, not of permission evaluation",
 }
 
-// TestRegistryEvaluatorFoundationCorpus runs the hand-written F1 decisions for
+// TestRegistryEvaluatorFoundationCorpus runs the hand-written frozen decisions for
 // ordinary human callers through the registry evaluator. The expectations
 // come from the frozen fixtures, never from the old evaluator's output, so a
 // broken compiled projection cannot make both sides agree.
 //
 // Require is every check passing, RequireAny one of them, and RiskPolicyApplies
 // the raw evaluate − bypass difference. Other callers and the RequireAnyUnblocked
-// veto compose several policies or named alternatives (F4).
+// veto compose several policies or named alternatives, which sit above
+// this evaluator.
 func TestRegistryEvaluatorFoundationCorpus(t *testing.T) {
 	t.Parallel()
 
@@ -154,7 +155,7 @@ func TestRegistryEvaluatorFoundationCorpus(t *testing.T) {
 		}
 	}
 	require.Empty(t, stale, "corpusSkips lists fixtures that are no longer selected")
-	require.Len(t, ran, 71, "the selected F1 corpus changed; update the expected count after checking every new case runs")
+	require.Len(t, ran, 71, "the selected frozen corpus changed; update the expected count after checking every new case runs")
 }
 
 func runEvaluatorCorpusCase(t *testing.T, reg *s.Registry, evaluator *RegistryEvaluator, f foundationFixture) {
@@ -215,7 +216,7 @@ func cmpErr(first, next error) error {
 	return next
 }
 
-// The cases below pin evaluator behaviour the F1 corpus cannot express:
+// The cases below pin evaluator behaviour the frozen corpus cannot express:
 // nested subtraction, permission reuse, branch order and evidence.
 
 const (
@@ -443,7 +444,7 @@ func TestRegistryEvaluatorMatchesRequireForMCPToolCalls(t *testing.T) {
 
 	// Each pair is compared with the unchanged evaluator. This is a
 	// consistency sweep over the MCP grammar; the authoritative expectations
-	// stay in the F1 corpus above.
+	// stay in the frozen corpus above.
 	for i, policy := range policies {
 		for _, dims := range requests {
 			check := MCPToolCallCheck("srv_1", dims)
