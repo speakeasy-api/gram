@@ -101,3 +101,43 @@ func TestHookClientsCacheRefreshPreservesSnapshotOnDeviceReadFailure(t *testing.
 	require.Equal(t, before.DeviceAgents, recovered.DeviceAgents)
 	require.True(t, recovered.QueriedAt.After(before.QueriedAt))
 }
+
+func TestHookClientsCachePageRefreshPreservesSnapshotOnDeviceReadFailure(t *testing.T) {
+	t.Parallel()
+	server := miniredis.RunT(t)
+	rc := redis.NewClient(&redis.Options{Addr: server.Addr()})
+	t.Cleanup(func() { require.NoError(t, rc.Close()) })
+	devices := deviceagentversions.NewStore(rc)
+	require.NoError(t, devices.Record(t.Context(), "example", "machine", "1.0.0", time.Now()))
+	reader := stubHookClientsReader{
+		sessions:  []telemetry.HookClientSessionRow{{OrganizationID: "example", Day: "2026-11-03", Machines: 2}},
+		inference: []telemetry.InferenceHookTrafficRow{{OrganizationID: "example", Day: "2026-11-03", Users: 1}},
+	}
+	warmer := NewHookClientsCache(testenv.NewLogger(t), cache.NewRedisCacheAdapter(rc), reader, devices)
+	require.NoError(t, warmer.Refresh(t.Context()))
+	before, err := warmer.hookClientsCache.Get(t.Context(), hookClientsCacheKey(hookClientsDefaultWindowDays))
+	require.NoError(t, err)
+	require.NotEmpty(t, before.DeviceAgents)
+	warmer.deviceAgentVersions = stubDeviceAgentVersions{err: errors.New("device versions unavailable")}
+	response, cached, err := warmer.hookClientsSnapshot(t.Context(), hookClientsDefaultWindowDays, true)
+	require.NoError(t, err)
+	require.False(t, cached)
+	require.Equal(t, reader.sessions, response.Sessions)
+	require.Equal(t, reader.inference, response.Inference)
+	require.Empty(t, response.DeviceAgents)
+	after, err := warmer.hookClientsCache.Get(t.Context(), hookClientsCacheKey(hookClientsDefaultWindowDays))
+	require.NoError(t, err)
+	require.Equal(t, before, after)
+	warmer.deviceAgentVersions = devices
+	recovered, _, err := warmer.hookClientsSnapshot(t.Context(), hookClientsDefaultWindowDays, true)
+	require.NoError(t, err)
+	after, err = warmer.hookClientsCache.Get(t.Context(), hookClientsCacheKey(hookClientsDefaultWindowDays))
+	require.NoError(t, err)
+	require.True(t, recovered.QueriedAt.Equal(after.QueriedAt))
+	require.Equal(t, recovered.WindowDays, after.WindowDays)
+	require.Equal(t, recovered.Sessions, after.Sessions)
+	require.Equal(t, recovered.Inference, after.Inference)
+	require.Equal(t, recovered.DeviceAgents, after.DeviceAgents)
+	require.NotEmpty(t, after.DeviceAgents)
+	require.True(t, after.QueriedAt.After(before.QueriedAt))
+}

@@ -245,7 +245,7 @@ func (s *HookClientsCache) refreshHookClientsInBackground(ctx context.Context, w
 	}()
 }
 
-// readHookClientsSnapshot reads the grids and caches them.
+// readHookClientsSnapshot serves partial reads but caches only complete snapshots.
 func (s *HookClientsCache) readHookClientsSnapshot(ctx context.Context, windowDays int) (hookClientsSnapshot, error) {
 	snapshot, err := s.loadHookClientsSnapshot(ctx, windowDays)
 	if err != nil {
@@ -254,6 +254,7 @@ func (s *HookClientsCache) readHookClientsSnapshot(ctx context.Context, windowDa
 	snapshot.DeviceAgents, err = s.readDeviceAgentVersions(ctx, windowDays, snapshot.QueriedAt)
 	if err != nil {
 		s.logger.WarnContext(ctx, "failed to read device agent versions", attr.SlogError(err))
+		return snapshot, nil
 	}
 	if err := s.publishHookClientsSnapshot(ctx, snapshot); err != nil {
 		s.logger.WarnContext(ctx, "failed to cache hook clients", attr.SlogError(err))
