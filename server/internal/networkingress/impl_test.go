@@ -208,6 +208,22 @@ func TestCreateIngressRejectsInvalidHostnameAndProvider(t *testing.T) {
 var _ = pgtype.Text{}
 var _ context.Context
 
+func TestCreateRecordsTheRuntimeForNewIngresses(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestService(t)
+	created := ti.create(t, ctx)
+	row, err := repo.New(ti.conn).GetNetworkIngressByID(ctx, repo.GetNetworkIngressByIDParams{ID: uuid.MustParse(created.ID), OrganizationID: ti.orgID})
+	require.NoError(t, err)
+	require.False(t, row.Runtime.Valid, "without the gateway, new ingresses stay on the operator")
+
+	ctx, ti = newTestService(t)
+	ti.service.HostNewIngressesOnGateway()
+	created = ti.create(t, ctx)
+	row, err = repo.New(ti.conn).GetNetworkIngressByID(ctx, repo.GetNetworkIngressByIDParams{ID: uuid.MustParse(created.ID), OrganizationID: ti.orgID})
+	require.NoError(t, err)
+	require.Equal(t, networkingress.RuntimeGateway, row.Runtime.String)
+}
+
 func TestCreateDefaultsHostnameToSpeakeasy(t *testing.T) {
 	t.Parallel()
 	ctx, ti := newTestService(t)

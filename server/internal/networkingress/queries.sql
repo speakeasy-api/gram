@@ -29,7 +29,8 @@ INSERT INTO network_ingresses (
     credentials_encrypted,
     attestor_namespace,
     attestor_service_account,
-    provider_resources
+    provider_resources,
+    runtime
 ) VALUES (
     @id,
     @organization_id,
@@ -42,7 +43,8 @@ INSERT INTO network_ingresses (
     @credentials_encrypted,
     @attestor_namespace,
     @attestor_service_account,
-    @provider_resources
+    @provider_resources,
+    sqlc.narg('runtime')
 )
 RETURNING *;
 
