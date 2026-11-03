@@ -5760,6 +5760,57 @@ func (q *Queries) RevokeUserSessionConsentGroup(ctx context.Context, arg RevokeU
 	return items, nil
 }
 
+const seedWorkloadAdmissionFixture = `-- name: SeedWorkloadAdmissionFixture :one
+INSERT INTO workload_identity_admissions (organization_id, project_id, workload_issuer_id, subject, name)
+VALUES ($1, $2, $3, $4, $5)
+RETURNING id
+`
+
+type SeedWorkloadAdmissionFixtureParams struct {
+	OrganizationID   string
+	ProjectID        uuid.NullUUID
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+	Name             pgtype.Text
+}
+
+func (q *Queries) SeedWorkloadAdmissionFixture(ctx context.Context, arg SeedWorkloadAdmissionFixtureParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, seedWorkloadAdmissionFixture,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.WorkloadIssuerID,
+		arg.Subject,
+		arg.Name,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const seedWorkloadAgentAssignmentFixture = `-- name: SeedWorkloadAgentAssignmentFixture :exec
+INSERT INTO workload_agent_assignments (organization_id, workload_issuer_id, subject, agent_id)
+VALUES ($1, $2, $3, $4)
+`
+
+type SeedWorkloadAgentAssignmentFixtureParams struct {
+	OrganizationID   string
+	WorkloadIssuerID uuid.UUID
+	Subject          string
+	AgentID          uuid.UUID
+}
+
+// Test fixture: workload identity writes belong to the workload identity
+// management API.
+func (q *Queries) SeedWorkloadAgentAssignmentFixture(ctx context.Context, arg SeedWorkloadAgentAssignmentFixtureParams) error {
+	_, err := q.db.Exec(ctx, seedWorkloadAgentAssignmentFixture,
+		arg.OrganizationID,
+		arg.WorkloadIssuerID,
+		arg.Subject,
+		arg.AgentID,
+	)
+	return err
+}
+
 const setOrganizationManagedUserSessionIssuerAuthenticationHost = `-- name: SetOrganizationManagedUserSessionIssuerAuthenticationHost :one
 UPDATE user_session_issuers AS issuer
 SET use_authentication_host = $1,
@@ -7145,4 +7196,13 @@ func (q *Queries) UserSessionIssuerIsPlatformOwned(ctx context.Context, arg User
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
+}
+
+const withdrawWorkloadAdmissionFixture = `-- name: WithdrawWorkloadAdmissionFixture :exec
+UPDATE workload_identity_admissions SET deleted_at = clock_timestamp() WHERE id = $1
+`
+
+func (q *Queries) WithdrawWorkloadAdmissionFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, withdrawWorkloadAdmissionFixture, id)
+	return err
 }

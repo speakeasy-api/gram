@@ -185,6 +185,9 @@ func (k *KitGKERuntimeBackend) deleteOwned(ctx context.Context, gvr schema.Group
 		case <-ctx.Done():
 			return fmt.Errorf("wait Kit GKE deletion: %w", ctx.Err())
 		case <-time.After(gkeRuntimePollInterval):
+			if err := keepKitLifecycleAlive(ctx); err != nil {
+				return err
+			}
 		}
 	}
 }
