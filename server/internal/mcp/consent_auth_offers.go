@@ -101,35 +101,73 @@ func (s *Service) gatewayAuthHeaderMetadata(ctx context.Context, organizationID 
 	return headers, nil
 }
 
+// gatewayOfferMetadata is a request-local, metadata-only snapshot. Its reads
+// are batched across members; capability evaluation never queries or decrypts.
+type gatewayOfferMetadata struct {
+	headers       map[uuid.UUID][]proxy.ConfiguredHeader
+	source        map[uuid.UUID][]proxy.ConfiguredHeader
+	nonCredential map[uuid.UUID][]proxy.ConfiguredHeader
+	selections    map[[2]uuid.UUID]upstreamclientsrepo.GetAuthClientSelectionRow
+}
+
+func (s *Service) loadGatewayOfferMetadata(ctx context.Context, organizationID string, members []metaMember, offers map[uuid.UUID]configuredAuthOffer) (gatewayOfferMetadata, error) {
+	metadata := gatewayOfferMetadata{
+		source:        make(map[uuid.UUID][]proxy.ConfiguredHeader),
+		nonCredential: make(map[uuid.UUID][]proxy.ConfiguredHeader),
+		selections:    make(map[[2]uuid.UUID]upstreamclientsrepo.GetAuthClientSelectionRow),
+	}
+	var serverIDs, remoteIDs, clientIDs []uuid.UUID
+	for _, member := range members {
+		offer, known := offers[member.serverID]
+		if !known || !member.remoteServerID.Valid || (offer.pending && len(offer.clients) == 0) {
+			continue
+		}
+		serverIDs = append(serverIDs, member.serverID)
+		remoteIDs = append(remoteIDs, member.remoteServerID.UUID)
+		for _, client := range offer.clients {
+			clientIDs = append(clientIDs, client.AuthClientID.UUID)
+		}
+	}
+	if len(serverIDs) == 0 {
+		return metadata, nil
+	}
+	var err error
+	metadata.headers, err = s.gatewayAuthHeaderMetadata(ctx, organizationID, clientIDs)
+	if err != nil {
+		return metadata, err
+	}
+	rows, err := remotemcprepo.New(s.db).ListServerHeaderMetadata(ctx, remotemcprepo.ListServerHeaderMetadataParams{RemoteMcpServerIds: remoteIDs, OrganizationID: organizationID})
+	if err != nil {
+		return metadata, fmt.Errorf("list gateway source header metadata: %w", err)
+	}
+	for _, row := range rows {
+		value := ""
+		if row.HasStoredValue {
+			value = "configured"
+		}
+		header := proxy.ConfiguredHeader{Name: row.Name, IsRequired: row.IsRequired, ValueFromRequestHeader: row.ValueFromRequestHeader.String, StaticValue: value}
+		metadata.source[row.RemoteMcpServerID] = append(metadata.source[row.RemoteMcpServerID], header)
+		if !proxy.IsCredentialHeader(row.Name, row.IsSecret, row.ValueFromRequestHeader.String != "") {
+			metadata.nonCredential[row.RemoteMcpServerID] = append(metadata.nonCredential[row.RemoteMcpServerID], header)
+		}
+	}
+	selections, err := upstreamclientsrepo.New(s.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{Proposed: true, ProposeAllClients: true, CredentialID: uuid.Nil, ProposedRegistrationID: uuid.NullUUID{}, ProposedAuthClientID: uuid.NullUUID{}, CredentialKind: upstreamclients.CredentialKindUserSession, McpServerIds: serverIDs, OrganizationID: organizationID})
+	if err != nil {
+		return metadata, fmt.Errorf("resolve gateway offer header sources: %w", err)
+	}
+	for _, row := range selections {
+		metadata.selections[[2]uuid.UUID{row.McpServerID, row.AuthClientID.UUID}] = row
+	}
+	return metadata, nil
+}
+
 // Match the serving resolver's effective header source, without permission
 // checks, acquiring tokens, or reading decrypted credentials. A setup gap is
 // not a discovery veto; consent explains it and serving still refuses it.
-func (s *Service) gatewayOfferCapability(ctx context.Context, organizationID string, member metaMember, offer configuredAuthOffer, headers map[uuid.UUID][]proxy.ConfiguredHeader) (bool, error) {
+func gatewayOfferCapability(member metaMember, offer configuredAuthOffer, metadata gatewayOfferMetadata) bool {
 	if member.tunneledServerID.Valid {
 		supported, _ := offer.gatewayCapability(true, nil)
-		return supported, nil
-	}
-	var source, nonCredential []proxy.ConfiguredHeader
-	if member.remoteServerID.Valid {
-		rows, err := remotemcprepo.New(s.db).ListServerHeaderMetadata(ctx, remotemcprepo.ListServerHeaderMetadataParams{RemoteMcpServerID: member.remoteServerID.UUID, OrganizationID: organizationID})
-		if err != nil {
-			return false, fmt.Errorf("list gateway source header metadata: %w", err)
-		}
-		for _, row := range rows {
-			value := ""
-			if row.HasStoredValue {
-				value = "configured"
-			}
-			header := proxy.ConfiguredHeader{Name: row.Name, IsRequired: row.IsRequired, ValueFromRequestHeader: row.ValueFromRequestHeader.String, StaticValue: value}
-			source = append(source, header)
-			if !proxy.IsCredentialHeader(row.Name, row.IsSecret, row.ValueFromRequestHeader.String != "") {
-				nonCredential = append(nonCredential, header)
-			}
-		}
-	}
-	if len(offer.clients) == 0 {
-		supported, _ := remoteMemberAuth(nonCredential, false)
-		return supported, nil
+		return supported
 	}
 	for _, client := range offer.clients {
 		single := configuredAuthOffer{clients: []upstreamclientsrepo.ListServerConsentAuthClientsRow{client}, pending: false}
@@ -139,21 +177,18 @@ func (s *Service) gatewayOfferCapability(ctx context.Context, organizationID str
 		}
 		// Reuse the authoritative resolver's metadata decision rather than copy
 		// its administrator/backfill, stale-copy, and identity-chaining rules.
-		rows, err := upstreamclientsrepo.New(s.db).GetAuthClientSelection(ctx, upstreamclientsrepo.GetAuthClientSelectionParams{Proposed: true, CredentialID: uuid.Nil, ProposedRegistrationID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, ProposedAuthClientID: client.AuthClientID, CredentialKind: upstreamclients.CredentialKindUserSession, McpServerIds: []uuid.UUID{member.serverID}, OrganizationID: organizationID})
-		if err != nil {
-			return false, fmt.Errorf("resolve gateway offer header source: %w", err)
-		}
-		if len(rows) != 1 {
+		row, ok := metadata.selections[[2]uuid.UUID{member.serverID, client.AuthClientID.UUID}]
+		if !ok {
 			continue
 		}
-		resolution := decideAuthClient(rows[0])
-		effective := proxy.MergeAuthClientHeaders(proxy.HeaderPolicyRemote, nonCredential, headers[client.AuthClientID.UUID])
+		resolution := decideAuthClient(row)
+		effective := proxy.MergeAuthClientHeaders(proxy.HeaderPolicyRemote, metadata.nonCredential[member.remoteServerID.UUID], metadata.headers[client.AuthClientID.UUID])
 		if resolution.outcome == authClientLegacy && !resolution.sendsClientHeaders() {
-			effective = source
+			effective = metadata.source[member.remoteServerID.UUID]
 		}
 		if supported, _ := remoteMemberAuth(effective, oauth); supported {
-			return true, nil
+			return true
 		}
 	}
-	return false, nil
+	return false
 }

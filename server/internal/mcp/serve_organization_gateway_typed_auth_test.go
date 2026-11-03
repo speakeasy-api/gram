@@ -29,8 +29,11 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 	for _, tc := range []struct {
 		name, clientType, header, source, value string
 		required                                bool
-		pending, bound                          bool
+		pending, bound, detached                bool
 	}{
+		{name: "detached_required_caller_header", detached: true, clientType: authz.AuthClientTypeStaticCredential, header: "X-API-Key", source: "X-API-Key", required: true},
+		{name: "detached_unbound_oauth", detached: true, clientType: authz.AuthClientTypeRemoteSession},
+		{name: "detached_bound_oauth", detached: true, bound: true, clientType: authz.AuthClientTypeRemoteSession},
 		{name: "legacy_pending_bound", pending: true, bound: true},
 		{name: "legacy_pending_unbound", pending: true},
 		{name: "personal_pending", clientType: authz.AuthClientTypeRemoteSession},
@@ -79,6 +82,15 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 				}
 				_, err = clients.AttachAuthClientToServer(ctx, authclientsrepo.AttachAuthClientToServerParams{OrganizationID: ac.ActiveOrganizationID, McpServerID: server.ID, AuthClientID: client.ID})
 				require.NoError(t, err)
+				if tc.detached {
+					_, err = clients.DetachAuthClientFromServer(ctx, authclientsrepo.DetachAuthClientFromServerParams{OrganizationID: ac.ActiveOrganizationID, McpServerID: server.ID, AuthClientID: client.ID})
+					require.NoError(t, err)
+					offers, err := upstreamclientsrepo.New(ti.conn).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: ac.ActiveOrganizationID, McpServerIds: []uuid.UUID{server.ID}})
+					require.NoError(t, err)
+					require.Len(t, offers, 1)
+					require.False(t, offers[0].UpstreamAuthPending)
+					require.False(t, offers[0].AuthClientID.Valid)
+				}
 			} else {
 				offers, err := upstreamclientsrepo.New(ti.conn).ListServerConsentAuthClients(ctx, upstreamclientsrepo.ListServerConsentAuthClientsParams{OrganizationID: ac.ActiveOrganizationID, McpServerIds: []uuid.UUID{server.ID}})
 				require.NoError(t, err)
@@ -107,7 +119,7 @@ func TestOrganizationGatewayTypedAuthEligibility(t *testing.T) {
 					mcp.ResetAuthEnforcementForTest(ti.service.Service)
 					ti.features.SetFlag(feature.FlagAuthClientResolver, ac.ActiveOrganizationID, false)
 					ti.features.SetFlag(feature.FlagAuthClientResolverShadow, ac.ActiveOrganizationID, mode == "shadow")
-					visible := tc.bound || tc.name == "static_header" || (!tc.pending && mode == "enforced" && tc.name != "required_caller_header")
+					visible := tc.bound || tc.name == "static_header" || (!tc.pending && !tc.detached && mode == "enforced" && tc.name != "required_caller_header")
 					w, err := serveOrganizationGatewayHTTP(t, t.Context(), ti, fx.organizationSlug, token, listServersBody(t))
 					require.NoError(t, err)
 					require.Equal(t, http.StatusOK, w.Code, w.Body.String())

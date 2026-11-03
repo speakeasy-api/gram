@@ -518,23 +518,24 @@ func (q *Queries) ListMcpServerIDsByRemoteURL(ctx context.Context, arg ListMcpSe
 }
 
 const listServerHeaderMetadata = `-- name: ListServerHeaderMetadata :many
-SELECT h.name, h.is_required, h.is_secret, h.value_from_request_header,
+SELECT h.remote_mcp_server_id, h.name, h.is_required, h.is_secret, h.value_from_request_header,
        (h.value IS NOT NULL)::boolean AS has_stored_value
 FROM remote_mcp_server_headers AS h
 JOIN remote_mcp_servers AS r ON r.id = h.remote_mcp_server_id AND r.deleted IS FALSE
 JOIN projects AS p ON p.id = r.project_id AND p.deleted IS FALSE
-WHERE h.remote_mcp_server_id = $1
+WHERE h.remote_mcp_server_id = ANY($1::uuid[])
   AND p.organization_id = $2
   AND h.deleted IS FALSE
 ORDER BY h.name
 `
 
 type ListServerHeaderMetadataParams struct {
-	RemoteMcpServerID uuid.UUID
-	OrganizationID    string
+	RemoteMcpServerIds []uuid.UUID
+	OrganizationID     string
 }
 
 type ListServerHeaderMetadataRow struct {
+	RemoteMcpServerID      uuid.UUID
 	Name                   string
 	IsRequired             bool
 	IsSecret               bool
@@ -544,7 +545,7 @@ type ListServerHeaderMetadataRow struct {
 
 // Discovery checks header sources without reading credential values.
 func (q *Queries) ListServerHeaderMetadata(ctx context.Context, arg ListServerHeaderMetadataParams) ([]ListServerHeaderMetadataRow, error) {
-	rows, err := q.db.Query(ctx, listServerHeaderMetadata, arg.RemoteMcpServerID, arg.OrganizationID)
+	rows, err := q.db.Query(ctx, listServerHeaderMetadata, arg.RemoteMcpServerIds, arg.OrganizationID)
 	if err != nil {
 		return nil, err
 	}
@@ -553,6 +554,7 @@ func (q *Queries) ListServerHeaderMetadata(ctx context.Context, arg ListServerHe
 	for rows.Next() {
 		var i ListServerHeaderMetadataRow
 		if err := rows.Scan(
+			&i.RemoteMcpServerID,
 			&i.Name,
 			&i.IsRequired,
 			&i.IsSecret,

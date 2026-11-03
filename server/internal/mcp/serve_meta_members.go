@@ -25,7 +25,6 @@ import (
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
-	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/requestorigin"
 )
@@ -357,7 +356,7 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 	// Only the signed-in organization gateway uses typed capability here.
 	// Hosted members and issuerless agent gateways retain their legacy rules.
 	var offers map[uuid.UUID]configuredAuthOffer
-	var offerHeaders map[uuid.UUID][]proxy.ConfiguredHeader
+	var offerMetadata gatewayOfferMetadata
 	if userSessionIssuerID != uuid.Nil {
 		enforced, err := s.consentAuthChoicesEnforced(ctx, organizationID)
 		if err != nil {
@@ -377,18 +376,9 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 		}
 	}
 	if offers != nil {
-		var clientIDs []uuid.UUID
-		for _, member := range members {
-			if !member.remoteServerID.Valid {
-				continue
-			}
-			for _, client := range offers[member.serverID].clients {
-				clientIDs = append(clientIDs, client.AuthClientID.UUID)
-			}
-		}
-		offerHeaders, err = s.gatewayAuthHeaderMetadata(ctx, organizationID, clientIDs)
+		offerMetadata, err = s.loadGatewayOfferMetadata(ctx, organizationID, members, offers)
 		if err != nil {
-			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load gateway auth client headers").LogError(ctx, logger)
+			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load gateway auth metadata").LogError(ctx, logger)
 		}
 	}
 
@@ -412,20 +402,24 @@ func (s *Service) resolveOrganizationMemberSnapshot(
 			if !known {
 				continue
 			}
-			// Do not expand discovery for incomplete legacy setup. Without an
-			// offer, pending servers retain both transport and issuer matching.
-			if !offer.pending || len(offer.clients) > 0 {
-				supported, err := s.gatewayOfferCapability(ctx, organizationID, member, offer, offerHeaders)
-				if err != nil {
-					return ctx, nil, oops.E(oops.CodeUnexpected, err, "check gateway member transport").LogError(ctx, logger)
-				}
+			// Without a live offer, retain legacy transport and issuer checks,
+			// including after an auth-client link was deleted (pending=false).
+			if len(offer.clients) > 0 {
+				supported := gatewayOfferCapability(member, offer, offerMetadata)
 				if supported {
 					eligible = append(eligible, member)
 				}
 				continue
 			}
 		}
-		supported, needsOAuth, err := s.derivedMemberAuth(ctx, shadow, authzSurface, member)
+		var supported, needsOAuth bool
+		if offer, known := offers[member.serverID]; known && !offer.pending && member.backend == metaMemberBackendProxied {
+			// Detached offers still need the source's complete legacy header
+			// requirements, but discovery must not decrypt its credentials.
+			supported, needsOAuth = remoteMemberAuth(offerMetadata.source[member.remoteServerID.UUID], memberNeedsSignIn(member))
+		} else {
+			supported, needsOAuth, err = s.derivedMemberAuth(ctx, shadow, authzSurface, member)
+		}
 		if err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "check gateway member authentication").LogError(ctx, logger)
 		}
