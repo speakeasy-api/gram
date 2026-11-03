@@ -20,6 +20,7 @@ import type { RemoteSessionClient } from "@gram/client/models/components/remotes
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import {
   UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat,
+  type UpdateRemoteSessionClientForm,
   type UpdateRemoteSessionClientFormTokenEndpointAuthAudienceFormat as AuthAudienceFormat,
 } from "@gram/client/models/components/updateremotesessionclientform.js";
 import { invalidateAllOrganizationRemoteSessionClient } from "@gram/client/react-query/organizationRemoteSessionClient.js";
@@ -252,31 +253,36 @@ export function ClientCard({
   const submit = () => {
     if (!canEdit || (privateKeyJwtSelected && !supportsAudience)) return;
 
-    let audienceUpdate: string | undefined;
+    const input: UpdateRemoteSessionClientForm = { id: client.id };
+    if (clientIdChanged) {
+      input.clientId = trimmedClientId;
+    }
+    if (authMethod) {
+      input.tokenEndpointAuthMethod = authMethod;
+    }
+    if (privateKeyJwtSelected && authAudienceFormat !== undefined) {
+      input.tokenEndpointAuthAudienceFormat = authAudienceFormat;
+    }
+    if (scopeChanged) {
+      input.scope = scope;
+    }
     if (audienceChanged) {
-      audienceUpdate = audience.trim();
+      input.audience = audience.trim();
+    }
+    const secretUpdate = clientSecretUpdateValue(authMethod, clientSecret);
+    if (secretUpdate !== undefined) {
+      input.clientSecret = secretUpdate;
+    }
+    if (
+      isPlatformAdmin &&
+      legacyCallbackMode !== undefined &&
+      legacyCallbackMode !== client.legacyCallbackUrl
+    ) {
+      input.legacyCallbackUrl = legacyCallbackMode;
     }
 
     update.mutate({
-      request: {
-        updateRemoteSessionClientForm: {
-          id: client.id,
-          clientId: clientIdChanged ? trimmedClientId : undefined,
-          tokenEndpointAuthMethod: authMethod || undefined,
-          tokenEndpointAuthAudienceFormat: privateKeyJwtSelected
-            ? authAudienceFormat
-            : undefined,
-          scope: scopeChanged ? scope : undefined,
-          audience: audienceUpdate,
-          clientSecret: clientSecretUpdateValue(authMethod, clientSecret),
-          legacyCallbackUrl:
-            isPlatformAdmin &&
-            legacyCallbackMode !== undefined &&
-            legacyCallbackMode !== client.legacyCallbackUrl
-              ? legacyCallbackMode
-              : undefined,
-        },
-      },
+      request: { updateRemoteSessionClientForm: input },
     });
   };
 

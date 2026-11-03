@@ -605,9 +605,14 @@ describe("client overview settings", () => {
 
     expect(lastSaved().audience).toBe("");
 
+    expect((screen.getByLabelText("Audience") as HTMLInputElement).value).toBe(
+      "  ",
+    );
+
     await act(async () => {
       await mutation.onSuccess?.({
         clientId: "upstream-client",
+        audience: "",
       });
     });
     expect((screen.getByLabelText("Audience") as HTMLInputElement).value).toBe(
@@ -659,10 +664,10 @@ describe("client overview settings", () => {
       expect.objectContaining({
         id: "client-1",
         tokenEndpointAuthMethod: AuthMethod.PrivateKeyJwt,
-        clientSecret: undefined,
-        tokenEndpointAuthAudienceFormat: undefined,
       }),
     );
+    expect(lastSaved()).not.toHaveProperty("clientSecret");
+    expect(lastSaved()).not.toHaveProperty("tokenEndpointAuthAudienceFormat");
 
     fireEvent.change(
       screen.getByRole("combobox", { name: "Authentication method" }),

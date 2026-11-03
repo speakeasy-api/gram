@@ -93,11 +93,14 @@ describe("client audience updates", () => {
       expect(testState.mutate).toHaveBeenCalledWith({
         request: {
           updateRemoteSessionClientForm: expect.objectContaining({
-            audience: undefined,
             legacyCallbackUrl: true,
           }),
         },
       });
+      expect(
+        testState.mutate.mock.lastCall?.[0].request
+          .updateRemoteSessionClientForm,
+      ).not.toHaveProperty("audience");
     },
   );
 });
@@ -193,10 +196,12 @@ it("preserves unknown audience configuration for unrelated non-JWT edits and blo
     request: {
       updateRemoteSessionClientForm: expect.objectContaining({
         audience: "new-audience",
-        tokenEndpointAuthAudienceFormat: undefined,
       }),
     },
   });
+  expect(
+    testState.mutate.mock.lastCall?.[0].request.updateRemoteSessionClientForm,
+  ).not.toHaveProperty("tokenEndpointAuthAudienceFormat");
   const auth = screen
     .getAllByRole("combobox")
     .find((el) => el.id !== "client-scopes")!;
