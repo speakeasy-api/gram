@@ -7,9 +7,13 @@ import (
 	"log/slog"
 	"time"
 
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/wide"
+	"go.opentelemetry.io/otel/codes"
+	"go.opentelemetry.io/otel/trace"
 )
 
 // codeRefusalCode classifies why an execution never reached a runner.
@@ -125,13 +129,30 @@ type codeExecutionTiming struct {
 	RunMS *int64 `json:"run_ms,omitempty"`
 }
 
-// newCodeExecutionTiming measures the request from started; execution is nil
-// when the coordinator refused it.
-func newCodeExecutionTiming(started time.Time, execution *codemode.ExecutionResult) codeExecutionTiming {
+// recordCodeExecutionTiming reports the response timings to the request log and
+// span as well. Execution is nil when the coordinator refused it.
+func recordCodeExecutionTiming(ctx context.Context, started time.Time, execution *codemode.ExecutionResult) codeExecutionTiming {
 	timing := codeExecutionTiming{ServerMS: time.Since(started).Milliseconds(), AdmissionMS: nil, RunMS: nil}
 	if execution != nil {
 		timing.AdmissionMS = new(execution.Timing.Admission.Milliseconds())
 		timing.RunMS = new(execution.Timing.Run.Milliseconds())
+	}
+	span := trace.SpanFromContext(ctx)
+	span.SetAttributes(attr.CodeServerMS(timing.ServerMS))
+	wide.Push(ctx, attr.SlogCodeServerMS(timing.ServerMS))
+	outcome := "refused"
+	if execution != nil {
+		outcome = "ok"
+		if execution.Error != nil {
+			outcome = "error"
+		}
+		span.SetAttributes(attr.CodeAdmissionMS(*timing.AdmissionMS), attr.CodeRunMS(*timing.RunMS))
+		wide.Push(ctx, attr.SlogCodeAdmissionMS(*timing.AdmissionMS), attr.SlogCodeRunMS(*timing.RunMS))
+	}
+	span.SetAttributes(attr.CodeOutcome(outcome))
+	wide.Push(ctx, attr.SlogCodeOutcome(outcome))
+	if outcome != "ok" {
+		span.SetStatus(codes.Error, outcome)
 	}
 	return timing
 }

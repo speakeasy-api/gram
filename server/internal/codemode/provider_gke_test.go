@@ -13,11 +13,15 @@ import (
 
 	"github.com/google/uuid"
 	"github.com/hashicorp/yamux"
+	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/sandbox"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/stretchr/testify/assert"
 	"github.com/stretchr/testify/require"
+	"go.opentelemetry.io/otel/codes"
+	sdktrace "go.opentelemetry.io/otel/sdk/trace"
+	"go.opentelemetry.io/otel/sdk/trace/tracetest"
 	k8serrors "k8s.io/apimachinery/pkg/api/errors"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/apis/meta/v1/unstructured"
@@ -603,11 +607,17 @@ func TestCodeGKETransientAdmissionFailurePreservesPod(t *testing.T) {
 
 func TestCodeGKECancelledRequestDoesNotCancelWarmup(t *testing.T) {
 	t.Parallel()
+	recorder := tracetest.NewSpanRecorder()
+	tracerProvider := sdktrace.NewTracerProvider(sdktrace.WithSpanProcessor(recorder))
+	t.Cleanup(func() { require.NoError(t, tracerProvider.Shutdown(context.Background())) })
+	parentCtx, parent := tracerProvider.Tracer("test").Start(t.Context(), "request")
+	defer parent.End()
 	entered, unblock := make(chan struct{}), make(chan struct{})
 	var once sync.Once
 	defer once.Do(func() { close(unblock) })
 	provider, client, scope := newCodeGKEFixture(t, func(_, _ *unstructured.Unstructured) { close(entered); <-unblock })
-	ctx, cancel := context.WithCancel(t.Context())
+	ctx, cancel := context.WithCancel(parentCtx)
+	defer cancel()
 	done := make(chan error, 1)
 	go func() { _, err := provider.Acquire(ctx, scope); done <- err }()
 	<-entered
@@ -620,6 +630,27 @@ func TestCodeGKECancelledRequestDoesNotCancelWarmup(t *testing.T) {
 	claims, err := client.Resource(sandbox.ClaimsV1Beta1).Namespace("code").List(t.Context(), metav1.ListOptions{})
 	require.NoError(t, err)
 	require.Len(t, claims.Items, 1)
+
+	spans := map[string]sdktrace.ReadOnlySpan{}
+	for _, span := range recorder.Ended() {
+		if span.SpanContext().TraceID() == parent.SpanContext().TraceID() {
+			spans[span.Name()] = span
+		}
+	}
+	for _, name := range []string{"codemode.acquire", "codemode.sandbox.allocate", "codemode.sandbox.claim", "codemode.sandbox.wait", "codemode.sandbox.inspect"} {
+		require.Contains(t, spans, name)
+	}
+	acquire, allocate := spans["codemode.acquire"], spans["codemode.sandbox.allocate"]
+	require.Equal(t, parent.SpanContext().SpanID(), acquire.Parent().SpanID())
+	require.Equal(t, codes.Error, acquire.Status().Code)
+	require.Contains(t, acquire.Attributes(), attr.CodeOutcome("cancelled"))
+	require.Equal(t, acquire.SpanContext().SpanID(), allocate.Parent().SpanID())
+	require.Contains(t, allocate.Attributes(), attr.CodeOutcome("ok"), "allocation outlives the cancelled request")
+	for _, name := range []string{"codemode.sandbox.claim", "codemode.sandbox.wait"} {
+		require.Equal(t, allocate.SpanContext().SpanID(), spans[name].Parent().SpanID())
+	}
+	require.Contains(t, spans["codemode.sandbox.wait"].Attributes(), attr.CodeClaimPolls(1))
+	require.Equal(t, spans["codemode.sandbox.wait"].SpanContext().SpanID(), spans["codemode.sandbox.inspect"].Parent().SpanID())
 }
 
 func TestCodeGKEIdleEvictionAcrossOrganizations(t *testing.T) {

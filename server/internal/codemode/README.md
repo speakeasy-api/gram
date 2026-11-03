@@ -358,6 +358,25 @@ Every execute result, including a refusal, carries the gateway's timing in
 for capacity) and `run_ms` once the program was submitted. Inspect shows it
 beside the browser's round trip.
 
+Those same values appear on the request's wide log event and the
+`gateway.code.execute` span as `gram.code.server_ms`,
+`gram.code.admission_ms` and `gram.code.run_ms`, with a bounded
+`gram.code.outcome`. Coordinator refusals omit admission/run values. Search
+Datadog logs with `service:gram-server @gram.code.server_ms:*` and follow the
+trace ID for sampled requests. This uses the environment's existing OTel
+configuration and sampling; it does not enable tracing in previews.
+
+Runtime child spans separate `codemode.acquire`, `codemode.sandbox.allocate`,
+`codemode.sandbox.claim`, `codemode.sandbox.wait`,
+`codemode.sandbox.inspect`, `codemode.runner.open`,
+`codemode.runner.connect` and `codemode.runner.run`. Remote Kubernetes HTTP
+calls are nested beneath their operation. Acquisition records whether it used
+an already-ready runner (`gram.code.runner_reused`); this does not measure warm
+pool adoption. Allocation records readiness polls (`gram.code.claim_polls` on
+the wait span), keeps its original trace parent, and continues independently
+of request cancellation. Runtime spans omit program text, tool arguments,
+credentials and raw error details.
+
 Each tool call from an execution starts its own trace, linked to the
 execution's, so Tool Logs shows one correctly attributed row per member call.
 

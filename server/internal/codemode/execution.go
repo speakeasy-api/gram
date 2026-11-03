@@ -9,6 +9,8 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/speakeasy-api/gram/server/internal/attr"
+	"go.opentelemetry.io/otel/codes"
 )
 
 const (
@@ -143,7 +145,17 @@ type executionState struct {
 
 // Run executes once, with no transport retry after submitting the start frame.
 func (c *RunnerClient) Run(ctx context.Context, executionID uuid.UUID, code string, factory HostFactory) *ExecutionResult {
+	ctx, span := runtimeTracer(ctx).Start(ctx, "codemode.runner.run")
 	result := &ExecutionResult{Value: json.RawMessage("null"), Output: "", OutputTruncated: false, Error: nil, ToolCalls: []CallOutcome{}, Timing: ExecutionTiming{Admission: 0, Run: 0}}
+	defer func() {
+		outcome := "ok"
+		if result.Error != nil {
+			outcome = "error"
+			span.SetStatus(codes.Error, "execution failed")
+		}
+		span.SetAttributes(attr.CodeOutcome(outcome))
+		span.End()
+	}()
 	fail := func(code, message string) { result.Error = &ExecutionError{Code: code, Message: message} }
 	if len(code) == 0 || len(code) > MaxSourceBytes || factory == nil {
 		fail("invalid_program", "code must contain 1 to 65536 UTF-8 bytes")

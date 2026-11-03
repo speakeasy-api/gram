@@ -4056,3 +4056,38 @@ func SlogRegistryEntryName(v string) slog.Attr { return slog.String(string(Regis
 func SlogRegistrySeedOutcome(v string) slog.Attr {
 	return slog.String(string(RegistrySeedOutcomeKey), v)
 }
+
+const (
+	// CodeServerMSKey measures the gateway's Code Mode execution handling.
+	CodeServerMSKey = attribute.Key("gram.code.server_ms")
+	// CodeAdmissionMSKey measures admission, allocation and connection before submission.
+	CodeAdmissionMSKey = attribute.Key("gram.code.admission_ms")
+	// CodeRunMSKey measures execution after submission, including helper callbacks.
+	CodeRunMSKey = attribute.Key("gram.code.run_ms")
+	// CodeOutcomeKey records a bounded execution or runtime-stage outcome.
+	CodeOutcomeKey = attribute.Key("gram.code.outcome")
+	// CodeRunnerReusedKey distinguishes an existing ready runner from an allocation wait.
+	CodeRunnerReusedKey = attribute.Key("gram.code.runner_reused")
+	// CodeInspectionInitialKey distinguishes readiness checks from admission checks.
+	CodeInspectionInitialKey = attribute.Key("gram.code.inspection_initial")
+	// CodeClaimPollsKey counts readiness inspections while allocating a sandbox.
+	CodeClaimPollsKey = attribute.Key("gram.code.claim_polls")
+)
+
+func CodeServerMS(v int64) attribute.KeyValue { return CodeServerMSKey.Int64(v) }
+func SlogCodeServerMS(v int64) slog.Attr      { return slog.Int64(string(CodeServerMSKey), v) }
+
+func CodeAdmissionMS(v int64) attribute.KeyValue { return CodeAdmissionMSKey.Int64(v) }
+func SlogCodeAdmissionMS(v int64) slog.Attr      { return slog.Int64(string(CodeAdmissionMSKey), v) }
+
+func CodeRunMS(v int64) attribute.KeyValue { return CodeRunMSKey.Int64(v) }
+func SlogCodeRunMS(v int64) slog.Attr      { return slog.Int64(string(CodeRunMSKey), v) }
+
+func CodeOutcome(v string) attribute.KeyValue { return CodeOutcomeKey.String(v) }
+func SlogCodeOutcome(v string) slog.Attr      { return slog.String(string(CodeOutcomeKey), v) }
+
+func CodeRunnerReused(v bool) attribute.KeyValue { return CodeRunnerReusedKey.Bool(v) }
+
+func CodeInspectionInitial(v bool) attribute.KeyValue { return CodeInspectionInitialKey.Bool(v) }
+
+func CodeClaimPolls(v int) attribute.KeyValue { return CodeClaimPollsKey.Int(v) }

@@ -20,6 +20,8 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/wide"
+	"go.opentelemetry.io/otel/codes"
 )
 
 // codePrefixLimit keeps native tool descriptions bounded; tools.servers paginates the rest.
@@ -136,7 +138,16 @@ func codeExecutionScope(ctx context.Context, gate *metaGateContext, id mcpjsonrp
 	return codemode.Scope{Organization: gate.organizationID, Project: gate.projectID, OrganizationWide: gate.organizationGateway, Gateway: gate.metaServerID, Caller: []string{gate.userID, gate.externalUserID, gate.apiKeyID, credential}, Session: session, Request: raw}, nil
 }
 
-func (s *Service) executeMetaCode(ctx context.Context, logger *slog.Logger, endpoint *endpointrepo.McpEndpoint, server *metamcprepo.MetaMcpServer, gate *metaGateContext, members []metaMember, req *rawRequest, params toolsCallParams) (json.RawMessage, error) {
+func (s *Service) executeMetaCode(ctx context.Context, logger *slog.Logger, endpoint *endpointrepo.McpEndpoint, server *metamcprepo.MetaMcpServer, gate *metaGateContext, members []metaMember, req *rawRequest, params toolsCallParams) (_ json.RawMessage, retErr error) {
+	ctx, span := s.tracer.Start(ctx, "gateway.code.execute")
+	defer func() {
+		if retErr != nil {
+			span.SetAttributes(attr.CodeOutcome("error"))
+			span.SetStatus(codes.Error, "execution failed")
+			wide.Push(ctx, attr.SlogCodeOutcome("error"))
+		}
+		span.End()
+	}()
 	started := time.Now()
 	if !s.codeExecutor.Enabled() || gate.discoveryMode != metamcp.DiscoveryModeCode {
 		return nil, oops.E(oops.CodeUnavailable, nil, "code mode is unavailable")
@@ -179,13 +190,13 @@ func (s *Service) executeMetaCode(ctx context.Context, logger *slog.Logger, endp
 		if refusal.Error.Code == codeRefusalUnexpected {
 			logger.WarnContext(ctx, "code execution was not admitted", attr.SlogError(err))
 		}
-		return marshalCodeAdmissionRefusal(ctx, logger, req.ID, refusal, newCodeExecutionTiming(started, nil))
+		return marshalCodeAdmissionRefusal(ctx, logger, req.ID, refusal, recordCodeExecutionTiming(ctx, started, nil))
 	}
 	// The runner refused before the program started: report it in the same
 	// structured, retryable shape as a coordinator refusal.
 	if execution.Error != nil && len(execution.ToolCalls) == 0 {
 		if refused := runnerRefusal(execution.Error.Code); refused != nil {
-			return marshalCodeAdmissionRefusal(ctx, logger, req.ID, newCodeAdmissionRefusal(refused), newCodeExecutionTiming(started, execution))
+			return marshalCodeAdmissionRefusal(ctx, logger, req.ID, newCodeAdmissionRefusal(refused), recordCodeExecutionTiming(ctx, started, execution))
 		}
 	}
 	structured, err := json.Marshal(execution)
@@ -196,7 +207,7 @@ func (s *Service) executeMetaCode(ctx context.Context, logger *slog.Logger, endp
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize code content").LogError(ctx, logger)
 	}
-	body, err := json.Marshal(&result[codeToolCallResult]{ID: req.ID, Result: codeToolCallResult{toolCallResult: toolCallResult{Content: []json.RawMessage{chunk}, StructuredContent: structured, IsError: execution.Error != nil}, Meta: map[string]codeExecutionTiming{codeTimingMetaKey: newCodeExecutionTiming(started, execution)}}, serverIdentity: serverInfoMetaServer, cacheHints: nil})
+	body, err := json.Marshal(&result[codeToolCallResult]{ID: req.ID, Result: codeToolCallResult{toolCallResult: toolCallResult{Content: []json.RawMessage{chunk}, StructuredContent: structured, IsError: execution.Error != nil}, Meta: map[string]codeExecutionTiming{codeTimingMetaKey: recordCodeExecutionTiming(ctx, started, execution)}}, serverIdentity: serverInfoMetaServer, cacheHints: nil})
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "serialize code response").LogError(ctx, logger)
 	}

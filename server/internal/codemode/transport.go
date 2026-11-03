@@ -98,7 +98,10 @@ func (c *RunnerClient) Close() error {
 // waiting at once instead of queueing behind another caller's connection
 // attempt or a slow stream open. waitUntil bounds the whole admission path,
 // connecting included; when it passes first, open fails with errRunnerFull.
-func (c *RunnerClient) open(ctx context.Context, waitUntil time.Time) (*runnerStream, error) {
+func (c *RunnerClient) open(ctx context.Context, waitUntil time.Time) (_ *runnerStream, retErr error) {
+	ctx, span := runtimeTracer(ctx).Start(ctx, "codemode.runner.open")
+	defer span.End()
+	defer func() { span.SetStatus(recordRuntimeOutcome(span, retErr)) }()
 	admission, stopAdmission := context.WithDeadline(ctx, waitUntil)
 	defer stopAdmission()
 	admissionErr := func(err error) error {
@@ -214,7 +217,10 @@ func (c *RunnerClient) knownCapacity() int {
 	return c.capacity
 }
 
-func (c *RunnerClient) connect(ctx context.Context) (*yamux.Session, int, error) {
+func (c *RunnerClient) connect(ctx context.Context) (_ *yamux.Session, _ int, retErr error) {
+	ctx, span := runtimeTracer(ctx).Start(ctx, "codemode.runner.connect")
+	defer span.End()
+	defer func() { span.SetStatus(recordRuntimeOutcome(span, retErr)) }()
 	ctx, cancel := context.WithTimeout(ctx, connectTimeout)
 	defer cancel()
 	port := c.endpoint.Port()
