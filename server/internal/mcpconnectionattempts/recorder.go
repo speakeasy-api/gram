@@ -48,7 +48,7 @@ const (
 	// defaultFlushInterval is how long a row waits in memory when traffic is low.
 	defaultFlushInterval = time.Second
 
-	// defaultInsertTimeout bounds one insert, so a stalled ClickHouse only costs queued rows.
+	// defaultInsertTimeout bounds one insert on a live connection. Dialing during a stall takes the client's dial timeout.
 	defaultInsertTimeout = 3 * time.Second
 
 	// drainLogWait bounds the wait for Shutdown's one log line.
@@ -469,7 +469,7 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		r.drop(ctx, dropInvalidEvent, 1, err)
 		return
 	}
-	if limited && r.limiter != nil && !r.limiter.allow(row, time.Now()) {
+	if limited && r.limiter != nil && (r.queueReserved() || !r.limiter.allow(row, time.Now())) {
 		r.drop(ctx, dropRateLimited, 1, nil)
 		return
 	}
@@ -505,6 +505,11 @@ func (r *Recorder) enqueue(row Row) dropReason {
 		r.unfinished.Add(-1)
 		return dropQueueFull
 	}
+}
+
+// queueReserved reports that the rest of the queue is kept for rows on real attempts.
+func (r *Recorder) queueReserved() bool {
+	return len(r.queue)*onceQueueShareDenominator >= cap(r.queue)*onceQueueShareNumerator
 }
 
 // Shutdown writes what is queued, each batch once, and stops the goroutine. It logs

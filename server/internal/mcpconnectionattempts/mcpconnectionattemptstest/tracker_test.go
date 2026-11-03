@@ -1,7 +1,9 @@
 package mcpconnectionattemptstest
 
 import (
+	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -156,4 +158,41 @@ func TestTracker_NilIsSafe(t *testing.T) {
 	tracked.Succeed(t.Context(), mcpconnectionattempts.ResultCodeIssued)
 	tracked.Continue()
 	tracked.Finish(t.Context())
+}
+
+// A caller that went away isn't our outage.
+func TestTracker_CanceledCallerWithNoVerdictRecordsNothing(t *testing.T) {
+	t.Parallel()
+
+	rec := New(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	rec.Recorder.Track(trackerScope(), mcpconnectionattempts.StepInboundAuthorize).Finish(ctx)
+
+	rec.RequireNothing()
+}
+
+func TestTracker_CanceledCallerKeepsAnExplicitVerdict(t *testing.T) {
+	t.Parallel()
+
+	rec := New(t)
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	tracked := rec.Recorder.Track(trackerScope(), mcpconnectionattempts.StepInboundAuthorize)
+	tracked.Refuse(ctx, mcpconnectionattempts.CodeInvalidRequest)
+	tracked.Finish(ctx)
+
+	rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeInvalidRequest)
+}
+
+// A deadline is ours or an upstream's, so it still shows.
+func TestTracker_DeadlineWithNoVerdictIsStillVisible(t *testing.T) {
+	t.Parallel()
+
+	rec := New(t)
+	ctx, cancel := context.WithDeadline(t.Context(), time.Now().Add(-time.Second))
+	defer cancel()
+	rec.Recorder.Track(trackerScope(), mcpconnectionattempts.StepInboundAuthorize).Finish(ctx)
+
+	rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeInternalError)
 }
