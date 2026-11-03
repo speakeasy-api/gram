@@ -42,10 +42,11 @@ ORDER BY items.at, items.id;
 
 -- name: MemoSourceChats :many
 -- The chat a memo was saved from, for crediting memo citations. A memo saved
--- outside any chat has none.
+-- outside any chat, or deleted since, has none.
 SELECT m.chat_id::uuid AS chat_id
 FROM memory_memos m
-WHERE m.id = @memo_id AND m.organization_id = @organization_id AND m.chat_id IS NOT NULL;
+WHERE m.id = @memo_id AND m.organization_id = @organization_id AND m.chat_id IS NOT NULL
+  AND m.deleted IS FALSE;
 
 -- name: DigestSourceChats :many
 -- Every chat a digest was built from, for crediting digest citations: a day
@@ -68,5 +69,6 @@ FROM (
   SELECT m.chat_id
   FROM memory_memos m
   WHERE m.organization_id = @organization_id AND m.chat_id IS NOT NULL
+    AND m.deleted IS FALSE
     AND m.id IN (SELECT unnest(tree.memo_ids) FROM tree)
 ) sources;

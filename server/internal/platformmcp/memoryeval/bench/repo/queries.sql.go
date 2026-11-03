@@ -30,6 +30,7 @@ FROM (
   SELECT m.chat_id
   FROM memory_memos m
   WHERE m.organization_id = $1 AND m.chat_id IS NOT NULL
+    AND m.deleted IS FALSE
     AND m.id IN (SELECT unnest(tree.memo_ids) FROM tree)
 ) sources
 `
@@ -156,6 +157,7 @@ const memoSourceChats = `-- name: MemoSourceChats :many
 SELECT m.chat_id::uuid AS chat_id
 FROM memory_memos m
 WHERE m.id = $1 AND m.organization_id = $2 AND m.chat_id IS NOT NULL
+  AND m.deleted IS FALSE
 `
 
 type MemoSourceChatsParams struct {
@@ -164,7 +166,7 @@ type MemoSourceChatsParams struct {
 }
 
 // The chat a memo was saved from, for crediting memo citations. A memo saved
-// outside any chat has none.
+// outside any chat, or deleted since, has none.
 func (q *Queries) MemoSourceChats(ctx context.Context, arg MemoSourceChatsParams) ([]uuid.UUID, error) {
 	rows, err := q.db.Query(ctx, memoSourceChats, arg.MemoID, arg.OrganizationID)
 	if err != nil {

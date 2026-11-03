@@ -79,4 +79,15 @@ func TestMemorySourcesResolvesMemosAndDigestTrees(t *testing.T) {
 
 	_, err = sources(ctx, "chat", chatID("decision-pooler"))
 	require.Error(t, err, "chat citations need no lookup")
+
+	_, err = loaded.db.Exec(ctx, "UPDATE memory_memos SET deleted_at = clock_timestamp() WHERE id = $1", memo)
+	require.NoError(t, err)
+
+	chats, err = sources(ctx, "memo", memo)
+	require.NoError(t, err)
+	require.Empty(t, chats, "a deleted memo no longer backs a citation")
+
+	chats, err = sources(ctx, "digest", monthID)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{chatID("decision-pooler")}, chats, "a digest drops the chats of its deleted memos")
 }
