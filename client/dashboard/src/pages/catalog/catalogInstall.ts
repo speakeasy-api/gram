@@ -3,9 +3,20 @@ import { normalizeRemoteUrl } from "@/pages/catalog/remotes";
 // tools:externalmcp:<slug>:<tool name>
 const EXTERNAL_MCP_TOOL_URN = /^tools:externalmcp:([^:]+):/;
 
+export type CatalogInstallState = "added" | "not-added" | "unknown";
+
 export function externalMcpSlugFromToolUrn(urn: string): string | undefined {
   const slug = EXTERNAL_MCP_TOOL_URN.exec(urn)?.[1];
   return slug || undefined;
+}
+
+export function normalizedUrlSet(urls: readonly string[]): Set<string> {
+  const urlsNormalized = new Set<string>();
+  for (const url of urls) {
+    const normalized = normalizeRemoteUrl(url);
+    if (normalized !== "") urlsNormalized.add(normalized);
+  }
+  return urlsNormalized;
 }
 
 export type CatalogExternalMcp = {
@@ -14,46 +25,19 @@ export type CatalogExternalMcp = {
 };
 
 export type CatalogInstallEvidence = {
-  installedUrls: ReadonlySet<string>;
+  remoteUrls: ReadonlySet<string>;
+  unproxiedUrls: ReadonlySet<string>;
   originSpecifiers: ReadonlySet<string>;
   referencedExternalMcpSlugs: ReadonlySet<string>;
 };
 
-type CatalogToolset = {
-  origin?: { registrySpecifier?: string | undefined } | null | undefined;
-  toolUrns?: readonly string[] | null | undefined;
+/** Which lookups have data. A lookup that is still loading or failed is not ready. */
+export type CatalogInstallReady = {
+  remote: boolean;
+  unproxied: boolean;
+  servers: boolean;
+  deployment: boolean;
 };
-
-/**
- * Evidence that a catalog entry is actually installed.
- *
- * A deployment attachment whose slug no toolset still selects is not an
- * installation: deleting the MCP server leaves that row behind, and the
- * catalog used to treat it as "Added".
- */
-export function collectCatalogInstallEvidence(input: {
-  urls: readonly string[];
-  toolsets: readonly CatalogToolset[];
-}): CatalogInstallEvidence {
-  const installedUrls = new Set<string>();
-  for (const url of input.urls) {
-    const normalized = normalizeRemoteUrl(url);
-    if (normalized !== "") installedUrls.add(normalized);
-  }
-
-  const originSpecifiers = new Set<string>();
-  const referencedExternalMcpSlugs = new Set<string>();
-  for (const toolset of input.toolsets) {
-    const specifier = toolset.origin?.registrySpecifier;
-    if (specifier) originSpecifiers.add(specifier);
-    for (const urn of toolset.toolUrns ?? []) {
-      const slug = externalMcpSlugFromToolUrn(urn);
-      if (slug) referencedExternalMcpSlugs.add(slug);
-    }
-  }
-
-  return { installedUrls, originSpecifiers, referencedExternalMcpSlugs };
-}
 
 export function liveCatalogExternalMcp<T extends CatalogExternalMcp>(
   server: { registrySpecifier: string },
@@ -67,25 +51,54 @@ export function liveCatalogExternalMcp<T extends CatalogExternalMcp>(
   );
 }
 
-export function catalogServerIsInstalled(
+/**
+ * "not-added" only when every lookup that could still show an install has
+ * succeeded and none matched. A loading or failed lookup stays "unknown" so
+ * the catalog does not flash Add for a server that is already installed.
+ */
+export function catalogServerInstallState(
   server: {
     registrySpecifier: string;
     remotes?: readonly { url: string }[] | null | undefined;
   },
   evidence: CatalogInstallEvidence,
   externalMcps: readonly CatalogExternalMcp[],
-): boolean {
-  if (evidence.originSpecifiers.has(server.registrySpecifier)) return true;
+  ready: CatalogInstallReady,
+): CatalogInstallState {
+  const urls = (server.remotes ?? []).map((remote) =>
+    normalizeRemoteUrl(remote.url),
+  );
   if (
+    ready.remote &&
+    urls.some((url) => url !== "" && evidence.remoteUrls.has(url))
+  ) {
+    return "added";
+  }
+  if (
+    ready.unproxied &&
+    urls.some((url) => url !== "" && evidence.unproxiedUrls.has(url))
+  ) {
+    return "added";
+  }
+  if (
+    ready.servers &&
+    evidence.originSpecifiers.has(server.registrySpecifier)
+  ) {
+    return "added";
+  }
+  if (
+    ready.servers &&
+    ready.deployment &&
     liveCatalogExternalMcp(
       server,
       externalMcps,
       evidence.referencedExternalMcpSlugs,
     )
   ) {
-    return true;
+    return "added";
   }
-  return (server.remotes ?? []).some((remote) =>
-    evidence.installedUrls.has(normalizeRemoteUrl(remote.url)),
-  );
+  if (ready.remote && ready.unproxied && ready.servers && ready.deployment) {
+    return "not-added";
+  }
+  return "unknown";
 }

@@ -6,12 +6,14 @@ import {
 } from "@/lib/mcpEndpoints";
 import { mcpServerRouteParam } from "@/lib/sources";
 import { getServerURL } from "@/lib/utils";
-import type { PulseMCPServer } from "@/pages/catalog/hooks";
+import {
+  useCatalogInstallations,
+  type PulseMCPServer,
+} from "@/pages/catalog/hooks";
 import {
   collectibleHeaders,
   getRemoteDisplayInfo,
   isFigmaCatalogServer,
-  normalizeRemoteUrl,
 } from "@/pages/catalog/remotes";
 import {
   configureCreatedRemoteMcpIdentity,
@@ -29,16 +31,10 @@ import { invalidateAllMcpEndpoints } from "@gram/client/react-query/mcpEndpoints
 import { invalidateAllMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { invalidateAllRiskListPolicies } from "@gram/client/react-query/riskListPolicies.js";
 import { invalidateAllRemoteMcpServerHeaders } from "@gram/client/react-query/remoteMcpServerHeaders.js";
-import {
-  invalidateAllRemoteMcpServers,
-  useRemoteMcpServers,
-} from "@gram/client/react-query/remoteMcpServers.js";
+import { invalidateAllRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { invalidateAllRemoteSessionClients } from "@gram/client/react-query/remoteSessionClients.js";
 import { invalidateAllRemoteSessionIssuers } from "@gram/client/react-query/remoteSessionIssuers.js";
-import {
-  invalidateAllUnproxiedMcpServers,
-  useUnproxiedMcpServers,
-} from "@gram/client/react-query/unproxiedMcpServers.js";
+import { invalidateAllUnproxiedMcpServers } from "@gram/client/react-query/unproxiedMcpServers.js";
 import { invalidateAllUserSessionIssuers } from "@gram/client/react-query/userSessionIssuers.js";
 import { useQueryClient } from "@tanstack/react-query";
 import { useCallback, useEffect, useMemo, useRef, useState } from "react";
@@ -451,35 +447,13 @@ export function useRemoteMcpInstallWorkflow({
   const issuerQuery = useEffectiveUserSessionIssuers({});
   const defaultOrganizationIssuerId = issuerQuery.organizationIssuers[0]?.id;
 
-  // Informational "already installed" signal: a remote MCP server with a
-  // matching URL already exists in the target project. Unproxied servers
-  // (e.g. Figma, installed via installUnproxiedTarget) live in a separate
-  // resource entirely, so their URLs are checked alongside the remote ones.
-  const { data: remoteServersData } = useRemoteMcpServers(
-    projectSlug ? { gramProject: projectSlug } : undefined,
-  );
-  const { data: unproxiedServersData } = useUnproxiedMcpServers(
-    projectSlug ? { gramProject: projectSlug } : undefined,
-  );
-  const installedUrls = useMemo(
-    () =>
-      new Set(
-        [
-          ...(remoteServersData?.remoteMcpServers ?? []),
-          ...(unproxiedServersData?.unproxiedMcpServers ?? []),
-        ].map((server) => normalizeRemoteUrl(server.url)),
-      ),
-    [
-      remoteServersData?.remoteMcpServers,
-      unproxiedServersData?.unproxiedMcpServers,
-    ],
-  );
+  // Same check as the catalog card, including toolset-backed installs.
+  // Use the workflow's project when the caller is installing somewhere other
+  // than the route's project.
+  const { installState } = useCatalogInstallations(projectSlug);
   const isServerAlreadyInstalled = useCallback(
-    (server: PulseMCPServer) =>
-      (server.remotes ?? []).some((remote) =>
-        installedUrls.has(normalizeRemoteUrl(remote.url)),
-      ),
-    [installedUrls],
+    (server: PulseMCPServer) => installState(server) === "added",
+    [installState],
   );
 
   const [phase, setPhase] = useState<InstallPhaseName>("configure");

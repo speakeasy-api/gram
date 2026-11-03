@@ -5,13 +5,14 @@ import type { DeploymentExternalMCP } from "@gram/client/models/components/deplo
 import { ExternalMCPServerEntry } from "@gram/client/models/components/externalmcpserverentry.js";
 import { ExternalMCPTool } from "@gram/client/models/components/externalmcptool.js";
 import {
-  catalogServerIsInstalled,
-  collectCatalogInstallEvidence,
+  catalogServerInstallState,
   liveCatalogExternalMcp,
+  normalizedUrlSet,
+  type CatalogInstallState,
 } from "@/pages/catalog/catalogInstall";
 import { queryKeyListMCPCatalog } from "@gram/client/react-query/listMCPCatalog.js";
 import { useLatestDeployment } from "@gram/client/react-query/latestDeployment.js";
-import { useListToolsets } from "@gram/client/react-query/listToolsets.js";
+import { useMcpServers } from "@gram/client/react-query/mcpServers.js";
 import { useQuery } from "@tanstack/react-query";
 import { useRemoteMcpServers } from "@gram/client/react-query/remoteMcpServers.js";
 import { useUnproxiedMcpServers } from "@gram/client/react-query/unproxiedMcpServers.js";
@@ -109,67 +110,119 @@ export function useListMCPCatalog(
  * again is always allowed and just creates another server, so this only
  * drives indicators, never blocking.
  *
- * Current installs are remote (or, for a few entries, unproxied) MCP servers
- * matched by endpoint URL. Older installs are toolsets stamped with the
- * catalog specifier, or a deployment attachment a toolset still selects.
- * An attachment left behind after that toolset is deleted does not count.
+ * Current installs are remote or unproxied MCP servers matched by endpoint
+ * URL. Older installs are MCP servers whose toolset records the catalog
+ * specifier, or a deployment attachment one of those servers still selects.
+ * An attachment left behind after that server is deleted does not count.
+ *
+ * Lookups are keyed by project. A lookup that is still loading or has failed
+ * leaves the state "unknown" instead of claiming the server is not added.
  */
-export function useCatalogInstallations(): {
-  isInstalled: (server: PulseMCPServer) => boolean;
+export function useCatalogInstallations(projectSlug?: string): {
+  installState: (server: PulseMCPServer) => CatalogInstallState;
   liveExternalMcp: (
     server: PulseMCPServer,
   ) => DeploymentExternalMCP | undefined;
 } {
-  const gramProject = useProjectSlugForRequests();
-  const { data: remoteServersData } = useRemoteMcpServers();
-  // A failed lookup must not take down the catalog; the badge just stays off.
-  // Key toolsets the same way as useToolsets so a project switch cannot reuse
-  // another project's list.
-  const { data: unproxiedServersData } = useUnproxiedMcpServers(
-    gramProject ? { gramProject } : undefined,
+  const routeProject = useProjectSlugForRequests();
+  const gramProject = projectSlug || routeProject;
+  const projectRequest = gramProject ? { gramProject } : undefined;
+  const queryOptions = { throwOnError: false, enabled: !!gramProject } as const;
+  const remoteQuery = useRemoteMcpServers(
+    projectRequest,
     undefined,
-    { throwOnError: false },
+    queryOptions,
   );
-  const { data: deploymentResult } = useLatestDeployment();
-  const { data: toolsetsResult } = useListToolsets({ gramProject }, undefined, {
-    throwOnError: false,
-  });
+  const unproxiedQuery = useUnproxiedMcpServers(
+    projectRequest,
+    undefined,
+    queryOptions,
+  );
+  const deploymentQuery = useLatestDeployment(
+    projectRequest,
+    undefined,
+    queryOptions,
+  );
+  // Server summaries carry the catalog specifier and external-MCP slugs.
+  // The full toolset list includes every tool definition, which this check
+  // does not need.
+  const serversQuery = useMcpServers(projectRequest, undefined, queryOptions);
 
-  const externalMcps = deploymentResult?.deployment?.externalMcps;
-  const evidence = useMemo(
+  const remoteUrls = useMemo(
     () =>
-      collectCatalogInstallEvidence({
-        urls: [
-          ...(remoteServersData?.remoteMcpServers ?? []).map(
-            (server) => server.url,
-          ),
-          ...(unproxiedServersData?.unproxiedMcpServers ?? []).map(
-            (server) => server.url,
-          ),
-        ],
-        toolsets: toolsetsResult?.toolsets ?? [],
-      }),
+      normalizedUrlSet(
+        (remoteQuery.data?.remoteMcpServers ?? []).map((server) => server.url),
+      ),
+    [remoteQuery.data?.remoteMcpServers],
+  );
+  const unproxiedUrls = useMemo(
+    () =>
+      normalizedUrlSet(
+        (unproxiedQuery.data?.unproxiedMcpServers ?? []).map(
+          (server) => server.url,
+        ),
+      ),
+    [unproxiedQuery.data?.unproxiedMcpServers],
+  );
+  const serverEvidence = useMemo(() => {
+    const originSpecifiers = new Set<string>();
+    const referencedExternalMcpSlugs = new Set<string>();
+    for (const server of serversQuery.data?.mcpServers ?? []) {
+      const specifier = server.toolset?.registrySpecifier;
+      if (specifier) originSpecifiers.add(specifier);
+      for (const slug of server.toolset?.externalMcpSlugs ?? []) {
+        if (slug) referencedExternalMcpSlugs.add(slug);
+      }
+    }
+    return { originSpecifiers, referencedExternalMcpSlugs };
+  }, [serversQuery.data?.mcpServers]);
+
+  const externalMcps = deploymentQuery.data?.deployment?.externalMcps;
+  const ready = useMemo(
+    () => ({
+      remote: remoteQuery.data !== undefined,
+      unproxied: unproxiedQuery.data !== undefined,
+      servers: serversQuery.data !== undefined,
+      deployment: deploymentQuery.data !== undefined,
+    }),
     [
-      remoteServersData?.remoteMcpServers,
-      unproxiedServersData?.unproxiedMcpServers,
-      toolsetsResult?.toolsets,
+      remoteQuery.data,
+      unproxiedQuery.data,
+      serversQuery.data,
+      deploymentQuery.data,
     ],
   );
+  const evidence = useMemo(
+    () => ({
+      remoteUrls,
+      unproxiedUrls,
+      originSpecifiers: serverEvidence.originSpecifiers,
+      referencedExternalMcpSlugs: serverEvidence.referencedExternalMcpSlugs,
+    }),
+    [remoteUrls, unproxiedUrls, serverEvidence],
+  );
 
-  const isInstalled = useCallback(
+  const installState = useCallback(
     (server: PulseMCPServer) =>
-      catalogServerIsInstalled(server, evidence, externalMcps ?? []),
-    [evidence, externalMcps],
+      catalogServerInstallState(server, evidence, externalMcps ?? [], ready),
+    [evidence, externalMcps, ready],
   );
   const liveExternalMcp = useCallback(
-    (server: PulseMCPServer) =>
-      liveCatalogExternalMcp(
+    (server: PulseMCPServer) => {
+      if (!ready.servers || !ready.deployment) return undefined;
+      return liveCatalogExternalMcp(
         server,
         externalMcps ?? [],
         evidence.referencedExternalMcpSlugs,
-      ),
-    [evidence.referencedExternalMcpSlugs, externalMcps],
+      );
+    },
+    [
+      evidence.referencedExternalMcpSlugs,
+      externalMcps,
+      ready.deployment,
+      ready.servers,
+    ],
   );
 
-  return { isInstalled, liveExternalMcp };
+  return { installState, liveExternalMcp };
 }

@@ -130,7 +130,7 @@ function CatalogInner() {
     isFetching,
     refetch: refetchCatalog,
   } = useListMCPCatalog();
-  const { isInstalled } = useCatalogInstallations();
+  const { installState } = useCatalogInstallations();
 
   // The backend returns the full catalog in one response.
   const allServers = useMemo(
@@ -223,7 +223,7 @@ function CatalogInner() {
                   detailHref={routes.mcp.catalog.detail.href(
                     encodeURIComponent(server.registrySpecifier),
                   )}
-                  isAdded={isInstalled(server)}
+                  installState={installState(server)}
                   onAdd={() => handleAdd(server)}
                 />
               );
@@ -250,7 +250,7 @@ function CatalogInner() {
                     detailHref={routes.mcp.catalog.detail.href(
                       encodeURIComponent(server.registrySpecifier),
                     )}
-                    isAdded={isInstalled(server)}
+                    installState={installState(server)}
                     onAdd={() => handleAdd(server)}
                   />
                 );

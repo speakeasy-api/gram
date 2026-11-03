@@ -1,9 +1,10 @@
 import { describe, expect, it } from "vitest";
 import {
-  catalogServerIsInstalled,
-  collectCatalogInstallEvidence,
+  catalogServerInstallState,
   externalMcpSlugFromToolUrn,
   liveCatalogExternalMcp,
+  type CatalogInstallEvidence,
+  type CatalogInstallReady,
 } from "./catalogInstall";
 
 const github = {
@@ -16,24 +17,41 @@ const attachment = {
   registryServerSpecifier: github.registrySpecifier,
 };
 
-function evidenceFor(input: {
-  urls?: string[];
-  toolsets?: {
-    origin?: { registrySpecifier?: string };
-    toolUrns?: string[];
-  }[];
-}) {
-  return collectCatalogInstallEvidence({
-    urls: input.urls ?? [],
-    toolsets: input.toolsets ?? [],
-  });
+const emptyEvidence: CatalogInstallEvidence = {
+  remoteUrls: new Set(),
+  unproxiedUrls: new Set(),
+  originSpecifiers: new Set(),
+  referencedExternalMcpSlugs: new Set(),
+};
+
+const allReady: CatalogInstallReady = {
+  remote: true,
+  unproxied: true,
+  servers: true,
+  deployment: true,
+};
+
+function stateFor(
+  evidence: Partial<CatalogInstallEvidence>,
+  ready: Partial<CatalogInstallReady> = {},
+  externalMcps: (typeof attachment)[] = [],
+) {
+  return catalogServerInstallState(
+    github,
+    { ...emptyEvidence, ...evidence },
+    externalMcps,
+    { ...allReady, ...ready },
+  );
 }
 
 describe("externalMcpSlugFromToolUrn", () => {
-  it("reads the source slug", () => {
+  it("reads the source slug from any tool name", () => {
     expect(externalMcpSlugFromToolUrn("tools:externalmcp:github:proxy")).toBe(
       "github",
     );
+    expect(
+      externalMcpSlugFromToolUrn("tools:externalmcp:github:listRepos"),
+    ).toBe("github");
   });
 
   it("ignores other tool kinds", () => {
@@ -43,77 +61,66 @@ describe("externalMcpSlugFromToolUrn", () => {
   });
 });
 
-describe("catalogServerIsInstalled", () => {
-  it("matches a remote or unproxied server URL, ignoring a trailing slash", () => {
-    const evidence = evidenceFor({
-      urls: ["https://api.githubcopilot.com/mcp"],
-    });
-    expect(catalogServerIsInstalled(github, evidence, [])).toBe(true);
-  });
-
-  it("stays installed when another endpoint URL is still present", () => {
-    const server = {
-      registrySpecifier: "com.example/multi",
-      remotes: [
-        { url: "https://mcp.example.com/a" },
-        { url: "https://mcp.example.com/b" },
-      ],
-    };
-    const evidence = evidenceFor({
-      urls: ["https://mcp.example.com/b"],
-    });
-    expect(catalogServerIsInstalled(server, evidence, [])).toBe(true);
-  });
-
-  it("does not treat a deployment attachment with no toolset as installed", () => {
-    const evidence = evidenceFor({});
-    expect(catalogServerIsInstalled(github, evidence, [attachment])).toBe(
-      false,
-    );
+describe("catalogServerInstallState", () => {
+  it("matches a remote URL before the other lookups finish", () => {
     expect(
-      liveCatalogExternalMcp(
-        github,
-        [attachment],
-        evidence.referencedExternalMcpSlugs,
+      stateFor(
+        { remoteUrls: new Set(["https://api.githubcopilot.com/mcp"]) },
+        { unproxied: false, servers: false, deployment: false },
       ),
+    ).toBe("added");
+  });
+
+  it("matches an unproxied URL", () => {
+    expect(
+      stateFor(
+        { unproxiedUrls: new Set(["https://api.githubcopilot.com/mcp"]) },
+        { remote: false },
+      ),
+    ).toBe("added");
+  });
+
+  it("stays unknown until every lookup has data", () => {
+    expect(stateFor({}, { remote: false })).toBe("unknown");
+    expect(stateFor({}, { servers: false })).toBe("unknown");
+    expect(stateFor({}, { deployment: false })).toBe("unknown");
+  });
+
+  it("is not-added only after every lookup succeeded with no match", () => {
+    expect(stateFor({})).toBe("not-added");
+  });
+
+  it("does not treat a deployment attachment with no server as installed", () => {
+    expect(stateFor({}, {}, [attachment])).toBe("not-added");
+    expect(
+      liveCatalogExternalMcp(github, [attachment], new Set()),
     ).toBeUndefined();
   });
 
-  it("treats an attachment as installed when a toolset still selects it", () => {
-    const evidence = evidenceFor({
-      toolsets: [{ toolUrns: ["tools:externalmcp:github:proxy"] }],
-    });
-    expect(catalogServerIsInstalled(github, evidence, [attachment])).toBe(true);
+  it("treats an attachment as installed when a server still selects its slug", () => {
     expect(
-      liveCatalogExternalMcp(
-        github,
-        [attachment],
-        evidence.referencedExternalMcpSlugs,
-      )?.slug,
-    ).toBe("github");
+      stateFor({ referencedExternalMcpSlugs: new Set(["github"]) }, {}, [
+        attachment,
+      ]),
+    ).toBe("added");
   });
 
-  it("treats a toolset catalog origin as installed after the attachment is gone", () => {
-    const evidence = evidenceFor({
-      toolsets: [{ origin: { registrySpecifier: github.registrySpecifier } }],
-    });
-    expect(catalogServerIsInstalled(github, evidence, [])).toBe(true);
+  it("treats a server catalog origin as installed without an attachment", () => {
+    expect(
+      stateFor(
+        { originSpecifiers: new Set([github.registrySpecifier]) },
+        { deployment: false },
+      ),
+    ).toBe("added");
   });
 
   it("does not match a different catalog entry", () => {
-    const evidence = evidenceFor({
-      urls: ["https://mcp.other.example/mcp"],
-      toolsets: [
-        {
-          origin: { registrySpecifier: "com.other/server" },
-          toolUrns: ["tools:externalmcp:other:proxy"],
-        },
-      ],
-    });
     expect(
-      catalogServerIsInstalled(github, evidence, [
-        { slug: "other", registryServerSpecifier: "com.other/server" },
-      ]),
-    ).toBe(false);
+      stateFor({
+        remoteUrls: new Set(["https://mcp.other.example/mcp"]),
+        originSpecifiers: new Set(["com.other/server"]),
+        referencedExternalMcpSlugs: new Set(["other"]),
+      }),
+    ).toBe("not-added");
   });
 });
