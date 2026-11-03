@@ -200,6 +200,13 @@ func (d *VerifyCustomDomain) Do(ctx context.Context, args VerifyCustomDomainArgs
 		return noResult, newCustomDomainInvalidError(ctx, d.logger, errors.New("custom domain identity mismatch"), "custom domain does not match this registration")
 	}
 
+	// Pending rows created before token support need a target before setup can finish.
+	token, err := customdomains.EnsureDNSTargetToken(ctx, d.db, domain.OrganizationID, domain.ID, customdomains.NewDNSTargetToken)
+	if err != nil {
+		return noResult, fmt.Errorf("ensure custom domain DNS target: %w", err)
+	}
+	domain.DnsTargetToken = conv.ToPGTextEmpty(token)
+
 	routingIssue, err := checkCustomDomainRouting(ctx, d.resolver, domain.Domain, d.expectedTargetCNAME, d.expectedARecords)
 	if err != nil {
 		return noResult, oops.E(oops.CodeUnexpected, err, "failed to find custom domain mapping for %s", domain.Domain).LogError(ctx, d.logger)

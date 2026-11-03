@@ -89,6 +89,26 @@ type GetDomainResponseBody struct {
 	// The suggested DNS record type for this domain. A suggestion only — delegated
 	// subzones can make an apex-looking domain CNAME-capable.
 	SuggestedRecordType *string `form:"suggested_record_type,omitempty" json:"suggested_record_type,omitempty" xml:"suggested_record_type,omitempty"`
+	// The random DNS label identifying this domain's designated CNAME target.
+	// Assigned when the domain is registered and unchanged for its lifetime.
+	// Absent until assigned.
+	DNSTargetToken *string `form:"dns_target_token,omitempty" json:"dns_target_token,omitempty" xml:"dns_target_token,omitempty"`
+	// The designated CNAME target for this domain (<dns_target_token>.<suffix>).
+	// Pointing the domain here lets Speakeasy move it without DNS changes. Absent
+	// when per-domain targets are not configured or the token is not yet assigned.
+	DNSTarget *string `form:"dns_target,omitempty" json:"dns_target,omitempty" xml:"dns_target,omitempty"`
+	// How the latest health check observed this domain's DNS routing traffic to
+	// Speakeasy. One of: per_domain_cname, shared_cname, a_record (also covers
+	// flattened CNAME, ALIAS and ANAME records, which resolve to addresses),
+	// unknown. Absent until the first health check.
+	DNSRoutingMethod *string `form:"dns_routing_method,omitempty" json:"dns_routing_method,omitempty" xml:"dns_routing_method,omitempty"`
+	// Advisory public DNS configuration: matched, wrong_target, unconfirmed,
+	// not_found, check_failed, or not_configured. Does not establish ownership or
+	// public availability.
+	DNSConfigurationStatus *string `form:"dns_configuration_status,omitempty" json:"dns_configuration_status,omitempty" xml:"dns_configuration_status,omitempty"`
+	// When DNS configuration was observed. Infrastructure health belongs to the
+	// same observation only when this matches health_checked_at.
+	DNSCheckedAt *string `form:"dns_checked_at,omitempty" json:"dns_checked_at,omitempty" xml:"dns_checked_at,omitempty"`
 }
 
 // ListDomainsResponseBody is the type of the "domains" service "listDomains"
@@ -145,6 +165,26 @@ type CreateDomainResponseBody struct {
 	// The suggested DNS record type for this domain. A suggestion only — delegated
 	// subzones can make an apex-looking domain CNAME-capable.
 	SuggestedRecordType *string `form:"suggested_record_type,omitempty" json:"suggested_record_type,omitempty" xml:"suggested_record_type,omitempty"`
+	// The random DNS label identifying this domain's designated CNAME target.
+	// Assigned when the domain is registered and unchanged for its lifetime.
+	// Absent until assigned.
+	DNSTargetToken *string `form:"dns_target_token,omitempty" json:"dns_target_token,omitempty" xml:"dns_target_token,omitempty"`
+	// The designated CNAME target for this domain (<dns_target_token>.<suffix>).
+	// Pointing the domain here lets Speakeasy move it without DNS changes. Absent
+	// when per-domain targets are not configured or the token is not yet assigned.
+	DNSTarget *string `form:"dns_target,omitempty" json:"dns_target,omitempty" xml:"dns_target,omitempty"`
+	// How the latest health check observed this domain's DNS routing traffic to
+	// Speakeasy. One of: per_domain_cname, shared_cname, a_record (also covers
+	// flattened CNAME, ALIAS and ANAME records, which resolve to addresses),
+	// unknown. Absent until the first health check.
+	DNSRoutingMethod *string `form:"dns_routing_method,omitempty" json:"dns_routing_method,omitempty" xml:"dns_routing_method,omitempty"`
+	// Advisory public DNS configuration: matched, wrong_target, unconfirmed,
+	// not_found, check_failed, or not_configured. Does not establish ownership or
+	// public availability.
+	DNSConfigurationStatus *string `form:"dns_configuration_status,omitempty" json:"dns_configuration_status,omitempty" xml:"dns_configuration_status,omitempty"`
+	// When DNS configuration was observed. Infrastructure health belongs to the
+	// same observation only when this matches health_checked_at.
+	DNSCheckedAt *string `form:"dns_checked_at,omitempty" json:"dns_checked_at,omitempty" xml:"dns_checked_at,omitempty"`
 }
 
 // UpdateDomainResponseBody is the type of the "domains" service "updateDomain"
@@ -192,6 +232,26 @@ type UpdateDomainResponseBody struct {
 	// The suggested DNS record type for this domain. A suggestion only — delegated
 	// subzones can make an apex-looking domain CNAME-capable.
 	SuggestedRecordType *string `form:"suggested_record_type,omitempty" json:"suggested_record_type,omitempty" xml:"suggested_record_type,omitempty"`
+	// The random DNS label identifying this domain's designated CNAME target.
+	// Assigned when the domain is registered and unchanged for its lifetime.
+	// Absent until assigned.
+	DNSTargetToken *string `form:"dns_target_token,omitempty" json:"dns_target_token,omitempty" xml:"dns_target_token,omitempty"`
+	// The designated CNAME target for this domain (<dns_target_token>.<suffix>).
+	// Pointing the domain here lets Speakeasy move it without DNS changes. Absent
+	// when per-domain targets are not configured or the token is not yet assigned.
+	DNSTarget *string `form:"dns_target,omitempty" json:"dns_target,omitempty" xml:"dns_target,omitempty"`
+	// How the latest health check observed this domain's DNS routing traffic to
+	// Speakeasy. One of: per_domain_cname, shared_cname, a_record (also covers
+	// flattened CNAME, ALIAS and ANAME records, which resolve to addresses),
+	// unknown. Absent until the first health check.
+	DNSRoutingMethod *string `form:"dns_routing_method,omitempty" json:"dns_routing_method,omitempty" xml:"dns_routing_method,omitempty"`
+	// Advisory public DNS configuration: matched, wrong_target, unconfirmed,
+	// not_found, check_failed, or not_configured. Does not establish ownership or
+	// public availability.
+	DNSConfigurationStatus *string `form:"dns_configuration_status,omitempty" json:"dns_configuration_status,omitempty" xml:"dns_configuration_status,omitempty"`
+	// When DNS configuration was observed. Infrastructure health belongs to the
+	// same observation only when this matches health_checked_at.
+	DNSCheckedAt *string `form:"dns_checked_at,omitempty" json:"dns_checked_at,omitempty" xml:"dns_checked_at,omitempty"`
 }
 
 // SetRootMcpEndpointResponseBody is the type of the "domains" service
@@ -239,6 +299,26 @@ type SetRootMcpEndpointResponseBody struct {
 	// The suggested DNS record type for this domain. A suggestion only — delegated
 	// subzones can make an apex-looking domain CNAME-capable.
 	SuggestedRecordType *string `form:"suggested_record_type,omitempty" json:"suggested_record_type,omitempty" xml:"suggested_record_type,omitempty"`
+	// The random DNS label identifying this domain's designated CNAME target.
+	// Assigned when the domain is registered and unchanged for its lifetime.
+	// Absent until assigned.
+	DNSTargetToken *string `form:"dns_target_token,omitempty" json:"dns_target_token,omitempty" xml:"dns_target_token,omitempty"`
+	// The designated CNAME target for this domain (<dns_target_token>.<suffix>).
+	// Pointing the domain here lets Speakeasy move it without DNS changes. Absent
+	// when per-domain targets are not configured or the token is not yet assigned.
+	DNSTarget *string `form:"dns_target,omitempty" json:"dns_target,omitempty" xml:"dns_target,omitempty"`
+	// How the latest health check observed this domain's DNS routing traffic to
+	// Speakeasy. One of: per_domain_cname, shared_cname, a_record (also covers
+	// flattened CNAME, ALIAS and ANAME records, which resolve to addresses),
+	// unknown. Absent until the first health check.
+	DNSRoutingMethod *string `form:"dns_routing_method,omitempty" json:"dns_routing_method,omitempty" xml:"dns_routing_method,omitempty"`
+	// Advisory public DNS configuration: matched, wrong_target, unconfirmed,
+	// not_found, check_failed, or not_configured. Does not establish ownership or
+	// public availability.
+	DNSConfigurationStatus *string `form:"dns_configuration_status,omitempty" json:"dns_configuration_status,omitempty" xml:"dns_configuration_status,omitempty"`
+	// When DNS configuration was observed. Infrastructure health belongs to the
+	// same observation only when this matches health_checked_at.
+	DNSCheckedAt *string `form:"dns_checked_at,omitempty" json:"dns_checked_at,omitempty" xml:"dns_checked_at,omitempty"`
 }
 
 // ListRootMcpServersResponseBody is the type of the "domains" service
@@ -292,6 +372,26 @@ type CheckHealthResponseBody struct {
 	// The suggested DNS record type for this domain. A suggestion only — delegated
 	// subzones can make an apex-looking domain CNAME-capable.
 	SuggestedRecordType *string `form:"suggested_record_type,omitempty" json:"suggested_record_type,omitempty" xml:"suggested_record_type,omitempty"`
+	// The random DNS label identifying this domain's designated CNAME target.
+	// Assigned when the domain is registered and unchanged for its lifetime.
+	// Absent until assigned.
+	DNSTargetToken *string `form:"dns_target_token,omitempty" json:"dns_target_token,omitempty" xml:"dns_target_token,omitempty"`
+	// The designated CNAME target for this domain (<dns_target_token>.<suffix>).
+	// Pointing the domain here lets Speakeasy move it without DNS changes. Absent
+	// when per-domain targets are not configured or the token is not yet assigned.
+	DNSTarget *string `form:"dns_target,omitempty" json:"dns_target,omitempty" xml:"dns_target,omitempty"`
+	// How the latest health check observed this domain's DNS routing traffic to
+	// Speakeasy. One of: per_domain_cname, shared_cname, a_record (also covers
+	// flattened CNAME, ALIAS and ANAME records, which resolve to addresses),
+	// unknown. Absent until the first health check.
+	DNSRoutingMethod *string `form:"dns_routing_method,omitempty" json:"dns_routing_method,omitempty" xml:"dns_routing_method,omitempty"`
+	// Advisory public DNS configuration: matched, wrong_target, unconfirmed,
+	// not_found, check_failed, or not_configured. Does not establish ownership or
+	// public availability.
+	DNSConfigurationStatus *string `form:"dns_configuration_status,omitempty" json:"dns_configuration_status,omitempty" xml:"dns_configuration_status,omitempty"`
+	// When DNS configuration was observed. Infrastructure health belongs to the
+	// same observation only when this matches health_checked_at.
+	DNSCheckedAt *string `form:"dns_checked_at,omitempty" json:"dns_checked_at,omitempty" xml:"dns_checked_at,omitempty"`
 }
 
 // ListMcpEndpointsResponseBody is the type of the "domains" service
@@ -1988,6 +2088,26 @@ type CustomDomainResponseBody struct {
 	// The suggested DNS record type for this domain. A suggestion only — delegated
 	// subzones can make an apex-looking domain CNAME-capable.
 	SuggestedRecordType *string `form:"suggested_record_type,omitempty" json:"suggested_record_type,omitempty" xml:"suggested_record_type,omitempty"`
+	// The random DNS label identifying this domain's designated CNAME target.
+	// Assigned when the domain is registered and unchanged for its lifetime.
+	// Absent until assigned.
+	DNSTargetToken *string `form:"dns_target_token,omitempty" json:"dns_target_token,omitempty" xml:"dns_target_token,omitempty"`
+	// The designated CNAME target for this domain (<dns_target_token>.<suffix>).
+	// Pointing the domain here lets Speakeasy move it without DNS changes. Absent
+	// when per-domain targets are not configured or the token is not yet assigned.
+	DNSTarget *string `form:"dns_target,omitempty" json:"dns_target,omitempty" xml:"dns_target,omitempty"`
+	// How the latest health check observed this domain's DNS routing traffic to
+	// Speakeasy. One of: per_domain_cname, shared_cname, a_record (also covers
+	// flattened CNAME, ALIAS and ANAME records, which resolve to addresses),
+	// unknown. Absent until the first health check.
+	DNSRoutingMethod *string `form:"dns_routing_method,omitempty" json:"dns_routing_method,omitempty" xml:"dns_routing_method,omitempty"`
+	// Advisory public DNS configuration: matched, wrong_target, unconfirmed,
+	// not_found, check_failed, or not_configured. Does not establish ownership or
+	// public availability.
+	DNSConfigurationStatus *string `form:"dns_configuration_status,omitempty" json:"dns_configuration_status,omitempty" xml:"dns_configuration_status,omitempty"`
+	// When DNS configuration was observed. Infrastructure health belongs to the
+	// same observation only when this matches health_checked_at.
+	DNSCheckedAt *string `form:"dns_checked_at,omitempty" json:"dns_checked_at,omitempty" xml:"dns_checked_at,omitempty"`
 }
 
 // DomainDNSConfigResponseBody is used to define fields on response body types.
@@ -2109,6 +2229,11 @@ func NewGetDomainCustomDomainOK(body *GetDomainResponseBody) *domains.CustomDoma
 		RootMcpEndpointID:        body.RootMcpEndpointID,
 		OpenaiAppsChallengeToken: body.OpenaiAppsChallengeToken,
 		SuggestedRecordType:      *body.SuggestedRecordType,
+		DNSTargetToken:           body.DNSTargetToken,
+		DNSTarget:                body.DNSTarget,
+		DNSRoutingMethod:         body.DNSRoutingMethod,
+		DNSConfigurationStatus:   body.DNSConfigurationStatus,
+		DNSCheckedAt:             body.DNSCheckedAt,
 	}
 	v.IPAllowlist = make([]string, len(body.IPAllowlist))
 	for i, val := range body.IPAllowlist {
@@ -2456,6 +2581,11 @@ func NewCreateDomainCustomDomainOK(body *CreateDomainResponseBody) *domains.Cust
 		RootMcpEndpointID:        body.RootMcpEndpointID,
 		OpenaiAppsChallengeToken: body.OpenaiAppsChallengeToken,
 		SuggestedRecordType:      *body.SuggestedRecordType,
+		DNSTargetToken:           body.DNSTargetToken,
+		DNSTarget:                body.DNSTarget,
+		DNSRoutingMethod:         body.DNSRoutingMethod,
+		DNSConfigurationStatus:   body.DNSConfigurationStatus,
+		DNSCheckedAt:             body.DNSCheckedAt,
 	}
 	v.IPAllowlist = make([]string, len(body.IPAllowlist))
 	for i, val := range body.IPAllowlist {
@@ -2636,6 +2766,11 @@ func NewUpdateDomainCustomDomainOK(body *UpdateDomainResponseBody) *domains.Cust
 		RootMcpEndpointID:        body.RootMcpEndpointID,
 		OpenaiAppsChallengeToken: body.OpenaiAppsChallengeToken,
 		SuggestedRecordType:      *body.SuggestedRecordType,
+		DNSTargetToken:           body.DNSTargetToken,
+		DNSTarget:                body.DNSTarget,
+		DNSRoutingMethod:         body.DNSRoutingMethod,
+		DNSConfigurationStatus:   body.DNSConfigurationStatus,
+		DNSCheckedAt:             body.DNSCheckedAt,
 	}
 	v.IPAllowlist = make([]string, len(body.IPAllowlist))
 	for i, val := range body.IPAllowlist {
@@ -2816,6 +2951,11 @@ func NewSetRootMcpEndpointCustomDomainOK(body *SetRootMcpEndpointResponseBody) *
 		RootMcpEndpointID:        body.RootMcpEndpointID,
 		OpenaiAppsChallengeToken: body.OpenaiAppsChallengeToken,
 		SuggestedRecordType:      *body.SuggestedRecordType,
+		DNSTargetToken:           body.DNSTargetToken,
+		DNSTarget:                body.DNSTarget,
+		DNSRoutingMethod:         body.DNSRoutingMethod,
+		DNSConfigurationStatus:   body.DNSConfigurationStatus,
+		DNSCheckedAt:             body.DNSCheckedAt,
 	}
 	v.IPAllowlist = make([]string, len(body.IPAllowlist))
 	for i, val := range body.IPAllowlist {
@@ -3162,6 +3302,11 @@ func NewCheckHealthCustomDomainOK(body *CheckHealthResponseBody) *domains.Custom
 		RootMcpEndpointID:        body.RootMcpEndpointID,
 		OpenaiAppsChallengeToken: body.OpenaiAppsChallengeToken,
 		SuggestedRecordType:      *body.SuggestedRecordType,
+		DNSTargetToken:           body.DNSTargetToken,
+		DNSTarget:                body.DNSTarget,
+		DNSRoutingMethod:         body.DNSRoutingMethod,
+		DNSConfigurationStatus:   body.DNSConfigurationStatus,
+		DNSCheckedAt:             body.DNSCheckedAt,
 	}
 	v.IPAllowlist = make([]string, len(body.IPAllowlist))
 	for i, val := range body.IPAllowlist {

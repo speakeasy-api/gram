@@ -43,6 +43,13 @@ func BuildCustomDomainView(domain customdomainsrepo.CustomDomain, isUpdating boo
 		RootMcpEndpointID:        rootMcpEndpointIDString,
 		OpenaiAppsChallengeToken: conv.FromPGText[string](domain.OpenaiAppsChallengeToken),
 		SuggestedRecordType:      "cname",
+		DNSTargetToken:           conv.FromPGText[string](domain.DnsTargetToken),
+		// The target needs the deployment's suffix, which the customdomains
+		// service owns and fills in.
+		DNSTarget:              nil,
+		DNSRoutingMethod:       conv.FromPGText[string](domain.DnsRoutingMethod),
+		DNSConfigurationStatus: conv.FromPGText[string](domain.DnsConfigurationStatus),
+		DNSCheckedAt:           conv.PtrEmpty(conv.FromPGTimestamptz(domain.DnsCheckedAt)),
 	}
 }
 
