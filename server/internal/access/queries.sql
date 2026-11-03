@@ -41,6 +41,18 @@ WHERE g.organization_id = @organization_id
   -- authorizing the next request without a sign-out or role change.
   AND (g.expires_at IS NULL OR g.expires_at > clock_timestamp());
 
+-- name: HasPermanentPrincipalGrants :one
+-- Reports whether a principal holds any permanent grant. Provisioning uses it
+-- to decide whether default grants were already written, so a temporary grant
+-- given to the principal never stands in for them.
+SELECT EXISTS (
+  SELECT 1
+  FROM principal_grants
+  WHERE organization_id = @organization_id
+    AND principal_urn = @principal_urn
+    AND expires_at IS NULL
+)::boolean AS has_grants;
+
 -- name: ListPrincipalGrantsByResource :many
 -- Returns grant rows for a single resource selector.
 SELECT principal_urn, scope, selectors

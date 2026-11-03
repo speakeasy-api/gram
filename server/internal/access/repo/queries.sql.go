@@ -1017,6 +1017,31 @@ func (q *Queries) GetTemporaryGrantForUpdate(ctx context.Context, arg GetTempora
 	return i, err
 }
 
+const hasPermanentPrincipalGrants = `-- name: HasPermanentPrincipalGrants :one
+SELECT EXISTS (
+  SELECT 1
+  FROM principal_grants
+  WHERE organization_id = $1
+    AND principal_urn = $2
+    AND expires_at IS NULL
+)::boolean AS has_grants
+`
+
+type HasPermanentPrincipalGrantsParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+}
+
+// Reports whether a principal holds any permanent grant. Provisioning uses it
+// to decide whether default grants were already written, so a temporary grant
+// given to the principal never stands in for them.
+func (q *Queries) HasPermanentPrincipalGrants(ctx context.Context, arg HasPermanentPrincipalGrantsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPermanentPrincipalGrants, arg.OrganizationID, arg.PrincipalUrn)
+	var has_grants bool
+	err := row.Scan(&has_grants)
+	return has_grants, err
+}
+
 const insertChallengeResolutions = `-- name: InsertChallengeResolutions :many
 INSERT INTO authz_challenge_resolutions (
   organization_id, challenge_id, principal_urn, scope,

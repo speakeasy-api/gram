@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/database"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -134,6 +135,17 @@ func (s *Service) temporaryGrantRecipient(ctx context.Context, organizationID st
 	return principal, nil
 }
 
+// temporaryGrantActor is the principal a temporary grant change is attributed
+// to: the authenticated agent when one is acting, otherwise the signed-in
+// user. The audit logger attributes the entry the same way, so self_granted
+// and the self-revoke check compare the recipient with that same actor.
+func temporaryGrantActor(ctx context.Context, userID string) urn.Principal {
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok && actor.Type == urn.PrincipalTypeAgent {
+		return actor
+	}
+	return urn.NewPrincipal(urn.PrincipalTypeUser, userID)
+}
+
 func (s *Service) requireTemporaryGrantAdmin(ctx context.Context, organizationID string) error {
 	return s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: organizationID, Dimensions: nil})
 }
@@ -174,7 +186,7 @@ func (s *Service) CreateTemporaryGrant(ctx context.Context, payload *gen.CreateT
 		return nil, err
 	}
 
-	actor := urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID)
+	actor := temporaryGrantActor(ctx, ac.UserID)
 
 	dbtx, err := s.db.Begin(ctx)
 	if err != nil {
@@ -328,6 +340,11 @@ func (s *Service) RenewTemporaryGrant(ctx context.Context, payload *gen.RenewTem
 	if err != nil {
 		return nil, err
 	}
+	// The holder must still be able to receive access: a member who left, a
+	// deleted role or a suspended agent cannot have its grant extended.
+	if _, err := s.temporaryGrantRecipient(ctx, ac.ActiveOrganizationID, before.PrincipalUrn.String()); err != nil {
+		return nil, err
+	}
 
 	renewed, err := repo.New(dbtx).RenewTemporaryGrant(ctx, repo.RenewTemporaryGrantParams{
 		ExpiresAt:      pgtype.Timestamptz{Time: deadline, InfinityModifier: pgtype.Finite, Valid: true},
@@ -364,7 +381,7 @@ func (s *Service) RenewTemporaryGrant(ctx context.Context, payload *gen.RenewTem
 	}
 	if err := s.audit.LogAccessTemporaryGrantRenew(ctx, dbtx, audit.LogAccessTemporaryGrantRenewEvent{
 		OrganizationID:               ac.ActiveOrganizationID,
-		Actor:                        urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID),
+		Actor:                        temporaryGrantActor(ctx, ac.UserID),
 		ActorDisplayName:             ac.Email,
 		ActorSlug:                    nil,
 		TemporaryGrantURN:            urn.NewTemporaryGrant(after.ID),
@@ -401,7 +418,7 @@ func (s *Service) RevokeTemporaryGrant(ctx context.Context, payload *gen.RevokeT
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
-	actor := urn.NewPrincipal(urn.PrincipalTypeUser, ac.UserID)
+	actor := temporaryGrantActor(ctx, ac.UserID)
 	before, err := lockActiveTemporaryGrant(ctx, dbtx, ac.ActiveOrganizationID, id)
 	if err != nil {
 		// A member who is not an administrator must not learn whether a grant

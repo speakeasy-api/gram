@@ -578,6 +578,11 @@ func TestTemporaryGrant_AgentPrincipal(t *testing.T) {
 	require.NoError(t, err)
 	require.True(t, allowed, "the agent gets the access while the grant is active")
 
+	_, err = agentsrepo.New(ti.conn).SuspendAgent(ctx, agentsrepo.SuspendAgentParams{OrganizationID: orgID, ID: agent.ID})
+	require.NoError(t, err)
+	_, err = ti.service.RenewTemporaryGrant(ctx, &gen.RenewTemporaryGrantPayload{SessionToken: nil, ID: grant.ID, ExpiresAt: inOneHour()})
+	requireOopsCode(t, err, oops.CodeBadRequest)
+
 	suspended, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
 		OrganizationID: orgID,
 		OwnerUserID:    authCtx.UserID,
@@ -592,4 +597,25 @@ func TestTemporaryGrant_AgentPrincipal(t *testing.T) {
 		ExpiresAt:    inOneHour(),
 	})
 	requireOopsCode(t, err, oops.CodeBadRequest)
+}
+
+func TestTemporaryGrant_DoesNotStandInForSystemRoleDefaults(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestAccessService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	orgID := authCtx.ActiveOrganizationID
+
+	require.NoError(t, authz.SeedSystemRoleGrantsTx(ctx, ti.conn, orgID))
+	memberRole, err := accessrepo.New(ti.conn).GetGlobalRoleBySlug(ctx, authz.SystemRoleMember)
+	require.NoError(t, err)
+	role := urn.NewPrincipal(urn.PrincipalTypeRole, "global:"+memberRole.ID.String())
+	require.NoError(t, authz.DeleteRoleGrants(ctx, accessrepo.New(ti.conn), orgID, role.String()))
+
+	createTemporaryGrantFor(t, ctx, ti, role.String(), authz.ScopeLogRead, nil)
+	require.Len(t, listPrincipalGrants(t, ctx, ti.conn, orgID, role), 1)
+
+	require.NoError(t, authz.SeedSystemRoleGrantsTx(ctx, ti.conn, orgID))
+	require.Greater(t, len(listPrincipalGrants(t, ctx, ti.conn, orgID, role)), 1, "a role holding only a temporary grant still gets its default grants")
 }
