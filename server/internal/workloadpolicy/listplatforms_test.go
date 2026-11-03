@@ -48,9 +48,10 @@ func TestListPlatforms_ReturnsTheCatalogPolicy(t *testing.T) {
 }
 
 // recordingFlags is an in-memory flag provider that records what each
-// evaluation asks and, with fail set, fails every one.
+// evaluation asks and, with fail set, fails every one. Its zero value is ready
+// to use.
 type recordingFlags struct {
-	*feature.InMemory
+	feature.InMemory
 	fail  error
 	asked []flagRequest
 }
@@ -94,7 +95,7 @@ func requireGitHubActionsComingSoon(t *testing.T, ctx context.Context, ti *testI
 
 func TestListPlatforms_OffersGitHubActionsWhereItsFlagIsOn(t *testing.T) {
 	t.Parallel()
-	flags := &recordingFlags{InMemory: &feature.InMemory{}}
+	flags := &recordingFlags{}
 	ctx, ti := newTestServiceWithFlags(t, flags)
 	flags.SetFlag(feature.FlagWorkloadPlatformGitHubActions, ti.orgID, true)
 
@@ -119,7 +120,7 @@ func TestListPlatforms_OffersGitHubActionsWhereItsFlagIsOn(t *testing.T) {
 
 func TestListPlatforms_KeepsGitHubActionsComingSoonWhileItsFlagIsMissing(t *testing.T) {
 	t.Parallel()
-	flags := &recordingFlags{InMemory: &feature.InMemory{}}
+	flags := &recordingFlags{}
 	ctx, ti := newTestServiceWithFlags(t, flags)
 
 	requireGitHubActionsComingSoon(t, ctx, ti)
@@ -128,7 +129,7 @@ func TestListPlatforms_KeepsGitHubActionsComingSoonWhileItsFlagIsMissing(t *test
 
 func TestListPlatforms_KeepsGitHubActionsComingSoonWhileItsFlagIsOff(t *testing.T) {
 	t.Parallel()
-	flags := &recordingFlags{InMemory: &feature.InMemory{}}
+	flags := &recordingFlags{}
 	ctx, ti := newTestServiceWithFlags(t, flags)
 	flags.SetFlag(feature.FlagWorkloadPlatformGitHubActions, ti.orgID, false)
 
@@ -138,7 +139,7 @@ func TestListPlatforms_KeepsGitHubActionsComingSoonWhileItsFlagIsOff(t *testing.
 
 func TestListPlatforms_KeepsGitHubActionsComingSoonWhileItsFlagIsOnForAnotherOrganization(t *testing.T) {
 	t.Parallel()
-	flags := &recordingFlags{InMemory: &feature.InMemory{}}
+	flags := &recordingFlags{}
 	ctx, ti := newTestServiceWithFlags(t, flags)
 	flags.SetFlag(feature.FlagWorkloadPlatformGitHubActions, "another-organization", true)
 
@@ -148,7 +149,7 @@ func TestListPlatforms_KeepsGitHubActionsComingSoonWhileItsFlagIsOnForAnotherOrg
 
 func TestListPlatforms_KeepsGitHubActionsComingSoonWhenItsFlagFails(t *testing.T) {
 	t.Parallel()
-	flags := &recordingFlags{InMemory: &feature.InMemory{}, fail: errors.New("flag service unavailable")}
+	flags := &recordingFlags{fail: errors.New("flag service unavailable")}
 	ctx, ti := newTestServiceWithFlags(t, flags)
 	// On, but the failure wins: an evaluation that errors is never enabled.
 	flags.SetFlag(feature.FlagWorkloadPlatformGitHubActions, ti.orgID, true)
