@@ -1,10 +1,18 @@
 import { useRBAC } from "@/hooks/useRBAC";
+import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
 import { Scope } from "@gram/client/models/components/rolegrant.js";
 import { RequestAccessFormScope } from "@gram/client/models/components/requestaccessform.js";
 import { useRequestAccessMutation } from "@gram/client/react-query/requestAccess.js";
+import { useRoles } from "@gram/client/react-query/roles.js";
 import { cn } from "@/lib/utils";
 import { Button } from "@/components/ui/Button";
 import { Icon } from "@/components/ui/Icon";
+import { suggestRolesForScope } from "@/pages/access/roleSuggestions";
+import {
+  scopeLabel,
+  scopeTitle,
+  type ScopeCatalogue,
+} from "@/pages/access/scopeCatalogue";
 import React from "react";
 import {
   Collapsible,
@@ -87,7 +95,12 @@ export function RequireScope(
       return (
         <>
           {props.fallback ?? (
-            <Unauthorized scopes={scopes} all={all} resourceId={resourceId} />
+            <Unauthorized
+              scopes={scopes}
+              all={all}
+              resourceId={resourceId}
+              projectId={projectId}
+            />
           )}
         </>
       );
@@ -111,15 +124,21 @@ export function RequireScope(
 
 /**
  * Build the "required scope" hint shown alongside the tooltip reason so the
- * user knows exactly which grant they're missing (and can request it).
+ * user knows exactly which grant they're missing (and can request it). The
+ * catalogue label is used once it is loaded: "View tool logs (log:read)".
  */
-function requiredScopeLabel(scopes: Scope[], all: boolean): string {
+function requiredScopeLabel(
+  scopes: Scope[],
+  all: boolean,
+  catalogue: ScopeCatalogue,
+): string {
   if (scopes.length === 0) return "";
-  if (scopes.length === 1) return `Requires the ${scopes[0]} scope.`;
-  const joined = scopes.join(", ");
+  const titles = scopes.map((s) => scopeTitle(catalogue, s));
+  if (titles.length === 1) return `Requires ${titles[0]}.`;
+  const joined = titles.join(", ");
   return all
-    ? `Requires all of these scopes: ${joined}.`
-    : `Requires one of these scopes: ${joined}.`;
+    ? `Requires all of these permissions: ${joined}.`
+    : `Requires one of these permissions: ${joined}.`;
 }
 
 /**
@@ -138,7 +157,8 @@ function ScopeDisabled({
   all: boolean;
   children: React.ReactNode;
 }) {
-  const scopeLabel = requiredScopeLabel(scopes, all);
+  const { catalogue } = useScopeCatalogue();
+  const scopeHint = requiredScopeLabel(scopes, all, catalogue);
   return (
     <Tooltip>
       <TooltipTrigger asChild>
@@ -162,8 +182,8 @@ function ScopeDisabled({
       </TooltipTrigger>
       <TooltipContent>
         <span>{reason}</span>
-        {scopeLabel && (
-          <span className="mt-1 block font-mono opacity-80">{scopeLabel}</span>
+        {scopeHint && (
+          <span className="mt-1 block opacity-80">{scopeHint}</span>
         )}
       </TooltipContent>
     </Tooltip>
@@ -190,12 +210,14 @@ function Unauthorized({
   scopes,
   all,
   resourceId,
+  projectId,
 }: {
   title?: string;
   description?: string;
   scopes: Scope[];
   all: boolean;
   resourceId?: string;
+  projectId?: string;
 }) {
   const [open, setOpen] = React.useState(false);
   const [requestState, setRequestState] = React.useState<
@@ -203,6 +225,7 @@ function Unauthorized({
   >("idle");
 
   const { hasScope } = useRBAC();
+  const { catalogue, workflows } = useScopeCatalogue();
   const requestAccessMutation = useRequestAccessMutation();
   // Only request scopes the user is actually missing — an all-scopes gate can
   // trip on a partial grant, and admins shouldn't be asked for held scopes.
@@ -323,35 +346,156 @@ function Unauthorized({
                 What access do I need?
               </CollapsibleTrigger>
               <CollapsibleContent className="pt-2">
-                <div className="bg-muted/25 border px-3 py-5">
+                <div className="bg-muted/25 border px-3 py-5 text-left">
                   <p className="text-muted-foreground text-center text-xs">
-                    {scopes.length === 1 || !all
-                      ? "Your account is missing a permission."
-                      : "Your account is missing permissions."}
-                  </p>
-                  <p className="text-muted-foreground mt-1 text-center text-xs">
                     {scopes.length === 1
                       ? "An organization admin can grant you:"
                       : all
                         ? "An organization admin can grant you all of:"
                         : "An organization admin can grant you any of:"}
                   </p>
-                  <ul className="mt-2 flex flex-wrap justify-center gap-1.5">
-                    {scopes.map((s) => (
-                      <li
-                        key={s}
-                        className="bg-background text-foreground border px-1.5 py-0.5 font-mono text-xs"
-                      >
-                        {s}
-                      </li>
-                    ))}
+                  <ul className="mt-2 space-y-2">
+                    {scopes.map((s) => {
+                      const entry = catalogue.get(s);
+                      return (
+                        <li
+                          key={s}
+                          className="bg-background text-foreground border px-2 py-1.5 text-xs"
+                        >
+                          <span className="font-medium">
+                            {scopeLabel(catalogue, s)}
+                          </span>{" "}
+                          <span className="text-muted-foreground font-mono">
+                            {s}
+                          </span>
+                          {entry?.description && (
+                            <p className="text-muted-foreground mt-0.5">
+                              {entry.description}
+                            </p>
+                          )}
+                        </li>
+                      );
+                    })}
                   </ul>
+                  <WorkflowHint
+                    scopes={scopes}
+                    catalogue={catalogue}
+                    workflows={workflows}
+                  />
+                  {scopes.length === 1 && (
+                    <RoleHint
+                      scope={scopes[0]!}
+                      catalogue={catalogue}
+                      resourceId={resourceId}
+                      projectId={projectId}
+                    />
+                  )}
                 </div>
               </CollapsibleContent>
             </Collapsible>
           </div>
         )}
       </div>
+    </div>
+  );
+}
+
+/** Names the task the missing permission is part of, and what else it needs. */
+function WorkflowHint({
+  scopes,
+  catalogue,
+  workflows,
+}: {
+  scopes: Scope[];
+  catalogue: ScopeCatalogue;
+  workflows: ReturnType<typeof useScopeCatalogue>["workflows"];
+}): React.JSX.Element | null {
+  const partOf = workflows.filter((workflow) =>
+    scopes.some((s) => workflow.scopes.includes(s)),
+  );
+  if (partOf.length === 0) return null;
+  return (
+    <ul className="text-muted-foreground mt-3 space-y-1 text-xs">
+      {partOf.map((workflow) => {
+        const alsoNeeds = workflow.scopes.filter(
+          (s) => !scopes.includes(s as Scope),
+        );
+        return (
+          <li key={workflow.slug}>
+            Part of <span className="font-medium">{workflow.label}</span>
+            {alsoNeeds.length > 0 &&
+              `, which also needs ${alsoNeeds
+                .map((s) => scopeLabel(catalogue, s))
+                .join(", ")}`}
+            .
+          </li>
+        );
+      })}
+    </ul>
+  );
+}
+
+/**
+ * Names the roles an admin could assign: the ones that give exactly this
+ * permission first, then the ones that give more. Reading roles needs
+ * org:read, which members hold by default; without it the hint is skipped.
+ */
+function RoleHint({
+  scope,
+  catalogue,
+  resourceId,
+  projectId,
+}: {
+  scope: Scope;
+  catalogue: ScopeCatalogue;
+  resourceId?: string;
+  projectId?: string;
+}): React.JSX.Element | null {
+  const { data: rolesData } = useRoles();
+  const suggestions = React.useMemo(
+    () =>
+      suggestRolesForScope(
+        rolesData?.roles ?? [],
+        scope,
+        catalogue,
+        resourceId,
+        projectId,
+      ),
+    [rolesData?.roles, scope, catalogue, resourceId, projectId],
+  );
+  if (suggestions.exact.length === 0 && suggestions.broader.length === 0) {
+    return null;
+  }
+  return (
+    <div className="text-muted-foreground mt-3 space-y-1 text-xs">
+      {suggestions.exact.length > 0 && (
+        <p>
+          Roles that give exactly this:{" "}
+          <span className="text-foreground">
+            {suggestions.exact.map((role) => role.name).join(", ")}
+          </span>
+          .
+        </p>
+      )}
+      {suggestions.broader.length > 0 && (
+        <p>
+          Roles that give more than this:{" "}
+          {suggestions.broader.map(
+            ({ role, extraScopes, extraSensitive }, i) => (
+              <React.Fragment key={role.id}>
+                {i > 0 && ", "}
+                <span className="text-foreground">{role.name}</span> (+
+                {extraScopes.length}
+                {extraSensitive.length > 0
+                  ? `, ${extraSensitive.length} sensitive`
+                  : ""}
+                )
+              </React.Fragment>
+            ),
+          )}
+          .
+        </p>
+      )}
     </div>
   );
 }

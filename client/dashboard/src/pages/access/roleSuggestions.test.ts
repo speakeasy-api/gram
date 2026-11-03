@@ -2,9 +2,12 @@ import { describe, expect, it } from "vitest";
 import {
   rolesCoveringChallengeScopes,
   rolesCoveringScope,
+  suggestRolesForScope,
 } from "./roleSuggestions";
+import { scopeCatalogue } from "./scopeCatalogue";
 
 import type { Role } from "@gram/client/models/components/role.js";
+import type { ScopeDefinition } from "@gram/client/models/components/scopedefinition.js";
 
 function role(name: string, grants: Role["grants"]): Role {
   return {
@@ -21,6 +24,44 @@ function role(name: string, grants: Role["grants"]): Role {
     updatedAt: new Date("2026-01-01T00:00:00Z"),
   };
 }
+
+function def(
+  slug: string,
+  extra: Partial<ScopeDefinition> = {},
+): ScopeDefinition {
+  const [resourceType] = slug.split(":");
+  return {
+    slug: slug as ScopeDefinition["slug"],
+    label: slug,
+    description: `${slug}.`,
+    resourceType: resourceType as ScopeDefinition["resourceType"],
+    category: resourceType as ScopeDefinition["category"],
+    visibility: slug.includes(":blocked_") ? "internal" : "user_visible",
+    agentEligible: true,
+    sensitive: false,
+    subScopes: [],
+    ...extra,
+  };
+}
+
+// The inclusions mirror what the server serves; the test does not keep its
+// own copy of scopeExpansions.
+const catalogue = scopeCatalogue([
+  def("org:read"),
+  def("org:admin", {
+    subScopes: ["org:read"],
+    sensitive: true,
+    sensitivity: "destructive_admin",
+  }),
+  def("project:read"),
+  def("mcp:connect"),
+  def("mcp:read", { subScopes: ["mcp:connect"] }),
+  def("mcp:write", { subScopes: ["mcp:connect", "mcp:read"] }),
+  def("mcp:blocked_connect"),
+  def("mcp:auth", { category: "mcp_auth_client" }),
+  def("log:read", { sensitive: true, sensitivity: "tool_logs" }),
+  def("chat:read", { sensitive: true, sensitivity: "conversations" }),
+]);
 
 describe("rolesCoveringScope", () => {
   it("does not suggest an MCP role scoped to another project", () => {
@@ -70,16 +111,115 @@ describe("rolesCoveringScope", () => {
     ];
 
     expect(
-      rolesCoveringScope(roles, "mcp:connect", "server-a", "project-a").map(
-        (item) => item.slug,
-      ),
+      rolesCoveringScope(
+        roles,
+        "mcp:connect",
+        catalogue,
+        "server-a",
+        "project-a",
+      ).map((item) => item.slug),
     ).toEqual(["unrestricted", "all-projects", "same-project"]);
 
     expect(
-      rolesCoveringScope(roles, "mcp:connect", "server-a").map(
+      rolesCoveringScope(roles, "mcp:connect", catalogue, "server-a").map(
         (item) => item.slug,
       ),
     ).toEqual(["unrestricted", "all-projects"]);
+  });
+
+  it("uses the inclusions the catalogue serves", () => {
+    const roles = [
+      role("writer", [{ scope: "mcp:write", selectors: undefined }]),
+      role("admin", [{ scope: "org:admin", selectors: undefined }]),
+    ];
+    expect(
+      rolesCoveringScope(roles, "mcp:connect", catalogue).map((r) => r.slug),
+    ).toEqual(["writer"]);
+    expect(
+      rolesCoveringScope(roles, "org:read", catalogue).map((r) => r.slug),
+    ).toEqual(["admin"]);
+    // Before the catalogue loads nothing is implied, so only an exact grant
+    // matches and no role is wrongly suggested.
+    expect(
+      rolesCoveringScope(roles, "org:read", scopeCatalogue(undefined)),
+    ).toEqual([]);
+  });
+});
+
+describe("suggestRolesForScope", () => {
+  const roles = [
+    role("admin", [
+      { scope: "org:admin", selectors: undefined },
+      { scope: "mcp:write", selectors: undefined },
+      { scope: "log:read", selectors: undefined },
+      { scope: "chat:read", selectors: undefined },
+      { scope: "mcp:auth", selectors: undefined },
+    ]),
+    role("log-reviewer", [
+      { scope: "log:read", selectors: undefined },
+      { scope: "mcp:blocked_connect", selectors: undefined },
+    ]),
+    role("observer", [
+      { scope: "log:read", selectors: undefined },
+      { scope: "project:read", selectors: undefined },
+    ]),
+    role("unrelated", [{ scope: "mcp:connect", selectors: undefined }]),
+  ];
+
+  it("puts roles that give exactly the scope first and names what broader roles add", () => {
+    const suggestions = suggestRolesForScope(roles, "log:read", catalogue);
+
+    expect(suggestions.exact.map((r) => r.slug)).toEqual(["log-reviewer"]);
+    expect(
+      suggestions.broader.map(({ role, extraScopes, extraSensitive }) => ({
+        slug: role.slug,
+        extraScopes,
+        extraSensitive,
+      })),
+    ).toEqual([
+      {
+        slug: "observer",
+        extraScopes: ["project:read"],
+        extraSensitive: [],
+      },
+      {
+        slug: "admin",
+        extraScopes: [
+          "org:admin",
+          "org:read",
+          "mcp:write",
+          "mcp:connect",
+          "mcp:read",
+          "chat:read",
+        ],
+        extraSensitive: ["org:admin", "chat:read"],
+      },
+    ]);
+  });
+
+  it("treats what the requested scope includes as part of the request", () => {
+    const suggestions = suggestRolesForScope(
+      [role("mcp-writer", [{ scope: "mcp:write", selectors: undefined }])],
+      "mcp:write",
+      catalogue,
+    );
+    expect(suggestions.exact.map((r) => r.slug)).toEqual(["mcp-writer"]);
+    expect(suggestions.broader).toEqual([]);
+  });
+
+  it("does not count exceptions or provisioned auth-client grants as more", () => {
+    const suggestions = suggestRolesForScope(
+      [
+        role("narrow", [
+          { scope: "log:read", selectors: undefined },
+          { scope: "mcp:blocked_connect", selectors: undefined },
+          { scope: "mcp:auth", selectors: undefined },
+        ]),
+      ],
+      "log:read",
+      catalogue,
+    );
+    expect(suggestions.exact.map((r) => r.slug)).toEqual(["narrow"]);
   });
 });
 
@@ -102,12 +242,16 @@ describe("rolesCoveringChallengeScopes", () => {
     ];
 
     expect(
-      rolesCoveringChallengeScopes(roles, [
-        {
-          scope: "project:read",
-          selector: { resource_kind: "project", resource_id: "project-a" },
-        },
-      ]).map((item) => item.slug),
+      rolesCoveringChallengeScopes(
+        roles,
+        [
+          {
+            scope: "project:read",
+            selector: { resource_kind: "project", resource_id: "project-a" },
+          },
+        ],
+        catalogue,
+      ).map((item) => item.slug),
     ).toEqual(["exact", "all"]);
   });
 
@@ -158,18 +302,22 @@ describe("rolesCoveringChallengeScopes", () => {
     ];
 
     expect(
-      rolesCoveringChallengeScopes(roles, [
-        {
-          scope: "mcp:connect",
-          selector: {
-            resource_kind: "mcp",
-            resource_id: "server-a",
-            project_id: "project-a",
-            tool: "search",
-            disposition: "read_only",
+      rolesCoveringChallengeScopes(
+        roles,
+        [
+          {
+            scope: "mcp:connect",
+            selector: {
+              resource_kind: "mcp",
+              resource_id: "server-a",
+              project_id: "project-a",
+              tool: "search",
+              disposition: "read_only",
+            },
           },
-        },
-      ]).map((item) => item.slug),
+        ],
+        catalogue,
+      ).map((item) => item.slug),
     ).toEqual(["server", "search-tool"]);
   });
 
@@ -196,10 +344,14 @@ describe("rolesCoveringChallengeScopes", () => {
     const base = { resource_kind: "mcp", resource_id: "server-a" };
 
     expect(
-      rolesCoveringChallengeScopes(roles, [
-        { scope: "mcp:connect", selector: { ...base, tool: "search" } },
-        { scope: "mcp:connect", selector: { ...base, tool: "write" } },
-      ]).map((item) => item.slug),
+      rolesCoveringChallengeScopes(
+        roles,
+        [
+          { scope: "mcp:connect", selector: { ...base, tool: "search" } },
+          { scope: "mcp:connect", selector: { ...base, tool: "write" } },
+        ],
+        catalogue,
+      ).map((item) => item.slug),
     ).toEqual(["both-tools"]);
   });
 
@@ -208,6 +360,7 @@ describe("rolesCoveringChallengeScopes", () => {
       rolesCoveringChallengeScopes(
         [role("all", [{ scope: "org:read", selectors: undefined }])],
         [{ scope: "org:read" }],
+        catalogue,
       ),
     ).toEqual([]);
   });

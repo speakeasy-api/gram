@@ -1417,9 +1417,24 @@ var ScopeModel = Type("ScopeDefinition", func() {
 	})
 })
 
+var ScopeWorkflowModel = Type("ScopeWorkflow", func() {
+	Required("slug", "label", "scopes")
+
+	Attribute("slug", String, "Stable identifier of the task.", func() {
+		Example("session_review")
+	})
+	Attribute("label", String, "What a person is trying to do.", func() {
+		Example("Review other members' sessions")
+	})
+	Attribute("scopes", ArrayOf(String), "Every scope the task needs end to end.", func() {
+		Example([]string{"chat:read", "log:read"})
+	})
+})
+
 var ListScopesResult = Type("ListScopesResult", func() {
-	Required("scopes")
+	Required("scopes", "workflows")
 	Attribute("scopes", ArrayOf(ScopeModel), "The scopes available in access control.")
+	Attribute("workflows", ArrayOf(ScopeWorkflowModel), "Tasks that need more than one scope, so a missing scope can be explained in context.")
 })
 
 var CreateRoleForm = Type("CreateRoleForm", func() {

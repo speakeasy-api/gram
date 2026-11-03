@@ -36,6 +36,7 @@ import {
   principalDisplayName,
 } from "./challengeHelpers";
 import { rolesCoveringChallengeScopes } from "./roleSuggestions";
+import { useScopeCatalogue } from "@/hooks/useScopeCatalogue";
 import { visiblePermissionCount } from "./roleDialogState";
 
 type Step = "choose" | "select-role" | "confirm";
@@ -62,6 +63,7 @@ export function GrantDrawer({
   const [roleAssignmentConfirmed, setRoleAssignmentConfirmed] = useState(false);
   const queryClient = useQueryClient();
   const { data: rolesData } = useRoles();
+  const { catalogue } = useScopeCatalogue();
   const allRoles = rolesData?.roles ?? [];
   const canAssignRole = challenge ? canAssignChallengeRole(challenge) : false;
   const challengeIds = challengeIdsProp ?? (challenge ? [challenge.id] : []);
@@ -87,6 +89,7 @@ export function GrantDrawer({
       ? rolesCoveringChallengeScopes(
           allRoles.filter((role) => !role.isSystem),
           challengeData.challenges,
+          catalogue,
         )
       : [];
 

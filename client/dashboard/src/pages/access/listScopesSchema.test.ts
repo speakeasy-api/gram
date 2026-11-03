@@ -29,6 +29,7 @@ describe("listScopes response schema", () => {
           sub_scopes: [],
         },
       ],
+      workflows: [],
     });
 
     expect(result.scopes[0]).toMatchObject({
@@ -74,6 +75,13 @@ describe("listScopes response schema", () => {
           sub_scopes: [],
         },
       ],
+      workflows: [
+        {
+          slug: "session_review",
+          label: "Review other members' sessions",
+          scopes: ["chat:read", "log:read"],
+        },
+      ],
     });
 
     expect(result.scopes[0]).toMatchObject({
@@ -82,5 +90,12 @@ describe("listScopes response schema", () => {
       subScopes: ["chat:read"],
     });
     expect(result.scopes).toHaveLength(2);
+    expect(result.workflows).toEqual([
+      {
+        slug: "session_review",
+        label: "Review other members' sessions",
+        scopes: ["chat:read", "log:read"],
+      },
+    ]);
   });
 });

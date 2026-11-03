@@ -157,6 +157,22 @@ interface CreateRoleDialogProps {
   hideAssignments?: boolean;
   /** Pre-fills the name of a new role, such as the group it is created for. */
   defaultName?: string;
+  /**
+   * Pre-selects unrestricted allow grants on a new role, such as the one
+   * permission an access request asked for.
+   */
+  defaultScopes?: Scope[];
+}
+
+function unrestrictedGrantsFor(scopes: Scope[]): Record<string, RoleGrant> {
+  const result: Record<string, RoleGrant> = Object.create(null);
+  for (const scope of scopes) {
+    result[scope] = {
+      scope,
+      rules: [{ id: crypto.randomUUID(), effect: "allow", selectors: null }],
+    };
+  }
+  return result;
 }
 
 export function CreateRoleDialog({
@@ -168,6 +184,7 @@ export function CreateRoleDialog({
   presentation = "sheet",
   hideAssignments = false,
   defaultName = "",
+  defaultScopes,
 }: CreateRoleDialogProps): JSX.Element {
   const isEditing = !!editingRole;
   const isSystemRole = !!editingRole?.isSystem;
@@ -175,7 +192,9 @@ export function CreateRoleDialog({
   // ─── Form state ───────────────────────────────────────────────
   const [name, setName] = useState(defaultName);
   const [description, setDescription] = useState("");
-  const [grants, setGrants] = useState<Record<string, RoleGrant>>({});
+  const [grants, setGrants] = useState<Record<string, RoleGrant>>(() =>
+    unrestrictedGrantsFor(defaultScopes ?? []),
+  );
   const [selectedMembers, setSelectedMembers] = useState<Set<string>>(
     new Set(),
   );

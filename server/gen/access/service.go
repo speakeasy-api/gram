@@ -1161,6 +1161,9 @@ type ListScopesPayload struct {
 type ListScopesResult struct {
 	// The scopes available in access control.
 	Scopes []*ScopeDefinition
+	// Tasks that need more than one scope, so a missing scope can be explained in
+	// context.
+	Workflows []*ScopeWorkflow
 }
 
 // ListShadowMCPInventoryPayload is the payload type of the access service
@@ -1480,6 +1483,15 @@ type ScopeDefinition struct {
 	AgentEligible bool
 	// The scope used to store exception rules for this scope.
 	ExclusionScope *string
+}
+
+type ScopeWorkflow struct {
+	// Stable identifier of the task.
+	Slug string
+	// What a person is trying to do.
+	Label string
+	// Every scope the task needs end to end.
+	Scopes []string
 }
 
 // A constraint that narrows which resources a grant applies to.

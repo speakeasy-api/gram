@@ -103504,8 +103504,14 @@ components:
           items:
             $ref: '#/components/schemas/ScopeDefinition'
           description: The scopes available in access control.
+        workflows:
+          type: array
+          items:
+            $ref: '#/components/schemas/ScopeWorkflow'
+          description: Tasks that need more than one scope, so a missing scope can be explained in context.
       required:
         - scopes
+        - workflows
     ListServerClientAssociationsResult:
       type: object
       properties:
@@ -113505,6 +113511,29 @@ components:
         - agent_eligible
         - sensitive
         - sub_scopes
+    ScopeWorkflow:
+      type: object
+      properties:
+        label:
+          type: string
+          description: What a person is trying to do.
+          example: Review other members' sessions
+        scopes:
+          type: array
+          items:
+            type: string
+          description: Every scope the task needs end to end.
+          example:
+            - chat:read
+            - log:read
+        slug:
+          type: string
+          description: Stable identifier of the task.
+          example: session_review
+      required:
+        - slug
+        - label
+        - scopes
     SearchBusinessMemoriesRequestBody:
       type: object
       properties:

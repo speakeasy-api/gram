@@ -451,6 +451,9 @@ type UpdateDirectoryReviewSettingsResponseBody struct {
 type ListScopesResponseBody struct {
 	// The scopes available in access control.
 	Scopes []*ScopeDefinitionResponseBody `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
+	// Tasks that need more than one scope, so a missing scope can be explained in
+	// context.
+	Workflows []*ScopeWorkflowResponseBody `form:"workflows,omitempty" json:"workflows,omitempty" xml:"workflows,omitempty"`
 }
 
 // ListMembersResponseBody is the type of the "access" service "listMembers"
@@ -9372,6 +9375,16 @@ type ScopeDefinitionResponseBody struct {
 	ExclusionScope *string `form:"exclusion_scope,omitempty" json:"exclusion_scope,omitempty" xml:"exclusion_scope,omitempty"`
 }
 
+// ScopeWorkflowResponseBody is used to define fields on response body types.
+type ScopeWorkflowResponseBody struct {
+	// Stable identifier of the task.
+	Slug *string `form:"slug,omitempty" json:"slug,omitempty" xml:"slug,omitempty"`
+	// What a person is trying to do.
+	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
+	// Every scope the task needs end to end.
+	Scopes []string `form:"scopes,omitempty" json:"scopes,omitempty" xml:"scopes,omitempty"`
+}
+
 // AccessMemberResponseBody is used to define fields on response body types.
 type AccessMemberResponseBody struct {
 	// User ID.
@@ -13187,6 +13200,14 @@ func NewListScopesResultOK(body *ListScopesResponseBody) *access.ListScopesResul
 			continue
 		}
 		v.Scopes[i] = unmarshalScopeDefinitionResponseBodyToAccessScopeDefinition(val)
+	}
+	v.Workflows = make([]*access.ScopeWorkflow, len(body.Workflows))
+	for i, val := range body.Workflows {
+		if val == nil {
+			v.Workflows[i] = nil
+			continue
+		}
+		v.Workflows[i] = unmarshalScopeWorkflowResponseBodyToAccessScopeWorkflow(val)
 	}
 
 	return v
@@ -18200,9 +18221,19 @@ func ValidateListScopesResponseBody(body *ListScopesResponseBody) (err error) {
 	if body.Scopes == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))
 	}
+	if body.Workflows == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("workflows", "body"))
+	}
 	for _, e := range body.Scopes {
 		if e != nil {
 			if err2 := ValidateScopeDefinitionResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	for _, e := range body.Workflows {
+		if e != nil {
+			if err2 := ValidateScopeWorkflowResponseBody(e); err2 != nil {
 				err = goa.MergeErrors(err, err2)
 			}
 		}
@@ -30122,6 +30153,21 @@ func ValidateScopeDefinitionResponseBody(body *ScopeDefinitionResponseBody) (err
 		if !(*body.ExclusionScope == "org:blocked_read" || *body.ExclusionScope == "org:blocked_admin" || *body.ExclusionScope == "project:blocked_read" || *body.ExclusionScope == "project:blocked_write" || *body.ExclusionScope == "mcp:blocked_read" || *body.ExclusionScope == "mcp:blocked_write" || *body.ExclusionScope == "mcp:blocked_connect" || *body.ExclusionScope == "mcp:blocked_auth" || *body.ExclusionScope == "environment:blocked_read" || *body.ExclusionScope == "environment:blocked_write" || *body.ExclusionScope == "skill:blocked_read" || *body.ExclusionScope == "skill:blocked_write" || *body.ExclusionScope == "assistant:blocked_read" || *body.ExclusionScope == "assistant:blocked_write" || *body.ExclusionScope == "plugin:blocked_write" || *body.ExclusionScope == "risk_policy:bypass" || *body.ExclusionScope == "workload:blocked_read" || *body.ExclusionScope == "workload:blocked_write") {
 			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.exclusion_scope", *body.ExclusionScope, []any{"org:blocked_read", "org:blocked_admin", "project:blocked_read", "project:blocked_write", "mcp:blocked_read", "mcp:blocked_write", "mcp:blocked_connect", "mcp:blocked_auth", "environment:blocked_read", "environment:blocked_write", "skill:blocked_read", "skill:blocked_write", "assistant:blocked_read", "assistant:blocked_write", "plugin:blocked_write", "risk_policy:bypass", "workload:blocked_read", "workload:blocked_write"}))
 		}
+	}
+	return
+}
+
+// ValidateScopeWorkflowResponseBody runs the validations defined on
+// ScopeWorkflowResponseBody
+func ValidateScopeWorkflowResponseBody(body *ScopeWorkflowResponseBody) (err error) {
+	if body.Slug == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("slug", "body"))
+	}
+	if body.Label == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("label", "body"))
+	}
+	if body.Scopes == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("scopes", "body"))
 	}
 	return
 }

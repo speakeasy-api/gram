@@ -55,6 +55,18 @@ func TestService_ListScopes(t *testing.T) {
 		require.Equal(t, scope.Sensitive, scope.Sensitivity != nil, scope.Slug)
 	}
 
+	// Workflows come from the same package and only name catalogued scopes.
+	require.Len(t, result.Workflows, len(authz.Workflows()))
+	for _, workflow := range result.Workflows {
+		require.NotEmpty(t, workflow.Slug)
+		require.NotEmpty(t, workflow.Label)
+		for _, scope := range workflow.Scopes {
+			require.Contains(t, bySlug, scope, "%s: %s is not a listed scope", workflow.Slug, scope)
+		}
+	}
+	require.Equal(t, "session_review", result.Workflows[2].Slug)
+	require.Equal(t, []string{"chat:read", "log:read"}, result.Workflows[2].Scopes)
+
 	require.Equal(t, "org", bySlug[string(authz.ScopeOrgRead)].ResourceType)
 	require.Equal(t, "project", bySlug[string(authz.ScopeProjectWrite)].ResourceType)
 	require.Equal(t, "mcp", bySlug[string(authz.ScopeMCPConnect)].ResourceType)

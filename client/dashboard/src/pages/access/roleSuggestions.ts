@@ -8,29 +8,13 @@ import {
 
 import type { Role } from "@gram/client/models/components/role.js";
 import type { RoleGrant } from "@gram/client/models/components/rolegrant.js";
-
-/**
- * User-visible sub-scopes implied by each higher-privilege scope.
- * Mirrors the inverse of scopeExpansions in server/internal/authz/scopes.go
- * (internal blocklist scopes are intentionally omitted).
- */
-const SUB_SCOPES: Record<string, readonly string[]> = {
-  "org:admin": ["org:read"],
-  "project:write": ["project:read"],
-  "mcp:write": ["mcp:read", "mcp:connect"],
-  "mcp:read": ["mcp:connect"],
-  "environment:write": ["environment:read"],
-  "skill:write": ["skill:read"],
-};
-
-/**
- * True when a grant of `grantScope` satisfies a check for `scope`, either
- * directly or via scope expansion (e.g. mcp:write covers mcp:connect).
- */
-function grantScopeCovers(grantScope: string, scope: string): boolean {
-  if (grantScope === scope) return true;
-  return SUB_SCOPES[grantScope]?.includes(scope) ?? false;
-}
+import {
+  isPresentableScope,
+  isSensitiveScope,
+  scopeClosure,
+  scopeCovers,
+  type ScopeCatalogue,
+} from "./scopeCatalogue";
 
 /**
  * True when the grant applies to the requested resource. A grant with no
@@ -85,21 +69,102 @@ function grantCoversResource(
 
 /**
  * Roles whose grants include the requested scope (for the requested resource,
- * when one is given), preserving role order.
+ * when one is given), preserving role order. Inclusion comes from the
+ * catalogue: org:admin covers org:read because the server says so.
  */
 export function rolesCoveringScope(
   roles: Role[],
   scope: string,
+  catalogue: ScopeCatalogue,
   resourceId?: string,
   projectId?: string,
 ): Role[] {
   return roles.filter((role) =>
     role.grants.some(
       (grant) =>
-        grantScopeCovers(grant.scope, scope) &&
+        scopeCovers(catalogue, grant.scope, scope) &&
         grantCoversResource(grant, scope, resourceId, projectId, false),
     ),
   );
+}
+
+/** A role that satisfies the request but grants other permissions too. */
+export interface BroaderRole {
+  role: Role;
+  /** Permissions beyond the requested scope and what it includes. */
+  extraScopes: string[];
+  /** The subset of extraScopes the catalogue marks sensitive. */
+  extraSensitive: string[];
+}
+
+export interface RoleSuggestions {
+  /** Roles that give the requested scope and nothing more. */
+  exact: Role[];
+  /** Roles that give more, narrowest first. */
+  broader: BroaderRole[];
+}
+
+/**
+ * Everything a role lets a person do, as presentable scopes: each allow grant
+ * expanded to the scopes it includes. Exceptions and provisioned auth-client
+ * grants are not permissions a person chose, so they are left out.
+ */
+function presentableScopesOf(
+  role: Role,
+  catalogue: ScopeCatalogue,
+): Set<string> {
+  const scopes = new Set<string>();
+  for (const grant of role.grants) {
+    if (!isPresentableScope(catalogue, grant.scope)) continue;
+    for (const scope of scopeClosure(catalogue, grant.scope)) {
+      if (isPresentableScope(catalogue, scope)) scopes.add(scope);
+    }
+  }
+  return scopes;
+}
+
+/**
+ * Splits the roles that satisfy a request into the ones that give exactly
+ * the requested permission and the ones that give more. A broad role such as
+ * Admin stays usable; what else it grants, and which of that is sensitive,
+ * is named so the cost of choosing it is visible.
+ */
+export function suggestRolesForScope(
+  roles: Role[],
+  scope: string,
+  catalogue: ScopeCatalogue,
+  resourceId?: string,
+  projectId?: string,
+): RoleSuggestions {
+  const requested = new Set(scopeClosure(catalogue, scope));
+  const exact: Role[] = [];
+  const broader: BroaderRole[] = [];
+
+  for (const role of rolesCoveringScope(
+    roles,
+    scope,
+    catalogue,
+    resourceId,
+    projectId,
+  )) {
+    const extraScopes = [...presentableScopesOf(role, catalogue)].filter(
+      (granted) => !requested.has(granted),
+    );
+    if (extraScopes.length === 0) {
+      exact.push(role);
+      continue;
+    }
+    broader.push({
+      role,
+      extraScopes,
+      extraSensitive: extraScopes.filter((granted) =>
+        isSensitiveScope(catalogue, granted),
+      ),
+    });
+  }
+
+  broader.sort((a, b) => a.extraScopes.length - b.extraScopes.length);
+  return { exact, broader };
 }
 
 function normalizeCapturedSelector(
@@ -125,6 +190,7 @@ export function rolesCoveringChallengeScopes(
     scope: string;
     selector?: Record<string, string>;
   }>,
+  catalogue: ScopeCatalogue,
 ): Role[] {
   const captured = challenges.map(({ scope, selector }) => ({
     scope,
@@ -143,7 +209,7 @@ export function rolesCoveringChallengeScopes(
     captured.every(({ scope, selector }) =>
       role.grants.some(
         (grant) =>
-          grantScopeCovers(grant.scope, scope) &&
+          scopeCovers(catalogue, grant.scope, scope) &&
           grantCoversSelector(grant, selector!, true),
       ),
     ),

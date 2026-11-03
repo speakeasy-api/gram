@@ -742,6 +742,9 @@ func validateInput(c Check) error {
 func (e *Engine) mapError(ctx context.Context, err error) error {
 	switch {
 	case errors.Is(err, ErrDenied):
+		if denied, ok := errors.AsType[*DeniedError](err); ok {
+			recordDenial(ctx, denied)
+		}
 		return oops.C(oops.CodeForbidden)
 	case errors.Is(err, ErrMissingGrants):
 		return oops.E(oops.CodeUnexpected, err, "authz grants missing from prepared context").LogError(ctx, e.logger)

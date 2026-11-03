@@ -10106,6 +10106,25 @@ func marshalAccessScopeDefinitionToScopeDefinitionResponseBody(v *access.ScopeDe
 	return res
 }
 
+// marshalAccessScopeWorkflowToScopeWorkflowResponseBody builds a value of type
+// *ScopeWorkflowResponseBody from a value of type *access.ScopeWorkflow.
+func marshalAccessScopeWorkflowToScopeWorkflowResponseBody(v *access.ScopeWorkflow) *ScopeWorkflowResponseBody {
+	res := &ScopeWorkflowResponseBody{
+		Slug:  v.Slug,
+		Label: v.Label,
+	}
+	if v.Scopes != nil {
+		res.Scopes = make([]string, len(v.Scopes))
+		for i, val := range v.Scopes {
+			res.Scopes[i] = val
+		}
+	} else {
+		res.Scopes = []string{}
+	}
+
+	return res
+}
+
 // marshalAccessAccessMemberToAccessMemberResponseBody builds a value of type
 // *AccessMemberResponseBody from a value of type *access.AccessMember.
 func marshalAccessAccessMemberToAccessMemberResponseBody(v *access.AccessMember) *AccessMemberResponseBody {

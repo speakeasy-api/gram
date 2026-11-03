@@ -455,6 +455,9 @@ type UpdateDirectoryReviewSettingsResponseBody struct {
 type ListScopesResponseBody struct {
 	// The scopes available in access control.
 	Scopes []*ScopeDefinitionResponseBody `form:"scopes" json:"scopes" xml:"scopes"`
+	// Tasks that need more than one scope, so a missing scope can be explained in
+	// context.
+	Workflows []*ScopeWorkflowResponseBody `form:"workflows" json:"workflows" xml:"workflows"`
 }
 
 // ListMembersResponseBody is the type of the "access" service "listMembers"
@@ -9304,6 +9307,16 @@ type ScopeDefinitionResponseBody struct {
 	ExclusionScope *string `form:"exclusion_scope,omitempty" json:"exclusion_scope,omitempty" xml:"exclusion_scope,omitempty"`
 }
 
+// ScopeWorkflowResponseBody is used to define fields on response body types.
+type ScopeWorkflowResponseBody struct {
+	// Stable identifier of the task.
+	Slug string `form:"slug" json:"slug" xml:"slug"`
+	// What a person is trying to do.
+	Label string `form:"label" json:"label" xml:"label"`
+	// Every scope the task needs end to end.
+	Scopes []string `form:"scopes" json:"scopes" xml:"scopes"`
+}
+
 // AccessMemberResponseBody is used to define fields on response body types.
 type AccessMemberResponseBody struct {
 	// User ID.
@@ -10372,6 +10385,18 @@ func NewListScopesResponseBody(res *access.ListScopesResult) *ListScopesResponse
 		}
 	} else {
 		body.Scopes = []*ScopeDefinitionResponseBody{}
+	}
+	if res.Workflows != nil {
+		body.Workflows = make([]*ScopeWorkflowResponseBody, len(res.Workflows))
+		for i, val := range res.Workflows {
+			if val == nil {
+				body.Workflows[i] = nil
+				continue
+			}
+			body.Workflows[i] = marshalAccessScopeWorkflowToScopeWorkflowResponseBody(val)
+		}
+	} else {
+		body.Workflows = []*ScopeWorkflowResponseBody{}
 	}
 	return body
 }

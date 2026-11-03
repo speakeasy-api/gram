@@ -10,12 +10,17 @@ import {
   ScopeDefinition,
   ScopeDefinition$inboundSchema,
 } from "./scopedefinition.js";
+import { ScopeWorkflow, ScopeWorkflow$inboundSchema } from "./scopeworkflow.js";
 
 export type ListScopesResult = {
   /**
    * The scopes available in access control.
    */
   scopes: Array<ScopeDefinition>;
+  /**
+   * Tasks that need more than one scope, so a missing scope can be explained in context.
+   */
+  workflows: Array<ScopeWorkflow>;
 };
 
 /** @internal */
@@ -24,6 +29,7 @@ export const ListScopesResult$inboundSchema: z.ZodMiniType<
   unknown
 > = z.object({
   scopes: z.array(ScopeDefinition$inboundSchema),
+  workflows: z.array(ScopeWorkflow$inboundSchema),
 });
 
 export function listScopesResultFromJSON(
