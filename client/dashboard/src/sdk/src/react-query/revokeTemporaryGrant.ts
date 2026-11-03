@@ -54,7 +54,7 @@ export type RevokeTemporaryGrantMutationError =
  * revokeTemporaryGrant access
  *
  * @remarks
- * End an active temporary grant before its deadline. Only this grant ends: a permanent grant is never removed this way, and the member's roles and other grants giving the same access are left alone. Requires org:admin, except that a member may end a grant given to themselves.
+ * End an active temporary grant before its deadline. Only this grant ends: a permanent grant is never removed this way, and the principal's roles and other grants giving the same access are left alone. Requires org:admin, except that a member may end a grant given directly to themselves.
  */
 export function useRevokeTemporaryGrantMutation(
   options?: MutationHookOptions<

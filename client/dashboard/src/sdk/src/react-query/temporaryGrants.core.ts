@@ -22,7 +22,7 @@ export type TemporaryGrantsQueryData = ListTemporaryGrantsResult;
 export function prefetchTemporaryGrants(
   queryClient: QueryClient,
   client$: GramCore,
-  request?: ListTemporaryGrantsRequest | undefined,
+  request: ListTemporaryGrantsRequest,
   security?: ListTemporaryGrantsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<void> {
@@ -38,7 +38,7 @@ export function prefetchTemporaryGrants(
 
 export function buildTemporaryGrantsQuery(
   client$: GramCore,
-  request?: ListTemporaryGrantsRequest | undefined,
+  request: ListTemporaryGrantsRequest,
   security?: ListTemporaryGrantsSecurity | undefined,
   options?: RequestOptions,
 ): {
@@ -47,9 +47,9 @@ export function buildTemporaryGrantsQuery(
 } {
   return {
     queryKey: queryKeyTemporaryGrants({
-      userId: request?.userId,
-      includeExpired: request?.includeExpired,
-      gramSession: request?.gramSession,
+      principalUrn: request.principalUrn,
+      includeExpired: request.includeExpired,
+      gramSession: request.gramSession,
     }),
     queryFn: async function temporaryGrantsQueryFn(
       ctx,
@@ -77,7 +77,7 @@ export function buildTemporaryGrantsQuery(
 
 export function queryKeyTemporaryGrants(
   parameters: {
-    userId?: string | undefined;
+    principalUrn: string;
     includeExpired?: boolean | undefined;
     gramSession?: string | undefined;
   },

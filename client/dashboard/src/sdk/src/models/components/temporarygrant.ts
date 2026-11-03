@@ -38,11 +38,11 @@ export type TemporaryGrant = {
    */
   id: string;
   /**
-   * For an active grant, the principal URNs of the member's other grants that already give the same access: a role, everyone (user:all), or the member themselves for a grant made to them directly. Access through these remains when this grant ends. Empty for ended grants and when this grant is the only route.
+   * For an active grant, the principal URNs of the holder's other grants that already give the same access: for a member or agent, a role, everyone (user:all), or the holder itself for a grant made to it directly; for a role or everyone, only that principal's own other grants. Access through these remains when this grant ends. Empty for ended grants and when this grant is the only route.
    */
   otherAccess: Array<string>;
   /**
-   * Canonical principal URN of the member holding the access.
+   * Canonical principal URN holding the access.
    */
   principalUrn: string;
   /**
@@ -62,10 +62,6 @@ export type TemporaryGrant = {
    */
   status: Status;
   updatedAt: Date;
-  /**
-   * The member holding the access.
-   */
-  userId: string;
 };
 
 /** @internal */
@@ -97,7 +93,6 @@ export const TemporaryGrant$inboundSchema: z.ZodMiniType<
       z.iso.datetime({ offset: true }),
       z.transform(v => new Date(v)),
     ),
-    user_id: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
@@ -107,7 +102,6 @@ export const TemporaryGrant$inboundSchema: z.ZodMiniType<
       "principal_urn": "principalUrn",
       "remaining_seconds": "remainingSeconds",
       "updated_at": "updatedAt",
-      "user_id": "userId",
     });
   }),
 );

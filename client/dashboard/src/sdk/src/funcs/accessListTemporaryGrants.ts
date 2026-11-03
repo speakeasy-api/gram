@@ -42,11 +42,11 @@ import { Result } from "../types/fp.js";
  * listTemporaryGrants access
  *
  * @remarks
- * List temporary grants with their boundary, deadline and remaining time, soonest deadline first. Organization administrators see every member's grants; anyone else sees only their own. Each active grant says which other grants the member holds that would still give the same access once it ends. Revoked grants are removed and appear only in the audit log.
+ * List the temporary grants given to one principal, with their boundary, deadline and remaining time, soonest deadline first. Organization administrators may list any principal's grants; anyone else may list only grants given to themselves (their own user:<id>). Each active grant says which other grants would still give the principal the same access once it ends. Revoked grants are removed and appear only in the audit log.
  */
 export function accessListTemporaryGrants(
   client: GramCore,
-  request?: ListTemporaryGrantsRequest | undefined,
+  request: ListTemporaryGrantsRequest,
   security?: ListTemporaryGrantsSecurity | undefined,
   options?: RequestOptions,
 ): APIPromise<
@@ -73,7 +73,7 @@ export function accessListTemporaryGrants(
 
 async function $do(
   client: GramCore,
-  request?: ListTemporaryGrantsRequest | undefined,
+  request: ListTemporaryGrantsRequest,
   security?: ListTemporaryGrantsSecurity | undefined,
   options?: RequestOptions,
 ): Promise<
@@ -95,8 +95,7 @@ async function $do(
 > {
   const parsed = safeParse(
     request,
-    (value) =>
-      z.parse(z.optional(ListTemporaryGrantsRequest$outboundSchema), value),
+    (value) => z.parse(ListTemporaryGrantsRequest$outboundSchema, value),
     "Input validation failed",
   );
   if (!parsed.ok) {
@@ -108,13 +107,13 @@ async function $do(
   const path = pathToFunc("/rpc/access.listTemporaryGrants")();
 
   const query = encodeFormQuery({
-    "include_expired": payload?.include_expired,
-    "user_id": payload?.user_id,
+    "include_expired": payload.include_expired,
+    "principal_urn": payload.principal_urn,
   });
 
   const headers = new Headers(compactMap({
     Accept: "application/json",
-    "Gram-Session": encodeSimple("Gram-Session", payload?.["Gram-Session"], {
+    "Gram-Session": encodeSimple("Gram-Session", payload["Gram-Session"], {
       explode: false,
       charEncoding: "none",
     }),

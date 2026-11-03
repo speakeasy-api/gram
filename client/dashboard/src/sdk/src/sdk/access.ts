@@ -295,7 +295,7 @@ export class Access extends ClientSDK {
    * createTemporaryGrant access
    *
    * @remarks
-   * Give one organization member a scope on a resource or activity boundary until a deadline, without changing their roles. Once the deadline passes the grant stops authorizing new requests, with no role change or sign-out. Fails with a conflict when the member already holds the same grant permanently, or temporarily (renew that one instead). An expired grant for the same boundary is restarted. Requires org:admin. An administrator may give themselves temporary access; the audit event records that it was self-granted. Session only: the grant is attributed to the person who gave it.
+   * Give one principal (a member, role, agent, or everyone) a scope on a resource or activity boundary until a deadline, without changing role assignments. Once the deadline passes the grant stops authorizing new requests, with no role change or sign-out. Fails with a conflict when the principal already holds the same grant permanently, or temporarily (renew that one instead). An expired grant for the same boundary is restarted. Requires org:admin. An administrator may give themselves temporary access; the audit event records that it was self-granted. Session only: the grant is attributed to the person who gave it.
    */
   async createTemporaryGrant(
     request: CreateTemporaryGrantRequest,
@@ -770,10 +770,10 @@ export class Access extends ClientSDK {
    * listTemporaryGrants access
    *
    * @remarks
-   * List temporary grants with their boundary, deadline and remaining time, soonest deadline first. Organization administrators see every member's grants; anyone else sees only their own. Each active grant says which other grants the member holds that would still give the same access once it ends. Revoked grants are removed and appear only in the audit log.
+   * List the temporary grants given to one principal, with their boundary, deadline and remaining time, soonest deadline first. Organization administrators may list any principal's grants; anyone else may list only grants given to themselves (their own user:<id>). Each active grant says which other grants would still give the principal the same access once it ends. Revoked grants are removed and appear only in the audit log.
    */
   async listTemporaryGrants(
-    request?: ListTemporaryGrantsRequest | undefined,
+    request: ListTemporaryGrantsRequest,
     security?: ListTemporaryGrantsSecurity | undefined,
     options?: RequestOptions,
   ): Promise<ListTemporaryGrantsResult> {
@@ -903,7 +903,7 @@ export class Access extends ClientSDK {
    * revokeTemporaryGrant access
    *
    * @remarks
-   * End an active temporary grant before its deadline. Only this grant ends: a permanent grant is never removed this way, and the member's roles and other grants giving the same access are left alone. Requires org:admin, except that a member may end a grant given to themselves.
+   * End an active temporary grant before its deadline. Only this grant ends: a permanent grant is never removed this way, and the principal's roles and other grants giving the same access are left alone. Requires org:admin, except that a member may end a grant given directly to themselves.
    */
   async revokeTemporaryGrant(
     request: RevokeTemporaryGrantRequest,

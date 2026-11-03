@@ -16,6 +16,10 @@ export type CreateTemporaryGrantForm = {
    */
   expiresAt: Date;
   /**
+   * The principal receiving the access: an organization member (user:<id>), everyone (user:all), a role (role:organization:<id> or role:global:<id>) or an active agent (agent:<id>).
+   */
+  principalUrn: string;
+  /**
    * Why the access is needed, recorded in the audit log.
    */
   reason?: string | undefined;
@@ -27,19 +31,15 @@ export type CreateTemporaryGrantForm = {
    * A constraint that narrows which resources a grant applies to.
    */
   selector?: Selector | undefined;
-  /**
-   * The organization member receiving the access.
-   */
-  userId: string;
 };
 
 /** @internal */
 export type CreateTemporaryGrantForm$Outbound = {
   expires_at: string;
+  principal_urn: string;
   reason?: string | undefined;
   scope: string;
   selector?: Selector$Outbound | undefined;
-  user_id: string;
 };
 
 /** @internal */
@@ -49,15 +49,15 @@ export const CreateTemporaryGrantForm$outboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     expiresAt: z.pipe(z.date(), z.transform(v => v.toISOString())),
+    principalUrn: z.string(),
     reason: z.optional(z.string()),
     scope: z.string(),
     selector: z.optional(Selector$outboundSchema),
-    userId: z.string(),
   }),
   z.transform((v) => {
     return remap$(v, {
       expiresAt: "expires_at",
-      userId: "user_id",
+      principalUrn: "principal_urn",
     });
   }),
 );
