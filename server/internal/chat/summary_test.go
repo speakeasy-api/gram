@@ -14,7 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chatredact"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/memorygate"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/openrouter"
 )
 
@@ -24,10 +24,10 @@ func plantedSecrets() (githubToken, dbPassword string) {
 	return "ghp_" + strings.Repeat("aB3dE5fG7h", 3) + "123456", "pg-" + "planted-" + "pw9"
 }
 
-func withTeamMemory(ti *chatTestInstance, client openrouter.CompletionClient, enabled bool) {
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagOrgMemory, feature.AnyDistinctID, enabled)
-	ti.service.WithMaskedSummaries(chat.NewSummaryGenerator(ti.conn, client, chatredact.New()), flags)
+func withTeamMemory(t *testing.T, ti *chatTestInstance, client openrouter.CompletionClient, enabled bool) {
+	t.Helper()
+	require.NoError(t, memorygate.Set(t.Context(), ti.conn, ti.orgID, enabled))
+	ti.service.WithMaskedSummaries(chat.NewSummaryGenerator(ti.conn, client, chatredact.New()))
 }
 
 func requestText(req openrouter.CompletionRequest) string {
@@ -56,7 +56,7 @@ func TestService_Summarize_MaskedPathRedactsInputAndOutput(t *testing.T) {
 		Once()
 
 	ti := newTestChatServiceWithCompletion(t, client)
-	withTeamMemory(ti, client, true)
+	withTeamMemory(t, ti, client, true)
 	ctx := initSessionCtx(t, ti)
 	chatID := seedChat(t, ctx, ti, "", "ext-user", "Retry queue")
 	seedMessageContent(t, ctx, ti, chatID, "Use token "+token+" and postgres://app:"+password+"@db:5432/main for the retry worker")
@@ -100,7 +100,7 @@ func TestService_Summarize_MaskedPathReplacesUnmaskedSummary(t *testing.T) {
 		Once()
 
 	ti := newTestChatServiceWithCompletion(t, client)
-	withTeamMemory(ti, client, true)
+	withTeamMemory(t, ti, client, true)
 	ctx := initSessionCtx(t, ti)
 	chatID := seedChat(t, ctx, ti, "", "ext-user", "Legacy")
 	seedMessageContent(t, ctx, ti, chatID, "Refactor the auth middleware")
@@ -135,7 +135,7 @@ func TestService_Summarize_FlagOffKeepsLegacyPath(t *testing.T) {
 		Once()
 
 	ti := newTestChatServiceWithCompletion(t, client)
-	withTeamMemory(ti, client, false)
+	withTeamMemory(t, ti, client, false)
 	ctx := initSessionCtx(t, ti)
 	chatID := seedChat(t, ctx, ti, "", "ext-user", "Flag off")
 	seedMessageContent(t, ctx, ti, chatID, "Deploy the API to staging")

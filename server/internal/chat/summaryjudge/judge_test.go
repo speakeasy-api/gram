@@ -2,7 +2,6 @@ package summaryjudge_test
 
 import (
 	"context"
-	"errors"
 	"log"
 	"os"
 	"strings"
@@ -22,7 +21,7 @@ import (
 	chatrepo "github.com/speakeasy-api/gram/server/internal/chat/repo"
 	"github.com/speakeasy-api/gram/server/internal/chat/summaryjudge"
 	"github.com/speakeasy-api/gram/server/internal/conv"
-	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/memorygate"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -186,11 +185,10 @@ func (f fixture) evaluationIDs(t *testing.T) []uuid.UUID {
 	return ids
 }
 
-func (f fixture) judge(t *testing.T, client openrouter.CompletionClient, flagOn bool) *summaryjudge.Judge {
+func (f fixture) judge(t *testing.T, client openrouter.CompletionClient, memoryOn bool) *summaryjudge.Judge {
 	t.Helper()
-	flags := &feature.InMemory{}
-	flags.SetFlag(feature.FlagOrgMemory, feature.AnyDistinctID, flagOn)
-	return summaryjudge.NewJudge(testenv.NewLogger(t), f.db, flags, client, nil)
+	require.NoError(t, memorygate.Set(t.Context(), f.db, f.orgID, memoryOn))
+	return summaryjudge.NewJudge(testenv.NewLogger(t), f.db, client, nil)
 }
 
 func (f fixture) input(chatID, evaluationID uuid.UUID) analysis.JudgeInput {
@@ -241,43 +239,20 @@ func TestJudge_WritesMaskedSummaryAndScoresEvaluation(t *testing.T) {
 	require.Equal(t, "scored", f.state(t, evaluationID))
 }
 
-func TestJudge_FlagOffScoresWithoutModelCall(t *testing.T) {
+func TestJudge_MemoryOffScoresWithoutModelCall(t *testing.T) {
 	t.Parallel()
 
-	f := newFixture(t, "summaryjudge_flagoff")
+	f := newFixture(t, "summaryjudge_memoryoff")
 	chatID := f.seedChat(t, "Decided to keep the old auth flow")
 	evaluationID := f.reserve(t, chatID)
 
 	client := &stubClient{summary: "unused"}
 	result, err := f.judge(t, client, false).Judge(t.Context(), f.input(chatID, evaluationID))
 	require.NoError(t, err)
-	require.JSONEq(t, `{"outcome":"flag_off"}`, string(result.Verdict.Detail))
+	require.JSONEq(t, `{"outcome":"memory_off"}`, string(result.Verdict.Detail))
 	require.Zero(t, client.calls.Load())
 	require.False(t, f.chat(t, chatID).Summary.Valid)
 	require.Equal(t, "scored", f.state(t, evaluationID))
-}
-
-// failingFlags is a flag provider whose lookups fail, as during a PostHog
-// outage.
-type failingFlags struct{ feature.InMemory }
-
-func (*failingFlags) IsFlagEnabled(context.Context, feature.Flag, string, map[string]string) (bool, error) {
-	return false, errors.New("flag provider unavailable")
-}
-
-func TestJudge_FlagLookupFailureIsRetryable(t *testing.T) {
-	t.Parallel()
-
-	f := newFixture(t, "summaryjudge_flagerr")
-	chatID := f.seedChat(t, "Decided to keep the old auth flow")
-	evaluationID := f.reserve(t, chatID)
-
-	client := &stubClient{summary: "unused"}
-	judge := summaryjudge.NewJudge(testenv.NewLogger(t), f.db, &failingFlags{}, client, nil)
-	_, err := judge.Judge(t.Context(), f.input(chatID, evaluationID))
-	require.ErrorIs(t, err, analysis.ErrRetryable)
-	require.Zero(t, client.calls.Load())
-	require.False(t, f.chat(t, chatID).Summary.Valid)
 }
 
 func TestJudge_SkipsChatsExcludedFromMemory(t *testing.T) {
