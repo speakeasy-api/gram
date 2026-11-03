@@ -61,6 +61,7 @@ func TestAuthorize_BeginsTheConnectionAttempt(t *testing.T) {
 	q.Set("code_challenge", "challenge")
 	q.Set("code_challenge_method", "S256")
 	req := httptest.NewRequest(http.MethodGet, "/mcp/"+slug+"/authorize?"+q.Encode(), nil)
+	req.Header.Set("User-Agent", "claude-code/2.0.14 (cli)")
 	rctx := chi.NewRouteContext()
 	rctx.URLParams.Add("mcpSlug", slug)
 	req = req.WithContext(context.WithValue(ctx, chi.RouteCtxKey, rctx))
@@ -90,9 +91,11 @@ func TestAuthorize_BeginsTheConnectionAttempt(t *testing.T) {
 		IsFinal          bool      `ch:"is_final"`
 		AppKey           string    `ch:"app_key"`
 		ProviderHost     string    `ch:"provider_host"`
+		ClientFamily     string    `ch:"client_family"`
+		ClientVersion    string    `ch:"client_version"`
 	}
 	require.NoError(t, conn.Select(ctx, &rows, `
-		SELECT organization_id, project_id, attempt_started_at, server_kind, server_id, step, step_result, is_final, app_key, provider_host
+		SELECT organization_id, project_id, attempt_started_at, server_kind, server_id, step, step_result, is_final, app_key, provider_host, client_family, client_version
 		FROM mcp_connection_events WHERE attempt_id = ?`, attemptID))
 	require.Len(t, rows, 1)
 	require.Equal(t, authCtx.ActiveOrganizationID, rows[0].OrganizationID)
@@ -105,6 +108,8 @@ func TestAuthorize_BeginsTheConnectionAttempt(t *testing.T) {
 	require.False(t, rows[0].IsFinal)
 	require.Equal(t, mcpconnectionattempts.AppDCR.String(), rows[0].AppKey)
 	require.Empty(t, rows[0].ProviderHost, "Speakeasy sign-in has no provider")
+	require.Equal(t, mcpconnectionattempts.FamilyClaudeCode, rows[0].ClientFamily)
+	require.Equal(t, "2.0.14", rows[0].ClientVersion)
 }
 
 // The organization gateway belongs to no project, and its rows name the gateway.
