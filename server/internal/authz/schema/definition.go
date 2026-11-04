@@ -227,7 +227,8 @@ func Scopes[S ScopeName](scopes ...S) []string {
 }
 
 // GrantSpec describes the catalogue metadata of the stored allow scope a
-// Grant names. Every field is optional.
+// Grant names. Description is required unless Internal; the other fields
+// are optional.
 type GrantSpec struct {
 	// Description is the catalogue text. Every grant that is not Internal
 	// needs one.
@@ -371,7 +372,7 @@ func ScopePermission[S ScopeName](name string, scope S, spec GrantSpec, opts ...
 	opts = slices.Clone(opts)
 	return typeOptionFunc(func(t *TypeDecl) {
 		grant.applyType(t)
-		p := permissionDecl{name: name, expr: Expr{}, direct: nil, excludedBy: nil, answers: string(scope), description: "", alsoGrantedBy: nil}
+		p := permissionDecl{name: name, expr: Rel(scope), direct: nil, excludedBy: nil, answers: string(scope), description: "", alsoGrantedBy: nil}
 		for _, opt := range opts {
 			opt.applyPermission(&p)
 		}

@@ -452,9 +452,14 @@ Tiago approved the new direction for the declaration language on 2026-11-04. Thi
 5. **`SubjectScoped` is removed.** The compiler rejected every use of it, so it was grammar with no possible user. _If reversed:_ add a `GrantSpec` field when audience-limited grants are designed.
 6. **One declaration function per resource type.** `DefaultDeclarations` lists `organizationType()`, `projectType()` and so on. Cross-type alternatives stay with the type whose typed constructor builds them. Role lists, anchor lists and the MCP tool condition shared by several grants are package variables; `Grant` and `Block` copy every slice they receive. The assessment suggested waiting for the agents stack. The coordinator asked for it now, so AG1, AG2 and W1 convert their agent and workload declarations to this form when they merge into the integration branch. That conversion is mechanical. _If reversed:_ inline the functions back into one list.
 7. **Stored scopes stay as they are.** `org:hooks_ingest` is declared on the organization with a project selector key even though it is decided per project. Moving it to a project scope changes stored grants, so it is recorded as a cleanup candidate after production shadow data, not done here.
+
+## Resource constructors stay flat (AIS-880)
+
+The first readability follow-up proposed naming every project resource through its project, `authz.Project(org, p).MCPServer(id)`. Tiago rejected it on 2026-11-04: a developer adding an MCP server check looks for `authz.MCPServer` in autocomplete and cannot guess that it hangs off `Project`. The flat constructors already make the project a required argument, `authz.MCPServer(projectID, serverID)`, so the chain added no safety. The change was reverted and the flat constructors stay as they were.
+
 ## Scope-keyed grants and the one-line scope permission (AIS-880)
 
-The second readability follow-up Tiago approved on 2026-11-04, applied on top of the declaration language changes in #8538. Grants and blocks are now named by the stored scope they read, and the common permission shape has a one-line form. The default declarations shrink from 444 to 333 lines. No stored scope, compiled projection or decision changes: `TestSchemaProjectionsMatchFrozenTables`, the foundation corpus and every authz test pass unchanged.
+The second readability follow-up Tiago approved on 2026-11-04, applied on top of the declaration language changes in #8538. Grants and blocks are now named by the stored scope they read, and the common permission shape has a one-line form. The default declarations shrink from 444 to 333 lines. No stored scope or decision changes. The compiled registry loses only `ScopeDefinition.Relation`. `TestSchemaProjectionsMatchFrozenTables` and the foundation corpus pass with their expectations unchanged; the authz tests were converted to the new API.
 
 ### Decided without reviewer input
 

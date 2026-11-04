@@ -567,6 +567,11 @@ func TestCompile_RejectsInvalidDeclarations(t *testing.T) {
 			want:  `ExcludedBy is given more than once; declare broader blocks with BlockSpec.ImpliedBy`,
 		},
 		{
+			name:  "AlsoGrantedBy on a plain permission",
+			types: []s.TypeDecl{simple("thing", s.Permission("guarded", s.Rel("thing:read"), s.AlsoGrantedBy("thing:write")))},
+			want:  `AlsoGrantedBy applies only to ScopePermission; write the Union in the expression`,
+		},
+		{
 			name:  "ImpliedBy an unknown block",
 			types: []s.TypeDecl{simple("thing", s.Block("thing:blocked_write", s.BlockSpec{ImpliedBy: []string{"missing"}}))},
 			want:  `block "thing:blocked_write": ImpliedBy names unknown block "missing"`,
