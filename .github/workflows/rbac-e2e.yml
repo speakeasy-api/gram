@@ -49,6 +49,7 @@ jobs:
               - server/internal/authenforcement/**
               - server/internal/mcpauthz/**
               - server/internal/mcpaccess/**
+              - server/internal/platformmcp/authorization*.go
               - server/design/access/**
               - client/dashboard/src/pages/access/**
               - client/dashboard/src/hooks/useRBAC.ts
