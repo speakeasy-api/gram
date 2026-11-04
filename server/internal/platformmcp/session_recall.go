@@ -20,6 +20,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/chat"
+	"github.com/speakeasy-api/gram/server/internal/chat/chattitle"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -203,7 +204,7 @@ func (s *SessionRecallService) ListMySessions(ctx context.Context, principal Pri
 		sessions = append(sessions, RecallableSession{
 			SessionID: sessionIDForChat(row.ExternalChatID, row.ID),
 			ChatID:    row.ID.String(),
-			Title:     conv.FromPGTextOrEmpty[string](row.Title),
+			Title:     chatDisplayTitle(row.Title, row.TitleManuallySet),
 			// Stored summaries can be transcript-derived and are deliberately not exposed.
 			Summary:     "",
 			ProjectName: row.ProjectName,
@@ -290,7 +291,7 @@ func (s *SessionRecallService) renderOwnedSessionDigest(ctx context.Context, pri
 	extract := turnsFromRows(messages, masks.content)
 	sourceSessionID := sessionIDForChat(row.ExternalChatID, row.ID)
 	handoff := sessionhandoff.Render(&sessionhandoff.Transcript{Session: sessionhandoff.SessionMeta{
-		Title: conv.FromPGTextOrEmpty[string](row.Title), SessionID: sourceSessionID, ChatID: chatID.String(), Source: valueOrUnknown(extract.source),
+		Title: chatDisplayTitle(row.Title, row.TitleManuallySet), SessionID: sourceSessionID, ChatID: chatID.String(), Source: valueOrUnknown(extract.source),
 		Cwd: conv.FromPGTextOrEmpty[string](row.Cwd), LastActivity: row.UpdatedAt.Time,
 	}, Turns: extract.turns}, sessionhandoff.Options{Budget: 0, RedactToolPayloads: true})
 	if cappedRead {
@@ -348,7 +349,7 @@ func (s *SessionRecallService) ContinueSession(ctx context.Context, principal Pr
 	if err := s.auditor.LogChatSessionRecall(ctx, dbtx, audit.LogChatSessionRecallEvent{
 		OrganizationID: principal.OrganizationID, ProjectID: rendered.row.ProjectID,
 		Actor: urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID), ChatSessionURN: urn.NewChatSession(rendered.chatID),
-		ChatTitle: conv.FromPGTextOrEmpty[string](rendered.row.Title), OwnerUserID: principal.UserID,
+		ChatTitle: chatDisplayTitle(rendered.row.Title, rendered.row.TitleManuallySet), OwnerUserID: principal.UserID,
 		SourceSessionID: rendered.sourceSessionID, RedactToolPayloads: true,
 		FindingsMasked: rendered.masks.neutralized, UnanalyzedMessages: rendered.extract.unanalyzed,
 		DigestBytes: len(rendered.digest), TurnsIncluded: rendered.handoff.TurnsIncluded, TurnsDropped: rendered.handoff.TurnsDropped,
@@ -383,7 +384,7 @@ func (s *SessionRecallService) CreateSessionHandoffLink(ctx context.Context, pri
 	ttlSeconds := int(sessionhandoff.ClampHandoffTTL(input.TTLSeconds) / time.Second)
 	result, err := s.handoffMinter.Mint(ctx, sessionhandoff.SessionHandoffMintInput{
 		OrganizationID: principal.OrganizationID, ProjectID: rendered.row.ProjectID, UserID: principal.UserID,
-		ChatID: rendered.chatID, SessionID: rendered.sourceSessionID, ChatTitle: conv.FromPGTextOrEmpty[string](rendered.row.Title),
+		ChatID: rendered.chatID, SessionID: rendered.sourceSessionID, ChatTitle: chatDisplayTitle(rendered.row.Title, rendered.row.TitleManuallySet),
 		Content: rendered.digest, TTLSeconds: &ttlSeconds, SourceSurface: string(principal.surface()),
 		ActorEmail: nil, DeviceSerial: "", DeviceHostname: "",
 	})
@@ -755,4 +756,10 @@ func truncateDigest(digest string) (string, bool) {
 		keep--
 	}
 	return digest[:keep] + recallDigestTruncationMarker, true
+}
+
+// chatDisplayTitle is a stored chat title as the dashboard shows it, so a
+// cron run reads under its job name.
+func chatDisplayTitle(title pgtype.Text, manuallySet bool) string {
+	return chattitle.Display(conv.FromPGTextOrEmpty[string](title), manuallySet)
 }

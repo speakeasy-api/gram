@@ -1777,6 +1777,256 @@ func DecodeBeginResponse(decoder func(*http.Response) goahttp.Decoder, restoreBo
 	}
 }
 
+// BuildSetDefaultProjectRequest instantiates a HTTP request object with method
+// and path set to call the "slackDirectoryConnections" service
+// "setDefaultProject" endpoint
+func (c *Client) BuildSetDefaultProjectRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetDefaultProjectSlackDirectoryConnectionsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("slackDirectoryConnections", "setDefaultProject", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetDefaultProjectRequest returns an encoder for requests sent to the
+// slackDirectoryConnections setDefaultProject server.
+func EncodeSetDefaultProjectRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*slackdirectoryconnections.SetDefaultProjectPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("slackDirectoryConnections", "setDefaultProject", "*slackdirectoryconnections.SetDefaultProjectPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		body := NewSetDefaultProjectRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("slackDirectoryConnections", "setDefaultProject", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetDefaultProjectResponse returns a decoder for responses returned by
+// the slackDirectoryConnections setDefaultProject endpoint. restoreBody
+// controls whether the response body should be restored after having been read.
+// DecodeSetDefaultProjectResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - "unavailable" (type *goa.ServiceError): http.StatusServiceUnavailable
+//   - error: internal error
+func DecodeSetDefaultProjectResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetDefaultProjectResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "setDefaultProject", err)
+			}
+			err = ValidateSetDefaultProjectResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "setDefaultProject", err)
+			}
+			res := NewSetDefaultProjectSlackDirectoryConnectionOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetDefaultProjectUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "setDefaultProject", err)
+			}
+			err = ValidateSetDefaultProjectUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "setDefaultProject", err)
+			}
+			return nil, NewSetDefaultProjectUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetDefaultProjectForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "setDefaultProject", err)
+			}
+			err = ValidateSetDefaultProjectForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "setDefaultProject", err)
+			}
+			return nil, NewSetDefaultProjectForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetDefaultProjectBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "setDefaultProject", err)
+			}
+			err = ValidateSetDefaultProjectBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "setDefaultProject", err)
+			}
+			return nil, NewSetDefaultProjectBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetDefaultProjectNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "setDefaultProject", err)
+			}
+			err = ValidateSetDefaultProjectNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "setDefaultProject", err)
+			}
+			return nil, NewSetDefaultProjectNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetDefaultProjectConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "setDefaultProject", err)
+			}
+			err = ValidateSetDefaultProjectConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "setDefaultProject", err)
+			}
+			return nil, NewSetDefaultProjectConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetDefaultProjectUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "setDefaultProject", err)
+			}
+			err = ValidateSetDefaultProjectUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "setDefaultProject", err)
+			}
+			return nil, NewSetDefaultProjectUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetDefaultProjectInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "setDefaultProject", err)
+			}
+			err = ValidateSetDefaultProjectInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "setDefaultProject", err)
+			}
+			return nil, NewSetDefaultProjectInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetDefaultProjectInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "setDefaultProject", err)
+				}
+				err = ValidateSetDefaultProjectInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("slackDirectoryConnections", "setDefaultProject", err)
+				}
+				return nil, NewSetDefaultProjectInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetDefaultProjectUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "setDefaultProject", err)
+				}
+				err = ValidateSetDefaultProjectUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("slackDirectoryConnections", "setDefaultProject", err)
+				}
+				return nil, NewSetDefaultProjectUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("slackDirectoryConnections", "setDefaultProject", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetDefaultProjectGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "setDefaultProject", err)
+			}
+			err = ValidateSetDefaultProjectGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "setDefaultProject", err)
+			}
+			return nil, NewSetDefaultProjectGatewayError(&body)
+		case http.StatusServiceUnavailable:
+			var (
+				body SetDefaultProjectUnavailableResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("slackDirectoryConnections", "setDefaultProject", err)
+			}
+			err = ValidateSetDefaultProjectUnavailableResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("slackDirectoryConnections", "setDefaultProject", err)
+			}
+			return nil, NewSetDefaultProjectUnavailable(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("slackDirectoryConnections", "setDefaultProject", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildDisconnectRequest instantiates a HTTP request object with method and
 // path set to call the "slackDirectoryConnections" service "disconnect"
 // endpoint
@@ -2049,6 +2299,7 @@ func unmarshalSlackDirectoryConnectionResponseBodyToSlackdirectoryconnectionsSla
 		LastSyncFailedAt:        v.LastSyncFailedAt,
 		LastFullSyncSucceededAt: v.LastFullSyncSucceededAt,
 		UpdatedAt:               *v.UpdatedAt,
+		DefaultProjectID:        v.DefaultProjectID,
 	}
 	res.GrantedScopes = make([]string, len(v.GrantedScopes))
 	for i, val := range v.GrantedScopes {

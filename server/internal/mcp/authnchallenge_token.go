@@ -1263,12 +1263,13 @@ func (s *Service) rotateRefreshToken(
 					tracker.Continue()
 					return true, admissionErr
 				}
-				if credentialCheckFault(admissionErr) || agentAdmissionRejection(admissionErr) == "agent_admission_unavailable" {
+				reason := agentAdmissionRejection(admissionErr)
+				if credentialCheckFault(admissionErr) || reason == "agent_admission_unavailable" {
 					return true, oops.E(oops.CodeUnexpected, admissionErr, "admit agent session").LogError(ctx, logger)
 				}
-				logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
+				logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", reason)
 				writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
-				return true, refuseInboundRefresh(ctx, tracker, r, writeErr, agentAdmissionRejection(admissionErr), mcpconnectionattempts.Subject(&refreshSession.SubjectUrn))
+				return true, refuseInboundRefresh(ctx, tracker, r, writeErr, reason, mcpconnectionattempts.Subject(&refreshSession.SubjectUrn))
 			}
 			admittedAgentSessionID = refreshSession.ID
 		}
@@ -1483,7 +1484,7 @@ func (s *Service) rotateRefreshToken(
 	if oldSession.SubjectUrn.Kind == urn.SessionSubjectKindAgent {
 		var admissionErr error
 		if admittedAgentSessionID == uuid.Nil || admittedAgentSessionID != oldSession.ID {
-			admissionErr = oops.C(oops.CodeUnauthorized)
+			admissionErr = oops.E(oops.CodeUnauthorized, errCredentialRejected, "%s", oops.CodeUnauthorized.UserMessage())
 		} else {
 			admittedAgentContext, admissionErr = s.authz.AdmitPrincipalCredentialWithDBTX(admittedAgentContext, dbtx)
 			if admissionErr == nil {
@@ -1491,12 +1492,13 @@ func (s *Service) rotateRefreshToken(
 			}
 		}
 		if admissionErr != nil {
-			if credentialCheckFault(admissionErr) || agentAdmissionRejection(admissionErr) == "agent_admission_unavailable" {
+			reason := agentAdmissionRejection(admissionErr)
+			if credentialCheckFault(admissionErr) || reason == "agent_admission_unavailable" {
 				return true, oops.E(oops.CodeUnexpected, admissionErr, "admit agent session").LogError(ctx, logger)
 			}
-			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", reason)
 			writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
-			return true, refuseInboundRefresh(ctx, tracker, r, writeErr, agentAdmissionRejection(admissionErr), mcpconnectionattempts.Subject(&oldSession.SubjectUrn))
+			return true, refuseInboundRefresh(ctx, tracker, r, writeErr, reason, mcpconnectionattempts.Subject(&oldSession.SubjectUrn))
 		}
 		ctx = admittedAgentContext
 	}
@@ -1833,12 +1835,13 @@ func (s *Service) writeRefreshTokenReplay(
 					tracker.Continue()
 					return cerr
 				}
-				if credentialCheckFault(cerr) || agentAdmissionRejection(cerr) == "agent_admission_unavailable" {
+				reason := agentAdmissionRejection(cerr)
+				if credentialCheckFault(cerr) || reason == "agent_admission_unavailable" {
 					return oops.E(oops.CodeUnexpected, cerr, "admit agent session").LogError(ctx, logger)
 				}
-				logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
+				logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", reason)
 				writeErr := writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
-				return refuseInboundRefresh(ctx, tracker, r, writeErr, agentAdmissionRejection(cerr), mcpconnectionattempts.Subject(payload.Subject))
+				return refuseInboundRefresh(ctx, tracker, r, writeErr, reason, mcpconnectionattempts.Subject(payload.Subject))
 			}
 		}
 

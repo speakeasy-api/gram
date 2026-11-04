@@ -421,6 +421,7 @@ func (s *Service) serveConsentProxiedMCP(
 	}
 	var tokens map[uuid.UUID]remotesessions.UpstreamToken
 	backendIssuerID := serverRow.RemoteSessionIssuerID
+	var chosenClient uuid.UUID
 	switch {
 	case auth == nil:
 		tokens, err = s.remoteChallengeMgr.ResolveAccessTokens(ctx, consentRefreshAttribution(r, endpoint, challengeState), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
@@ -428,6 +429,7 @@ func (s *Service) serveConsentProxiedMCP(
 		// No issuer-derived bearer is needed for this credential.
 	case auth.choice.clientID.Valid:
 		backendIssuerID = auth.choice.remoteSessionIssuerID
+		chosenClient = auth.choice.clientID.UUID
 		tokens, err = s.remoteChallengeMgr.ResolveAuthClientAccessTokens(ctx, remotesessions.AuthClientTokenRequest{
 			Attribution: consentRefreshAttribution(r, endpoint, challengeState),
 			ProjectID:   endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
@@ -436,6 +438,18 @@ func (s *Service) serveConsentProxiedMCP(
 		})
 	default:
 		err = errConsentConfigurationChanged
+	}
+	// As at runtime, a typed auth client that resolved serves its own material, never a chained identity.
+	// Chaining waits until access is authorized below.
+	// Refined failures also match ErrNoValidToken but must preserve their retry/configuration responses.
+	chain := errors.Is(err, remotesessions.ErrNoValidToken) &&
+		!errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) &&
+		!errors.Is(err, remotesessions.ErrRemoteSessionMisconfigured) &&
+		(auth == nil || auth.outcome == authClientLegacy) &&
+		s.identityChainer != nil && s.identityChainer.Configured(ctx, endpoint.OrganizationID, endpoint.ProjectID, endpoint.UserSessionIssuerID)
+	noToken := err
+	if chain {
+		err = nil
 	}
 	if err != nil {
 		if errors.Is(err, remotesessions.ErrRemoteSessionUnavailable) {
@@ -448,24 +462,21 @@ func (s *Service) serveConsentProxiedMCP(
 			return oops.E(oops.CodeFailedPrecondition, err, "%s", remoteSessionMisconfiguredDescription).LogWarn(ctx, logger)
 		}
 		if errors.Is(err, remotesessions.ErrNoValidToken) {
-			conflict := oops.E(oops.CodeConflict, err, "connect the upstream service before choosing tools")
-			if s.consentTransportDeferred(ctx, logger, endpoint, challengeState) {
-				// Expected before approval: chaining mints the token afterwards.
-				logger.InfoContext(ctx, "consent tool inventory waits for identity chaining", attr.SlogConsentInventoryDeferred(true))
-				return conflict
-			}
-			return conflict.LogWarn(ctx, logger)
+			return s.consentNoUpstreamTokenError(ctx, logger, endpoint, challengeState, err)
 		}
 		return oops.E(oops.CodeUnexpected, err, "resolve upstream tokens for consent transport").LogError(ctx, logger)
 	}
-	upstreamToken, err := routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, serverRow.TunneledMcpServerID.Valid, backendIssuerID)
-	var routeErr *upstreamRoutingError
-	switch {
-	case errors.As(err, &routeErr):
-		// routeUpstreamToken already logged the structured detail.
-		return oops.E(oops.CodeFailedPrecondition, err, "this MCP server's upstream credentials are not configured unambiguously")
-	case err != nil:
-		return oops.E(oops.CodeUnexpected, err, "resolve upstream token for consent transport").LogError(ctx, logger)
+	var upstreamToken remotesessions.UpstreamToken
+	if !chain {
+		upstreamToken, err = routeUpstreamToken(ctx, logger, tokens, endpoint.UpstreamResource, serverRow.TunneledMcpServerID.Valid, backendIssuerID)
+		var routeErr *upstreamRoutingError
+		switch {
+		case errors.As(err, &routeErr):
+			// routeUpstreamToken already logged the structured detail.
+			return oops.E(oops.CodeFailedPrecondition, err, "this MCP server's upstream credentials are not configured unambiguously")
+		case err != nil:
+			return oops.E(oops.CodeUnexpected, err, "resolve upstream token for consent transport").LogError(ctx, logger)
+		}
 	}
 
 	ctx, err = s.contextForSessionSubject(ctx, endpoint, subject, "consent:"+challengeState.ID, challengeState.ClientID)
@@ -478,9 +489,21 @@ func (s *Service) serveConsentProxiedMCP(
 		}
 	}
 	ctx = s.consentDiscoveryContext(ctx, challengeState)
-	ctx, err = s.authorizeProxyBackendAccess(ctx, logger, mandatorySurfaceConsent, endpoint.OrganizationID, endpoint.ProjectID, serverRow)
-	if err != nil {
+	authorized, err := s.authorizeProxyBackendAccess(ctx, logger, mandatorySurfaceConsent, endpoint.OrganizationID, endpoint.ProjectID, serverRow)
+	switch {
+	case err != nil && chain:
+		// Unauthorized subjects keep the pre-chaining answer and never reach the exchange.
+		return s.consentNoUpstreamTokenError(ctx, logger, endpoint, challengeState, noToken)
+	case err != nil:
 		return fmt.Errorf("authorize consent transport access: %w", err)
+	}
+	ctx = authorized
+	if chain {
+		chained := s.consentChainedUpstreamToken(ctx, logger, endpoint, challengeState, chosenClient)
+		if chained == nil {
+			return s.consentNoUpstreamTokenError(ctx, logger, endpoint, challengeState, noToken)
+		}
+		upstreamToken = *chained
 	}
 	r = r.WithContext(ctx)
 
@@ -901,6 +924,17 @@ func consentJSONRPCID(id json.RawMessage) json.RawMessage {
 		return json.RawMessage("null")
 	}
 	return id
+}
+
+// consentNoUpstreamTokenError is the conflict a consent transport answers when no upstream credential is available yet.
+func (s *Service) consentNoUpstreamTokenError(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, err error) error {
+	conflict := oops.E(oops.CodeConflict, err, "connect the upstream service before choosing tools")
+	if s.consentTransportDeferred(ctx, logger, endpoint, challengeState) {
+		// Expected before approval: chaining mints the token afterwards.
+		logger.InfoContext(ctx, "consent tool inventory waits for identity chaining", attr.SlogConsentInventoryDeferred(true))
+		return conflict
+	}
+	return conflict.LogWarn(ctx, logger)
 }
 
 // consentDiscoveryContext binds discovery to the challenge's human authorizer.

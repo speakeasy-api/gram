@@ -11,9 +11,12 @@ import (
 
 // agentAdmissionRejection tells a refused agent from an admission check that could not run.
 func agentAdmissionRejection(err error) string {
+	if errors.Is(err, errCredentialRejected) {
+		return "agent_credential_invalid"
+	}
 	if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
 		if shareable.Code == oops.CodeUnauthorized {
-			return "agent_credential_invalid"
+			return "agent_admission_misconfigured"
 		}
 		if shareable.Code == oops.CodeForbidden {
 			return "agent_admission_denied"
@@ -93,6 +96,8 @@ func inboundRefreshHappened(reason string) (mcpconnectionattempts.Code, bool) {
 		return mcpconnectionattempts.CodeSignInRevoked, true
 	case "agent_credential_invalid", "refresh_token_revoked", "refresh_token_replay_session_mismatch", "refresh_token_replay_rejected", "tool_selection_malformed", "tool_selection_resource_mismatch":
 		return mcpconnectionattempts.CodeRefreshTokenRevoked, true
+	case "agent_admission_misconfigured":
+		return mcpconnectionattempts.CodeCredentialMisconfigured, true
 	case "agent_admission_denied":
 		return mcpconnectionattempts.CodeNoServerAccess, true
 	case "agent_admission_unavailable":

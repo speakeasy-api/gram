@@ -59,6 +59,10 @@ export type SyncStatus = OpenEnum<typeof SyncStatus>;
  */
 export type SlackDirectoryConnection = {
   /**
+   * Project whose managed assistant answers Speakeasy app mentions and direct messages in this workspace.
+   */
+  defaultProjectId?: string | undefined;
+  /**
    * Whether a snapshot belongs to the usable current authorization.
    */
   directoryStatus: DirectoryStatus;
@@ -158,6 +162,7 @@ export const SlackDirectoryConnection$inboundSchema: z.ZodMiniType<
   unknown
 > = z.pipe(
   z.object({
+    default_project_id: z.optional(z.string()),
     directory_status: DirectoryStatus$inboundSchema,
     disconnected_at: z.optional(
       z.pipe(z.iso.datetime({ offset: true }), z.transform(v => new Date(v))),
@@ -191,6 +196,7 @@ export const SlackDirectoryConnection$inboundSchema: z.ZodMiniType<
   }),
   z.transform((v) => {
     return remap$(v, {
+      "default_project_id": "defaultProjectId",
       "directory_status": "directoryStatus",
       "disconnected_at": "disconnectedAt",
       "granted_scopes": "grantedScopes",

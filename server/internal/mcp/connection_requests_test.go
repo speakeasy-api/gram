@@ -36,6 +36,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -618,12 +619,15 @@ func TestGatewayLocalUsageRefusalRecordsOnce(t *testing.T) {
 	}
 }
 
-// Match direct servers: successful HTTP carrying tool errors does not imply an
-// authentication or connection failure, regardless of the JSON-RPC error code.
+// Tool errors over successful HTTP or a non-auth HTTP 400 do not prove rejected
+// credentials, regardless of the JSON-RPC error code. Preserve the tool response.
 func TestGatewayToolErrorsRecordNothing(t *testing.T) {
 	t.Parallel()
-	for _, code := range []int{-32601, -32602, -32603, -32000, 0} {
-		t.Run(fmt.Sprint(code), func(t *testing.T) {
+	for _, tc := range []struct{ code, status int }{
+		{-32601, 200}, {-32602, 200}, {-32603, 200}, {-32000, 200}, {0, 200}, {-32602, 400}, {-32000, 400},
+	} {
+		code := tc.code
+		t.Run(fmt.Sprintf("%d/%d", tc.status, code), func(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestMCPService(t)
 			auth := requireProjectAuthContext(t, ctx)
@@ -653,6 +657,7 @@ func TestGatewayToolErrorsRecordNothing(t *testing.T) {
 					if rpc.Method == "tools/call" {
 						calls.Add(1)
 						w.Header().Set("Content-Type", "application/json")
+						w.WriteHeader(tc.status)
 						assert.NoError(t, json.NewEncoder(w).Encode(map[string]any{"jsonrpc": "2.0", "id": rpc.ID, "error": map[string]any{"code": code, "message": "tool request failed"}}))
 						return
 					}
@@ -749,4 +754,32 @@ func TestFreshRefreshSuppressesOnlyDuplicateGateRow(t *testing.T) {
 	rows = rec.Rows()
 	require.Len(t, rows, 2)
 	require.Equal(t, mcpconnectionattempts.StepMCPRequest.String(), rows[1].Step)
+}
+
+func TestDirectHostedMissingSecurityRecordsResponsibleParty(t *testing.T) {
+	t.Parallel()
+	for _, oauth := range []bool{false, true} {
+		t.Run(fmt.Sprint(oauth), func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestMCPService(t)
+			auth := requireProjectAuthContext(t, ctx)
+			ts := createPublicMCPToolset(t, ctx, ti, auth, "direct-security-"+uuid.NewString()[:8])
+			want, who := mcpconnectionattempts.CodeCredentialMisconfigured, mcpconnectionattempts.WhoAdmin
+			if oauth {
+				ti.addToolWithDualSecurity(ctx, t, ts.ID, *auth.ProjectID, auth.ActiveOrganizationID)
+				want, who = mcpconnectionattempts.CodeInvalidRemoteSession, mcpconnectionattempts.WhoPerson
+			} else {
+				ti.addToolWithSecurity(ctx, t, ts.ID, *auth.ProjectID, auth.ActiveOrganizationID)
+			}
+			rec := mcpconnectionattemptstest.New(t)
+			ti.service.SetConnectionRecorder(rec.Recorder)
+			response, err := servePublicHTTP(t, context.Background(), ti, ts.McpSlug.String, makeInitializeBody(), "", nil)
+			require.EqualError(t, err, "serve public: "+oops.C(oops.CodeUnauthorized).Error())
+			require.Empty(t, response.Body.String())
+			require.Empty(t, response.Header().Get("WWW-Authenticate"))
+			row := rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, want)
+			require.Equal(t, string(who), row.WhoFixes)
+			require.Len(t, rec.Rows(), 1)
+		})
+	}
 }

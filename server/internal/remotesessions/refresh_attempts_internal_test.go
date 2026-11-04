@@ -142,7 +142,7 @@ func TestRefreshHappened_LocalTunnelTransportIsInternal(t *testing.T) {
 		what, ok := refreshHappened(refreshOutcomeForError(context.Background(), err), client, err)
 		require.True(t, ok)
 		require.Equal(t, mcpconnectionattempts.CodeInternalError, what)
-		require.False(t, refreshOutagePaced(remotesessionmetrics.RefreshOutcomeInternalError, err))
+		require.Equal(t, errors.Is(err, errRefreshTunnelTransport), refreshOutagePaced(remotesessionmetrics.RefreshOutcomeInternalError, err))
 	}
 }
 
@@ -207,7 +207,11 @@ func TestRefreshHappened_ExhaustedTunnelPreservesGatewayCause(t *testing.T) {
 			tunnels := tunnelrouting.NewHTTPClient(routes, "forward-token", guardian.NewDefaultPolicy(testenv.NewTracerProvider(t)), []string{"127.0.0.0/8"})
 			req, err := http.NewRequestWithContext(t.Context(), http.MethodPost, "https://idp.example.com/token", nil)
 			require.NoError(t, err)
-			_, err = tunnels.Do(req, "tunnel")
+			resp, err := tunnels.Do(req, "tunnel")
+			if resp != nil {
+				require.NoError(t, resp.Body.Close())
+			}
+			require.Nil(t, resp)
 			require.ErrorIs(t, err, tunnelrouting.ErrNoTunnelRoute)
 			// This is the unchanged wrapping applied by postRefreshGrant.
 			failure := fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, err)

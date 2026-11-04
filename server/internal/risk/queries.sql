@@ -1762,7 +1762,7 @@ WHERE ccp.id = ANY(@ids::uuid[])
 -- titles are read from Postgres at page render time rather than denormalized
 -- into ClickHouse, because titles are generated after the scan and would be
 -- stale at ingest.
-SELECT c.id, c.title
+SELECT c.id, c.title, c.title_manually_set
 FROM chats c
 WHERE c.project_id = @project_id
   AND c.id = ANY(@ids::uuid[])

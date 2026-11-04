@@ -279,6 +279,13 @@ func handleToolsCall(
 		}
 	}
 
+	// A gateway dispatch that fails before the telemetry row below is
+	// registered is logged by the gateway, under this resolved tool.
+	metaAttempt, _ := ctx.Value(metaToolCallAttemptKey{}).(*metaToolCallAttempt)
+	if metaAttempt != nil {
+		metaAttempt.descriptor = plan.Descriptor
+	}
+
 	// Per-tool RBAC check: if the user is authenticated on a private MCP,
 	// verify they have mcp:connect for this specific tool (not just the server).
 	// The connection-level check only validates the server; this narrows to the
@@ -506,6 +513,9 @@ func handleToolsCall(
 		}
 		telemLogger.Log(ctx, params)
 	}()
+	if metaAttempt != nil {
+		metaAttempt.logged = true
+	}
 
 	// The record is built when the call returns, so a call the scan stops still
 	// shows, and published off the response path.

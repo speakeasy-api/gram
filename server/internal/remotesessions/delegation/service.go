@@ -188,6 +188,14 @@ func (s *Service) decrypt(value string) (string, error) {
 // configurationRetryDelay paces renewal while an administrator fixes a refusal that kept the token.
 const configurationRetryDelay = 5 * time.Minute
 
+// maxRetryableDelay caps a provider's Retry-After.
+const maxRetryableDelay = 5 * time.Minute
+
+// retryableDelay waits at least a minute, longer when the provider asks.
+func retryableDelay(retryAfter time.Duration) time.Duration {
+	return min(max(retryAfter, time.Minute), maxRetryableDelay)
+}
+
 // configurationRetryLimit gives an administrator a weekend to fix the provider; past it a person signs in once.
 const configurationRetryLimit = 72 * time.Hour
 
@@ -665,7 +673,7 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		// erases the credential instead.
 		invalidIdentity := errors.As(refreshErr, &failure) && failure.Kind == RefreshInvalidIdentity
 		if result != nil && result.Credentials != nil && !invalidIdentity {
-			refreshErr = &RefreshError{Kind: RefreshAmbiguous}
+			refreshErr = &RefreshError{Kind: RefreshAmbiguous, SigningFailure: false, RetryAfter: 0}
 			c.assertion = ""
 			c.assertionExpiry = time.Time{}
 			if rotation := result.Credentials.RefreshToken(); rotation != "" {
@@ -686,7 +694,7 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	}
 	if result == nil || result.Credentials == nil {
 		renewalDecided = true
-		return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, &RefreshError{Kind: RefreshAmbiguous})
+		return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, &RefreshError{Kind: RefreshAmbiguous, SigningFailure: false, RetryAfter: 0})
 	}
 	next := c
 	next.observedAt = s.now()
@@ -718,7 +726,7 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		defer identity.DiscardCredentials()
 		if identity.SubjectID() != subject || identity.IssuerURL() != p.IssuerURL() {
 			renewalDecided = true
-			return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, &RefreshError{Kind: RefreshInvalidIdentity})
+			return Assertion{}, s.recordRefreshFailure(persistCtx, b, c, claim, &RefreshError{Kind: RefreshInvalidIdentity, SigningFailure: false, RetryAfter: 0})
 		}
 		if identity.Expiration().After(s.now()) {
 			next.assertion, err = s.encrypt(result.Credentials.IDToken())
@@ -851,7 +859,7 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 	}()
 	var failure *RefreshError
 	if !errors.As(cause, &failure) {
-		failure = &RefreshError{Kind: RefreshAmbiguous}
+		failure = &RefreshError{Kind: RefreshAmbiguous, SigningFailure: false, RetryAfter: 0}
 	}
 	next := c
 	next.observedAt = s.now()
@@ -894,7 +902,7 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 		next.status = "configuration_failure"
 		outcome = ErrReauthentication
 	case RefreshRetryable, RefreshSetupRetryable:
-		next.retryAfter = s.now().Add(time.Minute)
+		next.retryAfter = s.now().Add(retryableDelay(failure.RetryAfter))
 		if retained {
 			if !c.observedAt.IsZero() || kind == RefreshSetupRetryable {
 				next.observedAt = c.observedAt
@@ -924,7 +932,11 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 		return ErrTemporary
 	}
 	decided = true
-	s.recordRenewal(ctx, b, renewalHappened(kind))
+	code := renewalHappened(kind)
+	if failure.SigningFailure {
+		code = mcpconnectionattempts.CodeInternalError
+	}
+	s.recordRenewal(ctx, b, code)
 	return outcome
 }
 
