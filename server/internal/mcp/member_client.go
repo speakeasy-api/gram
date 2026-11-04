@@ -458,8 +458,10 @@ func memberClientFailure(ctx context.Context, logger *slog.Logger, rt memberOutc
 		// The SDK could not send the call, so the member never saw it.
 		code, _ := remotemcp.UpstreamFailureHappened(0, dial.upstreamCredential(), dial.tunneled, "")
 		return memberConnectionError{upstreamFailure(message, false), code}
+	// An HTTP-successful JSON-RPC error is a tool result, not evidence of a
+	// failed connection. Local proxy refusals already recorded their own row.
 	case isRPC:
-		return memberConnectionError{upstreamFailure(message, false), mcpconnectionattempts.CodeProviderRejected}
+		return upstreamFailure(message, false)
 	case status != 0:
 		return upstreamFailure(message, false)
 	}

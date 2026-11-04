@@ -48,7 +48,7 @@ func (s *Service) gatewayReportedClient(ctx context.Context, gate *metaGateConte
 
 // recordGateRejection attributes invalid bearers only when their signature proves a subject.
 func (s *Service) recordGateRejection(ctx context.Context, r *http.Request, endpoint *ResolvedMcpEndpoint, token, reason string, valErr error) {
-	if valErr == nil || errors.Is(ctx.Err(), context.Canceled) {
+	if valErr == nil || errors.Is(valErr, jwt.ErrTokenExpired) || errors.Is(ctx.Err(), context.Canceled) {
 		return
 	}
 	code := gateHappened(valErr)

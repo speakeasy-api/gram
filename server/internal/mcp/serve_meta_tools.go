@@ -241,7 +241,8 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 			}
 		}
 		if !found {
-			s.connections.Once(ctx, gate.connectionScope(ctx), mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeToolNotApproved, gate.connectionSubject(ctx), mcpconnectionattempts.FromRequest(gate.request), s.gatewayReportedClient(ctx, gate))
+			// Absence from this cached view does not prove consent excluded a real
+			// tool: misspelled, removed, or unknown member tools are absent too.
 			return marshalMetaToolError(ctx, logger, req.ID, remotemcp.ToolNotApprovedMessage)
 		}
 	}
@@ -273,12 +274,15 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 	// Pre-dispatch security check so an unsatisfied member surfaces as a
 	// member-scoped result (as in serveToolsetResolved). Members keep their
 	// toolset's hosting publicness.
-	satisfied, err := s.checkToolsetSecurity(ctx, toolset, hosting.Public, inputs)
+	satisfied, failureCode, err := s.checkToolsetSecurityOutcome(ctx, toolset, hosting.Public, inputs)
 	if err != nil {
 		return nil, err
 	}
 	if !satisfied {
-		s.recordMemberFailure(ctx, gate, member, gate.memberNoCredentialHappened(member))
+		if failureCode == mcpconnectionattempts.CodeInvalidRemoteSession {
+			failureCode = gate.memberNoCredentialHappened(member)
+		}
+		s.recordMemberFailure(ctx, gate, member, failureCode)
 		return marshalMetaToolError(ctx, logger, req.ID,
 			fmt.Sprintf("server %q requires authentication that this meta MCP session does not satisfy", member.slug))
 	}

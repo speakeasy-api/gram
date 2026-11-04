@@ -214,9 +214,8 @@ func TestMemberClientFailure_SDKRejection(t *testing.T) {
 
 	err := memberClientFailure(t.Context(), testenv.NewLogger(t), stubMemberOutcome{code: http.StatusOK}, memberDial{}, metaMember{slug: "fixture"}, member)
 	require.EqualError(t, err, `server "fixture" rejected the call: database is down`)
-	failure, recorded := errors.AsType[memberConnectionError](err)
-	require.True(t, recorded, "a member refusal at HTTP 200 still records the rejected call")
-	require.Equal(t, mcpconnectionattempts.CodeProviderRejected, failure.code)
+	_, recorded := errors.AsType[memberConnectionError](err)
+	require.False(t, recorded, "HTTP-successful tool errors do not describe connection health")
 }
 
 func TestMemberClientFailure_CarriesWhatHappened(t *testing.T) {
