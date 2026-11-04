@@ -35,7 +35,11 @@ func TestFederatedOnwardPreservesResponse(t *testing.T) {
 			tracker.Attach(openState().connectionAttempt(endpoint))
 			tracker.Consumed()
 			got := federatedOnward(t.Context(), tracker, tt.err)
-			require.True(t, got == tt.err, "the exact original error must reach the existing response handler") //nolint:errorlint // Error identity, not wrapped equivalence, preserves response handling.
+			if tt.err == nil {
+				require.NoError(t, got)
+			} else {
+				require.Same(t, tt.err, got, "the original error must reach the existing response handler")
+			}
 			tracker.Finish(t.Context())
 			if tt.err == nil {
 				rec.RequireNothing()

@@ -115,6 +115,8 @@ func TestFirstPartyConnected(t *testing.T) {
 
 	require.True(t, firstPartyConnected(nil, nil), "nothing to connect")
 	require.True(t, firstPartyConnected(nil, []remoteSessionCard{done}))
+	require.False(t, firstPartyConnected(nil, []remoteSessionCard{{Connected: true, Unavailable: true}}), "an outage must not complete the sign-in")
+	require.False(t, firstPartyConnected(nil, []remoteSessionCard{{Connected: true, ValidationNotice: "provider unavailable"}}), "an unresolved validation notice keeps the flow open")
 	require.True(t, firstPartyConnected(nil, []remoteSessionCard{{Chained: true, ChainCheck: chainCheckConnected}}), "a chained service connects with no sign-in")
 	require.False(t, firstPartyConnected(nil, []remoteSessionCard{{Chained: true, ChainCheck: chainCheckPending}}))
 	require.False(t, firstPartyConnected(nil, []remoteSessionCard{done, open}))

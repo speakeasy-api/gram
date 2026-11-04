@@ -28,6 +28,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts/mcpconnectionattemptstest"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -254,10 +255,22 @@ func TestConnectionOutcome_AgentAdmissionAtToken(t *testing.T) {
 
 			tc.breakIt(t, ctx, ti, fx, principal)
 
-			w := postForm(t, ti, fx.toolset.McpSlug.String, "token", codeGrantForm(fx.client, loc.Query().Get("code"), verifier))
-			require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-			require.Contains(t, w.Body.String(), "agent authorization is no longer valid")
-			rec.RequireEnded(mcpconnectionattempts.StepInboundToken, tc.want)
+			form := codeGrantForm(fx.client, loc.Query().Get("code"), verifier)
+			req := httptest.NewRequest(http.MethodPost, "/mcp/"+fx.toolset.McpSlug.String+"/token", strings.NewReader(form.Encode()))
+			req.Header.Set("Content-Type", "application/x-www-form-urlencoded")
+			req = req.WithContext(routedTo(ctx, fx.toolset.McpSlug.String))
+			w := httptest.NewRecorder()
+			oops.OAuthErrHandle(ti.logger, ti.service.HandleToken).ServeHTTP(w, req)
+			if name == "database outage" {
+				require.Equal(t, http.StatusInternalServerError, w.Code, w.Body.String())
+				// Main preserves the usable code across a dependency outage.
+				rec.RequireStep(mcpconnectionattempts.StepInboundToken, tc.want)
+				rec.RequireNotEnded()
+			} else {
+				require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
+				require.Contains(t, w.Body.String(), "agent authorization is no longer valid")
+				rec.RequireEnded(mcpconnectionattempts.StepInboundToken, tc.want)
+			}
 		})
 	}
 }

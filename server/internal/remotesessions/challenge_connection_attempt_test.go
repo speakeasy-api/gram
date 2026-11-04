@@ -450,4 +450,40 @@ func TestCompleteRemoteLogin_LocalSetupAndProviderRefusals(t *testing.T) {
 		require.Error(t, callback(ctx, fx, "code=c&state="+url.QueryEscape(login)))
 		rowFor(t, rec, mcpconnectionattempts.CodeSignInProviderError)
 	})
+
+	for _, tc := range []struct {
+		name   string
+		status int
+		body   string
+		code   mcpconnectionattempts.Code
+		outage bool
+	}{
+		{"denied-under-503", http.StatusServiceUnavailable, `{"error":"access_denied"}`, mcpconnectionattempts.CodeProviderDenied, false},
+		{"invalid-request-under-503", http.StatusServiceUnavailable, `{"error":"invalid_request"}`, mcpconnectionattempts.CodeSignInProviderError, false},
+		{"invalid-client-under-429", http.StatusTooManyRequests, `{"error":"invalid_client"}`, mcpconnectionattempts.CodeProviderOAuthInvalidClient, false},
+		{"server-error-under-400", http.StatusBadRequest, `{"error":"server_error"}`, mcpconnectionattempts.CodeProviderServerError, true},
+		{"unavailable-under-429", http.StatusTooManyRequests, `{"error":"temporarily_unavailable"}`, mcpconnectionattempts.CodeProviderUnavailable, true},
+		{"unnamed-429", http.StatusTooManyRequests, `{}`, mcpconnectionattempts.CodeProviderRateLimited, true},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			refuses := httptest.NewServer(http.HandlerFunc(func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set("Content-Type", "application/json")
+				w.WriteHeader(tc.status)
+				_, _ = w.Write([]byte(tc.body))
+			}))
+			t.Cleanup(refuses.Close)
+			ctx, fx, rec, login := begin(t, "attempt-"+tc.name, func(_ context.Context, fx resourceDanceFixture) {
+				fx.clients[0].TokenEndpoint = refuses.URL + "/token"
+			})
+			err := callback(ctx, fx, "code=c&state="+url.QueryEscape(login))
+			require.Error(t, err)
+			if tc.outage {
+				require.ErrorIs(t, err, remotesessions.ErrProviderOutageExternal)
+			} else {
+				require.NotErrorIs(t, err, remotesessions.ErrProviderOutageExternal)
+			}
+			rowFor(t, rec, tc.code)
+		})
+	}
 }

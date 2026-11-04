@@ -49,6 +49,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
@@ -1109,6 +1110,23 @@ type RemoteSessionState struct {
 	ValidationReason string
 }
 
+// ConnectionOutage reads the outage on record for subject's grant on clientID, and
+// the tunnel its provider sits behind. It calls nothing upstream, for pages to render from.
+func (m *ChallengeManager) ConnectionOutage(ctx context.Context, subject urn.SessionSubject, clientID uuid.UUID) (RefreshOutageKind, uuid.NullUUID, bool) {
+	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	queries := remotesessions_repo.New(m.db)
+	sess, err := queries.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID})
+	if err != nil {
+		return RefreshOutageNone, none, false
+	}
+	kind, known := m.refresher.RecordedOutage(ctx, sess)
+	client, err := queries.GetRemoteSessionClientWithIssuerByID(ctx, clientID)
+	if err != nil {
+		return kind, none, false
+	}
+	return kind, client.TunneledMcpServerID, known
+}
+
 // RemoteSessionStatuses returns, per remote_session_client_id, the state of
 // `subject`'s remote_session on every client bound to the requesting
 // `userSessionIssuerID`. Clients with no non-deleted session are omitted
@@ -1602,6 +1620,7 @@ func storeRemoteSessionGrant(ctx context.Context, q *remotesessions_repo.Queries
 func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Request) error {
 	result, err := m.CompleteRemoteLogin(r)
 	if err != nil {
+		TagExternalOutage(w, err)
 		return err
 	}
 	http.Redirect(w, r, result.RedirectURL, http.StatusSeeOther)
@@ -1715,6 +1734,10 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		}
 		t.Refuse(ctx, providerErrorHappened(errCode), mcpconnectionattempts.Detail(oautherr.RegisteredCodeLabel(errCode)))
 		m.recordCIMDAuthorizationFailure(ctx, state, errCode, q.Get("error_description"))
+		// RFC 6749 §4.1.2.1: the provider's own codes for an outage at authorize.
+		if errCode == oautherr.CodeTemporarilyUnavailable || errCode == oautherr.CodeServerError {
+			return none, providerOutageError(oops.E(oops.CodeUnavailable, nil, "The sign-in provider returned an error: %s", errCode).LogWarn(ctx, logger, attr.SlogOAuthError(errCode)), m.providerLabel(ctx, state))
+		}
 		return none, denied(ctx, logger, q)
 	}
 
@@ -1834,7 +1857,11 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		t.At(mcpconnectionattempts.StepProviderToken)
 		t.Refuse(ctx, exchangeHappened(err, clientRow.TunneledMcpServerID.Valid))
 		m.noteExchangeTokenEndpointMissing(ctx, logger, client.ID, err)
-		return none, exchangeFailure(ctx, logger, err, clientRow.TunneledMcpServerID.Valid)
+		failure := exchangeFailure(ctx, logger, err, clientRow.TunneledMcpServerID.Valid)
+		if !exchangeFailureIsProviderOutage(failure, err) {
+			return none, failure
+		}
+		return none, providerOutageError(failure, m.providerLabel(ctx, state))
 	}
 	// The pair is live upstream from this line on, and every path out of here
 	// that does not store it strands it: unreachable through Speakeasy, and outside
@@ -2162,6 +2189,9 @@ func providerErrorHappened(code string) mcpconnectionattempts.Code {
 
 // exchangeHappened maps a failed code exchange, by the same reading exchangeFailure makes.
 func exchangeHappened(err error, tunneled bool) mcpconnectionattempts.Code {
+	if errors.Is(err, tunnelrouting.ErrRouteStoreUnavailable) {
+		return mcpconnectionattempts.CodeInternalError
+	}
 	if _, ok := errors.AsType[*tokenEndpointSigningError](err); ok {
 		return mcpconnectionattempts.CodeInternalError
 	}
@@ -2183,15 +2213,23 @@ func exchangeHappened(err error, tunneled bool) mcpconnectionattempts.Code {
 		code = tokenEndpointErrorCode(oauthErr.Code)
 	}
 	switch {
-	case endpointErr.statusCode == http.StatusTooManyRequests:
-		return mcpconnectionattempts.CodeProviderRateLimited
+	case code == oautherr.CodeTemporarilyUnavailable:
+		return mcpconnectionattempts.CodeProviderUnavailable
+	case code == oautherr.CodeServerError:
+		return mcpconnectionattempts.CodeProviderServerError
+	case code == oautherr.CodeAccessDenied:
+		return mcpconnectionattempts.CodeProviderDenied
 	case code == oautherr.CodeInvalidClient, code == "" && endpointErr.statusCode == http.StatusUnauthorized:
 		return mcpconnectionattempts.CodeProviderOAuthInvalidClient
 	case code == oautherr.CodeInvalidScope, code == oautherr.CodeUnauthorizedClient:
 		return mcpconnectionattempts.CodeProviderOAuthInvalidScope
 	case code == oautherr.CodeInvalidGrant:
 		return mcpconnectionattempts.CodeProviderOAuthInvalidGrant
-	case code == oautherr.CodeTemporarilyUnavailable, endpointErr.statusCode == http.StatusServiceUnavailable:
+	case exchangeRefusalCodes[code]:
+		return mcpconnectionattempts.CodeSignInProviderError
+	case endpointErr.statusCode == http.StatusTooManyRequests:
+		return mcpconnectionattempts.CodeProviderRateLimited
+	case endpointErr.statusCode == http.StatusServiceUnavailable:
 		return mcpconnectionattempts.CodeProviderUnavailable
 	case endpointErr.statusCode/100 == 4:
 		return mcpconnectionattempts.CodeSignInProviderError
@@ -2211,6 +2249,46 @@ func denied(ctx context.Context, logger *slog.Logger, q url.Values) error {
 		attr.SlogOAuthError(truncateForMessage(errCode)),
 		attr.SlogOAuthErrorDescription(truncateForMessage(q.Get("error_description"))),
 	)
+}
+
+// ErrProviderOutageExternal marks a provider-caused 5xx at sign-in that shouldn't alert on-call.
+var ErrProviderOutageExternal = errors.New("sign-in provider outage")
+
+// TagExternalOutage marks the response to err as caused outside Speakeasy.
+func TagExternalOutage(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrProviderOutageExternal) {
+		w.Header().Set(constants.HeaderProxiedResponse, "1")
+	}
+}
+
+// providerOutageError presents a provider outage as one to try again shortly.
+func providerOutageError(err *oops.ShareableError, provider string) error {
+	presented := oops.WithBrowserProvider(oops.WithBrowserReason(err, oauthui.ReasonProviderUnavailable), provider)
+	return fmt.Errorf("complete remote login: %w: %w", ErrProviderOutageExternal, presented)
+}
+
+// providerLabel is the issuer's host; a tunneled provider's host stays off the page.
+func (m *ChallengeManager) providerLabel(ctx context.Context, state RemoteLoginState) string {
+	row, err := remotesessions_repo.New(m.db).GetRemoteSessionClientWithIssuerByID(ctx, state.RemoteSessionClientID)
+	if err != nil || row.TunneledMcpServerID.Valid {
+		return ""
+	}
+	parsed, err := url.Parse(row.IssuerUrl)
+	if err != nil {
+		return ""
+	}
+	return parsed.Hostname()
+}
+
+// exchangeFailureIsProviderOutage excludes failures Speakeasy's own signing caused.
+func exchangeFailureIsProviderOutage(failure *oops.ShareableError, err error) bool {
+	if errors.Is(err, tunnelrouting.ErrRouteStoreUnavailable) {
+		return false
+	}
+	if _, signing := errors.AsType[*tokenEndpointSigningError](err); signing {
+		return false
+	}
+	return failure.Code == oops.CodeUnavailable || failure.Code == oops.CodeGatewayError
 }
 
 // retryWithoutResource mints one resource-less leg of the same login after
@@ -2395,6 +2473,9 @@ func exchangeFailure(ctx context.Context, logger *slog.Logger, err error, tunnel
 		if errors.Is(err, tunnelrouting.ErrNoTunnelRoute) {
 			reason = "the MCP tunnel is not connected"
 		}
+		if errors.Is(err, tunnelrouting.ErrRouteStoreUnavailable) {
+			reason = "Speakeasy could not read the MCP tunnel's routes"
+		}
 		return oops.E(oops.CodeGatewayError, err, "%s: %s", message, reason).LogError(ctx, logger)
 	}
 	endpointErr, ok := errors.AsType[*tokenEndpointError](err)
@@ -2428,12 +2509,30 @@ func exchangeFailure(ctx context.Context, logger *slog.Logger, err error, tunnel
 	}
 }
 
+// exchangeRefusalCodes judge the request, so they stay a refusal under any status; other codes leave it to the status.
+var exchangeRefusalCodes = map[string]bool{
+	oautherr.CodeAccessDenied:         true,
+	oautherr.CodeInvalidClient:        true,
+	oautherr.CodeInvalidGrant:         true,
+	oautherr.CodeInvalidRequest:       true,
+	oautherr.CodeInvalidScope:         true,
+	oautherr.CodeInvalidTarget:        true,
+	oautherr.CodeUnauthorizedClient:   true,
+	oautherr.CodeUnsupportedGrantType: true,
+}
+
 // exchangeFailureCode answers a provider outage with 503 or 502 rather than blaming the user's credentials with 401.
 func exchangeFailureCode(status int, oauthCode string) oops.Code {
 	switch {
-	case oauthCode == oautherr.CodeTemporarilyUnavailable, status == http.StatusServiceUnavailable:
+	case oauthCode == oautherr.CodeTemporarilyUnavailable:
 		return oops.CodeUnavailable
-	case oauthCode == oautherr.CodeServerError, status >= http.StatusInternalServerError:
+	case oauthCode == oautherr.CodeServerError:
+		return oops.CodeGatewayError
+	case exchangeRefusalCodes[oauthCode]:
+		return oops.CodeUnauthorized
+	case status == http.StatusServiceUnavailable, status == http.StatusTooManyRequests:
+		return oops.CodeUnavailable
+	case status >= http.StatusInternalServerError:
 		return oops.CodeGatewayError
 	default:
 		return oops.CodeUnauthorized
