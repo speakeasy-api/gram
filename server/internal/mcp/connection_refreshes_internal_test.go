@@ -3,10 +3,13 @@ package mcp
 import (
 	"errors"
 	"fmt"
+	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
+	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/identitychaining"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 	"testing"
 )
@@ -38,6 +41,7 @@ func TestInboundRefreshHappened(t *testing.T) {
 
 	for reason, want := range map[string]mcpconnectionattempts.Code{
 		"resource_mismatch":                     mcpconnectionattempts.CodeResourceMismatch,
+		"agent_admission_misconfigured":         mcpconnectionattempts.CodeCredentialMisconfigured,
 		"agent_credential_invalid":              mcpconnectionattempts.CodeRefreshTokenRevoked,
 		"refresh_token_resource_mismatch":       mcpconnectionattempts.CodeResourceMismatch,
 		"refresh_token_unknown_or_already_used": mcpconnectionattempts.CodeRefreshTokenUnknownOrAlreadyUsed,
@@ -75,7 +79,8 @@ func TestAgentRefreshAdmissionReason(t *testing.T) {
 		err    error
 		reason string
 	}{
-		{oops.C(oops.CodeUnauthorized), "agent_credential_invalid"},
+		{oops.C(oops.CodeUnauthorized), "agent_admission_misconfigured"},
+		{oops.E(oops.CodeUnauthorized, errCredentialRejected, "%s", oops.CodeUnauthorized.UserMessage()), "agent_credential_invalid"},
 		{oops.C(oops.CodeForbidden), "agent_admission_denied"},
 		{errors.New("dependency unavailable"), "agent_admission_unavailable"},
 		{oops.C(oops.CodeUnexpected), "agent_admission_unavailable"},
@@ -89,5 +94,37 @@ func TestReplayLookupFailureReason(t *testing.T) {
 	for _, missing := range []string{"refresh_token_revoked", "sign_in_revoked"} {
 		require.Equal(t, missing, replayLookupFailureReason(fmt.Errorf("lookup: %w", pgx.ErrNoRows), missing))
 		require.Equal(t, "refresh_token_replay_lookup_failed", replayLookupFailureReason(errors.New("database unavailable"), missing))
+	}
+}
+
+func TestAgentRefreshCredentialAndEndpointFailures(t *testing.T) {
+	t.Parallel()
+	for _, brokenEndpoint := range []bool{false, true} {
+		t.Run(fmt.Sprint(brokenEndpoint), func(t *testing.T) {
+			t.Parallel()
+			endpoint := new(ResolvedMcpEndpoint)
+			endpoint.OrganizationID = "org-test"
+			endpoint.ProjectID = uuid.New()
+			endpoint.UserSessionIssuerID = uuid.New()
+			endpoint.McpServerID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
+			target, ok := agentAuthorizationTarget(endpoint)
+			require.True(t, ok)
+			credential, err := newAgentSessionCredential(*target, "person")
+			require.NoError(t, err)
+			subject := urn.NewAgentSubject(uuid.New())
+			reason := "agent_credential_invalid"
+			if brokenEndpoint {
+				endpoint.McpServerID.Valid = false
+				reason = "agent_admission_misconfigured"
+			} else {
+				credential.DelegatedGrants = []byte("malformed")
+			}
+			_, err = loadAgentSessionCredential(endpoint, subject, subject, pgtype.Text{String: endpoint.OrganizationID, Valid: true}, pgtype.Text{String: credential.AuthorizerUserID, Valid: true}, credential.DelegatedGrants, pgtype.Int4{Int32: credential.DelegatedGrantsVersion, Valid: true})
+			require.Error(t, err)
+			require.Equal(t, reason, agentAdmissionRejection(err))
+			var public *oops.ShareableError
+			require.ErrorAs(t, err, &public)
+			require.Equal(t, oops.CodeUnauthorized, public.Code, "preserve the authorization response")
+		})
 	}
 }

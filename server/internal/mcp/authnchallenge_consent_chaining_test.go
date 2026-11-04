@@ -8,6 +8,7 @@ import (
 	"strings"
 	"sync"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
@@ -23,7 +24,7 @@ const (
 
 // consentGovernor answers Serves with issuer for every upstream in served,
 // Governs with governs, HasUsableCredential with usable, and Acquire with
-// acquire; a nil acquire fails the test because rendering never acquires.
+// acquire; a nil acquire fails the test on an unexpected exchange.
 type consentGovernor struct {
 	t          *testing.T
 	issuer     uuid.UUID
@@ -33,9 +34,11 @@ type consentGovernor struct {
 	usable     bool
 	refresh    identitychaining.RefreshDecision
 	acquire    func(context.Context, identitychaining.Request) identitychaining.Outcome
+	token      string
 	mu         sync.Mutex
 	requests   []identitychaining.Request
 	acquired   []identitychaining.Request
+	signInIDs  []uuid.UUID
 	refreshed  []identitychaining.Request
 }
 
@@ -71,10 +74,10 @@ func (g *consentGovernor) Acquire(ctx context.Context, req identitychaining.Requ
 	acquire := g.acquire
 	g.mu.Unlock()
 	if acquire == nil {
-		g.t.Error("consent rendering must never acquire a chained token")
+		g.t.Error("unexpected chained token acquisition; configure acquire for this test")
 		return identitychaining.Token{}, identitychaining.Outcome{}
 	}
-	return identitychaining.Token{}, acquire(ctx, req)
+	return identitychaining.NewTokenForTest(g.token, time.Now().Add(time.Hour)), acquire(ctx, req)
 }
 
 func (g *consentGovernor) seen() []identitychaining.Request {
@@ -85,7 +88,7 @@ func (g *consentGovernor) seen() []identitychaining.Request {
 
 func setConsentGovernor(t *testing.T, fx consentActionFixture, issuer uuid.UUID, served ...string) *consentGovernor {
 	t.Helper()
-	g := &consentGovernor{t: t, issuer: issuer, served: map[string]bool{}, governs: len(served) > 0, configured: true, usable: false, refresh: identitychaining.RefreshNotChained, acquire: nil, mu: sync.Mutex{}, requests: nil, acquired: nil, refreshed: nil}
+	g := &consentGovernor{t: t, issuer: issuer, served: map[string]bool{}, governs: len(served) > 0, configured: true, usable: false, refresh: identitychaining.RefreshNotChained, acquire: nil, token: "", mu: sync.Mutex{}, requests: nil, acquired: nil, signInIDs: nil, refreshed: nil}
 	for _, u := range served {
 		g.served[u] = true
 	}
@@ -258,6 +261,9 @@ func (g *consentGovernor) RetireConsentCredentials(context.Context, string, uuid
 	return nil
 }
 
-func (g *consentGovernor) AcquireConsent(ctx context.Context, req identitychaining.Request, _ uuid.UUID) (identitychaining.Token, identitychaining.Outcome) {
+func (g *consentGovernor) AcquireConsent(ctx context.Context, req identitychaining.Request, signInID uuid.UUID) (identitychaining.Token, identitychaining.Outcome) {
+	g.mu.Lock()
+	g.signInIDs = append(g.signInIDs, signInID)
+	g.mu.Unlock()
 	return g.Acquire(ctx, req)
 }

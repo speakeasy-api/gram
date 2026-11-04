@@ -14,7 +14,6 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/repo"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 )
 
@@ -48,7 +47,6 @@ type CatalogSource struct {
 	CertificationVersion string
 	Priority             int32
 	SourceKey            string
-	Legacy               bool
 }
 
 // CatalogService is the single organization-selected source boundary for
@@ -60,7 +58,7 @@ type CatalogService struct {
 }
 
 // NewCatalogService admits only the native reader.
-func NewCatalogService(db *pgxpool.Pool, legacy RegistryReader, native RegistryReader, providers ...feature.Provider) *CatalogService {
+func NewCatalogService(db *pgxpool.Pool, native RegistryReader) *CatalogService {
 	adapters := make(map[string]RegistryReader, 1)
 	if native != nil {
 		adapters[registryAdapterKey(registrySourceTypeNative, registryAuthProfileNone)] = native
@@ -85,7 +83,6 @@ func zeroCatalogSource() CatalogSource {
 		CertificationVersion: "",
 		Priority:             0,
 		SourceKey:            "",
-		Legacy:               false,
 	}
 }
 
@@ -219,7 +216,7 @@ func (s *CatalogService) sources(ctx context.Context, registryID *uuid.UUID) ([]
 	return []CatalogSource{source}, nil
 }
 
-// SelectedSource selects only the native catalog, independently of rollout state.
+// SelectedSource selects only the native catalog.
 // Missing or failing native sources never fall back to another catalog.
 func (s *CatalogService) SelectedSource(ctx context.Context, organizationID, organizationSlug string) (CatalogSource, error) {
 	if s == nil || s.repo == nil {
@@ -267,7 +264,7 @@ func (s *CatalogService) SelectSource(ctx context.Context, organizationID, organ
 	return source, nil
 }
 
-// IdentitySource resolves persisted/accepted work independently of rollout state.
+// IdentitySource resolves persisted/accepted work.
 // Unsupported identities are rejected before enabled/certified admission; identities never switch.
 func (s *CatalogService) IdentitySource(ctx context.Context, id uuid.UUID) (CatalogSource, error) {
 	if s == nil || s.repo == nil {
@@ -357,7 +354,6 @@ func catalogSourceFromRow(row repo.ListMCPRegistriesRow) (CatalogSource, bool) {
 		CertificationVersion: row.CertificationVersion.String,
 		Priority:             priority,
 		SourceKey:            row.SourceKey.String,
-		Legacy:               false,
 	}, true
 }
 
@@ -383,9 +379,6 @@ func (s *CatalogService) AdmitNewEntry(ctx context.Context, organizationID, orga
 	source, err := s.SelectSource(ctx, organizationID, organizationSlug, id)
 	if err != nil {
 		return err
-	}
-	if source.SourceType != registrySourceTypeNative {
-		return nil
 	}
 	reader, err := s.ReaderFor(source)
 	if err != nil {

@@ -3,7 +3,6 @@ package remotesessions
 import (
 	"errors"
 	"fmt"
-	"net/http"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/oautherr"
@@ -93,13 +92,18 @@ func newTokenRefreshError(reason string, cause error, remedy refreshRemedy) *Tok
 // renew, as opposed to a transient failure such as server_error or
 // temporarily_unavailable.
 func (e *TokenRefreshError) invalidGrant() bool {
-	return e.code == oautherr.CodeInvalidGrant
+	return e.failure().Code == oautherr.RefreshCodeInvalidGrant
+}
+
+// failure classifies the upstream's answer; its Status means nothing when statusCode is 0.
+func (e *TokenRefreshError) failure() oautherr.RefreshFailure {
+	return oautherr.ClassifyRefreshFailure(e.statusCode, e.code)
 }
 
 // invalidTarget reports whether the upstream answered with RFC 8707
 // invalid_target: the resource parameter, not the grant, was refused.
 func (e *TokenRefreshError) invalidTarget() bool {
-	return e.code == oautherr.CodeInvalidTarget
+	return e.failure().Code == oautherr.RefreshCodeInvalidTarget
 }
 
 // invalidClient reports whether the upstream answered with RFC 6749 §5.2
@@ -107,7 +111,7 @@ func (e *TokenRefreshError) invalidTarget() bool {
 // credentials. No grant issued to that client can be redeemed, and the client
 // registration itself is what needs replacing.
 func (e *TokenRefreshError) invalidClient() bool {
-	return e.code == oautherr.CodeInvalidClient
+	return e.failure().Code == oautherr.RefreshCodeInvalidClient
 }
 
 // IsTokenRefreshRateLimited reports whether an upstream token endpoint
@@ -115,7 +119,7 @@ func (e *TokenRefreshError) invalidClient() bool {
 // provider for the remainder of a best-effort refresh sweep.
 func IsTokenRefreshRateLimited(err error) bool {
 	var refreshErr *TokenRefreshError
-	return errors.As(err, &refreshErr) && refreshErr.statusCode == http.StatusTooManyRequests
+	return errors.As(err, &refreshErr) && refreshErr.failure().Status == oautherr.RefreshStatusRateLimited
 }
 
 // newTokenRefreshErrorFromSuccessBody builds a TokenRefreshError for a 2xx

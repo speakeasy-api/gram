@@ -239,13 +239,6 @@ func TestReportedClient_LateRowIsNamed(t *testing.T) {
 	require.Equal(t, "1.2", rows[0].ClientVersion)
 }
 
-func BenchmarkReportedClientOption(b *testing.B) {
-	read := func() (string, string) { return "cursor", "" }
-	for b.Loop() {
-		_ = ReportedClient(read)
-	}
-}
-
 func TestFromRequest_SetsTheClient(t *testing.T) {
 	t.Parallel()
 
