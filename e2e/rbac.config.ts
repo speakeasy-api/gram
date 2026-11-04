@@ -37,7 +37,9 @@ export default defineConfig({
   use: {
     baseURL: siteURL,
     ignoreHTTPSErrors: true,
-    trace: "retain-on-failure",
+    // Traces record authenticated traffic, so CI, whose report is a public
+    // artifact, keeps none.
+    trace: process.env["CI"] ? "off" : "retain-on-failure",
     screenshot: "only-on-failure",
     // For machines whose preinstalled Chromium is not the build the pinned
     // runner expects; CI installs the matching build instead.
