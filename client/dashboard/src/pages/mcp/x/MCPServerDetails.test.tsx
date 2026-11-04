@@ -105,6 +105,15 @@ vi.mock("@/pages/access/useServerTools", () => ({
     return mocks.toolSource;
   },
 }));
+vi.mock("@/hooks/useScopeCatalogue", () => ({
+  useScopeCatalogue: () => ({
+    catalogue: new Map(),
+    workflows: [],
+    isLoading: false,
+    isError: false,
+    refetch: () => {},
+  }),
+}));
 vi.mock("@/components/insights-context", () => ({
   useHideInsightsDock: vi.fn(),
 }));

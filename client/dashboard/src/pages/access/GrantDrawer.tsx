@@ -64,8 +64,13 @@ export function GrantDrawer({
   const queryClient = useQueryClient();
   const { data: rolesData } = useRoles();
   // Role matching reads inclusions off the catalogue, so until it loads a
-  // mcp:write role would look unable to grant mcp:connect.
-  const { catalogue, isLoading: catalogueLoading } = useScopeCatalogue();
+  // mcp:write role would look unable to grant mcp:connect, and after a
+  // failed fetch it would look the same for good.
+  const {
+    catalogue,
+    isLoading: catalogueLoading,
+    isError: catalogueFailed,
+  } = useScopeCatalogue();
   const allRoles = rolesData?.roles ?? [];
   const canAssignRole = challenge ? canAssignChallengeRole(challenge) : false;
   const challengeIds = challengeIdsProp ?? (challenge ? [challenge.id] : []);
@@ -288,10 +293,14 @@ export function GrantDrawer({
                     Checking roles against the denied access…
                   </Text>
                 </div>
-              ) : challengesFailed || !hasAllChallengeDetails ? (
+              ) : challengesFailed ||
+                catalogueFailed ||
+                !hasAllChallengeDetails ? (
                 <div className="border-border space-y-2 border p-4 text-left">
                   <Text variant="body" className="font-medium">
-                    Challenge details are unavailable
+                    {catalogueFailed
+                      ? "Permission details are unavailable"
+                      : "Challenge details are unavailable"}
                   </Text>
                   <Text
                     variant="body"

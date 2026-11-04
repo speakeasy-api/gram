@@ -50,8 +50,10 @@ describe("workflowsNeeding", () => {
   });
 
   it("matches by name alone while the catalogue is empty", () => {
+    const empty = scopeCatalogue(undefined);
     expect(
-      workflowsNeeding(scopeCatalogue(undefined), workflows, "mcp:connect"),
-    ).toEqual([]);
+      workflowsNeeding(empty, workflows, "mcp:read").map((w) => w.slug),
+    ).toEqual(["review"]);
+    expect(workflowsNeeding(empty, workflows, "mcp:connect")).toEqual([]);
   });
 });

@@ -48,7 +48,7 @@ describe("denialMessage", () => {
     );
   });
 
-  it("names every resource kind the server checks against", () => {
+  it("names the risk policy and inference kinds", () => {
     expect(
       denialMessage({
         scope: "risk_policy:evaluate",
