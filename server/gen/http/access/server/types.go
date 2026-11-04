@@ -9274,10 +9274,25 @@ type DirectoryReviewItemResponseBody struct {
 type ScopeDefinitionResponseBody struct {
 	// Unique scope identifier.
 	Slug string `form:"slug" json:"slug" xml:"slug"`
-	// What this scope protects.
+	// Short name for the permission as people see it, e.g. "View tool logs".
+	Label string `form:"label" json:"label" xml:"label"`
+	// What a holder of this scope can do and, where it matters, what the scope
+	// does not include.
 	Description string `form:"description" json:"description" xml:"description"`
 	// The type of resource this scope applies to.
 	ResourceType string `form:"resource_type" json:"resource_type" xml:"resource_type"`
+	// How the dashboard groups the permission. Differs from resource_type where
+	// one resource type carries several permission families: plugins and tool logs
+	// are checked against a project but are not project permissions.
+	Category string `form:"category" json:"category" xml:"category"`
+	// Whether granting this scope exposes other members' private activity or
+	// allows destructive administration. Clients warn before granting it.
+	Sensitive bool `form:"sensitive" json:"sensitive" xml:"sensitive"`
+	// Why the scope is sensitive. Absent when sensitive is false.
+	Sensitivity *string `form:"sensitivity,omitempty" json:"sensitivity,omitempty" xml:"sensitivity,omitempty"`
+	// User-visible scopes a grant of this scope also satisfies, one step down:
+	// org:admin also satisfies org:read. Empty when the scope implies nothing else.
+	SubScopes []string `form:"sub_scopes" json:"sub_scopes" xml:"sub_scopes"`
 	// Whether this scope is a first-class permission or an internal
 	// storage/evaluation scope.
 	Visibility string `form:"visibility" json:"visibility" xml:"visibility"`
