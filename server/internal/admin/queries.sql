@@ -1233,17 +1233,26 @@ ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING;
 -- created_before, when set, limits the copy to grants written before it, so a
 -- rerun after the implication is removed leaves view-only grants alone.
 -- Writes nothing that is already in place, so it is safe to run again.
-WITH sources AS (
-  SELECT
-    g.organization_id,
-    g.principal_urn,
-    g.selectors,
-    CASE WHEN bool_or(g.expires_at IS NULL) THEN NULL ELSE max(g.expires_at) END AS expires_at
+--
+-- The source rows are locked FOR SHARE, so a revocation racing the backfill
+-- either commits first, and its grant is skipped, or waits until the backfill
+-- commits, as if it had run after it. A revoked grant is never copied.
+WITH locked AS (
+  SELECT g.organization_id, g.principal_urn, g.selectors, g.expires_at
   FROM principal_grants AS g
   WHERE g.scope IN ('mcp:read', 'mcp:write')
     AND (g.expires_at IS NULL OR g.expires_at > clock_timestamp())
     AND (sqlc.narg('created_before')::timestamptz IS NULL OR g.created_at < sqlc.narg('created_before')::timestamptz)
-  GROUP BY g.organization_id, g.principal_urn, g.selectors
+  FOR SHARE
+),
+sources AS (
+  SELECT
+    l.organization_id,
+    l.principal_urn,
+    l.selectors,
+    CASE WHEN bool_or(l.expires_at IS NULL) THEN NULL ELSE max(l.expires_at) END AS expires_at
+  FROM locked AS l
+  GROUP BY l.organization_id, l.principal_urn, l.selectors
 ),
 written AS (
   INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors, expires_at)
