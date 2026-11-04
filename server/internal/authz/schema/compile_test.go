@@ -37,7 +37,7 @@ func projectType() s.TypeDecl {
 		s.Block("plugin:blocked_write", s.BlockSpec{}),
 		s.Permission("read", s.Rel("project:read"), s.AnswersScope("project:read")),
 		s.Permission("publish_plugin", s.Rel("plugin:write"), s.AnswersScope("plugin:write"), s.ExcludedBy("plugin:blocked_write")),
-		s.Alternatives("plugin_publication", s.AlternativesSpec{Options: []s.PermissionRef{{Type: "project", Permission: "publish_plugin"}, {Type: "organization", Permission: "administer"}}, Blocks: s.AnyBlockVetoes}),
+		s.Permission("plugin_publication", s.AnyOf(s.Perm("publish_plugin"), s.Via("organization", "administer")), s.AnyBlockVetoes()),
 	)
 }
 
@@ -240,7 +240,7 @@ func TestCompile_AlternativesAndRuntime(t *testing.T) {
 
 	alts, ok := reg.Alternatives(s.PermissionRef{Type: "project", Permission: "plugin_publication"})
 	require.True(t, ok)
-	require.Equal(t, s.AnyBlockVetoes, alts.Blocks)
+	require.True(t, alts.AnyBlockVetoes)
 	require.Equal(t, []s.PermissionRef{
 		{Type: "project", Permission: "publish_plugin"},
 		{Type: "organization", Permission: "administer"},
@@ -537,29 +537,59 @@ func TestCompile_RejectsInvalidDeclarations(t *testing.T) {
 			want:  `AnswersScope names "other:read", which is not a grant of this type`,
 		},
 		{
-			name:  "single alternative",
-			types: []s.TypeDecl{simple("thing", s.Alternatives("only", s.AlternativesSpec{Options: []s.PermissionRef{{Type: "thing", Permission: "read"}}, Blocks: s.BlocksApplyPerOption}))},
-			want:  `alternatives "only": needs at least two alternatives`,
+			name:  "single AnyOf branch",
+			types: []s.TypeDecl{simple("thing", s.Permission("only", s.AnyOf(s.Perm("read"))))},
+			want:  `permission "only": AnyOf needs at least two branches`,
 		},
 		{
-			name:  "unknown alternative",
-			types: []s.TypeDecl{simple("thing", s.Alternatives("pair", s.AlternativesSpec{Options: []s.PermissionRef{{Type: "thing", Permission: "read"}, {Type: "thing", Permission: "write"}}, Blocks: s.BlocksApplyPerOption}))},
+			name:  "unknown AnyOf branch",
+			types: []s.TypeDecl{simple("thing", s.Permission("pair", s.AnyOf(s.Perm("read"), s.Perm("write"))))},
 			want:  `type "thing" declares no permission "write"`,
 		},
 		{
-			name:  "repeated alternative",
-			types: []s.TypeDecl{simple("thing", s.Permission("again", s.Rel("thing:read")), s.Alternatives("pair", s.AlternativesSpec{Options: []s.PermissionRef{{Type: "thing", Permission: "read"}, {Type: "thing", Permission: "read"}}, Blocks: s.BlocksApplyPerOption}))},
-			want:  `alternative thing.read listed twice`,
+			name:  "repeated AnyOf branch",
+			types: []s.TypeDecl{simple("thing", s.Permission("pair", s.AnyOf(s.Perm("read"), s.Perm("read"))))},
+			want:  `AnyOf lists Perm("read") twice`,
 		},
 		{
 			name:  "veto without blocks",
-			types: []s.TypeDecl{simple("thing", s.Permission("again", s.Rel("thing:read")), s.Alternatives("pair", s.AlternativesSpec{Options: []s.PermissionRef{{Type: "thing", Permission: "read"}, {Type: "thing", Permission: "again"}}, Blocks: s.AnyBlockVetoes}))},
-			want:  `AnyBlockVetoes needs an option with ExcludedBy`,
+			types: []s.TypeDecl{simple("thing", s.Permission("again", s.Rel("thing:read")), s.Permission("pair", s.AnyOf(s.Perm("read"), s.Perm("again")), s.AnyBlockVetoes()))},
+			want:  `AnyBlockVetoes needs a branch with ExcludedBy`,
 		},
 		{
-			name:  "alternatives without a block rule",
-			types: []s.TypeDecl{simple("thing", s.Permission("again", s.Rel("thing:read")), s.Alternatives("pair", s.AlternativesSpec{Options: []s.PermissionRef{{Type: "thing", Permission: "read"}, {Type: "thing", Permission: "again"}}}))},
-			want:  `alternatives "pair": Blocks must be set to AnyBlockVetoes or BlocksApplyPerOption`,
+			name:  "AnyBlockVetoes on an ordinary permission",
+			types: []s.TypeDecl{simple("thing", s.Permission("again", s.Rel("thing:read"), s.AnyBlockVetoes()))},
+			want:  `permission "again": AnyBlockVetoes applies only to an AnyOf permission`,
+		},
+		{
+			name:  "AnyOf inside another expression",
+			types: []s.TypeDecl{simple("thing", s.Permission("again", s.Rel("thing:read")), s.Permission("nested", s.Union(s.Rel("thing:read"), s.AnyOf(s.Perm("read"), s.Perm("again")))))},
+			want:  `permission "nested": AnyOf must be the permission's whole expression`,
+		},
+		{
+			name:  "AnyOf branch that matches grants directly",
+			types: []s.TypeDecl{simple("thing", s.Permission("again", s.Rel("thing:read")), s.Permission("pair", s.AnyOf(s.Perm("read"), s.Rel("thing:read"))))},
+			want:  `an AnyOf branch must be Perm or Via, not rel`,
+		},
+		{
+			name:  "AnyOf with its own block",
+			types: []s.TypeDecl{simple("thing", s.Block("thing:blocked_a", s.BlockSpec{}), s.Permission("again", s.Rel("thing:read")), s.Permission("pair", s.AnyOf(s.Perm("read"), s.Perm("again")), s.ExcludedBy("thing:blocked_a")))},
+			want:  `permission "pair": ExcludedBy does not apply to AnyOf; put it on the branch's own permission`,
+		},
+		{
+			name:  "AnyOf Via that is both the parent and an Attr",
+			types: []s.TypeDecl{simple("other"), simple("thing", s.Parent("other"), s.Attr("other", "other"), s.Permission("pair", s.AnyOf(s.Perm("read"), s.Via("other", "read"))))},
+			want:  `Via names "other", which is both the parent type and an Attr; rename the Attr`,
+		},
+		{
+			name:  "AnyOf with a description",
+			types: []s.TypeDecl{simple("thing", s.Permission("again", s.Rel("thing:read")), s.Permission("pair", s.AnyOf(s.Perm("read"), s.Perm("again")), s.Describe("Either")))},
+			want:  `permission "pair": Describe does not apply to AnyOf`,
+		},
+		{
+			name:  "AnyOf Via to an unrelated type",
+			types: []s.TypeDecl{simple("other"), simple("thing", s.Permission("pair", s.AnyOf(s.Perm("read"), s.Via("other", "read"))))},
+			want:  `Via names "other", which is neither the parent type nor an Attr`,
 		},
 		{
 			name:  "ExcludedBy given twice",

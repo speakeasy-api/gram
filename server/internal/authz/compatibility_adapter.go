@@ -57,7 +57,7 @@ func (c *Client) legacyFormFor(op Operation) (legacyForm, bool) {
 	if !ok {
 		return legacyForm{checks: nil, anyUnblocked: false, alternatives: false}, false
 	}
-	form := legacyForm{checks: make([]Check, 0, len(op.options)), anyUnblocked: set.Blocks == schema.AnyBlockVetoes, alternatives: true}
+	form := legacyForm{checks: make([]Check, 0, len(op.options)), anyUnblocked: set.AnyBlockVetoes, alternatives: true}
 	for _, option := range op.options {
 		check, ok := c.legacyCheck(option)
 		if !ok {

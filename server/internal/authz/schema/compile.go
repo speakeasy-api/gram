@@ -245,7 +245,7 @@ func (c *compiler) validateType(t *TypeDecl) {
 	c.validateFacts(t, m)
 	c.validateRelations(t)
 	c.validatePermissions(t, m)
-	c.validateAlternatives(t)
+	c.validateAlternatives(t, m)
 }
 
 func (c *compiler) validateParent(t *TypeDecl) {
@@ -533,6 +533,9 @@ func (c *compiler) validatePermissions(t *TypeDecl, m members) {
 		if len(p.alsoGrantedBy) > 0 {
 			c.problemf("%s: AlsoGrantedBy applies only to ScopePermission; write the Union in the expression", where)
 		}
+		if p.anyBlockVetoes {
+			c.problemf("%s: AnyBlockVetoes applies only to an AnyOf permission", where)
+		}
 		for _, name := range p.direct {
 			r, ok := m.relations[name]
 			switch {
@@ -636,6 +639,8 @@ func (c *compiler) validateExpr(t *TypeDecl, m members, where string, e Expr) {
 		if _, ok := m.perms[e.name]; !ok {
 			c.problemf("%s: Perm names unknown permission %q", where, e.name)
 		}
+	case OpAnyOf:
+		c.problemf("%s: AnyOf must be the permission's whole expression", where)
 	case OpWhen:
 		if _, ok := m.guards[e.guard]; !ok {
 			c.problemf("%s: When names unknown guard %q", where, e.guard)
@@ -701,19 +706,24 @@ func satisfyingRelations(m members, e Expr, visiting []string) []string {
 	}
 }
 
-func (c *compiler) validateAlternatives(t *TypeDecl) {
+func (c *compiler) validateAlternatives(t *TypeDecl, m members) {
 	for _, a := range t.alternatives {
-		where := fmt.Sprintf("type %q: alternatives %q", t.name, a.name)
-		if len(a.options) < 2 {
-			c.problemf("%s: needs at least two alternatives", where)
+		where := fmt.Sprintf("type %q: permission %q", t.name, a.name)
+		for _, option := range a.misused {
+			c.problemf("%s: %s does not apply to AnyOf; put it on the branch's own permission", where, option)
+		}
+		if len(a.branches) < 2 {
+			c.problemf("%s: AnyOf needs at least two branches", where)
 		}
 		anyBlock := false
-		for _, ref := range a.options {
-			target, ok := c.byName[ref.Type]
+		refs := make([]PermissionRef, 0, len(a.branches))
+		for _, branch := range a.branches {
+			ref, ok := c.anyOfBranch(t, m, where, branch)
 			if !ok {
-				c.problemf("%s: alternative type %q is not declared", where, ref.Type)
 				continue
 			}
+			refs = append(refs, ref)
+			target := c.byName[ref.Type]
 			i := slices.IndexFunc(target.permissions, func(p permissionDecl) bool { return p.name == ref.Permission })
 			if i < 0 {
 				c.problemf("%s: type %q declares no permission %q", where, ref.Type, ref.Permission)
@@ -723,32 +733,70 @@ func (c *compiler) validateAlternatives(t *TypeDecl) {
 				anyBlock = true
 			}
 		}
-		if dup := firstDuplicateRef(a.options); dup != nil && !a.instances {
-			c.problemf("%s: alternative %s.%s listed twice", where, dup.Type, dup.Permission)
+		if dup := firstDuplicateBranch(a.branches); dup != "" {
+			c.problemf("%s: AnyOf lists %s twice", where, dup)
 		}
-		switch a.blocks {
-		case AnyBlockVetoes:
-			if !anyBlock {
-				c.problemf("%s: AnyBlockVetoes needs an option with ExcludedBy", where)
-			}
-		case BlocksApplyPerOption:
-		case blockRuleUnset:
-			c.problemf("%s: Blocks must be set to AnyBlockVetoes or BlocksApplyPerOption", where)
-		default:
-			c.problemf("%s: Blocks has unknown rule %s", where, a.blocks)
+		if a.anyBlockVetoes && !anyBlock && len(refs) == len(a.branches) {
+			c.problemf("%s: AnyBlockVetoes needs a branch with ExcludedBy", where)
 		}
 	}
 }
 
-func firstDuplicateRef(refs []PermissionRef) *PermissionRef {
-	seen := make(map[PermissionRef]bool, len(refs))
-	for _, ref := range refs {
-		if seen[ref] {
-			return &ref
+// anyOfBranch resolves one AnyOf branch to the permission it asks for. Perm
+// names a permission on t; Via names one on t's parent type, or on the type
+// of an Attr of t, which may be t itself asked of another instance.
+func (c *compiler) anyOfBranch(t *TypeDecl, m members, where string, branch Expr) (PermissionRef, bool) {
+	switch branch.op {
+	case OpPerm:
+		return PermissionRef{Type: t.name, Permission: branch.name}, true
+	case OpVia:
+		if _, isAttr := m.attrs[branch.name]; isAttr && branch.name == t.parent {
+			c.problemf("%s: Via names %q, which is both the parent type and an Attr; rename the Attr", where, branch.name)
+			return PermissionRef{Type: "", Permission: ""}, false
 		}
-		seen[ref] = true
+		if a, ok := m.attrs[branch.name]; ok {
+			if _, declared := c.byName[a.factType]; !declared {
+				c.problemf("%s: Via attr %q has type %q, which is not a declared type", where, branch.name, a.factType)
+				return PermissionRef{Type: "", Permission: ""}, false
+			}
+			return PermissionRef{Type: a.factType, Permission: branch.permission}, true
+		}
+		if branch.name != "" && branch.name == t.parent {
+			if _, declared := c.byName[t.parent]; !declared {
+				c.problemf("%s: Via names parent type %q, which is not declared", where, t.parent)
+				return PermissionRef{Type: "", Permission: ""}, false
+			}
+			return PermissionRef{Type: t.parent, Permission: branch.permission}, true
+		}
+		c.problemf("%s: Via names %q, which is neither the parent type nor an Attr", where, branch.name)
+		return PermissionRef{Type: "", Permission: ""}, false
+	default:
+		c.problemf("%s: an AnyOf branch must be Perm or Via, not %s", where, branch.op)
+		return PermissionRef{Type: "", Permission: ""}, false
 	}
-	return nil
+}
+
+// firstDuplicateBranch names the first branch AnyOf lists twice. The same
+// permission reached through different Attrs, or through Perm and an Attr, is
+// asked of different instances and is not a duplicate.
+func firstDuplicateBranch(branches []Expr) string {
+	type branchKey struct {
+		op         Op
+		name       string
+		permission string
+	}
+	seen := make(map[branchKey]bool, len(branches))
+	for _, b := range branches {
+		key := branchKey{op: b.op, name: b.name, permission: b.permission}
+		if seen[key] {
+			if b.op == OpPerm {
+				return fmt.Sprintf("Perm(%q)", b.name)
+			}
+			return fmt.Sprintf("Via(%q, %q)", b.name, b.permission)
+		}
+		seen[key] = true
+	}
+	return ""
 }
 
 // validatePermissionCycles rejects permissions that reach themselves through

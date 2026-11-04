@@ -40,7 +40,6 @@ package schema
 
 import (
 	"slices"
-	"strconv"
 )
 
 // Self names the declared type itself in AnchoredAt.
@@ -115,13 +114,21 @@ type permissionDecl struct {
 	// alsoGrantedBy holds AlsoGrantedBy scopes. ScopePermission folds them
 	// into its expression; on Permission they are a declaration error.
 	alsoGrantedBy []string
+	// anyBlockVetoes holds AnyBlockVetoes, which only an AnyOf permission
+	// may declare.
+	anyBlockVetoes bool
 }
 
+// alternativesDecl is a permission declared with AnyOf. It is kept apart
+// from ordinary permissions because it decides by composing complete
+// permissions, not by matching grants.
 type alternativesDecl struct {
-	name      string
-	options   []PermissionRef
-	blocks    BlockRule
-	instances bool
+	name           string
+	branches       []Expr
+	anyBlockVetoes bool
+	// misused lists the options AnyOf does not accept, for the compiler to
+	// report.
+	misused []string
 }
 
 // PermissionRef names a permission on a declared type.
@@ -354,11 +361,33 @@ func Block[S ScopeName](scope S, spec BlockSpec) TypeOption {
 func Permission(name string, expr Expr, opts ...PermissionOption) TypeOption {
 	opts = slices.Clone(opts)
 	return typeOptionFunc(func(t *TypeDecl) {
-		p := permissionDecl{name: name, expr: expr, direct: nil, excludedBy: nil, answers: "", description: "", alsoGrantedBy: nil}
+		p := permissionDecl{name: name, expr: expr, direct: nil, excludedBy: nil, answers: "", description: "", alsoGrantedBy: nil, anyBlockVetoes: false}
 		for _, opt := range opts {
 			opt.applyPermission(&p)
 		}
-		t.permissions = append(t.permissions, p)
+		if expr.op != OpAnyOf {
+			t.permissions = append(t.permissions, p)
+			return
+		}
+		var misused []string
+		if p.description != "" {
+			misused = append(misused, "Describe")
+		}
+		if len(p.direct) > 0 {
+			misused = append(misused, "ExcludedBy")
+		}
+		if p.answers != "" {
+			misused = append(misused, "AnswersScope")
+		}
+		if len(p.alsoGrantedBy) > 0 {
+			misused = append(misused, "AlsoGrantedBy")
+		}
+		t.alternatives = append(t.alternatives, alternativesDecl{
+			name:           name,
+			branches:       slices.Clone(expr.operands),
+			anyBlockVetoes: p.anyBlockVetoes,
+			misused:        misused,
+		})
 	})
 }
 
@@ -372,7 +401,7 @@ func ScopePermission[S ScopeName](name string, scope S, spec GrantSpec, opts ...
 	opts = slices.Clone(opts)
 	return typeOptionFunc(func(t *TypeDecl) {
 		grant.applyType(t)
-		p := permissionDecl{name: name, expr: Rel(scope), direct: nil, excludedBy: nil, answers: string(scope), description: "", alsoGrantedBy: nil}
+		p := permissionDecl{name: name, expr: Rel(scope), direct: nil, excludedBy: nil, answers: string(scope), description: "", alsoGrantedBy: nil, anyBlockVetoes: false}
 		for _, opt := range opts {
 			opt.applyPermission(&p)
 		}
@@ -397,65 +426,11 @@ func AlsoGrantedBy[S ScopeName](scopes ...S) PermissionOption {
 	return permissionOptionFunc(func(p *permissionDecl) { p.alsoGrantedBy = append(p.alsoGrantedBy, names...) })
 }
 
-// BlockRule says how the blocks of Alternatives' options combine. Every
-// Alternatives must choose one; the zero value is a declaration error.
-type BlockRule int
-
-const (
-	blockRuleUnset BlockRule = iota
-
-	// AnyBlockVetoes rejects the request when any option's ExcludedBy block
-	// matches in any policy, even if another option passes.
-	AnyBlockVetoes
-
-	// BlocksApplyPerOption lets a block stop only its own option, so another
-	// unblocked option can still pass.
-	BlocksApplyPerOption
-)
-
-// String returns the rule's name.
-func (r BlockRule) String() string {
-	switch r {
-	case blockRuleUnset:
-		return "unset"
-	case AnyBlockVetoes:
-		return "AnyBlockVetoes"
-	case BlocksApplyPerOption:
-		return "BlocksApplyPerOption"
-	default:
-		return "BlockRule(" + strconv.Itoa(int(r)) + ")"
-	}
-}
-
-// AlternativesSpec describes named Alternatives.
-type AlternativesSpec struct {
-	// Options lists the complete permission checks, in order.
-	Options []PermissionRef
-
-	// Blocks says how the options' blocks combine. It must be set.
-	Blocks BlockRule
-
-	// AcrossInstances lets Options name the same permission more than once,
-	// because each position is asked of a different resource instance: for
-	// example a grant stored against the whole collection, or one against a
-	// single member. The typed constructor supplies the instance for each
-	// position. Without it a repeated option is a declaration error.
-	AcrossInstances bool
-}
-
-// Alternatives declares a named list of complete permission checks. A caller
-// passes when one option passes in every policy; it is not a Union, so
-// different policies cannot each satisfy a different option.
-func Alternatives(name string, spec AlternativesSpec) TypeOption {
-	options := slices.Clone(spec.Options)
-	return typeOptionFunc(func(t *TypeDecl) {
-		t.alternatives = append(t.alternatives, alternativesDecl{
-			name:      name,
-			options:   options,
-			blocks:    spec.Blocks,
-			instances: spec.AcrossInstances,
-		})
-	})
+// AnyBlockVetoes makes an AnyOf permission refuse the request when the
+// ExcludedBy block of any branch stands in any policy, even if another
+// branch passes. Without it a block stops only its own branch.
+func AnyBlockVetoes() PermissionOption {
+	return permissionOptionFunc(func(p *permissionDecl) { p.anyBlockVetoes = true })
 }
 
 // ExcludedBy applies block precedence to the permission: a matching block

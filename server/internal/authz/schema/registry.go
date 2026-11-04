@@ -190,19 +190,25 @@ func (p PermissionDefinition) clone() PermissionDefinition {
 	return p
 }
 
-// AlternativeSet is a compiled named list of complete permission checks.
+// AlternativeSet is a compiled AnyOf permission: the complete permissions
+// that satisfy it.
 type AlternativeSet struct {
-	// Type is the declared type that owns the alternatives.
+	// Type is the declared type that owns the permission.
 	Type string
 
-	// Name is the alternatives name.
+	// Name is the permission name.
 	Name string
 
-	// Options lists the complete permissions in declaration order.
+	// Expr is the declared AnyOf expression.
+	Expr Expr
+
+	// Options lists the branch permissions in declaration order. A typed
+	// constructor supplies the instance each branch is asked of.
 	Options []PermissionRef
 
-	// Blocks says how the options' blocks combine.
-	Blocks BlockRule
+	// AnyBlockVetoes refuses the request when any branch's block stands in
+	// any policy. Otherwise a block stops only its own branch.
+	AnyBlockVetoes bool
 }
 
 // TypeDefinition is a compiled resource type.
@@ -381,11 +387,17 @@ func (c *compiler) build() *Registry {
 			}
 		}
 		for _, a := range t.alternatives {
+			options := make([]PermissionRef, 0, len(a.branches))
+			for _, branch := range a.branches {
+				ref, _ := c.anyOfBranch(t, m, "", branch)
+				options = append(options, ref)
+			}
 			reg.alternatives[PermissionRef{Type: t.name, Permission: a.name}] = AlternativeSet{
-				Type:    t.name,
-				Name:    a.name,
-				Options: slices.Clone(a.options),
-				Blocks:  a.blocks,
+				Type:           t.name,
+				Name:           a.name,
+				Expr:           AnyOf(a.branches...),
+				Options:        options,
+				AnyBlockVetoes: a.anyBlockVetoes,
 			}
 		}
 	}
@@ -528,6 +540,9 @@ func (c *compiler) resolve(t *TypeDecl, m members, e Expr) Expr {
 			out.operands[i] = c.resolve(t, m, op)
 		}
 	case OpIs, OpPerm:
+	case OpAnyOf:
+		// Validation keeps AnyOf out of ordinary permissions; it compiles to
+		// an AlternativeSet instead.
 	}
 	return out
 }
@@ -577,6 +592,8 @@ func (w *prerequisiteWalker) walk(e Expr) {
 		for _, op := range e.operands {
 			w.walk(op)
 		}
+	case OpAnyOf:
+		// Validation keeps AnyOf out of ordinary permissions.
 	}
 }
 

@@ -638,14 +638,14 @@ func TestVetoDeniesDespiteAnUndecidedOption(t *testing.T) {
 	t.Parallel()
 
 	reg, err := s.Compile(s.Config{Roles: nil, GrantSurfaces: []string{"access"}, Conditions: nil, RetiredRuntimeScopes: nil},
-		s.NewType("doc", s.GrantSurface("access"),
+		s.NewType("doc", s.Parent("folder"), s.GrantSurface("access"),
 			s.Attr("archived", s.FactBool),
 			s.Guard("active", s.IsFalse("archived")),
 			s.Grant("doc:read", s.GrantSpec{Description: "Read"}),
 			s.Block("doc:blocked_read", s.BlockSpec{}),
 			s.Permission("read_grant", s.Rel("doc:read"), s.AnswersScope("doc:read")),
 			s.Permission("read", s.When("active", s.Rel("doc:read")), s.ExcludedBy("doc:blocked_read")),
-			s.Alternatives("open", s.AlternativesSpec{Options: []s.PermissionRef{{Type: "doc", Permission: "read"}, {Type: "folder", Permission: "read"}}, Blocks: s.AnyBlockVetoes}),
+			s.Permission("open", s.AnyOf(s.Perm("read"), s.Via("folder", "read")), s.AnyBlockVetoes()),
 		),
 		s.NewType("folder", s.GrantSurface("access"),
 			s.Grant("folder:read", s.GrantSpec{Description: "Read"}),

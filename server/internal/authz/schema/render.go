@@ -6,13 +6,14 @@ import (
 )
 
 // Render prints the compiled registry as a read-only text view, one block
-// per type: its stored scopes, facts, guards, permissions and alternatives.
+// per type: its stored scopes, facts, guards and permissions.
 // The view is documentation; nothing parses it.
 func Render(r *Registry) string {
 	var b strings.Builder
 	b.WriteString("# Generated from the compiled authorization registry. Do not edit.\n")
 	b.WriteString("# Grammar: a | b union, a - b minus, is(fact) the actor is the user a fact names,\n")
-	b.WriteString("# via(rel).perm a permission on a related resource, when guard (expr) a guarded branch.\n")
+	b.WriteString("# via(rel).perm a permission on a related resource, when guard (expr) a guarded branch,\n")
+	b.WriteString("# any_of(a, b) one of other permissions, which must pass in every policy.\n")
 	for _, t := range r.Types() {
 		b.WriteString("\ntype " + t.Name + "\n")
 		if t.Parent != "" {
@@ -92,15 +93,11 @@ func Render(r *Registry) string {
 		}
 		for _, name := range t.Alternatives {
 			set, _ := r.Alternatives(PermissionRef{Type: t.Name, Permission: name})
-			options := make([]string, 0, len(set.Options))
-			for _, o := range set.Options {
-				options = append(options, o.Type+"."+o.Permission)
+			fmt.Fprintf(&b, "  permission %s = %s", name, renderExpr(set.Expr, false))
+			if set.AnyBlockVetoes {
+				b.WriteString("  any_block_vetoes")
 			}
-			rule := "per_option"
-			if set.Blocks == AnyBlockVetoes {
-				rule = "any_vetoes"
-			}
-			fmt.Fprintf(&b, "  alternatives %s = %s  blocks: %s\n", name, strings.Join(options, ", "), rule)
+			b.WriteString("\n")
 		}
 	}
 	return b.String()
@@ -161,6 +158,12 @@ func renderExpr(e Expr, nested bool) string {
 		return "is(" + e.Name() + ")"
 	case OpVia:
 		return "via(" + e.Name() + ")." + e.Permission()
+	case OpAnyOf:
+		parts := make([]string, 0, len(e.Operands()))
+		for _, o := range e.Operands() {
+			parts = append(parts, renderExpr(o, false))
+		}
+		return "any_of(" + strings.Join(parts, ", ") + ")"
 	case OpWhen:
 		return "when " + e.Guard() + " (" + renderExpr(e.Operands()[0], false) + ")"
 	case OpUnion, OpMinus:

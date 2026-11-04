@@ -295,9 +295,9 @@ func brokenProjectRegistry(t *testing.T) *s.Registry {
 		s.Permission("write", s.Rel(ScopeProjectWrite), s.AnswersScope(string(ScopeProjectWrite)), s.ExcludedBy(ScopeProjectBlockedWrite)),
 		s.Permission("publish_plugin", s.Rel(ScopePluginWrite), s.AnswersScope(string(ScopePluginWrite)), s.ExcludedBy(ScopePluginBlockedWrite)),
 		s.Permission("read_logs", s.Rel(ScopeLogRead), s.AnswersScope(string(ScopeLogRead))),
-		s.Alternatives("plugin_publication", s.AlternativesSpec{Options: []s.PermissionRef{{Type: "project", Permission: "publish_plugin"}, {Type: "organization", Permission: "administer"}}, Blocks: s.AnyBlockVetoes}),
-		s.Alternatives("read_or_organization_read", s.AlternativesSpec{Options: []s.PermissionRef{{Type: "organization", Permission: "read"}, {Type: "project", Permission: "read"}}, Blocks: s.BlocksApplyPerOption}),
-		s.Alternatives("write_or_administer", s.AlternativesSpec{Options: []s.PermissionRef{{Type: "project", Permission: "write"}, {Type: "organization", Permission: "administer"}}, Blocks: s.BlocksApplyPerOption}),
+		s.Permission("plugin_publication", s.AnyOf(s.Perm("publish_plugin"), s.Via("organization", "administer")), s.AnyBlockVetoes()),
+		s.Permission("read_or_organization_read", s.AnyOf(s.Via("organization", "read"), s.Perm("read"))),
+		s.Permission("write_or_administer", s.AnyOf(s.Perm("write"), s.Via("organization", "administer"))),
 	))
 	registry, err := s.Compile(DefaultRegistryConfig(), decls...)
 	require.NoError(t, err)
