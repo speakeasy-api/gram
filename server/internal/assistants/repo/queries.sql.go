@@ -152,6 +152,21 @@ func (q *Queries) BackdateAssistantRuntimeUpdatedAt(ctx context.Context, arg Bac
 	return err
 }
 
+const backdateMCPEndpointBySlugFixture = `-- name: BackdateMCPEndpointBySlugFixture :exec
+UPDATE mcp_endpoints SET created_at = created_at - interval '1 day' WHERE slug = $1 AND project_id = $2
+`
+
+type BackdateMCPEndpointBySlugFixtureParams struct {
+	Slug      string
+	ProjectID uuid.UUID
+}
+
+// Test fixture: makes one endpoint a day older than when it was created.
+func (q *Queries) BackdateMCPEndpointBySlugFixture(ctx context.Context, arg BackdateMCPEndpointBySlugFixtureParams) error {
+	_, err := q.db.Exec(ctx, backdateMCPEndpointBySlugFixture, arg.Slug, arg.ProjectID)
+	return err
+}
+
 const beginExpireAssistantRuntime = `-- name: BeginExpireAssistantRuntime :one
 UPDATE assistant_runtimes
 SET
@@ -2802,6 +2817,11 @@ WHERE r.backend_metadata_json <> '{}'::jsonb
       AND r.ended IS NOT TRUE
       AND r.state = $3
     )
+    OR (
+      r.runtime_version = 3
+      AND (r.deleted IS TRUE OR r.ended IS TRUE)
+      AND r.state <> 'switch_retiring'
+    )
   )
 ORDER BY r.updated_at ASC
 LIMIT $4
@@ -2839,6 +2859,11 @@ type ListInactiveAssistantRuntimesForReapRow struct {
 //     window. Collecting it frees the deprecated backend's resources so the
 //     next admit lands on the target backend. Active/starting/expiring rows
 //     are left to finish, so a live assistant is never disrupted mid-turn.
+//  3. Retired Kit runtimes: version 3 rows own every object and credential
+//     they name, and a new row never inherits their metadata, so collecting
+//     one cannot affect the assistant's current runtime. They skip the
+//     inactivity check, which a busy assistant would never satisfy. Rows still
+//     in switch_retiring belong to the pending switch retirement sweep.
 func (q *Queries) ListInactiveAssistantRuntimesForReap(ctx context.Context, arg ListInactiveAssistantRuntimesForReapParams) ([]ListInactiveAssistantRuntimesForReapRow, error) {
 	rows, err := q.db.Query(ctx, listInactiveAssistantRuntimesForReap,
 		arg.InactiveBefore,
@@ -3757,6 +3782,33 @@ func (q *Queries) LoadThreadContextV2(ctx context.Context, arg LoadThreadContext
 	return i, err
 }
 
+const lockKitLocalWorkloadSubject = `-- name: LockKitLocalWorkloadSubject :exec
+SELECT pg_advisory_xact_lock(hashtextextended($1::text, 0))
+`
+
+// Serializes kit workload provisioning for one external subject across
+// projects. The key is the caller's canonical JSON encoding of the subject.
+func (q *Queries) LockKitLocalWorkloadSubject(ctx context.Context, subjectKey string) error {
+	_, err := q.db.Exec(ctx, lockKitLocalWorkloadSubject, subjectKey)
+	return err
+}
+
+const lockProjectForKitWorkload = `-- name: LockProjectForKitWorkload :one
+SELECT id FROM projects WHERE id = $1 AND organization_id = $2 FOR UPDATE
+`
+
+type LockProjectForKitWorkloadParams struct {
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) LockProjectForKitWorkload(ctx context.Context, arg LockProjectForKitWorkloadParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockProjectForKitWorkload, arg.ProjectID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const lookupActiveAssistantRuntimeV2 = `-- name: LookupActiveAssistantRuntimeV2 :one
 SELECT id, state
 FROM assistant_runtimes
@@ -4624,6 +4676,21 @@ func (q *Queries) RetireAssistantRuntimesForSwitch(ctx context.Context, arg Reti
 	return err
 }
 
+const retireMCPServerEndpointsFixture = `-- name: RetireMCPServerEndpointsFixture :exec
+UPDATE mcp_endpoints SET deleted_at = clock_timestamp() WHERE mcp_server_id = $1 AND project_id = $2
+`
+
+type RetireMCPServerEndpointsFixtureParams struct {
+	McpServerID uuid.NullUUID
+	ProjectID   uuid.UUID
+}
+
+// Test fixture: retires every endpoint of one MCP server.
+func (q *Queries) RetireMCPServerEndpointsFixture(ctx context.Context, arg RetireMCPServerEndpointsFixtureParams) error {
+	_, err := q.db.Exec(ctx, retireMCPServerEndpointsFixture, arg.McpServerID, arg.ProjectID)
+	return err
+}
+
 const revertExpireAssistantRuntimeToActive = `-- name: RevertExpireAssistantRuntimeToActive :exec
 UPDATE assistant_runtimes
 SET
@@ -4973,6 +5040,21 @@ type SoftDeleteAssistantThreadParams struct {
 
 func (q *Queries) SoftDeleteAssistantThread(ctx context.Context, arg SoftDeleteAssistantThreadParams) error {
 	_, err := q.db.Exec(ctx, softDeleteAssistantThread, arg.ID, arg.ProjectID)
+	return err
+}
+
+const softDeleteCustomDomainFixture = `-- name: SoftDeleteCustomDomainFixture :exec
+UPDATE custom_domains SET deleted_at = clock_timestamp() WHERE id = $1 AND organization_id = $2
+`
+
+type SoftDeleteCustomDomainFixtureParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// Test fixture: soft-deletes a custom domain under its endpoints.
+func (q *Queries) SoftDeleteCustomDomainFixture(ctx context.Context, arg SoftDeleteCustomDomainFixtureParams) error {
+	_, err := q.db.Exec(ctx, softDeleteCustomDomainFixture, arg.ID, arg.OrganizationID)
 	return err
 }
 

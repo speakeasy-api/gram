@@ -671,7 +671,7 @@ func TestKitGKEFailedRestoreRetainsPersistedServiceAccount(t *testing.T) {
 	_, err = client.Resource(kitServiceAccountGVR).Namespace(k.config.GKE.Namespace).Get(t.Context(), old.Metadata.Workload.ServiceAccount, metav1.GetOptions{})
 	require.True(t, apierrors.IsNotFound(err))
 	_, err = k.Ensure(t.Context(), r)
-	require.ErrorContains(t, err, "restoring")
+	require.ErrorIs(t, err, errKitRuntimeUnrecoverable)
 }
 
 func TestKitGKECallerGenerationIsScopedAndStable(t *testing.T) {

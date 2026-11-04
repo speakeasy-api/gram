@@ -255,6 +255,7 @@ func TestCatalogGitHubActions_WritesOrganizationTierRows(t *testing.T) {
 	require.Equal(t, []*gen.WorkloadPlatformSubjectAlternative{
 		{Key: "branch", Label: "One branch", Template: "repo:{owner}/{repo}:ref:refs/heads/{branch}", Wildcard: false},
 		{Key: "environment", Label: "One environment", Template: "repo:{owner}/{repo}:environment:{environment}", Wildcard: false},
+		{Key: "pull_request", Label: "Pull requests", Template: "repo:{owner}/{repo}:pull_request", Wildcard: false},
 	}, github.Subject.Alternatives)
 
 	_, err = ti.service.RegisterIssuer(orgCtx, &gen.RegisterIssuerPayload{

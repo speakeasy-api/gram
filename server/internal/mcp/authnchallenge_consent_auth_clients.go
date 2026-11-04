@@ -9,6 +9,7 @@ package mcp
 import (
 	"cmp"
 	"context"
+	"errors"
 	"fmt"
 	"net/http"
 	"slices"
@@ -386,31 +387,51 @@ func (s *Service) directConsentAuthChoice(ctx context.Context, endpoint *Resolve
 	return choices[serverID], nil
 }
 
+// errConsentNoUsableConnection refuses an approval no connection could serve.
+var errConsentNoUsableConnection = errors.New("no connection can serve this approval")
+
+// consentCardsApprovable is the rule for approving through service cards.
+func consentCardsApprovable(cards []remoteSessionCard) bool {
+	return len(cards) == 0 || slices.ContainsFunc(cards, func(card remoteSessionCard) bool {
+		return card.Connected || card.Chained
+	})
+}
+
 // consentDirectAuthClientPick validates the credential posted with a direct
 // server's approval against the choices computed again now, and returns it as
 // the grant's typed pick. The registration it names replaces the card-derived
 // pick in upstreamPicks; a headers-only client removes it. A pick that is no
 // longer usable, or a missing one where a choice is required, is
-// errConsentConfigurationChanged. It returns nil where the page offers no
-// typed choice.
+// errConsentConfigurationChanged. With no typed choice, cards decide a person's direct-server approval.
 func (s *Service) consentDirectAuthClientPick(ctx context.Context, endpoint *ResolvedMcpEndpoint, challengeState AuthnChallengeState, posted string, upstreamPicks map[uuid.UUID]uuid.UUID, cards []remoteSessionCard) (map[uuid.UUID]uuid.UUID, error) {
 	picked := uuid.Nil
 	if posted != "" {
 		parsed, err := uuid.Parse(posted)
-		if err != nil {
+		if err != nil || parsed == uuid.Nil {
 			return nil, errConsentConfigurationChanged
 		}
 		picked = parsed
 	}
 	auth, err := s.directConsentAuthChoice(ctx, endpoint, challengeState, cards, picked)
-	if err != nil || auth == nil {
+	if err != nil {
 		return nil, err
+	}
+	if auth == nil {
+		// An agent's attached connection is stored under its owner, so its own cards can't decide.
+		agent := challengeState.Subject != nil && challengeState.Subject.Kind == urn.SessionSubjectKindAgent
+		if !endpoint.MetaMcpServerID.Valid && !agent && !consentCardsApprovable(cards) {
+			return nil, errConsentNoUsableConnection
+		}
+		return nil, nil
 	}
 	if !auth.Approvable() {
 		return nil, errConsentConfigurationChanged
 	}
 	selected := auth.Selected()
 	if selected == nil {
+		if picked != uuid.Nil {
+			return nil, errConsentConfigurationChanged
+		}
 		// No upstream authentication: nothing to pick, and no card's client
 		// is recorded for the server.
 		delete(upstreamPicks, endpoint.McpServerID.UUID)

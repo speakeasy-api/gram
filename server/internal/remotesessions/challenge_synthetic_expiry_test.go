@@ -216,10 +216,12 @@ func (env syntheticExpiryEnv) callback(t *testing.T, rawQuery string) (*httptest
 // syntheticLoginOptions shapes the issuer, client, and callback of a
 // synthetic login; the zero value is the plain AIS-115 fixture.
 type syntheticLoginOptions struct {
-	legacyCallbackURL bool
-	issuerScopes      []string
-	clientScope       []string
-	scopeOverride     []string
+	// tokenResponseIssuer sets the provider identifier used to interpret returned scopes.
+	tokenResponseIssuer string
+	legacyCallbackURL   bool
+	issuerScopes        []string
+	clientScope         []string
+	scopeOverride       []string
 	// omitScopeFallback sets the issuer to send no scope where its catalogue is the last resort.
 	omitScopeFallback bool
 	// authorizeQuery is appended to the issuer's authorization endpoint, e.g. a baked-in scope.
@@ -460,6 +462,9 @@ func driveSyntheticLogin(t *testing.T, slugSuffix string, tokenHandler http.Hand
 	logger := testenv.NewLogger(t)
 	tracerProvider := testenv.NewTracerProvider(t)
 	issuerURL, jwksURI := "https://idp.example.com", ""
+	if options.tokenResponseIssuer != "" {
+		issuerURL = options.tokenResponseIssuer
+	}
 	// Every httptest TLS server presents the package's test certificate, so the issuer discovery server is trusted too.
 	trusted := testIssuerTLSRootCAs.Clone()
 	if options.idTokenIssuer != nil {

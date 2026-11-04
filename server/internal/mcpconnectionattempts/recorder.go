@@ -470,24 +470,42 @@ func NewCapturing(capture func(Row), logsEnabled func(context.Context, string) (
 	}
 }
 
+// limit is how much a row is held back before it is queued.
+type limit int
+
+const (
+	// limitNone is for rows on an attempt a caller already proved it started.
+	limitNone limit = iota
+	// limitStart is the per-organization ceiling and queue share, for a step anyone can start.
+	limitStart
+	// limitOnce adds the per-key limit and repeats count to limitStart.
+	limitOnce
+)
+
+// Start records the first step of an attempt that any caller can begin, such as /authorize.
+// Nothing proves a real flow yet, so it takes Once's per-organization ceiling and queue share.
+func (r *Recorder) Start(ctx context.Context, attempt Attempt, step Step, what Happened, opts ...Option) {
+	r.record(ctx, attempt, step, what, false, limitStart, opts)
+}
+
 // Step records a step that does not end the attempt.
 func (r *Recorder) Step(ctx context.Context, attempt Attempt, step Step, what Happened, opts ...Option) {
-	r.record(ctx, attempt, step, what, false, false, opts)
+	r.record(ctx, attempt, step, what, false, limitNone, opts)
 }
 
 // End records the step that ends the attempt. Its outcome is Connected for a
 // Result and the catalog's outcome for a Code. A flow ends an attempt once.
 func (r *Recorder) End(ctx context.Context, attempt Attempt, step Step, what Happened, opts ...Option) {
-	r.record(ctx, attempt, step, what, true, false, opts)
+	r.record(ctx, attempt, step, what, true, limitNone, opts)
 }
 
 // Once records an attempt that is one request: one row, final. It has no proof of a real flow
 // behind it, so repeats count as rate_limited, and rows past its queue share as queue_reserved.
 func (r *Recorder) Once(ctx context.Context, scope Scope, step Step, what Happened, opts ...Option) {
-	r.record(ctx, Begin(scope), step, what, true, true, opts)
+	r.record(ctx, Begin(scope), step, what, true, limitOnce, opts)
 }
 
-func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what Happened, final, limited bool, opts []Option) {
+func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what Happened, final bool, held limit, opts []Option) {
 	if r == nil || attempt.IsZero() {
 		return
 	}
@@ -502,7 +520,18 @@ func (r *Recorder) record(ctx context.Context, attempt Attempt, step Step, what 
 		r.drop(ctx, dropInvalidEvent, 1, err)
 		return
 	}
-	if limited && r.limiter != nil {
+	switch {
+	case r.limiter == nil:
+	case held == limitStart:
+		if r.queueReserved() {
+			r.drop(ctx, dropQueueReserve, 1, nil)
+			return
+		}
+		if !r.limiter.allowOrganization(row.OrganizationID, time.Now()) {
+			r.drop(ctx, dropRateLimited, 1, nil)
+			return
+		}
+	case held == limitOnce:
 		if r.queueReserved() {
 			r.dropLostRepeats(ctx, r.limiter.holdBack(row))
 			r.drop(ctx, dropQueueReserve, 1, nil)
@@ -636,19 +665,38 @@ func (r *Recorder) run() {
 
 	// organizations holds each logs check for one flush: one lookup per organization per interval.
 	organizations := map[string]dropReason{}
+	// After one failed insert once stopping, the rest drop, so a stalled ClickHouse can't hold shutdown.
+	drainFailed := false
+	stopping := func() bool {
+		select {
+		case <-r.stop:
+			return true
+		default:
+			return false
+		}
+	}
 	batch := make([]Row, 0, r.cfg.maxBatch)
 	flush := func() {
 		clear(organizations)
 		rows := batch
 		batch = make([]Row, 0, r.cfg.maxBatch)
 		if len(rows) > 0 {
-			r.surviving(len(rows), func() { r.insert(rows) })
+			r.surviving(len(rows), func() {
+				if !r.insert(rows) && stopping() {
+					drainFailed = true
+				}
+			})
 			r.unfinished.Add(-int64(len(rows)))
 		}
 		// A tick from during a slow insert would flush a nearly empty batch and let a backlog grow.
 		ticker.Reset(r.cfg.flushInterval)
 	}
 	add := func(row Row) {
+		if drainFailed {
+			r.drop(context.Background(), dropShutdown, 1, nil)
+			r.unfinished.Add(-1)
+			return
+		}
 		pending := len(batch)
 		r.surviving(1, func() {
 			reason, checked := organizations[row.OrganizationID]
@@ -735,21 +783,22 @@ func (r *Recorder) organizationAllowed(organizationID string) (dropReason, error
 	}
 }
 
-// insert writes one batch once and waits for the commit, so failures are counted.
-func (r *Recorder) insert(rows []Row) {
+// insert writes one batch once and waits for the commit, so failures are counted. It reports success.
+func (r *Recorder) insert(rows []Row) bool {
 	ctx, cancel := context.WithTimeout(context.Background(), r.cfg.insertTimeout)
 	defer cancel()
 
 	ctx = clickhouse.Context(ctx, clickhouse.WithSettings(clickhouse.Settings{"async_insert": 1, "wait_for_async_insert": 1}))
 	err := appendRowsInto(ctx, r.conn, r.cfg.table, rows)
 	if err == nil {
-		return
+		return true
 	}
 	reason := dropInsertFailed
 	if exception, ok := errors.AsType[*clickhouse.Exception](err); ok && exception.Code == unknownTableCode {
 		reason = dropTableMissing
 	}
 	r.drop(ctx, reason, len(rows), err)
+	return false
 }
 
 func (r *Recorder) countStep(ctx context.Context, row Row) {

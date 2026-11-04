@@ -401,6 +401,12 @@ func seedMetaValidationFixture(t *testing.T, prefix string) (context.Context, va
 
 	reader, provider := newValidationMeterProvider()
 	ctx, ti := newTestMCPServiceWithValidationTimeout(t, provider, validationProbeTimeout)
+	return ctx, seedMetaValidationFixtureOn(t, ctx, ti, reader, prefix)
+}
+
+func seedMetaValidationFixtureOn(t *testing.T, ctx context.Context, ti *testInstance, reader *sdkmetric.ManualReader, prefix string) validationFixture {
+	t.Helper()
+
 	projectID, orgID := consentTestTenant(t, ctx)
 
 	shared := createUserSessionIssuer(t, ctx, ti.conn, projectID)
@@ -414,7 +420,7 @@ func seedMetaValidationFixture(t *testing.T, prefix string) (context.Context, va
 	createMetaMember(t, ctx, ti.conn, projectID, metaServerID, prefix+"-member", member.url, conv.ToNullUUID(issuerID), 0)
 	insertQualifiedRemoteSessionToken(t, ctx, ti, shared, clientID, subject, "token-"+prefix, member.url)
 
-	return ctx, validationFixture{
+	return validationFixture{
 		ti:       ti,
 		reader:   reader,
 		endpoint: endpoint,
@@ -1184,13 +1190,7 @@ func TestServeConsentAction_ValidateRefusesExpiredGrant(t *testing.T) {
 		ProjectID:       conv.ToNullUUID(projectID),
 	}))
 
-	_, err := postValidate(t, fx, fx.clientID)
-	require.Error(t, err)
-	var oopsErr *oops.ShareableError
-	require.ErrorAs(t, err, &oopsErr)
-	require.Equal(t, oops.CodeBadRequest, oopsErr.Code)
-	require.ErrorContains(t, err, "Connect this service before verifying it.")
-	require.Empty(t, fx.member.drain(), "no probe reached the member")
+	requireVerifyNotice(t, fx, fx.clientID, verifyExpiredCard)
 	require.Empty(t, validationCounts(t, fx.reader))
 }
 
@@ -1286,7 +1286,7 @@ func TestServeConsentAction_ValidateRateLimited(t *testing.T) {
 	require.NoError(t, err)
 	require.Equal(t, http.StatusSeeOther, w.Code)
 	location := w.Header().Get("Location")
-	require.Equal(t, consentPagePath(fx)+"&validate_limited="+fx.clientID.String(), location)
+	require.Equal(t, consentPagePath(fx)+"&consent=required&validate_limited="+fx.clientID.String(), location)
 	require.Empty(t, fx.member.drain(), "a limited verify never reaches the member")
 
 	page := renderConsentAt(t, fx, location)

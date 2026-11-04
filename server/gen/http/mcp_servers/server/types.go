@@ -390,6 +390,35 @@ type SetToolMetadataResponseBody struct {
 	DeletedAt *string `form:"deleted_at,omitempty" json:"deleted_at,omitempty" xml:"deleted_at,omitempty"`
 }
 
+// GetMcpServerUsageImpactResponseBody is the type of the "mcpServers" service
+// "getMcpServerUsageImpact" endpoint HTTP response body.
+type GetMcpServerUsageImpactResponseBody struct {
+	// The server's display name, which confirmations ask the operator to type.
+	ServerName string `form:"server_name" json:"server_name" xml:"server_name"`
+	// Whether the server has a user session issuer. When false nothing is counted:
+	// callers are not signed in, so their usage is unknown.
+	SignInRequired bool `form:"sign_in_required" json:"sign_in_required" xml:"sign_in_required"`
+	// Whether the server's user session issuer also serves other MCP servers or
+	// gateways. Connections not bound to this server's address may then be using
+	// one of those instead.
+	SharedSignIn bool `form:"shared_sign_in" json:"shared_sign_in" xml:"shared_sign_in"`
+	// Unexpired, unrevoked sessions that can reach this server.
+	ActiveConnectionCount int `form:"active_connection_count" json:"active_connection_count" xml:"active_connection_count"`
+	// Distinct subjects (people, API keys, agents, workloads, anonymous callers)
+	// holding those sessions.
+	ActiveSubjectCount int `form:"active_subject_count" json:"active_subject_count" xml:"active_subject_count"`
+	// Of active_connection_count, the sessions issued for the whole shared sign-in
+	// rather than this server's address. Always zero when shared_sign_in is false.
+	SharedConnectionCount int `form:"shared_connection_count" json:"shared_connection_count" xml:"shared_connection_count"`
+	// Most recent use across all those sessions, accurate to within five minutes.
+	// Absent when none has a recorded use.
+	LastUsedAt *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
+	// Subjects holding active sessions, most recently used first.
+	Subjects []*McpServerUsageSubjectResponseBody `form:"subjects" json:"subjects" xml:"subjects"`
+	// Whether more subjects exist than are listed.
+	SubjectsTruncated bool `form:"subjects_truncated" json:"subjects_truncated" xml:"subjects_truncated"`
+}
+
 // CreateMcpServerUnauthorizedResponseBody is the type of the "mcpServers"
 // service "createMcpServer" endpoint HTTP response body for the "unauthorized"
 // error.
@@ -2860,6 +2889,215 @@ type DeleteMcpServerUnavailableResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// GetMcpServerUsageImpactUnauthorizedResponseBody is the type of the
+// "mcpServers" service "getMcpServerUsageImpact" endpoint HTTP response body
+// for the "unauthorized" error.
+type GetMcpServerUsageImpactUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerUsageImpactForbiddenResponseBody is the type of the "mcpServers"
+// service "getMcpServerUsageImpact" endpoint HTTP response body for the
+// "forbidden" error.
+type GetMcpServerUsageImpactForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerUsageImpactBadRequestResponseBody is the type of the
+// "mcpServers" service "getMcpServerUsageImpact" endpoint HTTP response body
+// for the "bad_request" error.
+type GetMcpServerUsageImpactBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerUsageImpactNotFoundResponseBody is the type of the "mcpServers"
+// service "getMcpServerUsageImpact" endpoint HTTP response body for the
+// "not_found" error.
+type GetMcpServerUsageImpactNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerUsageImpactConflictResponseBody is the type of the "mcpServers"
+// service "getMcpServerUsageImpact" endpoint HTTP response body for the
+// "conflict" error.
+type GetMcpServerUsageImpactConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerUsageImpactUnsupportedMediaResponseBody is the type of the
+// "mcpServers" service "getMcpServerUsageImpact" endpoint HTTP response body
+// for the "unsupported_media" error.
+type GetMcpServerUsageImpactUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerUsageImpactInvalidResponseBody is the type of the "mcpServers"
+// service "getMcpServerUsageImpact" endpoint HTTP response body for the
+// "invalid" error.
+type GetMcpServerUsageImpactInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerUsageImpactInvariantViolationResponseBody is the type of the
+// "mcpServers" service "getMcpServerUsageImpact" endpoint HTTP response body
+// for the "invariant_violation" error.
+type GetMcpServerUsageImpactInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerUsageImpactUnexpectedResponseBody is the type of the
+// "mcpServers" service "getMcpServerUsageImpact" endpoint HTTP response body
+// for the "unexpected" error.
+type GetMcpServerUsageImpactUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerUsageImpactGatewayErrorResponseBody is the type of the
+// "mcpServers" service "getMcpServerUsageImpact" endpoint HTTP response body
+// for the "gateway_error" error.
+type GetMcpServerUsageImpactGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// GetMcpServerUsageImpactUnavailableResponseBody is the type of the
+// "mcpServers" service "getMcpServerUsageImpact" endpoint HTTP response body
+// for the "unavailable" error.
+type GetMcpServerUsageImpactUnavailableResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // McpServerToolsetSummaryResponseBody is used to define fields on response
 // body types.
 type McpServerToolsetSummaryResponseBody struct {
@@ -3000,6 +3238,33 @@ type ToolMetadataResponseBody struct {
 	// When the tool metadata entry was deleted. Only present on deleted entries
 	// returned by listToolMetadata with include_deleted.
 	DeletedAt *string `form:"deleted_at,omitempty" json:"deleted_at,omitempty" xml:"deleted_at,omitempty"`
+}
+
+// McpServerUsageSubjectResponseBody is used to define fields on response body
+// types.
+type McpServerUsageSubjectResponseBody struct {
+	// The subject URN (user:<id> | apikey:<uuid> | agent:<uuid> | anonymous:<id> |
+	// workload:<issuer-id>:<external-subject>).
+	SubjectUrn string `form:"subject_urn" json:"subject_urn" xml:"subject_urn"`
+	// Subject kind: 'user', 'apikey', 'agent', 'anonymous', or 'workload'.
+	SubjectType string `form:"subject_type" json:"subject_type" xml:"subject_type"`
+	// Resolved human-readable name of the subject, if known.
+	DisplayName *string `form:"display_name,omitempty" json:"display_name,omitempty" xml:"display_name,omitempty"`
+	// Email of the subject when it is a Speakeasy user.
+	Email *string `form:"email,omitempty" json:"email,omitempty" xml:"email,omitempty"`
+	// Avatar URL of the subject when it is a Speakeasy user with one.
+	PhotoURL *string `form:"photo_url,omitempty" json:"photo_url,omitempty" xml:"photo_url,omitempty"`
+	// Active sessions this subject holds.
+	ConnectionCount int `form:"connection_count" json:"connection_count" xml:"connection_count"`
+	// Most recent use across this subject's sessions, accurate to within five
+	// minutes. Absent when unknown.
+	LastUsedAt *string `form:"last_used_at,omitempty" json:"last_used_at,omitempty" xml:"last_used_at,omitempty"`
+	// Self-reported names of the MCP clients behind the sessions. Unverified.
+	ClientNames []string `form:"client_names" json:"client_names" xml:"client_names"`
+	// Whether every one of this subject's sessions was issued for the whole shared
+	// sign-in rather than this server, so the subject may be using another server
+	// instead.
+	SharedSignIn bool `form:"shared_sign_in" json:"shared_sign_in" xml:"shared_sign_in"`
 }
 
 // ToolMetadataFormRequestBody is used to define fields on request body types.
@@ -3261,6 +3526,35 @@ func NewSetToolMetadataResponseBody(res *types.ToolMetadata) *SetToolMetadataRes
 		CreatedAt:       res.CreatedAt,
 		UpdatedAt:       res.UpdatedAt,
 		DeletedAt:       res.DeletedAt,
+	}
+	return body
+}
+
+// NewGetMcpServerUsageImpactResponseBody builds the HTTP response body from
+// the result of the "getMcpServerUsageImpact" endpoint of the "mcpServers"
+// service.
+func NewGetMcpServerUsageImpactResponseBody(res *types.McpServerUsageImpact) *GetMcpServerUsageImpactResponseBody {
+	body := &GetMcpServerUsageImpactResponseBody{
+		ServerName:            res.ServerName,
+		SignInRequired:        res.SignInRequired,
+		SharedSignIn:          res.SharedSignIn,
+		ActiveConnectionCount: res.ActiveConnectionCount,
+		ActiveSubjectCount:    res.ActiveSubjectCount,
+		SharedConnectionCount: res.SharedConnectionCount,
+		LastUsedAt:            res.LastUsedAt,
+		SubjectsTruncated:     res.SubjectsTruncated,
+	}
+	if res.Subjects != nil {
+		body.Subjects = make([]*McpServerUsageSubjectResponseBody, len(res.Subjects))
+		for i, val := range res.Subjects {
+			if val == nil {
+				body.Subjects[i] = nil
+				continue
+			}
+			body.Subjects[i] = marshalTypesMcpServerUsageSubjectToMcpServerUsageSubjectResponseBody(val)
+		}
+	} else {
+		body.Subjects = []*McpServerUsageSubjectResponseBody{}
 	}
 	return body
 }
@@ -5180,6 +5474,171 @@ func NewDeleteMcpServerUnavailableResponseBody(res *goa.ServiceError) *DeleteMcp
 	return body
 }
 
+// NewGetMcpServerUsageImpactUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "getMcpServerUsageImpact" endpoint of the
+// "mcpServers" service.
+func NewGetMcpServerUsageImpactUnauthorizedResponseBody(res *goa.ServiceError) *GetMcpServerUsageImpactUnauthorizedResponseBody {
+	body := &GetMcpServerUsageImpactUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerUsageImpactForbiddenResponseBody builds the HTTP response
+// body from the result of the "getMcpServerUsageImpact" endpoint of the
+// "mcpServers" service.
+func NewGetMcpServerUsageImpactForbiddenResponseBody(res *goa.ServiceError) *GetMcpServerUsageImpactForbiddenResponseBody {
+	body := &GetMcpServerUsageImpactForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerUsageImpactBadRequestResponseBody builds the HTTP response
+// body from the result of the "getMcpServerUsageImpact" endpoint of the
+// "mcpServers" service.
+func NewGetMcpServerUsageImpactBadRequestResponseBody(res *goa.ServiceError) *GetMcpServerUsageImpactBadRequestResponseBody {
+	body := &GetMcpServerUsageImpactBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerUsageImpactNotFoundResponseBody builds the HTTP response body
+// from the result of the "getMcpServerUsageImpact" endpoint of the
+// "mcpServers" service.
+func NewGetMcpServerUsageImpactNotFoundResponseBody(res *goa.ServiceError) *GetMcpServerUsageImpactNotFoundResponseBody {
+	body := &GetMcpServerUsageImpactNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerUsageImpactConflictResponseBody builds the HTTP response body
+// from the result of the "getMcpServerUsageImpact" endpoint of the
+// "mcpServers" service.
+func NewGetMcpServerUsageImpactConflictResponseBody(res *goa.ServiceError) *GetMcpServerUsageImpactConflictResponseBody {
+	body := &GetMcpServerUsageImpactConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerUsageImpactUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "getMcpServerUsageImpact" endpoint of
+// the "mcpServers" service.
+func NewGetMcpServerUsageImpactUnsupportedMediaResponseBody(res *goa.ServiceError) *GetMcpServerUsageImpactUnsupportedMediaResponseBody {
+	body := &GetMcpServerUsageImpactUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerUsageImpactInvalidResponseBody builds the HTTP response body
+// from the result of the "getMcpServerUsageImpact" endpoint of the
+// "mcpServers" service.
+func NewGetMcpServerUsageImpactInvalidResponseBody(res *goa.ServiceError) *GetMcpServerUsageImpactInvalidResponseBody {
+	body := &GetMcpServerUsageImpactInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerUsageImpactInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "getMcpServerUsageImpact" endpoint of
+// the "mcpServers" service.
+func NewGetMcpServerUsageImpactInvariantViolationResponseBody(res *goa.ServiceError) *GetMcpServerUsageImpactInvariantViolationResponseBody {
+	body := &GetMcpServerUsageImpactInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerUsageImpactUnexpectedResponseBody builds the HTTP response
+// body from the result of the "getMcpServerUsageImpact" endpoint of the
+// "mcpServers" service.
+func NewGetMcpServerUsageImpactUnexpectedResponseBody(res *goa.ServiceError) *GetMcpServerUsageImpactUnexpectedResponseBody {
+	body := &GetMcpServerUsageImpactUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerUsageImpactGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "getMcpServerUsageImpact" endpoint of the
+// "mcpServers" service.
+func NewGetMcpServerUsageImpactGatewayErrorResponseBody(res *goa.ServiceError) *GetMcpServerUsageImpactGatewayErrorResponseBody {
+	body := &GetMcpServerUsageImpactGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewGetMcpServerUsageImpactUnavailableResponseBody builds the HTTP response
+// body from the result of the "getMcpServerUsageImpact" endpoint of the
+// "mcpServers" service.
+func NewGetMcpServerUsageImpactUnavailableResponseBody(res *goa.ServiceError) *GetMcpServerUsageImpactUnavailableResponseBody {
+	body := &GetMcpServerUsageImpactUnavailableResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewCreateMcpServerPayload builds a mcpServers service createMcpServer
 // endpoint payload.
 func NewCreateMcpServerPayload(body *CreateMcpServerRequestBody, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.CreateMcpServerPayload {
@@ -5374,6 +5833,18 @@ func NewDeleteToolMetadataPayload(mcpServerID string, toolName string, sessionTo
 // endpoint payload.
 func NewDeleteMcpServerPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.DeleteMcpServerPayload {
 	v := &mcpservers.DeleteMcpServerPayload{}
+	v.ID = id
+	v.SessionToken = sessionToken
+	v.ApikeyToken = apikeyToken
+	v.ProjectSlugInput = projectSlugInput
+
+	return v
+}
+
+// NewGetMcpServerUsageImpactPayload builds a mcpServers service
+// getMcpServerUsageImpact endpoint payload.
+func NewGetMcpServerUsageImpactPayload(id string, sessionToken *string, apikeyToken *string, projectSlugInput *string) *mcpservers.GetMcpServerUsageImpactPayload {
+	v := &mcpservers.GetMcpServerUsageImpactPayload{}
 	v.ID = id
 	v.SessionToken = sessionToken
 	v.ApikeyToken = apikeyToken

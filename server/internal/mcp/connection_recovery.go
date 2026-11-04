@@ -202,6 +202,7 @@ func (s *Service) HandleConnectionRecovery(w http.ResponseWriter, r *http.Reques
 	}
 	subject := urn.NewUserSubject(recovery.UserID)
 	authorizationURL, err := s.remoteChallengeMgr.BuildAuthorizationUrl(ctx, remotesessions.ParentChallenge{
+		TypedAuthorization:  nil,
 		ConnectionPopup:     false,
 		ID:                  login.ID,
 		ProjectID:           recovery.ProjectID,

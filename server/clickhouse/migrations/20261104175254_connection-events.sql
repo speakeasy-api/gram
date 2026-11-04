@@ -1,4 +1,4 @@
--- create "mcp_connection_attempt_summaries" table
+-- Create "mcp_connection_attempt_summaries" table
 CREATE TABLE `gram`.`mcp_connection_attempt_summaries` (
   `organization_id` String COMMENT 'Organization the attempt belongs to. Readers always filter on it.
 @access: confidential',
@@ -26,7 +26,7 @@ CREATE TABLE `gram`.`mcp_connection_attempt_summaries` (
 @access: confidential',
   `provider_host` String COMMENT 'Normalized issuer host of the provider. A tenant host can name the customer.
 @access: restricted',
-  `app_key` String COMMENT 'Host of the client metadata URL of the app, or the client kind for apps without one. A host can name the customer.
+  `app_key` String COMMENT 'Host of the client metadata URL for apps in the client catalog, other_metadata_url for any other metadata URL, or the client kind for apps without one.
 @access: restricted',
   `client_family` LowCardinality(String) COMMENT 'Kind of client from the User-Agent, from a fixed list, otherwise other. Empty when no client made the request.
 @access: confidential',
@@ -48,7 +48,7 @@ CREATE TABLE `gram`.`mcp_connection_attempt_summaries` (
 @access: confidential'
 ) ENGINE = AggregatingMergeTree
 PRIMARY KEY (`organization_id`, `project_id`, `server_kind`, `server_id`, `bucket`) ORDER BY (`organization_id`, `project_id`, `server_kind`, `server_id`, `bucket`, `step`, `step_result`, `outcome`, `reason`, `who_fixes`, `grant_type`, `member_id`, `provider_host`, `app_key`, `client_family`) PARTITION BY (toMonday(bucket)) TTL bucket + toIntervalDay(90) SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1 COMMENT 'MCP connection attempts per 30-minute bucket of attempt start, for rates and trends. Filled by a view on mcp_connection_events. Abandoned is exact only per org, project, server and bucket. Kept 90 days.';
--- create "mcp_connection_events" table
+-- Create "mcp_connection_events" table
 CREATE TABLE `gram`.`mcp_connection_events` (
   `organization_id` String COMMENT 'Organization the attempt belongs to. Readers always filter on it.
 @access: confidential' CODEC(ZSTD(1)),
@@ -104,7 +104,7 @@ CREATE TABLE `gram`.`mcp_connection_events` (
 @access: confidential' CODEC(ZSTD(1)),
   `provider_host` String COMMENT 'Normalized issuer host of the provider, shared across orgs. A tenant host can name the customer.
 @access: restricted',
-  `app_key` String COMMENT 'Host of the client metadata URL of the app, or the client kind for apps without one. A host can name the customer.
+  `app_key` String COMMENT 'Host of the client metadata URL for apps in the client catalog, other_metadata_url for any other metadata URL, or the client kind for apps without one.
 @access: restricted',
   `client_family` LowCardinality(String) COMMENT 'Kind of client from the User-Agent, from a fixed list, otherwise other. Empty when no client made the request.
 @access: confidential',
@@ -119,7 +119,7 @@ CREATE TABLE `gram`.`mcp_connection_events` (
   INDEX `idx_mcp_connection_events_subject_urn` ((subject_urn)) TYPE bloom_filter(0.01)
 ) ENGINE = MergeTree
 PRIMARY KEY (`organization_id`, `project_id`, `server_kind`, `server_id`, `attempt_started_at`, `attempt_id`, `event_time`) ORDER BY (`organization_id`, `project_id`, `server_kind`, `server_id`, `attempt_started_at`, `attempt_id`, `event_time`) PARTITION BY (toDate(attempt_started_at)) TTL toDateTime(attempt_started_at) + toIntervalDay(30) SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1 COMMENT 'One row per step of an MCP connection attempt, successes included. Used for drill-in on one attempt, person or server. Rows are never updated. Kept 30 days.';
--- create "mcp_connection_outcomes_daily" table
+-- Create "mcp_connection_outcomes_daily" table
 CREATE TABLE `gram`.`mcp_connection_outcomes_daily` (
   `day` Date COMMENT 'UTC day the attempts started.
 @access: confidential',
@@ -141,7 +141,7 @@ CREATE TABLE `gram`.`mcp_connection_outcomes_daily` (
 @access: confidential'
 ) ENGINE = MergeTree
 PRIMARY KEY (`provider`, `app`, `client_family`, `step`, `day`, `outcome`, `reason`, `fixed_by`) ORDER BY (`provider`, `app`, `client_family`, `step`, `day`, `outcome`, `reason`, `fixed_by`) PARTITION BY (`day`) TTL day + toIntervalMonth(13) SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1 COMMENT 'Long-term daily counts of connection outcomes per provider and app, for trends beyond raw retention. No org, project or person. A daily job replaces each whole day atomically, so a day always holds one complete result. Kept 13 months.';
--- create "mcp_connection_outcomes_daily_staging" table
+-- Create "mcp_connection_outcomes_daily_staging" table
 CREATE TABLE `gram`.`mcp_connection_outcomes_daily_staging` (
   `day` Date COMMENT 'UTC day the attempts started.
 @access: confidential',
@@ -163,5 +163,5 @@ CREATE TABLE `gram`.`mcp_connection_outcomes_daily_staging` (
 @access: confidential'
 ) ENGINE = MergeTree
 PRIMARY KEY (`provider`, `app`, `client_family`, `step`, `day`, `outcome`, `reason`, `fixed_by`) ORDER BY (`provider`, `app`, `client_family`, `step`, `day`, `outcome`, `reason`, `fixed_by`) PARTITION BY (`day`) TTL day + toIntervalMonth(13) SETTINGS index_granularity = 8192, ttl_only_drop_parts = 1 COMMENT 'Holds one day of mcp_connection_outcomes_daily while the daily job builds it. Only that job reads it. Its TTL must match the main table because REPLACE PARTITION copies TTL info onto the main table, so a shorter TTL here deletes main table rows.';
--- create "mcp_connection_attempt_summaries_mv" view
+-- Create "mcp_connection_attempt_summaries_mv" view
 CREATE MATERIALIZED VIEW `gram`.`mcp_connection_attempt_summaries_mv` TO `gram`.`mcp_connection_attempt_summaries` AS SELECT organization_id, project_id, server_kind, server_id, toStartOfInterval(toDateTime(attempt_started_at, 'UTC'), toIntervalMinute(30)) AS bucket, step, step_result, outcome, reason, who_fixes, grant_type, member_id, provider_host, app_key, client_family, toUInt64(count()) AS step_events, uniqExactState(attempt_id) AS attempts_seen, uniqExactStateIf(attempt_id, is_final) AS attempts_ended, sum(toUInt64(mcp_connection_events.retries)) AS retries, sum(toUInt64(mcp_connection_events.repeats)) AS repeats, toUInt64(countIf((step = 'discovery_member') AND (step_result = 'listed') AND (mcp_connection_events.retries > 0))) AS recovered, min(event_time) AS first_seen, max(event_time) AS last_seen FROM gram.mcp_connection_events GROUP BY organization_id, project_id, server_kind, server_id, bucket, step, step_result, outcome, reason, who_fixes, grant_type, member_id, provider_host, app_key, client_family;

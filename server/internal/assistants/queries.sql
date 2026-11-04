@@ -1208,6 +1208,11 @@ WHERE assistant_id = @assistant_id
 --      window. Collecting it frees the deprecated backend's resources so the
 --      next admit lands on the target backend. Active/starting/expiring rows
 --      are left to finish, so a live assistant is never disrupted mid-turn.
+--   3. Retired Kit runtimes: version 3 rows own every object and credential
+--      they name, and a new row never inherits their metadata, so collecting
+--      one cannot affect the assistant's current runtime. They skip the
+--      inactivity check, which a busy assistant would never satisfy. Rows still
+--      in switch_retiring belong to the pending switch retirement sweep.
 SELECT r.id, r.assistant_thread_id, r.assistant_id, r.project_id, r.runtime_version, r.backend, r.backend_metadata_json, r.state, r.warm_until
 FROM assistant_runtimes r
 WHERE r.backend_metadata_json <> '{}'::jsonb
@@ -1237,6 +1242,11 @@ WHERE r.backend_metadata_json <> '{}'::jsonb
       AND r.deleted IS NOT TRUE
       AND r.ended IS NOT TRUE
       AND r.state = @stopped_state
+    )
+    OR (
+      r.runtime_version = 3
+      AND (r.deleted IS TRUE OR r.ended IS TRUE)
+      AND r.state <> 'switch_retiring'
     )
   )
 ORDER BY r.updated_at ASC
@@ -2044,3 +2054,23 @@ SELECT pg_advisory_unlock(hashtext('asst:' || @assistant_id::text))::boolean AS 
 
 -- name: GetAssistantTransactionIsolationForTest :one
 SELECT current_setting('transaction_isolation')::text AS isolation;
+
+-- name: RetireMCPServerEndpointsFixture :exec
+-- Test fixture: retires every endpoint of one MCP server.
+UPDATE mcp_endpoints SET deleted_at = clock_timestamp() WHERE mcp_server_id = @mcp_server_id AND project_id = @project_id;
+
+-- name: SoftDeleteCustomDomainFixture :exec
+-- Test fixture: soft-deletes a custom domain under its endpoints.
+UPDATE custom_domains SET deleted_at = clock_timestamp() WHERE id = @id AND organization_id = @organization_id;
+
+-- name: BackdateMCPEndpointBySlugFixture :exec
+-- Test fixture: makes one endpoint a day older than when it was created.
+UPDATE mcp_endpoints SET created_at = created_at - interval '1 day' WHERE slug = @slug AND project_id = @project_id;
+
+-- name: LockKitLocalWorkloadSubject :exec
+-- Serializes kit workload provisioning for one external subject across
+-- projects. The key is the caller's canonical JSON encoding of the subject.
+SELECT pg_advisory_xact_lock(hashtextextended(@subject_key::text, 0));
+
+-- name: LockProjectForKitWorkload :one
+SELECT id FROM projects WHERE id = @project_id AND organization_id = @organization_id FOR UPDATE;

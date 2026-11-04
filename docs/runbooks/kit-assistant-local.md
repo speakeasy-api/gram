@@ -17,8 +17,8 @@ Before starting, obtain:
 - The resource's persisted user-session issuer UUID and advertised OAuth issuer.
   These must identify the same issuer; an unrelated UUID will not work.
 
-Built-in Platform MCP machine authentication is not supported by this local
-composition. Do not substitute a human token or an inference bearer.
+Built-in Platform MCP toolsets use resource-bound workload authentication in
+this local composition. Do not substitute a human token or an inference bearer.
 
 For a fresh worktree, initialize the development environment:
 
@@ -258,6 +258,18 @@ projection rules, and restore constraints in the
 [Kit assistant adapter reference](../design/kit-assistant-adapter.md).
 
 ## Platform MCP parity
+
+Kit connects to built-in toolsets with dedicated resource-bound workload tokens,
+not inference tokens. Without automatically attached thread context, tools that
+always need a conversation advertise a required `thread_id`; Slack self-replies
+and wake triggers need it only when `route_replies` is `self` or the trigger
+definition is `wake`. An explicit `thread_id` on a tool that changes state
+requires write access to the target assistant; the current-thread default does
+not add that check. Kit receives the current
+thread ID in per-turn instructions as a convenient default. Explicit targets
+use the existing caller and tool authorization; selecting another authorized
+thread does not require runtime/session attribution. When attached context is
+available, the existing automatic behavior and tool schemas are preserved.
 
 An authorized administrator already uses `select_assistant_runtime` to preview
 and confirm the runtime choice for an exact project and assistant. Workload

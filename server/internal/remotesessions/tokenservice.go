@@ -1123,14 +1123,12 @@ func (s *RefreshService) refreshSessionTokens(
 	refreshTimeout, refreshTimeoutReported := tok.RefreshTokenTimeoutSeconds()
 	refreshExpires := conv.PtrToPGTimestamptz(expirationDeadline(now, refreshTimeout, refreshTimeoutReported))
 
-	// authorization_expires_in is an absolute property of the grant. Preserve
-	// the known deadline when a later response omits it; replace it when the
-	// provider reports the remaining authorization lifetime again.
+	// Keep the grant's known deadline unless this response reports a usable lifetime.
 	authorizationExpires := sess.AuthorizationExpiresAt
 	if lifetime, reported := tok.AuthorizationLifetimeSeconds(); reported {
 		authorizationExpires = conv.PtrToPGTimestamptz(expirationDeadline(now, lifetime, true))
 	}
-	scopes := tok.Scopes()
+	scopes := tok.scopesForIssuer(client.IssuerUrl)
 	if !tok.ScopeReported() {
 		// RFC 6749 §6: an omitted scope means the refreshed token retains the
 		// original grant's scope.
@@ -1157,7 +1155,13 @@ func (s *RefreshService) refreshSessionTokens(
 		if errors.Is(err, pgx.ErrNoRows) {
 			return zero, noToken, newTokenRefreshError("the session was rotated by another request or revoked while this refresh was in flight; reload to see its current state", errRefreshNotApplied, refreshRemedyRetry)
 		}
-		return zero, noToken, fmt.Errorf("persist refreshed session: %w", err)
+		s.logger.ErrorContext(ctx, "provider issued tokens that could not be stored; the connection may need reconnecting",
+			attr.SlogRemoteSessionID(sess.ID.String()),
+			attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
+			attr.SlogOAuthIssuer(client.IssuerUrl),
+			attr.SlogError(err),
+		)
+		return zero, noToken, fmt.Errorf("persist refreshed session: %w: %w", errRefreshOutcomeNotStored, err)
 	}
 
 	// Whether the provider rotates refresh tokens, and how long it says they
@@ -1324,7 +1328,7 @@ func (s *RefreshService) postRefreshGrant(
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if err != nil {
-		return zero, fmt.Errorf("read refresh response: %w", err)
+		return zero, fmt.Errorf("read refresh response: %w: %w", errRefreshUpstreamUnreachable, err)
 	}
 	if resp.StatusCode/100 != 2 {
 		refreshErr := newTokenRefreshErrorFromHTTP(resp.StatusCode, resp.Status, body)

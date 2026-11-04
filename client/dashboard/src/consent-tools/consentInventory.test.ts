@@ -5,26 +5,64 @@ import {
   parseGatewayInventoryBootstrap,
 } from "./consentInventory";
 
-afterEach(() => vi.unstubAllGlobals());
+afterEach(() => {
+  vi.unstubAllGlobals();
+  vi.restoreAllMocks();
+  vi.useRealTimers();
+});
 
-it.each(["tools/list", "DELETE"])(
-  "honors the caller deadline while %s is stalled, including SDK cleanup",
-  async (stalledMethod) => {
+it.each([false, true])(
+  "terminates an initialized session after discovery cancellation (stalled cleanup: %s)",
+  async (stallCleanup) => {
+    vi.useFakeTimers();
+    // Drive the timeout deterministically; native AbortSignal.timeout does not
+    // use Vitest's fake timers.
+    const timeout = vi
+      .spyOn(AbortSignal, "timeout")
+      .mockImplementation((ms) => {
+        const controller = new AbortController();
+        setTimeout(
+          () =>
+            controller.abort(
+              new DOMException("Cleanup timed out", "TimeoutError"),
+            ),
+          ms,
+        );
+        return controller.signal;
+      });
     const deadline = new AbortController();
-    let sawStall!: () => void;
-    const stalled = new Promise<void>((resolve) => {
-      sawStall = resolve;
+    let sawDiscovery!: () => void;
+    const discovery = new Promise<void>((resolve) => {
+      sawDiscovery = resolve;
     });
+    let sawDelete!: () => void;
+    const deleting = new Promise<void>((resolve) => {
+      sawDelete = resolve;
+    });
+    let cleanupSignal: AbortSignal | undefined;
     vi.stubGlobal(
       "fetch",
       vi.fn(async (_input: RequestInfo | URL, init?: RequestInit) => {
+        expect(new Headers(init?.headers).get("Gram-Consent-Auth-Client")).toBe(
+          "00000000-0000-4000-8000-000000000001",
+        );
         const request =
           init?.method === "POST" && typeof init.body === "string"
             ? JSON.parse(init.body)
             : undefined;
         const method = request?.method ?? init?.method;
-        if (method === stalledMethod) {
-          sawStall();
+        if (method === "tools/list" || method === "DELETE") {
+          if (method === "tools/list") sawDiscovery();
+          else {
+            cleanupSignal = init?.signal ?? undefined;
+            expect(deadline.signal.aborted).toBe(true);
+            expect(cleanupSignal?.aborted).toBe(false);
+            expect(new Headers(init?.headers).get("Mcp-Session-Id")).toBe(
+              "session",
+            );
+            sawDelete();
+            if (!stallCleanup) return new Response(null, { status: 200 });
+          }
           return new Promise<Response>((_resolve, reject) => {
             const abort = () => reject(init?.signal?.reason);
             if (init?.signal?.aborted) abort();
@@ -32,19 +70,18 @@ it.each(["tools/list", "DELETE"])(
           });
         }
         if (method === "GET") return new Response(null, { status: 405 });
-        if (method === "DELETE") return new Response(null, { status: 200 });
         if (method === "notifications/initialized")
           return new Response(null, { status: 202 });
-        const result =
-          method === "initialize"
-            ? {
-                protocolVersion: "2025-03-26",
-                capabilities: { tools: {} },
-                serverInfo: { name: "test", version: "1" },
-              }
-            : { tools: [] };
         return new Response(
-          JSON.stringify({ jsonrpc: "2.0", id: request.id, result }),
+          JSON.stringify({
+            jsonrpc: "2.0",
+            id: request.id,
+            result: {
+              protocolVersion: "2025-03-26",
+              capabilities: { tools: {} },
+              serverInfo: { name: "test", version: "1" },
+            },
+          }),
           {
             status: 200,
             headers: {
@@ -61,23 +98,30 @@ it.each(["tools/list", "DELETE"])(
       "csrf",
       "attempt",
       deadline.signal,
+      "00000000-0000-4000-8000-000000000001",
     );
-    // Attach rejection handling before aborting the real SDK request.
-    const outcome = inventory.then(
-      (value) => ({ value }),
-      (error: unknown) => ({ error }),
-    );
-    await stalled;
-    deadline.abort(new DOMException("Deadline exceeded", "TimeoutError"));
-    const result = await outcome;
-    if (stalledMethod === "tools/list") expect(result).toHaveProperty("error");
-    else
-      expect(result).toEqual({
-        value: {
-          tools: [],
-          roleHiddenTools: { count: 0, names: [] },
-        },
+    let settled = false;
+    const outcome = inventory
+      .then(
+        (value) => ({ value }),
+        (error: unknown) => ({ error }),
+      )
+      .finally(() => {
+        settled = true;
       });
+    await discovery;
+    deadline.abort(new DOMException("Discovery cancelled", "AbortError"));
+    await deleting;
+    expect(timeout).toHaveBeenCalledExactlyOnceWith(2000);
+    if (stallCleanup) {
+      await vi.advanceTimersByTimeAsync(1999);
+      expect(settled).toBe(false);
+      expect(cleanupSignal?.aborted).toBe(false);
+      await vi.advanceTimersByTimeAsync(1);
+      expect(cleanupSignal?.aborted).toBe(true);
+    }
+    // Cleanup must not replace the original discovery error.
+    expect(await outcome).toEqual({ error: deadline.signal.reason });
   },
 );
 

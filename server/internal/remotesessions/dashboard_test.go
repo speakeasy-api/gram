@@ -45,6 +45,7 @@ func TestCommitServerIdentityConfigurationManualCreatesConfigurationAtomically(t
 		ApikeyToken:        nil,
 		ProjectSlugInput:   nil,
 		McpServerID:        targetID.String(),
+		TargetServerOnly:   new(true),
 		ProviderID:         nil,
 		CreateProvider:     serverIdentityProviderForm("manual-provider", nil, false),
 		ClientMode:         "manual",

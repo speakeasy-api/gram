@@ -119,7 +119,7 @@ func TestConsentPage_IdentityChainedServiceIsManagedWithFallback(t *testing.T) {
 	require.Contains(t, page, "data-connect-fallback")
 	require.Contains(t, page, "Use a separate sign-in instead")
 	require.Contains(t, page, `data-consent-enabled="true"`)
-	require.NotContains(t, page, "Connect a service above to enable access.")
+	require.NotContains(t, page, "Connect or reconnect a service above to give access.")
 
 	reqs := g.seen()
 	require.Len(t, reqs, 1)

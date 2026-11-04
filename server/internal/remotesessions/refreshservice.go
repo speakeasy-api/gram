@@ -4,7 +4,7 @@
 // refresh handler (challenge.go, organizationsessionhandlers.go), and the
 // scheduled pre-emptive refresh activity (background worker). Sharing matters
 // because refresh tokens rotate: two callers presenting the same refresh token
-// to a provider with reuse detection (OAuth 2.0 Security BCP 4.13.2) can
+// to a provider with reuse detection (OAuth 2.0 Security BCP, RFC 9700 section 4.14.2) can
 // revoke the whole token family.
 
 package remotesessions
@@ -153,6 +153,8 @@ type RefreshService struct {
 
 	// connections records each refresh's outcome; nil records nothing.
 	connections *mcpconnectionattempts.Recorder
+	// refreshes tracks request-path refreshes, which can outlive their caller.
+	refreshes sync.WaitGroup
 }
 
 // identityRestatement carries a refresh response out of the lease so identity is written after release.
@@ -214,6 +216,7 @@ func NewRefreshService(logger *slog.Logger, meterProvider metric.MeterProvider, 
 		assertions:     unavailableTokenEndpointAssertionSigner{},
 		restatements:   sync.WaitGroup{},
 		connections:    nil,
+		refreshes:      sync.WaitGroup{},
 	}
 	for _, opt := range opts {
 		opt(s)
@@ -309,11 +312,20 @@ var errRefreshTunnelTransport = errors.New("remotesessions: no tunnel transport 
 
 var errRefreshNotApplied = errors.New("remotesessions: refreshed tokens matched no active session")
 
+// errRefreshLeaseLost marks a holder whose lease expired before its POST.
+var errRefreshLeaseLost = errors.New("remotesessions: refresh lease lost")
+
+// errRefreshOutcomeNotStored marks a provider answer that could not be written.
+var errRefreshOutcomeNotStored = errors.New("remotesessions: refresh outcome not stored")
+
 // Ordering is the invariant, guarded by TestRefreshTimingInvariant. Invert it
 // and a waiter gives up while the holder is still mid-POST, then presents the
 // same refresh token upstream.
 //
 //	refreshUpstreamTimeout < refreshLockTTL <= refreshWaitBudget
+//
+// The wait budget covers the POST but not a slow store: a holder extends its
+// lease to refreshRotationTimeout, so a waiter can give up while it is held.
 const (
 	// Nothing else bounds the POST: the pooled client sets no Timeout (its 30s
 	// is dial-only) and the MCP mux sets no WriteTimeout.
@@ -323,6 +335,10 @@ const (
 	refreshWaitBudget     = 12 * time.Second
 	refreshWaitPoll       = 200 * time.Millisecond
 	refreshReleaseTimeout = 5 * time.Second
+
+	// Bounds the POST and storing its outcome, and the lease is held for it: a
+	// second caller presenting the old token could revoke the new one at the provider.
+	refreshRotationTimeout = refreshUpstreamTimeout + 30*time.Second
 )
 
 func refreshLockKey(subject urn.SessionSubject, clientID uuid.UUID) string {
@@ -349,6 +365,9 @@ func refreshLockKey(subject urn.SessionSubject, clientID uuid.UUID) string {
 // A definitive invalid_grant clears only the refresh grant: the existing
 // access token remains usable until its own known expiry. This keeps
 // proactive refresh failure from forcing a reconnect.
+//
+// A request-path caller stops waiting when ctx ends, but a POST already started
+// runs on and stores its result; other triggers wait for it.
 func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_repo.RemoteSession, callerResource string, trigger remotesessionmetrics.RefreshTrigger, attribution RefreshAttribution) (RefreshResult, error) {
 	var zero RefreshResult
 	q := remotesessions_repo.New(s.db)
@@ -369,6 +388,64 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 		return zero, &RefreshError{IssuerURL: "", Outcome: outcome, err: err}
 	}
 	s.issuerMetadata.NoteUse(ctx, issuerUseFromClientRow(client))
+
+	if trigger != remotesessionmetrics.RefreshTriggerRequest {
+		return s.refreshNow(ctx, q, client, sess, callerResource, trigger, attribution)
+	}
+
+	type refreshed struct {
+		result RefreshResult
+		err    error
+	}
+	done := make(chan refreshed, 1)
+	s.refreshes.Go(func() {
+		// Off the handler goroutine, so the HTTP recovery middleware cannot catch this.
+		defer func() {
+			if recovered := recover(); recovered != nil {
+				err := fmt.Errorf("remote session refresh panicked: %v", recovered)
+				s.logger.ErrorContext(ctx, "remote session refresh panicked", attr.SlogError(err))
+				s.metrics.Record(ctx, client.IssuerUrl, trigger, remotesessionmetrics.RefreshOutcomeInternalError)
+				done <- refreshed{result: zero, err: &RefreshError{IssuerURL: client.IssuerUrl, Outcome: remotesessionmetrics.RefreshOutcomeInternalError, err: err}}
+			}
+		}()
+		result, err := s.refreshNow(ctx, q, client, sess, callerResource, trigger, attribution)
+		var refreshErr *RefreshError
+		if ctx.Err() != nil && errors.As(err, &refreshErr) && refreshErr.Outcome != remotesessionmetrics.RefreshOutcomeCanceled {
+			// The caller that would have logged this has gone. A cancel before the POST is routine.
+			s.logger.WarnContext(ctx, "remote session refresh failed after its caller stopped waiting", refreshFailureAttrs(sess, err)...)
+		}
+		done <- refreshed{result: result, err: err}
+	})
+
+	select {
+	case out := <-done:
+		return out.result, out.err
+	case <-ctx.Done():
+		return zero, &RefreshError{IssuerURL: client.IssuerUrl, Outcome: remotesessionmetrics.RefreshOutcomeCanceled, err: ctx.Err()}
+	}
+}
+
+// DrainRefreshes waits for refreshes that outlived their callers, and the
+// identity restatements they started, until ctx ends. Call it once handlers
+// have drained and before the datastores close.
+func (s *RefreshService) DrainRefreshes(ctx context.Context) error {
+	done := make(chan struct{})
+	go func() {
+		s.refreshes.Wait()
+		s.restatements.Wait()
+		close(done)
+	}()
+	select {
+	case <-done:
+		return nil
+	case <-ctx.Done():
+		return fmt.Errorf("wait for refreshes: %w", ctx.Err())
+	}
+}
+
+// refreshNow is RefreshNow's body, on whichever goroutine the trigger requires.
+func (s *RefreshService) refreshNow(ctx context.Context, q *remotesessions_repo.Queries, client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow, sess remotesessions_repo.RemoteSession, callerResource string, trigger remotesessionmetrics.RefreshTrigger, attribution RefreshAttribution) (RefreshResult, error) {
+	var zero RefreshResult
 
 	result, postLockClient, restatement, err := s.refresh(ctx, q, sess, callerResource)
 	issuerURL := client.IssuerUrl
@@ -417,11 +494,9 @@ func refreshClientLoadError(err error) error {
 
 // refreshOutcomeForError maps a failed refresh onto the metric outcome set.
 //
-// The caller going away is checked before the transport marker because an
-// aborted POST surfaces as a transport error too, and it is neither the
-// upstream's fault nor Speakeasy's. A deadline is the caller's own only when ctx
-// itself has expired; otherwise it was the POST's internal timeout, which is
-// the upstream not answering.
+// The POST and the store run detached from the caller, so their markers are
+// checked first: a deadline on either is never the caller's, even if ctx has
+// since ended. Any other deadline is the caller's own only when ctx has expired.
 //
 // invalid_grant and invalid_client are checked before the status-based
 // buckets because refresh clears the grant on either regardless of status,
@@ -432,10 +507,12 @@ func refreshOutcomeForError(ctx context.Context, err error) remotesessionmetrics
 	switch {
 	case errors.Is(err, ErrNoValidToken):
 		return remotesessionmetrics.RefreshOutcomeNoGrant
-	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded) && ctx.Err() != nil:
-		return remotesessionmetrics.RefreshOutcomeCanceled
 	case errors.Is(err, errRefreshUpstreamUnreachable):
 		return remotesessionmetrics.RefreshOutcomeUnreachable
+	case errors.Is(err, errRefreshOutcomeNotStored):
+		return remotesessionmetrics.RefreshOutcomeInternalError
+	case errors.Is(err, context.Canceled), errors.Is(err, context.DeadlineExceeded) && ctx.Err() != nil:
+		return remotesessionmetrics.RefreshOutcomeCanceled
 	case !errors.As(err, &tokenErr) || tokenErr.statusCode == 0:
 		// Plain infrastructure errors, and TokenRefreshErrors raised before or
 		// after the POST (no token endpoint, unreadable stored values, an empty
@@ -474,7 +551,16 @@ func (s *RefreshService) refresh(
 
 	lockKey := refreshLockKey(sess.SubjectUrn, sess.RemoteSessionClientID)
 	lockAcquiredAt := time.Now()
-	held, lockErr := s.locks.Add(ctx, lockKey, refreshLockTTL)
+	// Only a renewable cache holds the lease through the store; Redis is one.
+	leases, renewable := s.locks.(cache.RenewableLeaseCache)
+	leaseOwner := uuid.NewString()
+	var held bool
+	var lockErr error
+	if renewable {
+		held, lockErr = leases.AcquireLease(ctx, lockKey, leaseOwner, refreshLockTTL)
+	} else {
+		held, lockErr = s.locks.Add(ctx, lockKey, refreshLockTTL)
+	}
 
 	switch {
 	case lockErr != nil:
@@ -489,6 +575,9 @@ func (s *RefreshService) refresh(
 		if winner, ok := s.awaitRefreshedSession(ctx, q, sess); ok {
 			return winner, nil, nil, nil
 		}
+		if err := ctx.Err(); err != nil {
+			return zero, nil, nil, fmt.Errorf("wait for a concurrent refresh: %w", err)
+		}
 		// A duplicate POST beats a guaranteed reconnect prompt.
 		s.logger.WarnContext(ctx, "timed out waiting on a concurrent remote session refresh; refreshing directly",
 			attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
@@ -496,6 +585,18 @@ func (s *RefreshService) refresh(
 		)
 	default:
 		defer o11y.LogDefer(ctx, s.logger, "failed to release remote session refresh lock", func() error {
+			// Detached: MCP clients disconnect mid-refresh routinely, and a
+			// skipped release strands the lease for its full TTL.
+			releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
+			defer cancel()
+
+			if renewable {
+				if _, err := leases.ReleaseLeaseIfOwner(releaseCtx, lockKey, leaseOwner); err != nil {
+					return fmt.Errorf("release refresh lease: %w", err)
+				}
+				return nil
+			}
+
 			// Past TTL the key may be a new holder's lock. Skip delete; TTL reaps.
 			if time.Since(lockAcquiredAt) >= refreshLockTTL {
 				s.logger.WarnContext(ctx, "remote session refresh outlived its lock lease; leaving release to TTL",
@@ -505,18 +606,13 @@ func (s *RefreshService) refresh(
 				return nil
 			}
 
-			// Detached: MCP clients disconnect mid-refresh routinely, and a
-			// skipped release strands the lease for its full TTL.
-			releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshReleaseTimeout)
-			defer cancel()
-
 			return s.locks.Delete(releaseCtx, lockKey)
 		})
 	}
 
 	// sess predates the lock, so a holder that finished while we were acquiring
 	// has already consumed its refresh token. Replaying one makes providers with
-	// reuse detection (OAuth 2.0 Security BCP 4.13.2) revoke the whole family,
+	// reuse detection (OAuth 2.0 Security BCP, RFC 9700 section 4.14.2) revoke the whole family,
 	// the winner's fresh pair included, which nothing below can detect.
 	snapshotAt := sess.UpdatedAt.Time
 
@@ -577,6 +673,25 @@ func (s *RefreshService) refresh(
 	client, err := q.GetRemoteSessionClientWithIssuerByID(ctx, sess.RemoteSessionClientID)
 	if err != nil {
 		return zero, nil, nil, refreshClientLoadError(err)
+	}
+
+	// The provider may consume the refresh token once the POST starts; keep its replacement.
+	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), refreshRotationTimeout)
+	defer cancel()
+
+	if renewable && lockErr == nil && held {
+		renewed, err := leases.RenewLease(ctx, lockKey, leaseOwner, refreshRotationTimeout)
+		switch {
+		case err != nil:
+			s.logger.WarnContext(ctx, "failed to extend remote session refresh lease",
+				attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
+				attr.SlogCacheKey(lockKey),
+				attr.SlogError(err),
+			)
+		case !renewed:
+			// Another caller may be presenting this refresh token by now.
+			return zero, &client, nil, newTokenRefreshError("the refresh lease expired before the provider was asked; retry", errRefreshLeaseLost, refreshRemedyRetry)
+		}
 	}
 
 	updated, tok, refreshErr := s.refreshSessionTokens(ctx, q, client, sess, resource)
@@ -642,7 +757,7 @@ func (s *RefreshService) refresh(
 		case err == nil:
 			return zero, &client, nil, refreshErr
 		case !errors.Is(err, pgx.ErrNoRows):
-			return zero, &client, nil, fmt.Errorf("clear remote session refresh token after %s: %w", tokenRefreshErr.UpstreamCode(), err)
+			return zero, &client, nil, fmt.Errorf("clear remote session refresh token after %s: %w: %w", tokenRefreshErr.UpstreamCode(), errRefreshOutcomeNotStored, err)
 		}
 		// A row that moved after our refresh attempt belongs to a concurrent
 		// winner. Re-read it below and adopt that token instead of clearing it.
