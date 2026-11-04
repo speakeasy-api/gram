@@ -19,6 +19,7 @@ const mocks = vi.hoisted(() => ({
   registrationsFailed: false,
   registrations: [] as unknown[],
   issuers: [] as unknown[],
+  issuersLoading: false,
   authorizationServers: undefined as string[] | undefined,
 }));
 
@@ -66,7 +67,7 @@ vi.mock("@/lib/remote-identity", async (importOriginal) => ({
   }),
   useRemoteSessionIssuersByIds: () => ({
     items: mocks.issuers,
-    isLoading: false,
+    isLoading: mocks.issuersLoading,
     isError: false,
     refetch: vi.fn(),
   }),
@@ -127,6 +128,7 @@ afterEach(() => {
   mocks.registrationsFailed = false;
   mocks.registrations = [];
   mocks.issuers = [];
+  mocks.issuersLoading = false;
   mocks.authorizationServers = undefined;
 });
 
@@ -361,6 +363,130 @@ describe("AddCredentialSheet", () => {
         screen.getByText(/registered with auth\.example\.com yet/),
       ).toBeTruthy();
       expect(screen.queryByRole("combobox")).toBeNull();
+    });
+
+    it("tells issuers apart by query and fragment", () => {
+      signInMocks();
+      mocks.issuers = [
+        {
+          id: "linear",
+          issuer: "https://issuer.example/",
+          name: "Tenant-less",
+        },
+        {
+          id: "notion",
+          issuer: "https://issuer.example/?tenant=a",
+          name: "Tenant A",
+        },
+      ];
+      mocks.authorizationServers = ["https://issuer.example?tenant=a"];
+      renderSheet();
+      openPicker();
+
+      expect(screen.getByRole("option", { name: /Tenant A/ })).toBeTruthy();
+      expect(screen.queryByRole("option", { name: /Tenant-less/ })).toBeNull();
+    });
+
+    it("describes every server the upstream names", () => {
+      signInMocks();
+      mocks.issuers = [
+        ...mocks.issuers,
+        { id: "other", issuer: "https://other.example", name: "Other" },
+      ];
+      mocks.registrations = [
+        ...mocks.registrations,
+        {
+          id: "01a17e7e",
+          clientId: "other",
+          credentialOwner: "subject",
+          remoteSessionIssuerId: "other",
+        },
+      ];
+      mocks.authorizationServers = [
+        "https://mcp.linear.app",
+        "https://mcp.linear.app/",
+        " ",
+        "https://mcp.notion.com",
+      ];
+      renderSheet();
+      openPicker();
+
+      expect(screen.getByRole("option", { name: /Linear/ })).toBeTruthy();
+      expect(screen.getByRole("option", { name: /Notion/ })).toBeTruthy();
+      expect(screen.queryByRole("option", { name: /Other/ })).toBeNull();
+      expect(
+        screen.getByText(
+          /Showing sign-ins for mcp\.linear\.app and mcp\.notion\.com,/,
+        ),
+      ).toBeTruthy();
+    });
+
+    it("keeps a sign-in whose authorization server could not be looked up", () => {
+      signInMocks();
+      mocks.issuers = [mocks.issuers[0]];
+      mocks.authorizationServers = ["https://mcp.linear.app"];
+      renderSheet();
+      openPicker();
+
+      expect(screen.getByRole("option", { name: /Linear/ })).toBeTruthy();
+      expect(screen.getByRole("option", { name: /oacli_notion/ })).toBeTruthy();
+      expect(screen.queryByText(/Sign-ins could not be loaded/)).toBeNull();
+    });
+
+    it("hides the narrowing note until the sign-ins are shown", () => {
+      signInMocks();
+      mocks.issuersLoading = true;
+      mocks.authorizationServers = ["https://mcp.linear.app"];
+      renderSheet();
+      fireEvent.click(
+        screen.getByRole("radio", { name: /^Each person's own account/ }),
+      );
+
+      expect(screen.getByText("Loading sign-ins…")).toBeTruthy();
+      expect(screen.queryByText(/Showing sign-ins for/)).toBeNull();
+    });
+
+    it("names the registration on the closed picker", () => {
+      signInMocks();
+      mocks.authorizationServers = ["https://mcp.linear.app"];
+      renderSheet();
+      openPicker();
+      fireEvent.click(screen.getByRole("option", { name: /Linear/ }));
+
+      expect(screen.getByRole("combobox").textContent).toContain(
+        "mcp.linear.app",
+      );
+    });
+
+    it("drops a choice the narrower list leaves out", () => {
+      signInMocks();
+      mocks.authorizationServers = ["https://mcp.linear.app"];
+      renderSheet();
+      fireEvent.click(
+        screen.getByRole("radio", { name: /^Each person's own account/ }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Show all" }));
+      fireEvent.click(screen.getByRole("combobox"));
+      fireEvent.click(screen.getByRole("option", { name: /Notion/ }));
+      fireEvent.click(
+        screen.getByRole("button", { name: "Show only mcp.linear.app" }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Show all" }));
+
+      expect(screen.getByRole("combobox").textContent).toContain(
+        "Choose a sign-in",
+      );
+    });
+
+    it("treats a blank-only list as naming no server", () => {
+      signInMocks();
+      mocks.authorizationServers = [" "];
+      renderSheet();
+      openPicker();
+
+      expect(screen.getByRole("option", { name: /Linear/ })).toBeTruthy();
+      expect(screen.getByRole("option", { name: /Notion/ })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Show all" })).toBeNull();
     });
 
     it("offers every sign-in when the upstream names none", () => {

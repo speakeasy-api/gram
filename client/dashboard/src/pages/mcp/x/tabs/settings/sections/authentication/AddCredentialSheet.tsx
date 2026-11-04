@@ -108,7 +108,7 @@ export function AddCredentialSheet({
 }: {
   mcpServerId: string;
   projectId: string;
-  /** Lets the sign-in list narrow to the upstream's authorization server. */
+  /** Lets the sign-in list narrow to the upstream's authorization servers. */
   remoteMcpServerId: string | undefined;
   /** Tunneled servers are sent no credential headers. */
   tunneled: boolean;
@@ -143,6 +143,12 @@ export function AddCredentialSheet({
     (candidate) => candidate.registration.id === registrationId,
   );
   const registration = signIn?.registration;
+
+  // A choice the narrower list leaves out must not come back later unseen.
+  const toggleShowAll = () => {
+    if (signIns.showAll) setRegistrationId("");
+    signIns.setShowAll(!signIns.showAll);
+  };
 
   const done = (message: string) => {
     toast.success(message);
@@ -321,8 +327,8 @@ export function AddCredentialSheet({
                       {owner === "self"
                         ? "No sign-in that gets its own token is registered"
                         : "No sign-in for people's own accounts is registered"}
-                      {signIns.upstreamIssuer
-                        ? ` with ${signIns.upstreamIssuer}`
+                      {signIns.upstreamIssuers
+                        ? ` with ${signIns.upstreamIssuers}`
                         : ""}
                       {" yet. "}
                       Register one in{" "}
@@ -367,24 +373,29 @@ export function AddCredentialSheet({
                             size="sm"
                           />
                           <span className="truncate">{signIn.label}</span>
+                          <span className="text-muted-foreground truncate font-normal">
+                            {signIn.description}
+                          </span>
                         </span>
                       ) : (
                         "Choose a sign-in"
                       )}
                     </Combobox>
                   )}
-                  {signIns.hiddenCount > 0 || signIns.showAll ? (
+                  {!signIns.isLoading &&
+                  !signIns.isError &&
+                  (signIns.hiddenCount > 0 || signIns.showAll) ? (
                     <Text muted small className="block">
                       {signIns.showAll
                         ? "Showing every sign-in, including ones for other services. "
-                        : `Showing sign-ins for ${signIns.upstreamIssuer}, the upstream's authorization server. `}
+                        : `Showing sign-ins for ${signIns.upstreamIssuers}, as named by the upstream. `}
                       <button
                         type="button"
                         className="font-medium underline underline-offset-2"
-                        onClick={() => signIns.setShowAll(!signIns.showAll)}
+                        onClick={toggleShowAll}
                       >
                         {signIns.showAll
-                          ? `Show only ${signIns.upstreamIssuer}`
+                          ? `Show only ${signIns.upstreamIssuers}`
                           : "Show all"}
                       </button>
                     </Text>

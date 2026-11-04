@@ -1,6 +1,6 @@
 import {
-  displayUrl,
   issuerDisplayName,
+  providerUrlLabel,
   useAllRemoteSessionClients,
   useProtectedResourceMetadata,
   useRemoteSessionIssuersByIds,
@@ -10,7 +10,7 @@ import type { RemoteSessionClient } from "@gram/client/models/components/remotes
 import type { RemoteSessionIssuer } from "@gram/client/models/components/remotesessionissuer.js";
 import { useState } from "react";
 
-export type SignInChoice = {
+type SignInChoice = {
   registration: RemoteSessionClient;
   issuer: RemoteSessionIssuer | undefined;
   /** The authorization server, which is what an administrator recognizes. */
@@ -23,22 +23,32 @@ type SignInChoices = {
   choices: SignInChoice[];
   /** Registrations left out because they belong to another server. */
   hiddenCount: number;
-  /** The upstream's authorization server as shown, or "" when it names none. */
-  upstreamIssuer: string;
+  /** The upstream's authorization servers as shown, or "" when it names none. */
+  upstreamIssuers: string;
   showAll: boolean;
   setShowAll: (showAll: boolean) => void;
   isLoading: boolean;
   isError: boolean;
 };
 
-/** Spellings of one issuer URL compare equal, as the server's matching does. */
+/** Spellings of one issuer URL compare equal; a query or fragment sets it apart. */
 function canonicalIssuer(url: string): string {
   try {
     const parsed = new URL(url.trim());
-    return `${parsed.protocol}//${parsed.host}${parsed.pathname.replace(/\/+$/, "")}`;
+    return `${parsed.protocol}//${parsed.host}${parsed.pathname.replace(/\/+$/, "")}${parsed.search}${parsed.hash}`;
   } catch {
     return url.trim().replace(/\/+$/, "");
   }
+}
+
+const issuerList = new Intl.ListFormat("en", { type: "conjunction" });
+
+/** Each named server once, however the upstream spelled it. */
+function issuersLabel(authorizationServers: string[]): string {
+  const shown = authorizationServers.map((url) =>
+    providerUrlLabel(canonicalIssuer(url)),
+  );
+  return issuerList.format(new Set(shown));
 }
 
 function toChoice(
@@ -51,7 +61,7 @@ function toChoice(
     registration.displayName || unnamedSiblings > 1
       ? remoteSessionClientDisplayName(registration)
       : "";
-  const url = issuer ? displayUrl(issuer.issuer) : "";
+  const url = issuer ? providerUrlLabel(issuer.issuer) : "";
   return {
     registration,
     issuer,
@@ -64,12 +74,13 @@ function toChoice(
 
 /**
  * Pairs each registration with its authorization server and keeps the ones of
- * the servers the upstream names. Naming none leaves every registration in.
+ * the servers the upstream names. Naming none leaves every registration in, as
+ * does an authorization server that could not be looked up.
  */
-export function signInChoices(
+function signInChoices(
   registrations: RemoteSessionClient[],
   issuers: RemoteSessionIssuer[],
-  authorizationServers: string[] | undefined,
+  authorizationServers: string[],
 ): { matching: SignInChoice[]; all: SignInChoice[] } {
   const byId = new Map(issuers.map((issuer) => [issuer.id, issuer]));
   const issuerOf = (registration: RemoteSessionClient) =>
@@ -91,20 +102,19 @@ export function signInChoices(
       unnamed.get(issuerKey(registration)) ?? 0,
     ),
   );
-  if (!authorizationServers?.length) return { matching: all, all };
+  if (!authorizationServers.length) return { matching: all, all };
   const advertised = new Set(authorizationServers.map(canonicalIssuer));
   return {
     matching: all.filter(
       (choice) =>
-        !!choice.issuer &&
-        advertised.has(canonicalIssuer(choice.issuer.issuer)),
+        !choice.issuer || advertised.has(canonicalIssuer(choice.issuer.issuer)),
     ),
     all,
   };
 }
 
 /**
- * The sign-ins a new credential can use, narrowed to the authorization server
+ * The sign-ins a new credential can use, narrowed to the authorization servers
  * the upstream names. An upstream can name the wrong one, which an
  * administrator can correct, so the rest stay one click away.
  */
@@ -123,7 +133,9 @@ export function useSignInChoices(
     { enabled },
   );
   const resource = useProtectedResourceMetadata(remoteMcpServerId, enabled);
-  const authorizationServers = resource.metadata?.authorizationServers;
+  const authorizationServers = (
+    resource.metadata?.authorizationServers ?? []
+  ).filter((url) => url.trim());
   const { matching, all } = signInChoices(
     owned,
     issuers.items,
@@ -133,15 +145,13 @@ export function useSignInChoices(
   return {
     choices: showAll ? all : matching,
     hiddenCount: all.length - matching.length,
-    upstreamIssuer: authorizationServers?.[0]
-      ? displayUrl(authorizationServers[0])
-      : "",
+    upstreamIssuers: issuersLabel(authorizationServers),
     showAll,
     setShowAll,
     isLoading:
       registrations.isLoading ||
       issuers.isLoading ||
       resource.status === "loading",
-    isError: registrations.isError || issuers.isError,
+    isError: registrations.isError,
   };
 }

@@ -20,6 +20,8 @@ export { REDACTED_SECRET } from "./model/secret";
 
 export { normalizeScopes } from "./model/clientConfiguration";
 
+export { providerUrlLabel } from "./model/provider";
+
 export {
   headerDraftErrors,
   headerDraftFromCatalog,
@@ -40,7 +42,6 @@ export {
 export type { AgentCredentialFields } from "./drafts/useCredentialDraft";
 
 export {
-  displayUrl,
   issuerDisplayName,
   useUserIdentityDraft,
 } from "./drafts/useIdentityDraft";
