@@ -373,7 +373,7 @@ func NewTemporalWorker(
 			CatalogPromotions:              conv.Default(o.CatalogPromotions, opts.CatalogPromotions),
 			CatalogPromotionDeliveryPaused: o.CatalogPromotionDeliveryPaused || opts.CatalogPromotionDeliveryPaused,
 			GuardianPolicy:                 conv.Default(o.GuardianPolicy, opts.GuardianPolicy),
-			AuthzClient:                    nil,
+			AuthzClient:                    conv.Default(o.AuthzClient, opts.AuthzClient),
 			TunnelHTTPClient:               conv.Default(o.TunnelHTTPClient, opts.TunnelHTTPClient),
 			DB:                             conv.Default(o.DB, opts.DB),
 			EncryptionClient:               conv.Default(o.EncryptionClient, opts.EncryptionClient),

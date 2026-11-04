@@ -117,9 +117,11 @@ type parityRecorder struct {
 }
 
 func (r *parityRecorder) RecordShadowComparison(_ context.Context, c authz.ShadowComparison) {
-	// A request the test cancelled on purpose proves nothing either way.
+	// A request the test cancelled on purpose proves nothing either way. An
+	// incomparable answer means the registry lacked facts it needs, so it
+	// fails parity like a disagreement.
 	canceled := c.Outcome == authz.ShadowFailed && c.Detail == "canceled"
-	if canceled || (!c.Outcome.Disagrees() && c.Outcome != authz.ShadowFailed && c.Outcome != authz.ShadowSkipped) {
+	if canceled || (!c.Outcome.Disagrees() && c.Outcome != authz.ShadowFailed && c.Outcome != authz.ShadowSkipped && c.Outcome != authz.ShadowIncomparable) {
 		return
 	}
 	r.mu.Lock()
