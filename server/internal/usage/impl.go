@@ -48,7 +48,7 @@ type Service struct {
 	tracer          trace.Tracer
 	logger          *slog.Logger
 	auth            *auth.Auth
-	authz           *authz.Engine
+	authzClient     *authz.Client
 	serverURL       *url.URL
 	siteURL         *url.URL
 	db              *pgxpool.Pool
@@ -87,7 +87,7 @@ type openRouterBillingDBProvisioner interface {
 	RefreshAPIKeyLimitWithDB(context.Context, openrouter.DBTX, string, openrouter.KeyType, *int) (int, error)
 }
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, keyRefresher openRouterKeyRefreshScheduler, stripeClient stripeclient.Client, authzEngine *authz.Engine, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, featureFlags feature.Provider, productFeatures *productfeatures.Client, trialNotifier trialemails.Notifier, meterReadConn clickhouse.Conn) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessions *sessions.Manager, billingRepo billing.Repository, serverURL, siteURL *url.URL, posthogClient *posthog.Posthog, openRouter openrouter.Provisioner, keyRefresher openRouterKeyRefreshScheduler, stripeClient stripeclient.Client, authzEngine *authz.Engine, authzClient *authz.Client, telemetryRepo *telemetryrepo.Queries, auditLogger *audit.Logger, featureFlags feature.Provider, productFeatures *productfeatures.Client, trialNotifier trialemails.Notifier, meterReadConn clickhouse.Conn) *Service {
 	logger = logger.With(attr.SlogComponent("usage"))
 
 	if trialNotifier == nil {
@@ -98,7 +98,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/usage"),
 		logger:          logger,
 		auth:            auth.New(logger, db, sessions, authzEngine),
-		authz:           authzEngine,
+		authzClient:     authzClient,
 		serverURL:       serverURL,
 		siteURL:         siteURL,
 		db:              db,
@@ -130,7 +130,7 @@ func NewBillingOperations(logger *slog.Logger, db *pgxpool.Pool, stripeClient st
 		tracer:          nil,
 		logger:          logger.With(attr.SlogComponent("usage-billing")),
 		auth:            nil,
-		authz:           nil,
+		authzClient:     nil,
 		serverURL:       nil,
 		siteURL:         nil,
 		db:              db,
@@ -344,7 +344,7 @@ func (s *Service) GetPeriodUsage(ctx context.Context, payload *gen.GetPeriodUsag
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Read()); err != nil {
 		return nil, err
 	}
 
@@ -412,7 +412,7 @@ func (s *Service) CreateCheckout(ctx context.Context, payload *gen.CreateCheckou
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return "", oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return "", err
 	}
 
@@ -431,7 +431,7 @@ func (s *Service) CreateTopUpCheckout(ctx context.Context, payload *gen.CreateTo
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return "", oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return "", err
 	}
 
@@ -450,7 +450,7 @@ func (s *Service) CreateCustomerSession(ctx context.Context, payload *gen.Create
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return "", oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return "", err
 	}
 

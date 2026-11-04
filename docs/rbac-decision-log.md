@@ -117,3 +117,11 @@ Review follow-ups adopted on #8442 (each fails closed):
 
 1. **Audience resolution is shared by every activity.** `organizationAdministratorEmails` in the activities package wraps `Client.OrganizationAdministratorEmails` and handles the missing-client fallback. Directory review and custom-domain health both use it, and X1 owns its fallback row. _If reversed:_ each activity keeps its own fallback.
 2. **Other packages' test setups pass a parity client to assets.** The test setups for MCP servers, toolsets, tools, functions and deployments build an assets service, so they now pass one. Their assets calls are project-scoped and do not reach the organization handler. These are setup-only edits to tests that other slices own.
+
+## O6 (AIS-842): spend rules, usage and billing recipients
+
+### Decided without reviewer input
+
+1. **Billing recipients take the client explicitly.** `billingnotifications.ResolveRecipients` now takes the client, and `billingnotifications.OrganizationAdministratorEmails` holds the missing-client fallback for billing paths. Usage's Stripe customer identity and the two billing activities (credit alerts and the weekly usage summary) resolve through it. The activities helper from O5 now delegates to it, so the fallback lives in one place; the activities package already depends on this package, and usage does not depend on activities. X1 deletes the fallback. _If reversed:_ move the fallback into the authorization package and point both callers at it.
+2. **Stripe checkout status keeps two separate checks.** `GetStripeCheckoutStatus` requires both administer and read, and it still makes two `Require` calls instead of one call with two operations. While the engine decides, this records the same two challenges as before. _If reversed:_ make it a single call, which records one challenge.
+3. **The narrow billing operations service has no client.** `NewBillingOperations` serves trusted server surfaces that authorize on their own. It leaves the client nil, so any administrator lookup there takes the engine fallback, as it did before. _If reversed:_ thread a client into `NewBillingOperations`.

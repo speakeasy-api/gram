@@ -12,6 +12,7 @@ import (
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -36,14 +37,16 @@ type Service struct {
 	resolveRecipients func(context.Context, accessrepo.DBTX, string, string, *string) ([]string, error)
 }
 
-func NewService(logger *slog.Logger, db *pgxpool.Pool, sender Sender, features feature.Provider, orgHosts *orghost.Resolver) *Service {
+func NewService(logger *slog.Logger, db *pgxpool.Pool, sender Sender, features feature.Provider, orgHosts *orghost.Resolver, authzClient *authz.Client) *Service {
 	return &Service{
-		logger:            logger.With(attr.SlogComponent("billing-notifications")),
-		db:                db,
-		sender:            sender,
-		features:          features,
-		orgHosts:          orgHosts,
-		resolveRecipients: ResolveRecipients,
+		logger:   logger.With(attr.SlogComponent("billing-notifications")),
+		db:       db,
+		sender:   sender,
+		features: features,
+		orgHosts: orgHosts,
+		resolveRecipients: func(ctx context.Context, db accessrepo.DBTX, organizationID, accountType string, configuredEmail *string) ([]string, error) {
+			return ResolveRecipients(ctx, authzClient, db, organizationID, accountType, configuredEmail)
+		},
 	}
 }
 

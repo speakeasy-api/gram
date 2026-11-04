@@ -12,12 +12,15 @@ import (
 	"github.com/stretchr/testify/require"
 
 	accessrepo "github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/email"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/thirdparty/workos"
 	trialsrepo "github.com/speakeasy-api/gram/server/internal/trials/repo"
 	usagerepo "github.com/speakeasy-api/gram/server/internal/usage/repo"
 )
@@ -59,7 +62,8 @@ func newNotificationTestService(t *testing.T, accountType string, whitelisted bo
 	}))
 	sender := &captureSender{}
 	flags := new(feature.InMemory)
-	return NewService(testenv.NewLogger(t), db, sender, flags, testOrgHosts(t)), sender, organizationID
+	engine := authz.NewEngine(testenv.NewLogger(t), db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
+	return NewService(testenv.NewLogger(t), db, sender, flags, testOrgHosts(t), authztest.NewParityClient(t, engine)), sender, organizationID
 }
 
 // testOrgHosts serves the dashboard on ai.example.test, keeps organizations

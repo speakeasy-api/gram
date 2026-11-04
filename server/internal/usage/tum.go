@@ -27,7 +27,7 @@ func (s *Service) GetTokensUnderManagement(ctx context.Context, payload *gen.Get
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Read()); err != nil {
 		return nil, err
 	}
 
@@ -50,7 +50,7 @@ func (s *Service) SetBillingMetadata(ctx context.Context, payload *gen.SetBillin
 	if !authCtx.IsAdmin {
 		return nil, oops.E(oops.CodeForbidden, nil, "platform admin required").LogError(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Read()); err != nil {
 		return nil, err
 	}
 

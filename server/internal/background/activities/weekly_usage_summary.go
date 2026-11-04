@@ -14,6 +14,7 @@ import (
 	"github.com/jackc/pgx/v5/pgxpool"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	repo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/conv"
@@ -63,9 +64,10 @@ type WeeklyUsageSummary struct {
 	repo      *repo.Queries
 	emails    *email.Service
 	orgHosts  *orghost.Resolver
+	authz     *authz.Client
 }
 
-func NewWeeklyUsageSummary(logger *slog.Logger, db *pgxpool.Pool, meterReadConn clickhouse.Conn, emails *email.Service, orgHosts *orghost.Resolver) *WeeklyUsageSummary {
+func NewWeeklyUsageSummary(logger *slog.Logger, db *pgxpool.Pool, meterReadConn clickhouse.Conn, emails *email.Service, orgHosts *orghost.Resolver, authzClient *authz.Client) *WeeklyUsageSummary {
 	return &WeeklyUsageSummary{
 		logger:    logger.With(attr.SlogComponent("weekly_usage_summary")),
 		db:        db,
@@ -73,6 +75,7 @@ func NewWeeklyUsageSummary(logger *slog.Logger, db *pgxpool.Pool, meterReadConn 
 		repo:      repo.New(db),
 		emails:    emails,
 		orgHosts:  orgHosts,
+		authz:     authzClient,
 	}
 }
 
@@ -156,7 +159,7 @@ func (a *WeeklyUsageSummary) Send(ctx context.Context, args SendWeeklyUsageSumma
 	// Targets persisted by workflows started before AccountType was added came
 	// only from the legacy enterprise-with-email query.
 	accountType := conv.Default(target.AccountType, string(billing.TierEnterprise))
-	recipients, resolutionErr := resolveBillingNotificationRecipients(ctx, a.db, target.OrganizationID, accountType, configuredEmail)
+	recipients, resolutionErr := resolveBillingNotificationRecipients(ctx, a.authz, a.db, target.OrganizationID, accountType, configuredEmail)
 	if len(recipients) == 0 {
 		if resolutionErr == nil {
 			logger.InfoContext(ctx, "skipping weekly usage summary without eligible recipient")

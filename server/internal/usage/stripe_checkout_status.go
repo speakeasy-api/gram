@@ -23,8 +23,9 @@ func (s *Service) GetStripeCheckoutStatus(ctx context.Context, payload *gen.GetS
 	if !ok || authCtx == nil {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	for _, scope := range []authz.Scope{authz.ScopeOrgAdmin, authz.ScopeOrgRead} {
-		if err := s.authz.Require(ctx, authz.Check{Scope: scope, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	organization := authz.Organization(authCtx.ActiveOrganizationID)
+	for _, operation := range []authz.Operation{organization.Administer(), organization.Read()} {
+		if err := s.authzClient.Require(ctx, operation); err != nil {
 			return nil, err
 		}
 	}

@@ -2038,7 +2038,7 @@ func newStartCommand() *cli.Command {
 				c.String("custom-domain-cname"),
 				customDomainARecords,
 			).WithPublicationRequests(plugins.PublicationRequests{Enabled: publicationEmit}))
-			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, siteURL, posthogClient, openRouter, openRouterKeyRefresher, stripeClient, authzEngine, telemetryrepo.New(chDB), auditLogger, featureFlags, productFeatures, trialEmailNotifier, meterReadConn))
+			usage.Attach(mux, usage.NewService(logger, tracerProvider, db, sessionManager, billingRepo, serverURL, siteURL, posthogClient, openRouter, openRouterKeyRefresher, stripeClient, authzEngine, authzClient, telemetryrepo.New(chDB), auditLogger, featureFlags, productFeatures, trialEmailNotifier, meterReadConn))
 			tm.Attach(mux, telemSvc)
 			analytics.Attach(mux, analyticsSvc)
 			widgets.Attach(mux, widgetsSvc)
@@ -2118,6 +2118,7 @@ func newStartCommand() *cli.Command {
 				chDB,
 				sessionManager,
 				authzEngine,
+				authzClient,
 				auditLogger,
 				spendCelEngine,
 				cache.NewRedisCacheAdapter(redisClient),

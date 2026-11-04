@@ -64,6 +64,7 @@ func setupOpenRouterCreditsAlertsTestWithCache(
 			"openrouter_internal_credits_threshold": "internal-credits-test-id",
 		}), true),
 		testenv.NewMeterProvider(t),
+		audienceParityClient(t, conn),
 	)
 
 	return act, conn, captured, cacheAdapter

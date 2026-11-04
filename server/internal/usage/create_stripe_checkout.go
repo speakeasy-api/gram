@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/billingnotifications"
 	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -104,7 +105,7 @@ func (s *Service) stripeOrganizationIdentity(ctx context.Context, organizationID
 	if billingMetadata.AlertEmail.Valid && billingMetadata.AlertEmail.String != "" {
 		email = billingMetadata.AlertEmail.String
 	} else {
-		admins, adminErr := authz.ResolveOrganizationAdminEmails(ctx, s.db, organizationID)
+		admins, adminErr := billingnotifications.OrganizationAdministratorEmails(ctx, s.authzClient, s.db, organizationID)
 		if adminErr != nil {
 			s.logger.WarnContext(ctx, "failed to resolve organization admin emails for Stripe customer", attr.SlogError(adminErr))
 		}
@@ -136,7 +137,7 @@ func (s *Service) CreateStripeCheckout(ctx context.Context, payload *gen.CreateS
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 
