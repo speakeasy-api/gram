@@ -156,7 +156,7 @@ func TestRegistryEvaluatorFoundationCorpus(t *testing.T) {
 		}
 	}
 	require.Empty(t, stale, "corpusSkips lists fixtures that are no longer selected")
-	require.Len(t, ran, 71, "the selected frozen corpus changed; update the expected count after checking every new case runs")
+	require.Len(t, ran, 74, "the selected frozen corpus changed; update the expected count after checking every new case runs")
 }
 
 func runEvaluatorCorpusCase(t *testing.T, reg *s.Registry, evaluator *RegistryEvaluator, f foundationFixture) {
