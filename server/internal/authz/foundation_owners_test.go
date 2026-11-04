@@ -100,7 +100,6 @@ var foundationPackageOwners = map[string]string{
 	"internal/mcpregistry":                                   ownerP3,
 	"internal/mcpservers/upstreamclients":                    ownerM5,
 	"internal/mcpservers/upstreamclients/authclientbackfill": ownerM5,
-	"internal/metamcp":                                       ownerM3,
 	"internal/modelkeys":                                     ownerP5,
 	"internal/networkingress":                                ownerO5,
 	"internal/organizations":                                 ownerO1,

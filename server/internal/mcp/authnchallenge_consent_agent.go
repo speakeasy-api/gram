@@ -87,6 +87,12 @@ func (t AgentAuthorizationTarget) connectCheck() authz.Check {
 	return authz.MCPCheck(t.Scope, t.MCPResourceID.String(), t.ProjectID.String())
 }
 
+// connectOperation is connectCheck as a typed operation, for decisions the
+// authorization client makes on the request's own policies.
+func (t AgentAuthorizationTarget) connectOperation() authz.Operation {
+	return authz.MCPServer(t.ProjectID.String(), t.MCPResourceID.String()).Connect()
+}
+
 // agentSetupURL is the dashboard page where the organization's humans
 // register and manage agents, linked from the consent page.
 func (s *Service) agentSetupURL(ctx context.Context, logger *slog.Logger, organizationID string) (string, error) {

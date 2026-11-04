@@ -90,7 +90,7 @@ func handleToolsCall(
 	logger *slog.Logger,
 	metrics *mcpmetrics.Metrics,
 	identityCoverage *mcptoolexecution.IdentityCoverageCheckpoint,
-	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	guardianPolicy *guardian.Policy,
 	db *pgxpool.Pool,
 	env toolconfig.EnvironmentLoader,
@@ -284,7 +284,7 @@ func handleToolsCall(
 	// everyone, mirroring the connection-level guard in impl.go. Both the
 	// privacy read and the resource id follow the wrapper when one fronts
 	// the request.
-	if payload.authenticated && authzEngine != nil && payload.effectiveMCPPrivate(toolset.McpIsPublic) {
+	if payload.authenticated && authzClient != nil && payload.effectiveMCPPrivate(toolset.McpIsPublic) {
 		var disposition string
 		if tool != nil {
 			baseTool, err := conv.ToBaseTool(tool)
@@ -292,11 +292,7 @@ func handleToolsCall(
 				disposition = conv.DispositionFromAnnotations(baseTool.Annotations)
 			}
 		}
-		if err := authzEngine.Require(ctx, authz.MCPToolCallCheck(payload.mcpConnectResourceID(toolset.ID), authz.MCPToolCallDimensions{
-			Tool:        params.Name,
-			Disposition: disposition,
-			ProjectID:   payload.projectID.String(),
-		})); err != nil {
+		if err := authzClient.Require(ctx, authz.MCPServer(payload.projectID.String(), payload.mcpConnectResourceID(toolset.ID)).CallTool(params.Name, disposition)); err != nil {
 			return nil, fmt.Errorf("authorize MCP tool call: %w", mcpaccess.ToolPermissionDenied(err))
 		}
 	}

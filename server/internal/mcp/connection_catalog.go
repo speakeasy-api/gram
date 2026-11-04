@@ -359,7 +359,7 @@ func (s *Service) rejectConnectionCatalog(ctx context.Context, endpoint *Resolve
 // It never resolves upstream tokens or starts an MCP session.
 func (s *Service) describeCachedMember(ctx context.Context, gate *metaGateContext, member metaMember) (*memberCatalog, error) {
 	catalog := &memberCatalog{entries: nil, byName: map[string]*toolListEntry{}, incomplete: false}
-	checks := []authz.Check{}
+	ops := []authz.Operation{}
 	var dispositions map[string]string
 	private := member.visibility != "public"
 	if member.backend == metaMemberBackendHosted {
@@ -392,11 +392,11 @@ func (s *Service) describeCachedMember(ctx context.Context, gate *metaGateContex
 				// Cached discovery keeps consented annotations; execution checks the live tool disposition.
 				disposition = dispositionFromAnnotations(entry.Annotations)
 			}
-			checks = append(checks, authz.MCPToolCallCheck(resourceID.String(), authz.MCPToolCallDimensions{Tool: name, Disposition: disposition, ProjectID: member.projectID.String()}))
+			ops = append(ops, authz.MCPServer(member.projectID.String(), resourceID.String()).CallTool(name, disposition))
 		}
 	}
-	if len(checks) > 0 {
-		matched, err := s.authz.FindMatched(ctx, checks)
+	if len(ops) > 0 {
+		matched, err := s.authzClient.MatchMany(ctx, ops)
 		if err != nil {
 			return nil, fmt.Errorf("authorize cached member tools: %w", err)
 		}

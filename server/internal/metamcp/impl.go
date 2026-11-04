@@ -55,7 +55,8 @@ type Service struct {
 	logger                   *slog.Logger
 	db                       *pgxpool.Pool
 	auth                     *auth.Auth
-	authz                    *authz.Engine
+	authz                    *authz.Client
+	authzEngine              *authz.Engine
 	audit                    *audit.Logger
 	temporalEnv              *tenv.Environment
 	networkAccessEligibility networkaccess.EligibilityChecker
@@ -73,6 +74,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	auditLogger *audit.Logger,
 	temporalEnv *tenv.Environment,
 	networkAccessEligibility networkaccess.EligibilityChecker,
@@ -87,7 +89,8 @@ func NewService(
 		logger:                   logger,
 		db:                       db,
 		auth:                     auth.New(logger, db, sessions, authzEngine),
-		authz:                    authzEngine,
+		authz:                    authzClient,
+		authzEngine:              authzEngine,
 		audit:                    auditLogger,
 		temporalEnv:              temporalEnv,
 		networkAccessEligibility: networkAccessEligibility,
@@ -119,7 +122,7 @@ func (s *Service) signalPluginPublish(ctx context.Context, projectID uuid.UUID, 
 // writer is the shared gateway write core, so this API and the Platform MCP
 // apply exactly the same rules.
 func (s *Service) writer() GatewayWriter {
-	return GatewayWriter{Logger: s.logger, Audit: s.audit, Authz: s.authz, Admission: s.distributionAdmission}
+	return GatewayWriter{Logger: s.logger, Audit: s.audit, Authz: s.authzEngine, Admission: s.distributionAdmission}
 }
 
 func actorFromAuthContext(authCtx *contextvalues.AuthContext) Actor {
@@ -176,7 +179,7 @@ func (s *Service) CreateMetaMcpServer(ctx context.Context, payload *gen.CreateMe
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Edit()); err != nil {
 		return nil, err
 	}
 
@@ -226,7 +229,7 @@ func (s *Service) GetMetaMcpServer(ctx context.Context, payload *gen.GetMetaMcpS
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -256,7 +259,7 @@ func (s *Service) ListMetaMcpServers(ctx context.Context, payload *gen.ListMetaM
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -282,7 +285,7 @@ func (s *Service) UpdateMetaMcpServer(ctx context.Context, payload *gen.UpdateMe
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Edit()); err != nil {
 		return nil, err
 	}
 
@@ -562,7 +565,7 @@ func (s *Service) DeleteMetaMcpServer(ctx context.Context, payload *gen.DeleteMe
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Edit()); err != nil {
 		return err
 	}
 
@@ -762,7 +765,7 @@ func (s *Service) ListMetaMcpMembers(ctx context.Context, payload *gen.ListMetaM
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -801,7 +804,7 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Edit()); err != nil {
 		return nil, err
 	}
 
@@ -812,7 +815,7 @@ func (s *Service) AddMetaMcpMember(ctx context.Context, payload *gen.AddMetaMcpM
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid meta_mcp_server_id").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, metaID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), metaID.String()).Edit()); err != nil {
 		return nil, err
 	}
 
@@ -860,7 +863,7 @@ func (s *Service) UpdateMetaMcpMember(ctx context.Context, payload *gen.UpdateMe
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Edit()); err != nil {
 		return nil, err
 	}
 
@@ -928,7 +931,7 @@ func (s *Service) RemoveMetaMcpMember(ctx context.Context, payload *gen.RemoveMe
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Edit()); err != nil {
 		return err
 	}
 
