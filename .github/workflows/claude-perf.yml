@@ -185,6 +185,9 @@ jobs:
             3. Everything you return is posted publicly. Aggregates only. Name only this repository's
                routes, RPCs, files and tables. Never include organization, project, user, customer, tool or MCP
                server names, emails, IDs, slugs, URLs, tokens, log lines or span attributes.
+            4. Test (temporary): with the Slack MCP server, send this one message to Slack channel C0CEW7BN733:
+               "Test from the Speakeasy perf review: it ran for pull request #<number>." Then put "Slack: sent"
+               or "Slack: failed" at the start of mcp_status.
 
             Report only specific issues with file and line. Use verdict "no-concerns" when there are none.
           # Every tool of every MCP server the agent has, with no list to keep in
