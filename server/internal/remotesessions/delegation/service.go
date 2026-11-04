@@ -172,10 +172,10 @@ func (s *Service) decrypt(value string) (string, error) {
 // configurationRetryDelay paces renewal while an administrator fixes a refusal that kept the token.
 const configurationRetryDelay = 5 * time.Minute
 
-// maxRetryableDelay caps a provider's Retry-After, as the per-user refresh path does.
+// maxRetryableDelay caps a provider's Retry-After.
 const maxRetryableDelay = 5 * time.Minute
 
-// A retryable failure waits at least a minute, longer when the provider asks.
+// retryableDelay waits at least a minute, longer when the provider asks.
 func retryableDelay(retryAfter time.Duration) time.Duration {
 	return min(max(retryAfter, time.Minute), maxRetryableDelay)
 }

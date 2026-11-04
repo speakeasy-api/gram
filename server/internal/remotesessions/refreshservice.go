@@ -593,7 +593,6 @@ func (s *RefreshService) refresh(
 
 	var tokenRefreshErr *TokenRefreshError
 	clearGrant := errors.As(refreshErr, &tokenRefreshErr) && tokenRefreshErr.invalidGrant()
-	// Clears the grant: the next sign-in re-registers a dynamically registered client.
 	if errors.As(refreshErr, &tokenRefreshErr) && tokenRefreshErr.invalidClient() {
 		// The issuer has forgotten the client, not just this grant. Record it on
 		// the client row so the next remote login confirms and re-registers,

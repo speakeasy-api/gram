@@ -89,7 +89,7 @@ func (e *TokenRefreshError) invalidGrant() bool {
 	return e.failure().Code == oautherr.RefreshCodeInvalidGrant
 }
 
-// failure classifies the upstream's answer; it means nothing when statusCode is 0.
+// failure classifies the upstream's answer; its Status means nothing when statusCode is 0.
 func (e *TokenRefreshError) failure() oautherr.RefreshFailure {
 	return oautherr.ClassifyRefreshFailure(e.statusCode, e.code)
 }

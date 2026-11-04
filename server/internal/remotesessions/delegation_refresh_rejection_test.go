@@ -42,6 +42,12 @@ func (e *fakeTokenEndpoint) answer(status int, body string) {
 	e.status, e.body = status, body
 }
 
+func (e *fakeTokenEndpoint) answerRetryAfter(status int, body, retryAfter string) {
+	e.mu.Lock()
+	defer e.mu.Unlock()
+	e.status, e.body, e.retryAfter = status, body, retryAfter
+}
+
 func (e *fakeTokenEndpoint) received() []string {
 	e.mu.Lock()
 	defer e.mu.Unlock()
@@ -310,11 +316,12 @@ func TestDelegationRateLimitWaitsForRetryAfter(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			s, store, b, allow, endpoint, _ := rejectionFixture(t, nil)
-			endpoint.answer(http.StatusTooManyRequests, `slow down`)
-			endpoint.retryAfter = tc.retryAfter
-			if tc.retryAfter == "date" {
-				endpoint.retryAfter = time.Now().Add(4*time.Minute + 30*time.Second).UTC().Format(http.TimeFormat)
+			retryAfter := tc.retryAfter
+			if retryAfter == "date" {
+				// Retry-After is read against the real clock, not the fixture's.
+				retryAfter = time.Now().Add(4*time.Minute + 30*time.Second).UTC().Format(http.TimeFormat)
 			}
+			endpoint.answerRetryAfter(http.StatusTooManyRequests, `slow down`, retryAfter)
 
 			_, err := s.Resolve(t.Context(), b, allow)
 			require.ErrorIs(t, err, ErrDelegationTemporary)
@@ -360,6 +367,18 @@ func TestDelegationInvalidGrantClearsSavedToken(t *testing.T) {
 			require.NotContains(t, logs.String(), "secret-")
 		})
 	}
+}
+
+func TestDelegationServerErrorIgnoresRetryAfter(t *testing.T) {
+	t.Parallel()
+	s, store, b, allow, endpoint, _ := rejectionFixture(t, nil)
+	endpoint.answerRetryAfter(http.StatusServiceUnavailable, `down`, "300")
+	_, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrDelegationTemporary)
+	row, err := store.load(t.Context(), b)
+	require.NoError(t, err)
+	require.True(t, row.RefreshClaimID.Valid, "an ambiguous answer still holds the claim")
+	require.WithinDuration(t, s.now().Add(time.Minute), row.RetryAfter.Time, 2*time.Second)
 }
 
 func TestDelegationHeldClaimAnswersTemporaryThenSignIn(t *testing.T) {

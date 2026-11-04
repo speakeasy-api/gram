@@ -57,6 +57,8 @@ func TestParseRetryAfter(t *testing.T) {
 		{name: "padded seconds", value: " 30 ", want: 30 * time.Second},
 		{name: "zero", value: "0", want: 0},
 		{name: "negative", value: "-5", want: 0},
+		{name: "signed", value: "+30", want: 0},
+		{name: "past int64", value: "99999999999999999999", want: math.MaxInt64},
 		{name: "huge", value: "99999999999999999", want: math.MaxInt64},
 		{name: "http date", value: now.Add(90 * time.Second).Format(http.TimeFormat), want: 90 * time.Second},
 		{name: "past date", value: now.Add(-time.Hour).Format(http.TimeFormat), want: 0},

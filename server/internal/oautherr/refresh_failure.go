@@ -111,11 +111,9 @@ func IsOIDCSignInCode(code string) bool {
 // ParseRetryAfter reads RFC 9110 §10.2.3 seconds or an HTTP date, zero when absent, malformed or past; callers cap it.
 func ParseRetryAfter(value string, now time.Time) time.Duration {
 	value = strings.TrimSpace(value)
-	if seconds, err := strconv.ParseInt(value, 10, 64); err == nil {
-		if seconds <= 0 {
-			return 0
-		}
-		if seconds > int64(math.MaxInt64/time.Second) {
+	if value != "" && strings.Trim(value, "0123456789") == "" {
+		seconds, err := strconv.ParseInt(value, 10, 64)
+		if err != nil || seconds > int64(math.MaxInt64/time.Second) {
 			return math.MaxInt64
 		}
 		return time.Duration(seconds) * time.Second
