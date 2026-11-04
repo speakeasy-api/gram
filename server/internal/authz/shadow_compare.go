@@ -134,8 +134,12 @@ func newShadowComparer(budget ShadowBudget, recorder ShadowRecorder, buildVersio
 // recorded, after at most the budget's timeout. Nothing it does reaches the
 // caller's response.
 func (s *shadowComparer) compare(ctx context.Context, entry string, rt route, ops []Operation, old shadowAnswer, evaluate func() shadowAnswer) {
+	organizationID := rt.organizationID
+	if organizationID == "" {
+		organizationID = requestOrganizationID(ctx)
+	}
 	record := ShadowComparison{
-		OrganizationID: requestOrganizationID(ctx),
+		OrganizationID: organizationID,
 		Units:          rt.units,
 		Entry:          entry,
 		Permissions:    operationPermissions(ops),
