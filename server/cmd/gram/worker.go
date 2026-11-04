@@ -354,7 +354,6 @@ func newWorkerCommand() *cli.Command {
 	flags = append(flags, clickHouseFlags()...)
 	flags = append(flags, clickHouseReadFlags()...)
 	flags = append(flags, functionsFlags()...)
-	flags = append(flags, pulseMCPFlags()...)
 	flags = append(flags, assistantRuntimeFlags()...)
 	flags = append(flags, identityProviderConnectionFlags()...)
 	flags = append(flags, pluginsFlags()...)
@@ -702,14 +701,6 @@ func newWorkerCommand() *cli.Command {
 			)
 
 			ragService := rag.NewToolsetVectorStore(logger, tracerProvider, db, completionsClient)
-			mcpRegistryClient, err := newMCPRegistryClient(logger, tracerProvider, guardianPolicy, mcpRegistryClientOptions{
-				pulseTenantID: c.String("pulse-registry-tenant"),
-				pulseAPIKey:   conv.NewSecret([]byte(c.String("pulse-registry-api-key"))),
-				cacheImpl:     cache.NewRedisCacheAdapter(redisClient),
-			})
-			if err != nil {
-				return fmt.Errorf("failed to create mcp registry client: %w", err)
-			}
 
 			if err := externalmcp.EnsureNativeCatalogSource(ctx, db); err != nil {
 				return fmt.Errorf("ensure native catalog source: %w", err)
@@ -718,7 +709,7 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("catalog validator: %w", err)
 			}
-			mcpCatalog := externalmcp.NewCatalogService(db, mcpRegistryClient, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, catalogValidator)), featureFlags)
+			mcpCatalog := externalmcp.NewCatalogService(db, externalmcp.NewNativeRegistryReader(mcpregistry.New(db, catalogValidator)))
 
 			serverURL, err := url.Parse(c.String("server-url"))
 			if err != nil {
@@ -904,7 +895,6 @@ func newWorkerCommand() *cli.Command {
 				FunctionsDeployer:              functionsOrchestrator,
 				FunctionsVersion:               runnerVersion,
 				RagService:                     ragService,
-				MCPRegistryClient:              mcpRegistryClient,
 				MCPCatalog:                     mcpCatalog,
 				TelemetryLogger:                telemetryLogger,
 				ClickhouseConn:                 chDB,

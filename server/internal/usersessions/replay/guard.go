@@ -9,6 +9,7 @@ import (
 	"github.com/redis/go-redis/v9"
 
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 )
 
 // minHoldTTL is the floor applied to every reservation's lifetime.
@@ -19,6 +20,9 @@ import (
 // named after an attacker-supplied identifier. One second is long enough to be
 // a real hold and short enough to be harmless when it is reached.
 const minHoldTTL = time.Second
+
+// releaseBudget bounds the detached best-effort release after a failed reservation.
+const releaseBudget = 2 * time.Second
 
 // Guard records assertion identifiers and reports whether each is new.
 // Safe for concurrent use; construct one per logical keyspace at wiring time.
@@ -35,6 +39,9 @@ type Guard struct {
 	// maxHold caps the lifetime of any single reservation, bounding the
 	// keyspace one assertion-issuing party can occupy.
 	maxHold time.Duration
+
+	// leases is cache's owner-token view of the same store.
+	leases *cache.RedisCacheAdapter
 }
 
 // NewRedisGuard binds a Redis-backed Guard to a keyspace.
@@ -60,10 +67,12 @@ func NewRedisGuard(client *redis.Client, namespace string, maxHold time.Duration
 	if maxHold < minHoldTTL {
 		return nil, fmt.Errorf("replay: maxHold must be at least %s", minHoldTTL)
 	}
+	adapter := cache.NewRedisCacheAdapter(client)
 	return &Guard{
-		cache:     cache.NewRedisCacheAdapter(client),
+		cache:     adapter,
 		namespace: namespace,
 		maxHold:   maxHold,
+		leases:    adapter,
 	}, nil
 }
 
@@ -104,4 +113,36 @@ func (g *Guard) Reserve(ctx context.Context, key Key, holdUntil time.Time) (bool
 		return false, fmt.Errorf("reserve assertion id: %w", err)
 	}
 	return claimed, nil
+}
+
+// ReserveOwned is Reserve under a per-request owner, so a lost reply still counts as claimed.
+func (g *Guard) ReserveOwned(ctx context.Context, key Key, holdUntil time.Time, owner string) (bool, error) {
+	if key.Issuer == "" || key.Party == "" || key.ID == "" || owner == "" {
+		return false, errors.New("replay: Key needs an Issuer, a Party, and an ID, and a reservation an owner")
+	}
+
+	storageKey := g.namespace + ":" + key.storageKey()
+	ttl := min(max(time.Until(holdUntil), minHoldTTL), g.maxHold)
+
+	claimed, err := g.leases.ClaimLease(ctx, storageKey, owner, ttl)
+	if err == nil {
+		return claimed, nil
+	}
+
+	// A lost reply may have claimed it; the owner is unique to this attempt, so this frees only that claim.
+	releaseCtx, cancel := context.WithTimeout(context.WithoutCancel(ctx), releaseBudget)
+	defer cancel()
+	_, _ = g.leases.ReleaseLeaseIfOwner(releaseCtx, storageKey, owner)
+	return false, fmt.Errorf("reserve assertion id: %w", oops.MarkStoreConnectionLost(err))
+}
+
+// Release gives up owner's reservation so the party can present the assertion
+// again. Call it only when no token was delivered for the assertion. A commit
+// with an unknown outcome may release: at worst that leaves an orphan session
+// row, and only one token is ever delivered.
+func (g *Guard) Release(ctx context.Context, key Key, owner string) error {
+	if _, err := g.leases.ReleaseLeaseIfOwner(ctx, g.namespace+":"+key.storageKey(), owner); err != nil {
+		return fmt.Errorf("release assertion id: %w", err)
+	}
+	return nil
 }

@@ -298,5 +298,6 @@ func writeApprovalError(w http.ResponseWriter, r *http.Request, status int, desc
 		ClientID:       "",
 		ClientIDOrigin: "",
 		ServerName:     "",
+		ProviderName:   "",
 	})
 }

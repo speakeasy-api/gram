@@ -175,6 +175,29 @@ func ScopeEntryFor(scope Scope) (ScopeEntry, bool) {
 	return entry, ok
 }
 
+// ScopeNames returns every catalogued scope slug in presentation order. The
+// API design uses it for its scope enums so a new scope needs no edit there.
+func ScopeNames() []string {
+	out := make([]string, 0, len(scopeCatalog))
+	for _, entry := range scopeCatalog {
+		out = append(out, string(entry.Scope))
+	}
+	return out
+}
+
+// ExclusionScopeNames returns, in presentation order of the scopes they
+// store exceptions for, every scope that stores exception grants.
+func ExclusionScopeNames() []string {
+	var out []string
+	for _, entry := range scopeCatalog {
+		exclusion, ok := ExclusionScopeFor(entry.Scope)
+		if ok && !slices.Contains(out, string(exclusion)) {
+			out = append(out, string(exclusion))
+		}
+	}
+	return out
+}
+
 // SensitiveScopes returns, in presentation order, the catalogue scopes that
 // deserve a warning before they are granted.
 func SensitiveScopes() []Scope {

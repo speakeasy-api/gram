@@ -189,6 +189,19 @@ What a person reads about a scope lives in one place, `server/internal/authz/cat
 
 `TestScopeCatalog_CoversEveryRegisteredScope` fails when a scope is added without an entry, and `TestService_ListScopes_CategoriesAndSensitivitiesAreInTheDesignEnum` fails when the catalogue emits a category or reason the Goa design does not declare; generated clients would otherwise reject the whole `listScopes` response. Dashboard copy for a permission comes from these fields; the client keeps no list of its own.
 
+#### Tasks
+
+A task usually needs more than one scope, and a person who is refused one of them is better told "this is part of setting up an agent, which also needs `environment:read`" than shown a slug. `server/internal/authz/tasks.go` lists those tasks by hand: a slug, a label, and every scope the task needs end to end. `access.listScopes` serves the list as `tasks`, and the dashboard uses it in the access-restricted page and in the grant dialog. `TestTasks_StayInsideTheCatalogue` keeps every listed scope catalogued, user-visible and not already implied by another scope in the same task. The handlers that call `Require` are the source of truth for what a task needs; update the list when a flow starts or stops enforcing a scope.
+
+#### Explaining a 403
+
+The body of a refused request stays the generic `forbidden` error. The detail travels in two response headers added by `middleware.DenialHeaders` when the authz engine refused a scope and the handler answered 403:
+
+- `Gram-Required-Scope`: the scope slug the check lacked, such as `log:read`.
+- `Gram-Required-Resource-Kind`: the kind of resource it was checked against, such as `project` or `mcp`.
+
+Only the slug and the kind leave the server; the resource id and the caller's grants do not. A handler may probe a scope, swallow the refusal and continue, so the engine records the most recent denial and the middleware only reads it on a 403. The dashboard maps the slug to the catalogue (`client/dashboard/src/lib/denial.ts`) so a failed mutation says which permission is needed and where, and an access request email names the permission with its catalogue label and description.
+
 ### Grant
 
 A grant gives a principal a scope for some resource selector.
