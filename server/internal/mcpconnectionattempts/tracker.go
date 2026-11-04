@@ -76,6 +76,16 @@ func (t *Tracker) Consumed() {
 
 // Refuse is the verdict for anything but success. It records one row.
 func (t *Tracker) Refuse(ctx context.Context, code Code, opts ...Option) {
+	// A caller disconnect is not evidence that the provider or sign-in failed.
+	if errors.Is(ctx.Err(), context.Canceled) {
+		switch code {
+		case CodeInternalError, CodeProviderUnreachable, CodeProviderUnavailable,
+			CodeIDPUnavailable, CodeIDPTransientFailure, CodeRemoteSessionUnavailable,
+			CodeAIToolCheckUnavailable, CodeCIMDFetchFailed, CodeAssertionCheckUnavailable:
+			t.Continue()
+			return
+		}
+	}
 	t.decide(ctx, code, opts)
 }
 

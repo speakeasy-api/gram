@@ -26,6 +26,40 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+func TestCanceledConnectionChecksDoNotBlameProvider(t *testing.T) {
+	t.Parallel()
+	ctx, cancel := context.WithCancel(t.Context())
+	cancel()
+	rec := mcpconnectionattemptstest.New(t)
+	s := &Service{connections: rec.Recorder}
+	s.recordRemoteSessionVerdict(ctx, mcpconnectionattempts.FromRequest(nil), directEndpoint(), openState(), remotesessions.Client{}, validationTarget{}, uuid.New(), remotesessions.ValidationOutcomeUnknown, remotesessionmetrics.ValidationTriggerVerify)
+	gate := &metaGateContext{organizationID: "org-test", projectID: uuid.New(), metaServerID: uuid.New()}
+	s.recordListingFailures(ctx, gate, []unavailableMember{{member: metaMember{serverID: uuid.New()}, err: context.Canceled}})
+	rec.RequireNothing()
+	// A concrete refusal remains true even if the caller subsequently leaves.
+	s.recordRemoteSessionVerdict(ctx, mcpconnectionattempts.FromRequest(nil), directEndpoint(), openState(), remotesessions.Client{}, validationTarget{}, uuid.New(), remotesessions.ValidationOutcomeRejectedByMember, remotesessionmetrics.ValidationTriggerVerify)
+	rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.CodeRejectedByMember)
+	s.recordListingFailures(ctx, gate, []unavailableMember{{member: metaMember{serverID: uuid.New()}, err: oops.E(oops.CodeForbidden, nil, "denied")}})
+	rec.RequireEnded(mcpconnectionattempts.StepDiscoveryMember, mcpconnectionattempts.CodeNoServerAccess)
+}
+
+func TestTokenAdmissionRefusalKeepsCIMDApp(t *testing.T) {
+	t.Parallel()
+	for _, reason := range []string{"cimd_admission_denied", "cimd_admission_disabled"} {
+		t.Run(reason, func(t *testing.T) {
+			t.Parallel()
+			rec := mcpconnectionattemptstest.New(t)
+			s := &Service{connections: rec.Recorder}
+			clientID := "https://claude.ai"
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/token", nil)
+			s.recordTokenClientRefusal(req, directEndpoint(), oauthwire.GrantTypeAuthorizationCode, clientID, reason)
+			row := rec.RequireEnded(mcpconnectionattempts.StepInboundToken, mcpconnectionattempts.CodeCIMDAdmissionDenied)
+			require.Equal(t, mcpconnectionattempts.AppOf(clientID).String(), row.AppKey)
+			require.NotEqual(t, mcpconnectionattempts.AppUnverified.String(), row.AppKey)
+		})
+	}
+}
+
 var testAttemptStart = time.Date(2026, 1, 2, 3, 4, 5, 0, time.UTC)
 
 func directEndpoint() *ResolvedMcpEndpoint {

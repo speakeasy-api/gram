@@ -278,7 +278,8 @@ func TestConnectionOutcome_AgentAdmissionAtToken(t *testing.T) {
 // claimFailureCache lets the page read a ticket, then fails the claim that spends it.
 type claimFailureCache struct {
 	cache.Cache
-	fail atomic.Pointer[error]
+	fail         atomic.Pointer[error]
+	markingCalls atomic.Int32
 }
 
 func (c *claimFailureCache) GetAndDelete(ctx context.Context, key string, value any) error {
@@ -286,6 +287,18 @@ func (c *claimFailureCache) GetAndDelete(ctx context.Context, key string, value 
 		return *err
 	}
 	return c.Cache.GetAndDelete(ctx, key, value) //nolint:wrapcheck // test decorator preserves the underlying cache error
+}
+
+func (c *claimFailureCache) GetAndDeleteMarking(ctx context.Context, key, marker string, ttl time.Duration, value any) error {
+	c.markingCalls.Add(1)
+	if err := c.fail.Load(); err != nil {
+		return *err
+	}
+	marking, ok := c.Cache.(cache.MarkingConsumeCache)
+	if !ok {
+		return errors.New("test delegate does not implement marking consume")
+	}
+	return marking.GetAndDeleteMarking(ctx, key, marker, ttl, value) //nolint:wrapcheck // preserve the injected cache contract
 }
 
 // Only a spent link is expired. A store that can't answer says nothing about the link.
@@ -505,7 +518,7 @@ func TestConnectionOutcome_TokenUnknownClientIsCounted(t *testing.T) {
 	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
 
 	form := url.Values{"grant_type": {"authorization_code"}, "client_id": {"client_missing"}, "code": {"c"}, "redirect_uri": {"http://localhost/cb"}, "code_verifier": {"v"}}
-	require.GreaterOrEqual(t, postForm(t, ti, toolset.McpSlug.String, "token", form).Code, http.StatusBadRequest)
+	require.Equal(t, http.StatusBadRequest, postForm(t, ti, toolset.McpSlug.String, "token", form).Code)
 
 	rec.RequireNothing()
 	points := collectCounterPoints(t, reader, "mcp.connection.refusals_without_row")
@@ -633,12 +646,73 @@ func TestConnectionOutcome_ConsentConsumeOutageIsNotLostRace(t *testing.T) {
 			var failure *oops.ShareableError
 			require.ErrorAs(t, err, &failure)
 			require.Equal(t, oops.CodeUnavailable, failure.Code)
+			require.EqualValues(t, 1, failing.markingCalls.Load())
 			rec.RequireStep(mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeInternalError)
 			rec.RequireNotEnded()
 			failing.fail.Store(nil)
 			postConsentAction(t, ctx, ti, toolset.McpSlug.String, stateID, action)
 		})
 	}
+}
+
+type challengeStoreFailureCache struct{ cache.Cache }
+
+func (c *challengeStoreFailureCache) Set(ctx context.Context, key string, value any, ttl time.Duration) error {
+	if strings.HasPrefix(key, "authnChallenge:") {
+		return errors.New("challenge store unavailable")
+	}
+	return c.Cache.Set(ctx, key, value, ttl) //nolint:wrapcheck // test decorator preserves the cache contract
+}
+
+func TestConnectionOutcome_FirstPartyStoreFailure(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPServiceWithTunnelPublicConfigAndCacheWrapper(t, testenv.NewLogger(t), testenv.NewMeterProvider(t), &mockIdentityResolver{}, mcp.TunnelPublicConfig{}, func(delegate cache.Cache) cache.Cache {
+		return &challengeStoreFailureCache{Cache: delegate}
+	})
+	rec := recordConnections(t, ti)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	req := httptest.NewRequestWithContext(routedTo(ctx, toolset.McpSlug.String), http.MethodGet, "/mcp/"+toolset.McpSlug.String+"/connect/first-party", nil)
+	require.Error(t, ti.service.HandleFirstPartyConnect(httptest.NewRecorder(), req))
+	rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeInternalError)
+}
+
+type registrationDisconnectWriter struct {
+	http.ResponseWriter
+	cancel context.CancelFunc
+}
+
+func (w registrationDisconnectWriter) Write([]byte) (int, error) {
+	w.cancel()
+	return 0, context.Canceled
+}
+
+func TestConnectionOutcome_RegistrationDisconnectIsNotOutage(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	rec := recordConnections(t, ti)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	ctx, cancel := context.WithCancel(ctx)
+	defer cancel()
+	body := `{"client_name":"test client","redirect_uris":["http://localhost:9876/callback"],"token_endpoint_auth_method":"none"}`
+	req := httptest.NewRequestWithContext(routedTo(ctx, toolset.McpSlug.String), http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/register", strings.NewReader(body))
+	req.Header.Set("Content-Type", "application/json")
+	require.Error(t, ti.service.HandleRegister(registrationDisconnectWriter{httptest.NewRecorder(), cancel}, req))
+	rec.RequireNothing()
+}
+
+type registrationPanicWriter struct{ http.ResponseWriter }
+
+func (w registrationPanicWriter) Write([]byte) (int, error) { panic("response writer panicked") }
+
+func TestConnectionOutcome_RegistrationPanicIsInternal(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestMCPServiceWithIdentityResolver(t, &mockIdentityResolver{})
+	rec := recordConnections(t, ti)
+	toolset, _, _ := seedPrivateToolsetWithIssuer(t, ctx, ti)
+	body := `{"client_name":"test client","redirect_uris":["http://localhost:9876/callback"],"token_endpoint_auth_method":"none"}`
+	req := httptest.NewRequestWithContext(routedTo(ctx, toolset.McpSlug.String), http.MethodPost, "/mcp/"+toolset.McpSlug.String+"/register", strings.NewReader(body))
+	require.Panics(t, func() { _ = ti.service.HandleRegister(registrationPanicWriter{httptest.NewRecorder()}, req) })
+	rec.RequireEnded(mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.CodeInternalError)
 }
 
 type registrationFailingWriter struct{ http.ResponseWriter }

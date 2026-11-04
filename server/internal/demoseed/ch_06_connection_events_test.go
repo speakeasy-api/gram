@@ -8,6 +8,14 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
+func TestGenericConnectionEndingsMatchSeededApp(t *testing.T) {
+	t.Parallel()
+	for _, ending := range connectionEndings {
+		require.NotEqual(t, mcpconnectionattempts.ResultComplete, ending.what, "CIMD app does not complete at first-party consent")
+		require.NotEqual(t, mcpconnectionattempts.CodeReviewCanceled, ending.what, "CIMD app has no Code Mode review")
+	}
+}
+
 func TestStoppedConnectionAttemptRowsKeepBrowserIdentity(t *testing.T) {
 	t.Parallel()
 	s := &seeder{spec: DefaultSpec()}
@@ -26,23 +34,26 @@ func TestStoppedConnectionAttemptRowsKeepBrowserIdentity(t *testing.T) {
 func TestStoppedConnectionAttemptMembersBelongToGateway(t *testing.T) {
 	t.Parallel()
 	s := &seeder{spec: DefaultSpec()}
-	for name, scope := range map[string]mcpconnectionattempts.Scope{
-		"server":               mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), mcpconnectionattempts.AppDCR),
-		"project gateway":      mcpconnectionattempts.GatewayScope(s.orgID(), s.projectID(), s.det("metamcp-1"), mcpconnectionattempts.AppDCR),
-		"organization gateway": mcpconnectionattempts.OrganizationGatewayScope(s.orgID(), s.det("organization-gateway"), mcpconnectionattempts.AppDCR),
+	for name, tc := range map[string]struct {
+		scope  mcpconnectionattempts.Scope
+		rows   int
+		member bool
+	}{
+		"server":               {mcpconnectionattempts.ServerScope(s.orgID(), s.projectID(), s.det("mcpserver-github"), mcpconnectionattempts.AppDCR), 2, false},
+		"project gateway":      {mcpconnectionattempts.GatewayScope(s.orgID(), s.projectID(), s.det("metamcp-1"), mcpconnectionattempts.AppDCR), 3, true},
+		"organization gateway": {mcpconnectionattempts.OrganizationGatewayScope(s.orgID(), s.det("organization-gateway"), mcpconnectionattempts.AppDCR), 2, false},
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			attempt := mcpconnectionattempts.AttemptAt(s.det("stopped-attempt"), time.Now(), scope)
+			attempt := mcpconnectionattempts.AttemptAt(s.det("stopped-attempt"), time.Now(), tc.scope)
 			rows, err := s.connectionAttemptRows(attempt, "stopped-attempt", connectionEndings[0], true)
 			require.NoError(t, err)
-			if name == "project gateway" {
-				require.Len(t, rows, 3)
+			require.Len(t, rows, tc.rows)
+			if tc.member {
 				require.Equal(t, s.det("mcpserver-support").String(), rows[2].MemberID)
 				require.Equal(t, mcpconnectionattempts.FamilyBrowser, rows[2].ClientFamily)
 				require.Equal(t, s.connectionDevice("stopped-attempt"), rows[2].DeviceKey)
 			} else {
-				require.Len(t, rows, 2)
 				for _, row := range rows {
 					require.Empty(t, row.MemberID)
 				}

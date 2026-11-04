@@ -30,6 +30,14 @@ func TestProviderErrorHappened(t *testing.T) {
 	}
 }
 
+func TestExchangeRequestConfigurationIsNotProviderFailure(t *testing.T) {
+	t.Parallel()
+	manager := &ChallengeManager{}
+	_, err := manager.exchangeCode(t.Context(), nil, RemoteLoginState{TokenEndpoint: "not-an-absolute-url"}, TokenEndpointClientAuth{Method: TokenEndpointAuthMethodNone}, "", "code")
+	require.Error(t, err)
+	require.Equal(t, mcpconnectionattempts.CodeCredentialMisconfigured, exchangeHappened(err, false))
+}
+
 func TestExchangeHappened(t *testing.T) {
 	t.Parallel()
 

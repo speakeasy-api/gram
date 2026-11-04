@@ -2195,6 +2195,9 @@ func exchangeHappened(err error, tunneled bool) mcpconnectionattempts.Code {
 	if _, ok := errors.AsType[*tokenEndpointSigningError](err); ok {
 		return mcpconnectionattempts.CodeInternalError
 	}
+	if _, ok := errors.AsType[*tokenExchangeRequestError](err); ok {
+		return mcpconnectionattempts.CodeCredentialMisconfigured
+	}
 	if _, ok := errors.AsType[*tokenExchangeUnavailableError](err); ok {
 		if errors.Is(err, tunnelrouting.ErrNoTunnelRoute) {
 			return mcpconnectionattempts.CodeTunnelUnavailable
@@ -2396,7 +2399,7 @@ func (m *ChallengeManager) exchangeCode(
 
 	req, err := NewTokenEndpointRequest(ctx, state.TokenEndpoint, form, clientAuth)
 	if err != nil {
-		return tokenResponse{}, fmt.Errorf("new token request: %w", err)
+		return tokenResponse{}, &tokenExchangeRequestError{err: fmt.Errorf("new token request: %w", err)}
 	}
 
 	resp, err := doer.Do(req)
@@ -2657,6 +2660,13 @@ func s256Challenge(verifier string) string {
 	sum := sha256.Sum256([]byte(verifier))
 	return base64.RawURLEncoding.EncodeToString(sum[:])
 }
+
+// tokenExchangeRequestError means no provider request was sent: local settings
+// could not form a request. A nested signing error keeps its operational meaning.
+type tokenExchangeRequestError struct{ err error }
+
+func (e *tokenExchangeRequestError) Error() string { return e.err.Error() }
+func (e *tokenExchangeRequestError) Unwrap() error { return e.err }
 
 // tokenExchangeUnavailableError preserves the shared exchange error contract.
 type tokenExchangeUnavailableError struct{ err error }

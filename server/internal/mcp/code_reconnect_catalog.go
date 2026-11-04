@@ -193,6 +193,7 @@ func (s *Service) finishCodeReconnectApproval(w http.ResponseWriter, r *http.Req
 	}
 	completed := *b
 	completed.CatalogComplete = true
+	completed.CatalogCanceled = false
 	if err := s.updateCodeReconnect(ctx, state, completed); err != nil {
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return err

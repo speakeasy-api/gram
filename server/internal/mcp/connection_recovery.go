@@ -383,7 +383,8 @@ func (s *Service) verifyConnectionRecoveryCompletion(r *http.Request, remote rem
 		return true, err
 	}
 	// Used up only once it has passed, so a stray callback cannot spend it.
-	// A late second callback finds the login gone; this one still ends the attempt.
+	// Reserve the ending atomically: CompleteRemoteLogin records this callback's
+	// verdict; a late callback cannot claim a second, expired ending.
 	if _, err := s.connectionRecoveryCache.GetAndDeleteMarking(ctx, key, attemptEndMarker(remote.Attempt), connectionAttemptEndTTL); err != nil {
 		if errors.Is(err, redisCache.ErrCacheMiss) {
 			return true, errRecoveryLoginExpired

@@ -145,15 +145,16 @@ func (s *Service) ServeFirstPartyConnect(w http.ResponseWriter, r *http.Request,
 		AutoConnectDone: false,
 		FocusServer:     focusServer,
 	}
+	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppFirstParty), mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.FromRequest(r))
+	defer t.Finish(ctx)
 	if err := s.authnChallengeCache.Store(ctx, challengeState); err != nil {
+		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnexpected, err, "store authn challenge state").LogError(ctx, logger)
 	}
 
 	attempt := challengeState.connectionAttempt(endpoint)
-	t := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppFirstParty), mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.FromRequest(r))
 	t.Attach(attempt)
 	t.Consumed()
-	defer t.Finish(ctx)
 	defer func() {
 		if retErr != nil && codeReconnect != nil {
 			_, _ = s.authnChallengeCache.GetAndDelete(ctx, "authnChallenge:"+challengeState.ID)

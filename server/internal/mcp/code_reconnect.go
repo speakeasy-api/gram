@@ -129,8 +129,13 @@ func (s *Service) updateCodeReconnect(ctx context.Context, state AuthnChallengeS
 		updated := current
 		merged := *current.CodeReconnect
 		merged.ReviewReady = merged.ReviewReady || binding.ReviewReady
+		if binding.CatalogComplete && !binding.CatalogCanceled {
+			// A committed approval wins even if cancellation was stored first.
+			merged.CatalogCanceled = false
+		} else if !merged.CatalogComplete {
+			merged.CatalogCanceled = merged.CatalogCanceled || binding.CatalogCanceled
+		}
 		merged.CatalogComplete = merged.CatalogComplete || binding.CatalogComplete
-		merged.CatalogCanceled = merged.CatalogCanceled || binding.CatalogCanceled
 		updated.CodeReconnect = &merged
 		done, err := s.authnChallengeCache.CompareAndSwap(ctx, current, updated)
 		if err != nil {

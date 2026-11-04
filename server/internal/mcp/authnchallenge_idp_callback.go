@@ -283,7 +283,6 @@ func (s *Service) HandleIDPCallback(w http.ResponseWriter, r *http.Request) (ret
 			t.Refuse(ctx, mcpconnectionattempts.CodeSignInProviderError, mcpconnectionattempts.Detail(oautherr.RegisteredCodeLabel(idpErr)))
 			s.metrics.RecordOAuthFlowFailed(ctx, issuerID, mcpSlug, mcpmetrics.OAuthFlowStageIDPCallback)
 			logger.InfoContext(ctx, "oauth flow failed at idp callback", attr.SlogOAuthError(idpErr), attr.SlogOAuthErrorDescription(errDescription))
-			t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 			return oops.E(oops.CodeUnexpected, nil, "idp returned an error: %s", idpErr).LogError(ctx, logger)
 		}
 		issuer, err := s.issuerURL(endpoint, baseURL)

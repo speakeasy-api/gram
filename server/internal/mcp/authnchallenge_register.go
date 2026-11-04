@@ -125,8 +125,12 @@ func (s *Service) serveRegister(w http.ResponseWriter, r *http.Request, logger *
 	}
 
 	defer func() {
-		if retErr != nil && !refusalRecorded {
+		panicked := recover()
+		if (retErr != nil || panicked != nil) && !refusalRecorded && !errors.Is(ctx.Err(), context.Canceled) {
 			refused(ctx, "internal_error")
+		}
+		if panicked != nil {
+			panic(panicked)
 		}
 	}()
 	req.SetDefaults()

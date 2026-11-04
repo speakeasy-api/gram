@@ -409,8 +409,7 @@ func TestConnectionOutcome_RecoveryLinkEndsAtTheProvider(t *testing.T) {
 	t.Parallel()
 
 	f := newConnectionRecoveryFixture(t)
-	rec := mcpconnectionattemptstest.New(t)
-	f.ti.service.SetConnectionRecorder(rec.Recorder)
+	rec := recordConnections(t, f.ti)
 	manager := f.ti.service.RemoteChallengeManager()
 	remotesessions.WithConnectionRecorder(rec.Recorder)(manager)
 
@@ -1079,8 +1078,7 @@ func TestConnectionOutcome_RowsCarryTheClientFamily(t *testing.T) {
 		t.Parallel()
 		f := newConnectionRecoveryFixture(t)
 		f.userAgent = userAgent
-		rec := mcpconnectionattemptstest.New(t)
-		f.ti.service.SetConnectionRecorder(rec.Recorder)
+		rec := recordConnections(t, f.ti)
 		remotesessions.WithConnectionRecorder(rec.Recorder)(f.ti.service.RemoteChallengeManager())
 		path, err := f.ti.service.IssueConnectionRecovery(f.ctx, f.link)
 		require.NoError(t, err)

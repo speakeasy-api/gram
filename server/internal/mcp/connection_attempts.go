@@ -459,7 +459,7 @@ func (s *Service) recordTokenClientRefusal(r *http.Request, endpoint *ResolvedMc
 		return
 	}
 	app := mcpconnectionattempts.AppUnverified
-	if reason == "ai_tool_blocked" || reason == "cimd_metadata_invalid" {
+	if reason == "ai_tool_blocked" || reason == "cimd_metadata_invalid" || reason == "cimd_admission_denied" || reason == "cimd_admission_disabled" {
 		app = mcpconnectionattempts.AppOf(clientID)
 	}
 	s.connections.Once(r.Context(), connectionScope(endpoint, app), mcpconnectionattempts.StepInboundToken, what, mcpconnectionattempts.FromRequest(r), mcpconnectionattempts.Grant(grantType), mcpconnectionattempts.Detail(reason))
@@ -513,7 +513,7 @@ func (s *Service) recordRemoteSessionVerdict(
 	verdict remotesessions.ValidationOutcome,
 	trigger remotesessionmetrics.ValidationTrigger,
 ) {
-	if trigger == remotesessionmetrics.ValidationTriggerKeepalive {
+	if trigger == remotesessionmetrics.ValidationTriggerKeepalive || (verdict == remotesessions.ValidationOutcomeUnknown && errors.Is(ctx.Err(), context.Canceled)) {
 		return
 	}
 	what := verdictHappened(verdict, target.tunnelID.Valid)
@@ -563,6 +563,9 @@ func (s *Service) recordListingFailures(ctx context.Context, gate *metaGateConte
 		subject = &gate.authentication.subject
 	}
 	for _, failed := range unavailable {
+		if errors.Is(ctx.Err(), context.Canceled) && errors.Is(failed.err, context.Canceled) {
+			continue
+		}
 		if what, recorded := listingFailureHappened(failed.err); recorded {
 			s.connections.Once(ctx, scope, mcpconnectionattempts.StepDiscoveryMember, what, gate.fromRequest, mcpconnectionattempts.Member(failed.member.serverID), mcpconnectionattempts.Subject(subject))
 		}
