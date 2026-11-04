@@ -187,7 +187,10 @@ function show(search = "") {
 }
 
 // Radix scrolls the selected option into view in browsers; jsdom lacks it.
-const originalScrollIntoView = Element.prototype.scrollIntoView;
+const originalScrollIntoView = Object.getOwnPropertyDescriptor(
+  Element.prototype,
+  "scrollIntoView",
+);
 
 beforeEach(() => {
   Element.prototype.scrollIntoView = vi.fn<() => void>();
@@ -204,7 +207,15 @@ beforeEach(() => {
 afterEach(() => {
   cleanup();
   vi.clearAllMocks();
-  Element.prototype.scrollIntoView = originalScrollIntoView;
+  if (originalScrollIntoView) {
+    Object.defineProperty(
+      Element.prototype,
+      "scrollIntoView",
+      originalScrollIntoView,
+    );
+  } else {
+    Reflect.deleteProperty(Element.prototype, "scrollIntoView");
+  }
 });
 
 it("does not fetch workspace data for a non-admin", () => {
