@@ -151,7 +151,7 @@ Review follow-ups adopted on #8442 (each fails closed):
 
 ### Decided without reviewer input
 
-1. **O2 lands in two parts.** This part moves the access service's 29 plain organization and project checks, which need nothing beyond the operations F6 already has. The second part covers the remaining 46 rows:
+1. **O2 lands in two parts.** This part moves the access service's 29 plain organization and project checks, which need nothing beyond the operations F6 already has. The second part covers the 48 O2 rows the inventory still lists on this branch. The 83 in the migration table is the baseline count, before later owner reassignments; these are the rows still open:
    - the organization-or-project read alternatives in `ListRoles` and `ListMembers`;
    - the MCP checks in explain access and resource audiences, which need M1's MCP server operations;
    - challenge-role assignment;
