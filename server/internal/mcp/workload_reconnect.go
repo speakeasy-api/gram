@@ -102,10 +102,10 @@ func (s *Service) serveWorkloadReconnect(w http.ResponseWriter, r *http.Request,
 		if selection != nil && !selection.AllowsName(params.Name) {
 			return oops.E(oops.CodeForbidden, nil, "tool is not allowed by this session")
 		}
-		if s.remoteProxyManager == nil || s.authz == nil {
+		if s.remoteProxyManager == nil || s.authzClient == nil {
 			return oops.E(oops.CodeForbidden, nil, "tool authorization is unavailable")
 		}
-		interceptor := remotemcp.NewToolsCallAuthzInterceptor(s.authz, s.remoteProxyManager, endpoint.McpServerID.UUID.String(), endpoint.ProjectID.String(), s.logger)
+		interceptor := remotemcp.NewToolsCallAuthzInterceptor(s.authzClient, s.remoteProxyManager, endpoint.McpServerID.UUID.String(), endpoint.ProjectID.String(), s.logger)
 		if err := interceptor.InterceptToolsCallRequest(ctx, &proxy.ToolsCallRequest{Params: &params, UserRequest: nil}); err != nil {
 			return fmt.Errorf("authorize workload reconnect tool: %w", err)
 		}

@@ -1843,11 +1843,11 @@ func newStartCommand() *cli.Command {
 			mcpService.SetBindingRefreshAttempts(bindingRefreshAttempts)
 			mcpService.SetConsentBindingService(remoteSessionsService)
 			remotesessions.Attach(mux, remoteSessionsService)
-			remoteMcpService := remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, guardianPolicy, auditLogger, mcpServersService, featureFlags).WithServerURL(serverURL).
+			remoteMcpService := remotemcp.NewService(logger, tracerProvider, db, sessionManager, encryptionClient, authzEngine, authzClient, guardianPolicy, auditLogger, mcpServersService, featureFlags).WithServerURL(serverURL).
 				WithDistributionAdmission(distributionAdmission)
 			remotemcp.Attach(mux, remoteMcpService)
-			unproxiedmcp.Attach(mux, unproxiedmcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger))
-			tunnelService := tunneledmcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, route.NewRedis(redisClient), redisClient)
+			unproxiedmcp.Attach(mux, unproxiedmcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, auditLogger))
+			tunnelService := tunneledmcp.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, auditLogger, route.NewRedis(redisClient), redisClient)
 			tunnelService.Metrics = tunnelmetrics.NewStore(chDB)
 			tunneledmcp.Attach(mux, tunnelService)
 			mcpRuntime, err := buildMCPServerRuntime(mcpServerRuntimeDependencies{

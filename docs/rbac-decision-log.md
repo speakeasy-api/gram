@@ -108,3 +108,12 @@ Review follow-ups adopted on #8442 (each fails closed):
 5. **Behaviour change: meta MCP management carries the project.** Nine of the 42 dimensionless project-level checks were in `metamcp` (create, get, list, update, delete, list/add/update/remove members). They now use `MCPServersInProject`, so a role bounded to another project no longer manages this project's meta servers. The e2e suite pinned the old cross-project allow on main for the meta MCP list.
 6. **`metamcp` keeps the engine only for the shadow MCP admission writer**, as `mcpservers` does in M2.
 7. **Known inventory limitation.** The inventory scanner matches `PrepareContext`, `RefreshContext` and `CaptureAdmissionBoundary` by name, so the migrated client calls in `internal/mcp` still appear as engine consumers until the scanner checks the receiver type.
+
+## M4 (AIS-866): remote, tunneled and unproxied MCP
+
+### Decided without reviewer input
+
+1. **Behaviour change: remote and unproxied MCP management carries the project.** Eighteen of the 42 dimensionless project-level checks were here: `remotemcp` (create, create with MCP server, list, get, update, probe URL, verify URL, delete, headers list/get/create/update/delete, protected-resource discovery) and `unproxiedmcp` (create, list, get, delete). They now use `MCPServersInProject`. The e2e suite pinned the old cross-project allow on main for the remote and unproxied MCP lists. `tunneledmcp` already passed the project.
+2. **The remote proxy's tool interceptors take the client.** `ToolsCallAuthzInterceptor` asks `CallTool` and `ToolsListMCPConnectFilterInterceptor` asks `MatchMany` of `CallTool` operations, so per-tool decisions on proxied servers follow the MCP unit like hosted ones. `ProxyManager` holds the client instead of the engine, and the workload reconnect interceptor in `internal/mcp` passes the client too.
+3. **Scope pinning names operations, not scopes.** `authorizeServerScopes` takes `authz.MCPServerRef.Read` or `.Edit` as a method value, as `authclients` does for organization operations; the sharing-server checks are lists of `Edit` operations.
+4. **`remotemcp` keeps the engine only for shadow MCP admission**, as `mcpservers` does.
