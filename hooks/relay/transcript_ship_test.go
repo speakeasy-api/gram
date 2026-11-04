@@ -696,26 +696,21 @@ func TestStopOutsideCoworkRelaysToIngest(t *testing.T) {
 	require.Positive(t, ts.requests.Load(), "Stop still reaches ingest")
 }
 
-// TestCoworkReadsEntrypointFromTranscript: without
-// CLAUDE_CODE_ENTRYPOINT in the hook environment, the transcript's own
-// entrypoint decides.
-func TestCoworkReadsEntrypointFromTranscript(t *testing.T) {
-	for entrypoint, ships := range map[string]bool{"remote_cowork": true, "cli": false, "": false, "not_cowork": false, "remote": false} {
+// TestCoworkModeFollowsHookEnvironment: only the entrypoint Claude Code puts
+// in the hook environment decides. A transcript naming Cowork is ignored, so
+// events that fire before its first line is written decide the same way as
+// the Stop after them.
+func TestCoworkModeFollowsHookEnvironment(t *testing.T) {
+	for entrypoint, ships := range map[string]bool{"remote_cowork": true, "REMOTE_COWORK": true, "cli": false, "": false, "not_cowork": false, "remote": false} {
 		t.Setenv("XDG_STATE_HOME", t.TempDir())
 		ts := newTranscriptServer(t)
 		cfg := coworkConfig(t, ts.URL)
-		t.Setenv("CLAUDE_CODE_ENTRYPOINT", "")
+		t.Setenv("CLAUDE_CODE_ENTRYPOINT", entrypoint)
 		transcript := claudeTranscriptFile(t)
-		line := map[string]any{"type": "user", "uuid": "u-1", "message": map[string]any{"role": "user", "content": "hi"}}
-		if entrypoint != "" {
-			line["entrypoint"] = entrypoint
-		}
-		b, err := json.Marshal(line)
-		require.NoError(t, err)
-		appendTranscript(t, transcript, string(b)+"\n")
+		appendTranscript(t, transcript, `{"type":"user","uuid":"u-1","entrypoint":"remote_cowork","message":{"role":"user","content":"hi"}}`+"\n")
 
 		invokeClaude(t, cfg, claudeStop(transcript))
 		uploads, _ := ts.recorded()
-		require.Equal(t, ships, len(uploads) == 1, "entrypoint %q", entrypoint)
+		require.Equal(t, ships, len(uploads) == 1, "CLAUDE_CODE_ENTRYPOINT=%q", entrypoint)
 	}
 }

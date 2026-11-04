@@ -75,12 +75,12 @@ without approval, discovery skips the **entire backend**, including inline-text 
 
 The standard Claude plugin switches modes by itself. Claude's admin plugin
 settings install it in Claude Code and in the Cowork VM alike. When Claude Code
-reports a Cowork entrypoint (`CLAUDE_CODE_ENTRYPOINT`, or the transcript's own
-`entrypoint` field, is `remote_cowork` in the Cowork VM), the binary relays no
-per-event hook, so no policy is enforced there, and ships the transcript from
-Stop instead. Everywhere else it relays per-event hooks as before. Every event
-of a session reads the same entrypoint, so a session never mixes per-event
-rows with `claude-transcript:` rows.
+reports the Cowork entrypoint (`CLAUDE_CODE_ENTRYPOINT=remote_cowork`, which
+every hook process inherits), the binary relays no per-event hook, so no policy
+is enforced there, and ships the transcript from Stop instead. Everywhere else
+it relays per-event hooks as before. Every event of a session reads the same
+environment, so a session never mixes per-event rows with `claude-transcript:`
+rows.
 
 Capture needs both halves deployed: a pinned hooks binary that includes the
 Cowork mode, and an ingress rule forwarding `/transcript` to the server.

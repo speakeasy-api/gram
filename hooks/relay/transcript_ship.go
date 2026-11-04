@@ -70,10 +70,6 @@ const (
 	// longer lines are assembled from buffer-sized fragments.
 	transcriptReadBufferBytes = 64 << 10
 
-	// transcriptEntrypointScanBytes (1 MiB) bounds how much of a transcript is
-	// read to find its entrypoint when the hook environment does not name it.
-	transcriptEntrypointScanBytes = 1 << 20
-
 	// transcriptResponseLimit (64 KiB) bounds how much of a response is read;
 	// the acknowledgement is a few bytes of JSON.
 	transcriptResponseLimit = 64 << 10
@@ -229,58 +225,21 @@ func (r *Relay) shipTranscript(ctx context.Context, e *agenthooks.StopEvent) {
 // coworkTranscriptMode reports whether a Claude Code event fires inside
 // Claude's Cowork VM, where the relay ships the session transcript from Stop
 // and relays no per-event hook. Claude Code names its surface in
-// CLAUDE_CODE_ENTRYPOINT ("remote_cowork" in the Cowork VM, "cli" in a
-// terminal) and stamps the same value on each transcript line as
-// "entrypoint", which covers a hook environment without the variable. Every
-// event of a session reads the same answer, so one session never mixes
-// per-event rows with transcript rows. agenthooks reports the Cowork VM as the
-// remote variant, which Claude Code on the web shares, so the variant cannot
-// decide.
+// CLAUDE_CODE_ENTRYPOINT, which every hook process inherits: "remote_cowork"
+// in the Cowork VM, "cli" in a terminal. Every event of a session reads the
+// same value, so one session never mixes per-event rows with transcript rows;
+// deciding from the transcript instead could, because its first lines are
+// still being written when the first events fire. agenthooks reports the
+// Cowork VM as the remote variant, which Claude Code on the web shares, so the
+// variant cannot decide either.
 func coworkTranscriptMode(base *agenthooks.Event) bool {
-	if base.Provider != agenthooks.ProviderClaudeCode {
-		return false
-	}
-	if entrypoint := strings.TrimSpace(os.Getenv("CLAUDE_CODE_ENTRYPOINT")); entrypoint != "" {
-		return coworkEntrypoint(entrypoint)
-	}
-	path, err := validateClaudeTranscriptPath(base.Session.TranscriptPath)
-	if err != nil {
-		return false
-	}
-	return coworkEntrypoint(transcriptEntrypoint(path))
+	return base.Provider == agenthooks.ProviderClaudeCode &&
+		strings.EqualFold(strings.TrimSpace(os.Getenv("CLAUDE_CODE_ENTRYPOINT")), coworkVMEntrypoint)
 }
 
 // coworkVMEntrypoint is the entrypoint Claude Code reports inside the Cowork
 // VM. Anything else, including entrypoints not seen yet, keeps per-event hooks.
 const coworkVMEntrypoint = "remote_cowork"
-
-func coworkEntrypoint(entrypoint string) bool {
-	return strings.EqualFold(strings.TrimSpace(entrypoint), coworkVMEntrypoint)
-}
-
-// transcriptEntrypoint returns the first "entrypoint" a transcript line
-// carries, reading at most transcriptEntrypointScanBytes, or "" when none is
-// found.
-func transcriptEntrypoint(path string) string {
-	f, err := os.Open(path)
-	if err != nil {
-		return ""
-	}
-	defer func() { _ = f.Close() }()
-	reader := bufio.NewReaderSize(io.LimitReader(f, transcriptEntrypointScanBytes), transcriptReadBufferBytes)
-	for {
-		line, err := reader.ReadBytes('\n')
-		var entry struct {
-			Entrypoint string `json:"entrypoint"`
-		}
-		if json.Unmarshal(line, &entry) == nil && entry.Entrypoint != "" {
-			return entry.Entrypoint
-		}
-		if err != nil {
-			return ""
-		}
-	}
-}
 
 // transcriptUploadSettled reports whether the server has answered a chunk for
 // good, so the offset may move past it. A definitive 4xx would be rejected
