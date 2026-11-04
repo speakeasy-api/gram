@@ -202,15 +202,25 @@ jobs:
             --allowedTools "Read,Grep,Glob"
             --disallowedTools "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch"
 
-      # With full output off, the action hides why Claude stopped. Print only
-      # an error result's message, such as an API or sign-in refusal, never a
-      # result that holds the review.
+      # With full output off, the action hides why Claude stopped. The logs are
+      # public, so only Claude Code's own "API Error:" prefix (status and
+      # request ID) and the error type are printed; any other error text, which
+      # could carry untrusted API or MCP content, is withheld.
       - name: Show why Claude stopped
         if: failure() && steps.claude.outputs.execution_file != ''
         env:
           EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
         run: |
-          jq -r '[.[] | select(.type == "result" and .is_error == true)] | last | .result // empty' "$EXECUTION_FILE" 2>/dev/null | head -c 500 || true
+          msg=$(jq -r '[.[] | select(.type == "result" and .is_error == true)] | last | .result // empty' "$EXECUTION_FILE" 2>/dev/null) || msg=""
+          case "$msg" in
+            "") echo "Claude recorded no error result." ;;
+            "API Error: "*)
+              prefix=$(printf '%s' "${msg%%\{*}" | head -c 200 | tr -cd '[:alnum:] _().:/-')
+              type=$(printf '%s' "$msg" | grep -o '"type":"[a-z_]*"' | tail -n 1 | tr -cd '[:alnum:]_:"')
+              echo "::error::Claude stopped. ${prefix}${type:+ $type}"
+              ;;
+            *) echo "::error::Claude stopped with an error. Its message is withheld because it may hold untrusted text." ;;
+          esac
 
   post:
     name: post
