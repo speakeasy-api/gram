@@ -14,6 +14,7 @@ import (
 	"regexp"
 	"strconv"
 	"strings"
+	"sync"
 	"time"
 
 	"github.com/speakeasy-api/gram/server/internal/catalogauth"
@@ -40,7 +41,8 @@ const (
 	maxNameLength = 200
 	// maxDescriptionLength bounds reviewed public prose sent to the factory.
 	maxDescriptionLength = 8000
-	// maxPullRequestFilePages matches GitHub's cap of 3000 listed files per pull request.
+	// maxPullRequestFilePages matches GitHub's cap of 3000 listed files per
+	// pull request. A larger pull request is judged on the files GitHub lists.
 	maxPullRequestFilePages = 30
 	// guidesDirectory holds one folder per published setup guide in the guide repository.
 	guidesDirectory = "guides/"
@@ -112,6 +114,22 @@ type client struct {
 	httpClient    *guardian.HTTPClient
 	githubBaseURL string
 	now           func() time.Time
+
+	// pullsMu guards pullFolders, which concurrent deliveries share.
+	pullsMu sync.Mutex
+	// pullFolders caches the guide folders each open pull request changes,
+	// keyed by pull request number, so repeated checks list files only for new
+	// or updated pull requests. Pull requests that are no longer open are
+	// dropped after each complete listing.
+	pullFolders map[int]pullRequestFolders
+}
+
+// pullRequestFolders records the guide folders a pull request changes at one head commit.
+type pullRequestFolders struct {
+	// head is the commit the file listing was read at.
+	head string
+	// slugs holds the names of the guide folders the pull request changes.
+	slugs map[string]struct{}
 }
 
 // New builds a usable client even without credentials; unconfigured effects
@@ -125,7 +143,7 @@ func New(policy *guardian.Policy, config Config) Client {
 	}
 	transport := policy.PooledClient(guardian.WithCheckRedirect(func(*http.Request, []*http.Request) error { return http.ErrUseLastResponse }))
 	transport.Timeout = requestTimeout
-	return &client{config: config, httpClient: transport, githubBaseURL: "https://api.github.com", now: time.Now}
+	return &client{config: config, httpClient: transport, githubBaseURL: "https://api.github.com", now: time.Now, pullsMu: sync.Mutex{}, pullFolders: make(map[int]pullRequestFolders)}
 }
 
 // disabledClient parks unconfigured deliveries for operator attention.
@@ -218,7 +236,11 @@ func (c *client) EnsureGuide(ctx context.Context, guide Guide) (GuideResult, err
 	return GuideResult{URL: "https://github.com/" + c.config.GitHubRepository + "/issues/" + strconv.Itoa(issue.Number), Outcome: OutcomeRequested}, nil
 }
 
-// guidePublished reports whether the default branch already has the guide's metadata file.
+// guidePublished reports whether the default branch already has the guide's
+// metadata file. GitHub answers 404 both for a missing file and for a token
+// without Contents read, so a missing file only counts as absent once the
+// guides directory itself proves readable. Otherwise the 404 is a
+// configuration error and no request is filed.
 func (c *client) guidePublished(ctx context.Context, slug string) (bool, error) {
 	var file struct {
 		// Type is "file" for a regular file; a directory listing decodes as an error.
@@ -228,13 +250,19 @@ func (c *client) guidePublished(ctx context.Context, slug string) (bool, error) 
 	if err != nil {
 		return false, err
 	}
-	return found && file.Type == "file", nil
+	if found {
+		return file.Type == "file", nil
+	}
+	if err := c.github(ctx, http.MethodGet, "/contents/"+strings.TrimSuffix(guidesDirectory, "/"), nil, nil); err != nil {
+		return false, err
+	}
+	return false, nil
 }
 
 // openGuidePullRequest returns the lowest-numbered open pull request that
 // changes a file in the guide's folder, or zero when none does.
 func (c *client) openGuidePullRequest(ctx context.Context, slug string) (int, error) {
-	prefix := guidesDirectory + slug + "/"
+	open := make(map[int]struct{})
 	for page := 1; page <= maxPages; page++ {
 		var pulls []githubPullRequest
 		path := fmt.Sprintf("/pulls?state=open&sort=created&direction=asc&per_page=%d&page=%d", pageSize, page)
@@ -245,38 +273,81 @@ func (c *client) openGuidePullRequest(ctx context.Context, slug string) (int, er
 			if pull.Number <= 0 {
 				return 0, deliveryError(ErrorPermanent, "invalid_response", "guide pull request response has no number", nil)
 			}
-			touches, err := c.pullRequestTouches(ctx, pull.Number, prefix)
+			open[pull.Number] = struct{}{}
+			folders, err := c.pullRequestGuideFolders(ctx, pull)
 			if err != nil {
 				return 0, err
 			}
-			if touches {
+			if _, ok := folders[slug]; ok {
 				return pull.Number, nil
 			}
 		}
 		if len(pulls) < pageSize {
+			c.forgetClosedPullRequests(open)
 			return 0, nil
 		}
 	}
 	return 0, deliveryError(ErrorPermanent, "reconciliation_limit", "guide pull request reconciliation exceeded page limit", nil)
 }
 
-func (c *client) pullRequestTouches(ctx context.Context, number int, prefix string) (bool, error) {
-	for page := 1; page <= maxPullRequestFilePages; page++ {
-		var files []pullRequestFile
-		path := fmt.Sprintf("/pulls/%d/files?per_page=%d&page=%d", number, pageSize, page)
-		if err := c.github(ctx, http.MethodGet, path, nil, &files); err != nil {
-			return false, err
-		}
-		for _, file := range files {
-			if strings.HasPrefix(file.Filename, prefix) || strings.HasPrefix(file.PreviousFilename, prefix) {
-				return true, nil
-			}
-		}
-		if len(files) < pageSize {
-			return false, nil
+// pullRequestGuideFolders returns the guide folders a pull request changes,
+// reusing the cached listing while the pull request's head commit is unchanged.
+func (c *client) pullRequestGuideFolders(ctx context.Context, pull githubPullRequest) (map[string]struct{}, error) {
+	head := pull.Head.SHA
+	if head != "" {
+		c.pullsMu.Lock()
+		cached, ok := c.pullFolders[pull.Number]
+		c.pullsMu.Unlock()
+		if ok && cached.head == head {
+			return cached.slugs, nil
 		}
 	}
-	return false, deliveryError(ErrorPermanent, "reconciliation_limit", "guide pull request file reconciliation exceeded page limit", nil)
+	slugs := make(map[string]struct{})
+	for page := 1; page <= maxPullRequestFilePages; page++ {
+		var files []pullRequestFile
+		path := fmt.Sprintf("/pulls/%d/files?per_page=%d&page=%d", pull.Number, pageSize, page)
+		if err := c.github(ctx, http.MethodGet, path, nil, &files); err != nil {
+			return nil, err
+		}
+		for _, file := range files {
+			addGuideFolder(slugs, file.Filename)
+			addGuideFolder(slugs, file.PreviousFilename)
+		}
+		if len(files) < pageSize {
+			break
+		}
+	}
+	if head != "" {
+		c.pullsMu.Lock()
+		c.pullFolders[pull.Number] = pullRequestFolders{head: head, slugs: slugs}
+		c.pullsMu.Unlock()
+	}
+	return slugs, nil
+}
+
+// forgetClosedPullRequests drops cached listings for pull requests missing
+// from a complete open pull request listing.
+func (c *client) forgetClosedPullRequests(open map[int]struct{}) {
+	c.pullsMu.Lock()
+	defer c.pullsMu.Unlock()
+	for number := range c.pullFolders {
+		if _, ok := open[number]; !ok {
+			delete(c.pullFolders, number)
+		}
+	}
+}
+
+// addGuideFolder records the guide folder a changed file belongs to. Only
+// files inside a folder count, so guides/example.md names no guide.
+func addGuideFolder(slugs map[string]struct{}, filename string) {
+	rest, ok := strings.CutPrefix(filename, guidesDirectory)
+	if !ok {
+		return
+	}
+	folder, _, ok := strings.Cut(rest, "/")
+	if ok && folder != "" {
+		slugs[folder] = struct{}{}
+	}
 }
 
 type githubIssue struct {
@@ -317,6 +388,13 @@ type githubLabel struct {
 type githubPullRequest struct {
 	// Number identifies the pull request in the target repository.
 	Number int `json:"number"`
+	// Head identifies the commit whose changed files the pull request lists.
+	Head githubCommitRef `json:"head"`
+}
+
+type githubCommitRef struct {
+	// SHA is the commit the branch points to.
+	SHA string `json:"sha"`
 }
 
 type pullRequestFile struct {
@@ -376,9 +454,10 @@ func (c *client) github(ctx context.Context, method, path string, input, output 
 }
 
 // send performs one repository API request. When notFoundIsAbsent is set, an
-// HTTP 404 reports found=false instead of an error. Only use it for lookups made
-// after an earlier request in the same reconciliation proved repository access,
-// because GitHub also answers 404 when the token cannot see the repository.
+// HTTP 404 reports found=false instead of an error. GitHub also answers 404
+// when the token cannot see the repository or lacks the permission the
+// endpoint needs, so callers must confirm that access separately before
+// treating found=false as absent.
 func (c *client) send(ctx context.Context, method, path string, input, output any, notFoundIsAbsent bool) (bool, error) {
 	var body io.Reader
 	if input != nil {
