@@ -123,7 +123,8 @@ endorsements.
 `mise run test:rbac-e2e`. It runs on pull requests that touch authorization code
 or this suite, on any pull request labelled `rbac-migration` whatever its base
 branch, and by `workflow_dispatch` with an optional `ref`. The Playwright report
-is uploaded as the `rbac-e2e-playwright` artifact.
+is uploaded as the `rbac-e2e-playwright` artifact; CI records no traces, since
+they would carry persona sessions into a downloadable file.
 
 ## Environment
 
