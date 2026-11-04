@@ -82,6 +82,7 @@ func runPubsubLaneFailure(t *testing.T, laneErr error) (string, metricdata.Resou
 		metering.NewRiskRecorder(gcp.NewNoopPublisher[*meteringv1.MeterReading]()),
 	)
 	require.NoError(t, err)
+	scanner.WithAuthorization(newRiskAuthorization(t, ti.conn))
 
 	result, err := scanner.ScanForEnforcement(ctx, realtimeScanRequest(authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID, "alice@example.com", message.User, ""))
 	require.NoError(t, err)

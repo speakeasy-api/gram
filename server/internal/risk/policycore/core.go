@@ -64,10 +64,11 @@ type Core struct {
 	queries         *repo.Queries
 	mutations       *MutationDependencies
 	toolAnnotations ToolAnnotationsResolver
+	authorization   *authz.Client
 }
 
 func New(db repo.DBTX, mutations ...MutationDependencies) *Core {
-	core := &Core{db: db, queries: repo.New(db), mutations: nil, toolAnnotations: nil}
+	core := &Core{db: db, queries: repo.New(db), mutations: nil, toolAnnotations: nil, authorization: nil}
 	if len(mutations) > 0 {
 		core.mutations = &mutations[0]
 	}
@@ -78,6 +79,15 @@ func NewWithToolAnnotations(db repo.DBTX, resolver ToolAnnotationsResolver, muta
 	core := New(db, mutations...)
 	core.toolAnnotations = resolver
 	return core
+}
+
+// WithAuthorization sets the client that decides which policies apply to an
+// MCP principal and returns the core. Listing policies for a principal fails
+// without it; every other read and mutation leaves authorization to the
+// calling service.
+func (c *Core) WithAuthorization(client *authz.Client) *Core {
+	c.authorization = client
+	return c
 }
 
 // PageCursor identifies one policy in deterministic keyset order.
@@ -288,6 +298,9 @@ func audiencePrincipalURNs(ctx context.Context, db repo.DBTX, organizationID, po
 // filterByAudience keeps the policies the principal's grants apply, using the
 // same rule as chat and hook enforcement.
 func (c *Core) filterByAudience(ctx context.Context, organizationID string, principal MCPPrincipal, rows []repo.RiskPolicy) ([]repo.RiskPolicy, []string, error) {
+	if c.authorization == nil {
+		return nil, nil, errors.New("risk policy core has no authorization client")
+	}
 	var principals []urn.Principal
 	var err error
 	if principal.AgentID != "" {
@@ -306,11 +319,11 @@ func (c *Core) filterByAudience(ctx context.Context, organizationID string, prin
 	applicable := make([]repo.RiskPolicy, 0, len(rows))
 	policyIDs := make([]string, 0, len(rows))
 	for _, row := range rows {
-		application, err := authz.RiskPolicyApplies(row.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(grants)
+		applies, err := c.authorization.EvaluateGrants(ctx, grants, authz.RiskPolicy(row.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate())
 		if err != nil {
 			return nil, nil, fmt.Errorf("evaluate risk policy application: %w", err)
 		}
-		if application.Satisfied {
+		if applies {
 			applicable = append(applicable, row)
 			policyIDs = append(policyIDs, row.ID.String())
 		}

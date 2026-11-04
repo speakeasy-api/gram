@@ -162,7 +162,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	ti := &testInstance{
 		flags:          flags,
-		service:        mcpapproval.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, flags, audit.NewLogger(), assembler, starter.start),
+		service:        mcpapproval.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, authztest.NewParityClient(t, authzEngine), flags, audit.NewLogger(), assembler, starter.start),
 		conn:           conn,
 		repo:           repo.New(conn),
 		sessionManager: sessionManager,

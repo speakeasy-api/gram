@@ -234,6 +234,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 		// require_approval policies deny here with a clear message instead of
 		// pointing agents at a server they may not reach.
 		nil,
+		authzClient,
 	)
 	if err != nil {
 		return nil, err

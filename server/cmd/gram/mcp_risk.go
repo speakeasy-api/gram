@@ -13,6 +13,7 @@ import (
 	"go.opentelemetry.io/otel/trace"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	ra "github.com/speakeasy-api/gram/server/internal/background/activities/risk_analysis"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -92,6 +93,7 @@ func newMCPRiskEvaluator(
 	shadowMCPClient *shadowmcp.Client,
 	toolIOLogsEnabled telemetry.FeatureChecker,
 	approvals mcpriskscan.ApprovalGate,
+	authorization *authz.Client,
 ) (*mcpriskscan.Evaluator, *risk.Scanner, error) {
 	var piiScanner ra.PIIScanner
 	if presidioURL := c.String("presidio-analyzer-url"); presidioURL != "" {
@@ -125,11 +127,12 @@ func newMCPRiskEvaluator(
 	if err != nil {
 		return nil, nil, fmt.Errorf("create MCP risk scanner: %w", err)
 	}
+	scanner.WithAuthorization(authorization)
 	evaluator := mcpriskscan.NewPolicyEvaluator(
 		logger,
 		tracerProvider,
 		meterProvider,
-		policycore.NewWithToolAnnotations(db, mcpservers.NewToolDispositionCache(logger, db, cache.NewRedisCacheAdapter(redisClient))),
+		policycore.NewWithToolAnnotations(db, mcpservers.NewToolDispositionCache(logger, db, cache.NewRedisCacheAdapter(redisClient))).WithAuthorization(authorization),
 		risk.NewMCPPolicyScanner(scanner, shadowMCPClient),
 		publishers.RiskFindings,
 		mcpriskscan.DefaultPolicyConfig,

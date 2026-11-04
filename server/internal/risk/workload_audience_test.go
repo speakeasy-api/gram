@@ -151,10 +151,10 @@ func TestPolicyBypassEvaluator_WorkloadUsesItsAgentsRoleBypass(t *testing.T) {
 	}
 
 	memberCtx := workloadRequestContext(t, ctx, ti, "Workload bypass agent", role.RoleUrn, true)
-	require.True(t, risk.NewPolicyBypassEvaluator(testenv.NewLogger(t), ti.conn).CanBypass(memberCtx, evaluation),
+	require.True(t, risk.NewPolicyBypassEvaluator(testenv.NewLogger(t), ti.conn).WithAuthorization(newRiskAuthorization(t, ti.conn)).CanBypass(memberCtx, evaluation),
 		"a workload inherits its agent's role-based bypass")
 
 	outsiderCtx := workloadRequestContext(t, ctx, ti, "Workload no-bypass agent", "", true)
-	require.False(t, risk.NewPolicyBypassEvaluator(testenv.NewLogger(t), ti.conn).CanBypass(outsiderCtx, evaluation),
+	require.False(t, risk.NewPolicyBypassEvaluator(testenv.NewLogger(t), ti.conn).WithAuthorization(newRiskAuthorization(t, ti.conn)).CanBypass(outsiderCtx, evaluation),
 		"a workload whose agent lacks the role cannot bypass")
 }

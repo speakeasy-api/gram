@@ -52,7 +52,7 @@ func newTestRiskServiceWithRealIntake(t *testing.T) (context.Context, *testInsta
 			riskIntakeQuietProbes{},
 		)
 
-		instance.approvalIntake = mcpapproval.NewService(logger, tracerProvider, instance.conn, instance.sessionManager, authzEngine, flags, audit.NewLogger(), assembler, nil)
+		instance.approvalIntake = mcpapproval.NewService(logger, tracerProvider, instance.conn, instance.sessionManager, authzEngine, authztest.NewParityClient(t, authzEngine), flags, audit.NewLogger(), assembler, nil)
 	})
 
 	authCtx, ok := contextvalues.GetAuthContext(ctx)

@@ -52,7 +52,7 @@ func (s *Service) GetRiskSignals(ctx context.Context, payload *gen.GetRiskSignal
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 
@@ -456,7 +456,7 @@ func (s *Service) GetRiskMcpServerCounts(ctx context.Context, payload *gen.GetRi
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 
@@ -518,22 +518,26 @@ func (s *Service) filterMCPServerCountsByRead(ctx context.Context, authCtx *cont
 
 	// Grants key on the toolset id for toolset-backed servers, else the server id.
 	grantIDByServer := make(map[string]string, len(servers))
-	checks := make([]authz.Check, 0, len(servers))
+	operations := make([]authz.Operation, 0, len(servers))
+	grantIDs := make([]string, 0, len(servers))
 	for _, server := range servers {
 		grantID := server.ID.String()
 		if server.ToolsetID.Valid {
 			grantID = server.ToolsetID.UUID.String()
 		}
 		grantIDByServer[server.ID.String()] = grantID
-		checks = append(checks, authz.MCPCheck(authz.ScopeMCPRead, grantID, authCtx.ProjectID.String()))
+		operations = append(operations, authz.MCPServer(authCtx.ProjectID.String(), grantID).Read())
+		grantIDs = append(grantIDs, grantID)
 	}
-	allowedIDs, err := s.authz.Filter(ctx, checks)
+	matched, err := s.authzClient.MatchMany(ctx, operations)
 	if err != nil {
 		return nil, err
 	}
-	allowed := make(map[string]struct{}, len(allowedIDs))
-	for _, id := range allowedIDs {
-		allowed[id] = struct{}{}
+	allowed := make(map[string]struct{}, len(grantIDs))
+	for i, id := range grantIDs {
+		if matched[i] {
+			allowed[id] = struct{}{}
+		}
 	}
 
 	kept := make([]chrepo.RiskMCPServerCount, 0, len(rows))

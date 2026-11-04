@@ -244,5 +244,7 @@ func typedOperations() []Operation {
 		mcpServer.Read(), mcpServer.Edit(), mcpServer.Connect(),
 		project.WriteOrAdminister(), project.ReadOrEditMCPServer("server"),
 		project.ReadToolLogs(),
+		RiskPolicy("policy", RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(),
+		RiskPolicy("policy", RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Bypass(),
 	}
 }

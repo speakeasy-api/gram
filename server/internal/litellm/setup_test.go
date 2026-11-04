@@ -161,7 +161,7 @@ func newRealTestServiceWithScannerFactory(t *testing.T, scannerFactory func(*pgx
 		nil,
 		scanner,
 		nil,
-		risk.NewPolicyBypassEvaluator(logger, conn),
+		risk.NewPolicyBypassEvaluator(logger, conn).WithAuthorization(authztest.NewParityClient(t, authzEngine)),
 		spendGate,
 		shadowmcp.NewClient(logger, conn, cacheAdapter, serverURL),
 		chatWriter,

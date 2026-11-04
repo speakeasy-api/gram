@@ -333,6 +333,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 	mcpRiskEvaluator, mcpRiskScanner, err := newMCPRiskEvaluator(
 		c, logger, tracerProvider, meterProvider, db, enc, redisClient, featureFlags, enforcementDispatcher, completions, guardianPolicy, openRouter, publishers, shadowMCPClient, toolIOLogsEnabled,
 		approvalService,
+		authzClient,
 	)
 	if err != nil {
 		return err

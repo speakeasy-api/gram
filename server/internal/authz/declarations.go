@@ -35,6 +35,7 @@ func DefaultRegistry() (*s.Registry, error) {
 // scope must reproduce its frozen scope table entry.
 func DefaultDeclarations() []s.TypeDecl {
 	access := string(GrantSurfaceAccess)
+	riskPolicies := string(GrantSurfaceRiskPolicy)
 	return []s.TypeDecl{
 		s.NewType("organization", s.StoredKind(ResourceKindOrg), s.WrittenBy(access),
 			s.Grant("reader", s.StoredAs(string(ScopeOrgRead)),
@@ -122,6 +123,15 @@ func DefaultDeclarations() []s.TypeDecl {
 			s.Block("use_blocked", s.StoredAs(string(ScopeMCPBlockedAuth)), s.RuntimeSafeSince(5)),
 			s.Permission("use", s.Rel("user"),
 				s.Checks(string(ScopeMCPAuth)), s.ExcludedBy("use_blocked")),
+		),
+		s.NewType("risk_policy", s.StoredKind(ResourceKindRiskPolicy), s.WrittenBy(riskPolicies),
+			s.SelectorKeys(SelectorKeyServerIdentity, SelectorKeyServerURL),
+			s.Grant("included", s.StoredAs(string(ScopeRiskPolicyEvaluate)), s.Describe("Apply the policy"), s.RuntimeSafeSince(1)),
+			s.Grant("bypassed", s.StoredAs(string(ScopeRiskPolicyBypass)), s.Describe("Skip the policy")),
+			s.Grant("blocker", s.StoredAs(string(ScopeRiskPolicyBlock)), s.Describe("Block with the policy")),
+			s.Permission("evaluate", s.Minus(s.Rel("included"), s.Rel("bypassed")), s.Checks(string(ScopeRiskPolicyEvaluate))),
+			s.Permission("bypass", s.Rel("bypassed"), s.Checks(string(ScopeRiskPolicyBypass))),
+			s.Permission("block", s.Rel("blocker"), s.Checks(string(ScopeRiskPolicyBlock))),
 		),
 	}
 }

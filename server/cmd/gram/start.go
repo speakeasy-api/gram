@@ -1226,7 +1226,8 @@ func newStartCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("create risk scanner: %w", err)
 			}
-			policyBypass := risk.NewPolicyBypassEvaluator(logger, db)
+			riskScanner.WithAuthorization(authzClient)
+			policyBypass := risk.NewPolicyBypassEvaluator(logger, db).WithAuthorization(authzClient)
 			toolDispositionCache := mcpservers.NewToolDispositionCache(logger, db, cache.NewRedisCacheAdapter(redisClient))
 			mcpFindingEvidence := risk.NewMCPFindingEvidenceStore(db, encryptionClient)
 			approvalService := approval.NewService(logger, db, serverURL, auditLogger)
@@ -1234,7 +1235,7 @@ func newStartCommand() *cli.Command {
 				logger,
 				tracerProvider,
 				meterProvider,
-				policycore.NewWithToolAnnotations(db, toolDispositionCache),
+				policycore.NewWithToolAnnotations(db, toolDispositionCache).WithAuthorization(authzClient),
 				risk.NewMCPPolicyScanner(riskScanner, shadowMCPClient),
 				publishers.RiskFindings,
 				mcpriskscan.DefaultPolicyConfig,
@@ -1863,7 +1864,7 @@ func newStartCommand() *cli.Command {
 			// One probe serves both the authority and tool-declarations slots:
 			// they are two views of the same remote prober.
 			remoteProber := remoteprobe.New(logger, guardianPolicy)
-			mcpApprovalService := mcpapproval.NewService(logger, tracerProvider, db, sessionManager, authzEngine, featureFlags, auditLogger,
+			mcpApprovalService := mcpapproval.NewService(logger, tracerProvider, db, sessionManager, authzEngine, authzClient, featureFlags, auditLogger,
 				mcpapprovalevidence.NewAssembler(
 					packagemeta.NewClient(guardianPolicy.PooledClient()),
 					repometa.NewClient(guardianPolicy.PooledClient(), repometa.WithToken(c.String("github-evidence-token"))),
@@ -2066,6 +2067,7 @@ func newStartCommand() *cli.Command {
 				db,
 				sessionManager,
 				authzEngine,
+				authzClient,
 				riskSignaler,
 				riskReconciler,
 				riskResultsCleaner,

@@ -20,7 +20,6 @@ import (
 // honest against scope_tables.golden.
 func evaluatorSliceDeclarations() []s.TypeDecl {
 	access := string(GrantSurfaceAccess)
-	riskSurface := string(GrantSurfaceRiskPolicy)
 	return append(frozenSliceDeclarations(),
 		s.NewType("environment", s.Parent("project"), s.WrittenBy(access),
 			s.SelectorKeys(SelectorKeyProjectID),
@@ -56,15 +55,6 @@ func evaluatorSliceDeclarations() []s.TypeDecl {
 		s.NewType("agent", s.Parent("organization"), s.WrittenBy(access),
 			s.Grant("reader", s.StoredAs(string(ScopeAgentRead)), s.Describe("Read agents"), s.DefaultFor(SystemRoleAdmin)),
 			s.Permission("read", s.Rel("reader"), s.Checks(string(ScopeAgentRead))),
-		),
-		s.NewType("risk_policy", s.WrittenBy(riskSurface),
-			s.SelectorKeys(SelectorKeyServerIdentity, SelectorKeyServerURL),
-			s.Grant("included", s.StoredAs(string(ScopeRiskPolicyEvaluate)), s.Describe("Apply the policy"), s.RuntimeSafeSince(1)),
-			s.Grant("bypassed", s.StoredAs(string(ScopeRiskPolicyBypass)), s.Describe("Skip the policy")),
-			s.Grant("blocker", s.StoredAs(string(ScopeRiskPolicyBlock)), s.Describe("Block with the policy")),
-			s.Permission("evaluate", s.Minus(s.Rel("included"), s.Rel("bypassed")), s.Checks(string(ScopeRiskPolicyEvaluate))),
-			s.Permission("bypass", s.Rel("bypassed"), s.Checks(string(ScopeRiskPolicyBypass))),
-			s.Permission("block", s.Rel("blocker"), s.Checks(string(ScopeRiskPolicyBlock))),
 		),
 	)
 }

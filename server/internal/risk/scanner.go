@@ -341,6 +341,7 @@ type Scanner struct {
 	metrics               *scannerMetrics
 	celEng                *celenv.Engine
 	recommended           ra.RecommendedSet
+	authorization         *authz.Client // decides which policies apply; nil fails closed
 }
 
 // NewScanner creates a RiskScanner. piiScanner may be nil if Presidio
@@ -442,6 +443,7 @@ func newScanner(
 		metrics:               newScannerMetrics(meterProvider, logger),
 		celEng:                celEng,
 		recommended:           recommended,
+		authorization:         nil,
 	}, nil
 }
 
@@ -559,12 +561,12 @@ func (s *Scanner) scanForEnforcement(
 
 	applicablePolicies := make([]repo.RiskPolicy, 0, len(policies))
 	for _, p := range policies {
-		policyApplication, err := authz.RiskPolicyApplies(p.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(grants)
+		applies, err := s.policyApplies(ctx, grants, p.ID.String())
 		if err != nil {
 			s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
-			return nil, fmt.Errorf("evaluate risk policy application: %w", err)
+			return nil, err
 		}
-		if !policyApplication.Satisfied {
+		if !applies {
 			continue
 		}
 		applicablePolicies = append(applicablePolicies, p)
@@ -802,11 +804,11 @@ func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, organizatio
 		return nil, fmt.Errorf("list shadow_mcp policies: %w", err)
 	}
 	for _, p := range policies {
-		policyApplication, err := authz.RiskPolicyApplies(p.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(grants)
+		applies, err := s.policyApplies(ctx, grants, p.ID.String())
 		if err != nil {
-			return nil, fmt.Errorf("evaluate risk policy application: %w", err)
+			return nil, err
 		}
-		if !policyApplication.Satisfied {
+		if !applies {
 			continue
 		}
 		if p.Action == "block" {
@@ -843,6 +845,28 @@ func (s *Scanner) riskPolicyGrants(ctx context.Context, organizationID string, u
 		return nil, fmt.Errorf("load risk policy audience grants: %w", err)
 	}
 	return grants, nil
+}
+
+// WithAuthorization sets the client that decides which risk policies apply to
+// a caller and returns the scanner. Without it, scans that consult policy
+// audiences fail instead of guessing. Call it once, before the scanner serves
+// requests.
+func (s *Scanner) WithAuthorization(client *authz.Client) *Scanner {
+	s.authorization = client
+	return s
+}
+
+// policyApplies asks whether a risk policy's audience covers the loaded
+// grants, after subtracting bypasses.
+func (s *Scanner) policyApplies(ctx context.Context, grants []authz.Grant, policyID string) (bool, error) {
+	if s.authorization == nil {
+		return false, errors.New("risk scanner has no authorization client")
+	}
+	applies, err := s.authorization.EvaluateGrants(ctx, grants, authz.RiskPolicy(policyID, authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate())
+	if err != nil {
+		return false, fmt.Errorf("evaluate risk policy application: %w", err)
+	}
+	return applies, nil
 }
 
 // HasEnabledShadowMCPPolicy reports whether the project has at least one
