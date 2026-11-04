@@ -40,6 +40,10 @@ func (bindingOwnerOnlyEngine) GetScopeOverrides(context.Context) ([]authz.RoleGr
 	return nil, false
 }
 
+func (bindingOwnerOnlyEngine) EvaluateLoadedAuthority(context.Context, []authz.Grant, authz.Scope, authz.Selector) error {
+	return oops.C(oops.CodeForbidden)
+}
+
 func TestBindingsRequireOrdinaryHuman(t *testing.T) {
 	t.Parallel()
 	svc := &remotesessions.Service{}
@@ -323,6 +327,10 @@ func TestBindingsOwnershipReachabilityAndExactSession(t *testing.T) {
 
 // Exercise delegated edit and authorize permissions independently.
 type bindingDelegatedEngine struct{ authorizeOnly bool }
+
+func (bindingDelegatedEngine) EvaluateLoadedAuthority(context.Context, []authz.Grant, authz.Scope, authz.Selector) error {
+	return oops.C(oops.CodeForbidden)
+}
 
 func (bindingDelegatedEngine) GetScopeOverrides(context.Context) ([]authz.RoleGrant, bool) {
 	return nil, false

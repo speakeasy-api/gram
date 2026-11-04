@@ -89,6 +89,7 @@ var consumerEntryPoints = map[string]consumerCategory{
 	"IsBlocklistScope":              categoryEvaluator,
 	"RequirePluginWrite":            categoryEvaluator,
 	"APIKeyReachesMCP":              categoryEvaluator,
+	"NewAgentAccess":                categoryEvaluator,
 
 	// Independent gates.
 	"CheckSensitiveContentAccess":            categoryGate,

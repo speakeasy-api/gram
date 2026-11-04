@@ -169,7 +169,7 @@ func (s *Service) Create(ctx context.Context, payload *gen.CreatePayload) (*gen.
 			ownerUserID = *payload.OwnerUserID
 		}
 
-		human, err := s.authorizer.RequireCreate(ctx, tx, agentID, ownerUserID)
+		human, err := s.authorizer.RequireCreate(ctx, tx, ownerUserID)
 		if err != nil {
 			return err
 		}

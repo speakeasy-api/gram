@@ -12,7 +12,7 @@ agent:read
   visibility: user_visible
   resource_kind: agent
   surface: access
-  satisfied_by: []
+  satisfied_by: [agent:write]
   exclusion: -
   closure: [agent:read]
   sub_scopes: []
@@ -34,8 +34,8 @@ agent:write
   surface: access
   satisfied_by: []
   exclusion: -
-  closure: [agent:write]
-  sub_scopes: []
+  closure: [agent:read agent:write]
+  sub_scopes: [agent:read]
   selector_keys: []
   roles: [admin]
 assistant:blocked_read

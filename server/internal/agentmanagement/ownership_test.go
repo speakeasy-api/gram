@@ -26,7 +26,7 @@ func TestTransferAtomicallyReplacesOwnerAndPreservesDirectPolicy(t *testing.T) {
 
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-a")
-	seedOrganizationUser(t, conn, "org-a", "owner")
+	seedAgentCreator(t, conn, "org-a", "owner")
 	seedOrganizationUser(t, conn, "org-a", "replacement")
 	service := newTestService(conn, &fakeAuthorizationEngine{allowed: map[string]bool{}})
 	created, err := service.Create(validatedHumanContext(t, "org-a", "owner"), &gen.CreatePayload{Name: "Transfer agent"})

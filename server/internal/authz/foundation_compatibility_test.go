@@ -244,7 +244,7 @@ func runFoundationCase(t *testing.T, f foundationFixture) {
 		_, err := SelectorFromRow(f.Raw)
 		requireFoundationOutcome(t, f.Want, err == nil, nil)
 	case "assistant_defaults":
-		got := withAssistantSystemRoleDefaults(foundationGrants(f.Grants), f.Defaults)
+		got := withSystemRoleDefaults(foundationGrants(f.Grants), f.Defaults)
 		requireFoundationOutcome(t, f.Want, foundationAllows(t, got, checks), nil)
 	default:
 		t.Fatalf("unknown operation %q", f.Operation)

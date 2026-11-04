@@ -23,7 +23,9 @@ func evaluatorSliceDeclarations() []s.TypeDecl {
 	return append(frozenSliceDeclarations(),
 		s.NewType("agent", s.Parent("organization"), s.WrittenBy(access),
 			s.Grant("reader", s.StoredAs(string(ScopeAgentRead)), s.Describe("Read agents"), s.DefaultFor(SystemRoleAdmin)),
-			s.Permission("read", s.Rel("reader"), s.Checks(string(ScopeAgentRead))),
+			s.Grant("writer", s.StoredAs(string(ScopeAgentWrite)), s.Describe("Change agents"), s.DefaultFor(SystemRoleAdmin)),
+			s.Permission("read", s.Union(s.Rel("reader"), s.Rel("writer")), s.Checks(string(ScopeAgentRead))),
+			s.Permission("write", s.Rel("writer"), s.Checks(string(ScopeAgentWrite))),
 		),
 	)
 }

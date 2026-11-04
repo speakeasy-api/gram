@@ -80,6 +80,10 @@ export type Selector = {
    */
   disposition?: Disposition | undefined;
   /**
+   * Agent owner filter (agent scopes only): 'self' for the caller, a user ID for a specified owner, or '*' for any owner. With resource_id='*', agent:write permits creation and management for these owners.
+   */
+  owner?: string | undefined;
+  /**
    * Project filter (MCP, environment, assistant, inference, mcp:auth, and mcp:blocked_auth scopes). When set with resource_id='*', grants access to every resource of the kind in the project. For mcp:auth and mcp:blocked_auth it is the project of the server using the client.
    */
   projectId?: string | undefined;
@@ -132,6 +136,7 @@ export const Selector$inboundSchema: z.ZodMiniType<Selector, unknown> = z.pipe(
     client_type: z.optional(ClientType$inboundSchema),
     connection_owner: z.optional(z.string()),
     disposition: z.optional(Disposition$inboundSchema),
+    owner: z.optional(z.string()),
     project_id: z.optional(z.string()),
     resource_id: z.string(),
     resource_kind: ResourceKind$inboundSchema,
@@ -156,6 +161,7 @@ export type Selector$Outbound = {
   client_type?: string | undefined;
   connection_owner?: string | undefined;
   disposition?: string | undefined;
+  owner?: string | undefined;
   project_id?: string | undefined;
   resource_id: string;
   resource_kind: string;
@@ -173,6 +179,7 @@ export const Selector$outboundSchema: z.ZodMiniType<
     clientType: z.optional(ClientType$outboundSchema),
     connectionOwner: z.optional(z.string()),
     disposition: z.optional(Disposition$outboundSchema),
+    owner: z.optional(z.string()),
     projectId: z.optional(z.string()),
     resourceId: z.string(),
     resourceKind: ResourceKind$outboundSchema,

@@ -304,7 +304,7 @@ var scopeExpansions = map[Scope][]Scope{
 	ScopeChatWrite:               nil,
 	ScopeInferenceExecute:        nil,
 	ScopeLogRead:                 nil,
-	ScopeAgentRead:               nil,
+	ScopeAgentRead:               {ScopeAgentWrite},
 	ScopeAgentWrite:              nil,
 	ScopeAgentAuthorize:          nil,
 	ScopeAgentTransfer:           nil,

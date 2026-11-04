@@ -235,6 +235,13 @@ func (s *seeder) seedRoles(ctx context.Context) error {
 		}
 	}
 
+	if err := s.q.RolesInsertAgentCreationGrants(ctx, repo.RolesInsertAgentCreationGrantsParams{
+		OrganizationID:   org,
+		SpecifiedOwnerID: s.userID("jonas"),
+	}); err != nil {
+		return fmt.Errorf("insert demo owner-scoped agent creation grants: %w", err)
+	}
+
 	// Show the completed one-time onboarding result, not a pending repair job.
 	// Role plugins stay role-only and install by default; the Default plugin
 	// remains Everyone and is available for members to turn on.

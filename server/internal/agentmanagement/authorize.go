@@ -33,11 +33,13 @@ const (
 type HumanContext struct {
 	Auth   *contextvalues.AuthContext
 	grants []authz.Grant
+	access authz.AgentAccess
 	// A permitted RBAC scope override only narrows agent management checks:
-	// they must pass both grants and overrideGrants. Delegation containment
-	// and LiveGrants always use the live grants, so an override never widens.
+	// they must pass both the live grants and the override. Delegation
+	// containment and LiveGrants always use the live grants, so an override
+	// never widens.
 	overridden     bool
-	overrideGrants []authz.Grant
+	overrideAccess authz.AgentAccess
 }
 
 // LiveGrants returns an isolated copy of the caller grants loaded by the
@@ -64,6 +66,7 @@ type AgentPermissions struct {
 type authorizationEngine interface {
 	EvaluateLoadedGrants(context.Context, []authz.Grant, ...authz.Check) error
 	GetScopeOverrides(context.Context) ([]authz.RoleGrant, bool)
+	EvaluateLoadedAuthority(context.Context, []authz.Grant, authz.Scope, authz.Selector) error
 }
 
 // Authorizer implements the reusable human-only agent management seam.
@@ -148,53 +151,93 @@ func (a *Authorizer) lockHumanMemberships(ctx context.Context, dbtx repo.DBTX, a
 		return HumanContext{}, fmt.Errorf("load live authorization grants: %w", err)
 	}
 
-	human := HumanContext{Auth: authCtx, grants: grants, overridden: false, overrideGrants: nil}
+	human := HumanContext{Auth: authCtx, grants: grants, access: authz.NewAgentAccess(authCtx.UserID, grants), overridden: false, overrideAccess: authz.AgentAccess{}}
 	if a.authz != nil {
 		if overrides, ok := a.authz.GetScopeOverrides(ctx); ok {
 			human.overridden = true
-			human.overrideGrants = authz.GrantsFromOverrides(overrides)
+			human.overrideAccess = authz.NewAgentAccess(authCtx.UserID, authz.GrantsFromOverrides(overrides))
 		}
 	}
 	return human, nil
 }
 
-func (a *Authorizer) evaluate(ctx context.Context, human HumanContext, check authz.Check) error {
-	if err := a.authz.EvaluateLoadedGrants(ctx, human.grants, check); err != nil {
+// require authorizes an existing-agent operation against the live grants and,
+// when a scope override is active, against the override as well.
+func (a *Authorizer) require(ctx context.Context, human HumanContext, scope authz.Scope, agent repo.Agent) error {
+	if err := human.access.Require(ctx, a.authz, scope, agent.ID.String(), agent.OwnerUserID); err != nil {
 		return fmt.Errorf("evaluate live grants: %w", err)
 	}
 	if !human.overridden {
 		return nil
 	}
-	if err := a.authz.EvaluateLoadedGrants(ctx, human.overrideGrants, check); err != nil {
+	if err := human.overrideAccess.Require(ctx, a.authz, scope, agent.ID.String(), agent.OwnerUserID); err != nil {
 		return fmt.Errorf("evaluate scope override: %w", err)
 	}
 	return nil
 }
 
-func (h HumanContext) satisfies(check authz.Check) bool {
-	if !authz.GrantsSatisfy(h.grants, check) {
-		return false
+// requireCreate authorizes creation for ownerUserID against the live grants
+// and, when a scope override is active, against the override as well.
+func (a *Authorizer) requireCreate(ctx context.Context, human HumanContext, ownerUserID string) error {
+	if err := human.access.RequireCreate(ctx, a.authz, ownerUserID); err != nil {
+		return fmt.Errorf("evaluate live grants: %w", err)
 	}
-	return !h.overridden || authz.GrantsSatisfy(h.overrideGrants, check)
+	if !human.overridden {
+		return nil
+	}
+	if err := human.overrideAccess.RequireCreate(ctx, a.authz, ownerUserID); err != nil {
+		return fmt.Errorf("evaluate scope override: %w", err)
+	}
+	return nil
 }
 
-// RequireCreate authorizes a prospective agent ID and locks the eligible owner
-// membership until the insert commits. Self-owned creation is intrinsic; any
-// other owner requires agent:write evaluated against the prospective agent.
-func (a *Authorizer) RequireCreate(ctx context.Context, dbtx repo.DBTX, agentID uuid.UUID, ownerUserID string) (HumanContext, error) {
+// allows is the capability projection of require.
+func (h HumanContext) allows(scope authz.Scope, agent repo.Agent) bool {
+	if !h.access.Allows(scope, agent.ID.String(), agent.OwnerUserID) {
+		return false
+	}
+	return !h.overridden || h.overrideAccess.Allows(scope, agent.ID.String(), agent.OwnerUserID)
+}
+
+// creationOwners lists the owners the caller may create agents for. A scope
+// override narrows the live answer: an owner must be allowed by both.
+func (h HumanContext) creationOwners() (all bool, ownerIDs []string) {
+	all, ownerIDs = h.access.CreationOwners()
+	if !h.overridden {
+		return all, ownerIDs
+	}
+	overrideAll, overrideIDs := h.overrideAccess.CreationOwners()
+	switch {
+	case all && overrideAll:
+		return true, []string{}
+	case all:
+		return false, overrideIDs
+	case overrideAll:
+		return false, ownerIDs
+	}
+	both := make([]string, 0, len(ownerIDs))
+	for _, id := range ownerIDs {
+		if slices.Contains(overrideIDs, id) {
+			both = append(both, id)
+		}
+	}
+	return false, both
+}
+
+// RequireCreate evaluates creation eligibility against the intended owner and
+// locks both active memberships until the insert commits. The recipient need
+// not hold write permission; owners retain intrinsic management access.
+func (a *Authorizer) RequireCreate(ctx context.Context, dbtx repo.DBTX, ownerUserID string) (HumanContext, error) {
 	human, err := a.requireHumanWithMemberships(ctx, dbtx, ownerUserID)
 	if err != nil {
 		return HumanContext{}, err
 	}
 
-	if ownerUserID == human.Auth.UserID {
-		return human, nil
-	}
 	if a.authz == nil {
 		return HumanContext{}, errors.New("agent authorization engine is unavailable")
 	}
-	if err := a.evaluate(ctx, human, agentCheck(authz.ScopeAgentWrite, agentID)); err != nil {
-		return HumanContext{}, fmt.Errorf("authorize agent creation for another owner: %w", err)
+	if err := a.requireCreate(ctx, human, ownerUserID); err != nil {
+		return HumanContext{}, fmt.Errorf("require agent creation: %w", err)
 	}
 	return human, nil
 }
@@ -292,7 +335,7 @@ func (a *Authorizer) requireAgentWithHuman(ctx context.Context, dbtx repo.DBTX, 
 	if a.authz == nil {
 		return HumanContext{}, repo.Agent{}, errors.New("agent authorization engine is unavailable")
 	}
-	if err := a.evaluate(ctx, human, agentCheck(scope, agent.ID)); err != nil {
+	if err := a.require(ctx, human, scope, agent); err != nil {
 		// Selected-agent denials deliberately do not distinguish absent,
 		// cross-tenant, or unauthorized resources.
 		return HumanContext{}, repo.Agent{}, oops.C(oops.CodeForbidden)
@@ -309,10 +352,10 @@ func (a *Authorizer) Permissions(ctx context.Context, human HumanContext, agent 
 	}
 
 	return AgentPermissions{
-		Read:      human.satisfies(agentCheck(authz.ScopeAgentRead, agent.ID)),
-		Write:     human.satisfies(agentCheck(authz.ScopeAgentWrite, agent.ID)),
-		Authorize: human.satisfies(agentCheck(authz.ScopeAgentAuthorize, agent.ID)),
-		Transfer:  human.satisfies(agentCheck(authz.ScopeAgentTransfer, agent.ID)),
+		Read:      human.allows(authz.ScopeAgentRead, agent),
+		Write:     human.allows(authz.ScopeAgentWrite, agent),
+		Authorize: human.allows(authz.ScopeAgentAuthorize, agent),
+		Transfer:  human.allows(authz.ScopeAgentTransfer, agent),
 	}, nil
 }
 
@@ -332,14 +375,5 @@ func scopeForOwnerPredicate(predicate OwnerPredicate) (authz.Scope, bool) {
 		return authz.ScopeAgentTransfer, true
 	default:
 		return "", false
-	}
-}
-
-func agentCheck(scope authz.Scope, agentID uuid.UUID) authz.Check {
-	return authz.Check{
-		Scope:        scope,
-		ResourceKind: authz.ResourceKindAgent,
-		ResourceID:   agentID.String(),
-		Dimensions:   nil,
 	}
 }

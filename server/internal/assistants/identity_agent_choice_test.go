@@ -110,3 +110,37 @@ func TestUpgradeAssistantIdentityRequiresAuthorityOverExistingAgent(t *testing.T
 	require.ErrorAs(t, err, &denied)
 	require.Equal(t, oops.CodeBadRequest, denied.Code)
 }
+
+func TestUpgradeAssistantIdentityHonorsAgentOwnerSelector(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		owner   string
+		allowed bool
+	}{
+		{owner: "user-2", allowed: true},
+		{owner: "different-owner"},
+		{owner: "self"},
+		{owner: "*", allowed: true},
+	} {
+		t.Run(tc.owner, func(t *testing.T) {
+			t.Parallel()
+			svc, ctx, project, db := newRBACServiceWithConn(t, "identity_owner_selector")
+			legacy := createLegacyAssistant(t, db, project, "Owner-scoped agent")
+			agent, err := agentrepo.New(db).CreateAgent(t.Context(), agentrepo.CreateAgentParams{OrganizationID: "org-test", OwnerUserID: "user-2", ProjectID: uuid.NullUUID{UUID: project, Valid: true}, Name: "Another owner's agent"})
+			require.NoError(t, err)
+			selector, err := authz.AgentOwnerSelector(authz.ScopeAgentAuthorize, tc.owner).MarshalJSON()
+			require.NoError(t, err)
+			_, err = accessrepo.New(db).UpsertPrincipalGrant(t.Context(), accessrepo.UpsertPrincipalGrantParams{OrganizationID: "org-test", PrincipalUrn: urn.NewPrincipal(urn.PrincipalTypeUser, "user-test"), Scope: string(authz.ScopeAgentAuthorize), Selectors: selector})
+			require.NoError(t, err)
+			ctx = authztest.WithExactGrants(t, ctx, authz.NewGrant(authz.ScopeProjectWrite, project.String()))
+			_, err = svc.UpgradeAssistantIdentity(ctx, &gen.UpgradeAssistantIdentityPayload{ID: legacy.ID.String(), AgentID: new(agent.ID.String())})
+			if tc.allowed {
+				require.NoError(t, err)
+			} else {
+				var denied *oops.ShareableError
+				require.ErrorAs(t, err, &denied)
+				require.Equal(t, oops.CodeForbidden, denied.Code)
+			}
+		})
+	}
+}

@@ -62,7 +62,7 @@ func TestLoadUserGrants_matchesIndividualPolicies(t *testing.T) {
 	counted := &userGrantQueryCounter{DBTX: conn}
 	batch, err := LoadUserGrants(ctx, counted, orgID, ids)
 	require.NoError(t, err)
-	require.Equal(t, 2, counted.queries, "principal and grant queries must not scale with owner count")
+	require.Equal(t, 2, counted.queries, "principal and grant queries must not scale with owner count; seeded Member grants need no system-role lookup")
 	for _, id := range ids {
 		principals, err := ResolveUserPrincipals(ctx, conn, orgID, id)
 		require.NoError(t, err)

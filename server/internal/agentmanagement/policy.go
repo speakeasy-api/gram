@@ -319,13 +319,7 @@ func (s *Service) policyCheckOwner(ctx context.Context, tx pgx.Tx, agentID *uuid
 		if ownerUserID == "" {
 			ownerUserID = authCtx.UserID
 		}
-		// Never stored: it stands for the agent agents.create would make, so
-		// naming another owner needs the same agent:write there as here.
-		prospective, err := uuid.NewV7()
-		if err != nil {
-			return HumanContext{}, "", fmt.Errorf("generate prospective agent id: %w", err)
-		}
-		human, err := s.authorizer.RequireCreate(ctx, tx, prospective, ownerUserID)
+		human, err := s.authorizer.RequireCreate(ctx, tx, ownerUserID)
 		if err != nil {
 			return HumanContext{}, "", err
 		}

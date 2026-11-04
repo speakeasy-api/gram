@@ -154,12 +154,12 @@
       ]
     },
     {
-      "name": "expansion_agent_write_does_not_satisfy_agent_read",
+      "name": "expansion_agent_write_satisfies_agent_read",
       "contract": "nontransitive_expansion",
       "caller": "human",
       "operation": "require",
       "checks": [{ "scope": "agent:read", "resource_id": "agent_1" }],
-      "want": "deny",
+      "want": "allow",
       "grants": [
         {
           "principal": "role:organization:role_fixture",

@@ -48,6 +48,33 @@ func (q *Queries) PostflightIDAdmissionsOutreachingIssuer(ctx context.Context, o
 	return count, err
 }
 
+const postflightIDAgentCreationGrants = `-- name: PostflightIDAgentCreationGrants :one
+SELECT count(*) FROM principal_grants g
+JOIN organization_roles r ON g.principal_urn = 'role:organization:' || r.id
+WHERE g.organization_id = $1::text AND r.organization_id = $1::text
+  AND g.scope = 'agent:write'
+  AND g.selectors = jsonb_build_object(
+    'resource_kind', 'agent', 'resource_id', '*',
+    'owner', CASE r.workos_slug
+      WHEN 'engineer' THEN 'self'
+      WHEN 'collaborator' THEN $2::text
+      WHEN 'temporary-escalation' THEN '*'
+    END)
+  AND r.workos_slug IN ('engineer', 'collaborator', 'temporary-escalation')
+`
+
+type PostflightIDAgentCreationGrantsParams struct {
+	OrgID            string
+	SpecifiedOwnerID string
+}
+
+func (q *Queries) PostflightIDAgentCreationGrants(ctx context.Context, arg PostflightIDAgentCreationGrantsParams) (int64, error) {
+	row := q.db.QueryRow(ctx, postflightIDAgentCreationGrants, arg.OrgID, arg.SpecifiedOwnerID)
+	var count int64
+	err := row.Scan(&count)
+	return count, err
+}
+
 const postflightIDAgentGrants = `-- name: PostflightIDAgentGrants :one
 SELECT count(*) FROM principal_grants
 WHERE organization_id = $1::text AND principal_urn LIKE 'agent:%'

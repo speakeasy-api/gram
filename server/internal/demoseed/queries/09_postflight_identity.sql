@@ -707,3 +707,17 @@ WHERE i.organization_id = @org_id::text AND i.id = @issuer_id::uuid
   AND agent_grant.selectors = jsonb_build_object(
     'resource_kind', 'inference', 'resource_id', '*', 'project_id', ag.project_id::text)
   AND owner_grant.selectors = agent_grant.selectors;
+
+-- name: PostflightIDAgentCreationGrants :one
+SELECT count(*) FROM principal_grants g
+JOIN organization_roles r ON g.principal_urn = 'role:organization:' || r.id
+WHERE g.organization_id = @org_id::text AND r.organization_id = @org_id::text
+  AND g.scope = 'agent:write'
+  AND g.selectors = jsonb_build_object(
+    'resource_kind', 'agent', 'resource_id', '*',
+    'owner', CASE r.workos_slug
+      WHEN 'engineer' THEN 'self'
+      WHEN 'collaborator' THEN @specified_owner_id::text
+      WHEN 'temporary-escalation' THEN '*'
+    END)
+  AND r.workos_slug IN ('engineer', 'collaborator', 'temporary-escalation');

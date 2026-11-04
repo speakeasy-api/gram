@@ -41,6 +41,7 @@ func blockedServer(serverID, projectID string) authz.Selector {
 func TestCreateWithAllServersRefusedWhenCallerIsBlockedFromOneServer(t *testing.T) {
 	t.Parallel()
 	f := newDelegableFixture(t)
+	f.grantSelfCreate(t)
 	projectID := uuid.NewString()
 	f.grant(t, "caller", authz.ScopeMCPConnect, authz.NewSelector(authz.ScopeMCPConnect, authz.WildcardResource))
 	f.grant(t, "caller", authz.ScopeMCPBlockedConnect, blockedServer("server-b", ""))
@@ -97,6 +98,7 @@ func TestCheckPolicyGrantsForNewAgentMatchesCreate(t *testing.T) {
 		t.Run(tc.name, func(t *testing.T) {
 			t.Parallel()
 			f := newDelegableFixture(t)
+			f.grantSelfCreate(t)
 			for _, grant := range tc.grants {
 				f.grant(t, "caller", grant.Scope, grant.Selector)
 			}

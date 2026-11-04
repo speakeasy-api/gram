@@ -52,6 +52,13 @@ func (f delegableFixture) principal(name string) urn.Principal {
 	return urn.NewPrincipal(urn.PrincipalTypeUser, name)
 }
 
+// grantSelfCreate lets the caller create agents they own, which every agent
+// creation requires.
+func (f delegableFixture) grantSelfCreate(t *testing.T) {
+	t.Helper()
+	f.grant(t, "caller", authz.ScopeAgentWrite, authz.AgentOwnerSelector(authz.ScopeAgentWrite, authz.AgentOwnerSelf))
+}
+
 func (f delegableFixture) grant(t *testing.T, principal string, scope authz.Scope, selector authz.Selector) uuid.UUID {
 	t.Helper()
 	raw, err := selector.MarshalJSON()

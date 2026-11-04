@@ -1398,6 +1398,10 @@ type Selector struct {
 	// remote_session clients only). Together with connection_owner it names one
 	// person's connection across every auth client sharing that upstream client.
 	UpstreamClient *string
+	// Agent owner filter (agent scopes only): 'self' for the caller, a user ID for
+	// a specified owner, or '*' for any owner. With resource_id='*', agent:write
+	// permits creation and management for these owners.
+	Owner *string
 	// Tool disposition filter (MCP scopes only).
 	Disposition *string
 	// Specific tool name filter (MCP scopes only).

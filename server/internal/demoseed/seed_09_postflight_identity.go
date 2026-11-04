@@ -67,6 +67,12 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 				OrgID: org, ProjectID: proj, IssuerID: s.det("inference-workload-issuer"), AgentID: s.det("inference-agent"),
 			})
 		}, 1, "demo seed postflight: expected one project-scoped inference workload with explicit agent and owner access, found %d"},
+		{func(ctx context.Context) (int64, error) {
+			return s.q.PostflightIDAgentCreationGrants(ctx, repo.PostflightIDAgentCreationGrantsParams{
+				OrgID:            org,
+				SpecifiedOwnerID: s.userID("jonas"),
+			})
+		}, 3, "demo seed postflight: expected 3 owner-scoped agent creation grants, found %d"},
 		// The seed never creates API keys: any row left here was minted by a
 		// demo visitor and would grant programmatic access that survives the
 		// reseed. (SQL: IF stray > 0; a count is never negative, so == 0.)
