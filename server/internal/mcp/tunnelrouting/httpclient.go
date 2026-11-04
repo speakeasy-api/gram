@@ -147,7 +147,11 @@ func (c *HTTPClient) Do(req *http.Request, tunnelID string) (*http.Response, err
 			// so drop it from the store on the way past. Any later failure —
 			// the request is on the wire by then — is returned as-is.
 			if !isDeadGateway(err) {
-				return nil, errors.Join(fmt.Errorf("forward request via tunnel: %w", err), unpublishErr)
+				// The request may have reached the provider, so an earlier cleanup failure must not mark it as never sent.
+				if unpublishErr != nil {
+					return nil, fmt.Errorf("forward request via tunnel: %w (earlier route cleanup failed: %v)", err, unpublishErr)
+				}
+				return nil, fmt.Errorf("forward request via tunnel: %w", err)
 			}
 			if uerr := c.routes.Unpublish(ctx, tunnelID, addr); uerr != nil {
 				unpublishErr = errors.Join(unpublishErr, routeCleanupError("unpublish unreachable tunnel route", uerr))
