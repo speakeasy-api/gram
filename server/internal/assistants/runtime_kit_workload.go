@@ -148,7 +148,7 @@ func (s *ServiceCore) provisionKitWorkload(ctx context.Context, r assistantRunti
 	if err != nil {
 		return nil, fmt.Errorf("provision kit workload: %w", err)
 	}
-	if err := kitWorkloadInferenceAllowed(r.ProjectID, agentPolicy, ownerPolicy); err != nil {
+	if err := kitWorkloadInferenceAllowed(ctx, s.authz, r.ProjectID, agentPolicy, ownerPolicy); err != nil {
 		return nil, fmt.Errorf("provision kit workload: %w", err)
 	}
 	shared, err := usersessionsrepo.New(db).GetSharedUserSessionIssuerByID(ctx, c.MCPUserSessionIssuerID)
@@ -375,12 +375,12 @@ func kitAgentDisplayName(ctx context.Context, db assistantrepo.DBTX, organizatio
 	return conv.PtrEmpty(name), nil
 }
 
-func kitWorkloadInferenceAllowed(project uuid.UUID, policies ...[]authz.Grant) error {
+func kitWorkloadInferenceAllowed(ctx context.Context, client *authz.Client, project uuid.UUID, policies ...[]authz.Grant) error {
 	if project == uuid.Nil || len(policies) != 2 {
 		return ErrKitRuntimeBinding
 	}
 	for _, policy := range policies {
-		allowed, err := authz.GrantsAuthorize(policy, authz.InferenceExecuteCheck(project.String()))
+		allowed, err := client.EvaluateGrants(ctx, policy, authz.Inference(project.String()).Execute())
 		if err != nil {
 			return fmt.Errorf("check kit workload inference policy: %w", err)
 		}

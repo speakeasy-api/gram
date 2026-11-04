@@ -221,7 +221,7 @@ func TestAssistantIdentityOAuthUpgradeMatchesAPI(t *testing.T) {
 	engine := authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	authzClient := authztest.NewParityClient(t, engine)
 	tracer, meter := testenv.NewTracerProvider(t), testenv.NewMeterProvider(t)
-	identities := assistantidentity.New("https://platform.example.invalid", audit.NewLogger())
+	identities := assistantidentity.New("https://platform.example.invalid", audit.NewLogger(), authztest.NewLoadedGrantsClient())
 	core := assistants.NewServiceCore(logger, tracer, meter, db, nil, nil, nil, nil, nil, nil, telemetry.NewStub(logger), nil, audit.NewLogger(), identities, authzClient)
 	management := assistants.NewService(logger, tracer, meter, db, &sessions.Manager{}, engine, authzClient, core, nil, nil)
 	service := NewAssistantIdentityService(management, NewPostgresReader(logger, db))

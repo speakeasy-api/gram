@@ -64,6 +64,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/background"
 	bgtriggers "github.com/speakeasy-api/gram/server/internal/background/triggers"
 	"github.com/speakeasy-api/gram/server/internal/billing"
@@ -1242,12 +1243,12 @@ func newTriggersApp(
 
 // newAssistantIdentities binds assistant trigger workloads to the deployment's
 // Speakeasy signing issuer, the same origin mcpauthz.New takes.
-func newAssistantIdentities(c *cli.Context, auditLogger *audit.Logger) *assistantidentity.Service {
+func newAssistantIdentities(c *cli.Context, auditLogger *audit.Logger, authzClient *authz.Client) *assistantidentity.Service {
 	issuerURL := c.String("authz-issuer-url")
 	inv.Require("assistant identity issuer",
 		"authz-issuer-url is a Speakeasy issuer origin", mcpauthz.ValidateIssuerOrigin(issuerURL, c.String("environment") == "local"),
 	)
-	return assistantidentity.New(issuerURL, auditLogger)
+	return assistantidentity.New(issuerURL, auditLogger, authzClient)
 }
 
 func newAuditLogger() *audit.Logger {

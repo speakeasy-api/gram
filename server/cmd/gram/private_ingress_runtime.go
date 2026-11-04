@@ -250,7 +250,7 @@ func newPrivateIngressRuntime(ctx context.Context, c *cli.Context, logger *slog.
 	if err != nil {
 		return nil, err
 	}
-	assistantIdentities := newAssistantIdentities(c, auditLogger)
+	assistantIdentities := newAssistantIdentities(c, auditLogger, authzClient)
 	callbackOrigins, err := callbackOriginsFromCLI(c, serverURL, c.String("environment"), platformHosts)
 	if err != nil {
 		return nil, err
