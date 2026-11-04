@@ -381,8 +381,11 @@ func TestChallengeState_AttemptNamesTheApp(t *testing.T) {
 	codeMode.CodeReconnect = &mcp.CodeReconnectBinding{}
 	require.Equal(t, mcpconnectionattempts.AppCodeMode.String(), app(codeMode))
 	cimdClient := base
-	cimdClient.ClientID = "https://client.example.com/some/path"
-	require.Equal(t, "client.example.com", app(cimdClient))
+	cimdClient.ClientID = "https://claude.ai/oauth/claude-code-client-metadata"
+	require.Equal(t, "claude.ai", app(cimdClient))
+	unknownClient := base
+	unknownClient.ClientID = "https://client.example.com/some/path"
+	require.Equal(t, mcpconnectionattempts.AppOtherMetadataURL.String(), app(unknownClient), "a caller's own host stays out of the rollup")
 	dcrClient := base
 	dcrClient.ClientID = "registered-client"
 	require.Equal(t, mcpconnectionattempts.AppDCR.String(), app(dcrClient))

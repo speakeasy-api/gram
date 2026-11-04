@@ -281,7 +281,7 @@ func (s *Service) ServeAuthorize(w http.ResponseWriter, r *http.Request, endpoin
 	// companion completion-ratio monitor divides terminal outcomes against.
 	s.metrics.RecordOAuthFlowStarted(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug)
 	logger.InfoContext(ctx, "oauth flow started")
-	s.connections.Step(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted,
+	s.connections.Start(ctx, challengeState.connectionAttempt(endpoint), mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted,
 		mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID),
 		mcpconnectionattempts.UserSessionClient(client.ID),
 		mcpconnectionattempts.Subject(subject),

@@ -5,7 +5,7 @@
 // A call site names what happened and nothing else:
 //
 //	attempt := mcpconnectionattempts.Begin(scope)
-//	recorder.Step(ctx, attempt, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted)
+//	recorder.Start(ctx, attempt, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted)
 //	recorder.End(ctx, attempt, mcpconnectionattempts.StepInboundConsent, mcpconnectionattempts.CodeCanceled)
 //
 //	recorder.Once(ctx, scope, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidBearerToken)
@@ -21,6 +21,7 @@ import (
 	"github.com/google/uuid"
 
 	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd/admission"
 )
 
 const (
@@ -35,7 +36,7 @@ const (
 const maxProviderHostBytes = 261
 
 // App identifies the app behind an attempt. app_key is a rollup sort key that a
-// caller can reach before sign-in, so it holds a host or a kind and nothing else.
+// caller can reach before sign-in, so it holds a known app's host or a kind and nothing else.
 type App struct{ key string }
 
 var (
@@ -56,10 +57,14 @@ var (
 
 	// AppRecoveryLink is a sign-in started from a link an assistant was given.
 	AppRecoveryLink = App{"recovery_link"}
+
+	// AppOtherMetadataURL is an app with a client metadata URL that Speakeasy's catalog doesn't list.
+	AppOtherMetadataURL = App{"other_metadata_url"}
 )
 
-// AppOf returns the App of a validated client_id: the host of its client
-// metadata URL, or AppDCR. An empty client_id is the dashboard.
+// AppOf returns the App of a validated client_id: the host of a catalog app's client
+// metadata URL, AppOtherMetadataURL for any other URL, or AppDCR. An empty client_id is
+// the dashboard. Anyone can serve a metadata document, so only catalog hosts are kept.
 func AppOf(clientID string) App {
 	if clientID == "" {
 		return AppFirstParty
@@ -67,10 +72,11 @@ func AppOf(clientID string) App {
 	if !cimd.IsClientIDURL(clientID) {
 		return AppDCR
 	}
+	if _, known := admission.CatalogMatch(clientID); !known {
+		return AppOtherMetadataURL
+	}
 	host := NormalizeProviderHost(clientID)
-	switch (App{host}) {
-	case App{""}, AppDCR, AppFirstParty, AppUnverified, AppWorkload, AppCodeMode, AppRecoveryLink:
-		// A host spelled like a kind must not count as that kind.
+	if host == "" {
 		return AppUnverified
 	}
 	return App{host}

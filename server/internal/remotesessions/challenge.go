@@ -223,7 +223,7 @@ func (s RemoteLoginState) parent() ParentChallenge {
 		Resource:            s.Resource,
 		McpServerID:         s.McpServerID,
 		MetaMcpServerID:     s.MetaMcpServerID,
-		// The retry leg reuses the first leg's scopes, so it reads no resource.
+		// Carried so the retry leg's row names the member. Its scopes come from the first leg.
 		ResourceMcpServerID: s.ResourceMcpServerID,
 		AutoRefresh:         s.AutoRefresh,
 		Authority:           s.Authority,
@@ -236,13 +236,14 @@ func (s RemoteLoginState) parent() ParentChallenge {
 // recordSignInStep records the end of a provider sign-in. A login with a final
 // destination ends its attempt here. One returning to consent does not, because
 // the person can still finish connecting.
-func (m *ChallengeManager) recordSignInStep(ctx context.Context, r *http.Request, state RemoteLoginState, what mcpconnectionattempts.Happened) {
+func (m *ChallengeManager) recordSignInStep(ctx context.Context, r *http.Request, state RemoteLoginState, what mcpconnectionattempts.Happened, remoteSessionID uuid.UUID) {
 	record := m.connections.Step
 	if state.FinalRedirectURI != "" {
 		record = m.connections.End
 	}
 	record(ctx, state.Attempt, mcpconnectionattempts.StepProviderSignIn, what,
 		mcpconnectionattempts.Provider(state.ProviderHost),
+		mcpconnectionattempts.RemoteSession(remoteSessionID),
 		mcpconnectionattempts.Member(state.ResourceMcpServerID.UUID),
 		mcpconnectionattempts.RemoteSessionIssuer(state.RemoteSessionIssuerID),
 		mcpconnectionattempts.UserSessionIssuer(state.UserSessionIssuerID),
@@ -1613,7 +1614,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 
 	if errCode != "" {
 		if errCode == oautherr.CodeAccessDenied {
-			m.recordSignInStep(ctx, r, state, mcpconnectionattempts.CodeProviderDenied)
+			m.recordSignInStep(ctx, r, state, mcpconnectionattempts.CodeProviderDenied, uuid.Nil)
 			// Final destinations acknowledge a completed connection, so a canceled
 			// flow must stay on the callback page instead of claiming success.
 			if state.FinalRedirectURI != "" {
@@ -1903,7 +1904,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnexpected, err, "commit remote session").LogError(ctx, logger)
 	}
 	stranded = false
-	m.recordSignInStep(ctx, r, state, mcpconnectionattempts.ResultSignedIn)
+	m.recordSignInStep(ctx, r, state, mcpconnectionattempts.ResultSignedIn, storedSession.ID)
 
 	redirect, err := m.remoteLoginDestination(ctx, state, mcpSlug)
 	if err != nil {
