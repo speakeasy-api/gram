@@ -1,6 +1,7 @@
 package mcp
 
 import (
+	"cmp"
 	"context"
 	"errors"
 	"fmt"
@@ -12,6 +13,7 @@ import (
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	remotesessionsrepo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -80,6 +82,25 @@ func (s *Service) ValidateRemoteLoginTypedAuthorization(ctx context.Context, sta
 		return fmt.Errorf("%w: typed login binding is no longer authorized", errTypedLoginDenied)
 	}
 	return nil
+}
+
+// typedLoginResource is the RFC 8707 resource of a login a typed server binding
+// authorized: the upstream of that server, which is what its grant must name to
+// route. A typed registration need not reach the server through any issuer
+// binding, so derived, read from those bindings, can be empty or name another
+// server. A server with no upstream of its own keeps derived.
+func (s *Service) typedLoginResource(ctx context.Context, endpoint *ResolvedMcpEndpoint, authorization *remotesessions.TypedAuthorization, derived string) (string, error) {
+	if endpoint.McpServerID.Valid && endpoint.McpServerID.UUID == authorization.ServerID {
+		return cmp.Or(endpoint.UpstreamResource, derived), nil
+	}
+	upstream, err := remotesessionsrepo.New(s.db).GetRemoteURLForMcpServer(ctx, remotesessionsrepo.GetRemoteURLForMcpServerParams{McpServerID: authorization.ServerID, ProjectID: authorization.ProjectID})
+	if errors.Is(err, pgx.ErrNoRows) {
+		return derived, nil
+	}
+	if err != nil {
+		return "", fmt.Errorf("get upstream of typed login server: %w", err)
+	}
+	return cmp.Or(upstream, derived), nil
 }
 
 func (s *Service) remoteLoginTypedAuthorization(ctx context.Context, endpoint *ResolvedMcpEndpoint, challenge AuthnChallengeState, client remotesessions.Client, member chosenMetaMember) (*remotesessions.TypedAuthorization, error) {

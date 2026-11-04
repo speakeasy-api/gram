@@ -402,6 +402,12 @@ func (s *Service) buildRemoteConnectURL(
 	}
 	if typedAuthorization != nil {
 		loginProjectID = typedAuthorization.ProjectID
+		if !claimedByMember {
+			clientResource, err = s.typedLoginResource(ctx, endpoint, typedAuthorization, clientResource)
+			if err != nil {
+				return "", false, oops.E(oops.CodeUnexpected, err, "derive typed connection upstream resource").LogError(ctx, logger)
+			}
+		}
 	}
 	parent := remotesessions.ParentChallenge{
 		TypedAuthorization:  typedAuthorization,
