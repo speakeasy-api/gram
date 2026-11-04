@@ -1415,7 +1415,7 @@ func (s *RefreshService) postRefreshGrant(
 	}
 
 	resp, err := doer.Do(req)
-	if errors.Is(err, tunnelrouting.ErrRouteStoreUnavailable) {
+	if errors.Is(err, tunnelrouting.ErrRouteStoreUnavailable) || errors.Is(err, tunnelrouting.ErrTransportConfiguration) {
 		return zero, fmt.Errorf("post refresh: %w", err)
 	}
 	if err != nil {
@@ -1442,7 +1442,7 @@ func (s *RefreshService) postRefreshGrant(
 		if refreshErr, ok := newTokenRefreshErrorFromSuccessBody(resp.StatusCode, resp.Status, body); ok {
 			return zero, refreshErr
 		}
-		return zero, newTokenRefreshError("the identity provider returned no access token", nil, refreshRemedyAdministrator)
+		return zero, newTokenRefreshError("the identity provider returned no access token", errRefreshUnusableAnswer, refreshRemedyRetry)
 	}
 	return tok, nil
 }

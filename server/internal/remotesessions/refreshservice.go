@@ -33,6 +33,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -424,7 +425,7 @@ func refreshOutagePaced(outcome remotesessionmetrics.RefreshOutcome, err error) 
 	case remotesessionmetrics.RefreshOutcomeUpstreamError, remotesessionmetrics.RefreshOutcomeRateLimited, remotesessionmetrics.RefreshOutcomeUnreachable:
 		return true
 	default:
-		return errors.Is(err, errRefreshTunnelTransport) || errors.Is(err, errRefreshUnusableAnswer)
+		return errors.Is(err, errRefreshUnusableAnswer)
 	}
 }
 
@@ -722,7 +723,7 @@ func refreshOutcomeForError(ctx context.Context, err error) remotesessionmetrics
 		return remotesessionmetrics.RefreshOutcomeInvalidClient
 	case tokenErr.statusCode == http.StatusTooManyRequests:
 		return remotesessionmetrics.RefreshOutcomeRateLimited
-	case tokenErr.statusCode >= http.StatusInternalServerError:
+	case tokenErr.statusCode >= http.StatusInternalServerError || tokenErr.code == oautherr.CodeServerError || tokenErr.code == oautherr.CodeTemporarilyUnavailable:
 		return remotesessionmetrics.RefreshOutcomeUpstreamError
 	case tokenErr.code == "":
 		return remotesessionmetrics.RefreshOutcomeRejectedUnparsed
