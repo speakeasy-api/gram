@@ -284,7 +284,7 @@ func (r *MigrationRouter) routeWith(ctx context.Context, ops []Operation, pins *
 // notification audience. Each call is its own boundary: it reads the units'
 // modes for that organization afresh and pins nothing.
 func (r *MigrationRouter) routeForOrganization(ctx context.Context, organizationID string, ops []Operation) route {
-	old := route{mode: MigrationModeOld, units: nil}
+	old := route{mode: MigrationModeOld, units: nil, organizationID: ""}
 	if r == nil || organizationID == "" || len(ops) == 0 {
 		return old
 	}
@@ -306,7 +306,7 @@ func (r *MigrationRouter) routeForOrganization(ctx context.Context, organization
 			mode = min(mode, r.source.MigrationMode(ctx, dep, organizationID))
 		}
 	}
-	return route{mode: mode, units: units}
+	return route{mode: mode, units: units, organizationID: organizationID}
 }
 
 func operationTypes(op Operation) []string {
