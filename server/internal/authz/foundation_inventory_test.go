@@ -189,10 +189,12 @@ var consumerEntryPoints = map[string]consumerCategory{
 
 	// Typed operations: a consumer that uses them has migrated, so they are
 	// not inventoried.
-	"Organization": "",
-	"Project":      "",
-	"Assistant":    "",
-	"MCPServer":    "",
+	"Organization":        "",
+	"Project":             "",
+	"MCPServer":           "",
+	"MCPServersInProject": "",
+	"Assistant":           "",
+	"AssistantsInProject": "",
 }
 
 // engineEntryPoints are Engine methods whose names are distinctive enough to

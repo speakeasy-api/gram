@@ -520,7 +520,7 @@ func TestCreateMCPFromFunctionsMatchesTheDashboardSequence(t *testing.T) {
 	require.NoError(t, err)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, fixture.conn, redisClient, cache.Suffix("gram-local"), billing.NewStubClient(logger, tracerProvider))
 	engine := authz.NewEngine(logger, fixture.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	toolsetService := toolsets.NewService(logger, tracerProvider, nil, fixture.conn, sessionManager, nil, engine, audit.NewLogger(), nil, false)
+	toolsetService := toolsets.NewService(logger, tracerProvider, nil, fixture.conn, sessionManager, nil, engine, authztest.NewParityClient(t, engine), audit.NewLogger(), nil, false)
 	serverService := mcpservers.NewService(logger, tracerProvider, fixture.conn, sessionManager, engine, audit.NewLogger(), nil, nil, false, nil, nil, networkaccess.DenyAllChecker{})
 	orgSlug := projectOrganizationSlug(ctx, fixture.conn, fixture.principal.OrganizationID)
 	dashboardCtx := contextvalues.SetAuthContext(ctx, &contextvalues.AuthContext{
