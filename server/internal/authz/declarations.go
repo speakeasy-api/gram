@@ -123,30 +123,10 @@ func projectType() s.TypeDecl {
 			Sensitive:   true,
 		}),
 
-		s.Alternatives("plugin_publication", s.AlternativesSpec{
-			Options: []s.PermissionRef{
-				{Type: "project", Permission: "publish_plugin"},
-				{Type: "organization", Permission: "administer"},
-			},
-			Blocks:          s.AnyBlockVetoes,
-			AcrossInstances: false,
-		}),
-		s.Alternatives("read_or_organization_read", s.AlternativesSpec{
-			Options: []s.PermissionRef{
-				{Type: "organization", Permission: "read"},
-				{Type: "project", Permission: "read"},
-			},
-			Blocks:          s.BlocksApplyPerOption,
-			AcrossInstances: false,
-		}),
-		s.Alternatives("write_or_administer", s.AlternativesSpec{
-			Options: []s.PermissionRef{
-				{Type: "project", Permission: "write"},
-				{Type: "organization", Permission: "administer"},
-			},
-			Blocks:          s.BlocksApplyPerOption,
-			AcrossInstances: false,
-		}),
+		s.Permission("plugin_publication", s.AnyOf(s.Perm("publish_plugin"), s.Via("organization", "administer")),
+			s.AnyBlockVetoes()),
+		s.Permission("read_or_organization_read", s.AnyOf(s.Via("organization", "read"), s.Perm("read"))),
+		s.Permission("write_or_administer", s.AnyOf(s.Perm("write"), s.Via("organization", "administer"))),
 	)
 }
 
@@ -187,14 +167,7 @@ func mcpServerType() s.TypeDecl {
 			DelegatableSince: 1,
 		}, s.AlsoGrantedBy(ScopeMCPRead, ScopeMCPWrite), s.ExcludedBy(ScopeMCPBlockedConnect)),
 
-		s.Alternatives("project_read_or_edit", s.AlternativesSpec{
-			Options: []s.PermissionRef{
-				{Type: "project", Permission: "read"},
-				{Type: "mcp_server", Permission: "edit"},
-			},
-			Blocks:          s.BlocksApplyPerOption,
-			AcrossInstances: false,
-		}),
+		s.Permission("project_read_or_edit", s.AnyOf(s.Via("project", "read"), s.Perm("edit"))),
 	)
 }
 
@@ -264,6 +237,10 @@ func riskPolicyType() s.TypeDecl {
 // skillType declares skills.
 func skillType() s.TypeDecl {
 	return s.NewType("skill", s.Parent("project"), s.GrantSurface(accessSurface),
+		// Skill grants stored against the project cover every skill in it.
+		// project_skills names that project-wide instance, so reading a skill
+		// can ask for read on it as well as on the skill itself.
+		s.Attr("project_skills", "skill"),
 		s.Block(ScopeSkillBlockedRead, s.BlockSpec{DelegatableSince: 4}),
 		s.Block(ScopeSkillBlockedWrite, s.BlockSpec{
 			ImpliedBy:        s.Scopes(ScopeSkillBlockedRead),
@@ -283,14 +260,8 @@ func skillType() s.TypeDecl {
 			DelegatableSince: 1,
 		}, s.ExcludedBy(ScopeSkillBlockedWrite)),
 
-		s.Alternatives("project_or_skill_read", s.AlternativesSpec{
-			Options: []s.PermissionRef{
-				{Type: "skill", Permission: "read"},
-				{Type: "skill", Permission: "read"},
-			},
-			Blocks:          s.AnyBlockVetoes,
-			AcrossInstances: true,
-		}),
+		s.Permission("project_or_skill_read", s.AnyOf(s.Via("project_skills", "read"), s.Perm("read")),
+			s.AnyBlockVetoes()),
 	)
 }
 

@@ -44,7 +44,7 @@ func TestFingerprintTracksTheCompiledModel(t *testing.T) {
 			s.Permission("administer", s.Rel("org:admin"), s.AnswersScope("org:admin")),
 		}
 		if v.alternatives {
-			opts = append(opts, s.Alternatives("read_or_administer", s.AlternativesSpec{Options: []s.PermissionRef{{Type: "organization", Permission: "read"}, {Type: "organization", Permission: "administer"}}, Blocks: s.BlocksApplyPerOption}))
+			opts = append(opts, s.Permission("read_or_administer", s.AnyOf(s.Perm("read"), s.Perm("administer"))))
 		}
 		reg, err := s.Compile(testConfig, s.NewType("organization", opts...))
 		require.NoError(t, err)

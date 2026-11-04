@@ -21,6 +21,9 @@ const (
 	OpPerm Op = "perm"
 	// OpWhen evaluates its operand only when a named guard holds.
 	OpWhen Op = "when"
+	// OpAnyOf is satisfied by any one of other permissions. It is only valid
+	// as a permission's whole expression.
+	OpAnyOf Op = "any_of"
 )
 
 // Expr is an immutable permission expression node. Declarations build it with
@@ -98,6 +101,18 @@ func Via(fact, permission string) Expr {
 // Perm reuses a permission declared on the same type.
 func Perm(permission string) Expr {
 	return newExpr(OpPerm, permission, "", "", nil)
+}
+
+// AnyOf declares a permission that other permissions satisfy, in the style of
+// a Zanzibar union of computed usersets: Perm names a permission on this type
+// and Via a permission on the parent type or on the resource an Attr names.
+// It must be the permission's whole expression. A request passes when one
+// listed permission passes in every policy, so one policy cannot satisfy one
+// branch while another policy satisfies a different one. Each branch keeps
+// its own ExcludedBy blocks, so a block stops only its branch unless the
+// permission also declares AnyBlockVetoes. A denial names the first branch.
+func AnyOf(branches ...Expr) Expr {
+	return newExpr(OpAnyOf, "", "", "", slices.Clone(branches))
 }
 
 // When evaluates expr only when the named Guard holds. A false guard skips

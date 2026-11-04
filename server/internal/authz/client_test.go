@@ -148,7 +148,7 @@ func runClientCorpusCase(t *testing.T, client *Client, engine *Engine, f foundat
 		requireFoundationOutcome(t, f.Want, err == nil, ignoreForbidden(err))
 	case "require_any_unblocked":
 		require.Len(t, ops, 2, "the publication alternatives take a project and an organization option")
-		publication := newAlternatives("project", "plugin_publication", ops...)
+		publication := newAnyOf("project", "plugin_publication", ops...)
 		err := client.Require(ctx, publication)
 		requireFoundationOutcome(t, f.Want, err == nil, ignoreForbidden(err))
 	case "evaluate":

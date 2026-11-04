@@ -211,7 +211,7 @@ func (e *RegistryEvaluator) DecideAlternatives(set PolicySet, ref schema.Permiss
 
 	// A standing block in any option and policy vetoes, even when checking
 	// another option or policy could not be decided.
-	if alternatives.Blocks == schema.AnyBlockVetoes {
+	if alternatives.AnyBlockVetoes {
 		var vetoErr error
 		for i, option := range options {
 			policies, err := e.policiesFor(set, option.Permission)

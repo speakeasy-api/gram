@@ -10,7 +10,8 @@ import (
 )
 
 // Operation is one typed authorization request: a registered permission on a
-// concrete resource instance, or a named set of complete alternatives. Build
+// concrete resource instance, or an AnyOf permission whose branches each name
+// their own instance. Build
 // operations with the typed resource constructors, such as
 // Project(organizationID, projectID).Read(); services never assemble scopes,
 // resource kinds or selectors themselves.
@@ -20,8 +21,8 @@ type Operation struct {
 	permission schema.PermissionRef
 	instance   operationInstance
 
-	// alternatives is set for a named alternatives operation, whose options
-	// are complete single-permission operations in declaration order.
+	// alternatives is set for an AnyOf permission, whose options are complete
+	// single-permission operations in the declared branch order.
 	alternatives bool
 	options      []Operation
 }
@@ -52,7 +53,9 @@ func newOperation(typeName, permission, resourceID string, dimensions map[string
 	}
 }
 
-func newAlternatives(typeName, name string, options ...Operation) Operation {
+// newAnyOf builds an operation for an AnyOf permission. options supply the
+// instance for each declared branch, in the declared order.
+func newAnyOf(typeName, name string, options ...Operation) Operation {
 	return Operation{
 		permission:   schema.PermissionRef{Type: typeName, Permission: name},
 		instance:     operationInstance{resourceID: "", dimensions: nil, strict: false, facts: nil, requiredFacts: nil},
@@ -61,12 +64,11 @@ func newAlternatives(typeName, name string, options ...Operation) Operation {
 	}
 }
 
-// Permission names the registered permission or alternatives the operation
-// asks for.
+// Permission names the registered permission the operation asks for.
 func (o Operation) Permission() schema.PermissionRef { return o.permission }
 
 // ResourceID is the concrete resource the operation targets, or "" for an
-// alternatives operation, whose options each name their own resource.
+// AnyOf operation, whose branches each name their own resource.
 func (o Operation) ResourceID() string { return o.instance.resourceID }
 
 // WithStrictMatch makes ordinary allows match strictly: a grant constraint
@@ -174,19 +176,19 @@ func (p ProjectRef) ReadToolLogs() Operation {
 
 // PublishPlugin asks to publish a plugin from the project: either project
 // plugin publication or administration of its organization, with a block on
-// either alternative vetoing both.
+// either branch vetoing both.
 func (p ProjectRef) PublishPlugin() Operation {
-	return newAlternatives("project", "plugin_publication",
+	return newAnyOf("project", "plugin_publication",
 		newOperation("project", "publish_plugin", p.id, nil),
 		Organization(p.organizationID).Administer(),
 	)
 }
 
 // ReadOrOrganizationRead asks to read the project's organization or the
-// project itself: either alternative allows, and a block on one does not
-// stop the other. Organization read comes first, so a denial names it.
+// project itself: either branch allows, and a block on one does not stop the
+// other. Organization read comes first, so a denial names it.
 func (p ProjectRef) ReadOrOrganizationRead() Operation {
-	return newAlternatives("project", "read_or_organization_read",
+	return newAnyOf("project", "read_or_organization_read",
 		Organization(p.organizationID).Read(),
 		p.Read(),
 	)
@@ -222,7 +224,7 @@ func Skill(projectID, skillID string) SkillRef {
 // project, covering every skill in it, or against one skill, so the
 // operation passes with either; a block on either refuses it.
 func (k SkillRef) Read() Operation {
-	return newAlternatives("skill", "project_or_skill_read",
+	return newAnyOf("skill", "project_or_skill_read",
 		newOperation("skill", "read", k.projectID, nil),
 		newOperation("skill", "read", k.id, nil),
 	)
@@ -382,9 +384,9 @@ func (p ProjectRef) ReadChats() Operation {
 }
 
 // WriteOrAdminister asks to change the project or to administer its
-// organization. A block on one alternative does not stop the other.
+// organization. A block on one branch does not stop the other.
 func (p ProjectRef) WriteOrAdminister() Operation {
-	return newAlternatives("project", "write_or_administer",
+	return newAnyOf("project", "write_or_administer",
 		p.Write(),
 		Organization(p.organizationID).Administer(),
 	)
@@ -392,9 +394,9 @@ func (p ProjectRef) WriteOrAdminister() Operation {
 
 // ReadOrEditMCPServer asks to read the project or to change one of its MCP
 // servers. serverID may be the project ID to name every server of the
-// project. A block on one alternative does not stop the other.
+// project. A block on one branch does not stop the other.
 func (p ProjectRef) ReadOrEditMCPServer(serverID string) Operation {
-	return newAlternatives("mcp_server", "project_read_or_edit",
+	return newAnyOf("mcp_server", "project_read_or_edit",
 		p.Read(),
 		MCPServer(p.id, serverID).Edit(),
 	)

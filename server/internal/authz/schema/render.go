@@ -6,7 +6,7 @@ import (
 )
 
 // Render prints the compiled registry as a read-only text view, one block
-// per type: its stored scopes, facts, guards, permissions and alternatives.
+// per type: its stored scopes, facts, guards and permissions.
 // The view is documentation; nothing parses it.
 func Render(r *Registry) string {
 	var b strings.Builder
@@ -92,15 +92,11 @@ func Render(r *Registry) string {
 		}
 		for _, name := range t.Alternatives {
 			set, _ := r.Alternatives(PermissionRef{Type: t.Name, Permission: name})
-			options := make([]string, 0, len(set.Options))
-			for _, o := range set.Options {
-				options = append(options, o.Type+"."+o.Permission)
+			fmt.Fprintf(&b, "  permission %s = %s", name, renderExpr(set.Expr, false))
+			if set.AnyBlockVetoes {
+				b.WriteString("  any_block_vetoes")
 			}
-			rule := "per_option"
-			if set.Blocks == AnyBlockVetoes {
-				rule = "any_vetoes"
-			}
-			fmt.Fprintf(&b, "  alternatives %s = %s  blocks: %s\n", name, strings.Join(options, ", "), rule)
+			b.WriteString("\n")
 		}
 	}
 	return b.String()
@@ -161,6 +157,12 @@ func renderExpr(e Expr, nested bool) string {
 		return "is(" + e.Name() + ")"
 	case OpVia:
 		return "via(" + e.Name() + ")." + e.Permission()
+	case OpAnyOf:
+		parts := make([]string, 0, len(e.Operands()))
+		for _, o := range e.Operands() {
+			parts = append(parts, renderExpr(o, false))
+		}
+		return "any_of(" + strings.Join(parts, ", ") + ")"
 	case OpWhen:
 		return "when " + e.Guard() + " (" + renderExpr(e.Operands()[0], false) + ")"
 	case OpUnion, OpMinus:

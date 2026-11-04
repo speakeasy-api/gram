@@ -37,9 +37,9 @@ type project
   permission write = project:write  answers project:write  excluded_by project:blocked_write
   permission publish_plugin = plugin:write  answers plugin:write  excluded_by plugin:blocked_write
   permission read_logs = log:read  answers log:read
-  alternatives plugin_publication = project.publish_plugin, organization.administer  blocks: any_vetoes
-  alternatives read_or_organization_read = organization.read, project.read  blocks: per_option
-  alternatives write_or_administer = project.write, organization.administer  blocks: per_option
+  permission plugin_publication = any_of(publish_plugin, via(organization).administer)  any_block_vetoes
+  permission read_or_organization_read = any_of(via(organization).read, read)
+  permission write_or_administer = any_of(write, via(organization).administer)
 
 type mcp_server
   parent       project
@@ -57,7 +57,7 @@ type mcp_server
   permission read = mcp:read | mcp:write  answers mcp:read  excluded_by mcp:blocked_read
   permission edit = mcp:write  answers mcp:write  excluded_by mcp:blocked_write
   permission connect = mcp:connect | mcp:read | mcp:write  answers mcp:connect  excluded_by mcp:blocked_connect
-  alternatives project_read_or_edit = project.read, mcp_server.edit  blocks: per_option
+  permission project_read_or_edit = any_of(via(project).read, edit)
 
 type mcp_auth_client
   parent       organization
@@ -107,9 +107,11 @@ type skill
   block skill:blocked_read  delegatable_since: 4
   block skill:blocked_write  implied_by: skill:blocked_read  delegatable_since: 4
 
+  attr project_skills: skill
+
   permission read = skill:read | skill:write  answers skill:read  excluded_by skill:blocked_read
   permission write = skill:write  answers skill:write  excluded_by skill:blocked_write
-  alternatives project_or_skill_read = skill.read, skill.read  blocks: any_vetoes
+  permission project_or_skill_read = any_of(via(project_skills).read, read)  any_block_vetoes
 
 type assistant
   parent       project
