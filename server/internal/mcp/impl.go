@@ -551,6 +551,11 @@ func NewService(
 	metaRuntimeConfig MetaRuntimeConfig,
 	codeExecutor codemode.Executor,
 ) (*Service, error) {
+	// Every per-tool and consent check asks the typed client, so a service
+	// without one would serve private catalogs unfiltered.
+	if authzClient == nil {
+		return nil, errors.New("mcp service requires an authorization client")
+	}
 	if codeExecutor == nil {
 		codeExecutor = codemode.Disabled{}
 	}
