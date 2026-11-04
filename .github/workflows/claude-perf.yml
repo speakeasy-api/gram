@@ -202,6 +202,16 @@ jobs:
             --allowedTools "Read,Grep,Glob"
             --disallowedTools "Bash,Edit,Write,NotebookEdit,WebFetch,WebSearch"
 
+      # With full output off, the action hides why Claude stopped. Print only
+      # an error result's message, such as an API or sign-in refusal, never a
+      # result that holds the review.
+      - name: Show why Claude stopped
+        if: failure() && steps.claude.outputs.execution_file != ''
+        env:
+          EXECUTION_FILE: ${{ steps.claude.outputs.execution_file }}
+        run: |
+          jq -r '[.[] | select(.type == "result" and .is_error == true)] | last | .result // empty' "$EXECUTION_FILE" 2>/dev/null | head -c 500 || true
+
   post:
     name: post
     needs: analyse
