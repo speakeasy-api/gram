@@ -1328,10 +1328,11 @@ func (s *Service) canonicalTelemetryRows(ctx context.Context, payload *gen.Inges
 	rows := make([]hookTelemetryRow, 0, 2)
 
 	hookEventName := telemetryHookEventName(payload)
+	// Only tool events carry a tool name. Prompt, lifecycle, and other
+	// non-tool rows keep gram.tool.name empty (gram.hook.event still names
+	// the event), because tool-call analytics count hook rows by a non-empty
+	// tool name.
 	toolName := canonicalTelemetryToolName(payload)
-	if toolName == "" {
-		toolName = hookEventName
-	}
 
 	attrs := hookTelemetryBaseAttrs(payload, authCtx, hookEventName, hookSource)
 	if blockReason != "" {
