@@ -2,6 +2,7 @@ package relay
 
 import (
 	"bytes"
+	"context"
 	"encoding/json"
 	"fmt"
 	"os"
@@ -10,6 +11,7 @@ import (
 	"testing"
 
 	"github.com/speakeasy-api/agenthooks"
+	"github.com/speakeasy-api/agenthooks/agenthookstest"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/hooks/sdk/models/components"
@@ -435,4 +437,252 @@ func TestOpenClawMCPCallReadsDetailsMarker(t *testing.T) {
 			require.Equal(t, tc.tool, got.Tool)
 		})
 	}
+}
+
+// openclawToolFrame renders a tool frame carrying the shim's mcpServers list.
+func openclawToolFrame(t *testing.T, hook string, event map[string]any, mcpServers any) string {
+	t.Helper()
+	frame := map[string]any{
+		"seq":   1,
+		"hook":  hook,
+		"event": event,
+		"ctx":   map[string]any{"agentId": "main", "sessionId": "openclaw-session", "runId": "run-1"},
+	}
+	if mcpServers != nil {
+		frame[openclawMCPServersField] = mcpServers
+	}
+	encoded, err := json.Marshal(frame)
+	require.NoError(t, err)
+	return string(encoded)
+}
+
+// openclawEnvelope decodes one OpenClaw tool frame and returns the ingest
+// envelope the relay builds for it.
+func openclawEnvelope(t *testing.T, frame string) components.IngestRequestBody {
+	t.Helper()
+	runner := agenthooks.New()
+	var got components.IngestRequestBody
+	runner.OnToolPre(func(_ context.Context, e *agenthooks.ToolPreEvent) (agenthooks.ToolPreDecision, error) {
+		got = buildEnvelope(e, "test-host")
+		return agenthooks.NoDecision(), nil
+	})
+	runner.OnToolPost(func(_ context.Context, e *agenthooks.ToolPostEvent) (agenthooks.ToolPostDecision, error) {
+		got = buildEnvelope(e, "test-host")
+		return agenthooks.Observed(), nil
+	})
+	agenthookstest.Invoke(t, runner, agenthooks.ProviderOpenClaw, []byte(frame))
+	require.NotNil(t, got.Data, "the frame produced no tool envelope")
+	return got
+}
+
+func openclawPreToolEvent(toolName string) map[string]any {
+	return map[string]any{"toolName": toolName, "params": map[string]any{"q": "status"}, "runId": "run-1", "toolCallId": "call-1"}
+}
+
+func openclawPostToolEvent(toolName string, details map[string]any) map[string]any {
+	return map[string]any{
+		"toolName":   toolName,
+		"params":     map[string]any{"q": "status"},
+		"runId":      "run-1",
+		"toolCallId": "call-1",
+		"result":     map[string]any{"content": []any{map[string]any{"type": "text", "text": "ok"}}, "details": details},
+		"durationMs": 5,
+	}
+}
+
+var openclawTestMCPServers = []any{
+	map[string]any{"name": "speakeasy", "url": "https://app.example.com/agent-mcp/agent-1"},
+	map[string]any{"name": "github", "url": "https://api.github.com/mcp"},
+}
+
+func requireOpenclawMCP(t *testing.T, got components.IngestRequestBody, server, url string) {
+	t.Helper()
+	require.NotNil(t, got.Data.Mcp)
+	require.NotNil(t, got.Data.Mcp.ServerName)
+	require.Equal(t, server, *got.Data.Mcp.ServerName)
+	require.NotNil(t, got.Data.Mcp.ServerIdentity)
+	require.Equal(t, server, *got.Data.Mcp.ServerIdentity)
+	require.Nil(t, got.Data.Mcp.Command)
+	if url == "" {
+		require.Nil(t, got.Data.Mcp.URL)
+		return
+	}
+	require.NotNil(t, got.Data.Mcp.URL)
+	require.Equal(t, url, *got.Data.Mcp.URL)
+}
+
+// The pre-call event carries no result marker, so the server is the
+// configured one whose name prefixes the tool name.
+func TestOpenClawPreCallResolvesMCPServerFromToolName(t *testing.T) {
+	t.Parallel()
+	got := openclawEnvelope(t, openclawToolFrame(t, "before_tool_call", openclawPreToolEvent("speakeasy__list_servers"), openclawTestMCPServers))
+
+	require.Equal(t, components.TypeToolRequested, got.Event.Type)
+	require.Equal(t, "speakeasy__list_servers", *got.Data.ToolCall.Name, "the native tool name is kept verbatim")
+	requireOpenclawMCP(t, got, "speakeasy", "https://app.example.com/agent-mcp/agent-1")
+	require.NotContains(t, rawEcho(t, got), openclawMCPServersField, "the raw echo drops the configured server list")
+}
+
+// The post-call result names its server exactly in details.mcpServer, which
+// picks the configured URL.
+func TestOpenClawPostCallResolvesMCPServerURLFromResultMarker(t *testing.T) {
+	t.Parallel()
+	got := openclawEnvelope(t, openclawToolFrame(t, "after_tool_call",
+		openclawPostToolEvent("github__search", map[string]any{"mcpServer": "github", "mcpTool": "search"}),
+		openclawTestMCPServers))
+
+	require.Equal(t, components.TypeToolCompleted, got.Event.Type)
+	requireOpenclawMCP(t, got, "github", "https://api.github.com/mcp")
+	require.NotContains(t, rawEcho(t, got), openclawMCPServersField)
+}
+
+func TestOpenClawUnresolvedMCPServerKeepsNameOnlyAttribution(t *testing.T) {
+	t.Parallel()
+
+	t.Run("a native pre-call stays unattributed", func(t *testing.T) {
+		t.Parallel()
+		got := openclawEnvelope(t, openclawToolFrame(t, "before_tool_call", openclawPreToolEvent("exec"), openclawTestMCPServers))
+		require.Nil(t, got.Data.Mcp)
+	})
+	t.Run("a pre-call naming no configured server stays unattributed", func(t *testing.T) {
+		t.Parallel()
+		got := openclawEnvelope(t, openclawToolFrame(t, "before_tool_call", openclawPreToolEvent("linear__list_issues"), openclawTestMCPServers))
+		require.Nil(t, got.Data.Mcp)
+	})
+	t.Run("a pre-call without a server list stays unattributed", func(t *testing.T) {
+		t.Parallel()
+		got := openclawEnvelope(t, openclawToolFrame(t, "before_tool_call", openclawPreToolEvent("speakeasy__list_servers"), nil))
+		require.Nil(t, got.Data.Mcp)
+	})
+	t.Run("a post-call naming an unlisted server keeps its name without a URL", func(t *testing.T) {
+		t.Parallel()
+		got := openclawEnvelope(t, openclawToolFrame(t, "after_tool_call",
+			openclawPostToolEvent("linear__list_issues", map[string]any{"mcpServer": "linear", "mcpTool": "list_issues"}),
+			openclawTestMCPServers))
+		requireOpenclawMCP(t, got, "linear", "")
+	})
+	t.Run("a post-call without a server list keeps the marker name", func(t *testing.T) {
+		t.Parallel()
+		got := openclawEnvelope(t, openclawToolFrame(t, "after_tool_call",
+			openclawPostToolEvent("speakeasy__list_servers", map[string]any{"mcpServer": "speakeasy", "mcpTool": "list_servers"}),
+			nil))
+		requireOpenclawMCP(t, got, "speakeasy", "")
+	})
+}
+
+// A frame's server entries carry only a name and a URL, but a shim that sent
+// more must still leak nothing: the relay reads only the name and the URL,
+// strips the URL's credentials, and drops the list from the raw echo.
+func TestOpenClawMCPServerResolutionLeaksNoCredentials(t *testing.T) {
+	t.Parallel()
+	servers := []any{map[string]any{
+		"name":    "speakeasy",
+		"url":     "https://user:hunter2@app.example.com/agent-mcp/agent-1?api_key=sk-query-secret#frag",
+		"headers": map[string]any{"Authorization": "Bearer gram_agent_secret"},
+		"env":     map[string]any{"API_KEY": "env-secret"},
+		"command": "npx server --token cmd-secret",
+	}}
+	for _, frame := range []string{
+		openclawToolFrame(t, "before_tool_call", openclawPreToolEvent("speakeasy__list_servers"), servers),
+		openclawToolFrame(t, "after_tool_call",
+			openclawPostToolEvent("speakeasy__list_servers", map[string]any{"mcpServer": "speakeasy", "mcpTool": "list_servers"}),
+			servers),
+	} {
+		got := openclawEnvelope(t, frame)
+		require.NotNil(t, got.Data.Mcp)
+		require.NotNil(t, got.Data.Mcp.URL)
+		require.Equal(t, "https://app.example.com/agent-mcp/agent-1?api_key=%2A%2A%2A", *got.Data.Mcp.URL)
+		encoded, err := json.Marshal(got)
+		require.NoError(t, err)
+		for _, secret := range []string{"hunter2", "sk-query-secret", "gram_agent_secret", "env-secret", "cmd-secret", "#frag"} {
+			require.NotContains(t, string(encoded), secret)
+		}
+	}
+}
+
+func TestOpenClawConfiguredMCPServersToleratesMalformedLists(t *testing.T) {
+	t.Parallel()
+
+	tests := []struct {
+		name       string
+		mcpServers any
+		want       []openclawMCPServer
+	}{
+		{name: "missing", mcpServers: nil, want: nil},
+		{name: "a string", mcpServers: "speakeasy", want: nil},
+		{name: "an object", mcpServers: map[string]any{"speakeasy": map[string]any{"url": "https://app.example.com/mcp"}}, want: nil},
+		{
+			name: "junk entries beside a valid one",
+			mcpServers: []any{
+				42,
+				"speakeasy",
+				map[string]any{"url": "https://nameless.example.com/mcp"},
+				map[string]any{"name": "relative", "url": "/agent-mcp/agent-1"},
+				map[string]any{"name": "stdio", "url": "file:///tmp/server.sock"},
+				map[string]any{"name": "numeric-url", "url": 7},
+				map[string]any{"name": " speakeasy ", "url": "https://app.example.com/agent-mcp/agent-1"},
+			},
+			want: []openclawMCPServer{{Name: "speakeasy", URL: "https://app.example.com/agent-mcp/agent-1"}},
+		},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			frame := openclawToolFrame(t, "before_tool_call", openclawPreToolEvent("speakeasy__list_servers"), tc.mcpServers)
+			event := &agenthooks.Event{Raw: json.RawMessage(frame)}
+			got := openclawConfiguredMCPServers(event)
+			if tc.want == nil {
+				require.Empty(t, got)
+				return
+			}
+			require.Equal(t, tc.want, got)
+		})
+	}
+}
+
+func TestOpenClawMCPServerForToolName(t *testing.T) {
+	t.Parallel()
+
+	servers := []openclawMCPServer{
+		{Name: "a", URL: "https://a.example.com/mcp"},
+		{Name: "a__b", URL: "https://ab.example.com/mcp"},
+		{Name: "my server.v2", URL: "https://sanitized.example.com/mcp"},
+		{Name: "a-very-long-server-name-that-openclaw-truncates", URL: "https://long.example.com/mcp"},
+	}
+	tests := []struct {
+		name     string
+		toolName string
+		server   string
+		tool     string
+	}{
+		{name: "exact name", toolName: "a__search", server: "a", tool: "search"},
+		{name: "longest configured name wins", toolName: "a__b__search", server: "a__b", tool: "search"},
+		{name: "sanitized name", toolName: "my-server-v2__search", server: "my server.v2", tool: "search"},
+		{name: "truncated sanitized name", toolName: "a-very-long-server-name-that-o__search", server: "a-very-long-server-name-that-openclaw-truncates", tool: "search"},
+		{name: "unconfigured prefix", toolName: "b__search"},
+		{name: "prefix without a tool part", toolName: "a__"},
+		{name: "native tool", toolName: "exec"},
+		{name: "case differs", toolName: "A__search"},
+	}
+	for _, tc := range tests {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			server, tool, ok := openclawMCPServerForToolName(servers, tc.toolName)
+			if tc.server == "" {
+				require.False(t, ok)
+				return
+			}
+			require.True(t, ok)
+			require.Equal(t, tc.server, server.Name)
+			require.Equal(t, tc.tool, tool)
+		})
+	}
+}
+
+// rawEcho returns the envelope's raw provider payload echo as JSON text.
+func rawEcho(t *testing.T, got components.IngestRequestBody) string {
+	t.Helper()
+	encoded, err := json.Marshal(got.Raw)
+	require.NoError(t, err)
+	return string(encoded)
 }

@@ -192,7 +192,8 @@ func buildEnvelope(typed any, hostname string) components.IngestRequestBody {
 // data.mcp alone would leave the same values in the echo. It runs on every
 // event like the bash senders' scrub did. Payloads that need no rewrite are
 // returned verbatim; a rewritten payload is re-encoded, so its key order and
-// whitespace may normalize while all other values stay intact.
+// whitespace may normalize while all other values stay intact. The OpenClaw
+// shim's mcpServers list is dropped.
 func scrubRawPayload(raw json.RawMessage) json.RawMessage {
 	var obj map[string]json.RawMessage
 	if err := json.Unmarshal(raw, &obj); err != nil {
@@ -223,6 +224,13 @@ func scrubRawPayload(raw json.RawMessage) json.RawMessage {
 		redactField(key, redactURL)
 	}
 	redactField("command", redactCommand)
+	// The OpenClaw shim lists every configured MCP server on each tool frame.
+	// data.mcp already carries the one the call reached, so the echo does not
+	// repeat the whole list.
+	if _, ok := obj[openclawMCPServersField]; ok {
+		delete(obj, openclawMCPServersField)
+		changed = true
+	}
 	if !changed {
 		return raw
 	}
@@ -261,7 +269,7 @@ func applyToolCall(data *components.HookIngestData, base *agenthooks.Event, tool
 
 	mcp := tool.MCP
 	if mcp == nil && base.Provider == agenthooks.ProviderOpenClaw {
-		mcp = openClawMCPCall(output, errOut)
+		mcp = openclawResolveMCPCall(base, tool.Name, output, errOut)
 	}
 	if mcp != nil {
 		m := &components.HookMCPData{
@@ -290,9 +298,9 @@ func applyToolCall(data *components.HookIngestData, base *agenthooks.Event, tool
 // than mcp__<server>__<tool>, so the tool name cannot be decoded without
 // guessing, but OpenClaw's MCP bridge stamps details.mcpServer and
 // details.mcpTool on every MCP tool result and native tools never carry them.
-// The pre-call event has only the tool name and params, so it stays
-// unattributed. Results are tried in order and the first one naming a server
-// wins; nil means the call is not an MCP call.
+// The pre-call event has only the tool name and params, so it carries no
+// marker. Results are tried in order and the first one naming a server wins;
+// nil means the result names no MCP server.
 func openClawMCPCall(results ...json.RawMessage) *agenthooks.MCPCall {
 	for _, raw := range results {
 		var result struct {
