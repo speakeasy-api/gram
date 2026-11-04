@@ -142,5 +142,13 @@ func DefaultDeclarations() []s.TypeDecl {
 			s.Permission("write", s.Rel("writer"),
 				s.Checks(string(ScopeAssistantWrite)), s.ExcludedBy("write_blocked", "read_blocked")),
 		),
+		s.NewType("chat", s.Parent("project"), s.WrittenBy(access),
+			s.Grant("reader", s.StoredAs(string(ScopeChatRead)), s.AnchoredAt("organization", "project", s.Self),
+				s.Sensitive(), s.Describe("Read session transcripts")),
+			s.Grant("writer", s.StoredAs(string(ScopeChatWrite)), s.AnchoredAt("organization", "project", s.Self),
+				s.Describe("Change session transcripts")),
+			s.Permission("read_grant", s.Union(s.Rel("reader"), s.Rel("writer")), s.Checks(string(ScopeChatRead))),
+			s.Permission("write_grant", s.Rel("writer"), s.Checks(string(ScopeChatWrite))),
+		),
 	}
 }

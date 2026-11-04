@@ -81,7 +81,7 @@ func TestNewMigrationRouterValidatesManifests(t *testing.T) {
 	require.NoError(t, err, "the default units must match the default registry")
 
 	cases := map[string][]MigrationUnit{
-		"undeclared type":   {{Name: "chat", Types: []string{"chat"}, DependsOn: nil}},
+		"undeclared type":   {{Name: "undeclared", Types: []string{"undeclared"}, DependsOn: nil}},
 		"no types":          {{Name: "empty", Types: nil, DependsOn: nil}},
 		"invalid name":      {{Name: "Project", Types: []string{"project"}, DependsOn: nil}},
 		"duplicate unit":    {{Name: "project", Types: []string{"project"}, DependsOn: nil}, {Name: "project", Types: []string{"organization"}, DependsOn: nil}},

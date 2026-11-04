@@ -67,6 +67,7 @@ var _ gen.Auther = (*Service)(nil)
 type Service struct {
 	auth             *auth.Auth
 	authz            *authz.Engine
+	authzClient      *authz.Client
 	db               *pgxpool.Pool
 	repo             *repo.Queries
 	tracer           trace.Tracer
@@ -130,6 +131,7 @@ func NewService(
 	telemetryService *telemetry.Service,
 	assetStorage assets.BlobStore,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	assistantTokens *assistanttokens.Manager,
 	billingRepo billing.Repository,
 	auditLogger *audit.Logger,
@@ -139,6 +141,7 @@ func NewService(
 	return &Service{
 		auth:             auth.New(logger, db, sessions, authzEngine),
 		authz:            authzEngine,
+		authzClient:      authzClient,
 		db:               db,
 		sessions:         sessions,
 		chatSessions:     chatSessions,
@@ -1034,11 +1037,12 @@ const (
 	chatAccessWrite
 )
 
-func (a chatAccess) check(chatID string) authz.Check {
+func (a chatAccess) operation(chat repo.GetChatRow) authz.Operation {
+	ref := authz.Chat(chat.ID.String())
 	if a == chatAccessWrite {
-		return authz.ChatWriteCheck(chatID)
+		return ref.Write()
 	}
-	return authz.ChatReadCheck(chatID)
+	return ref.Read()
 }
 
 // authorizeChatRead decides whether the caller may read a chat's content.
@@ -1134,7 +1138,7 @@ func (s *Service) authorizeChatAccess(ctx context.Context, authCtx *contextvalue
 			}
 			return nil
 		}
-		if err := s.authz.Require(ctx, access.check(chat.ID.String())); err != nil {
+		if err := s.authzClient.Require(ctx, access.operation(chat)); err != nil {
 			return err
 		}
 	}
