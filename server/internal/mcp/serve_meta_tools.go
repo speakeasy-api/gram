@@ -12,7 +12,9 @@ import (
 	"fmt"
 	"log/slog"
 	"maps"
+	"net/http"
 	"slices"
+	"time"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
@@ -217,16 +219,33 @@ func (s *Service) handleMetaExecuteToolCall(
 	argsRaw json.RawMessage,
 	meta *mcprequests.WireMeta,
 ) (json.RawMessage, error) {
+	start := time.Now()
 	qualified, arguments, err := processExecuteToolCall(ctx, logger, argsRaw)
 	if err != nil {
+		s.logMetaToolCallFailure(ctx, gate, metamcp.ToolExecuteTool, argsRaw, newMetaToolCallAttempt(start), err)
 		return nil, err
 	}
 
 	return s.executeMetaMemberTool(ctx, logger, gate, members, req, qualified, arguments, meta)
 }
 
-// executeMetaMemberTool is shared by Direct calls and Progressive execute_tool.
+// executeMetaMemberTool is shared by Direct calls, Progressive execute_tool,
+// and Code Mode. A call that fails before its member dispatch writes the
+// member's tool_call row is logged here, so every failed call leaves one row
+// stamped with this gateway.
 func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember, req *rawRequest, qualified string, arguments json.RawMessage, meta *mcprequests.WireMeta) (json.RawMessage, error) {
+	attempt := newMetaToolCallAttempt(time.Now())
+	body, err := s.dispatchMetaMemberTool(context.WithValue(ctx, metaToolCallAttemptKey{}, attempt), logger, gate, members, req, qualified, arguments, meta, attempt)
+	if attempt.logged || attempt.proxied || (err == nil && attempt.status == 0) {
+		return body, err
+	}
+	s.logMetaToolCallFailure(ctx, gate, qualified, arguments, attempt, err)
+	return body, err
+}
+
+// dispatchMetaMemberTool routes one member tool call, recording on attempt
+// how far it got and why it failed.
+func (s *Service) dispatchMetaMemberTool(ctx context.Context, logger *slog.Logger, gate *metaGateContext, members []metaMember, req *rawRequest, qualified string, arguments json.RawMessage, meta *mcprequests.WireMeta, attempt *metaToolCallAttempt) (json.RawMessage, error) {
 	serverSlug, toolName, err := metamcp.SplitQualifiedName(qualified)
 	if err != nil {
 		return nil, oops.E(oops.CodeInvalid, err, "invalid tool name: must be of the form serverslug--toolname").LogWarn(ctx, logger)
@@ -240,6 +259,7 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 			}
 		}
 		if !found {
+			attempt.fail(http.StatusForbidden, remotemcp.ToolNotApprovedMessage)
 			return marshalMetaToolError(ctx, logger, req.ID, remotemcp.ToolNotApprovedMessage)
 		}
 	}
@@ -247,8 +267,10 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 	if !ok {
 		return nil, unknownMetaMemberError(ctx, logger, gate, serverSlug)
 	}
+	attempt.member = &member
 	if err := s.validateCatalogMember(ctx, gate, member); err != nil {
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
+			attempt.fail(metaMemberErrorStatus(err), memberErr.message)
 			return marshalMetaMemberFailure(ctx, logger, req.ID, err, memberErr.message)
 		}
 		if denied, ok := errors.AsType[*oops.ShareableError](err); ok && (denied.Code == oops.CodeForbidden || denied.Code == oops.CodeNotFound) {
@@ -257,16 +279,19 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 		return nil, oops.E(oops.CodeUnavailable, err, "could not verify the approved server; retry shortly").LogError(ctx, logger)
 	}
 	if member.backend != metaMemberBackendHosted {
+		attempt.proxied = true
 		return s.executeProxiedMemberTool(ctx, logger, gate, member, req, toolName, arguments, meta)
 	}
 
 	toolset, hosting, inputs, err := s.buildMemberDispatch(ctx, logger, gate, member)
 	if err != nil {
 		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
+			attempt.fail(metaMemberErrorStatus(err), memberErr.message)
 			return marshalMetaToolError(ctx, logger, req.ID, memberErr.message)
 		}
 		return nil, err
 	}
+	attempt.toolsetSlug = toolset.Slug
 
 	// Pre-dispatch security check so an unsatisfied member surfaces as a
 	// member-scoped result (as in serveToolsetResolved). Members keep their
@@ -276,8 +301,9 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 		return nil, err
 	}
 	if !satisfied {
-		return marshalMetaToolError(ctx, logger, req.ID,
-			fmt.Sprintf("server %q requires authentication that this meta MCP session does not satisfy", member.slug))
+		message := fmt.Sprintf("server %q requires authentication that this meta MCP session does not satisfy", member.slug)
+		attempt.fail(http.StatusUnauthorized, message)
+		return marshalMetaToolError(ctx, logger, req.ID, message)
 	}
 
 	// Agent gateway and organization keys name no project, and a stored
@@ -339,8 +365,9 @@ func (s *Service) executeMetaMemberTool(ctx context.Context, logger *slog.Logger
 				(shareable.Code == oops.CodeNotFound || shareable.Code == oops.CodeInvalid) {
 				invocation.rejected = true
 			}
-			return marshalMetaToolError(ctx, logger, req.ID,
-				fmt.Sprintf("server %q failed to execute %q: %s", member.slug, toolName, deepest.Error()))
+			message := fmt.Sprintf("server %q failed to execute %q: %s", member.slug, toolName, deepest.Error())
+			attempt.fail(shareable.HTTPStatus(ctx), message)
+			return marshalMetaToolError(ctx, logger, req.ID, message)
 		}
 		return nil, err
 	}
