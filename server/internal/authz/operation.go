@@ -307,6 +307,16 @@ func (m MCPServerRef) Connect() Operation {
 	return newOperation("mcp_server", "connect", m.id, m.dimensions())
 }
 
+// ReadOrAdminister asks to inspect the server or to administer the
+// organization that owns it. Organization administration comes first, so a
+// denial names it, and a block on one alternative does not stop the other.
+func (m MCPServerRef) ReadOrAdminister(organizationID string) Operation {
+	return newAlternatives("mcp_server", "read_or_administer",
+		Organization(organizationID).Administer(),
+		m.Read(),
+	)
+}
+
 // EnvironmentRef names one environment in its project for typed
 // operations. Every operation carries the project as a dimension, so a grant
 // or block bounded to one project never matches an environment in another.
@@ -438,7 +448,7 @@ func typedOperations() []Operation {
 		project.Read(), project.Write(), project.PublishPlugin(), project.ReadOrOrganizationRead(),
 		mcpServer.Read(), mcpServer.Edit(), mcpServer.Connect(), mcpServer.CallTool("tool", "read_only"),
 		project.ReadSkills(), project.WriteSkills(), Skill("project", "skill").Read(),
-		project.WriteOrAdminister(), project.ReadOrEditMCPServer("server"),
+		project.WriteOrAdminister(), project.ReadOrEditMCPServer("server"), mcpServer.ReadOrAdminister("organization"),
 		project.ReadToolLogs(),
 		RiskPolicy("policy", RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate(),
 		RiskPolicy("policy", RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Bypass(),

@@ -271,7 +271,7 @@ func (s *Service) ExplainResourceAccess(ctx context.Context, payload *gen.Explai
 	}
 	// The same gate as the resource's audience: the explanation names the
 	// rules reaching a member, which that surface already shows.
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, payload.ResourceID, projectID)); err != nil {
+	if err := s.authzClient.Require(ctx, authz.MCPServer(projectID, payload.ResourceID).Read()); err != nil {
 		return nil, err
 	}
 	if err := s.authzClient.Require(ctx, authz.Organization(ac.ActiveOrganizationID).Read()); err != nil {
