@@ -317,7 +317,7 @@ func TestRefreshReplayLookupOutage(t *testing.T) {
 	}
 	tracker := rec.Recorder.Track(connectionScope(endpoint, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepInboundToken)
 	w := httptest.NewRecorder()
-	err := service.writeRefreshTokenReplay(t.Context(), tracker, w, httptest.NewRequest(http.MethodPost, "/token", nil), endpoint, client, "https://example.com", "none", "userSessionRefreshReplay:expected", replay, slog.Default())
+	err := service.writeRefreshTokenReplay(t.Context(), tracker, w, httptest.NewRequest(http.MethodPost, "/token", nil), endpoint, client, "https://example.com", "none", "userSessionRefreshReplay:expected", replay, testenv.NewLogger(t))
 	tracker.Finish(t.Context())
 	require.NoError(t, err)
 	require.Equal(t, http.StatusServiceUnavailable, w.Code)

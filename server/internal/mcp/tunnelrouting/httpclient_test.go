@@ -410,7 +410,8 @@ func TestHTTPClientLocalConfigurationFailure(t *testing.T) {
 	} {
 		t.Run(name, func(t *testing.T) {
 			t.Parallel()
-			_, err := client.Do(tokenRequest(t, "https://idp.example.com/token"), "tunnel-1")
+			resp, err := client.Do(tokenRequest(t, "https://idp.example.com/token"), "tunnel-1") //nolint:bodyclose // error path returns a nil response
+			require.Nil(t, resp)
 			require.ErrorIs(t, err, ErrTransportConfiguration)
 			require.NotErrorIs(t, err, ErrNoTunnelRoute)
 		})
@@ -435,7 +436,8 @@ func TestHTTPClientExhaustedGatewayStatusPreserved(t *testing.T) {
 			defer gateway.Close()
 			routes := route.NewRouteTable()
 			require.NoError(t, routes.Publish(t.Context(), "tunnel", gateway.URL, time.Minute))
-			_, err := newTestHTTPClient(t, routes).Do(tokenRequest(t, "https://idp.example.com/token"), "tunnel")
+			resp, err := newTestHTTPClient(t, routes).Do(tokenRequest(t, "https://idp.example.com/token"), "tunnel") //nolint:bodyclose // error path returns a nil response
+			require.Nil(t, resp)
 			require.ErrorIs(t, err, ErrNoTunnelRoute)
 			require.Equal(t, ErrNoTunnelRoute.Error(), err.Error())
 			code, ok := FailureHappened("", err)
