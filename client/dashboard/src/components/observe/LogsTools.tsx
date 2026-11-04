@@ -159,6 +159,15 @@ export function LogsTools({
 
   const serverNameMappings = useServerNameMappings();
 
+  // A scoped view shows every call the identity made. Local tools are hidden
+  // by default on the page-wide view for volume, but an agent that only runs
+  // through hooks makes nothing but local tool calls, and hiding them would
+  // leave its panel empty. Both lists are module constants, so the reference
+  // stays stable across renders.
+  const defaultTypes = scope
+    ? TOOL_USAGE_VALID_TYPES
+    : TOOL_USAGE_DEFAULT_TYPES;
+
   const {
     from,
     to,
@@ -185,7 +194,7 @@ export function LogsTools({
     accountType: pickedAccountType,
     handleAccountTypeChange,
   } = useObserveFilters<ToolUsageType>({
-    defaultTypes: TOOL_USAGE_DEFAULT_TYPES,
+    defaultTypes,
     validTypes: TOOL_USAGE_VALID_TYPES,
   });
   const accountType =
@@ -510,7 +519,10 @@ export function LogsTools({
       {
         id: "type",
         label: "Type",
-        isDefaultSelection: isDefaultToolUsageTypeSelection(selectedHookTypes),
+        isDefaultSelection: isDefaultToolUsageTypeSelection(
+          selectedHookTypes,
+          defaultTypes,
+        ),
         // Declared order groups the MCP surfaces together and leaves local
         // tools and skills at the end, which alphabetising breaks apart.
         keepValueOrder: true,
@@ -710,7 +722,7 @@ export function LogsTools({
           handleStatusesChange([]);
           break;
         case "type":
-          handleHookTypesChange(TOOL_USAGE_DEFAULT_TYPES);
+          handleHookTypesChange(defaultTypes);
           break;
         case "source":
           handleHookSourceSelectionChange([]);
@@ -1008,6 +1020,7 @@ export function LogsTools({
             timeSeriesPending={timeSeriesPending}
             facetGroups={visibleFacetGroups}
             embedded={!!scope}
+            defaultTypes={defaultTypes}
             onFacetToggle={onFacetToggle}
             onFacetClearGroup={onFacetClearGroup}
             onRangeSelect={setRangeFromBrush}
@@ -1261,6 +1274,7 @@ function LogsToolsContent({
   onResetRange,
   isZoomed,
   embedded = false,
+  defaultTypes,
 }: {
   isLoading: boolean;
   isFetching: boolean;
@@ -1319,6 +1333,8 @@ function LogsToolsContent({
   isZoomed: boolean;
   /** Inside another page: that page supplies the heading and the inset. */
   embedded?: boolean;
+  /** The type selection that counts as "no filter" for this view. */
+  defaultTypes: ToolUsageType[];
 }) {
   const orgRoutes = useOrgRoutes();
   // Below xl the rail does not fit beside the table. It is the only filter
@@ -1639,7 +1655,10 @@ function LogsToolsContent({
                       traces={traces}
                       hasActiveFilters={
                         activeFilters.length > 0 ||
-                        !isDefaultToolUsageTypeSelection(selectedTypes) ||
+                        !isDefaultToolUsageTypeSelection(
+                          selectedTypes,
+                          defaultTypes,
+                        ) ||
                         selectedStatuses.length > 0 ||
                         selectedRoleIds.length > 0 ||
                         selectedClientKeys.length > 0 ||
@@ -1657,6 +1676,7 @@ function LogsToolsContent({
                       serverNameMappings={serverNameMappings}
                       from={from}
                       to={to}
+                      embedded={embedded}
                     />
                   </div>
 
@@ -1704,6 +1724,7 @@ function LogsToolsTableContent({
   serverNameMappings,
   from,
   to,
+  embedded = false,
 }: {
   error: Error | null;
   isLoading: boolean;
@@ -1720,6 +1741,8 @@ function LogsToolsTableContent({
   to: Date;
   /** Resolved when this row's caller is an agent; its name is not on the row. */
   agent?: { id: string; name: string };
+  /** Scoped to one identity, whose page already says capture is set up. */
+  embedded?: boolean;
 }) {
   // Agent names are not on a trace — the row carries "agent:<uuid>" and
   // nothing else — so they are read once here rather than per row. Asked for
@@ -1785,6 +1808,18 @@ function LogsToolsTableContent({
   }
 
   if (traces.length === 0) {
+    // Scoped to one identity, an empty list means that identity made no
+    // calls in the period, not that capture is missing for the project.
+    if (!hasActiveFilters && embedded) {
+      return (
+        <div className="py-12 text-center">
+          <span className="text-muted-foreground text-sm">
+            No tool calls from this identity in this period.
+          </span>
+        </div>
+      );
+    }
+
     if (!hasActiveFilters) {
       return <HooksEmptyState />;
     }

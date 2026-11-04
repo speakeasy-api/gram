@@ -170,12 +170,18 @@ export function selectedHookSources(activeFilters: FilterChip[]): string[] {
     .filter(Boolean);
 }
 
+/**
+ * Whether the selection is the view's default. A view scoped to one identity
+ * defaults to every type, so pass its defaults rather than relying on the
+ * page-wide ones.
+ */
 export function isDefaultToolUsageTypeSelection(
   selectedTypes: ObserveTypeFilterValue[],
+  defaultTypes: ObserveTypeFilterValue[] = TOOL_USAGE_DEFAULT_TYPES,
 ): boolean {
   return (
-    selectedTypes.length === TOOL_USAGE_DEFAULT_TYPES.length &&
-    TOOL_USAGE_DEFAULT_TYPES.every((type) => selectedTypes.includes(type))
+    selectedTypes.length === defaultTypes.length &&
+    defaultTypes.every((type) => selectedTypes.includes(type))
   );
 }
 

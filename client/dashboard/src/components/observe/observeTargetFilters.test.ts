@@ -3,9 +3,12 @@ import {
   buildServerOptionGroups,
   encodeGatewayServerFilter,
   hostedServerFilterValue,
+  isDefaultToolUsageTypeSelection,
   parseTargetFilter,
   selectedUserEmails,
   splitHostedTargets,
+  TOOL_USAGE_DEFAULT_TYPES,
+  TOOL_USAGE_VALID_TYPES,
 } from "./observeTargetFilters";
 
 describe("selectedUserEmails", () => {
@@ -154,5 +157,33 @@ describe("splitHostedTargets", () => {
         { type: "gateway", id: "gw-1" },
       ]),
     ).toEqual({ mcpServerIds: [id], hostedToolsetSlugs: ["payments"] });
+  });
+});
+
+describe("isDefaultToolUsageTypeSelection", () => {
+  it("compares against the page-wide defaults when none are given", () => {
+    expect(isDefaultToolUsageTypeSelection([...TOOL_USAGE_DEFAULT_TYPES])).toBe(
+      true,
+    );
+    expect(isDefaultToolUsageTypeSelection([...TOOL_USAGE_VALID_TYPES])).toBe(
+      false,
+    );
+  });
+
+  it("compares against the defaults the view passes", () => {
+    // A view scoped to one identity defaults to every type, local tools
+    // included, so that selection is not a filter there.
+    expect(
+      isDefaultToolUsageTypeSelection(
+        [...TOOL_USAGE_VALID_TYPES].reverse(),
+        TOOL_USAGE_VALID_TYPES,
+      ),
+    ).toBe(true);
+    expect(
+      isDefaultToolUsageTypeSelection(
+        [...TOOL_USAGE_DEFAULT_TYPES],
+        TOOL_USAGE_VALID_TYPES,
+      ),
+    ).toBe(false);
   });
 });
