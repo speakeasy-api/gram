@@ -23,7 +23,7 @@ func (s *Service) GetBillingEmail(ctx context.Context, _ *gen.GetBillingEmailPay
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 	if err := s.requirePaygOrganization(ctx, authCtx.ActiveOrganizationID); err != nil {
@@ -46,7 +46,7 @@ func (s *Service) SetBillingEmail(ctx context.Context, payload *gen.SetBillingEm
 	if !ok || authCtx == nil || authCtx.ActiveOrganizationID == "" {
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 	if err := s.requirePaygOrganization(ctx, authCtx.ActiveOrganizationID); err != nil {

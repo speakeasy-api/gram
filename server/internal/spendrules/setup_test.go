@@ -100,6 +100,7 @@ func newTestSpendRulesService(t *testing.T) (context.Context, *testInstance) {
 		chConn,
 		sessionManager,
 		authzEngine,
+		authztest.NewParityClient(t, authzEngine),
 		audit.NewLogger(),
 		celEng,
 		cache.NewRedisCacheAdapter(redisClient),

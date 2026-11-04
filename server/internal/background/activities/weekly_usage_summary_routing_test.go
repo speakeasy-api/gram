@@ -22,7 +22,7 @@ func TestWeeklyUsageSummary_ListTargetsAppliesBillingRecipientMatrix(t *testing.
 	paygAdmins, _ := createAlertOrgWithAccountType(t, ctx, db, "", "", billing.TierPayg)
 	createAlertOrgWithAccountType(t, ctx, db, "free@example.test", "", billing.TierBase)
 
-	activity := activities.NewWeeklyUsageSummary(testenv.NewLogger(t), db, nil, nil, nil)
+	activity := activities.NewWeeklyUsageSummary(testenv.NewLogger(t), db, nil, nil, nil, nil)
 	targets, err := activity.ListTargets(ctx)
 
 	require.NoError(t, err)

@@ -80,7 +80,7 @@ func newTUMTestService(t *testing.T, orgID string) (*Service, *pgxpool.Pool, dri
 	svc := &Service{
 		tracer:        tp.Tracer("test"),
 		logger:        logger,
-		authz:         authzEngine,
+		authzClient:   authztest.NewParityClient(t, authzEngine),
 		db:            db,
 		repo:          repo.New(db),
 		orgRepo:       orgRepo.New(db),

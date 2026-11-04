@@ -75,16 +75,16 @@ type ActorEvaluationSignaler interface {
 }
 
 type Service struct {
-	tracer trace.Tracer
-	logger *slog.Logger
-	db     *pgxpool.Pool
-	chConn chrepo.CHTX
-	auth   *auth.Auth
-	authz  *authz.Engine
-	audit  *audit.Logger
-	celEng *celenv.Engine
-	cache  cache.Cache
-	flags  feature.Provider
+	tracer      trace.Tracer
+	logger      *slog.Logger
+	db          *pgxpool.Pool
+	chConn      chrepo.CHTX
+	auth        *auth.Auth
+	authzClient *authz.Client
+	audit       *audit.Logger
+	celEng      *celenv.Engine
+	cache       cache.Cache
+	flags       feature.Provider
 	// signaler is optional; nil disables mutation-triggered re-evaluation.
 	signaler EvaluationSignaler
 }
@@ -96,6 +96,7 @@ func NewService(
 	chConn chrepo.CHTX,
 	sessionManager *sessions.Manager,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	auditLogger *audit.Logger,
 	celEng *celenv.Engine,
 	cacheImpl cache.Cache,
@@ -105,17 +106,17 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("spendrules"))
 
 	return &Service{
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/spendrules"),
-		logger:   logger,
-		db:       db,
-		chConn:   chConn,
-		auth:     auth.New(logger, db, sessionManager, authzEngine),
-		authz:    authzEngine,
-		audit:    auditLogger,
-		celEng:   celEng,
-		cache:    cacheImpl,
-		flags:    flags,
-		signaler: signaler,
+		tracer:      tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/spendrules"),
+		logger:      logger,
+		db:          db,
+		chConn:      chConn,
+		auth:        auth.New(logger, db, sessionManager, authzEngine),
+		authzClient: authzClient,
+		audit:       auditLogger,
+		celEng:      celEng,
+		cache:       cacheImpl,
+		flags:       flags,
+		signaler:    signaler,
 	}
 }
 
@@ -139,7 +140,7 @@ func (s *Service) CreateSpendRule(ctx context.Context, payload *gen.CreateSpendR
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 
@@ -230,7 +231,7 @@ func (s *Service) ListSpendRules(ctx context.Context, payload *gen.ListSpendRule
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 
@@ -257,7 +258,7 @@ func (s *Service) ListActorAttributes(ctx context.Context, payload *gen.ListActo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 
@@ -279,7 +280,7 @@ func (s *Service) GetSpendRule(ctx context.Context, payload *gen.GetSpendRulePay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 
@@ -308,7 +309,7 @@ func (s *Service) UpdateSpendRule(ctx context.Context, payload *gen.UpdateSpendR
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 
@@ -482,7 +483,7 @@ func (s *Service) ArchiveSpendRule(ctx context.Context, payload *gen.ArchiveSpen
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return err
 	}
 
@@ -556,7 +557,7 @@ func (s *Service) PreviewSpendRule(ctx context.Context, payload *gen.PreviewSpen
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 
@@ -637,7 +638,7 @@ func (s *Service) ListSpendRuleEvents(ctx context.Context, payload *gen.ListSpen
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 
@@ -712,7 +713,7 @@ func (s *Service) GetSpendRulesOverview(ctx context.Context, payload *gen.GetSpe
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 

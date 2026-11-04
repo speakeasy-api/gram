@@ -5,6 +5,7 @@ import (
 	"fmt"
 
 	"github.com/speakeasy-api/gram/server/internal/access/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/billingnotifications"
 )
 
@@ -16,12 +17,13 @@ func recipientEmailIdempotencyKey(recipient string, parts ...string) string {
 
 func resolveBillingNotificationRecipients(
 	ctx context.Context,
+	client *authz.Client,
 	db repo.DBTX,
 	organizationID string,
 	accountType string,
 	configuredEmail *string,
 ) ([]string, error) {
-	recipients, err := billingnotifications.ResolveRecipients(ctx, db, organizationID, accountType, configuredEmail)
+	recipients, err := billingnotifications.ResolveRecipients(ctx, client, db, organizationID, accountType, configuredEmail)
 	if err != nil {
 		return recipients, fmt.Errorf("resolve billing notification recipients: %w", err)
 	}

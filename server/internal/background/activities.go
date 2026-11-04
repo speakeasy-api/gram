@@ -411,7 +411,7 @@ func NewActivities(
 		customDomainIngress:              activities.NewCustomDomainIngress(logger, db, k8sClient),
 		customDomainHealth:               activities.NewCustomDomainHealth(logger, db, k8sClient, expectedTargetCNAME, expectedARecords, emailService, orgHosts, guardianPolicy, authzClient),
 		fireOpenRouterCreditsMetrics:     activities.NewFireOpenRouterCreditsMetrics(logger, meterProvider),
-		sendOpenRouterCreditsAlerts:      activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, cacheAdapter, emailService, meterProvider),
+		sendOpenRouterCreditsAlerts:      activities.NewMaybeSendOpenRouterCreditsAlerts(logger, db, cacheAdapter, emailService, meterProvider, authzClient),
 		firePlatformUsageMetrics:         activities.NewFirePlatformUsageMetrics(logger, billingTracker),
 		syncIdentityMap:                  activities.NewSyncIdentityMap(logger, db, chConn, cacheAdapter),
 		syncTenantDimensions:             activities.NewSyncTenantDimensions(logger, db, chConn, cacheAdapter),
@@ -422,7 +422,7 @@ func NewActivities(
 		provisionFunctionsAccess:         activities.NewProvisionFunctionsAccess(logger, db, encryption),
 		deployFunctionRunners:            activities.NewDeployFunctionRunners(logger, db, functionsDeployer, functionsVersion, encryption),
 		reapFlyApps:                      activities.NewReapFlyApps(logger, meterProvider, db, functionsDeployer, 1),
-		weeklyUsageSummary:               activities.NewWeeklyUsageSummary(logger, db, meterReadConn, emailService, orgHosts),
+		weeklyUsageSummary:               activities.NewWeeklyUsageSummary(logger, db, meterReadConn, emailService, orgHosts, authzClient),
 		directoryReviewEmails:            activities.NewDirectoryReviewEmails(logger, db, emailService, orgHosts, authzClient),
 		refreshOpenRouterKey:             activities.NewRefreshOpenRouterKey(logger, db, openrouterProvisioner),
 		setOpenRouterSpendCap:            activities.NewSetOpenRouterSpendCap(logger, db, openrouterProvisioner, auditLogger, cacheAdapter),
@@ -493,7 +493,7 @@ func NewActivities(
 		trialFixtureHandler:     trialFixtureHandler,
 		mcpResearch:             mcpResearch,
 		mcpApprovalRecheck:      mcpApprovalRecheck,
-		billingNotifications:    billingnotifications.NewService(logger, db, emailService, features, orgHosts),
+		billingNotifications:    billingnotifications.NewService(logger, db, emailService, features, orgHosts, authzClient),
 		// The judges draw on the same per-(org, model) bucket and the same
 		// completion client as every other platform judge, so chat analysis
 		// cannot outspend the org's key behind their backs.

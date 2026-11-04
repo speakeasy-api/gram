@@ -15,6 +15,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
+	"github.com/speakeasy-api/gram/server/internal/authz"
 	repo "github.com/speakeasy-api/gram/server/internal/background/activities/repo"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
@@ -124,6 +125,7 @@ type MaybeSendOpenRouterCreditsAlerts struct {
 	auditRepo    *auditrepo.Queries
 	cache        cache.Cache
 	emails       *email.Service
+	authz        *authz.Client
 	alertsSent   metric.Int64Counter
 	alertsFailed metric.Int64Counter
 }
@@ -134,6 +136,7 @@ func NewMaybeSendOpenRouterCreditsAlerts(
 	cacheAdapter cache.Cache,
 	emails *email.Service,
 	meterProvider metric.MeterProvider,
+	authzClient *authz.Client,
 ) *MaybeSendOpenRouterCreditsAlerts {
 	ctx := context.Background()
 	componentLogger := logger.With(attr.SlogComponent("openrouter_credits_alerts"))
@@ -167,6 +170,7 @@ func NewMaybeSendOpenRouterCreditsAlerts(
 		auditRepo:    auditrepo.New(db),
 		cache:        cacheAdapter,
 		emails:       emails,
+		authz:        authzClient,
 		alertsSent:   sent,
 		alertsFailed: failed,
 	}
@@ -369,7 +373,7 @@ func (a *MaybeSendOpenRouterCreditsAlerts) Do(ctx context.Context, metrics []Ope
 		audience, resolved := audiences[c.orgID]
 		if !resolved {
 			configuredEmail := conv.FromPGText[string](r.AlertEmail)
-			audience.recipients, audience.err = resolveBillingNotificationRecipients(ctx, a.db, c.orgID, r.GramAccountType, configuredEmail)
+			audience.recipients, audience.err = resolveBillingNotificationRecipients(ctx, a.authz, a.db, c.orgID, r.GramAccountType, configuredEmail)
 			audiences[c.orgID] = audience
 		}
 		if len(audience.recipients) == 0 {

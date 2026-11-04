@@ -456,7 +456,7 @@ func newStripeCheckoutTestInstance(t *testing.T) *stripeCheckoutTestInstance {
 		tracer:        testenv.NewTracerProvider(t).Tracer("test"),
 		logger:        logger,
 		auth:          nil,
-		authz:         authzEngine,
+		authzClient:   authztest.NewParityClient(t, authzEngine),
 		serverURL:     nil,
 		siteURL:       siteURL,
 		db:            db,
