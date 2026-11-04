@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	auditrepo "github.com/speakeasy-api/gram/server/internal/audit/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/outbox/events"
@@ -162,7 +163,24 @@ func newTestService(conn *pgxpool.Pool, engine authorizationEngine) *Service {
 	return &Service{
 		logger:     slog.New(slog.NewTextHandler(os.Stderr, nil)),
 		db:         conn,
-		authorizer: NewAuthorizer(engine),
+		authorizer: NewAuthorizer(engine, nil),
 		audit:      audit.NewLogger(),
 	}
+}
+
+// agentClientModes are the migration modes agent decisions are tested in.
+var agentClientModes = []authz.MigrationMode{authz.MigrationModeOld, authz.MigrationModeShadow, authz.MigrationModeNew}
+
+// newClientTestService decides existing-agent operations through a typed
+// client in mode. Shadow mode fails the test on any disagreement between the
+// engine and the registry evaluator.
+func newClientTestService(t *testing.T, conn *pgxpool.Pool, engine *authz.Engine, mode authz.MigrationMode) *Service {
+	t.Helper()
+	client := authztest.NewClientInMode(t, engine, mode)
+	if mode == authz.MigrationModeShadow {
+		client = authztest.NewParityClient(t, engine)
+	}
+	service := newTestService(conn, engine)
+	service.authorizer = NewAuthorizer(engine, client)
+	return service
 }

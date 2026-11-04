@@ -24,7 +24,7 @@ import (
 )
 
 func configureBindingOwnerAuthorizer(ti *testInstance) {
-	authorizer := agentmanagement.NewAuthorizer(bindingOwnerOnlyEngine{})
+	authorizer := agentmanagement.NewAuthorizer(bindingOwnerOnlyEngine{}, nil)
 	ti.service.SetBindingAuthorizer(func(ctx context.Context, tx pgx.Tx, id uuid.UUID, write bool) error {
 		predicate := agentmanagement.OwnedAgentAuthorize
 		if write {

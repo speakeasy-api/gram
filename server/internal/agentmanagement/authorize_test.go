@@ -95,7 +95,7 @@ func TestOwnerPredicatesAreIntrinsicAndIndependentScopesAreExact(t *testing.T) {
 	seedOrganizationUser(t, conn, "org-a", "other")
 	agent := createAgent(t, conn, "org-a", "owner", "Managed agent")
 	engine := &fakeAuthorizationEngine{allowed: map[string]bool{}}
-	authorizer := NewAuthorizer(engine)
+	authorizer := NewAuthorizer(engine, nil)
 
 	ownerCtx := validatedHumanContext(t, "org-a", "owner")
 	for _, predicate := range []OwnerPredicate{OwnedAgentRead, OwnedAgentSetup, OwnedAgentAuthorize, OwnedAgentTransfer} {
@@ -130,7 +130,7 @@ func TestFormerOwnerLosesIntrinsicPredicates(t *testing.T) {
 	})
 	require.NoError(t, err)
 
-	authorizer := NewAuthorizer(&fakeAuthorizationEngine{allowed: map[string]bool{}})
+	authorizer := NewAuthorizer(&fakeAuthorizationEngine{allowed: map[string]bool{}}, nil)
 	_, _, err = authorizer.RequireAgent(validatedHumanContext(t, "org-a", "former-owner"), conn, agent.ID, OwnedAgentRead)
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
@@ -145,7 +145,7 @@ func TestOwnerPredicateRequiresUnblockedCurrentOwnership(t *testing.T) {
 	err := testrepo.New(conn).SetAgentOwnerLatchFixture(t.Context(), agent.ID)
 	require.NoError(t, err)
 
-	authorizer := NewAuthorizer(&fakeAuthorizationEngine{allowed: map[string]bool{}})
+	authorizer := NewAuthorizer(&fakeAuthorizationEngine{allowed: map[string]bool{}}, nil)
 	_, _, err = authorizer.RequireAgent(validatedHumanContext(t, "org-a", "owner"), conn, agent.ID, OwnedAgentRead)
 	requireOopsCode(t, err, oops.CodeForbidden)
 }
@@ -156,7 +156,7 @@ func TestRequireHumanRejectsAlternateAndUntrustedCallers(t *testing.T) {
 	conn := newTestDB(t)
 	seedOrganization(t, conn, "org-a")
 	seedOrganizationUser(t, conn, "org-a", "human")
-	authorizer := NewAuthorizer(&fakeAuthorizationEngine{allowed: map[string]bool{}})
+	authorizer := NewAuthorizer(&fakeAuthorizationEngine{allowed: map[string]bool{}}, nil)
 
 	valid := validatedHumanContext(t, "org-a", "human")
 	_, err := authorizer.RequireHuman(valid, conn)
@@ -208,7 +208,7 @@ func TestScopeOverrideOnlyNarrowsAgentManagement(t *testing.T) {
 	owned := createAgent(t, conn, "org-a", "admin", "Own agent")
 	other := createAgent(t, conn, "org-a", "owner", "Other agent")
 	seedGrant(t, t.Context(), conn, "org-a", urn.NewPrincipal(urn.PrincipalTypeUser, "admin"), authz.ScopeAgentRead, other.ID.String())
-	authorizer := NewAuthorizer(&fakeAuthorizationEngine{allowed: map[string]bool{}, loadedGrantsOnly: true})
+	authorizer := NewAuthorizer(&fakeAuthorizationEngine{allowed: map[string]bool{}, loadedGrantsOnly: true}, nil)
 
 	platformAdmin := func(override string) context.Context {
 		authCtx := *mustAuthContext(t, validatedHumanContext(t, "org-a", "admin"))
@@ -259,7 +259,7 @@ func TestSelectedAgentDenialsDoNotDiscloseExistenceOrTenant(t *testing.T) {
 	seedOrganizationUser(t, conn, "org-a", "caller")
 	seedOrganizationUser(t, conn, "org-b", "owner-b")
 	crossTenant := createAgent(t, conn, "org-b", "owner-b", "Other tenant agent")
-	authorizer := NewAuthorizer(&fakeAuthorizationEngine{allowed: map[string]bool{}})
+	authorizer := NewAuthorizer(&fakeAuthorizationEngine{allowed: map[string]bool{}}, nil)
 	ctx := validatedHumanContext(t, "org-a", "caller")
 
 	for _, id := range []uuid.UUID{crossTenant.ID, uuid.New()} {
@@ -278,7 +278,7 @@ func TestRequireAgentRejectsStalePreparedGrants(t *testing.T) {
 	agent := createAgent(t, conn, "org-a", "owner", "Revoked grant agent")
 	engine := &fakeAuthorizationEngine{allowed: map[string]bool{}, loadedGrantsOnly: true}
 	allow(engine, authz.ScopeAgentRead, agent.ID)
-	authorizer := NewAuthorizer(engine)
+	authorizer := NewAuthorizer(engine, nil)
 	ctx := authz.GrantsToContext(
 		validatedHumanContext(t, "org-a", "caller"),
 		[]authz.Grant{authz.NewGrant(authz.ScopeAgentRead, agent.ID.String())},
@@ -296,7 +296,7 @@ func TestCreateForAnotherOwnerUsesIntendedOwnerSelector(t *testing.T) {
 	seedOrganizationUser(t, conn, "org-a", "caller")
 	seedOrganizationUser(t, conn, "org-a", "owner")
 	engine := &fakeAuthorizationEngine{allowed: map[string]bool{}}
-	authorizer := NewAuthorizer(engine)
+	authorizer := NewAuthorizer(engine, nil)
 	ctx := validatedHumanContext(t, "org-a", "caller")
 	_, err := authorizer.RequireCreate(ctx, conn, "owner")
 	requireOopsCode(t, err, oops.CodeForbidden)
@@ -331,7 +331,7 @@ func TestConsentProvenanceOnlyAuthorizesSelectedAgentAttachments(t *testing.T) {
 	seedOrganization(t, conn, "org-a")
 	seedOrganizationUser(t, conn, "org-a", "owner")
 	agent := createAgent(t, conn, "org-a", "owner", "Consent agent")
-	authorizer := NewAuthorizer(&fakeAuthorizationEngine{allowed: map[string]bool{}})
+	authorizer := NewAuthorizer(&fakeAuthorizationEngine{allowed: map[string]bool{}}, nil)
 	ctx := contextvalues.WithConsentBindingAuthorization(t.Context(), "owner", "org-a", uuid.New(), agent.ID, uuid.New())
 	tx := testenv.BeginTx(t, ctx, conn)
 	_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, agent.ID, OwnedAgentAuthorize)
@@ -354,7 +354,7 @@ func TestConsentNonOwnerRequiresLiveAuthorizeGrant(t *testing.T) {
 	seedOrganizationUser(t, conn, "org-a", "caller")
 	agent := createAgent(t, conn, "org-a", "owner", "Consent delegation agent")
 	engine := &fakeAuthorizationEngine{allowed: map[string]bool{}, loadedGrantsOnly: true}
-	authorizer := NewAuthorizer(engine)
+	authorizer := NewAuthorizer(engine, nil)
 	ctx := contextvalues.WithConsentBindingAuthorization(t.Context(), "caller", "org-a", uuid.New(), agent.ID, uuid.New())
 	// Prepared grants cannot substitute for a current database grant.
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeAgentAuthorize, agent.ID.String())})

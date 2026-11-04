@@ -265,6 +265,39 @@ func (a AssistantRef) Write() Operation {
 	return newOperation("assistant", "write", a.id, a.dimensions())
 }
 
+// AgentRef names one existing agent and its persisted owner for typed
+// operations. Every operation carries the owner as a dimension and matches
+// strictly, so a grant bounded to one owner's agents never reaches another
+// owner's agent, and a grant never covers an agent whose owner is unknown.
+type AgentRef struct {
+	id    string
+	owner string
+}
+
+// Agent names the agent with the given ID, owned by ownerUserID. The owner
+// must be the current persisted owner, never a caller-supplied claim, and the
+// caller must have verified the agent belongs to the request's organization.
+func Agent(agentID, ownerUserID string) AgentRef {
+	return AgentRef{id: agentID, owner: ownerUserID}
+}
+
+func (a AgentRef) operation(permission string) Operation {
+	return newOperation("agent", permission, a.id, map[string]string{SelectorKeyOwner: a.owner}).WithStrictMatch()
+}
+
+// Read asks to read the agent.
+func (a AgentRef) Read() Operation { return a.operation("read") }
+
+// Write asks to change the agent.
+func (a AgentRef) Write() Operation { return a.operation("write") }
+
+// Authorize asks to authorize the agent: delegate grants to it and approve
+// its connections.
+func (a AgentRef) Authorize() Operation { return a.operation("authorize") }
+
+// Transfer asks to transfer the agent to another owner.
+func (a AgentRef) Transfer() Operation { return a.operation("transfer") }
+
 // MCPServerRef names one MCP server in its project for typed operations.
 // Every operation carries the project as a dimension, so a grant or block
 // bounded to one project never matches a server in another.
@@ -447,5 +480,7 @@ func typedOperations() []Operation {
 		Inference("project").Execute(),
 		Chat("chat").Read(), Chat("chat").Write(),
 		project.ReadChats(),
+		Agent("agent", "owner").Read(), Agent("agent", "owner").Write(),
+		Agent("agent", "owner").Authorize(), Agent("agent", "owner").Transfer(),
 	}
 }

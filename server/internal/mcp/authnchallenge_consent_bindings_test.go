@@ -63,7 +63,7 @@ func TestConsentAgentBindingActionsUseRealAttachmentService(t *testing.T) {
 		if write {
 			predicate = agentmanagement.OwnedAgentSetup
 		}
-		_, _, err := agentmanagement.NewAuthorizer(ti.authzEngine).RequireAgentOwnerForUpdate(ctx, tx, id, predicate)
+		_, _, err := agentmanagement.NewAuthorizer(ti.authzEngine, nil).RequireAgentOwnerForUpdate(ctx, tx, id, predicate)
 		if err != nil {
 			return fmt.Errorf("authorize attachment owner: %w", err)
 		}

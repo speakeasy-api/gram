@@ -72,10 +72,15 @@ type authorizationEngine interface {
 // Authorizer implements the reusable human-only agent management seam.
 type Authorizer struct {
 	authz authorizationEngine
+	// client decides existing-agent operations through the typed
+	// authorization client. Without one they are decided by the engine.
+	client *authz.Client
 }
 
-func NewAuthorizer(engine authorizationEngine) *Authorizer {
-	return &Authorizer{authz: engine}
+// NewAuthorizer builds the agent management authorizer. client may be nil,
+// in which case existing-agent decisions stay on the engine.
+func NewAuthorizer(engine authorizationEngine, client *authz.Client) *Authorizer {
+	return &Authorizer{authz: engine, client: client}
 }
 
 // RequireHuman rejects credentials that only carry human attribution. Only an
@@ -164,6 +169,16 @@ func (a *Authorizer) lockHumanMemberships(ctx context.Context, dbtx repo.DBTX, a
 // require authorizes an existing-agent operation against the live grants and,
 // when a scope override is active, against the override as well.
 func (a *Authorizer) require(ctx context.Context, human HumanContext, scope authz.Scope, agent repo.Agent) error {
+	if a.client != nil {
+		op, ok := agentOperation(scope, agent)
+		if !ok {
+			return oops.C(oops.CodeForbidden)
+		}
+		if err := a.client.RequireLoaded(ctx, human.loadedPolicies(), op); err != nil {
+			return fmt.Errorf("authorize existing agent: %w", err)
+		}
+		return nil
+	}
 	if err := human.access.Require(ctx, a.authz, scope, agent.ID.String(), agent.OwnerUserID); err != nil {
 		return fmt.Errorf("evaluate live grants: %w", err)
 	}
@@ -192,11 +207,64 @@ func (a *Authorizer) requireCreate(ctx context.Context, human HumanContext, owne
 }
 
 // allows is the capability projection of require.
-func (h HumanContext) allows(scope authz.Scope, agent repo.Agent) bool {
-	if !h.access.Allows(scope, agent.ID.String(), agent.OwnerUserID) {
-		return false
+func (a *Authorizer) allows(ctx context.Context, human HumanContext, scope authz.Scope, agent repo.Agent) (bool, error) {
+	if a.client == nil {
+		if !human.access.Allows(scope, agent.ID.String(), agent.OwnerUserID) {
+			return false, nil
+		}
+		return !human.overridden || human.overrideAccess.Allows(scope, agent.ID.String(), agent.OwnerUserID), nil
 	}
-	return !h.overridden || h.overrideAccess.Allows(scope, agent.ID.String(), agent.OwnerUserID)
+	op, ok := agentOperation(scope, agent)
+	if !ok {
+		return false, nil
+	}
+	allowed, err := a.client.EvaluateLoaded(ctx, human.loadedPolicies(), op)
+	if err != nil {
+		return false, fmt.Errorf("evaluate existing agent: %w", err)
+	}
+	return allowed, nil
+}
+
+// visible reports whether the caller's live grants let them read agent. A
+// scope override narrows what the caller may do with an agent, not which
+// agents they see.
+func (a *Authorizer) visible(ctx context.Context, human HumanContext, agent repo.Agent) (bool, error) {
+	live := human
+	live.overridden = false
+	return a.allows(ctx, live, authz.ScopeAgentRead, agent)
+}
+
+// loadedPolicies are the caller's live grants and, under a scope override,
+// the override grants, each with owner selectors bound to the caller. Every
+// policy must allow.
+func (h HumanContext) loadedPolicies() authz.LoadedPolicies {
+	policies := [][]authz.Grant{h.access.Grants()}
+	if h.overridden {
+		policies = append(policies, h.overrideAccess.Grants())
+	}
+	return authz.LoadedPolicies{OrganizationID: h.Auth.ActiveOrganizationID, User: h.Auth.UserID, Policies: policies}
+}
+
+// agentOperation is the typed operation for scope on agent. An agent without
+// a persisted owner has none: no grant may cover an agent whose owner is
+// unknown.
+func agentOperation(scope authz.Scope, agent repo.Agent) (authz.Operation, bool) {
+	if agent.OwnerUserID == "" || agent.OwnerUserID == authz.WildcardResource {
+		return authz.Operation{}, false
+	}
+	ref := authz.Agent(agent.ID.String(), agent.OwnerUserID)
+	switch scope {
+	case authz.ScopeAgentRead:
+		return ref.Read(), true
+	case authz.ScopeAgentWrite:
+		return ref.Write(), true
+	case authz.ScopeAgentAuthorize:
+		return ref.Authorize(), true
+	case authz.ScopeAgentTransfer:
+		return ref.Transfer(), true
+	default:
+		return authz.Operation{}, false
+	}
 }
 
 // creationOwners lists the owners the caller may create agents for. A scope
@@ -351,12 +419,23 @@ func (a *Authorizer) Permissions(ctx context.Context, human HumanContext, agent 
 		return AgentPermissions{}, errors.New("agent authorization engine is unavailable")
 	}
 
-	return AgentPermissions{
-		Read:      human.allows(authz.ScopeAgentRead, agent),
-		Write:     human.allows(authz.ScopeAgentWrite, agent),
-		Authorize: human.allows(authz.ScopeAgentAuthorize, agent),
-		Transfer:  human.allows(authz.ScopeAgentTransfer, agent),
-	}, nil
+	var permissions AgentPermissions
+	for _, decision := range []struct {
+		scope authz.Scope
+		into  *bool
+	}{
+		{authz.ScopeAgentRead, &permissions.Read},
+		{authz.ScopeAgentWrite, &permissions.Write},
+		{authz.ScopeAgentAuthorize, &permissions.Authorize},
+		{authz.ScopeAgentTransfer, &permissions.Transfer},
+	} {
+		allowed, err := a.allows(ctx, human, decision.scope, agent)
+		if err != nil {
+			return AgentPermissions{}, err
+		}
+		*decision.into = allowed
+	}
+	return permissions, nil
 }
 
 func ownsUnblockedAgent(human HumanContext, agent repo.Agent) bool {

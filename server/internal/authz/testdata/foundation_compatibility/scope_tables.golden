@@ -6,7 +6,7 @@ agent:authorize
   exclusion: -
   closure: [agent:authorize]
   sub_scopes: []
-  selector_keys: []
+  selector_keys: [owner]
   roles: [admin]
 agent:read
   visibility: user_visible
@@ -16,7 +16,7 @@ agent:read
   exclusion: -
   closure: [agent:read]
   sub_scopes: []
-  selector_keys: []
+  selector_keys: [owner]
   roles: [admin]
 agent:transfer
   visibility: user_visible
@@ -26,7 +26,7 @@ agent:transfer
   exclusion: -
   closure: [agent:transfer]
   sub_scopes: []
-  selector_keys: []
+  selector_keys: [owner]
   roles: [admin]
 agent:write
   visibility: user_visible
@@ -36,7 +36,7 @@ agent:write
   exclusion: -
   closure: [agent:read agent:write]
   sub_scopes: [agent:read]
-  selector_keys: []
+  selector_keys: [owner]
   roles: [admin]
 assistant:blocked_read
   visibility: internal

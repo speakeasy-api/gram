@@ -14,20 +14,12 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
-// evaluatorSliceDeclarations extends the frozen schema slice with the types the
-// frozen decision corpus also exercises. Like frozenSliceDeclarations they exist
-// only in tests; TestRegistryEvaluatorSliceMatchesFrozenTables keeps them
-// honest against scope_tables.golden.
+// evaluatorSliceDeclarations is the schema slice the frozen decision corpus
+// exercises. Like frozenSliceDeclarations it exists only in tests;
+// TestRegistryEvaluatorSliceMatchesFrozenTables keeps it honest against
+// scope_tables.golden.
 func evaluatorSliceDeclarations() []s.TypeDecl {
-	access := string(GrantSurfaceAccess)
-	return append(frozenSliceDeclarations(),
-		s.NewType("agent", s.Parent("organization"), s.WrittenBy(access),
-			s.Grant("reader", s.StoredAs(string(ScopeAgentRead)), s.Describe("Read agents"), s.DefaultFor(SystemRoleAdmin)),
-			s.Grant("writer", s.StoredAs(string(ScopeAgentWrite)), s.Describe("Change agents"), s.DefaultFor(SystemRoleAdmin)),
-			s.Permission("read", s.Union(s.Rel("reader"), s.Rel("writer")), s.Checks(string(ScopeAgentRead))),
-			s.Permission("write", s.Rel("writer"), s.Checks(string(ScopeAgentWrite))),
-		),
-	)
+	return frozenSliceDeclarations()
 }
 
 func compileEvaluatorSlice(t *testing.T) *s.Registry {

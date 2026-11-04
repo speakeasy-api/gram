@@ -13,6 +13,7 @@ import (
 
 	gen "github.com/speakeasy-api/gram/server/gen/assistants"
 	"github.com/speakeasy-api/gram/server/gen/types"
+	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -805,11 +806,13 @@ func newRBACServiceWithConn(t *testing.T, dbName string) (*Service, context.Cont
 	logger := testenv.NewLogger(t)
 	authzClient := newTestAuthzClient(t, conn)
 	service := &Service{
-		tracer:   testenv.NewTracerProvider(t).Tracer("test"),
-		logger:   logger,
-		auth:     nil,
-		authz:    authzClient,
-		core:     NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, authzClient),
+		tracer: testenv.NewTracerProvider(t).Tracer("test"),
+		logger: logger,
+		auth:   nil,
+		authz:  authzClient,
+		// The identity service shares the parity client, so its agent
+		// selection is checked against the registry evaluator too.
+		core:     NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE, runTurnErr: nil}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), assistantidentity.New("https://platform.example.invalid", audit.NewLogger(), authzClient), authzClient),
 		signaler: &stubWorkflowSignaler{signalledThreads: nil},
 	}
 

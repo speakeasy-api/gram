@@ -419,7 +419,7 @@ func runMCPServer(c *cli.Context, shutdown *mcpServerShutdown) error {
 		if write {
 			predicate = agentmanagement.OwnedAgentSetup
 		}
-		authorizer := agentmanagement.NewAuthorizer(authzEngine)
+		authorizer := agentmanagement.NewAuthorizer(authzEngine, authzClient)
 		_, _, err := authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, predicate)
 		if err != nil && !write {
 			_, _, err = authorizer.RequireAgentOwnerForUpdate(ctx, tx, id, agentmanagement.OwnedAgentSetup)

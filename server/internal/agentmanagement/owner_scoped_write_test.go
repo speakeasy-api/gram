@@ -15,6 +15,16 @@ import (
 
 func TestOwnerScopedWriteCreatesAndManagesOnlySelectedOwners(t *testing.T) {
 	t.Parallel()
+	for _, mode := range agentClientModes {
+		t.Run(mode.String(), func(t *testing.T) {
+			t.Parallel()
+			testOwnerScopedWriteCreatesAndManagesOnlySelectedOwners(t, mode)
+		})
+	}
+}
+
+func testOwnerScopedWriteCreatesAndManagesOnlySelectedOwners(t *testing.T, mode authz.MigrationMode) {
+	t.Helper()
 	db := newTestDB(t)
 	seedOrganization(t, db, "org-owner-write")
 	for _, user := range []string{"caller", "employee", "other"} {
@@ -23,7 +33,7 @@ func TestOwnerScopedWriteCreatesAndManagesOnlySelectedOwners(t *testing.T) {
 	ctx := validatedHumanContext(t, "org-owner-write", "caller")
 	seedGrant(t, ctx, db, "org-owner-write", urn.NewPrincipal(urn.PrincipalTypeUser, "caller"), authz.ScopeAgentWrite, "*", "employee")
 	engine := authz.NewEngine(testenv.NewLogger(t), db, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	service := newTestService(db, engine)
+	service := newClientTestService(t, db, engine, mode)
 	agent, err := service.Create(ctx, &gen.CreatePayload{Name: "Provisioned agent", OwnerUserID: new("employee")})
 	require.NoError(t, err)
 	require.True(t, agent.Permissions.Read)
@@ -53,6 +63,16 @@ func TestOwnerScopedWriteCreatesAndManagesOnlySelectedOwners(t *testing.T) {
 
 func TestExactAgentGrantCannotCreateAndRetainsOwnerRestriction(t *testing.T) {
 	t.Parallel()
+	for _, mode := range agentClientModes {
+		t.Run(mode.String(), func(t *testing.T) {
+			t.Parallel()
+			testExactAgentGrantCannotCreateAndRetainsOwnerRestriction(t, mode)
+		})
+	}
+}
+
+func testExactAgentGrantCannotCreateAndRetainsOwnerRestriction(t *testing.T, mode authz.MigrationMode) {
+	t.Helper()
 	db := newTestDB(t)
 	seedOrganization(t, db, "org-exact-write")
 	for _, user := range []string{"caller", "employee", "other"} {
@@ -62,7 +82,7 @@ func TestExactAgentGrantCannotCreateAndRetainsOwnerRestriction(t *testing.T) {
 	ctx := validatedHumanContext(t, "org-exact-write", "caller")
 	seedGrant(t, ctx, db, "org-exact-write", urn.NewPrincipal(urn.PrincipalTypeUser, "caller"), authz.ScopeAgentWrite, agent.ID.String(), "other")
 	engine := authz.NewEngine(testenv.NewLogger(t), db, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	service := newTestService(db, engine)
+	service := newClientTestService(t, db, engine, mode)
 	_, err := service.Rename(ctx, &gen.RenamePayload{ID: agent.ID.String(), Name: "Wrong owner"})
 	requireOopsCode(t, err, oops.CodeForbidden)
 	seedGrant(t, ctx, db, "org-exact-write", urn.NewPrincipal(urn.PrincipalTypeUser, "caller"), authz.ScopeAgentWrite, agent.ID.String(), "employee")
