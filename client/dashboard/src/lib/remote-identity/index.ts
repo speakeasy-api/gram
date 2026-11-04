@@ -40,13 +40,17 @@ export {
 export type { AgentCredentialFields } from "./drafts/useCredentialDraft";
 
 export {
+  displayUrl,
   issuerDisplayName,
   useUserIdentityDraft,
 } from "./drafts/useIdentityDraft";
 
 export { useAllRemoteSessionClients } from "./queries/useAllRemoteSessionClients";
 export { useRemoteSessionIssuersByIds } from "./queries/useRemoteSessionIssuersByIds";
-export { resetAllProtectedResourceMetadata } from "./queries/useProtectedResourceMetadata";
+export {
+  resetAllProtectedResourceMetadata,
+  useProtectedResourceMetadata,
+} from "./queries/useProtectedResourceMetadata";
 export { useUpstreamProbe } from "./queries/useUpstreamProbe";
 
 export { AgentIdentityRow } from "./components/CredentialFields";

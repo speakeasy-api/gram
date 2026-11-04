@@ -17,6 +17,9 @@ const mocks = vi.hoisted(() => ({
   create: vi.fn(),
   clientPages: [] as unknown[][],
   registrationsFailed: false,
+  registrations: [] as unknown[],
+  issuers: [] as unknown[],
+  authorizationServers: undefined as string[] | undefined,
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
@@ -52,13 +55,26 @@ vi.mock("@gram/client/react-query/createAuthClient.js", () => ({
   }),
 }));
 
-vi.mock("@/lib/remote-identity", () => ({
+vi.mock("@/lib/remote-identity", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("@/lib/remote-identity")>()),
   useAllRemoteSessionClients: () => ({
-    items: [],
+    items: mocks.registrations,
     isLoading: false,
     isError: mocks.registrationsFailed,
     error: null,
     refetch: vi.fn(),
+  }),
+  useRemoteSessionIssuersByIds: () => ({
+    items: mocks.issuers,
+    isLoading: false,
+    isError: false,
+    refetch: vi.fn(),
+  }),
+  useProtectedResourceMetadata: () => ({
+    status: mocks.authorizationServers ? "available" : "unavailable",
+    metadata: mocks.authorizationServers
+      ? { authorizationServers: mocks.authorizationServers }
+      : null,
   }),
 }));
 
@@ -94,6 +110,7 @@ function renderSheet(tunneled = false) {
           <AddCredentialSheet
             mcpServerId="this-server"
             projectId="project-1"
+            remoteMcpServerId="remote-1"
             tunneled={tunneled}
             onOpenChange={() => undefined}
           />
@@ -108,6 +125,9 @@ afterEach(() => {
   cleanup();
   vi.clearAllMocks();
   mocks.registrationsFailed = false;
+  mocks.registrations = [];
+  mocks.issuers = [];
+  mocks.authorizationServers = undefined;
 });
 
 describe("AddCredentialSheet", () => {
@@ -274,5 +294,102 @@ describe("AddCredentialSheet", () => {
     fireEvent.click(screen.getByRole("radio", { name: /^Service account/ }));
     expect(screen.getByText(/Sign-ins could not be loaded/)).toBeTruthy();
     expect(screen.queryByText(/No sign-in that gets its own token/)).toBeNull();
+  });
+
+  describe("sign-ins", () => {
+    const signInMocks = () => {
+      mocks.clientPages = [];
+      mocks.issuers = [
+        { id: "linear", issuer: "https://mcp.linear.app/", name: "Linear" },
+        { id: "notion", issuer: "https://mcp.notion.com", name: "Notion" },
+      ];
+      mocks.registrations = [
+        {
+          id: "01a1a312",
+          clientId: "01a1a312",
+          credentialOwner: "subject",
+          remoteSessionIssuerId: "linear",
+        },
+        {
+          id: "01a19e9a",
+          clientId: "oacli_notion",
+          credentialOwner: "subject",
+          remoteSessionIssuerId: "notion",
+        },
+      ];
+    };
+    const openPicker = () => {
+      fireEvent.click(
+        screen.getByRole("radio", { name: /^Each person's own account/ }),
+      );
+      fireEvent.click(screen.getByRole("combobox"));
+    };
+
+    it("offers the upstream's authorization server, by name", () => {
+      signInMocks();
+      mocks.authorizationServers = ["https://mcp.linear.app"];
+      renderSheet();
+      openPicker();
+
+      expect(screen.getByRole("option", { name: /Linear/ })).toBeTruthy();
+      expect(screen.queryByRole("option", { name: /Notion/ })).toBeNull();
+      expect(screen.queryByText("01a1a312")).toBeNull();
+    });
+
+    it("keeps the other sign-ins one click away", () => {
+      signInMocks();
+      mocks.authorizationServers = ["https://mcp.linear.app"];
+      renderSheet();
+      fireEvent.click(
+        screen.getByRole("radio", { name: /^Each person's own account/ }),
+      );
+      fireEvent.click(screen.getByRole("button", { name: "Show all" }));
+      fireEvent.click(screen.getByRole("combobox"));
+
+      expect(screen.getByRole("option", { name: /Notion/ })).toBeTruthy();
+    });
+
+    it("says what to register when no sign-in matches", () => {
+      signInMocks();
+      mocks.authorizationServers = ["https://auth.example.com"];
+      renderSheet();
+      fireEvent.click(
+        screen.getByRole("radio", { name: /^Each person's own account/ }),
+      );
+
+      expect(
+        screen.getByText(/registered with auth\.example\.com yet/),
+      ).toBeTruthy();
+      expect(screen.queryByRole("combobox")).toBeNull();
+    });
+
+    it("offers every sign-in when the upstream names none", () => {
+      signInMocks();
+      renderSheet();
+      openPicker();
+
+      expect(screen.getByRole("option", { name: /Linear/ })).toBeTruthy();
+      expect(screen.getByRole("option", { name: /Notion/ })).toBeTruthy();
+      expect(screen.queryByRole("button", { name: "Show all" })).toBeNull();
+    });
+
+    it("tells unnamed registrations of one server apart", () => {
+      signInMocks();
+      mocks.registrations = [
+        ...mocks.registrations,
+        {
+          id: "01a16996",
+          clientId: "second",
+          credentialOwner: "subject",
+          remoteSessionIssuerId: "linear",
+        },
+      ];
+      mocks.authorizationServers = ["https://mcp.linear.app"];
+      renderSheet();
+      openPicker();
+
+      expect(screen.getByText("mcp.linear.app · 01a1a312")).toBeTruthy();
+      expect(screen.getByText("mcp.linear.app · second")).toBeTruthy();
+    });
   });
 });
