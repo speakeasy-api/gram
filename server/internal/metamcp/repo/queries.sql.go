@@ -967,44 +967,51 @@ func (q *Queries) ListMetaMCPProxiedMemberResources(ctx context.Context, arg Lis
 	return items, nil
 }
 
-const listMetaMCPServerNamesForTelemetryByOrganizationID = `-- name: ListMetaMCPServerNamesForTelemetryByOrganizationID :many
-SELECT ms.id, ms.name, ms.project_id, ms.deleted
+const listMetaMCPServerLabelsForTelemetry = `-- name: ListMetaMCPServerLabelsForTelemetry :many
+SELECT ms.id, ms.name, ms.project_id, ms.deleted, p.slug AS project_slug, p.deleted AS project_deleted
 FROM meta_mcp_servers ms
-WHERE ms.project_id IN (
-    SELECT p.id
-    FROM projects p
-    WHERE p.organization_id = $1
-  )
-  AND ms.organization_id = $1
-ORDER BY ms.deleted ASC, ms.created_at DESC
+JOIN projects p ON p.id = ms.project_id
+WHERE ms.organization_id = $1
+  AND p.organization_id = $1
+  AND ms.id = ANY($2::uuid[])
 `
 
-type ListMetaMCPServerNamesForTelemetryByOrganizationIDRow struct {
-	ID        uuid.UUID
-	Name      string
-	ProjectID uuid.UUID
-	Deleted   bool
+type ListMetaMCPServerLabelsForTelemetryParams struct {
+	OrganizationID string
+	Ids            []uuid.UUID
 }
 
-// Gateway names for telemetry labels across every project of the
-// organization, deleted gateways included: a member's calls are logged in the
-// member's project, which need not be the gateway's. Projects select the rows
-// so the lookup rides the project_id index. The project and deleted flag let
-// a label link to the gateway's page while it still has one.
-func (q *Queries) ListMetaMCPServerNamesForTelemetryByOrganizationID(ctx context.Context, organizationID string) ([]ListMetaMCPServerNamesForTelemetryByOrganizationIDRow, error) {
-	rows, err := q.db.Query(ctx, listMetaMCPServerNamesForTelemetryByOrganizationID, organizationID)
+type ListMetaMCPServerLabelsForTelemetryRow struct {
+	ID             uuid.UUID
+	Name           string
+	ProjectID      uuid.UUID
+	Deleted        bool
+	ProjectSlug    string
+	ProjectDeleted bool
+}
+
+// Names the stored gateways among telemetry ids, deleted gateways included: a
+// member's calls are logged in the member's project, which need not be the
+// gateway's. Ids that are not stored gateways (agent and organization gateways
+// stamp derived ids) simply match nothing. The project and deleted flags let a
+// label link to the gateway's page while it still has one, and say which
+// project the caller must be able to read to see the name.
+func (q *Queries) ListMetaMCPServerLabelsForTelemetry(ctx context.Context, arg ListMetaMCPServerLabelsForTelemetryParams) ([]ListMetaMCPServerLabelsForTelemetryRow, error) {
+	rows, err := q.db.Query(ctx, listMetaMCPServerLabelsForTelemetry, arg.OrganizationID, arg.Ids)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListMetaMCPServerNamesForTelemetryByOrganizationIDRow
+	var items []ListMetaMCPServerLabelsForTelemetryRow
 	for rows.Next() {
-		var i ListMetaMCPServerNamesForTelemetryByOrganizationIDRow
+		var i ListMetaMCPServerLabelsForTelemetryRow
 		if err := rows.Scan(
 			&i.ID,
 			&i.Name,
 			&i.ProjectID,
 			&i.Deleted,
+			&i.ProjectSlug,
+			&i.ProjectDeleted,
 		); err != nil {
 			return nil, err
 		}
