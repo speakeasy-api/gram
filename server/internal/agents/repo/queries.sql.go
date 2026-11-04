@@ -371,6 +371,28 @@ func (q *Queries) GetAgentByIDForUpdate(ctx context.Context, arg GetAgentByIDFor
 	return i, err
 }
 
+const getAgentNameIncludingDeleted = `-- name: GetAgentNameIncludingDeleted :one
+SELECT name
+FROM agents
+WHERE organization_id = $1
+  AND id = $2
+LIMIT 1
+`
+
+type GetAgentNameIncludingDeletedParams struct {
+	OrganizationID string
+	ID             uuid.UUID
+}
+
+// Reads an agent's name even after it is deleted, for records written about
+// it afterwards, such as its runtime's withdrawal in the audit log.
+func (q *Queries) GetAgentNameIncludingDeleted(ctx context.Context, arg GetAgentNameIncludingDeletedParams) (string, error) {
+	row := q.db.QueryRow(ctx, getAgentNameIncludingDeleted, arg.OrganizationID, arg.ID)
+	var name string
+	err := row.Scan(&name)
+	return name, err
+}
+
 const getAgentOwnerProfile = `-- name: GetAgentOwnerProfile :one
 SELECT u.display_name, u.photo_url
 FROM users AS u

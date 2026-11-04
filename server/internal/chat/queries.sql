@@ -2226,3 +2226,14 @@ UPDATE api_keys SET scopes = ARRAY[]::text[], subject_urn = @subject_urn,
   delegated_grants = @delegated_grants::jsonb, delegated_grants_version = @delegated_grants_version,
   expires_at = clock_timestamp() + interval '1 hour'
 WHERE id = @api_key_id AND project_id = @project_id;
+
+-- name: LockChatForCompaction :exec
+-- Serializes compaction writes for one chat. A missing chat is not an error.
+SELECT 1 FROM chats WHERE id = @id AND project_id = @project_id FOR UPDATE;
+
+-- name: AcquireToolCallSummaryLock :exec
+-- Session-level: the caller must release it on the same connection.
+SELECT pg_advisory_lock(@lock_key::bigint);
+
+-- name: ReleaseToolCallSummaryLock :exec
+SELECT pg_advisory_unlock(@lock_key::bigint);

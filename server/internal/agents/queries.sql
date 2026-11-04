@@ -39,6 +39,15 @@ WHERE organization_id = @organization_id
   AND deleted IS FALSE
 LIMIT 1;
 
+-- name: GetAgentNameIncludingDeleted :one
+-- Reads an agent's name even after it is deleted, for records written about
+-- it afterwards, such as its runtime's withdrawal in the audit log.
+SELECT name
+FROM agents
+WHERE organization_id = @organization_id
+  AND id = @id
+LIMIT 1;
+
 -- name: LockAgentIncludingDeleted :one
 -- Locks an agent whatever its lifecycle, for cleanup that must still run
 -- after the agent is deleted.

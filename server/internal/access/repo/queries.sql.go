@@ -930,6 +930,19 @@ func (q *Queries) GetPrincipalGrants(ctx context.Context, arg GetPrincipalGrants
 	return items, nil
 }
 
+const getRemoteSessionRowDigestFixture = `-- name: GetRemoteSessionRowDigestFixture :one
+SELECT md5(row_to_json(s)::text) AS row_digest FROM remote_sessions s WHERE s.id = $1
+`
+
+// Test fixture: a digest of the whole stored row, so a test can prove it was
+// not touched without reading any credential value.
+func (q *Queries) GetRemoteSessionRowDigestFixture(ctx context.Context, id uuid.UUID) (string, error) {
+	row := q.db.QueryRow(ctx, getRemoteSessionRowDigestFixture, id)
+	var row_digest string
+	err := row.Scan(&row_digest)
+	return row_digest, err
+}
+
 const insertChallengeResolutions = `-- name: InsertChallengeResolutions :many
 INSERT INTO authz_challenge_resolutions (
   organization_id, challenge_id, principal_urn, scope,

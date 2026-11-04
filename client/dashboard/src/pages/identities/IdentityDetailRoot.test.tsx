@@ -21,37 +21,6 @@ vi.mock("@/contexts/Auth", () => ({
 vi.mock("@/hooks/useRBAC", () => ({
   useRBAC: () => ({ hasScope: () => mocks.orgRead, isLoading: false }),
 }));
-const page = (segment: string) => ({
-  href: (urn: string) => `/identities/${urn}/${segment}`,
-  active: false,
-});
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    agents: { href: () => "/agents" },
-    identities: {
-      href: (urn?: string) => (urn ? `/identities/${urn}` : "/identities"),
-      Link: ({ children }: { children?: React.ReactNode }) => (
-        <span>{children}</span>
-      ),
-      agents: { href: () => "/identities/agents" },
-      detail: {
-        overview: page("overview"),
-        access: page("access"),
-        usage: page("usage"),
-        security: page("security"),
-        findings: page("findings"),
-        cost: page("cost"),
-        connections: page("connections"),
-        devices: page("devices"),
-        activity: page("activity"),
-        permissions: page("permissions"),
-        credentials: page("credentials"),
-        sessions: page("sessions"),
-        controls: page("controls"),
-      },
-    },
-  }),
-}));
 // Do not mount the panels: these regressions exercise the route's
 // authorization boundary, not what the page then shows.
 vi.mock("@/components/require-scope", () => ({
@@ -61,8 +30,8 @@ vi.mock("@/components/require-scope", () => ({
 }));
 vi.mock("@/contexts/Sdk", () => ({
   useSdkClient: () => ({}),
-  useSlugs: () => ({ orgSlug: "example", projectSlug: "default" }),
   useProjectSlugForRequests: () => "example",
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project-one" }),
 }));
 vi.mock("@gram/client/react-query/_context.js", () => ({
   useGramContext: () => ({}),
@@ -113,10 +82,14 @@ function setup(urn: string) {
   });
   render(
     <QueryClientProvider client={client}>
-      <MemoryRouter initialEntries={[`/identities/${encodeURIComponent(urn)}`]}>
+      <MemoryRouter
+        initialEntries={[
+          `/org/projects/project-one/identities/${encodeURIComponent(urn)}/overview`,
+        ]}
+      >
         <Routes>
           <Route
-            path="/identities/:identityUrn"
+            path="/org/projects/project-one/identities/:identityUrn"
             element={<IdentityDetailRoot />}
           >
             <Route path="overview" element={<h1>Identity overview</h1>} />
@@ -233,7 +206,8 @@ it("renders a successful retained-access result with updated permissions", () =>
 it.each([403, 404])(
   "forgets a previously readable agent in recents after %s",
   (statusCode) => {
-    const href = "/identities/agent%3Aagent_example/overview";
+    const href =
+      "/org/projects/project-one/identities/agent%3Aagent_example/overview";
     mocks.subject.mockReturnValue({
       data: cachedAgent,
       error: null,
@@ -241,12 +215,12 @@ it.each([403, 404])(
     });
     setup("agent:agent_example");
     expect(getRecentLabelOverride(href)).toBe(cachedAgent.displayName);
-    recordVisit("user_example", "example", "default", {
+    recordVisit("user_example", "org", "project-one", {
       href,
       label: cachedAgent.displayName,
     });
-    recordVisit("user_example", "example", "default", {
-      href: "/identities/agent%3Aother/overview",
+    recordVisit("user_example", "org", "project-one", {
+      href: "/org/projects/project-one/identities/agent%3Aother/overview",
       label: "Other agent",
     });
     cleanup();

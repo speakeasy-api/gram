@@ -42,18 +42,13 @@ vi.mock("@/hooks/useRBAC", () => ({
     },
   }),
 }));
-vi.mock("react-router", () => ({ useNavigate: () => mocks.navigate }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    identities: {
-      agents: {
-        new: { href: () => "/example/projects/main/identities/agents/new" },
-      },
-    },
-  }),
-  useOrgRoutes: () => ({
-    access: { roles: { href: () => "/example/access/roles" } },
-  }),
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
+  useLocation: () => ({ pathname: "/", search: "" }),
+  useNavigate: () => mocks.navigate,
+}));
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: mocks.orgSlug, projectSlug: "main" }),
 }));
 afterEach(cleanup);
 beforeEach(() => {

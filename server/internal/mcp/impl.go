@@ -579,6 +579,7 @@ func NewService(
 		telemSvc,
 		auditLogger,
 		platformtoolsruntime.WithTriggerTools(triggerApp),
+		platformtoolsruntime.WithThreadContextAuthorizer(authzEngine),
 		platformtoolsruntime.WithSlackHTTPClient(guardianPolicy.PooledClient()),
 		platformtoolsruntime.WithExternalTools(platformExtras),
 		platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),
@@ -939,6 +940,21 @@ func (s *Service) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Reque
 			// redirect; attachment completion stays fail-closed and can be retried
 			// with a fresh popup instead of replaying a spent authorization code.
 			s.logger.ErrorContext(r.Context(), "record committed popup grant", attr.SlogError(err))
+		}
+
+		if err := s.markReconnectReviewReady(r, *result.Grant); err != nil {
+			if !errors.Is(err, errConnectionCatalogExpired) {
+				return fmt.Errorf("complete code reconnect: %w", err)
+			}
+			s.logger.WarnContext(r.Context(), "catalogue reconnect requires full gateway consent", attr.SlogError(err))
+			redirect, parseErr := url.Parse(result.RedirectURL)
+			if parseErr != nil {
+				return fmt.Errorf("parse reconnect redirect: %w", parseErr)
+			}
+			query := redirect.Query()
+			query.Set("catalog_reconnect", "required")
+			redirect.RawQuery = query.Encode()
+			result.RedirectURL = redirect.String()
 		}
 
 		if deadline := s.verifyRemoteGrant(r.Context(), *result.Grant); !deadline.IsZero() {

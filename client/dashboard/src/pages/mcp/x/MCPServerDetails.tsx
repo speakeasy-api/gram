@@ -48,6 +48,7 @@ import { ArrowRight, Check, ChevronDown } from "lucide-react";
 import { Link, Navigate, useLocation, useParams } from "react-router";
 import { toast } from "sonner";
 import { MCPTeamAccessTab } from "../MCPTeamAccessTab";
+import { RemoteTeamAccessTab } from "./tabs/RemoteTeamAccessTab";
 import {
   activeTabFromPath,
   mcpServerTabHref,
@@ -283,11 +284,15 @@ export default function MCPServerDetails(): JSX.Element | null {
                 level="page"
               >
                 {/* Reads gate on the toolset id like the API; grants key on the server id that endpoint calls check. */}
-                <MCPTeamAccessTab
-                  resourceId={mcpServer.id}
-                  serverName={mcpServer.name ?? undefined}
-                  tools={hostedToolset?.tools}
-                />
+                {mcpServer.remoteMcpServerId ? (
+                  <RemoteTeamAccessTab server={mcpServer} />
+                ) : (
+                  <MCPTeamAccessTab
+                    resourceId={mcpServer.id}
+                    serverName={mcpServer.name ?? undefined}
+                    tools={hostedToolset?.tools}
+                  />
+                )}
               </RequireScope>
             </RequireScope>
           )

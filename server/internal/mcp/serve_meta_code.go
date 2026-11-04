@@ -101,7 +101,7 @@ func (s *Service) listMetaCodeTools(ctx context.Context, logger *slog.Logger, se
 }
 
 // codeCallableMembers advertises only approved, configured members with tools
-// permitted by this connection's immutable catalogue. Helpers keep members
+// permitted by this connection's approved catalogue. Helpers keep members
 // that need a new consent, so they can report that instead of hiding them.
 func (s *Service) codeCallableMembers(ctx context.Context, gate *metaGateContext, members []metaMember, keepConsentRequired bool) []metaMember {
 	if gate.catalogRecoveryOnly {

@@ -27,12 +27,7 @@ func (s *Service) requireExistingBillingEligibility(ctx context.Context, organiz
 		return err
 	}
 	// Match checkout activation's active/trialing/past_due policy.
-	switch state.Status {
-	case "active", "trialing", "past_due":
-		return nil
-	default:
-		return oops.E(oops.CodeConflict, nil, "Stripe subscription is not eligible for activation")
-	}
+	return requireStripeActivationStatus(state)
 }
 
 // Repair removes stale restrictions; it never grants a new tier entitlement.

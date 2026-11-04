@@ -42,6 +42,21 @@ func (q *Queries) AdminAuditProjectBelongsToOrganization(ctx context.Context, ar
 	return exists, err
 }
 
+const adminBackdateUserSessionFixture = `-- name: AdminBackdateUserSessionFixture :exec
+UPDATE user_sessions SET created_at = $1 WHERE id = $2
+`
+
+type AdminBackdateUserSessionFixtureParams struct {
+	CreatedAt pgtype.Timestamptz
+	ID        uuid.UUID
+}
+
+// Test fixture: no writer backdates a session.
+func (q *Queries) AdminBackdateUserSessionFixture(ctx context.Context, arg AdminBackdateUserSessionFixtureParams) error {
+	_, err := q.db.Exec(ctx, adminBackdateUserSessionFixture, arg.CreatedAt, arg.ID)
+	return err
+}
+
 const adminBackfillMCPAuthFromConnect = `-- name: AdminBackfillMCPAuthFromConnect :execrows
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 SELECT DISTINCT g.organization_id, g.principal_urn, 'mcp:auth', '{"resource_kind":"mcp_auth_client","resource_id":"*"}'::jsonb

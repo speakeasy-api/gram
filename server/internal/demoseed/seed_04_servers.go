@@ -675,6 +675,17 @@ func (s *seeder) seedAuthClients(ctx context.Context) error {
 			return fmt.Errorf("associate demo auth client %s: %w", a.key, err)
 		}
 	}
+	picked, err := s.q.ServersPickGatewayGitHubCredential(ctx, repo.ServersPickGatewayGitHubCredentialParams{
+		AuthClientID: s.det("auth-client-github-forwarded"), OrgID: org, ProjectID: proj,
+		CredentialIds: []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
+		McpServerID:   s.det("mcpserver-github"),
+	})
+	if err != nil {
+		return fmt.Errorf("pick demo gateway GitHub credential: %w", err)
+	}
+	if picked != 3 {
+		return fmt.Errorf("pick demo gateway GitHub credential: expected 3 choices, updated %d", picked)
+	}
 	if err := s.q.ServersInsertAuthClientRoleGrants(ctx, repo.ServersInsertAuthClientRoleGrantsParams{
 		OrgID: org, AuthClientID: s.det("auth-client-github-token"),
 		UseID: s.det("auth-client-github-token-use"), BlockID: s.det("auth-client-github-token-block"),

@@ -1,10 +1,12 @@
 import {
   cleanup,
   fireEvent,
-  render,
+  render as testingRender,
   screen,
   waitFor,
 } from "@testing-library/react";
+import type { ReactElement } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 import { ConfirmInferenceTrafficSection } from "./confirm-inference-traffic-section";
 
@@ -60,10 +62,11 @@ vi.mock("./session-audit-access", async (importOriginal) => ({
   ...(await importOriginal<typeof import("./session-audit-access")>()),
   useSessionAuditAccess: () => mocks.access,
 }));
-vi.mock("@/routes", () => ({
-  useOrgRoutes: () => ({ identity: { href: () => "/org/identity" } }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: undefined }),
 }));
-vi.mock("react-router", () => ({
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
   Link: ({ children }: { children: React.ReactNode }) => <a>{children}</a>,
 }));
 
@@ -78,6 +81,9 @@ function chat(overrides: Record<string, unknown> = {}) {
     ...overrides,
   };
 }
+
+const render = (ui: ReactElement) =>
+  testingRender(ui, { wrapper: MemoryRouter });
 
 afterEach(cleanup);
 beforeEach(() => {

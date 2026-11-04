@@ -20,6 +20,7 @@ const mocks = vi.hoisted(() => ({
 }));
 
 vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
   useSdkClient: () => ({
     authClients: {
       list: () =>
@@ -58,12 +59,6 @@ vi.mock("@/lib/remote-identity", () => ({
     isError: mocks.registrationsFailed,
     error: null,
     refetch: vi.fn(),
-  }),
-}));
-
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    remoteIdentityProviders: { href: () => "/authorization-servers" },
   }),
 }));
 

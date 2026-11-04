@@ -161,7 +161,7 @@ func (s *LiveOrganizationSelector) EligibleOrganizations(ctx context.Context, us
 			}
 			return nil, fmt.Errorf("check organization membership eligibility: %w", err)
 		}
-		options = append(options, OrganizationOption{ID: organization.ID, Name: organization.Name})
+		options = append(options, OrganizationOption{ID: organization.ID, Name: organization.Name, WorkOSID: organization.WorkosID.String})
 	}
 	return options, nil
 }

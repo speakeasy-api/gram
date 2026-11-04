@@ -2182,43 +2182,36 @@ func (s *Service) issueSession(
 	}
 	// A rotated session keeps the choices its credential already has.
 	if !issuance.CredentialID.Valid {
-		pickedServers := make([]uuid.UUID, 0, len(issuance.UpstreamClientPicks))
-		pickedClients := make([]uuid.UUID, 0, len(issuance.UpstreamClientPicks))
-		var pickedAuthClients []uuid.UUID
+		picks := usersessions_repo.RecordUpstreamClientSelectionsParams{
+			UserSessionIssuerID: issuance.UserSessionIssuerID,
+			CredentialKind:      upstreamclients.CredentialKindUserSession,
+			CredentialID:        session.ID,
+			Source:              upstreamclients.SelectionSourceIssuance,
+			ScopeMcpServerIds:   nil,
+			PickedMcpServerIds:  nil,
+			PickedClientIds:     nil,
+			PickedAuthClientIds: nil,
+		}
 		if issuance.Catalog != nil {
-			for _, member := range issuance.Catalog.Members {
-				if member.Auth != nil {
-					pickedServers = append(pickedServers, member.ServerID)
-					pickedClients = append(pickedClients, member.Auth.RegistrationID.UUID)
-					pickedAuthClients = append(pickedAuthClients, member.Auth.ClientID)
-				}
-			}
+			picks = issuance.Catalog.upstreamChoices(session.ID)
 		} else {
 			for serverID, clientID := range issuance.UpstreamClientPicks {
-				pickedServers = append(pickedServers, serverID)
-				pickedClients = append(pickedClients, clientID)
+				picks.PickedMcpServerIds = append(picks.PickedMcpServerIds, serverID)
+				picks.PickedClientIds = append(picks.PickedClientIds, clientID)
 				// The zero id is read as no typed pick.
-				pickedAuthClients = append(pickedAuthClients, issuance.AuthClientPicks[serverID])
+				picks.PickedAuthClientIds = append(picks.PickedAuthClientIds, issuance.AuthClientPicks[serverID])
 			}
 			for serverID, authClientID := range issuance.AuthClientPicks {
 				if _, ok := issuance.UpstreamClientPicks[serverID]; ok {
 					continue
 				}
 				// A headers-only client has no registration.
-				pickedServers = append(pickedServers, serverID)
-				pickedClients = append(pickedClients, uuid.Nil)
-				pickedAuthClients = append(pickedAuthClients, authClientID)
+				picks.PickedMcpServerIds = append(picks.PickedMcpServerIds, serverID)
+				picks.PickedClientIds = append(picks.PickedClientIds, uuid.Nil)
+				picks.PickedAuthClientIds = append(picks.PickedAuthClientIds, authClientID)
 			}
 		}
-		if _, err := queries.RecordUpstreamClientSelections(ctx, usersessions_repo.RecordUpstreamClientSelectionsParams{
-			UserSessionIssuerID: issuance.UserSessionIssuerID,
-			CredentialKind:      upstreamclients.CredentialKindUserSession,
-			CredentialID:        session.ID,
-			Source:              upstreamclients.SelectionSourceIssuance,
-			PickedMcpServerIds:  pickedServers,
-			PickedClientIds:     pickedClients,
-			PickedAuthClientIds: pickedAuthClients,
-		}); err != nil {
+		if _, err := queries.RecordUpstreamClientSelections(ctx, picks); err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "record upstream client selections").LogError(ctx, logger)
 		}
 	}

@@ -216,7 +216,9 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDUpstreamClientChoices(ctx, repo.PostflightIDUpstreamClientChoicesParams{
 				OrgSessionIds:      []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
-				OrgNoAuthServerIds: []uuid.UUID{s.det("mcpserver-github"), s.tunnelServerID()},
+				OrgNoAuthServerIds: []uuid.UUID{s.tunnelServerID()},
+				GithubServerID:     s.det("mcpserver-github"),
+				GithubAuthClientID: s.det("auth-client-github-forwarded"),
 				ProjectID:          proj,
 				LinearSessionIds:   []uuid.UUID{s.det("user-session-6"), s.det("user-session-7"), s.det("user-session-10"), s.det("user-session-11"), s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
 				SlackSessionIds:    []uuid.UUID{s.det("user-session-8"), s.det("user-session-9"), s.det("user-session-10"), s.det("user-session-11"), s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
@@ -228,7 +230,9 @@ func (s *seeder) postflightIdentity(ctx context.Context) error {
 		{func(ctx context.Context) (int64, error) {
 			return s.q.PostflightIDMisassignedUpstreamClientChoices(ctx, repo.PostflightIDMisassignedUpstreamClientChoicesParams{
 				OrgSessionIds:      []uuid.UUID{s.det("org-gateway-session-1"), s.det("org-gateway-session-2"), s.det("org-gateway-session-3")},
-				OrgNoAuthServerIds: []uuid.UUID{s.det("mcpserver-github"), s.tunnelServerID()},
+				OrgNoAuthServerIds: []uuid.UUID{s.tunnelServerID()},
+				GithubServerID:     s.det("mcpserver-github"),
+				GithubAuthClientID: s.det("auth-client-github-forwarded"),
 				ProjectID:          proj,
 				LinearServerID:     s.det("mcpserver-linear"),
 				LinearClientID:     s.det("remote-identity-client-linear"),

@@ -3,18 +3,27 @@ package remotesessions_test
 import (
 	"context"
 	"testing"
+	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5/pgconn"
 	"github.com/jackc/pgx/v5/pgxpool"
 	"github.com/stretchr/testify/require"
 
+	"github.com/jackc/pgx/v5/pgtype"
 	orgclientsgen "github.com/speakeasy-api/gram/server/gen/organization_remote_session_clients"
 	gen "github.com/speakeasy-api/gram/server/gen/remote_sessions"
+	authclientsrepo "github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/productfeatures"
+	productfeaturesrepo "github.com/speakeasy-api/gram/server/internal/productfeatures/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
 
@@ -42,6 +51,69 @@ func associate(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizati
 	})
 	require.NoError(t, err)
 	return n
+}
+
+// offeredAuthClients is the live links through which one MCP server offers
+// typed auth clients. A retired link stops the offer; the client row survives.
+func offeredAuthClients(t *testing.T, ctx context.Context, conn *pgxpool.Pool, serverID uuid.UUID) []uuid.UUID {
+	t.Helper()
+	ids, err := authclientbackfill.New(conn).ListServerAuthClientsFixture(ctx, serverID)
+	require.NoError(t, err)
+	return ids
+}
+
+// recordTypedClients writes the typed auth clients and links the servers'
+// associations call for, as every association writer does.
+func recordTypedClients(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, serverIDs ...uuid.UUID) {
+	t.Helper()
+	tx := testenv.BeginTx(t, ctx, conn)
+	require.NoError(t, authclientbackfill.SyncServerAssociations(ctx, tx, organizationID, serverIDs...))
+	require.NoError(t, tx.Commit(ctx))
+}
+
+// enforceUpstreamAuth turns on the organization's upstream auth enforcement,
+// the state in which its servers are served from typed auth clients.
+func enforceUpstreamAuth(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string) {
+	t.Helper()
+	_, err := productfeaturesrepo.New(conn).EnableFeature(ctx, productfeaturesrepo.EnableFeatureParams{
+		OrganizationID: organizationID,
+		FeatureName:    string(productfeatures.FeatureUpstreamAuthEnforced),
+	})
+	require.NoError(t, err)
+}
+
+// seedAdministratorAuthClient creates a static-credential auth client an
+// administrator owns and offers it on the server, the records the sync must
+// never touch.
+func seedAdministratorAuthClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID, serverID uuid.UUID) uuid.UUID {
+	t.Helper()
+	client, err := authclientsrepo.New(conn).CreateAuthClient(ctx, authclientsrepo.CreateAuthClientParams{
+		OrganizationID:        organizationID,
+		ProjectID:             uuid.NullUUID{UUID: projectID, Valid: true},
+		ClientType:            "static_credential",
+		Name:                  "Administrator credential",
+		CreatedByUserID:       conv.ToPGText("admin-user"),
+		RemoteSessionClientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		ClientAttachmentScope: pgtype.Text{String: "", Valid: false},
+	})
+	require.NoError(t, err)
+	_, err = authclientsrepo.New(conn).AttachAuthClientToServer(ctx, authclientsrepo.AttachAuthClientToServerParams{
+		McpServerID:    serverID,
+		AuthClientID:   client.ID,
+		OrganizationID: organizationID,
+	})
+	require.NoError(t, err)
+	return client.ID
+}
+
+// authClientLive reports whether the typed auth client row itself is still
+// live. Retiring a link never deletes the client: only the offline backfill
+// retires one no server reaches.
+func authClientLive(t *testing.T, ctx context.Context, conn *pgxpool.Pool, authClientID uuid.UUID) bool {
+	t.Helper()
+	row, err := authclientbackfill.New(conn).GetAuthClientFixture(ctx, authClientID)
+	require.NoError(t, err)
+	return !row.Deleted
 }
 
 func TestMCPServerUpstreamClientAssociations(t *testing.T) {
@@ -136,6 +208,35 @@ func TestMCPServerUpstreamClientAssociations(t *testing.T) {
 		var shareable *oops.ShareableError
 		require.ErrorAs(t, err, &shareable)
 		require.Equal(t, oops.CodeNotFound, shareable.Code, "a second detach finds nothing to remove")
+	})
+
+	t.Run("detaching a server stops it offering that client", func(t *testing.T) {
+		t.Parallel()
+
+		userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-assoc-typed")
+		first := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-typed-a")
+		second := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "assoc-typed-b")
+		clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-assoc-typed")
+		associate(t, ctx, ti.conn, orgID, projectID, first, clientID)
+		associate(t, ctx, ti.conn, orgID, projectID, second, clientID)
+		recordTypedClients(t, ctx, ti.conn, orgID, first, second)
+
+		offered := offeredAuthClients(t, ctx, ti.conn, first)
+		require.NotEmpty(t, offered, "the association must be offered through a link to retire")
+		require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, second))
+
+		require.NoError(t, ti.service.DetachServerClientAssociation(ctx, &gen.DetachServerClientAssociationPayload{
+			McpServerID:           first.String(),
+			RemoteSessionClientID: clientID.String(),
+		}))
+
+		require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, first))
+		require.Empty(t, offeredAuthClients(t, ctx, ti.conn, first),
+			"the link goes with the association it was derived from")
+		require.True(t, authClientLive(t, ctx, ti.conn, offered[0]),
+			"the client row survives the retired link")
+		require.Equal(t, offered, offeredAuthClients(t, ctx, ti.conn, second),
+			"the other server on the same client keeps what it offers")
 	})
 
 	t.Run("the only server's own binding cannot be detached on its own", func(t *testing.T) {
@@ -252,4 +353,246 @@ func TestCommitServerIdentityConfigurationAssociatesOnlyTheTargetServer(t *testi
 	_, err = ti.service.CommitServerIdentityConfiguration(ctx, existingServerIdentityPayload(targetID, providerID, clientID))
 	require.NoError(t, err, "a repeated commit is idempotent")
 	require.Equal(t, []uuid.UUID{clientID}, associatedClients(t, ctx, ti.conn, projectID, targetID))
+}
+
+// TestDetachServerClientAssociation_EnforcedOrganization proves the older path
+// still works for an organization served by typed auth clients, and that both
+// models move: the write is not refused, and its link goes with it.
+func TestDetachServerClientAssociation_EnforcedOrganization(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+	enforceUpstreamAuth(t, ctx, ti.conn, orgID)
+
+	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-enforced")
+	first := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "enforced-a")
+	second := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "enforced-b")
+	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-enforced")
+	associate(t, ctx, ti.conn, orgID, projectID, first, clientID)
+	associate(t, ctx, ti.conn, orgID, projectID, second, clientID)
+	recordTypedClients(t, ctx, ti.conn, orgID, first, second)
+	require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, first))
+
+	require.NoError(t, ti.service.DetachServerClientAssociation(ctx, &gen.DetachServerClientAssociationPayload{
+		McpServerID:           first.String(),
+		RemoteSessionClientID: clientID.String(),
+	}), "an enforced organization is not refused the older path")
+
+	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, first))
+	require.Empty(t, offeredAuthClients(t, ctx, ti.conn, first),
+		"both models move together while enforced")
+	require.NotEmpty(t, offeredAuthClients(t, ctx, ti.conn, second))
+}
+
+// TestDetachServerClientAssociation_KeepsAdministratorClients proves the sync
+// never reaches records an administrator owns: a client and link they created
+// survive a legacy detach of the registration-derived ones.
+func TestDetachServerClientAssociation_KeepsAdministratorClients(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-adminkeep")
+	first := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "adminkeep-a")
+	second := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "adminkeep-b")
+	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-adminkeep")
+	associate(t, ctx, ti.conn, orgID, projectID, first, clientID)
+	associate(t, ctx, ti.conn, orgID, projectID, second, clientID)
+	recordTypedClients(t, ctx, ti.conn, orgID, first, second)
+
+	adminClientID := seedAdministratorAuthClient(t, ctx, ti.conn, orgID, projectID, first)
+	require.Contains(t, offeredAuthClients(t, ctx, ti.conn, first), adminClientID)
+
+	require.NoError(t, ti.service.DetachServerClientAssociation(ctx, &gen.DetachServerClientAssociationPayload{
+		McpServerID:           first.String(),
+		RemoteSessionClientID: clientID.String(),
+	}))
+
+	require.Equal(t, []uuid.UUID{adminClientID}, offeredAuthClients(t, ctx, ti.conn, first),
+		"only the link derived from the association is retired")
+}
+
+// TestDetachServerClientAssociationGatesRegistrationsBeforeTheServerRow pins
+// the lock order the shared transaction depends on. Holding a server row and
+// then waiting for a registration gate another transaction holds — while that
+// one waits for the row — deadlocks the pair, so the gate has to come first.
+// The probe asserts which lock the handler stops at, not merely that it
+// stops: stopping at the server row is the order that deadlocks.
+func TestDetachServerClientAssociationGatesRegistrationsBeforeTheServerRow(t *testing.T) {
+	t.Parallel()
+
+	// probeTimeout bounds the gate probe, independently of goroutine scheduling.
+	const probeTimeout = 100 * time.Millisecond
+	ctx, ti := newTestServiceWithConfig(t, testServiceConfig{lockTimeout: probeTimeout})
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-gate-order")
+	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "gate-order-a")
+	otherID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "gate-order-b")
+	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-gate-order")
+	associate(t, ctx, ti.conn, orgID, projectID, serverID, clientID)
+	associate(t, ctx, ti.conn, orgID, projectID, otherID, clientID)
+
+	holder := testenv.BeginTx(t, ctx, ti.conn)
+	require.NoError(t, authclientbackfill.New(holder).LockOAuthRegistrationSyncScope(ctx, authclientbackfill.LockOAuthRegistrationSyncScopeParams{
+		OrganizationID:  orgID,
+		RegistrationIds: []uuid.UUID{clientID},
+	}))
+
+	probeErr := ti.service.DetachServerClientAssociation(ctx, &gen.DetachServerClientAssociationPayload{
+		McpServerID:           serverID.String(),
+		RemoteSessionClientID: clientID.String(),
+	})
+	testenv.RequireLockNotAvailable(t, probeErr)
+	require.ErrorContains(t, probeErr, "lock mcp server auth client scope",
+		"the registration gate is reached before the server row")
+
+	require.NoError(t, holder.Rollback(ctx))
+	require.NoError(t, ti.service.DetachServerClientAssociation(ctx, &gen.DetachServerClientAssociationPayload{
+		McpServerID:           serverID.String(),
+		RemoteSessionClientID: clientID.String(),
+	}))
+	require.Empty(t, associatedClients(t, ctx, ti.conn, projectID, serverID))
+}
+
+// injectedRetirementFailure is what refuseTypedLinkRetirement raises, so the
+// test asserts the handler reported that refusal rather than any error.
+const injectedRetirementFailure = "injected failure retiring a typed link"
+
+// refuseTypedLinkRetirement makes the typed link retirement fail inside
+// whatever transaction reaches it, by refusing updates to the link table. The
+// legacy association removal that runs before it is untouched, so the handler
+// fails between its two writes — the case both models have to survive
+// together. The database is this test's own clone, so the refusal is scoped to
+// it.
+func refuseTypedLinkRetirement(t *testing.T, ctx context.Context, conn *pgxpool.Pool) {
+	t.Helper()
+
+	//nolint:glint // notestingrawsql: injecting a write failure is schema-level DDL, which has no SQLc-generated equivalent.
+	_, err := conn.Exec(ctx, `
+CREATE FUNCTION refuse_typed_link_retirement() RETURNS trigger LANGUAGE plpgsql AS $$
+BEGIN
+  RAISE EXCEPTION '`+injectedRetirementFailure+`';
+END;
+$$;
+CREATE TRIGGER refuse_typed_link_retirement
+BEFORE UPDATE ON mcp_server_auth_clients
+FOR EACH ROW EXECUTE FUNCTION refuse_typed_link_retirement();`)
+	require.NoError(t, err)
+}
+
+// TestDetachServerClientAssociationKeepsBothModelsWhenTypedSyncFails drives
+// the handler with the typed write refused, which is the failure the shared
+// transaction exists for: the legacy association the dashboard removed has to
+// come back rather than outlive the typed records derived from it.
+func TestDetachServerClientAssociationKeepsBothModelsWhenTypedSyncFails(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-sync-fails")
+	serverID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "sync-fails-a")
+	otherID := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "sync-fails-b")
+	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-sync-fails")
+	associate(t, ctx, ti.conn, orgID, projectID, serverID, clientID)
+	associate(t, ctx, ti.conn, orgID, projectID, otherID, clientID)
+	recordTypedClients(t, ctx, ti.conn, orgID, serverID, otherID)
+
+	associatedBefore := associatedClients(t, ctx, ti.conn, projectID, serverID)
+	offeredBefore := offeredAuthClients(t, ctx, ti.conn, serverID)
+	require.NotEmpty(t, associatedBefore)
+	require.NotEmpty(t, offeredBefore, "the server offers a typed client the sync would retire")
+
+	refuseTypedLinkRetirement(t, ctx, ti.conn)
+
+	err := ti.service.DetachServerClientAssociation(ctx, &gen.DetachServerClientAssociationPayload{
+		McpServerID:           serverID.String(),
+		RemoteSessionClientID: clientID.String(),
+	})
+	// ShareableError.Error stops at its public message, so the refusal is
+	// identified by the PostgreSQL error it wraps rather than by that text.
+	var pgErr *pgconn.PgError
+	require.ErrorAs(t, err, &pgErr,
+		"the handler reports the refused typed write rather than committing half of it")
+	require.Equal(t, injectedRetirementFailure, pgErr.Message,
+		"the refusal reported is the injected one, not some other failure")
+
+	require.Equal(t, associatedBefore, associatedClients(t, ctx, ti.conn, projectID, serverID),
+		"the legacy association is still there because the typed write failed")
+	require.Equal(t, offeredBefore, offeredAuthClients(t, ctx, ti.conn, serverID),
+		"the typed link is still there with it")
+}
+
+// TestLegacyRemovalAndTypedSyncRollBackTogether proves the two writes are
+// mutually revertible: the legacy association removal and the typed link
+// retirement share one transaction, so a failure after either leaves both
+// models as they were. It drives the pair directly and abandons the
+// transaction, which is what any error between them does to the handler that
+// owns it.
+func TestLegacyRemovalAndTypedSyncRollBackTogether(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	require.NotNil(t, authCtx.ProjectID)
+	projectID := *authCtx.ProjectID
+	orgID := authCtx.ActiveOrganizationID
+
+	userIssuerID := createUserSessionIssuerInProject(t, ctx, ti.conn, projectID, "usi-atomic")
+	first := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "atomic-a")
+	second := seedServerOnIssuer(t, ctx, ti.conn, projectID, userIssuerID, "atomic-b")
+	clientID, _ := seedActiveClient(t, ctx, ti.conn, projectID, userIssuerID, orgID, "rsi-atomic")
+	associate(t, ctx, ti.conn, orgID, projectID, first, clientID)
+	associate(t, ctx, ti.conn, orgID, projectID, second, clientID)
+	recordTypedClients(t, ctx, ti.conn, orgID, first, second)
+
+	associatedBefore := associatedClients(t, ctx, ti.conn, projectID, first)
+	offeredBefore := offeredAuthClients(t, ctx, ti.conn, first)
+	require.NotEmpty(t, associatedBefore)
+	require.NotEmpty(t, offeredBefore)
+
+	tx := testenv.BeginTx(t, ctx, ti.conn)
+	removed, err := upstreamclientsrepo.New(tx).DetachMCPServerRemoteSessionClient(ctx, upstreamclientsrepo.DetachMCPServerRemoteSessionClientParams{
+		McpServerID:           first,
+		RemoteSessionClientID: clientID,
+		ProjectID:             projectID,
+	})
+	require.NoError(t, err)
+	require.Equal(t, int64(1), removed)
+	require.NoError(t, authclientbackfill.SyncServerAssociations(ctx, tx, orgID, first))
+
+	// Both writes are visible inside the transaction, so the rollback below is
+	// reverting real work rather than passing on a sync that did nothing.
+	inFlight, err := authclientbackfill.New(tx).ListServerAuthClientsFixture(ctx, first)
+	require.NoError(t, err)
+	require.Empty(t, inFlight, "the link is retired inside the transaction")
+
+	// Whatever fails after this point — the audit write, the commit — takes
+	// both writes with it.
+	require.NoError(t, tx.Rollback(ctx))
+
+	require.Equal(t, associatedBefore, associatedClients(t, ctx, ti.conn, projectID, first),
+		"the legacy association is restored by the rollback")
+	require.Equal(t, offeredBefore, offeredAuthClients(t, ctx, ti.conn, first),
+		"the typed link is restored by the same rollback")
 }

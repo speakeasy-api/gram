@@ -116,7 +116,7 @@ function IdentityDetailContent(): JSX.Element {
   const recentsUserId = useRecentsUserId(agentUnavailable);
   const { orgSlug, projectSlug } = useSlugs();
   const resourceHref = encodedUrn
-    ? routes.identities.href(encodedUrn)
+    ? routes.identities.detail.href(encodedUrn)
     : undefined;
   useEffect(() => {
     if (!agentUnavailable || !recentsUserId || !resourceHref) return;

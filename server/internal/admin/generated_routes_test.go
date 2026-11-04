@@ -37,6 +37,7 @@ func TestGeneratedAdminRoutes_ExposeExactMigratedMounts(t *testing.T) {
 		"ListGlobalIssuers":                     "GET /admin/remote-session-issuers.list",
 		"GetSession":                            "GET /admin/session.get",
 		"GetOrganizationFeatures":               "GET /admin/organization.features",
+		"SetOrganizationProviderSetup":          "POST /admin/organization.providerSetup",
 		"SetOrganizationFeature":                "POST /admin/organization.features",
 		"GetOrganizationChatAnalysisSettings":   "GET /admin/organization.chatAnalysisSettings",
 		"SetOrganizationChatAnalysisSettings":   "POST /admin/organization.chatAnalysisSettings",
@@ -107,6 +108,7 @@ func TestGeneratedAdminRoutes_AuthenticateBeforeDecode(t *testing.T) {
 	for name, request := range map[string]*http.Request{
 		"session":                           httptest.NewRequest(http.MethodGet, "/admin/session.get", nil),
 		"features get":                      httptest.NewRequest(http.MethodGet, "/admin/organization.features", nil),
+		"provider setup":                    httptest.NewRequest(http.MethodPost, "/admin/organization.providerSetup", bytes.NewBufferString(`{`)),
 		"features set":                      httptest.NewRequest(http.MethodPost, "/admin/organization.features", bytes.NewBufferString(`{`)),
 		"settings get":                      httptest.NewRequest(http.MethodGet, "/admin/organization.chatAnalysisSettings", nil),
 		"settings set":                      httptest.NewRequest(http.MethodPost, "/admin/organization.chatAnalysisSettings", bytes.NewBufferString(`{`)),

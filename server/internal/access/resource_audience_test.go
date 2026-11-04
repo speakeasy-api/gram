@@ -1177,9 +1177,8 @@ func TestService_SetResourceAudience_AgentRestrictionOverridesBroadAllow(t *test
 		})
 		require.NoError(t, err)
 	}
-	var beforeSession, afterSession string
-	//nolint:glint // notestingrawsql: capture the shared credential without logging it
-	err = ti.conn.QueryRow(ctx, `SELECT row_to_json(s)::text FROM remote_sessions s WHERE id = $1`, sessionID).Scan(&beforeSession)
+	// Capture the shared credential without logging it.
+	beforeSession, err := accessrepo.New(ti.conn).GetRemoteSessionRowDigestFixture(ctx, sessionID)
 	require.NoError(t, err)
 	_, err = ti.service.SetResourceAudience(ctx, &gen.SetResourceAudiencePayload{
 		ResourceKind: "mcp", ResourceID: serverID,
@@ -1195,8 +1194,8 @@ func TestService_SetResourceAudience_AgentRestrictionOverridesBroadAllow(t *test
 	allowed, err = authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeMCPConnect, ResourceID: otherServerID})
 	require.NoError(t, err)
 	require.True(t, allowed)
-	//nolint:glint // notestingrawsql: prove server-local policy removal leaves shared upstream authority intact
-	err = ti.conn.QueryRow(ctx, `SELECT row_to_json(s)::text FROM remote_sessions s WHERE id = $1`, sessionID).Scan(&afterSession)
+	// Server-local policy removal leaves shared upstream authority intact.
+	afterSession, err := accessrepo.New(ti.conn).GetRemoteSessionRowDigestFixture(ctx, sessionID)
 	require.NoError(t, err)
 	require.Equal(t, beforeSession, afterSession, "shared upstream session must be unchanged")
 }
