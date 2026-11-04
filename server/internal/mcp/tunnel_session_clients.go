@@ -6,6 +6,7 @@ import (
 	"errors"
 	"fmt"
 	"log/slog"
+	"strings"
 	"sync/atomic"
 	"time"
 
@@ -97,7 +98,11 @@ func (c *tunnelClientFamilies) remembered(ctx context.Context, logger *slog.Logg
 		// recorded, or a client that reported neither a name nor a protocol
 		// version.
 	case err != nil:
-		logger.WarnContext(ctx, "failed to load mcp session client info", attr.SlogError(err))
+		message := "failed to load mcp session client info"
+		if strings.HasPrefix(scope, tunnelClientInfoScopePrefix) {
+			message = "failed to load tunneled mcp session client info"
+		}
+		logger.WarnContext(ctx, message, attr.SlogError(err))
 		return rememberedClient{family: "", name: "", version: ""}, fmt.Errorf("load session client info: %w", err)
 	}
 	client := rememberedClient{family: reportedClientFamily(info.Name), name: info.Name, version: info.Version}

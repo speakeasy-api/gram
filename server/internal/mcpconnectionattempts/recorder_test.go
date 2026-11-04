@@ -1071,3 +1071,49 @@ func TestRecord_APanicNeverReachesTheRequest(t *testing.T) {
 
 	require.Equal(t, int64(1), recorder.dropped(t, dropPanic))
 }
+
+func TestShutdownAndWait_CancelsIOAndDiscardsBacklog(t *testing.T) {
+	t.Parallel()
+	for _, blocked := range []string{"logs", "insert"} {
+		t.Run(blocked, func(t *testing.T) {
+			t.Parallel()
+			cfg := testConfig()
+			cfg.maxBatch = 1
+			cfg.logsCheckTimeout = time.Minute
+			cfg.insertTimeout = time.Minute
+			conn := &scriptedConn{Conn: nil, block: nil, err: nil, prepares: atomic.Int64{}}
+			check := &logsCheck{enabled: true, err: nil, block: nil, panics: false, checks: atomic.Int64{}}
+			if blocked == "logs" {
+				check.block = make(chan struct{})
+			} else {
+				conn.block = make(chan struct{})
+			}
+			r := newTestRecorderWithLogs(t, conn, check.check, cfg)
+			for i := range 30 {
+				scope := testScope()
+				scope.organizationID = fmt.Sprintf("org-drain-%d", i)
+				r.Step(t.Context(), Begin(scope), StepInboundAuthorize, ResultAccepted)
+			}
+			require.Eventually(t, func() bool {
+				if blocked == "logs" {
+					return check.checks.Load() > 0
+				}
+				return conn.prepares.Load() > 0
+			}, time.Second, time.Millisecond)
+			ctx, cancel := context.WithTimeout(t.Context(), 20*time.Millisecond)
+			defer cancel()
+			started := time.Now()
+			require.ErrorIs(t, r.ShutdownAndWait(ctx), context.DeadlineExceeded)
+			require.Less(t, time.Since(started), 3*time.Second)
+			select {
+			case <-r.done:
+			default:
+				t.Fatal("writer still running after shutdown")
+			}
+			require.Zero(t, r.unfinished.Load())
+			require.Zero(t, len(r.queue))
+			require.LessOrEqual(t, conn.prepares.Load(), int64(1))
+			require.LessOrEqual(t, check.checks.Load(), int64(1))
+		})
+	}
+}

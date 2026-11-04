@@ -596,18 +596,23 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 	p, err = s.loadProvider(ctx, b.OrganizationID, b.IssuerID, b.ClientID)
 	if err != nil {
 		if definitiveDelegationFailure(err) {
+			s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 			return Assertion{}, ErrConfiguration
 		}
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalRetryable)
 		return Assertion{}, ErrTemporary
 	}
 	if p == nil {
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 		return Assertion{}, ErrConfiguration
 	}
 	if p.DelegationConfigurationHash() != c.config {
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeReauthenticationRequired)
 		return Assertion{}, ErrStaleRegistration
 	}
 	refresh, subject, nonce, err := s.refreshSecrets(c)
 	if err != nil {
+		s.recordRenewal(ctx, b, mcpconnectionattempts.CodeRenewalMisconfigured)
 		return Assertion{}, err
 	}
 	marked, err := s.store.markRefreshAttempt(ctx, b, c.generation, claim, s.now())

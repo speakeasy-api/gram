@@ -197,7 +197,7 @@ func TestStaleNoAuthChoiceReconnectsThroughConsent(t *testing.T) {
 
 					registration := g.attachSignIn(t, ctx, typed)
 					before := g.source.requests.Load()
-					requireStaleError(t, g.call(t, connection.token, "source--tool_000"), `Server \"source\"'s `+staleReconnectCopy)
+					requireStaleError(t, g.call(t, connection.token, "source--tool_000"), `This server's `+staleReconnectCopy)
 					require.Equal(t, before, g.source.requests.Load(), "refused before any upstream request")
 
 					requireExecuted(t, g.call(t, connection.token, "other--tool_000"))

@@ -93,8 +93,15 @@ func directConnectionOptions(ctx context.Context, r *http.Request, organizationI
 	})}
 }
 
-// callerSubject is the signed-in user of an authenticated request, when there is one.
+// callerSubject preserves the authenticated actor, not the human authorizing an agent.
 func callerSubject(ctx context.Context) mcpconnectionattempts.Option {
+	if actor, ok := contextvalues.AuthenticatedActor(ctx); ok {
+		subject, err := urn.ParseSessionSubject(actor.String())
+		if err == nil {
+			return mcpconnectionattempts.Subject(&subject)
+		}
+		return mcpconnectionattempts.Subject(nil)
+	}
 	authCtx, ok := contextvalues.GetAuthContext(ctx)
 	if !ok || authCtx == nil || authCtx.UserID == "" {
 		return mcpconnectionattempts.Subject(nil)

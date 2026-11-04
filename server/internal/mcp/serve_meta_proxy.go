@@ -161,7 +161,10 @@ type memberDial struct {
 }
 
 func serverHeadersHaveCredential(headers []remotemcp_repo.RemoteMcpServerHeader) bool {
-	return slices.ContainsFunc(headers, func(header remotemcp_repo.RemoteMcpServerHeader) bool { return header.Value.String != "" })
+	return slices.ContainsFunc(headers, func(header remotemcp_repo.RemoteMcpServerHeader) bool {
+		return header.Value.String != "" && header.ValueFromRequestHeader.String == "" &&
+			proxy.IsCredentialHeader(header.Name, header.IsSecret, false)
+	})
 }
 
 func (d memberDial) upstreamCredential() remotemcp.UpstreamCredential {
@@ -554,8 +557,8 @@ func (s *Service) executeProxiedMemberTool(
 			}
 			s.recordMemberFailure(ctx, gate, member, code)
 		}
-		if memberErr, ok := errors.AsType[*metaMemberError](err); ok {
-			return marshalMetaMemberFailure(ctx, logger, req.ID, err, memberErr.message)
+		if _, ok := errors.AsType[*metaMemberError](err); ok {
+			return marshalMetaMemberFailure(ctx, logger, req.ID, err, s.memberFailureMessage(ctx, logger, gate, member, err))
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "dial meta MCP member").LogError(ctx, logger)
 	}

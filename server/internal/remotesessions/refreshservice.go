@@ -543,7 +543,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 	s.issuerMetadata.NoteUse(ctx, issuerUseFromClientRow(client))
 
 	if trigger != remotesessionmetrics.RefreshTriggerRequest {
-		return s.refreshNow(ctx, q, client, sess, callerResource, trigger, attribution)
+		return s.refreshNowSafely(ctx, q, client, sess, callerResource, trigger, attribution)
 	}
 
 	type refreshed struct {
@@ -552,17 +552,7 @@ func (s *RefreshService) RefreshNow(ctx context.Context, sess remotesessions_rep
 	}
 	done := make(chan refreshed, 1)
 	s.refreshes.Go(func() {
-		// Off the handler goroutine, so the HTTP recovery middleware cannot catch this.
-		defer func() {
-			if recovered := recover(); recovered != nil {
-				err := fmt.Errorf("remote session refresh panicked: %v", recovered)
-				s.logger.ErrorContext(ctx, "remote session refresh panicked", attr.SlogError(err))
-				s.metrics.Record(ctx, client.IssuerUrl, trigger, remotesessionmetrics.RefreshOutcomeInternalError)
-				s.recordRefresh(ctx, attribution, sess, client, trigger, remotesessionmetrics.RefreshOutcomeInternalError, err)
-				done <- refreshed{result: zero, err: &RefreshError{IssuerURL: client.IssuerUrl, Outcome: remotesessionmetrics.RefreshOutcomeInternalError, retryAfter: 0, outageKind: RefreshOutageNone, err: err}}
-			}
-		}()
-		result, err := s.refreshNow(ctx, q, client, sess, callerResource, trigger, attribution)
+		result, err := s.refreshNowSafely(ctx, q, client, sess, callerResource, trigger, attribution)
 		var refreshErr *RefreshError
 		if ctx.Err() != nil && errors.As(err, &refreshErr) && refreshErr.Outcome != remotesessionmetrics.RefreshOutcomeCanceled {
 			// The caller that would have logged this has gone. A cancel before the POST is routine.
@@ -595,6 +585,20 @@ func (s *RefreshService) DrainRefreshes(ctx context.Context) error {
 	case <-ctx.Done():
 		return fmt.Errorf("wait for refreshes: %w", ctx.Err())
 	}
+}
+
+// refreshNowSafely applies the same recovery boundary to every trigger.
+func (s *RefreshService) refreshNowSafely(ctx context.Context, q *remotesessions_repo.Queries, client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow, sess remotesessions_repo.RemoteSession, callerResource string, trigger remotesessionmetrics.RefreshTrigger, attribution RefreshAttribution) (result RefreshResult, err error) {
+	defer func() {
+		if recovered := recover(); recovered != nil {
+			cause := fmt.Errorf("remote session refresh panicked: %v", recovered)
+			s.logger.ErrorContext(ctx, "remote session refresh panicked", attr.SlogError(cause))
+			s.metrics.Record(ctx, client.IssuerUrl, trigger, remotesessionmetrics.RefreshOutcomeInternalError)
+			s.recordRefresh(ctx, attribution, sess, client, trigger, remotesessionmetrics.RefreshOutcomeInternalError, cause)
+			err = &RefreshError{IssuerURL: client.IssuerUrl, Outcome: remotesessionmetrics.RefreshOutcomeInternalError, retryAfter: 0, outageKind: RefreshOutageNone, err: cause}
+		}
+	}()
+	return s.refreshNow(ctx, q, client, sess, callerResource, trigger, attribution)
 }
 
 // refreshNow is RefreshNow's body, on whichever goroutine the trigger requires.

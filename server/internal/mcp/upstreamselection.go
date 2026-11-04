@@ -35,7 +35,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
-	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
@@ -837,7 +836,7 @@ func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember,
 		return
 	}
 	if err != nil {
-		member.upstreamUnavailable = memberDiscoveryError{metaMemberError: &metaMemberError{message: connectionNotCheckedMessage(member.slug)}, status: 0, retryable: false, retryAfter: 0}
+		member.upstreamUnavailable = memberDiscoveryError{metaMemberError: &metaMemberError{message: connectionNotCheckedMessage}, status: 0, retryable: false, retryAfter: 0}
 		return
 	}
 	switch res.outcome {
@@ -866,9 +865,7 @@ func staleNoAuthReason(res authClientResolution, err error) (string, bool) {
 }
 
 // connectionNotCheckedMessage is for a failed lookup, which nothing keeps: a retry looks again.
-func connectionNotCheckedMessage(slug string) string {
-	return fmt.Sprintf("Server %q's connection could not be checked. Try again in a few minutes.", slug)
-}
+const connectionNotCheckedMessage = "This server's connection could not be checked. Try again in a few minutes."
 
 // staleChoiceMessage says who can fix a stale choice, and whether reconnecting does.
 // Keep this guidance fixed: Code Mode carries the untrusted slug separately in FailedMember.Server.
@@ -887,7 +884,7 @@ func (s *Service) staleChoiceMessage(ctx context.Context, logger *slog.Logger, g
 	switch {
 	case err != nil:
 		logger.WarnContext(ctx, "check whether consent can replace a stale choice", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
-		return "This server's connection could not be checked. Try again in a few minutes.", false
+		return connectionNotCheckedMessage, false
 	case fixable:
 		return "This server's sign-in setup changed. Reconnect this gateway in your AI app and approve the new connection.", true
 	}
@@ -1146,7 +1143,7 @@ func memberNeedsSignIn(member metaMember) bool {
 // up with a credential for through that credential, where typed auth client
 // resolution is enforced. It is nil for any other caller, before enforcement,
 // and for a key with no choices, so the gateway keeps its path.
-func (s *Service) agentKeyMemberChoices(ctx context.Context, organizationID string, agentID uuid.UUID, scope mcpconnectionattempts.Scope) (*memberChoices, error) {
+func (s *Service) agentKeyMemberChoices(ctx context.Context, organizationID string, agentID uuid.UUID, attribution remotesessions.RefreshAttribution) (*memberChoices, error) {
 	mode, byKey := contextvalues.APIKeyAuthorization(ctx)
 	authCtx, hasAuth := contextvalues.GetAuthContext(ctx)
 	if !byKey || mode != contextvalues.APIKeyAuthorizationModePrincipal || !hasAuth || authCtx == nil || authCtx.ActiveOrganizationID != organizationID {
@@ -1199,7 +1196,7 @@ func (s *Service) agentKeyMemberChoices(ctx context.Context, organizationID stri
 				OrganizationID:            organizationID,
 				UserSessionIssuerID:       issuerID,
 			}
-			tokens, err := s.resolveChosenMemberTokens(ctx, remotesessions.RefreshIn(scope), endpoint, subject, true, member)
+			tokens, err := s.resolveChosenMemberTokens(ctx, attribution, endpoint, subject, true, member)
 			if err != nil {
 				return nil, err
 			}
