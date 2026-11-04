@@ -510,7 +510,7 @@ The fourth readability follow-up Tiago approved on 2026-11-04, and the first own
 
 ## Service helpers return the project instead of taking an operation adapter (AIS-880)
 
-Raised by Tiago on 2026-11-04: seven service helpers (skills, telemetry, signals authoring, dashboards, widgets, triggers, assistant memories) took `operation func(authz.ProjectRef) authz.Operation`, so callers passed method values such as `authz.ProjectRef.Read`. That was the migration's way to keep the helper building the project from the auth context. Each helper now returns the project (`project, authCtx, err := s.project(ctx)`) and the call site writes the check itself (`s.authz.Require(ctx, project.Read())`), so the operation a handler needs is visible where it is asked, and found from autocomplete on the `ProjectRef`. Tiago chose to do this now rather than wait for the context-derived sweep.
+Raised by Tiago on 2026-11-04: seven service helpers (skills, telemetry, signals authoring, dashboards, widgets, triggers, assistant memories) took `operation func(authz.ProjectRef) authz.Operation`, so callers passed method values such as `authz.ProjectRef.Read`. That was the migration's way to keep the helper building the project from the auth context. Six of them now return the project (`project, authCtx, err := s.project(ctx)`) and the call site writes the check itself (`s.authz.Require(ctx, project.Read())`), so the operation a handler needs is visible where it is asked, and found from autocomplete on the `ProjectRef`. Signals authoring is the exception (decision 2): `authoringState(ctx, tx, write bool)` picks the operation inside the authoring transaction. Tiago chose to do this now rather than wait for the context-derived sweep.
 
 ### Decided without reviewer input
 
