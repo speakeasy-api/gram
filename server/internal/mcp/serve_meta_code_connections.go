@@ -143,7 +143,7 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 		instructions = "Open authorization_url to connect this service, then review and approve the refreshed gateway tools. Then start a fresh execution and check access; do not replay an earlier program."
 	} else if needsConsent {
 		reason = "consent_required"
-		instructions = "Open authorization_url to connect the upstream service. Then reconnect this gateway in your MCP client and approve this server. Browser sign-in alone does not renew the client's catalogue consent. Start a fresh execution after reconnecting; do not replay an earlier program."
+		instructions = "Open authorization_url to connect the upstream service. Then reconnect this gateway in your AI app and approve this server. Browser sign-in alone does not renew the client's catalogue consent. Start a fresh execution after reconnecting; do not replay an earlier program."
 	}
 	action := &codemode.ConnectionAction{Server: server, Status: "authorization_required", Reason: reason, AuthorizationURL: link.String(), ExpiresAt: &expires, ClientReconnectRequired: needsConsent && ticket.CodeReconnect.CatalogID == uuid.Nil, Instructions: instructions}
 	if b.connections.actions == nil {

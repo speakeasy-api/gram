@@ -496,7 +496,7 @@ func TestStaleNoAuthCodeModeReachesTheProgram(t *testing.T) {
 						require.NoError(t, connectErr)
 						// A cached catalog binds to in-browser review; a live one needs a client reconnect.
 						require.Equal(t, mode == toolfilter.CatalogModeLive, action.ClientReconnectRequired)
-						require.Contains(t, action.Instructions, map[bool]string{true: "reconnect this gateway in your MCP client", false: "review and approve the refreshed gateway tools"}[mode == toolfilter.CatalogModeLive])
+						require.Contains(t, action.Instructions, map[bool]string{true: "reconnect this gateway in your AI app", false: "review and approve the refreshed gateway tools"}[mode == toolfilter.CatalogModeLive])
 					} else {
 						action, connectErr := host.Connect(runCtx, "source")
 						require.Nil(t, action)

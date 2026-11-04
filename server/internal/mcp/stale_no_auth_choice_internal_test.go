@@ -49,9 +49,6 @@ func TestStaleNoAuthClassification(t *testing.T) {
 	require.False(t, new(gapResolution(authClientReasonMissingChoice)).staleNoAuth())
 }
 
-//go:fix inline
-func ptr[T any](v T) *T { return new(v) }
-
 func TestStaleChoiceErrorChain(t *testing.T) {
 	t.Parallel()
 	s := &Service{}
