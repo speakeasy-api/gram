@@ -171,13 +171,13 @@ export function selectedHookSources(activeFilters: FilterChip[]): string[] {
 }
 
 /**
- * Whether the selection is the view's default. A view scoped to one identity
- * defaults to every type, so pass its defaults rather than relying on the
- * page-wide ones.
+ * Whether the selection is the view's default. Views default differently (one
+ * scoped to an identity starts from every type), so each passes its own
+ * defaults: the page-wide `TOOL_USAGE_DEFAULT_TYPES` or a scoped list.
  */
 export function isDefaultToolUsageTypeSelection(
   selectedTypes: ObserveTypeFilterValue[],
-  defaultTypes: ObserveTypeFilterValue[] = TOOL_USAGE_DEFAULT_TYPES,
+  defaultTypes: ObserveTypeFilterValue[],
 ): boolean {
   return (
     selectedTypes.length === defaultTypes.length &&

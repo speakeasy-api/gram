@@ -184,13 +184,19 @@ describe("scopedToolUsageDefaultTypes", () => {
 });
 
 describe("isDefaultToolUsageTypeSelection", () => {
-  it("compares against the page-wide defaults when none are given", () => {
-    expect(isDefaultToolUsageTypeSelection([...TOOL_USAGE_DEFAULT_TYPES])).toBe(
-      true,
-    );
-    expect(isDefaultToolUsageTypeSelection([...TOOL_USAGE_VALID_TYPES])).toBe(
-      false,
-    );
+  it("compares against the page-wide defaults", () => {
+    expect(
+      isDefaultToolUsageTypeSelection(
+        [...TOOL_USAGE_DEFAULT_TYPES],
+        TOOL_USAGE_DEFAULT_TYPES,
+      ),
+    ).toBe(true);
+    expect(
+      isDefaultToolUsageTypeSelection(
+        [...TOOL_USAGE_VALID_TYPES],
+        TOOL_USAGE_DEFAULT_TYPES,
+      ),
+    ).toBe(false);
   });
 
   it("compares against the defaults the view passes", () => {
