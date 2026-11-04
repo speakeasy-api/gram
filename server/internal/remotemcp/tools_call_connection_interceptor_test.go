@@ -159,7 +159,7 @@ func TestUpstreamFailureHappened(t *testing.T) {
 		wire.TunnelErrorNoLiveSession:         mcpconnectionattempts.CodeTunnelUnavailable,
 		wire.TunnelErrorSubstreamFailed:       mcpconnectionattempts.CodeTunnelUnavailable,
 		wire.TunnelErrorNoRoute:               mcpconnectionattempts.CodeTunnelUnavailable,
-		wire.TunnelErrorTunnelBusy:            mcpconnectionattempts.CodeTunnelUnavailable,
+		wire.TunnelErrorTunnelBusy:            mcpconnectionattempts.CodeTunnelAtCapacity,
 		wire.TunnelErrorRouteLookupFailed:     mcpconnectionattempts.CodeInternalError,
 		wire.TunnelErrorRouteStoreUnavailable: mcpconnectionattempts.CodeInternalError,
 	} {
@@ -300,4 +300,55 @@ func TestRefusalHappened(t *testing.T) {
 
 	_, ok := refusalHappened(&proxy.ToolResultError{Message: "needs approval"})
 	require.False(t, ok, "a call held for approval is not an end state")
+}
+
+func TestToolsCallConnections_PreSendFailures(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name, target string
+		headers      []proxy.ConfiguredHeader
+		want         mcpconnectionattempts.Code
+	}{
+		{name: "missing caller header", target: "https://provider.example.com/mcp", headers: []proxy.ConfiguredHeader{{Name: "X-Tenant", ValueFromRequestHeader: "X-Tenant", IsRequired: true}}, want: mcpconnectionattempts.CodeInvalidRequest},
+		{name: "invalid target", target: "http://provider.example.com/mcp", want: mcpconnectionattempts.CodeCredentialMisconfigured},
+		{name: "build failure", target: "://invalid", want: mcpconnectionattempts.CodeInternalError},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			rec := mcpconnectionattemptstest.New(t)
+			connections := recordingConnections(rec, "token")
+			p := newKillswitchTestProxy(t, tc.target, NewToolsCallKillswitchInterceptor(continueCheckpoint(), "org", "server", testenv.NewLogger(t)))
+			p.Identity.RemoteMCPServerID = "server"
+			p.Headers = tc.headers
+			p.ToolsCallFailureInterceptors = connections.withFailures(nil)
+			req := httptest.NewRequestWithContext(t.Context(), http.MethodPost, "/mcp/server", strings.NewReader(connectionToolsCall))
+			req.Header.Set("Content-Type", "application/json")
+			req.Header.Set("Accept", "application/json, text/event-stream")
+			err := p.Post(httptest.NewRecorder(), req)
+			require.Error(t, err)
+			rec.RequireEnded(mcpconnectionattempts.StepMCPRequest, tc.want)
+		})
+	}
+}
+func TestToolsCallConnections_TunnelCapacityAndCheck(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct{ header, reason, who string }{
+		{wire.TunnelErrorTunnelBusy, "tunnel_at_capacity", "admin"},
+		{wire.TunnelErrorActiveCheckFailed, "internal_error", "speakeasy"},
+	} {
+		t.Run(tc.header, func(t *testing.T) {
+			t.Parallel()
+			rec := mcpconnectionattemptstest.New(t)
+			c := recordingConnections(rec, "token")
+			c.tunneled = true
+			serveToolsCall(t.Context(), t, c, func(w http.ResponseWriter, _ *http.Request) {
+				w.Header().Set(tunnelrouting.ErrorHeader, tc.header)
+				w.WriteHeader(http.StatusBadGateway)
+			}, continueCheckpoint())
+			rows := rec.Rows()
+			require.Len(t, rows, 1)
+			require.Equal(t, tc.reason, rows[0].Reason)
+			require.Equal(t, tc.who, rows[0].WhoFixes)
+		})
+	}
 }
