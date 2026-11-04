@@ -4,18 +4,18 @@ import { ToolCollectionBadge } from "@/components/tool-collection-badge";
 import { DotRow } from "@/components/ui/DotRow";
 import { Text } from "@/components/ui/Text";
 import { Badge } from "@/components/ui/Badge";
-import { Button } from "@/components/ui/Button";
-import { Plus } from "lucide-react";
 import { useMemo } from "react";
+import type { CatalogInstallState } from "./catalogInstall";
 import type { PulseMCPServer } from "./hooks";
 import { parseServerMetadata } from "./hooks/serverMetadata";
 import { ManualSetupBadge } from "./ManualSetupBadge";
+import { CatalogInstallButton } from "./ServerCard";
 
 interface ServerTableRowProps {
   server: PulseMCPServer;
   detailHref: string;
-  /** Whether this catalog server is already installed in the project. */
-  isAdded: boolean;
+  /** Unknown while install lookups are loading or failed, so the row does not flash Add. */
+  installState: CatalogInstallState;
   /** Starts the install flow for this one server. */
   onAdd: () => void;
 }
@@ -23,7 +23,7 @@ interface ServerTableRowProps {
 export function ServerTableRow({
   server,
   detailHref,
-  isAdded,
+  installState,
   onAdd,
 }: ServerTableRowProps): JSX.Element {
   const metadata = useMemo(() => parseServerMetadata(server), [server]);
@@ -67,7 +67,7 @@ export function ServerTableRow({
           >
             {displayName}
           </Text>
-          {isAdded && (
+          {installState === "added" && (
             <Badge variant="success">
               <Badge.Text>Added</Badge.Text>
             </Badge>
@@ -106,20 +106,12 @@ export function ServerTableRow({
       {/* Add — sits above the row's stretched link overlay so it stays
           clickable without navigating. */}
       <td className="relative z-20 px-3 py-3">
-        <Button
-          variant={isAdded ? "secondary" : "primary"}
-          size="sm"
-          onClick={(e) => {
-            e.preventDefault();
-            e.stopPropagation();
-            onAdd();
-          }}
-        >
-          <Button.LeftIcon>
-            <Plus className="h-3.5 w-3.5" />
-          </Button.LeftIcon>
-          <Button.Text>{isAdded ? "Add again" : "Add"}</Button.Text>
-        </Button>
+        <CatalogInstallButton
+          state={installState}
+          onAdd={onAdd}
+          iconClassName="h-3.5 w-3.5"
+          stopNavigation
+        />
       </td>
     </DotRow>
   );

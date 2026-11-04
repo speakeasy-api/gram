@@ -591,6 +591,50 @@ func TestUpdateRemoteSessionClient(t *testing.T) {
 	require.Equal(t, beforeCount+1, afterCount)
 }
 
+func TestUpdateRemoteSessionClient_Audience(t *testing.T) {
+	t.Parallel()
+
+	for _, clearAudience := range []bool{false, true} {
+		name := "omitted preserves existing"
+		if clearAudience {
+			name = "empty clears to null"
+		}
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+			ctx, ti := newTestService(t)
+			issuerID := createRemoteIssuer(t, ctx, ti, "rsc-audience", "")
+			userIssuerID := createUserSessionIssuer(t, ctx, ti.conn, "usi-audience").String()
+			audience := "https://api.example.com"
+			created, err := ti.service.CreateRemoteSessionClient(ctx, &clientsgen.CreateRemoteSessionClientPayload{
+				RemoteSessionIssuerID: issuerID,
+				UserSessionIssuerIds:  []string{userIssuerID},
+				ClientID:              "audience-client",
+				Audience:              &audience,
+			})
+			require.NoError(t, err)
+			require.Equal(t, &audience, created.Audience)
+
+			payload := &clientsgen.UpdateRemoteSessionClientPayload{ID: created.ID}
+			if clearAudience {
+				empty := ""
+				payload.Audience = &empty
+			}
+			updated, err := ti.service.UpdateRemoteSessionClient(ctx, payload)
+			require.NoError(t, err)
+
+			stored, err := repo.New(ti.conn).GetRemoteSessionClientWithIssuerByID(ctx, uuid.MustParse(created.ID))
+			require.NoError(t, err)
+			if clearAudience {
+				require.False(t, stored.ClientAudience.Valid, "cleared audience must be SQL NULL")
+				require.Nil(t, updated.Audience)
+			} else {
+				require.Equal(t, pgtype.Text{String: audience, Valid: true}, stored.ClientAudience)
+				require.Equal(t, &audience, updated.Audience)
+			}
+		})
+	}
+}
+
 func TestUpdateRemoteSessionClient_LegacyCallbackURLRequiresPlatformAdmin(t *testing.T) {
 	t.Parallel()
 

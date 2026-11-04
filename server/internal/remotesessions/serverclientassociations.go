@@ -113,6 +113,13 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
 		return oops.E(oops.CodeUnexpected, err, "lock association writer scope").LogError(ctx, logger)
 	}
+	// The typed synchronization below gates the registrations this server
+	// reaches. Taking those gates before the server row, rather than when the
+	// synchronization asks for them, keeps this in step with the paths that
+	// reach the same gates without holding a server row.
+	if err := authclientbackfill.PreflightServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, serverID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "lock mcp server auth client scope").LogError(ctx, logger)
+	}
 
 	// The server lock serializes this with identity commits and server
 	// updates, which change the bindings the sole-consumer check reads.
@@ -167,10 +174,15 @@ func (s *Service) DetachServerClientAssociation(ctx context.Context, payload *ge
 		return oops.E(oops.CodeUnexpected, err, "detach MCP server client association").LogError(ctx, logger)
 	}
 
-	// The client may now reach one source alone, so the credential headers it
+	// The association is what the server's link to its typed auth client was
+	// derived from, so deciding again here keeps the two models in step: the
+	// link goes with the association, and the credential headers the client
 	// copied from the source this server sat on are no longer its to send.
-	if err := authclientbackfill.SyncServerDerivedCopies(ctx, dbtx, authCtx.ActiveOrganizationID, serverID); err != nil {
-		return oops.E(oops.CodeUnexpected, err, "sync mcp server auth client headers").LogError(ctx, logger)
+	// The client row itself is left alone — only the offline backfill retires
+	// one no server reaches. Deciding from the same evidence is how a repeated
+	// detach stays a no-op.
+	if err := authclientbackfill.SyncServerAssociations(ctx, dbtx, authCtx.ActiveOrganizationID, serverID); err != nil {
+		return oops.E(oops.CodeUnexpected, err, "sync mcp server auth clients").LogError(ctx, logger)
 	}
 
 	if err := s.auditLogger.LogRemoteSessionClientDetachMcpServer(ctx, dbtx, audit.LogRemoteSessionClientDetachMcpServerEvent{

@@ -556,7 +556,7 @@ var UpdateGlobalRemoteSessionClientForm = Type("UpdateGlobalRemoteSessionClientF
 	Attribute("scope", ArrayOf(String), func() {
 		rsclients.ScopeAttribute("Replace the explicit upstream OAuth scopes for this client. Omit to leave unchanged.")
 	})
-	Attribute("audience", String, "Replace the upstream OAuth audience sent for this client. Omit to leave unchanged.", rsclients.AudienceAttribute)
+	Attribute("audience", String, "Replace the upstream OAuth audience sent for this client. Pass an empty string to clear it. Omit to leave unchanged.", rsclients.UpdateAudienceAttribute)
 
 	Required("id")
 })

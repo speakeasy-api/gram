@@ -380,6 +380,75 @@ var _ = Service("mcpServers", func() {
 		Meta("openapi:extension:x-speakeasy-name-override", "delete")
 		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "DeleteMcpServer"}`)
 	})
+
+	Method("getMcpServerUsageImpact", func() {
+		Description("Preview who a breaking change to an MCP server affects: the server's active signed-in connections and when each subject last used them. Authorizes the caller as updateMcpServer does. Only sessions issued by the server's user session issuer are counted, so servers without sign-in report sign_in_required=false and no subjects.")
+
+		Payload(func() {
+			Attribute("id", String, "The ID of the MCP server", func() {
+				Format(FormatUUID)
+			})
+			Required("id")
+			security.SessionPayload()
+			security.ByKeyPayload()
+			security.ProjectPayload()
+		})
+
+		Result(McpServerUsageImpact)
+
+		HTTP(func() {
+			GET("/rpc/mcpServers.getUsageImpact")
+			Param("id")
+			security.SessionHeader()
+			security.ByKeyHeader()
+			security.ProjectHeader()
+			Response(StatusOK)
+		})
+
+		Meta("openapi:operationId", "getMcpServerUsageImpact")
+		Meta("openapi:extension:x-speakeasy-name-override", "getUsageImpact")
+		Meta("openapi:extension:x-speakeasy-react-hook", `{"name": "McpServerUsageImpact"}`)
+	})
+})
+
+var McpServerUsageImpact = Type("McpServerUsageImpact", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("Active signed-in usage of an MCP server, for confirming a breaking change.")
+
+	Attribute("server_name", String, "The server's display name, which confirmations ask the operator to type.")
+	Attribute("sign_in_required", Boolean, "Whether the server has a user session issuer. When false nothing is counted: callers are not signed in, so their usage is unknown.")
+	Attribute("shared_sign_in", Boolean, "Whether the server's user session issuer also serves other MCP servers or gateways. Connections not bound to this server's address may then be using one of those instead.")
+	Attribute("active_connection_count", Int, "Unexpired, unrevoked sessions that can reach this server.")
+	Attribute("active_subject_count", Int, "Distinct subjects (people, API keys, agents, workloads, anonymous callers) holding those sessions.")
+	Attribute("shared_connection_count", Int, "Of active_connection_count, the sessions issued for the whole shared sign-in rather than this server's address. Always zero when shared_sign_in is false.")
+	Attribute("last_used_at", String, "Most recent use across all those sessions, accurate to within five minutes. Absent when none has a recorded use.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("subjects", ArrayOf(McpServerUsageSubject), "Subjects holding active sessions, most recently used first.")
+	Attribute("subjects_truncated", Boolean, "Whether more subjects exist than are listed.")
+
+	Required("server_name", "sign_in_required", "shared_sign_in", "active_connection_count", "active_subject_count", "shared_connection_count", "subjects", "subjects_truncated")
+})
+
+var McpServerUsageSubject = Type("McpServerUsageSubject", func() {
+	Meta("struct:pkg:path", "types")
+
+	Description("One subject's active connections to an MCP server.")
+
+	Attribute("subject_urn", String, "The subject URN (user:<id> | apikey:<uuid> | agent:<uuid> | anonymous:<id> | workload:<issuer-id>:<external-subject>).")
+	Attribute("subject_type", String, "Subject kind: 'user', 'apikey', 'agent', 'anonymous', or 'workload'.")
+	Attribute("display_name", String, "Resolved human-readable name of the subject, if known.")
+	Attribute("email", String, "Email of the subject when it is a Speakeasy user.")
+	Attribute("photo_url", String, "Avatar URL of the subject when it is a Speakeasy user with one.")
+	Attribute("connection_count", Int, "Active sessions this subject holds.")
+	Attribute("last_used_at", String, "Most recent use across this subject's sessions, accurate to within five minutes. Absent when unknown.", func() {
+		Format(FormatDateTime)
+	})
+	Attribute("client_names", ArrayOf(String), "Self-reported names of the MCP clients behind the sessions. Unverified.")
+	Attribute("shared_sign_in", Boolean, "Whether every one of this subject's sessions was issued for the whole shared sign-in rather than this server, so the subject may be using another server instead.")
+
+	Required("subject_urn", "subject_type", "connection_count", "client_names", "shared_sign_in")
 })
 
 var McpServerVisibility = Type("McpServerVisibility", String, func() {

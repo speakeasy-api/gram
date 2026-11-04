@@ -10,6 +10,7 @@ import (
 
 	"github.com/google/uuid"
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
+	"github.com/speakeasy-api/gram/server/internal/adminmcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/assets"
 	assetrepo "github.com/speakeasy-api/gram/server/internal/assets/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
@@ -163,7 +164,7 @@ func TestRegistryIconsTrustedProjection(t *testing.T) { //nolint:tparallel // Su
 		_, err = f.db.Exec(t.Context(), "UPDATE assets SET "+assignment+" WHERE id = $1", asset.ID) //nolint:glint // notestingrawsql: exercise unsafe legacy asset associations.
 		require.NoError(t, err)
 		require.False(t, registry.IsPublicCatalogIcon(t.Context(), icon))
-		_, err = f.db.Exec(t.Context(), "UPDATE assets SET content_type = 'image/svg+xml', project_id = NULL, organization_id = NULL, deleted_at = NULL WHERE id = $1", asset.ID) //nolint:glint // notestingrawsql: restore the asset fixture.
+		err = repo.New(f.db).RestorePublicCatalogIconAssetFixture(t.Context(), asset.ID)
 		require.NoError(t, err)
 	}
 	registry.WithAssetBaseURL(nil)

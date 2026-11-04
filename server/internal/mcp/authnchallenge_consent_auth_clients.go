@@ -397,7 +397,7 @@ func (s *Service) consentDirectAuthClientPick(ctx context.Context, endpoint *Res
 	picked := uuid.Nil
 	if posted != "" {
 		parsed, err := uuid.Parse(posted)
-		if err != nil {
+		if err != nil || parsed == uuid.Nil {
 			return nil, errConsentConfigurationChanged
 		}
 		picked = parsed
@@ -411,6 +411,9 @@ func (s *Service) consentDirectAuthClientPick(ctx context.Context, endpoint *Res
 	}
 	selected := auth.Selected()
 	if selected == nil {
+		if picked != uuid.Nil {
+			return nil, errConsentConfigurationChanged
+		}
 		// No upstream authentication: nothing to pick, and no card's client
 		// is recorded for the server.
 		delete(upstreamPicks, endpoint.McpServerID.UUID)

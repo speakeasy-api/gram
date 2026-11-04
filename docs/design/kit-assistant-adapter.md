@@ -159,9 +159,10 @@ Runtime-image cancellation requires authoritative terminal evidence and a flushe
 canonical projection. Connection loss or session replay alone is not evidence of
 successful cancellation.
 
-Runtime-generated context-upgrade notices for preexisting transcripts are
-unsupported by the pinned runtime (`ErrKitUpgradeNoticeUnsupported`). Do not
-import legacy history or manufacture a successful upgrade notice.
+A Kit session never receives earlier transcript. When a session that has not
+yet been prompted starts in a conversation with earlier assistant turns, the
+server adds a notice to its first prompt that earlier messages are unavailable,
+and the turn proceeds. Do not import legacy history into the session.
 
 Production GKE restore accepts only rootfs-only checkpoints and starts a fresh
 gateway process with renewed credentials. Whole-pod memory snapshots are rejected:

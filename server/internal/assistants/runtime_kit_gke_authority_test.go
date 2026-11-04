@@ -13,6 +13,8 @@ import (
 	"github.com/stretchr/testify/require"
 	metav1 "k8s.io/apimachinery/pkg/apis/meta/v1"
 	"k8s.io/apimachinery/pkg/runtime/schema"
+
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 )
 
 // The test store models the durable row independently from stale caller records.
@@ -137,7 +139,7 @@ func TestKitGKEAuthorityFailedClosePermanentlyFencesCheckpoint(t *testing.T) {
 		require.NotEqual(t, "delete", action.GetVerb())
 	}
 	_, err = k.Ensure(t.Context(), r)
-	require.ErrorContains(t, err, "not safely restorable")
+	require.ErrorIs(t, err, errKitRuntimeUnrecoverable, "an unacknowledged close is retired, not restored")
 }
 
 func TestKitGKEFakeAuthorityRequiresLifecycleTransaction(t *testing.T) {
@@ -146,4 +148,16 @@ func TestKitGKEFakeAuthorityRequiresLifecycleTransaction(t *testing.T) {
 	r := assistantRuntimeRecord{ID: uuid.New(), BackendMetadataJSON: []byte(`{}`), LifecycleTx: &kitGKEFixtureTransaction{Tx: nil}}
 	require.ErrorContains(t, store.Save(t.Context(), nil, r, []byte(`{}`), []byte(`{}`)), "requires the lifecycle transaction")
 	require.NoError(t, store.Save(t.Context(), r.LifecycleTx, r, []byte(`{}`), []byte(`{}`)))
+}
+
+func TestKeepKitLifecycleAlive(t *testing.T) {
+	t.Parallel()
+	require.NoError(t, keepKitLifecycleAlive(t.Context()), "no held transaction is a no-op")
+	conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_kit_keepalive")
+	require.NoError(t, err)
+	tx := testenv.BeginTx(t, t.Context(), conn)
+	ctx := context.WithValue(t.Context(), kitLifecycleTxKey{}, tx)
+	require.NoError(t, keepKitLifecycleAlive(ctx))
+	require.NoError(t, tx.Rollback(t.Context()))
+	require.Error(t, keepKitLifecycleAlive(ctx), "a dead lifecycle transaction must stop the wait")
 }

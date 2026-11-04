@@ -1212,3 +1212,7 @@ FROM principal_grants AS g
 WHERE g.scope = 'mcp:connect'
   AND g.expires_at IS NULL
 ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING;
+
+-- name: AdminBackdateUserSessionFixture :exec
+-- Test fixture: no writer backdates a session.
+UPDATE user_sessions SET created_at = @created_at WHERE id = @id;

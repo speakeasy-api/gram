@@ -1,15 +1,77 @@
 package authclientbackfill
 
 import (
+	"bytes"
 	"context"
 	"errors"
 	"fmt"
+	"slices"
 
 	"github.com/google/uuid"
 	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/oops"
 )
+
+// PreflightServerAssociations takes the registration gates
+// SyncServerAssociations needs, for a caller that locks rows of its own before
+// calling it. The gates have to come first: a caller holding one of those rows
+// and then asking for a gate another transaction holds — while that one waits
+// for the row — deadlocks the pair. SyncServerAssociations asks for the same
+// gates again, which costs a transaction that already holds them nothing.
+//
+// It deliberately stops at the gates. The typed client rows are locked in one
+// ordered pass inside the synchronization, and taking part of that set early
+// would acquire the rest of it out of order afterwards, which is its own
+// deadlock. The gates already exclude the writers that would add to the set.
+//
+// The server set may still grow by the time the synchronization reads it, so
+// this narrows the window rather than closing it; pass every server the caller
+// knows it will decide.
+func PreflightServerAssociations(ctx context.Context, tx pgx.Tx, organizationID string, serverIDs ...uuid.UUID) error {
+	if organizationID == "" {
+		return errors.New("preflight server associations: no tenant scope")
+	}
+	servers := dedupeServers(serverIDs)
+	if len(servers) == 0 {
+		return nil
+	}
+	_, err := gateOAuthRegistrations(ctx, New(tx), organizationID, servers)
+	return err
+}
+
+// gateOAuthRegistrations serializes the OAuth registrations the given servers
+// reach and reports them.
+func gateOAuthRegistrations(ctx context.Context, q *Queries, organizationID string, servers []uuid.UUID) ([]uuid.UUID, error) {
+	// The writer scope expands shared EMA registrations, not organization-wide
+	// OAuth registrations. Serialize the complete OAuth registration set before
+	// any typed client/link write, including clients that do not exist yet.
+	registrations, err := q.ListOAuthClientsOfServers(ctx, ListOAuthClientsOfServersParams{OrganizationID: organizationID, McpServerIds: servers})
+	if err != nil {
+		return nil, fmt.Errorf("list OAuth synchronization scope: %w", err)
+	}
+	if err := q.LockOAuthRegistrationSyncScope(ctx, LockOAuthRegistrationSyncScopeParams{OrganizationID: organizationID, RegistrationIds: registrations}); err != nil {
+		return nil, fmt.Errorf("lock OAuth registration synchronization scope: %w", err)
+	}
+	return registrations, nil
+}
+
+// dedupeServers drops the nil id and repeats and sorts what is left, so a
+// caller can pass whatever its discovery produced and the locks taken for it
+// are still in UUID order.
+func dedupeServers(serverIDs []uuid.UUID) []uuid.UUID {
+	servers := make([]uuid.UUID, 0, len(serverIDs))
+	seen := make(map[uuid.UUID]bool, len(serverIDs))
+	for _, id := range serverIDs {
+		if id == uuid.Nil || seen[id] {
+			continue
+		}
+		seen[id] = true
+		servers = append(servers, id)
+	}
+	slices.SortFunc(servers, func(a, b uuid.UUID) int { return bytes.Compare(a[:], b[:]) })
+	return servers
+}
 
 // SyncServerAssociations records the typed auth clients and server links the
 // given servers' upstream OAuth associations need, then brings the credential
@@ -46,38 +108,35 @@ import (
 // LockEMAWriterScope before its first row lock or mutation, including capture
 // of legacy associations. This function writes OAuth clients/links before EMA
 // copy synchronization acquires registration/client/link locks; acquiring the
-// complete source/server scope here would be too late for earlier writes.
+// complete source/server scope here would be too late for earlier writes. For
+// the same reason a caller that locks rows of its own first must take the
+// registration gates through PreflightServerAssociations rather than leave
+// them to the call that needs them.
 func SyncServerAssociations(ctx context.Context, tx pgx.Tx, organizationID string, serverIDs ...uuid.UUID) error {
 	ctx = withAtomicHeaderSync(ctx)
 	if organizationID == "" {
 		return errors.New("sync server associations: no tenant scope")
 	}
-	servers := make([]uuid.UUID, 0, len(serverIDs))
-	seen := make(map[uuid.UUID]bool, len(serverIDs))
-	for _, id := range serverIDs {
-		if id == uuid.Nil || seen[id] {
-			continue
-		}
-		seen[id] = true
-		servers = append(servers, id)
-	}
+	servers := dedupeServers(serverIDs)
 	if len(servers) == 0 {
 		return nil
 	}
 	q := New(tx)
-	// The writer scope expands shared EMA registrations, not organization-wide
-	// OAuth registrations. Serialize the complete OAuth registration set before
-	// any typed client/link write, including clients that do not exist yet.
-	registrations, err := q.ListOAuthClientsOfServers(ctx, ListOAuthClientsOfServersParams{OrganizationID: organizationID, McpServerIds: servers})
+	registrations, err := gateOAuthRegistrations(ctx, q, organizationID, servers)
 	if err != nil {
-		return fmt.Errorf("list OAuth synchronization scope: %w", err)
+		return err
 	}
-	if err := q.LockOAuthRegistrationSyncScope(ctx, LockOAuthRegistrationSyncScopeParams{OrganizationID: organizationID, RegistrationIds: registrations}); err != nil {
-		return fmt.Errorf("lock OAuth registration synchronization scope: %w", err)
+	// Lock the servers in UUID order, which is the order the EMA writer scope
+	// walks them in. The link insert below takes a foreign-key lock on each
+	// server it records and records them in association order, so the two
+	// orders disagree unless they are all held up front.
+	if err := q.LockServersForAuthClientSync(ctx, LockServersForAuthClientSyncParams{OrganizationID: organizationID, McpServerIds: servers}); err != nil {
+		return fmt.Errorf("lock servers for synchronization: %w", err)
 	}
 	// Lock every existing candidate and stale client in UUID order before any
 	// link insert can acquire a foreign-key lock. Administrator detaches use
-	// this same client-before-link order. The registration gates cover new rows.
+	// this same client-before-link order. The registration gates cover new
+	// rows, and gating them above is what lets this stay one ordered pass.
 	if err := q.LockServerOAuthClientsForSync(ctx, LockServerOAuthClientsForSyncParams{OrganizationID: organizationID, McpServerIds: servers, RegistrationIds: registrations}); err != nil {
 		return fmt.Errorf("lock OAuth clients for synchronization: %w", err)
 	}
