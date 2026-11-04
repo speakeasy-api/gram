@@ -51,6 +51,8 @@ type Claims struct {
 const mcpAuthFlowIssuer = "gram-assistants-mcp-auth-flow"
 
 type MCPAuthFlowInput struct {
+	SelectionProfileVersionID string
+
 	OrgID       string
 	ProjectID   uuid.UUID
 	UserID      string
@@ -72,6 +74,8 @@ type MCPAuthFlowInput struct {
 }
 
 type MCPAuthFlowClaims struct {
+	SelectionProfileVersionID string `json:"selection_profile_version_id,omitempty"`
+
 	OrgID             string `json:"org_id"`
 	ProjectID         string `json:"project_id"`
 	UserID            string `json:"user_id"`
@@ -179,6 +183,8 @@ func (m *Manager) GenerateMCPAuthFlow(input MCPAuthFlowInput) (string, error) {
 		attemptID = input.FlowID
 	}
 	token := jwt.NewWithClaims(jwt.SigningMethodHS256, MCPAuthFlowClaims{
+		SelectionProfileVersionID: input.SelectionProfileVersionID,
+
 		OrgID:             input.OrgID,
 		ProjectID:         input.ProjectID.String(),
 		UserID:            input.UserID,

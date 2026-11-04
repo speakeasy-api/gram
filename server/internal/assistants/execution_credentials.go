@@ -16,8 +16,8 @@ import (
 )
 
 // executionTrigger is the root trigger whose workload identity a turn runs
-// under. Wakes and OAuth continuations have no root trigger of their own, so
-// they run under the assistant's dashboard trigger.
+// under. OAuth continuations retain their authenticated originating trigger.
+// Wakes and legacy continuations without an origin use the dashboard trigger.
 func (s *ServiceCore) executionTrigger(ctx context.Context, assistant assistantRecord, event assistantThreadEventRecord) (uuid.UUID, error) {
 	var metadata struct {
 		Source string `json:"_gram_source_kind"`

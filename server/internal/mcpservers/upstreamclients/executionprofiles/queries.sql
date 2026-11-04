@@ -439,3 +439,67 @@ SELECT @organization_id, @project_id, @organization_id, @project_id,
        ab.generation, generate_uuidv7(), 'workload', 1
 FROM assistant_agent_bindings AS ab
 WHERE ab.assistant_id = @assistant_id AND ab.deleted IS FALSE;
+
+-- name: GetOAuthResumeOrigin :one
+-- Only a live user-backed origin may accept a browser's authenticated choice.
+SELECT p.trigger_instance_id, v.version
+FROM execution_selection_profile_versions v
+JOIN execution_selection_profiles p ON p.id = v.profile_id
+JOIN assistants a ON a.id = p.assistant_id AND a.project_id = p.project_id
+JOIN assistant_threads t ON t.assistant_id = a.id AND t.project_id = p.project_id
+WHERE v.id = @version_id
+  AND p.organization_id = @organization_id
+  AND p.project_id = @project_id
+  AND p.assistant_id = @assistant_id
+  AND t.id = @thread_id
+  AND p.execution_context = 'user_backed'
+  AND p.deleted IS FALSE AND a.deleted IS FALSE AND t.deleted IS FALSE
+  AND a.status = 'active'
+FOR SHARE OF p, a, t;
+
+-- name: GetOAuthResumeSelection :one
+-- The verified bearer must identify this exact live user session and OAuth
+-- client, and the selected upstream must belong to the originating project.
+SELECT sel.auth_client_id, sel.no_auth
+FROM user_sessions s
+JOIN user_session_issuers i ON i.id = s.user_session_issuer_id AND i.deleted IS FALSE
+JOIN user_session_clients c ON c.id = s.user_session_client_id AND c.deleted IS FALSE
+JOIN upstream_client_selections sel ON sel.credential_id = s.id
+  AND sel.credential_kind = 'user_session' AND sel.deleted IS FALSE
+JOIN mcp_servers m ON m.id = sel.mcp_server_id AND m.deleted IS FALSE
+JOIN projects p ON p.id = m.project_id AND p.deleted IS FALSE
+WHERE s.jti = @jti AND s.deleted IS FALSE AND s.expires_at > now()
+  AND s.subject_urn = @subject_urn
+  AND c.client_id = @client_id AND c.user_session_issuer_id = i.id
+  AND i.id = @issuer_id AND m.user_session_issuer_id = i.id
+  AND (i.project_id = p.id OR (i.project_id IS NULL AND i.organization_id = p.organization_id))
+  AND m.id = @mcp_server_id AND m.project_id = @project_id
+  AND p.organization_id = @organization_id
+  AND s.organization_id = p.organization_id
+  AND sel.organization_id = p.organization_id AND sel.project_id = p.id
+FOR SHARE OF s, i, c, sel, m, p;
+
+-- name: SeedOAuthResumeFixture :one
+WITH chat AS (
+  INSERT INTO chats (project_id, organization_id) VALUES (@project_id, @organization_id) RETURNING id
+), thread AS (
+  INSERT INTO assistant_threads (project_id, assistant_id, chat_id, correlation_id, source_kind)
+  SELECT @project_id, @assistant_id, chat.id, 'oauth-fixture', 'dashboard' FROM chat RETURNING id
+), issuer AS (
+  INSERT INTO user_session_issuers (project_id, organization_id, slug, authn_challenge_mode, session_duration)
+  VALUES (@project_id, @organization_id, 'oauth-fixture', 'interactive', '1 hour') RETURNING id
+), client AS (
+  INSERT INTO user_session_clients (project_id, organization_id, user_session_issuer_id, client_id, client_name)
+  SELECT @project_id, @organization_id, issuer.id, 'oauth-fixture', 'OAuth fixture' FROM issuer RETURNING id, user_session_issuer_id
+), session AS (
+  INSERT INTO user_sessions (project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, jti, refresh_expires_at, expires_at)
+  SELECT @project_id, @organization_id, client.user_session_issuer_id, client.id, 'user:oauth-user', @jti, now() + interval '1 hour', now() + interval '1 hour' FROM client RETURNING id
+), endpoint AS (
+  UPDATE mcp_servers SET user_session_issuer_id = (SELECT id FROM issuer)
+  WHERE mcp_servers.id = @mcp_server_id AND mcp_servers.project_id = @project_id RETURNING mcp_servers.id
+), selection AS (
+  INSERT INTO upstream_client_selections (project_id, organization_id, credential_kind, credential_id, mcp_server_id, auth_client_id, auth_client_attachment_scope, no_auth, source)
+  SELECT @project_id, @organization_id, 'user_session', session.id, @mcp_server_id, ac.id, ac.attachment_scope, false, 'issuance'
+  FROM session, mcp_auth_clients ac WHERE ac.id = @auth_client_id AND ac.organization_id = @organization_id
+)
+SELECT thread.id AS thread_id, issuer.id AS issuer_id FROM thread, issuer;

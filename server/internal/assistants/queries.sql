@@ -2064,3 +2064,13 @@ SELECT pg_advisory_xact_lock(hashtextextended(@subject_key::text, 0));
 
 -- name: LockProjectForKitWorkload :one
 SELECT id FROM projects WHERE id = @project_id AND organization_id = @organization_id FOR UPDATE;
+
+-- name: LockAssistantMCPAuthAttempt :exec
+-- Serialize consumption and event insertion for the same signed OAuth state.
+SELECT pg_advisory_xact_lock(hashtextextended('assistant-mcp-auth:' || CAST(@project_id::uuid AS text) || ':' || @attempt_id::text, 0));
+
+-- name: GetAssistantMCPAuthAttempt :one
+SELECT assistant_id, normalized_payload_json
+FROM assistant_thread_events
+WHERE project_id = @project_id AND assistant_thread_id = @thread_id
+  AND event_id = @event_id;

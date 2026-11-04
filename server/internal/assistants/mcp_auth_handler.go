@@ -25,6 +25,7 @@ import (
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/auth/assistanttokens"
+	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
@@ -91,13 +92,14 @@ func (e *mcpOAuthTokenError) Error() string {
 }
 
 type mcpAuthEventPayload struct {
-	ResumeUserID     string `json:"_gram_resume_user_id,omitempty"`
-	GramEventKind    string `json:"gram_event_kind"`
-	Status           string `json:"status"`
-	ServerID         string `json:"mcp_server_id"`
-	McpSlug          string `json:"mcp_slug"`
-	Error            string `json:"error,omitempty"`
-	ErrorDescription string `json:"error_description,omitempty"`
+	ResumeTriggerID  uuid.NullUUID `json:"-"`
+	ResumeUserID     string        `json:"_gram_resume_user_id,omitempty"`
+	GramEventKind    string        `json:"gram_event_kind"`
+	Status           string        `json:"status"`
+	ServerID         string        `json:"mcp_server_id"`
+	McpSlug          string        `json:"mcp_slug"`
+	Error            string        `json:"error,omitempty"`
+	ErrorDescription string        `json:"error_description,omitempty"`
 }
 
 func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request) error {
@@ -196,7 +198,16 @@ func (s *Service) handleCreateMCPAuthFlow(w http.ResponseWriter, r *http.Request
 		return oops.E(oops.CodeUnexpected, err, "resolve assistant mcp oauth client").LogError(ctx, s.logger)
 	}
 
+	profileVersion := ""
+	if credential, ok := principalcredential.FromContext(ctx); ok && claims.UserID != "" {
+		if !credential.Credential.SelectionProfileVersionID.Valid {
+			return oops.E(oops.CodeUnavailable, nil, "execution profile unavailable for OAuth continuation")
+		}
+		profileVersion = credential.Credential.SelectionProfileVersionID.UUID.String()
+	}
 	state, err := s.core.assistantTokens.GenerateMCPAuthFlow(assistanttokens.MCPAuthFlowInput{
+		SelectionProfileVersionID: profileVersion,
+
 		OrgID:             claims.OrgID,
 		ProjectID:         projectID,
 		UserID:            claims.UserID,
@@ -277,6 +288,45 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 		return oops.E(oops.CodeBadRequest, err, "callback mcp url missing slug").LogError(ctx, s.logger)
 	}
 
+	// Hold the attempt lock through event insertion. A duplicate callback must
+	// not race a successful exchange and enqueue a failure first.
+	tx, err := s.core.db.Begin(ctx)
+	if err != nil {
+		return fmt.Errorf("begin OAuth continuation: %w", err)
+	}
+	defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	callbacks := assistantrepo.New(tx)
+	attempt := mcpAuthAttemptID(claims)
+	if err := callbacks.LockAssistantMCPAuthAttempt(ctx, assistantrepo.LockAssistantMCPAuthAttemptParams{ProjectID: projectID, AttemptID: attempt}); err != nil {
+		return err
+	}
+	persisted, err := callbacks.GetAssistantMCPAuthAttempt(ctx, assistantrepo.GetAssistantMCPAuthAttemptParams{ProjectID: projectID, ThreadID: threadID, EventID: mcpAuthEventKind + ":" + attempt})
+	if err != nil && !errors.Is(err, pgx.ErrNoRows) {
+		return err
+	}
+	if err == nil {
+		if persisted.AssistantID != assistantID {
+			return oops.C(oops.CodeForbidden)
+		}
+		if err := tx.Commit(ctx); err != nil {
+			return err
+		}
+		// Event insertion is durable but the coordinator signal is not. Retry
+		// that signal from the persisted origin, never exchange the code or
+		// publish another profile version on a callback retry.
+		if err := s.signaler.SignalCoordinator(ctx, persisted.AssistantID); err != nil {
+			return fmt.Errorf("signal assistant coordinator: %w", err)
+		}
+		var previous mcpAuthEventPayload
+		if err := json.Unmarshal(persisted.NormalizedPayloadJson, &previous); err != nil {
+			return err
+		}
+		if previous.Status == mcpAuthStatusSuccess {
+			return writeMCPAuthSuccess(w)
+		}
+		return fmt.Errorf("complete assistant connection: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "this connection callback was already processed"), oauthui.ReasonExpired))
+	}
+
 	payload := mcpAuthEventPayload{
 		ResumeUserID:     claims.UserID,
 		GramEventKind:    mcpAuthEventKind,
@@ -305,7 +355,7 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 		payload.Error = "invalid_request"
 		payload.ErrorDescription = "authorization code missing from callback"
 	default:
-		if err := s.consumeMCPAuthGrant(ctx, claims, code); err != nil {
+		if err := s.consumeMCPAuthGrantForResume(ctx, claims, code, &payload); err != nil {
 			var tokenErr *mcpOAuthTokenError
 			if errors.As(err, &tokenErr) && tokenErr.Code == "invalid_client" {
 				s.invalidateMCPAuthClient(ctx, projectID, assistantID, claims.OAuthServerIssuer, claims.ClientID)
@@ -322,9 +372,12 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 		}
 	}
 
-	eventCreated, err := s.enqueueMCPAuthEvent(ctx, projectID, assistantID, threadID, mcpAuthAttemptID(claims), payload)
+	eventCreated, err := s.enqueueMCPAuthEventWithQueries(ctx, callbacks, projectID, assistantID, threadID, attempt, payload)
 	if err != nil {
 		return err
+	}
+	if err := tx.Commit(ctx); err != nil {
+		return fmt.Errorf("commit OAuth continuation: %w", err)
 	}
 	if eventCreated {
 		if err := s.signaler.SignalCoordinator(ctx, assistantID); err != nil {
@@ -343,6 +396,10 @@ func (s *Service) handleMCPAuthCallback(w http.ResponseWriter, r *http.Request) 
 		return fmt.Errorf("complete assistant connection: %w", oops.WithBrowserReason(oops.E(oops.CodeBadRequest, nil, "connection was not completed; return to your assistant conversation and try again"), reason))
 	}
 
+	return writeMCPAuthSuccess(w)
+}
+
+func writeMCPAuthSuccess(w http.ResponseWriter) error {
 	w.Header().Set("Content-Type", "text/html; charset=utf-8")
 	w.WriteHeader(http.StatusOK)
 	_, _ = io.WriteString(w, "<!doctype html><title>Authentication complete</title><p>Authentication complete. You can close this window.</p>")
@@ -420,7 +477,10 @@ func mcpAuthAttemptID(claims *assistanttokens.MCPAuthFlowClaims) string {
 }
 
 func (s *Service) enqueueMCPAuthEvent(ctx context.Context, projectID, assistantID, threadID uuid.UUID, flowID string, payload mcpAuthEventPayload) (bool, error) {
-	repo := assistantrepo.New(s.core.db)
+	return s.enqueueMCPAuthEventWithQueries(ctx, assistantrepo.New(s.core.db), projectID, assistantID, threadID, flowID, payload)
+}
+
+func (s *Service) enqueueMCPAuthEventWithQueries(ctx context.Context, repo *assistantrepo.Queries, projectID, assistantID, threadID uuid.UUID, flowID string, payload mcpAuthEventPayload) (bool, error) {
 	thread, err := repo.ResolveThreadCorrelation(ctx, assistantrepo.ResolveThreadCorrelationParams{
 		ThreadID:  threadID,
 		ProjectID: projectID,
@@ -443,7 +503,7 @@ func (s *Service) enqueueMCPAuthEvent(ctx context.Context, projectID, assistantI
 		AssistantThreadID:     threadID,
 		AssistantID:           assistantID,
 		ProjectID:             projectID,
-		TriggerInstanceID:     uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		TriggerInstanceID:     payload.ResumeTriggerID,
 		EventID:               mcpAuthEventKind + ":" + flowID,
 		CorrelationID:         thread.CorrelationID,
 		Status:                eventStatusPending,
@@ -839,6 +899,10 @@ func newMCPAuthTokenRequest(ctx context.Context, endpoint string, form url.Value
 }
 
 func (s *Service) consumeMCPAuthGrant(ctx context.Context, claims *assistanttokens.MCPAuthFlowClaims, code string) error {
+	return s.consumeMCPAuthGrantForResume(ctx, claims, code, &mcpAuthEventPayload{})
+}
+
+func (s *Service) consumeMCPAuthGrantForResume(ctx context.Context, claims *assistanttokens.MCPAuthFlowClaims, code string, payload *mcpAuthEventPayload) error {
 	verifier, err := s.core.encryptionClient.Decrypt(claims.CodeVerifier)
 	if err != nil {
 		return fmt.Errorf("decrypt pkce verifier: %w", err)
@@ -882,6 +946,19 @@ func (s *Service) consumeMCPAuthGrant(ctx context.Context, claims *assistanttoke
 			return &mcpOAuthTokenError{Code: tokenError.Error, StatusCode: resp.StatusCode}
 		}
 		return fmt.Errorf("token request failed: status=%d body=%s", resp.StatusCode, strings.TrimSpace(string(body)))
+	}
+	if claims.SelectionProfileVersionID != "" {
+		var token struct {
+			AccessToken string `json:"access_token"`
+		}
+		if err := json.Unmarshal(body, &token); err != nil || token.AccessToken == "" {
+			return errors.New("authorization response missing access token")
+		}
+		trigger, err := s.core.adoptMCPAuthSelection(ctx, claims, token.AccessToken)
+		if err != nil {
+			return fmt.Errorf("adopt authenticated upstream choice: %w", err)
+		}
+		payload.ResumeTriggerID = uuid.NullUUID{UUID: trigger, Valid: trigger != uuid.Nil}
 	}
 	return nil
 }
