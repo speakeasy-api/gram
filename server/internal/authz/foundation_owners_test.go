@@ -170,8 +170,6 @@ var foundationFunctionOwners = map[string]string{
 	"internal/assistantidentity/provision.go *Service.selectAgent":                  ownerAG1,
 	"internal/assistants/runtime_kit_workload.go kitWorkloadInferenceAllowed":       ownerI1,
 	"internal/background/activities/process_workos_org_events.go handleRoleDeleted": ownerO2,
-	"internal/chat/impl.go *Service.GetWorkUnitsTrend":                              ownerC3,
-	"internal/chat/impl.go *Service.chatVisibilityScope":                            ownerC3,
 	"internal/skills/impl.go *Service.accessibleSkillIDs":                           ownerS2,
 }
 
