@@ -125,14 +125,14 @@ func (s *Service) enumerateGatewayConsentInventory(r *http.Request, endpoint *Re
 	}
 	ctx = s.consentDiscoveryContext(ctx, challengeState)
 
-	if s.authz != nil {
+	if s.authzClient != nil {
 		if ctx, err = s.authzClient.PrepareContext(ctx); err != nil {
 			return nil, nil, nil, oops.E(oops.CodeUnexpected, err, "load access grants for consent inventory").LogError(ctx, logger)
 		}
 	}
 	// The organization gateway has no grant of its own: a subject may consent
 	// when it reaches at least one member, as its token exchange requires.
-	if s.authz != nil && private && !organizationGateway {
+	if s.authzClient != nil && private && !organizationGateway {
 		connectResourceID := endpoint.connectResourceID()
 		if err := s.authzClient.Require(ctx, authz.MCPServer(endpoint.ProjectID.String(), connectResourceID.String()).Connect()); err != nil {
 			return nil, nil, nil, fmt.Errorf("authorize consent inventory access: %w", mcpaccess.ServerPermissionDenied(err, s.requestAccessURL(ctx, connectResourceID.String(), endpoint.Slug)))
