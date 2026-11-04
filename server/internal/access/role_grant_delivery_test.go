@@ -15,6 +15,7 @@ import (
 	gen "github.com/speakeasy-api/gram/server/gen/access"
 	plugingen "github.com/speakeasy-api/gram/server/gen/plugins"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/billing"
 	"github.com/speakeasy-api/gram/server/internal/cache"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
@@ -267,7 +268,7 @@ func newRoleDeliveryFixture(t *testing.T) (context.Context, *roleDeliveryFixture
 	github.Test(t)
 	t.Cleanup(func() { github.AssertExpectations(t) })
 	githubConfig := &plugins.GitHubConfig{Client: github, Org: "test-org", InstallationID: 12345}
-	pluginService := plugins.NewService(logger, tracer, ti.conn, sessions, cache.NewRedisCacheAdapter(redis), ti.service.authz, ti.service.audit, githubConfig, "test", "https://example.com", nil, nil)
+	pluginService := plugins.NewService(logger, tracer, ti.conn, sessions, cache.NewRedisCacheAdapter(redis), ti.service.authz, authztest.NewParityClient(t, ti.service.authz), ti.service.audit, githubConfig, "test", "https://example.com", nil, nil)
 	signals := &recordingPublishSignaler{}
 	ti.service.roleMgr = NewRoleManager(logger, ti.conn, ti.roles, ti.service.audit, plugins.PublicationRequests{Enabled: true}, nil).WithPluginPublisher(signals)
 	plugin, err := pluginService.CreatePlugin(ctx, &plugingen.CreatePluginPayload{Name: "Delivery audience"})
