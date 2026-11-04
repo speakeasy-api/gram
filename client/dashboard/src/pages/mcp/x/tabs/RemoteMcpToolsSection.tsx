@@ -1,3 +1,10 @@
+import { extractToolParameters } from "@/components/mcp/tool-parameters";
+import {
+  McpToolParameters,
+  McpToolRow,
+  McpToolRows,
+  McpToolRowsSkeleton,
+} from "@/components/mcp/tool-browser";
 import { Heading } from "@/components/ui/Heading";
 import {
   Sheet,
@@ -6,21 +13,15 @@ import {
   SheetHeader,
   SheetTitle,
 } from "@/components/ui/Sheet";
-import { Skeleton } from "@/components/ui/Skeleton";
 import { Text } from "@/components/ui/Text";
-import {
-  type ProxiedMcpTool,
-  type ProxiedMcpToolAnnotations,
-} from "@/hooks/useProxiedMcpTools";
+import { type ProxiedMcpTool } from "@/hooks/useProxiedMcpTools";
 import { handleError, toError } from "@/lib/errors";
-import { cn } from "@/lib/utils";
 import type { ToolMetadata } from "@gram/client/models/components/toolmetadata.js";
 import { ToolAnnotationIndicators } from "./ToolAnnotationIndicators";
 import { ToolMetadataDriftPanel } from "./ToolMetadataDriftPanel";
 import { computeDrift } from "./toolMetadataSync";
 import { useRemoteMcpToolConnection } from "./useRemoteMcpToolConnection";
 import { type ToolMetadataByName } from "@/hooks/useToolMetadata";
-import { Badge } from "@/components/ui/Badge";
 import { Button } from "@/components/ui/Button";
 import { QueryErrorResetBoundary } from "@tanstack/react-query";
 import { PlugZap } from "lucide-react";
@@ -262,7 +263,7 @@ function RemoteMcpToolsBody({
   onConnect?: () => void;
 }): JSX.Element {
   if (loading) {
-    return <ToolsListSkeleton />;
+    return <McpToolRowsSkeleton />;
   }
 
   if (needsAuth && onConnect) {
@@ -327,19 +328,23 @@ function RemoteMcpToolsList({
 
   return (
     <>
-      <div className="border-neutral-softest w-full overflow-hidden border">
+      <McpToolRows>
         {toolEntries.map(([name, tool]) => (
-          <RemoteToolRow
+          <McpToolRow
             key={name}
             name={name}
             description={tool.description}
-            annotations={tool.annotations}
-            stored={metadataByTool[name]}
+            hint={
+              <ToolAnnotationIndicators
+                annotations={tool.annotations}
+                stored={metadataByTool[name]}
+              />
+            }
             selected={name === selectedName}
             onSelect={() => setSelectedName(name)}
           />
         ))}
-      </div>
+      </McpToolRows>
 
       <Sheet
         open={selected !== null}
@@ -361,58 +366,6 @@ function RemoteMcpToolsList({
   );
 }
 
-/**
- * A single tool row, styled to match the toolset Tools tab (see ToolList's
- * ToolRow): tool name on top with the description truncated to one line below,
- * and any annotation hints rendered as badges beside the name. Remote MCP tools
- * carry no Speakeasy-side identity, so there are no method/variation badges or action
- * menus — selecting a row opens the details drawer instead.
- */
-function RemoteToolRow({
-  name,
-  description,
-  annotations,
-  stored,
-  selected,
-  onSelect,
-}: {
-  name: string;
-  description?: string;
-  annotations?: ProxiedMcpToolAnnotations;
-  stored?: ToolMetadata;
-  selected: boolean;
-  onSelect: () => void;
-}): JSX.Element {
-  return (
-    <div
-      role="button"
-      tabIndex={0}
-      aria-pressed={selected}
-      onClick={onSelect}
-      onKeyDown={(e) => {
-        if (e.key === "Enter" || e.key === " ") {
-          e.preventDefault();
-          onSelect();
-        }
-      }}
-      className={cn(
-        "border-neutral-softest hover:bg-muted flex cursor-pointer items-center justify-between border-b py-4 pr-3 pl-4 transition-colors last:border-b-0",
-        selected && "bg-muted",
-      )}
-    >
-      <div className="flex min-w-0 flex-1 flex-col">
-        <div className="flex min-w-0 items-center gap-2">
-          <p className="text-foreground truncate text-sm leading-6">{name}</p>
-          <ToolAnnotationIndicators annotations={annotations} stored={stored} />
-        </div>
-        <p className="text-muted-foreground truncate text-sm leading-6">
-          {description || "No description"}
-        </p>
-      </div>
-    </div>
-  );
-}
-
 /** The drawer body: the selected tool's full description and parameters. */
 function RemoteToolDetails({
   name,
@@ -423,7 +376,10 @@ function RemoteToolDetails({
   tool: ProxiedMcpTool;
   stored?: ToolMetadata;
 }): JSX.Element {
-  const parameters = useMemo(() => extractParameters(tool), [tool]);
+  const parameters = useMemo(
+    () => extractToolParameters(tool.inputSchema),
+    [tool.inputSchema],
+  );
 
   return (
     <>
@@ -451,48 +407,9 @@ function RemoteToolDetails({
         <Text variant="subheading" as="h4" className="mb-3">
           Parameters
         </Text>
-        {parameters.length === 0 ? (
-          <Text muted small as="p">
-            This tool takes no parameters.
-          </Text>
-        ) : (
-          <ul className="divide-border divide-y">
-            {parameters.map((parameter) => (
-              <ToolParameterRow key={parameter.name} parameter={parameter} />
-            ))}
-          </ul>
-        )}
+        <McpToolParameters parameters={parameters} />
       </div>
     </>
-  );
-}
-
-function ToolParameterRow({
-  parameter,
-}: {
-  parameter: ToolParameter;
-}): JSX.Element {
-  return (
-    <li className="flex flex-col gap-1 py-3 first:pt-0 last:pb-0">
-      <div className="flex flex-wrap items-baseline gap-x-2 gap-y-1">
-        <Text mono small as="span" className="font-medium break-all">
-          {parameter.name}
-        </Text>
-        <Text mono small as="span" className="text-muted-foreground">
-          {parameter.type}
-        </Text>
-        {parameter.required ? (
-          <Badge variant="neutral" size="sm" background>
-            <Badge.Text className="text-[10px] uppercase">Required</Badge.Text>
-          </Badge>
-        ) : null}
-      </div>
-      {parameter.description ? (
-        <Text muted small as="span" className="break-words">
-          {parameter.description}
-        </Text>
-      ) : null}
-    </li>
   );
 }
 
@@ -546,25 +463,6 @@ function EmptyState({
   );
 }
 
-function ToolsListSkeleton(): JSX.Element {
-  return (
-    <div className="border-neutral-softest w-full overflow-hidden border">
-      {Array.from({ length: 5 }).map((_, index) => (
-        <ToolRowSkeleton key={index} />
-      ))}
-    </div>
-  );
-}
-
-function ToolRowSkeleton(): JSX.Element {
-  return (
-    <div className="border-neutral-softest flex flex-col gap-2 border-b py-4 pr-3 pl-4 last:border-b-0">
-      <Skeleton className="h-4 w-48" />
-      <Skeleton className="h-3 w-80 max-w-full" />
-    </div>
-  );
-}
-
 /**
  * The needs-connect state: a centered card prompting the user to connect
  * upstream before tools can be listed. Connecting opens the first-party connect
@@ -588,76 +486,4 @@ function RemoteMcpToolsConnectPrompt({
       ) : null}
     </div>
   );
-}
-
-type ToolParameter = {
-  name: string;
-  type: string;
-  description?: string;
-  required: boolean;
-};
-
-/** Flatten a tool's JSON Schema into a flat list of named parameters. */
-function extractParameters(tool: ProxiedMcpTool): ToolParameter[] {
-  const schema = readJsonSchema(tool.inputSchema);
-  if (!schema) return [];
-
-  const properties = isRecord(schema.properties) ? schema.properties : {};
-  const required = new Set(
-    Array.isArray(schema.required)
-      ? schema.required.filter((r): r is string => typeof r === "string")
-      : [],
-  );
-
-  return Object.entries(properties).map(([name, def]) => ({
-    name,
-    type: jsonSchemaTypeLabel(def),
-    description:
-      isRecord(def) && typeof def.description === "string"
-        ? def.description
-        : undefined,
-    required: required.has(name),
-  }));
-}
-
-/**
- * The hook hands us the raw MCP `inputSchema` (a JSON Schema object), so the
- * value itself is the schema. Some AI SDK code paths instead wrap it via
- * `jsonSchema()`, stowing the schema on `.jsonSchema` — unwrap that if present.
- */
-function readJsonSchema(
-  inputSchema: unknown,
-): Record<string, unknown> | undefined {
-  if (!isRecord(inputSchema)) return undefined;
-  if (isRecord(inputSchema.jsonSchema)) return inputSchema.jsonSchema;
-  return inputSchema;
-}
-
-/** A short, human-readable type label for a JSON Schema property definition. */
-function jsonSchemaTypeLabel(def: unknown): string {
-  if (!isRecord(def)) return "unknown";
-
-  if (Array.isArray(def.enum) && def.enum.length > 0) {
-    return def.enum.map((value) => JSON.stringify(value)).join(" | ");
-  }
-
-  const type = def.type;
-  if (Array.isArray(type)) {
-    const names = type.filter((t): t is string => typeof t === "string");
-    return names.length > 0 ? names.join(" | ") : "unknown";
-  }
-  if (type === "array") {
-    const items = def.items;
-    const itemType =
-      isRecord(items) && typeof items.type === "string"
-        ? items.type
-        : undefined;
-    return itemType ? `${itemType}[]` : "array";
-  }
-
-  return typeof type === "string" ? type : "unknown";
-}
-
-function isRecord(value: unknown): value is Record<string, unknown> {
-  return typeof value === "object" && value !== null && !Array.isArray(value);
 }

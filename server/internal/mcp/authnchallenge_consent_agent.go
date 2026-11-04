@@ -66,7 +66,7 @@ func agentAuthorizationTarget(endpoint *ResolvedMcpEndpoint) (*AgentAuthorizatio
 	default:
 		return nil, false
 	}
-	if resourceID == uuid.Nil || endpoint.ProjectID == uuid.Nil || endpoint.UserSessionIssuerID == uuid.Nil || endpoint.OrganizationID == "" {
+	if resourceID == uuid.Nil || endpoint.ProjectID == uuid.Nil || endpoint.OrganizationID == "" {
 		return nil, false
 	}
 	return &AgentAuthorizationTarget{
@@ -188,7 +188,7 @@ func (s *Service) eligibleConsentAgents(ctx context.Context, state AuthnChalleng
 		if !consentAgentCandidateEligible(human, candidate, *target) {
 			continue
 		}
-		allowed, err := consentPolicyConnect(policies[candidate.ID], target.connectCheck())
+		allowed, err := target.agentPolicyConnect(policies[candidate.ID])
 		if err != nil {
 			return nil, fmt.Errorf("evaluate candidate agent connect policy: %w", err)
 		}
@@ -276,7 +276,7 @@ func (s *Service) consentAgentEligible(ctx context.Context, human consentHumanAu
 	if err != nil {
 		return false, fmt.Errorf("load direct agent policy: %w", err)
 	}
-	allowed, err := consentPolicyConnect(agentPolicy, target.connectCheck())
+	allowed, err := target.agentPolicyConnect(agentPolicy)
 	if err != nil {
 		return false, fmt.Errorf("evaluate selected agent connect policy: %w", err)
 	}
@@ -318,4 +318,8 @@ func consentPolicyConnect(policy []authz.Grant, check authz.Check) (bool, error)
 		return false, fmt.Errorf("authorize consent connect policy: %w", err)
 	}
 	return allowed, nil
+}
+
+func (t AgentAuthorizationTarget) agentPolicyConnect(policy []authz.Grant) (bool, error) {
+	return consentPolicyConnect(policy, t.connectCheck())
 }

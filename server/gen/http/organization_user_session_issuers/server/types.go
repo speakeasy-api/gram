@@ -551,6 +551,9 @@ type GetIssuerMigratePreflightResponseBody struct {
 	// Enterprise-managed authorization bindings already present on the target.
 	// Non-zero blocks migration.
 	EmaBindingConflictCount int `form:"ema_binding_conflict_count" json:"ema_binding_conflict_count" xml:"ema_binding_conflict_count"`
+	// Number of live built-in MCP bindings to the source issuer. Rebind these
+	// explicitly before migrating; a nonzero count blocks migration.
+	BuiltinBindingCount int `form:"builtin_binding_count" json:"builtin_binding_count" xml:"builtin_binding_count"`
 	// Whether a Platform MCP catalog registration owns either issuer. True blocks
 	// migration.
 	PlatformOwned bool `form:"platform_owned" json:"platform_owned" xml:"platform_owned"`
@@ -4042,6 +4045,7 @@ func NewGetIssuerMigratePreflightResponseBody(res *organizationusersessionissuer
 		RemoteSessionCount:            res.RemoteSessionCount,
 		PrincipalBindingConflictCount: res.PrincipalBindingConflictCount,
 		EmaBindingConflictCount:       res.EmaBindingConflictCount,
+		BuiltinBindingCount:           res.BuiltinBindingCount,
 		PlatformOwned:                 res.PlatformOwned,
 		WarningsFingerprint:           res.WarningsFingerprint,
 		CanMigrate:                    res.CanMigrate,

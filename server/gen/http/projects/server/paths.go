@@ -7,6 +7,16 @@
 
 package server
 
+// ListBuiltinMcpServersProjectsPath returns the URL path to the projects service listBuiltinMcpServers HTTP endpoint.
+func ListBuiltinMcpServersProjectsPath() string {
+	return "/rpc/projects.listBuiltinMcpServers"
+}
+
+// UpdateBuiltinMcpServerProjectsPath returns the URL path to the projects service updateBuiltinMcpServer HTTP endpoint.
+func UpdateBuiltinMcpServerProjectsPath() string {
+	return "/rpc/projects.updateBuiltinMcpServer"
+}
+
 // GetProjectProjectsPath returns the URL path to the projects service getProject HTTP endpoint.
 func GetProjectProjectsPath() string {
 	return "/rpc/projects.get"

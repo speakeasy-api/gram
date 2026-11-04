@@ -301,6 +301,50 @@ func (q *Queries) ServersInsertAuthClientRoleGrants(ctx context.Context, arg Ser
 	return err
 }
 
+const serversInsertBuiltinSlackServer = `-- name: ServersInsertBuiltinSlackServer :exec
+INSERT INTO mcp_servers
+  (id, project_id, name, builtin_backend, visibility, requires_upstream_auth,
+   user_session_issuer_id)
+SELECT $1::uuid, p.id, 'Built-in Slack', 'slack', 'private', true, $2::uuid
+FROM projects p
+WHERE p.id = $3::uuid AND p.organization_id = $4::text
+`
+
+type ServersInsertBuiltinSlackServerParams struct {
+	ID        uuid.UUID
+	IssuerID  uuid.UUID
+	ProjectID uuid.UUID
+	OrgID     string
+}
+
+func (q *Queries) ServersInsertBuiltinSlackServer(ctx context.Context, arg ServersInsertBuiltinSlackServerParams) error {
+	_, err := q.db.Exec(ctx, serversInsertBuiltinSlackServer,
+		arg.ID,
+		arg.IssuerID,
+		arg.ProjectID,
+		arg.OrgID,
+	)
+	return err
+}
+
+const serversInsertBuiltinSlackSettings = `-- name: ServersInsertBuiltinSlackSettings :exec
+INSERT INTO builtin_mcp_settings
+  (id, project_id, builtin_key, user_session_issuer_id, user_session_issuer_bound)
+VALUES ($1::uuid, $2::uuid, 'slack', $3::uuid, true)
+`
+
+type ServersInsertBuiltinSlackSettingsParams struct {
+	ID        uuid.UUID
+	ProjectID uuid.UUID
+	IssuerID  uuid.UUID
+}
+
+// Inbound issuer preference for the code-owned Slack backend.
+func (q *Queries) ServersInsertBuiltinSlackSettings(ctx context.Context, arg ServersInsertBuiltinSlackSettingsParams) error {
+	_, err := q.db.Exec(ctx, serversInsertBuiltinSlackSettings, arg.ID, arg.ProjectID, arg.IssuerID)
+	return err
+}
+
 const serversInsertCodeGateway = `-- name: ServersInsertCodeGateway :exec
 INSERT INTO meta_mcp_servers (id, organization_id, project_id, name,
                               user_session_issuer_id) VALUES
@@ -1759,6 +1803,8 @@ WHERE p.organization_id = $1::text AND p.project_id = $2::uuid
   -- Canonical hosted wrappers share their toolset's name with the
   -- fresh-id servers above; distribute those servers only.
   AND s.id IS DISTINCT FROM s.toolset_id
+  -- Built-in Slack uses its synthetic route, not plugin distribution.
+  AND s.builtin_backend IS DISTINCT FROM 'slack'
   AND EXISTS (
     SELECT 1 FROM principal_grants g
     WHERE g.organization_id = $1::text AND g.principal_urn = a.principal_urn

@@ -430,3 +430,28 @@ Browser verification: [~] — follow check 33 in `seed/demo/verify.md`.
 - This is display-only trust configuration: no working platform key, token, API key, or inference session is seeded. Runtime exchange uses the shared issuer token endpoint with `resource=urn:speakeasy:inference` and `project_id`; returned access tokens are for `/chat/completions`, not MCP.
 - Reseeding removes workload trust and agent rows through the existing organization-scoped cleanup, and explicitly removes the owner's deterministic direct grant before recreating it. Postflight checks verify the exact trust chain and both project-scoped grants, and reject additional inference grants.
 - Browser verification and live reseeding have not been run for this addition.
+
+### Built-in Slack inbound authentication
+
+Verification: [Built-in Slack inbound authentication](verify.md#built-in-slack-inbound-authentication).
+
+`[~]` The built-in Slack settings have one project-scoped inbound user session
+issuer binding, referencing the existing project-owned `slack` issuer with
+`user_session_issuer_bound = true`. This is separate from the seeded remote Slack
+server: the built-in has its own deterministic, private MCP server row with
+upstream authentication required, but no toolset or normal endpoint. Its synthetic
+route is not distributed through role plugins. Its ordinary static credential
+auth client, “Built-in Slack demo token”, has one secret `SLACK_BOT_TOKEN` header
+containing an explicitly fake token. The normal tenant-scoped association and
+auth migration provision `mcp:auth` for the existing MCP audience; there is no
+machine-only or exact-server-grant prerequisite. Legacy environment credentials
+remain as separate fixtures. Open the built-in Slack authentication settings and verify the
+inbound issuer is selected. Reseed twice and verify the selection remains; the
+postflight checks exactly one binding to the expected project/org issuer and
+one matching persisted server, auth client, association, and fake token header.
+The existing project/server foreign-key cascades remove these auth rows on
+reseed; generated audience grants use the existing scoped provision cleanup.
+Cleanup removes settings across the seeded organization's projects before
+issuers or projects are deleted. If a previous project deletion already detached
+the deterministic Slack preference, cleanup also recovers that specific
+Spec-derived row without deleting other tenants' detached preferences.

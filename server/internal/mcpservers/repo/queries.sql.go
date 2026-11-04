@@ -1159,6 +1159,8 @@ JOIN projects AS p
  AND p.deleted IS FALSE
 WHERE m.project_id = $2
   AND m.deleted IS FALSE
+  -- Code-defined Slack has its own visibility-aware catalog surface.
+  AND m.builtin_backend IS DISTINCT FROM 'slack'
 ORDER BY m.id ASC
 LIMIT $3
 `
@@ -1216,6 +1218,8 @@ FROM mcp_servers AS m
 JOIN projects AS p ON p.id = m.project_id
 WHERE p.organization_id = $1
   AND m.deleted IS FALSE
+  -- Code-defined Slack has its own visibility-aware catalog surface.
+  AND m.builtin_backend IS DISTINCT FROM 'slack'
   AND p.deleted IS FALSE
   -- Same live-toolset rule as ListMCPServersByProjectID.
   AND (
@@ -1277,6 +1281,8 @@ SELECT ms.id, ms.project_id, ms.name, ms.slug, ms.environment_id, ms.user_sessio
 FROM mcp_servers ms
 WHERE ms.project_id = $1
   AND ms.deleted IS FALSE
+  -- Code-defined Slack has its own visibility-aware catalog surface.
+  AND ms.builtin_backend IS DISTINCT FROM 'slack'
   AND (
     ms.toolset_id IS NULL
     OR EXISTS (
@@ -1352,6 +1358,8 @@ SELECT id, project_id, name, slug, environment_id, user_session_issuer_id, remot
 FROM mcp_servers
 WHERE project_id = $1
   AND deleted IS FALSE
+  -- Code-defined Slack has its own visibility-aware catalog surface.
+  AND builtin_backend IS DISTINCT FROM 'slack'
 ORDER BY id ASC
 LIMIT $2
 `

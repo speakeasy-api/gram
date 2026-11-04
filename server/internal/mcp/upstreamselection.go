@@ -671,7 +671,7 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 	ids := make([]uuid.UUID, 0, len(members))
 	projects := make(map[uuid.UUID]uuid.UUID, len(members))
 	for _, member := range members {
-		if member.backend == metaMemberBackendProxied {
+		if c.typedMember(member) {
 			ids = append(ids, member.serverID)
 			projects[member.serverID] = member.projectID
 		}
@@ -683,7 +683,7 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 		// A principal credential that binds no execution-selection profile
 		// reaches no proxied member once the organization enforces.
 		for i := range members {
-			if members[i].backend == metaMemberBackendProxied {
+			if c.typedMember(members[i]) {
 				members[i].upstreamUnavailable = &metaMemberError{message: fmt.Sprintf("server %q needs this gateway to be signed in to again to choose its connection", members[i].slug)}
 			}
 		}
@@ -754,7 +754,7 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 	headers, headerErr := c.selector.service.loadAuthClientHeaders(ctx, c.selector.organizationID, headerIDs)
 	for i := range members {
 		member := &members[i]
-		if member.backend != metaMemberBackendProxied {
+		if !c.typedMember(*member) {
 			continue
 		}
 		if c.onlyChosen {
@@ -990,6 +990,8 @@ func (s *Service) agentKeyMemberChoices(ctx context.Context, organizationID stri
 				return nil, err
 			}
 			endpoint := &ResolvedMcpEndpoint{
+				BuiltinID:                 uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+				builtinOAuthError:         nil,
 				AudienceURN:               "",
 				CIMDAdmissionModeRaw:      pgtype.Text{String: "", Valid: false},
 				CustomDomainID:            uuid.NullUUID{UUID: uuid.Nil, Valid: false},

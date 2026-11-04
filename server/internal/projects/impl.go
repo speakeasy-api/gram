@@ -29,21 +29,23 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/middleware"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/orghost"
 	"github.com/speakeasy-api/gram/server/internal/projects/repo"
 	tenv "github.com/speakeasy-api/gram/server/internal/temporal"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 type Service struct {
-	tracer   trace.Tracer
-	logger   *slog.Logger
-	db       *pgxpool.Pool
-	repo     *repo.Queries
-	core     *Core
-	sessions *sessions.Manager
-	auth     *auth.Auth
-	authz    *authz.Engine
-	audit    *audit.Logger
+	tracer       trace.Tracer
+	logger       *slog.Logger
+	db           *pgxpool.Pool
+	repo         *repo.Queries
+	core         *Core
+	sessions     *sessions.Manager
+	auth         *auth.Auth
+	authz        *authz.Engine
+	audit        *audit.Logger
+	builtinHosts *orghost.Resolver
 }
 
 var _ gen.Service = (*Service)(nil)
@@ -61,15 +63,16 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("projects"))
 
 	return &Service{
-		tracer:   tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/projects"),
-		logger:   logger,
-		db:       db,
-		repo:     repo.New(db),
-		core:     NewCore(logger, auditLogger, temporalEnv, pluginsGitHubEnabled),
-		sessions: sessions,
-		auth:     auth.New(logger, db, sessions, authzEngine),
-		authz:    authzEngine,
-		audit:    auditLogger,
+		tracer:       tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/projects"),
+		logger:       logger,
+		db:           db,
+		repo:         repo.New(db),
+		core:         NewCore(logger, auditLogger, temporalEnv, pluginsGitHubEnabled),
+		sessions:     sessions,
+		auth:         auth.New(logger, db, sessions, authzEngine),
+		authz:        authzEngine,
+		audit:        auditLogger,
+		builtinHosts: nil,
 	}
 }
 

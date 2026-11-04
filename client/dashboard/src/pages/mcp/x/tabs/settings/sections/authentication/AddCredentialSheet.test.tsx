@@ -103,7 +103,7 @@ function client(overrides: Record<string, unknown>) {
   };
 }
 
-function renderSheet(tunneled = false) {
+function renderSheet(tunneled = false, builtinSlack = false) {
   const queryClient = new QueryClient();
   render(
     <QueryClientProvider client={queryClient}>
@@ -114,6 +114,7 @@ function renderSheet(tunneled = false) {
             projectId="project-1"
             remoteMcpServerId="remote-1"
             tunneled={tunneled}
+            builtinSlack={builtinSlack}
             onOpenChange={() => undefined}
           />
         </MemoryRouter>
@@ -608,5 +609,83 @@ describe("AddCredentialSheet", () => {
       expect(screen.getByText("mcp.linear.app · 01a1a312")).toBeTruthy();
       expect(screen.getByText("mcp.linear.app · second")).toBeTruthy();
     });
+  });
+});
+
+it("limits built-in Slack to static secrets and creates a named token header", async () => {
+  mocks.clientPages = [
+    [client({ clientType: "remote_session", name: "OAuth credential" })],
+  ];
+  renderSheet(false, true);
+  await waitFor(() =>
+    expect(
+      screen.queryByRole("radio", { name: /^Existing credential/ }),
+    ).toBeNull(),
+  );
+  expect(screen.getAllByRole("radio")).toHaveLength(1);
+  expect(
+    screen.getByRole("radio", { name: /^Static credential/ }),
+  ).toBeTruthy();
+  fireEvent.change(screen.getByLabelText("Name"), {
+    target: { value: "Slack token" },
+  });
+  fireEvent.change(screen.getByLabelText("Value for SLACK_BOT_TOKEN"), {
+    target: { value: "test-secret" },
+  });
+  fireEvent.click(screen.getByRole("button", { name: "Add credential" }));
+  expect(mocks.create).toHaveBeenCalledWith({
+    request: {
+      createAuthClientRequestBody: expect.objectContaining({
+        clientType: "static_credential",
+        mcpServerIds: ["this-server"],
+        headers: [
+          expect.objectContaining({
+            name: "SLACK_BOT_TOKEN",
+            value: "test-secret",
+            isSecret: true,
+          }),
+        ],
+      }),
+    },
+  });
+});
+
+it("reuses only static credentials for built-in Slack", async () => {
+  mocks.clientPages = [
+    [
+      client({ id: "static", name: "Slack shared token" }),
+      client({
+        id: "oauth",
+        name: "OAuth credential",
+        clientType: "remote_session",
+      }),
+      client({
+        id: "pass",
+        name: "Forwarded headers",
+        clientType: "pass_through",
+      }),
+      client({
+        id: "service",
+        name: "Service sign-in",
+        clientType: "service_account",
+      }),
+    ],
+  ];
+  renderSheet(false, true);
+  fireEvent.click(await screen.findByRole("combobox"));
+  expect(
+    screen.queryByRole("option", {
+      name: /OAuth credential|Forwarded headers|Service sign-in/,
+    }),
+  ).toBeNull();
+  fireEvent.click(screen.getByRole("option", { name: /Slack shared token/ }));
+  fireEvent.click(screen.getByRole("button", { name: "Add credential" }));
+  expect(mocks.attach).toHaveBeenCalledWith({
+    request: {
+      attachAuthClientToMcpServerRequestBody: {
+        id: "static",
+        mcpServerId: "this-server",
+      },
+    },
   });
 });

@@ -147,6 +147,10 @@ describe("MCP server routes", () => {
     "/mcp/deployments",
     "/mcp/sources",
     "/mcp/sources/source-1",
+    "/mcp/builtin/slack",
+    "/mcp/builtin/slack/overview",
+    "/mcp/builtin/slack/tools",
+    "/mcp/builtin/slack/authentication",
     "/mcp/organization-gateway",
     "/mcp/gateway/gateway-1",
     "/mcp/gateway/gateway-1/overview",
@@ -155,6 +159,15 @@ describe("MCP server routes", () => {
     expect(matches.length).toBeGreaterThan(0);
     expect(matches.map((match) => match.route.path)).not.toContain(
       ":mcpServerSlug",
+    );
+  });
+
+  it("links a server slugged builtin by id without entering the built-in page", () => {
+    const id = "11111111-1111-4111-8111-111111111111";
+    const param = mcpServerRouteParam({ id, slug: "builtin" });
+    expect(param).toBe(id);
+    expect(visit(`${BASE}/mcp/${param}/overview`)).toBe(
+      `${id} ${BASE}/mcp/${id}/overview`,
     );
   });
 

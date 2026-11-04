@@ -9,6 +9,25 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 )
 
+type BuiltinMcpServerMember struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	MetaMcpServerID uuid.NullUUID
+	// @access: confidential
+	BuiltinKey string
+	// @access: confidential
+	EnvironmentID uuid.NullUUID
+	// @access: confidential
+	SortOrder int32
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
 type MetaMcpServer struct {
 	// @access: confidential
 	ID uuid.UUID

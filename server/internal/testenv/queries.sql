@@ -2581,3 +2581,19 @@ FROM remote_sessions WHERE id = @id AND deleted;
 
 -- name: GetDeletedRemoteSessionCredentialsFixture :one
 SELECT subject_urn, access_token_encrypted, refresh_token_encrypted FROM remote_sessions WHERE id = @id AND deleted;
+-- name: ForceHardDeleteUserSessionIssuerFixture :exec
+-- Shared fixture for checking ON DELETE behavior of issuer bindings.
+DELETE FROM user_session_issuers WHERE id = @id;
+
+-- name: ForceUserSessionIssuerOwnershipFixture :exec
+-- Shared fixture for defensive runtime checks of stale or invalid bindings.
+UPDATE user_session_issuers
+SET project_id = sqlc.narg(project_id), organization_id = sqlc.narg(organization_id)
+WHERE id = @id;
+
+-- name: CountBuiltinIssuerBindingAuditsFixture :one
+SELECT count(*) FROM audit_logs
+WHERE project_id = @project_id
+  AND subject_id = @subject_id
+  AND action = 'builtin_mcp:update'
+  AND actor_id = 'builtin-mcp-issuer-binding';

@@ -447,3 +447,20 @@ describe("completed membership reconciliation", () => {
     },
   );
 });
+
+it("classifies synthetic built-ins without a persisted server row", () => {
+  const rows = buildMemberRows(
+    [
+      {
+        id: "membership",
+        mcpServerId: "synthetic",
+        builtinKey: "slack",
+        mcpServerName: "Slack",
+        sortOrder: 0,
+      },
+    ],
+    [],
+  );
+  expect(rows[0]?.classification).toBe("builtin");
+  expect(rows[0]?.server).toBeUndefined();
+});

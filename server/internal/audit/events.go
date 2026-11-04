@@ -9,6 +9,7 @@ import (
 type subjectType string
 
 const (
+	subjectTypeBuiltinMcpServer            subjectType = "builtin_mcp_server"
 	subjectTypeAPIKey                      subjectType = "api_key"
 	subjectTypeAccessChallenge             subjectType = "access_challenge"
 	subjectTypeAccessMember                subjectType = "access_member"

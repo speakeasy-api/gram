@@ -4,6 +4,7 @@ import {
   authorizationServerModeLabel,
   changesIssuerUrl,
   consolidationTargets,
+  linkedMcpServerKindLabel,
   describeMismatch,
   settingValue,
   unavailableReason,
@@ -154,5 +155,16 @@ describe("display helpers", () => {
       ]),
     ).toBe(true);
     expect(changesIssuerUrl([])).toBe(false);
+  });
+});
+
+describe("linkedMcpServerKindLabel", () => {
+  it.each([
+    ["builtin_mcp_server", "Built-in MCP server"],
+    ["meta_mcp_server", "Gateway"],
+    ["mcp_server", "MCP server"],
+    ["toolset", "MCP server"],
+  ])("labels %s as %s", (kind, label) => {
+    expect(linkedMcpServerKindLabel(kind)).toBe(label);
   });
 });

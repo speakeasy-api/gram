@@ -44,3 +44,10 @@ AND NOT EXISTS (
  AND c.remote_session_issuer_id = b.remote_session_issuer_id
  AND c.organization_id = b.organization_id AND c.project_id = b.project_id
 );
+
+-- name: DetachBuiltinSlackSettings :execrows
+-- Reproduce the SET NULL state left by deleting the owning project and issuer.
+UPDATE builtin_mcp_settings
+SET project_id = NULL, user_session_issuer_id = NULL
+WHERE project_id = @project_id::uuid AND builtin_key = 'slack'
+  AND project_id IN (SELECT id FROM projects WHERE organization_id = @org_id::text);

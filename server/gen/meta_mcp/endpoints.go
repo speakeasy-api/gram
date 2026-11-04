@@ -16,15 +16,16 @@ import (
 
 // Endpoints wraps the "metaMcp" service endpoints.
 type Endpoints struct {
-	CreateMetaMcpServer goa.Endpoint
-	GetMetaMcpServer    goa.Endpoint
-	ListMetaMcpServers  goa.Endpoint
-	UpdateMetaMcpServer goa.Endpoint
-	DeleteMetaMcpServer goa.Endpoint
-	ListMetaMcpMembers  goa.Endpoint
-	AddMetaMcpMember    goa.Endpoint
-	UpdateMetaMcpMember goa.Endpoint
-	RemoveMetaMcpMember goa.Endpoint
+	CreateMetaMcpServer     goa.Endpoint
+	GetMetaMcpServer        goa.Endpoint
+	ListMetaMcpServers      goa.Endpoint
+	UpdateMetaMcpServer     goa.Endpoint
+	DeleteMetaMcpServer     goa.Endpoint
+	ListMetaMcpMembers      goa.Endpoint
+	SetBuiltinMetaMcpMember goa.Endpoint
+	AddMetaMcpMember        goa.Endpoint
+	UpdateMetaMcpMember     goa.Endpoint
+	RemoveMetaMcpMember     goa.Endpoint
 }
 
 // NewEndpoints wraps the methods of the "metaMcp" service with endpoints.
@@ -32,15 +33,16 @@ func NewEndpoints(s Service) *Endpoints {
 	// Casting service to Auther interface
 	a := s.(Auther)
 	return &Endpoints{
-		CreateMetaMcpServer: NewCreateMetaMcpServerEndpoint(s, a.APIKeyAuth),
-		GetMetaMcpServer:    NewGetMetaMcpServerEndpoint(s, a.APIKeyAuth),
-		ListMetaMcpServers:  NewListMetaMcpServersEndpoint(s, a.APIKeyAuth),
-		UpdateMetaMcpServer: NewUpdateMetaMcpServerEndpoint(s, a.APIKeyAuth),
-		DeleteMetaMcpServer: NewDeleteMetaMcpServerEndpoint(s, a.APIKeyAuth),
-		ListMetaMcpMembers:  NewListMetaMcpMembersEndpoint(s, a.APIKeyAuth),
-		AddMetaMcpMember:    NewAddMetaMcpMemberEndpoint(s, a.APIKeyAuth),
-		UpdateMetaMcpMember: NewUpdateMetaMcpMemberEndpoint(s, a.APIKeyAuth),
-		RemoveMetaMcpMember: NewRemoveMetaMcpMemberEndpoint(s, a.APIKeyAuth),
+		CreateMetaMcpServer:     NewCreateMetaMcpServerEndpoint(s, a.APIKeyAuth),
+		GetMetaMcpServer:        NewGetMetaMcpServerEndpoint(s, a.APIKeyAuth),
+		ListMetaMcpServers:      NewListMetaMcpServersEndpoint(s, a.APIKeyAuth),
+		UpdateMetaMcpServer:     NewUpdateMetaMcpServerEndpoint(s, a.APIKeyAuth),
+		DeleteMetaMcpServer:     NewDeleteMetaMcpServerEndpoint(s, a.APIKeyAuth),
+		ListMetaMcpMembers:      NewListMetaMcpMembersEndpoint(s, a.APIKeyAuth),
+		SetBuiltinMetaMcpMember: NewSetBuiltinMetaMcpMemberEndpoint(s, a.APIKeyAuth),
+		AddMetaMcpMember:        NewAddMetaMcpMemberEndpoint(s, a.APIKeyAuth),
+		UpdateMetaMcpMember:     NewUpdateMetaMcpMemberEndpoint(s, a.APIKeyAuth),
+		RemoveMetaMcpMember:     NewRemoveMetaMcpMemberEndpoint(s, a.APIKeyAuth),
 	}
 }
 
@@ -52,6 +54,7 @@ func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.UpdateMetaMcpServer = m(e.UpdateMetaMcpServer)
 	e.DeleteMetaMcpServer = m(e.DeleteMetaMcpServer)
 	e.ListMetaMcpMembers = m(e.ListMetaMcpMembers)
+	e.SetBuiltinMetaMcpMember = m(e.SetBuiltinMetaMcpMember)
 	e.AddMetaMcpMember = m(e.AddMetaMcpMember)
 	e.UpdateMetaMcpMember = m(e.UpdateMetaMcpMember)
 	e.RemoveMetaMcpMember = m(e.RemoveMetaMcpMember)
@@ -408,6 +411,65 @@ func NewListMetaMcpMembersEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFu
 			return nil, err
 		}
 		return s.ListMetaMcpMembers(ctx, p)
+	}
+}
+
+// NewSetBuiltinMetaMcpMemberEndpoint returns an endpoint function that calls
+// the method "setBuiltinMetaMcpMember" of service "metaMcp".
+func NewSetBuiltinMetaMcpMemberEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*SetBuiltinMetaMcpMemberPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err == nil {
+			sc := security.APIKeyScheme{
+				Name:           "project_slug",
+				Scopes:         []string{},
+				RequiredScopes: []string{},
+			}
+			var key string
+			if p.ProjectSlugInput != nil {
+				key = *p.ProjectSlugInput
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+		}
+		if err != nil {
+			sc := security.APIKeyScheme{
+				Name:           "apikey",
+				Scopes:         []string{"consumer", "producer", "chat", "hooks", "agent", "agent_user"},
+				RequiredScopes: []string{"producer"},
+			}
+			var key string
+			if p.ApikeyToken != nil {
+				key = *p.ApikeyToken
+			}
+			ctx, err = authAPIKeyFn(ctx, key, &sc)
+			if err == nil {
+				sc := security.APIKeyScheme{
+					Name:           "project_slug",
+					Scopes:         []string{},
+					RequiredScopes: []string{"producer"},
+				}
+				var key string
+				if p.ProjectSlugInput != nil {
+					key = *p.ProjectSlugInput
+				}
+				ctx, err = authAPIKeyFn(ctx, key, &sc)
+			}
+		}
+		if err != nil {
+			return nil, err
+		}
+		return s.SetBuiltinMetaMcpMember(ctx, p)
 	}
 }
 

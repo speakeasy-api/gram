@@ -39,11 +39,12 @@ vi.mock("@gram/client/react-query/updateAuthClient.js", () => ({
   useUpdateAuthClientMutation: () => ({ mutate: vi.fn(), isPending: false }),
 }));
 
-function renderSection(server: Partial<McpServer>) {
+function renderSection(server: Partial<McpServer>, builtinSlack = false) {
   render(
     <QueryClientProvider client={new QueryClient()}>
       <TooltipProvider>
         <UpstreamCredentialsSection
+          builtinSlack={builtinSlack}
           mcpServer={
             { id: "server-1", projectId: "project-1", ...server } as McpServer
           }
@@ -120,4 +121,10 @@ describe("UpstreamCredentialsSection", () => {
     expect(mocks.probed).toHaveBeenCalledWith("", false);
     expect(screen.queryByText(/Speakeasy checked the upstream/)).toBeNull();
   });
+});
+
+it("does not probe a built-in upstream", () => {
+  renderSection({}, true);
+  expect(mocks.probed).not.toHaveBeenCalled();
+  expect(screen.getByRole("button", { name: "Add credential" })).toBeTruthy();
 });

@@ -9,6 +9,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
+	"github.com/speakeasy-api/gram/server/internal/builtinmcp"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -16,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	upstreamclientsrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/selectionbackfill"
+	metamcprepo "github.com/speakeasy-api/gram/server/internal/metamcp/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
@@ -226,4 +228,53 @@ func TestAgentKeyChoiceServesAServerWithoutAnIssuerGate(t *testing.T) {
 	require.Len(t, serve(omittedChoiceCtx, true), 1, "an agent key with no recorded choice keeps legacy headers")
 	server.UserSessionIssuerID = validUUID(uuid.New())
 	require.Len(t, serve(keyCtx, true), 1, "the issuer-gated path keeps its already-resolved options")
+}
+
+func TestRecordNewBuiltinMemberUsesAttachmentTime(t *testing.T) {
+	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "builtin_new_member_attachment")
+	require.NoError(t, err)
+	ctx := t.Context()
+	f := newAuthClientFixture(t, pool)
+	f.enforce()
+	user := urn.NewUserSubject("user_builtin")
+	issuerID, gatewayID := uuid.New(), uuid.New()
+	fixtures := selectionbackfill.New(pool)
+	require.NoError(t, fixtures.SeedUserSessionIssuerFixture(ctx, selectionbackfill.SeedUserSessionIssuerFixtureParams{ID: issuerID, ProjectID: validUUID(f.projectID), OrganizationID: text(f.orgID), Slug: "usi-" + issuerID.String()[:8]}))
+	require.NoError(t, fixtures.SeedMetaMCPServerFixture(ctx, selectionbackfill.SeedMetaMCPServerFixtureParams{ID: gatewayID, OrganizationID: f.orgID, ProjectID: f.projectID, Name: "gateway", UserSessionIssuerID: validUUID(issuerID)}))
+	// The normal server and its configured client already exist at issuance.
+	require.NoError(t, builtinmcp.EnsureServer(ctx, pool, f.orgID, f.projectID, builtinmcp.Slack, validUUID(issuerID)))
+	f.serverID = builtinmcp.ID(f.projectID, builtinmcp.Slack)
+	clientID := f.adminClient(authClientTypeStaticCredential, uuid.NullUUID{})
+	f.copyHeader(clientID, "SLACK_BOT_TOKEN", true, false, text("test-static-token"), pgtype.Text{})
+	credentialID := uuid.New()
+	require.NoError(t, f.q.SeedUserSessionFixture(ctx, authclientbackfill.SeedUserSessionFixtureParams{ProjectID: validUUID(f.projectID), OrganizationID: text(f.orgID), UserSessionIssuerID: issuerID, SubjectUrn: user, Jti: "jti-" + credentialID.String(), CredentialID: validUUID(credentialID)}))
+	query := upstreamclientsrepo.New(pool)
+	params := upstreamclientsrepo.ListGatewayMembersAddedAfterIssuanceParams{OrganizationID: f.orgID, MetaMcpServerID: validUUID(gatewayID), McpServerIds: []uuid.UUID{f.serverID}, CredentialID: credentialID, SubjectUrn: user.String()}
+	added, err := query.ListGatewayMembersAddedAfterIssuance(ctx, params)
+	require.NoError(t, err)
+	require.Empty(t, added, "a previously provisioned server is not itself a new member")
+	_, err = metamcprepo.New(pool).SetBuiltinMetaMCPMember(ctx, metamcprepo.SetBuiltinMetaMCPMemberParams{ProjectID: validUUID(f.projectID), MetaMcpServerID: validUUID(gatewayID), BuiltinKey: builtinmcp.Slack})
+	require.NoError(t, err)
+	added, err = query.ListGatewayMembersAddedAfterIssuance(ctx, params)
+	require.NoError(t, err)
+	require.Equal(t, []uuid.UUID{f.serverID}, added)
+	// The organization gateway still uses server creation, not this attachment.
+	derived := params
+	derived.MetaMcpServerID = uuid.NullUUID{}
+	added, err = query.ListGatewayMembersAddedAfterIssuance(ctx, derived)
+	require.NoError(t, err)
+	require.Empty(t, added)
+	choices := &memberChoices{selector: &upstreamSelector{service: f.service, organizationID: f.orgID, userSessionIssuerID: issuerID, credentialKind: upstreamclients.CredentialKindUserSession, credentialID: credentialID}, subject: user, enforced: true, metaServerID: validUUID(gatewayID), byServer: map[uuid.UUID]*memberTokens{}}
+	members := []metaMember{{backend: metaMemberBackendBuiltin, builtinKey: builtinmcp.Slack, serverID: f.serverID, projectID: f.projectID, slug: "builtin_slack"}}
+	require.True(t, choices.recordNewMemberChoices(ctx, testenv.NewLogger(t), members, map[uuid.UUID]authClientResolution{}))
+	selection, err := f.q.GetSelectionFixture(ctx, authclientbackfill.GetSelectionFixtureParams{CredentialID: credentialID, McpServerID: f.serverID})
+	require.NoError(t, err)
+	require.Equal(t, validUUID(clientID), selection.AuthClientID)
+	require.Equal(t, upstreamclients.SelectionSourceNewMember, selection.Source)
+	// Automatic selection is not permission: serving still checks the client.
+	f.service.authClientPermitter = denyPermitter{}
+	choices.apply(ctx, testenv.NewLogger(t), members, true)
+	require.Error(t, members[0].upstreamUnavailable)
+	require.Equal(t, authClientNoAccess, members[0].authClient.outcome)
 }

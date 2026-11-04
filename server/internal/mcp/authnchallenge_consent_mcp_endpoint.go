@@ -207,6 +207,9 @@ func (s *Service) ServeConsentMCP(w http.ResponseWriter, r *http.Request, endpoi
 	if endpoint.ToolsetID.Valid {
 		return s.serveConsentToolsetMCP(w, r, endpoint, challengeState, draft)
 	}
+	if serverRow != nil && credentialConsumingBuiltin(serverRow.BuiltinBackend.String) {
+		return s.serveConsentCredentialBuiltinMCP(w, r, endpoint, challengeState, draft, serverRow.BuiltinBackend.String, postedAuthClient)
+	}
 	if serverRow != nil && serverRow.BuiltinBackend.Valid {
 		return s.serveConsentBuiltinMCP(w, r, endpoint, challengeState, draft, serverRow)
 	}

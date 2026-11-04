@@ -17,6 +17,10 @@ import {
  */
 export type OrganizationUserSessionIssuerMigratePreflight = {
   /**
+   * Number of live built-in MCP bindings to the source issuer. Rebind these explicitly before migrating; a nonzero count blocks migration.
+   */
+  builtinBindingCount: number;
+  /**
    * True when no hard blocker is present.
    */
   canMigrate: boolean;
@@ -71,6 +75,7 @@ export const OrganizationUserSessionIssuerMigratePreflight$inboundSchema:
   z.ZodMiniType<OrganizationUserSessionIssuerMigratePreflight, unknown> = z
     .pipe(
       z.object({
+        builtin_binding_count: z.int(),
         can_migrate: z.boolean(),
         cimd_client_count: z.int(),
         client_count: z.int(),
@@ -86,6 +91,7 @@ export const OrganizationUserSessionIssuerMigratePreflight$inboundSchema:
       }),
       z.transform((v) => {
         return remap$(v, {
+          "builtin_binding_count": "builtinBindingCount",
           "can_migrate": "canMigrate",
           "cimd_client_count": "cimdClientCount",
           "client_count": "clientCount",

@@ -37,6 +37,7 @@ export const MCP_FILTER_OPTIONS: OptionsById = {
     { value: "catalog", label: "Catalog" },
     { value: "custom", label: "Custom" },
     { value: "gateway", label: "Gateway" },
+    { value: "builtin", label: "Built-in" },
     { value: "remote", label: "Remote URL" },
     { value: "tunneled", label: "Tunneled" },
     { value: "unproxied", label: "Unproxied" },
@@ -53,6 +54,7 @@ export interface McpFacets {
     | "catalog"
     | "custom"
     | "gateway"
+    | "builtin"
     | "remote"
     | "tunneled"
     | "unproxied"

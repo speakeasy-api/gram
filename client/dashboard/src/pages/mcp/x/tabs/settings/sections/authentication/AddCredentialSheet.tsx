@@ -104,6 +104,7 @@ export function AddCredentialSheet({
   projectId,
   remoteMcpServerId,
   tunneled,
+  builtinSlack = false,
   onOpenChange,
 }: {
   mcpServerId: string;
@@ -112,6 +113,8 @@ export function AddCredentialSheet({
   remoteMcpServerId: string | undefined;
   /** Tunneled servers are sent no credential headers. */
   tunneled: boolean;
+  /** Built-in Slack consumes named token secrets, not upstream OAuth. */
+  builtinSlack?: boolean;
   onOpenChange: (open: boolean) => void;
 }): JSX.Element {
   const queryClient = useQueryClient();
@@ -121,11 +124,14 @@ export function AddCredentialSheet({
   const [name, setName] = useState("");
   const [registrationId, setRegistrationId] = useState("");
   const [shareAcrossProjects, setShareAcrossProjects] = useState(false);
-  const [headers, setHeaders] = useState<HeaderDraft[]>([]);
+  const [headers, setHeaders] = useState<HeaderDraft[]>(() =>
+    builtinSlack ? [newHeaderDraft("stored", "SLACK_BOT_TOKEN")] : [],
+  );
 
   const reusable = useAllAuthClients();
   const candidates = (reusable.data ?? []).filter(
     (client) =>
+      (!builtinSlack || client.clientType === "static_credential") &&
       !client.servers.some((server) => server.id === mcpServerId) &&
       (!client.projectId || client.projectId === projectId) &&
       !(tunneled && isHeadersOnly(client.clientType)),
@@ -135,7 +141,12 @@ export function AddCredentialSheet({
   const offersExisting =
     picked === "existing" || !reusable.isSuccess || candidates.length > 0;
   const choice: Choice =
-    picked ?? (offersExisting ? "existing" : "service_account");
+    picked ??
+    (offersExisting
+      ? "existing"
+      : builtinSlack
+        ? "static_credential"
+        : "service_account");
 
   const owner = REGISTRATION_OWNER[choice];
   const signIns = useSignInChoices(owner, remoteMcpServerId);
@@ -171,7 +182,11 @@ export function AddCredentialSheet({
     setPicked(next);
     setRegistrationId("");
     signIns.setShowAll(false);
-    setHeaders(initialHeaders(next));
+    setHeaders(
+      builtinSlack && next === "static_credential"
+        ? [newHeaderDraft("stored", "SLACK_BOT_TOKEN")]
+        : initialHeaders(next),
+    );
   };
 
   const problem =
@@ -249,17 +264,19 @@ export function AddCredentialSheet({
                 description="Share one another server uses instead of making a copy. Changing or rotating it later changes every server that uses it."
               />
             ) : null}
-            {NEW_KINDS.filter((kind) => !(tunneled && isHeadersOnly(kind))).map(
-              (kind) => (
-                <ChoiceRow
-                  key={kind}
-                  value={kind}
-                  selected={choice}
-                  label={clientTypeLabel(kind)}
-                  description={clientTypeHint(kind)}
-                />
-              ),
-            )}
+            {NEW_KINDS.filter(
+              (kind) =>
+                (!builtinSlack || kind === "static_credential") &&
+                !(tunneled && isHeadersOnly(kind)),
+            ).map((kind) => (
+              <ChoiceRow
+                key={kind}
+                value={kind}
+                selected={choice}
+                label={clientTypeLabel(kind)}
+                description={clientTypeHint(kind)}
+              />
+            ))}
           </RadioGroup>
 
           {choice === "existing" ? (

@@ -164,6 +164,7 @@ export function mcpServerRouteParam(server: {
 export const RESERVED_MCP_SEGMENTS: ReadonlySet<string> = new Set([
   "add",
   "catalog",
+  "builtin",
   "deployments",
   "sources",
   "organization-gateway",

@@ -40,6 +40,20 @@ INSERT INTO user_session_issuers (id, project_id, organization_id, slug,
   (@code_gateway_id::uuid, @project_id::uuid, @org_id::text, 'python-code-gateway',
    'interactive', make_interval(secs => 14 * 24 * 60 * 60), 'endpoint');
 
+-- name: ServersInsertBuiltinSlackSettings :exec
+-- Inbound issuer preference for the code-owned Slack backend.
+INSERT INTO builtin_mcp_settings
+  (id, project_id, builtin_key, user_session_issuer_id, user_session_issuer_bound)
+VALUES (@id::uuid, @project_id::uuid, 'slack', @issuer_id::uuid, true);
+
+-- name: ServersInsertBuiltinSlackServer :exec
+INSERT INTO mcp_servers
+  (id, project_id, name, builtin_backend, visibility, requires_upstream_auth,
+   user_session_issuer_id)
+SELECT @id::uuid, p.id, 'Built-in Slack', 'slack', 'private', true, @issuer_id::uuid
+FROM projects p
+WHERE p.id = @project_id::uuid AND p.organization_id = @org_id::text;
+
 -- name: ServersInsertMCPServers :exec
 INSERT INTO mcp_servers (id, project_id, name, slug, toolset_id,
                          remote_mcp_server_id, user_session_issuer_id,
@@ -149,6 +163,8 @@ WHERE p.organization_id = @org_id::text AND p.project_id = @project_id::uuid
   -- Canonical hosted wrappers share their toolset's name with the
   -- fresh-id servers above; distribute those servers only.
   AND s.id IS DISTINCT FROM s.toolset_id
+  -- Built-in Slack uses its synthetic route, not plugin distribution.
+  AND s.builtin_backend IS DISTINCT FROM 'slack'
   AND EXISTS (
     SELECT 1 FROM principal_grants g
     WHERE g.organization_id = @org_id::text AND g.principal_urn = a.principal_urn
