@@ -1375,12 +1375,10 @@ func (s *Service) canonicalTelemetryRows(ctx context.Context, payload *gen.Inges
 			attrs[attr.GenAIUsageCostKey] = *usage.Cost
 		}
 	}
+	if server := canonicalTelemetryToolSource(payload); server != "" {
+		attrs[attr.ToolCallSourceKey] = server
+	}
 	if mcp := canonicalMCPData(payload); mcp != nil {
-		if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerIdentity, "")); server != "" {
-			attrs[attr.ToolCallSourceKey] = server
-		} else if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerName, "")); server != "" {
-			attrs[attr.ToolCallSourceKey] = server
-		}
 		if url := strings.TrimSpace(conv.PtrValOr(mcp.URL, "")); url != "" {
 			attrs[attr.MCPServerURLKey] = url
 			attrs[attr.MCPMatchKey] = url
@@ -2221,6 +2219,80 @@ func canonicalTelemetryToolName(payload *gen.IngestPayload) string {
 		return "Skill"
 	}
 	return canonicalToolName(payload)
+}
+
+// canonicalTelemetryToolSource resolves the MCP server a hook tool event is
+// attributed to, stored as gram.tool_call.source. Tool-usage analytics
+// classify a hook trace with a source as a shadow MCP call and one without as
+// a local tool call.
+func canonicalTelemetryToolSource(payload *gen.IngestPayload) string {
+	if mcp := canonicalMCPData(payload); mcp != nil {
+		if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerIdentity, "")); server != "" {
+			return server
+		}
+		if server := strings.TrimSpace(conv.PtrValOr(mcp.ServerName, "")); server != "" {
+			return server
+		}
+	}
+	return openClawResultMCPServer(payload)
+}
+
+// openClawResultMCPServer reads the server name OpenClaw stamps as
+// details.mcpServer on every MCP tool result. Native tool results never carry
+// it. OpenClaw names MCP tools <server>__<tool>, which no relay decodes into
+// data.mcp, and relays that predate reading this marker send OpenClaw MCP
+// results without data.mcp, so ingest reads the marker from the result too.
+// Only post-call events carry a result: the pre-call row of the same call
+// stays unattributed and shares the call's trace.
+func openClawResultMCPServer(payload *gen.IngestPayload) string {
+	if payload == nil || payload.Source == nil || payload.Event == nil {
+		return ""
+	}
+	if !strings.EqualFold(strings.TrimSpace(payload.Source.Adapter), "openclaw") {
+		return ""
+	}
+	switch strings.TrimSpace(payload.Event.Type) {
+	case "tool.completed", "tool.failed":
+	default:
+		return ""
+	}
+	tool := canonicalToolCallData(payload)
+	if tool == nil {
+		return ""
+	}
+	for _, result := range []any{tool.Output, tool.Error} {
+		if server := toolResultDetailsMCPServer(result); server != "" {
+			return server
+		}
+	}
+	return ""
+}
+
+// toolResultDetailsMCPServer returns details.mcpServer from a decoded tool
+// result, which arrives either as a JSON value or as JSON-encoded text.
+func toolResultDetailsMCPServer(result any) string {
+	var raw []byte
+	switch r := result.(type) {
+	case nil:
+		return ""
+	case string:
+		raw = []byte(r)
+	default:
+		encoded, err := json.Marshal(r)
+		if err != nil {
+			return ""
+		}
+		raw = encoded
+	}
+	var decoded struct {
+		Details struct {
+			MCPServer string `json:"mcpServer"`
+		} `json:"details"`
+	}
+	if json.Unmarshal(raw, &decoded) != nil {
+		return ""
+	}
+	return strings.TrimSpace(decoded.Details.MCPServer)
 }
 
 func canonicalToolCallID(payload *gen.IngestPayload) string {

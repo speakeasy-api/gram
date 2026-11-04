@@ -1050,3 +1050,70 @@ func TestListToolUsageTraces_CarriesClientOnBothQueryPaths(t *testing.T) {
 		})
 	}
 }
+
+// OpenClaw reports the MCP server of a call only on its post-call row; the
+// pre-call row of the same trace has no source. The raw path must still
+// classify the call as one shadow MCP call rather than splitting it into an
+// MCP row and a local-tool row. The summary path cannot guarantee this yet:
+// trace_summaries keeps tool_source with any(), so the MV and part merges can
+// keep the pre-call row's empty string.
+func TestListToolUsageTraces_RawPathClassifiesMCPCallWithServerOnPostRowOnly(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID := authCtx.ProjectID.String()
+	now := time.Now().UTC()
+
+	insertOpenClawToolCall := func(traceID string, at time.Time, toolName string, server string) {
+		insertHookEvent(t, ctx, hookEventParams{
+			projectID:      projectID,
+			deploymentID:   uuid.New().String(),
+			timestamp:      at,
+			traceID:        traceID,
+			userEmail:      "erin@example.com",
+			hookSource:     "openclaw",
+			toolName:       toolName,
+			conversationID: "conv-openclaw",
+			customAttrs:    map[string]any{"gram.hook.event": "PreToolUse"},
+		})
+		insertHookEvent(t, ctx, hookEventParams{
+			projectID:      projectID,
+			deploymentID:   uuid.New().String(),
+			timestamp:      at.Add(time.Second),
+			traceID:        traceID,
+			userEmail:      "erin@example.com",
+			hookSource:     "openclaw",
+			toolSource:     server,
+			toolName:       toolName,
+			result:         `"ok"`,
+			conversationID: "conv-openclaw",
+			customAttrs:    map[string]any{"gram.hook.event": "PostToolUse"},
+		})
+	}
+	insertOpenClawToolCall(uuid.New().String(), now.Add(-10*time.Minute), "speakeasy__execute_tool", "speakeasy")
+	insertOpenClawToolCall(uuid.New().String(), now.Add(-5*time.Minute), "exec", "")
+
+	rawPathQuery := ":"
+	result := requireToolUsageTraces(t, ctx, ti, &gen.ListToolUsageTracesPayload{
+		From:  now.Add(-1 * time.Hour).Format(time.RFC3339),
+		To:    now.Add(1 * time.Hour).Format(time.RFC3339),
+		Query: &rawPathQuery,
+		Limit: 10,
+		Sort:  "desc",
+	}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == 2
+	})
+
+	traces := normalizeToolUsageTraces(result.Traces)
+	mcpCall, ok := traces["shadow_mcp_server:speakeasy:speakeasy__execute_tool"]
+	require.True(t, ok, "the MCP call must classify under its server: %v", traces)
+	require.Equal(t, "speakeasy", mcpCall.TargetLabel)
+	require.Equal(t, "success", mcpCall.HookStatus)
+	require.Equal(t, uint64(2), mcpCall.LogCount)
+
+	nativeCall, ok := traces["local_tool:local:exec"]
+	require.True(t, ok, "a native tool stays a local tool: %v", traces)
+	require.Equal(t, uint64(2), nativeCall.LogCount)
+}

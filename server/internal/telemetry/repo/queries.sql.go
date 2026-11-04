@@ -2253,7 +2253,7 @@ func (q *Queries) ListToolTraces(ctx context.Context, arg ListToolTracesParams) 
 		"anyIfMerge(http_status_code) as http_status_code",
 		"any(gram_urn) as gram_urn",
 		"max(tool_name) as tool_name",
-		"any(tool_source) as tool_source",
+		"max(tool_source) as tool_source",
 		"any(event_source) as event_source",
 	).
 		From("trace_summaries").
@@ -5967,7 +5967,13 @@ func toolUsageTraceRowsFromSummariesCTE(arg ListToolUsageTracesParams) (string, 
 		"sum(log_count) AS g_log_count",
 		"any(gram_urn) AS g_gram_urn",
 		"max(tool_name) AS g_tool_name",
-		"any(tool_source) AS g_tool_source",
+		// max, not any: an MCP hook call can name its server on only one of
+		// its rows (OpenClaw reports it on the post-call result alone), so
+		// across a trace's unmerged summary rows the populated value must win
+		// over the unattributed sibling's empty string. The table column and
+		// its MV still aggregate tool_source with any(), so once the rows
+		// collapse into one the empty string can already have won.
+		"max(tool_source) AS g_tool_source",
 		"max(toolset_slug) AS g_toolset_slug",
 		"any(skill_name) AS g_skill_name",
 		"any(user_email) AS g_user_email",
@@ -6322,6 +6328,28 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		return "", nil, fmt.Errorf("building tool usage trace raw source: %w", err)
 	}
 
+	logGroupKind := chMultiIf(
+		"trace_id != ''", "'trace_id'",
+		"trigger_correlation_id != ''", "'correlation_id'",
+		"trigger_event_id != ''", "'trigger_event_id'",
+		"'log_id'",
+	)
+	logGroupValue := chMultiIf(
+		"trace_id != ''", "toString(trace_id)",
+		"trigger_correlation_id != ''", "trigger_correlation_id",
+		"trigger_event_id != ''", "trigger_event_id",
+		"toString(log_id)",
+	)
+	// An MCP hook call can name its server on only one of its rows (OpenClaw
+	// reports it on the post-call result alone). Every row of the log group
+	// inherits it, so the call classifies as one MCP target instead of
+	// splitting into an MCP row and a local-tool row, matching the
+	// max(tool_source) the summary path reads.
+	rawSQL = fmt.Sprintf(
+		"SELECT * REPLACE (if(tool_source != '', tool_source, max(tool_source) OVER (PARTITION BY %s, %s)) AS tool_source) FROM (%s)",
+		logGroupKind, logGroupValue, rawSQL,
+	)
+
 	hostedToolsetSlugs, hostedMCPSlugs, hostedURLSuffixes := toolUsageHostedMatcherArrays(arg.HostedMCPMatchers)
 	mcpSourceIDs, mcpTargetTypes, mcpTargetIDs, mcpTargetLabels := toolUsageMCPServerMatcherArrays(arg.MCPServerMatchers)
 	metaURLSuffixes, metaTargetIDs, metaTargetLabels, metaAnchored := toolUsageMetaMCPMatcherArrays(arg.MetaMCPMatchers)
@@ -6348,18 +6376,6 @@ func toolUsageTraceRowsCTE(arg ListToolUsageTracesParams) (string, []any, error)
 		sourceArgs = append(sourceArgs, rawArgs...)
 	}
 
-	logGroupKind := chMultiIf(
-		"trace_id != ''", "'trace_id'",
-		"trigger_correlation_id != ''", "'correlation_id'",
-		"trigger_event_id != ''", "'trigger_event_id'",
-		"'log_id'",
-	)
-	logGroupValue := chMultiIf(
-		"trace_id != ''", "toString(trace_id)",
-		"trigger_correlation_id != ''", "trigger_correlation_id",
-		"trigger_event_id != ''", "trigger_event_id",
-		"toString(log_id)",
-	)
 	// Reuse the existing trace/log-group window so sparse actor attributes win
 	// before user identity enters GROUP BY, without another scan or join.
 	traceAgentID := "max(agent_id) OVER (PARTITION BY " + logGroupKind + ", " + logGroupValue + ")"
@@ -6705,7 +6721,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 	directGroupedSB := sq.Select(
 		"min(start_time_unix_nano) AS event_time_ns",
 		"max(toolset_slug) AS g_toolset_slug",
-		"any(tool_source) AS g_tool_source",
+		"max(tool_source) AS g_tool_source",
 		"max(tool_name) AS g_tool_name",
 		"any(gram_urn) AS g_gram_urn",
 		"any(user_email) AS g_user_email",
@@ -6734,7 +6750,7 @@ func toolUsageNormalizedEventsCTE(arg GetToolUsageSummaryParams) (string, []any,
 	hookGroupedSB := sq.Select(
 		"min(start_time_unix_nano) AS event_time_ns",
 		"max(tool_name) AS g_tool_name",
-		"any(tool_source) AS g_tool_source",
+		"max(tool_source) AS g_tool_source",
 		"any(user_email) AS g_user_email",
 		"max(external_user_id) AS g_external_user_id",
 		"max(user_id) AS g_user_id",
