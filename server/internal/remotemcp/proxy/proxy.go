@@ -1205,13 +1205,13 @@ func (p *Proxy) forwardRequest(
 	if err != nil {
 		phaseTimer.Stop()
 		forwardCancel()
-		return nil, nil, oops.E(oops.CodeUnexpected, err, "build upstream request").LogError(ctx, p.Logger)
+		return nil, nil, &ForwardSetupError{Err: oops.E(oops.CodeUnexpected, err, "build upstream request").LogError(ctx, p.Logger), Kind: ForwardSetupInternal}
 	}
 	if p.Identity.RemoteMCPServerID != "" {
 		if _, err := validateRemoteMCPTransportURL(upstreamReq.URL.String()); err != nil {
 			phaseTimer.Stop()
 			forwardCancel()
-			return nil, nil, p.classifyForwardError(ctx, fmt.Errorf("validate remote MCP target: %w", err), false)
+			return nil, nil, &ForwardSetupError{Err: p.classifyForwardError(ctx, fmt.Errorf("validate remote MCP target: %w", err), false), Kind: ForwardSetupConfiguration}
 		}
 	}
 

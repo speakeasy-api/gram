@@ -43,3 +43,21 @@ type ToolsCallFailureInterceptor interface {
 	// span attributes and log correlation.
 	Name() string
 }
+
+// ForwardSetupKind distinguishes local setup from an upstream transport failure.
+type ForwardSetupKind uint8
+
+const (
+	ForwardSetupInternal ForwardSetupKind = iota
+	ForwardSetupConfiguration
+	ForwardSetupCaller
+)
+
+// ForwardSetupError preserves the response-facing error while naming why no request was sent.
+type ForwardSetupError struct {
+	Err  error
+	Kind ForwardSetupKind
+}
+
+func (e *ForwardSetupError) Error() string { return e.Err.Error() }
+func (e *ForwardSetupError) Unwrap() error { return e.Err }
