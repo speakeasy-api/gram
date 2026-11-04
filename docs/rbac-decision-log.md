@@ -471,7 +471,7 @@ These resolutions are in the base branch's merge commit and are listed here so t
 ### Decided without reviewer input
 
 1. **Stacked on AG1, and through it on #7590.** _If reversed:_ see AG1 decision 1.
-2. **Only the key service's request decisions move.** Five checks change. Key creation, listing, revocation and policy updates check `Organization(org).Administer()`, and binding a key to a project checks `Project(org, project).Read()`. Recording an agent key's credential choices checks `MCPServer(project, server).Connect()` through `EvaluateGrants` against the creator's live grants. The old code used `GrantsAuthorize` there, which is the same effective decision with blocks.
+2. **Only the key service's request decisions move.** Five checks change. Ordinary key creation (except hooks-only keys without policy grants), organization-wide listing, ordinary-key revocation and policy updates check `Organization(org).Administer()`, and binding a key to a project checks `Project(org, project).Read()`. Agent-key listing and revocation go through the AG1 authorizer. Recording an agent key's credential choices checks `MCPServer(project, server).Connect()` through `EvaluateGrants` against the creator's live grants. The old code used `GrantsAuthorize` there, which is the same effective decision with blocks.
 3. **The other 25 AG2 rows stay, by class.** None of them is a request decision:
    - Upstream selector writes are an independent gate.
    - `LoadGrants`, `ResolveUserPrincipals` and `SelectorFromRow` are loaders that feed the loaded decisions.
