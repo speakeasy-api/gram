@@ -7,7 +7,7 @@ import { remap as remap$ } from "../../lib/primitives.js";
 
 export type RenewTemporaryGrantForm = {
   /**
-   * The new deadline. At least five minutes and at most 30 days from now.
+   * The new deadline. At least five minutes and at most 24 hours from now.
    */
   expiresAt: Date;
   /**

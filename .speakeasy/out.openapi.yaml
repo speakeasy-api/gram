@@ -93774,7 +93774,7 @@ components:
       properties:
         expires_at:
           type: string
-          description: When the grant stops authorizing new requests. At least five minutes and at most 30 days from now.
+          description: When the grant stops authorizing new requests. At least five minutes and at most 24 hours from now.
           format: date-time
         principal_urn:
           type: string
@@ -110036,7 +110036,7 @@ components:
       properties:
         expires_at:
           type: string
-          description: The new deadline. At least five minutes and at most 30 days from now.
+          description: The new deadline. At least five minutes and at most 24 hours from now.
           format: date-time
         id:
           type: string

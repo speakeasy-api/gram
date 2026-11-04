@@ -12,7 +12,7 @@ import {
 
 export type CreateTemporaryGrantForm = {
   /**
-   * When the grant stops authorizing new requests. At least five minutes and at most 30 days from now.
+   * When the grant stops authorizing new requests. At least five minutes and at most 24 hours from now.
    */
   expiresAt: Date;
   /**
