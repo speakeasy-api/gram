@@ -590,12 +590,19 @@ WHERE e.project_id = @project_id
   )
 ORDER BY e.deleted ASC, ms.deleted ASC, e.created_at DESC;
 
--- name: ListMetaMCPServerNamesForTelemetryByProjectID :many
--- Gateway names for telemetry labels, deleted gateways included.
-SELECT id, name
-FROM meta_mcp_servers
-WHERE project_id = @project_id
-ORDER BY deleted ASC, created_at DESC;
+-- name: ListMetaMCPServerLabelsForTelemetry :many
+-- Names the stored gateways among telemetry ids, deleted gateways included: a
+-- member's calls are logged in the member's project, which need not be the
+-- gateway's. Ids that are not stored gateways (agent and organization gateways
+-- stamp derived ids) simply match nothing. The project and deleted flags let a
+-- label link to the gateway's page while it still has one, and say which
+-- project the caller must be able to read to see the name.
+SELECT ms.id, ms.name, ms.project_id, ms.deleted, p.slug AS project_slug, p.deleted AS project_deleted
+FROM meta_mcp_servers ms
+JOIN projects p ON p.id = ms.project_id
+WHERE ms.organization_id = @organization_id
+  AND p.organization_id = @organization_id
+  AND ms.id = ANY(@ids::uuid[]);
 
 -- name: UpdateMetaMCPServerNetworkAccessMode :execrows
 UPDATE meta_mcp_servers

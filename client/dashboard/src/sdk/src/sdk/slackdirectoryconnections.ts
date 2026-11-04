@@ -8,6 +8,7 @@ import { slackDirectoryConnectionsGetMember } from "../funcs/slackDirectoryConne
 import { slackDirectoryConnectionsList } from "../funcs/slackDirectoryConnectionsList.js";
 import { slackDirectoryConnectionsListMembers } from "../funcs/slackDirectoryConnectionsListMembers.js";
 import { slackDirectoryConnectionsListPersonAccounts } from "../funcs/slackDirectoryConnectionsListPersonAccounts.js";
+import { slackDirectoryConnectionsSetDefaultProject } from "../funcs/slackDirectoryConnectionsSetDefaultProject.js";
 import { slackDirectoryConnectionsSetMapping } from "../funcs/slackDirectoryConnectionsSetMapping.js";
 import { slackDirectoryConnectionsSync } from "../funcs/slackDirectoryConnectionsSync.js";
 import { ClientSDK, RequestOptions } from "../lib/sdks.js";
@@ -42,6 +43,10 @@ import {
   ListSlackPersonAccountsRequest,
   ListSlackPersonAccountsSecurity,
 } from "../models/operations/listslackpersonaccounts.js";
+import {
+  SetSlackDirectoryDefaultProjectRequest,
+  SetSlackDirectoryDefaultProjectSecurity,
+} from "../models/operations/setslackdirectorydefaultproject.js";
 import {
   SetSlackIdentityMappingRequest,
   SetSlackIdentityMappingSecurity,
@@ -151,6 +156,25 @@ export class SlackDirectoryConnections extends ClientSDK {
     options?: RequestOptions,
   ): Promise<ListPersonAccountsResponseBody> {
     return unwrapAsync(slackDirectoryConnectionsListPersonAccounts(
+      this,
+      request,
+      security,
+      options,
+    ));
+  }
+
+  /**
+   * setDefaultProject slackDirectoryConnections
+   *
+   * @remarks
+   * Choose the project whose managed assistant answers Speakeasy app mentions and direct messages in a connected workspace. Omit project_id to clear it. A project can be the default for at most one workspace.
+   */
+  async setDefaultProject(
+    request: SetSlackDirectoryDefaultProjectRequest,
+    security?: SetSlackDirectoryDefaultProjectSecurity | undefined,
+    options?: RequestOptions,
+  ): Promise<SlackDirectoryConnection> {
+    return unwrapAsync(slackDirectoryConnectionsSetDefaultProject(
       this,
       request,
       security,

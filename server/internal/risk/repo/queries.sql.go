@@ -2767,7 +2767,7 @@ func (q *Queries) ListChatProjectsByIDs(ctx context.Context, arg ListChatProject
 }
 
 const listChatTitlesByIDs = `-- name: ListChatTitlesByIDs :many
-SELECT c.id, c.title
+SELECT c.id, c.title, c.title_manually_set
 FROM chats c
 WHERE c.project_id = $1
   AND c.id = ANY($2::uuid[])
@@ -2780,8 +2780,9 @@ type ListChatTitlesByIDsParams struct {
 }
 
 type ListChatTitlesByIDsRow struct {
-	ID    uuid.UUID
-	Title pgtype.Text
+	ID               uuid.UUID
+	Title            pgtype.Text
+	TitleManuallySet bool
 }
 
 // Display enrichment for the ClickHouse-served risk events listing: chat
@@ -2797,7 +2798,7 @@ func (q *Queries) ListChatTitlesByIDs(ctx context.Context, arg ListChatTitlesByI
 	var items []ListChatTitlesByIDsRow
 	for rows.Next() {
 		var i ListChatTitlesByIDsRow
-		if err := rows.Scan(&i.ID, &i.Title); err != nil {
+		if err := rows.Scan(&i.ID, &i.Title, &i.TitleManuallySet); err != nil {
 			return nil, err
 		}
 		items = append(items, i)

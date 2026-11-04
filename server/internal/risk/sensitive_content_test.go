@@ -205,3 +205,38 @@ func TestRiskListingSessionTitles(t *testing.T) {
 		})
 	}
 }
+
+// The dismissed listing redacts chat titles for an impersonated session, as
+// the live listings do.
+func TestRiskDismissedListingSessionTitles(t *testing.T) {
+	t.Parallel()
+	ctx, ti := newTestRiskService(t)
+	authCtx, _ := contextvalues.GetAuthContext(ctx)
+	projectID, orgID := *authCtx.ProjectID, authCtx.ActiveOrganizationID
+	ctx = withExactAccessGrants(t, ctx, ti.conn,
+		authz.NewGrant(authz.ScopeOrgAdmin, orgID),
+		authz.NewGrant(authz.ScopeChatRead, authz.WildcardResource),
+	)
+	policyID := seedUnmaskPolicy(t, ti, projectID, orgID, true)
+	chatID, msgID := seedChatWithUser(t, ti, projectID, orgID, "")
+	dismissedAt := time.Now().UTC()
+	insertUnmaskFinding(t, ti, unmaskFinding{
+		orgID: orgID, projectID: projectID.String(), chatID: chatID.String(), chatMessageID: msgID.String(),
+		riskPolicyID: policyID.String(), matchLen: 12, matchRedacted: "<redacted>", falsePositiveAt: &dismissedAt,
+	})
+
+	dismissed, err := ti.service.ListDismissedRiskResults(ctx, &gen.ListDismissedRiskResultsPayload{})
+	require.NoError(t, err)
+	require.Len(t, dismissed.Results, 1)
+	require.NotNil(t, dismissed.Results[0].ChatTitle)
+	require.Equal(t, "test chat", *dismissed.Results[0].ChatTitle)
+
+	copied := *authCtx
+	copied.IsAdmin = true
+	copied.SupportOrganizationID = orgID
+	dismissed, err = ti.service.ListDismissedRiskResults(contextvalues.WithValidatedSupportSession(ctx, &copied), &gen.ListDismissedRiskResultsPayload{})
+	require.NoError(t, err)
+	require.Len(t, dismissed.Results, 1)
+	require.NotNil(t, dismissed.Results[0].ChatTitle)
+	require.Equal(t, "Session "+chatID.String()[:8], *dismissed.Results[0].ChatTitle)
+}
