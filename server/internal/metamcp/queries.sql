@@ -590,12 +590,20 @@ WHERE e.project_id = @project_id
   )
 ORDER BY e.deleted ASC, ms.deleted ASC, e.created_at DESC;
 
--- name: ListMetaMCPServerNamesForTelemetryByProjectID :many
--- Gateway names for telemetry labels, deleted gateways included.
-SELECT id, name
-FROM meta_mcp_servers
-WHERE project_id = @project_id
-ORDER BY deleted ASC, created_at DESC;
+-- name: ListMetaMCPServerNamesForTelemetryByOrganizationID :many
+-- Gateway names for telemetry labels across every project of the
+-- organization, deleted gateways included: a member's calls are logged in the
+-- member's project, which need not be the gateway's. Projects select the rows
+-- so the lookup rides the project_id index.
+SELECT ms.id, ms.name
+FROM meta_mcp_servers ms
+WHERE ms.project_id IN (
+    SELECT p.id
+    FROM projects p
+    WHERE p.organization_id = @organization_id
+  )
+  AND ms.organization_id = @organization_id
+ORDER BY ms.deleted ASC, ms.created_at DESC;
 
 -- name: UpdateMetaMCPServerNetworkAccessMode :execrows
 UPDATE meta_mcp_servers

@@ -967,28 +967,36 @@ func (q *Queries) ListMetaMCPProxiedMemberResources(ctx context.Context, arg Lis
 	return items, nil
 }
 
-const listMetaMCPServerNamesForTelemetryByProjectID = `-- name: ListMetaMCPServerNamesForTelemetryByProjectID :many
-SELECT id, name
-FROM meta_mcp_servers
-WHERE project_id = $1
-ORDER BY deleted ASC, created_at DESC
+const listMetaMCPServerNamesForTelemetryByOrganizationID = `-- name: ListMetaMCPServerNamesForTelemetryByOrganizationID :many
+SELECT ms.id, ms.name
+FROM meta_mcp_servers ms
+WHERE ms.project_id IN (
+    SELECT p.id
+    FROM projects p
+    WHERE p.organization_id = $1
+  )
+  AND ms.organization_id = $1
+ORDER BY ms.deleted ASC, ms.created_at DESC
 `
 
-type ListMetaMCPServerNamesForTelemetryByProjectIDRow struct {
+type ListMetaMCPServerNamesForTelemetryByOrganizationIDRow struct {
 	ID   uuid.UUID
 	Name string
 }
 
-// Gateway names for telemetry labels, deleted gateways included.
-func (q *Queries) ListMetaMCPServerNamesForTelemetryByProjectID(ctx context.Context, projectID uuid.UUID) ([]ListMetaMCPServerNamesForTelemetryByProjectIDRow, error) {
-	rows, err := q.db.Query(ctx, listMetaMCPServerNamesForTelemetryByProjectID, projectID)
+// Gateway names for telemetry labels across every project of the
+// organization, deleted gateways included: a member's calls are logged in the
+// member's project, which need not be the gateway's. Projects select the rows
+// so the lookup rides the project_id index.
+func (q *Queries) ListMetaMCPServerNamesForTelemetryByOrganizationID(ctx context.Context, organizationID string) ([]ListMetaMCPServerNamesForTelemetryByOrganizationIDRow, error) {
+	rows, err := q.db.Query(ctx, listMetaMCPServerNamesForTelemetryByOrganizationID, organizationID)
 	if err != nil {
 		return nil, err
 	}
 	defer rows.Close()
-	var items []ListMetaMCPServerNamesForTelemetryByProjectIDRow
+	var items []ListMetaMCPServerNamesForTelemetryByOrganizationIDRow
 	for rows.Next() {
-		var i ListMetaMCPServerNamesForTelemetryByProjectIDRow
+		var i ListMetaMCPServerNamesForTelemetryByOrganizationIDRow
 		if err := rows.Scan(&i.ID, &i.Name); err != nil {
 			return nil, err
 		}
