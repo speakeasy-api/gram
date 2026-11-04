@@ -24,7 +24,7 @@ Tracked in Linear as AIS-880 (rename: AIS-881). Follow-up work that the migratio
 
 ## Waiting on production shadow data (release gate)
 
-The RFC lets the engine and scope tables go only after production shadow comparisons are classified and resolved. These items start after rollout.
+The RFC lets the engine and scope tables go only after production shadow comparisons are classified and resolved. These items start after rollout, except the static half of X1 (item 12), which changes no decision and is already done.
 
 12. **X1, catalogue, validation and seeding (AIS-873).** The static half is done ahead of the release gate: the engine's scope tables (visibility, satisfying scopes, exclusions, grant surfaces, system role defaults) are projected from the registry, with a hand-written remainder for the root, agent and workload scopes (`undeclaredScopes`). What still waits is storage: catalogue reads, grant validation and seeding switching to the registry API directly, and deleting `undeclaredScopes` once AG1, AG2 and W1 declare the agent and workload types.
 13. **X2, runtime and key policy projections (AIS-874).**
