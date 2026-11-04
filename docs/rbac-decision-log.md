@@ -128,7 +128,7 @@ Review follow-ups adopted on #8442 (each fails closed):
 2. **`Engine.RequirePluginWrite` callers in plugins use `Project(org, id).PublishPlugin()`.** The engine method is `RequireAnyUnblocked` over the same two checks, and the client's engine form of the alternatives is exactly that call, so old mode is unchanged. The engine method is not an inventory entry point, so its 13 call sites never appeared in `consumers.csv`; this slice switches the nine in plugins. The skills calls belong to S1 and the Platform MCP call to X3. _If reversed:_ none; flagged so the inventory gap can be closed by adding `RequirePluginWrite` to `engineEntryPoints`.
 3. **The plugins service keeps an `engine` field** for `admission.AdministratorWriteContext` (an admission context, not a decision) and for the skill-distribution `RequireAnyUnblocked` in `distribution_projection.go`, which S2 owns.
 4. **The role-principal validator stays.** `assignments.normalizePrincipal` calls `authz.ValidatePrincipal`, which reads the role tables that stay authoritative until they are retired; its inventory row remains under PL1.
-5. **Parity:** the plugins, access and cmd/gram suites made 1,864 comparisons, all matching. `TestProcessRoleDistributionSetup_DeleteWaitsForSetup` (a database lock-ordering test) fails identically on the base branch in this environment.
+5. **Parity:** the plugins, access and cmd/gram suites made 1,864 comparisons and the Platform MCP suite (which builds the plugins service for delivery tests) 350, all matching. `TestProcessRoleDistributionSetup_DeleteWaitsForSetup` (a database lock-ordering test) fails identically on the base branch in this environment.
 
 ## M1 (AIS-859): toolsets and the MCP server constructor
 
