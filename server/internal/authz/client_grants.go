@@ -16,14 +16,33 @@ import (
 // so an empty set denies. Alternatives are rejected; ask for each option.
 // Errors are mapped as the client's other methods map them.
 func (c *Client) EvaluateGrants(ctx context.Context, grants []Grant, op Operation) (bool, error) {
-	allowed, err := c.evaluateGrants(ctx, grants, op)
+	allowed, err := c.evaluateGrants(ctx, grants, op, func(ops []Operation) route {
+		return c.router.routeFor(ctx, ops)
+	})
 	if err != nil {
 		return false, c.engine.mapError(ctx, err)
 	}
 	return allowed, nil
 }
 
-func (c *Client) evaluateGrants(ctx context.Context, grants []Grant, op Operation) (bool, error) {
+// EvaluateGrantsInOrganization is EvaluateGrants for grants loaded in
+// organizationID. Inside an admitted request with an active organization it
+// routes exactly as EvaluateGrants does. An admitted request without one
+// routes by organizationID and pins that mode for the rest of the request.
+// Outside a request, such as in a stream consumer or a background job, the
+// call is its own boundary and follows organizationID's rollout instead of
+// always keeping the engine.
+func (c *Client) EvaluateGrantsInOrganization(ctx context.Context, organizationID string, grants []Grant, op Operation) (bool, error) {
+	allowed, err := c.evaluateGrants(ctx, grants, op, func(ops []Operation) route {
+		return c.router.routeForLoaded(ctx, ops, organizationID)
+	})
+	if err != nil {
+		return false, c.engine.mapError(ctx, err)
+	}
+	return allowed, nil
+}
+
+func (c *Client) evaluateGrants(ctx context.Context, grants []Grant, op Operation, routeOf func([]Operation) route) (bool, error) {
 	if err := c.validate([]Operation{op}); err != nil {
 		return false, err
 	}
@@ -31,7 +50,7 @@ func (c *Client) evaluateGrants(ctx context.Context, grants []Grant, op Operatio
 		return false, fmt.Errorf("%w: alternatives %s cannot be evaluated against loaded grants", ErrInvalidCheck, op)
 	}
 	ops := []Operation{op}
-	rt := c.router.routeFor(ctx, ops)
+	rt := routeOf(ops)
 	switch rt.mode {
 	case MigrationModeNew:
 		return c.evaluateGrantsNew(grants, op)

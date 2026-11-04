@@ -319,7 +319,7 @@ func (c *Core) filterByAudience(ctx context.Context, organizationID string, prin
 	applicable := make([]repo.RiskPolicy, 0, len(rows))
 	policyIDs := make([]string, 0, len(rows))
 	for _, row := range rows {
-		applies, err := c.authorization.EvaluateGrants(ctx, grants, authz.RiskPolicy(row.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate())
+		applies, err := c.authorization.EvaluateGrantsInOrganization(ctx, organizationID, grants, authz.RiskPolicy(row.ID.String(), authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate())
 		if err != nil {
 			return nil, nil, fmt.Errorf("evaluate risk policy application: %w", err)
 		}
