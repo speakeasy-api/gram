@@ -227,7 +227,7 @@ type Service struct {
 	orgsRepo             *organizations_repo.Queries
 	domainsRepo          *customdomains_repo.Queries
 	auth                 *auth.Auth
-	authz                *authz.Engine
+	authz                *authz.Client
 	serverURL            *url.URL
 	siteURL              *url.URL
 	toolsetCache         cache.TypedCacheObject[mv.ToolsetBaseContents]
@@ -261,6 +261,7 @@ func NewService(
 	siteURL *url.URL,
 	cacheAdapter cache.Cache,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	auditLogger *audit.Logger,
 	metaInstallAdmission func(context.Context, string) error,
 ) *Service {
@@ -281,7 +282,7 @@ func NewService(
 		orgsRepo:       organizations_repo.New(db),
 		domainsRepo:    customdomains_repo.New(db),
 		auth:           auth.New(logger, db, sessions, authzEngine),
-		authz:          authzEngine,
+		authz:          authzClient,
 		serverURL:      serverURL,
 		siteURL:        siteURL,
 		toolsetCache:   cache.NewTypedObjectCache[mv.ToolsetBaseContents](logger.With(attr.SlogCacheNamespace("toolset")), cacheAdapter, cache.SuffixNone),
@@ -1188,7 +1189,7 @@ func (s *Service) ServeInstallPage(w http.ResponseWriter, r *http.Request) error
 	var ic *installContext
 	var err error
 	if privateNetworkInstall {
-		if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+		if err := s.authz.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 			return err
 		}
 		ic, err = s.resolvePrivateInstallContext(ctx, mcpSlug, authCtx.ActiveOrganizationID)

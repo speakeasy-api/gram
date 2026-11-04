@@ -52,7 +52,8 @@ type Service struct {
 	logger                *slog.Logger
 	db                    *pgxpool.Pool
 	auth                  *auth.Auth
-	authz                 *authz.Engine
+	authz                 *authz.Client
+	authzEngine           *authz.Engine
 	audit                 *audit.Logger
 	temporalEnv           *tenv.Environment
 	pluginsGitHubEnabled  bool
@@ -69,6 +70,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	auditLogger *audit.Logger,
 	temporalEnv *tenv.Environment,
 	pluginsGitHubEnabled bool,
@@ -80,7 +82,8 @@ func NewService(
 		logger:                logger,
 		db:                    db,
 		auth:                  auth.New(logger, db, sessions, authzEngine),
-		authz:                 authzEngine,
+		authz:                 authzClient,
+		authzEngine:           authzEngine,
 		audit:                 auditLogger,
 		temporalEnv:           temporalEnv,
 		pluginsGitHubEnabled:  pluginsGitHubEnabled,
@@ -262,7 +265,7 @@ func (s *Service) CreateMcpEndpoint(ctx context.Context, payload *gen.CreateMcpE
 	// or marketplace publishing; that flow is exclusive to generic MCP servers.
 	attached, pluginCreated := false, false
 	if mcpServerID.Valid && mcpServer.Visibility != mcpservers.VisibilityDisabled {
-		admissionCtx, err := admission.AdministratorWriteContext(ctx, s.authz, authCtx.ActiveOrganizationID)
+		admissionCtx, err := admission.AdministratorWriteContext(ctx, s.authzEngine, authCtx.ActiveOrganizationID)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnavailable, err, "distribution approval could not be verified safely").LogError(ctx, logger)
 		}
@@ -341,7 +344,7 @@ func (s *Service) GetMcpEndpoint(ctx context.Context, payload *gen.GetMcpEndpoin
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -404,7 +407,7 @@ func (s *Service) ListMcpEndpoints(ctx context.Context, payload *gen.ListMcpEndp
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -466,7 +469,7 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 	requireProjectWrite := func() error {
-		return s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
+		return s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Edit())
 	}
 
 	endpointID, err := uuid.Parse(payload.ID)
@@ -685,7 +688,7 @@ func (s *Service) CheckMcpEndpointSlugAvailability(ctx context.Context, payload 
 		return false, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Read()); err != nil {
 		return false, err
 	}
 
@@ -734,7 +737,7 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeMCPWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Edit()); err != nil {
 		return err
 	}
 

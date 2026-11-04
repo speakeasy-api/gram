@@ -67,7 +67,7 @@ func seedConnectionMutationFixture(t *testing.T, name string, eligibility networ
 	require.NoError(t, err)
 	sessionManager := testenv.NewTestManager(t, logger, tracerProvider, gateway.conn, redisClient, cache.Suffix("gram-local"), billing.NewStubClient(logger, tracerProvider))
 	engine := authz.NewEngine(logger, gateway.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	writer := mcpendpoints.NewService(logger, tracerProvider, gateway.conn, sessionManager, engine, audit.NewLogger(), nil, false)
+	writer := mcpendpoints.NewService(logger, tracerProvider, gateway.conn, sessionManager, engine, authztest.NewParityClient(t, engine), audit.NewLogger(), nil, false)
 	mutations, err := NewMCPConnectionMutationService(gateway.conn, NewMCPConnectionSettingsService(gateway.conn), writer, audit.NewLogger(), engine, eligibility, plugins.PublicationRequests{}, nil)
 	require.NoError(t, err)
 	return ctx, connectionMutationFixture{gatewayFixture: gateway, orgSlug: orgSlug, hostedID: gateway.toolsetID, hostedEndpoint: endpoint.ID, mutations: mutations}
@@ -332,6 +332,17 @@ func TestSetMCPConnectionMutationRefusesOtherProjectsAndMissingWrite(t *testing.
 		Mode: "dual", ExpectedVersion: version, IdempotencyKey: uuid.NewString(), Confirmed: true,
 	})
 	require.ErrorAs(t, err, &denied)
+
+	otherProjectWrite := authz.GrantsToContext(ctx, []authz.Grant{
+		authz.NewGrant(authz.ScopeOrgAdmin, f.principal.OrganizationID),
+		authz.NewGrantWithSelector(authz.ScopeMCPWrite, authz.Selector{
+			authz.SelectorKeyResourceID: "*",
+			authz.SelectorKeyProjectID:  uuid.NewString(),
+		}),
+	})
+	_, err = f.setAddress(otherProjectWrite, MCPConnectionSettingsMCPServer, f.hostedID, version, "", f.orgSlug+"-third", "", true)
+	require.ErrorAs(t, err, &denied, "MCP write bounded to another project does not change this project's address")
+	require.Equal(t, string(authz.ScopeMCPWrite), denied.RequiredScope)
 }
 
 func TestSetMCPNetworkAccessChecksEntitlementAndIngress(t *testing.T) {
