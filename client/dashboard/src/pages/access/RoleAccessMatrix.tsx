@@ -85,7 +85,7 @@ const SEARCH_THRESHOLD = 8;
 
 /**
  * What a role can do, as two grids: MCP servers by Use / View / Manage /
- * Blocked, then the rest of the platform by View / Manage / Blocked. Ticks
+ * Blocked, then the rest of the platform by View / Manage / Allowed / Blocked. Ticks
  * the role stores are solid; ticks it gets from a higher level or a broader
  * row are dashed, so an admin sees where access comes from without opening
  * anything.
