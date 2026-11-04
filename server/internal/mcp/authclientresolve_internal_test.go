@@ -60,16 +60,15 @@ func TestDecideAuthClient(t *testing.T) {
 			RegistrationLive:     true,
 			RegistrationAttached: true,
 			Associated:           true,
-			RequiresUpstreamAuth: pgtype.Bool{Bool: true, Valid: true},
-			ServerHasClients:     true,
+			RequiresUpstreamAuth: true,
 		}
 	}
-	noAuth := func(requires pgtype.Bool, hasClients bool) upstreamclientsrepo.GetAuthClientSelectionRow {
+	noAuth := func(requires, pending bool) upstreamclientsrepo.GetAuthClientSelectionRow {
 		row := live(authClientTypeRemoteSession)
 		row.NoAuth = true
 		row.AuthClientID = uuid.NullUUID{UUID: uuid.Nil, Valid: false}
 		row.RequiresUpstreamAuth = requires
-		row.ServerHasClients = hasClients
+		row.UpstreamAuthPending = pending
 		return row
 	}
 	with := func(clientType string, edit func(*upstreamclientsrepo.GetAuthClientSelectionRow)) upstreamclientsrepo.GetAuthClientSelectionRow {
@@ -85,7 +84,6 @@ func TestDecideAuthClient(t *testing.T) {
 		})
 	}
 	same := func(*upstreamclientsrepo.GetAuthClientSelectionRow) {}
-	undecided := pgtype.Bool{Bool: false, Valid: false}
 
 	cases := []struct {
 		name    string
@@ -121,28 +119,27 @@ func TestDecideAuthClient(t *testing.T) {
 		{"a service account's stale header copies are served the old way", with(authClientTypeServiceAccount, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.HeadersStale = true }), authClientLegacy, authClientReasonHeadersStale},
 		{"a headers-only client missing a server credential header is a setup gap", headersOnly(authClientTypePassThrough, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.CredentialHeadersUncovered = true }), authClientGap, authClientReasonSetup},
 		{"a pass-through requiring the inbound Authorization is a setup gap", headersOnly(authClientTypePassThrough, func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.RequiresDeniedSource = true }), authClientGap, authClientReasonSetup},
-		{"no-auth on a server that explicitly needs none", noAuth(pgtype.Bool{Bool: false, Valid: true}, true), authClientNoAuth, ""},
-		{"no-auth on an undecided server with no clients", noAuth(undecided, false), authClientNoAuth, ""},
-		{"no-auth on an undecided server that has clients is a gap", noAuth(undecided, true), authClientGap, authClientReasonNoAuthStale},
-		{"no-auth on a server that needs auth is a gap", noAuth(pgtype.Bool{Bool: true, Valid: true}, false), authClientGap, authClientReasonNoAuthForbidden},
+		{"no-auth on a server offering no enabled client", noAuth(false, false), authClientNoAuth, ""},
+		{"no-auth on a server with credentials no auth client records yet is a gap", noAuth(false, true), authClientGap, authClientReasonNoAuthStale},
+		{"no-auth on a server offering an enabled client is a gap", noAuth(true, false), authClientGap, authClientReasonNoAuthForbidden},
 		{"no-auth on a server with only header clients is served the old way", func() upstreamclientsrepo.GetAuthClientSelectionRow {
-			row := noAuth(pgtype.Bool{Bool: true, Valid: true}, true)
+			row := noAuth(true, false)
 			row.ServerHasHeaderClients = true
 			return row
 		}(), authClientLegacy, authClientReasonUnmapped},
-		{"no-auth on a server that declares none and keeps header clients is served the old way until enforced", func() upstreamclientsrepo.GetAuthClientSelectionRow {
-			row := noAuth(pgtype.Bool{Bool: false, Valid: true}, true)
+		{"no-auth on a server whose header clients are all disabled is served the old way until enforced", func() upstreamclientsrepo.GetAuthClientSelectionRow {
+			row := noAuth(false, false)
 			row.ServerHasHeaderClients = true
 			return row
 		}(), authClientLegacy, authClientReasonNoAuthDeclared},
 		{"no-auth on a server with header and OAuth clients is a gap", func() upstreamclientsrepo.GetAuthClientSelectionRow {
-			row := noAuth(pgtype.Bool{Bool: true, Valid: true}, true)
+			row := noAuth(true, false)
 			row.ServerHasHeaderClients = true
 			row.ServerHasOauthClients = true
 			return row
 		}(), authClientGap, authClientReasonNoAuthForbidden},
 		{"no-auth on a server with credential headers is a setup gap", func() upstreamclientsrepo.GetAuthClientSelectionRow {
-			row := noAuth(undecided, false)
+			row := noAuth(false, false)
 			row.CredentialHeadersUncovered = true
 			return row
 		}(), authClientGap, authClientReasonSetup},
@@ -453,17 +450,17 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		require.Equal(t, authClientReasonRegistration, res.reason)
 	})
 
-	t.Run("no-auth follows requires_upstream_auth", func(t *testing.T) {
+	t.Run("no-auth follows the server's enabled auth clients, never the stored requirement", func(t *testing.T) {
 		t.Parallel()
 		f := newAuthClientFixture(t, pool)
-		require.Equal(t, authClientNoAuth, f.resolve(f.choose(uuid.NullUUID{})).outcome, "undecided with no clients")
+		require.Equal(t, authClientNoAuth, f.resolve(f.choose(uuid.NullUUID{})).outcome, "no clients and no upstream credentials")
 		require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{RequiresUpstreamAuth: pgtype.Bool{Bool: true, Valid: true}, ID: f.serverID}))
-		require.Equal(t, authClientReasonNoAuthForbidden, f.resolve(f.choose(uuid.NullUUID{})).reason)
+		require.Equal(t, authClientNoAuth, f.resolve(f.choose(uuid.NullUUID{})).outcome, "a stored requirement is ignored")
+		id := f.oauthClient(authClientTypeRemoteSession)
 		require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{RequiresUpstreamAuth: pgtype.Bool{Bool: false, Valid: true}, ID: f.serverID}))
-		f.oauthClient(authClientTypeRemoteSession)
-		require.Equal(t, authClientNoAuth, f.resolve(f.choose(uuid.NullUUID{})).outcome, "explicitly none even with a client")
-		require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{RequiresUpstreamAuth: pgtype.Bool{}, ID: f.serverID}))
-		require.Equal(t, authClientReasonNoAuthStale, f.resolve(f.choose(uuid.NullUUID{})).reason, "undecided once a client exists")
+		require.Equal(t, authClientReasonNoAuthForbidden, f.resolve(f.choose(uuid.NullUUID{})).reason, "an enabled client requires auth whatever is stored")
+		require.NoError(t, f.q.SetAuthClientEnabledFixture(ctx, authclientbackfill.SetAuthClientEnabledFixtureParams{Enabled: false, ID: id}))
+		require.Equal(t, authClientNoAuth, f.resolve(f.choose(uuid.NullUUID{})).outcome, "with every client disabled the server needs none")
 	})
 
 	t.Run("a legacy attach alone makes a no-auth choice stale", func(t *testing.T) {
@@ -473,12 +470,22 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		require.Equal(t, authClientReasonNoAuthStale, f.resolve(f.choose(uuid.NullUUID{})).reason)
 	})
 
-	t.Run("a disabled client still makes a no-auth choice stale", func(t *testing.T) {
+	t.Run("a legacy attach whose only client is disabled serves no-auth", func(t *testing.T) {
 		t.Parallel()
 		f := newAuthClientFixture(t, pool)
+		f.attach()
 		id := f.client(authClientTypeServiceAccount, validUUID(f.registration), true)
 		require.NoError(t, f.q.SetAuthClientEnabledFixture(ctx, authclientbackfill.SetAuthClientEnabledFixtureParams{Enabled: false, ID: id}))
-		require.Equal(t, authClientReasonNoAuthStale, f.resolve(f.choose(uuid.NullUUID{})).reason)
+		require.Equal(t, authClientNoAuth, f.resolve(f.choose(uuid.NullUUID{})).outcome, "an auth client recorded the attach, so it is not pending")
+	})
+
+	t.Run("a detached client leaves the server needing no auth", func(t *testing.T) {
+		t.Parallel()
+		f := newAuthClientFixture(t, pool)
+		f.oauthClient(authClientTypeServiceAccount)
+		require.Equal(t, authClientReasonNoAuthForbidden, f.resolve(f.choose(uuid.NullUUID{})).reason)
+		require.NoError(t, f.q.SoftDeleteServerAuthClientLinksFixture(ctx, f.serverID))
+		require.Equal(t, authClientNoAuth, f.resolve(f.choose(uuid.NullUUID{})).outcome, "a detached link is a decision, not a pending migration, though the legacy attach remains")
 	})
 
 	t.Run("a no-auth choice on a server with only header clients is served the old way", func(t *testing.T) {
@@ -487,7 +494,6 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		f.sourceHeader("Authorization", true, text("sealed-v1"), pgtype.Text{})
 		id := f.client(authClientTypeStaticCredential, uuid.NullUUID{}, true)
 		f.copyHeader(id, "Authorization", true, true, text("sealed-v1"), pgtype.Text{})
-		require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{RequiresUpstreamAuth: pgtype.Bool{Bool: true, Valid: true}, ID: f.serverID}))
 		selector := f.choose(uuid.NullUUID{})
 
 		res := f.serve(selector)
@@ -508,7 +514,6 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		f := newAuthClientFixture(t, pool)
 		f.client(authClientTypeStaticCredential, uuid.NullUUID{}, true)
 		f.oauthClient(authClientTypeRemoteSession)
-		require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{RequiresUpstreamAuth: pgtype.Bool{Bool: true, Valid: true}, ID: f.serverID}))
 		res := f.resolve(f.choose(uuid.NullUUID{}))
 		require.Equal(t, authClientGap, res.outcome)
 		require.Equal(t, authClientReasonNoAuthForbidden, res.reason)
@@ -521,7 +526,7 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		f.attach()
 		res := f.resolve(f.choose(uuid.NullUUID{}))
 		require.Equal(t, authClientGap, res.outcome)
-		require.Equal(t, authClientReasonNoAuthStale, res.reason)
+		require.Equal(t, authClientReasonNoAuthForbidden, res.reason)
 	})
 
 	t.Run("no-auth on a server with credential headers is a setup gap", func(t *testing.T) {
@@ -653,11 +658,11 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		require.Equal(t, authClientResolved, f.resolve(f.choose(validUUID(id))).outcome, "a disabled EMA client chains nothing")
 	})
 
-	t.Run("an enforced no-auth choice on a server that declares none is served with a header client attached", func(t *testing.T) {
+	t.Run("an enforced no-auth choice is served while the server's header client is disabled", func(t *testing.T) {
 		t.Parallel()
 		f := newAuthClientFixture(t, pool)
-		f.client(authClientTypeStaticCredential, uuid.NullUUID{}, true)
-		require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{RequiresUpstreamAuth: pgtype.Bool{Bool: false, Valid: true}, ID: f.serverID}))
+		id := f.client(authClientTypeStaticCredential, uuid.NullUUID{}, true)
+		require.NoError(t, f.q.SetAuthClientEnabledFixture(ctx, authclientbackfill.SetAuthClientEnabledFixtureParams{Enabled: false, ID: id}))
 		selector := f.choose(uuid.NullUUID{})
 		subject := urn.NewUserSubject("user_1")
 		for range 2 {
@@ -666,10 +671,10 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 			require.Equal(t, authClientNoAuth, res.outcome)
 		}
 
-		require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{RequiresUpstreamAuth: pgtype.Bool{Bool: true, Valid: true}, ID: f.serverID}))
+		require.NoError(t, f.q.SetAuthClientEnabledFixture(ctx, authclientbackfill.SetAuthClientEnabledFixtureParams{Enabled: true, ID: id}))
 		res, err := f.service.resolveEnforcedAuthClient(ctx, selector, f.serverID, f.projectID, subject)
 		require.NoError(t, err)
-		require.Equal(t, authClientGap, res.outcome, "a server that needs auth still refuses the old no-auth choice")
+		require.Equal(t, authClientGap, res.outcome, "once the client is enabled the server refuses the old no-auth choice")
 	})
 
 	t.Run("a personal connection that may chain sends its own headers", func(t *testing.T) {
@@ -807,7 +812,7 @@ func TestResolveAuthClientReadsTheRecordedChoice(t *testing.T) {
 		require.Equal(t, authClientReasonSetup, res.reason)
 
 		require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(ctx, authclientbackfill.SetRequiresUpstreamAuthFixtureParams{RequiresUpstreamAuth: pgtype.Bool{Bool: false, Valid: true}, ID: f.serverID}))
-		require.Equal(t, authClientResolved, f.serve(f.choose(validUUID(id))).outcome, "a server needing no auth may be called without client headers")
+		require.Equal(t, authClientGap, f.serve(f.choose(validUUID(id))).outcome, "a stored no-auth requirement never lets an enabled client call the upstream anonymously")
 	})
 
 	t.Run("client headers are revealed for the proxy", func(t *testing.T) {

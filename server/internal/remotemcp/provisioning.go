@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
@@ -88,6 +89,9 @@ func (s *RemoteMCPProvisioningService) ProvisionDashboardRemoteMCP(ctx context.C
 	}
 	defer func() { _ = tx.Rollback(ctx) }()
 
+	if err := authclientbackfill.LockEMAWriterScope(ctx, tx, authCtx.ActiveOrganizationID, []uuid.UUID{*authCtx.ProjectID}); err != nil {
+		return RemoteMCPProvisioningResult{}, oops.E(oops.CodeUnexpected, err, "lock provisioning writer scope")
+	}
 	if err := requireLiveProjectForActiveOrganization(ctx, tx, authCtx); err != nil {
 		return RemoteMCPProvisioningResult{}, err
 	}
@@ -233,14 +237,7 @@ func requireLiveProjectForActiveOrganization(ctx context.Context, tx pgx.Tx, aut
 	if tx == nil || authCtx == nil || authCtx.ProjectID == nil || authCtx.ActiveOrganizationID == "" {
 		return oops.E(oops.CodeBadRequest, nil, "invalid project ownership check")
 	}
-	var projectID uuid.UUID
-	err := tx.QueryRow(ctx, `
-SELECT id
-FROM projects
-WHERE id = $1
-  AND organization_id = $2
-  AND deleted IS FALSE
-FOR UPDATE`, *authCtx.ProjectID, authCtx.ActiveOrganizationID).Scan(&projectID)
+	_, err := repo.New(tx).LockLiveProjectForRemoteMCPProvisioning(ctx, repo.LockLiveProjectForRemoteMCPProvisioningParams{ProjectID: *authCtx.ProjectID, OrganizationID: authCtx.ActiveOrganizationID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return oops.E(oops.CodeNotFound, err, "project not found in active organization")
 	}

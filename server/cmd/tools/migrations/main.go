@@ -12,6 +12,8 @@
 //     AUTH_PERMISSION_DEFAULTS_BACKFILL.md. It defaults to a dry run.
 //   - assistant-role-grants: PostgreSQL application-data backfill; see
 //     ASSISTANT_ROLE_GRANTS_BACKFILL.md. It defaults to a dry run.
+//   - audit-kit-runtime-security: PostgreSQL application-data backfill; see
+//     AUDIT_KIT_RUNTIME_SECURITY_BACKFILL.md. It defaults to a dry run.
 //
 // Each guide documents its own connectivity, secret environment variables,
 // invocation modes, output, and recovery procedure. Flags are subcommand-local;
@@ -101,9 +103,11 @@ func run() int {
 		return runAuthPermissionDefaults(args, os.Stdout, os.Getenv)
 	case assistantRoleGrantsCommand:
 		return runAssistantRoleGrants(args, os.Stdout, os.Getenv)
+	case auditKitRuntimeSecurityName:
+		return runAuditKitRuntimeSecurity(args, os.Stdout, os.Getenv)
 	default:
 		// The unrecognized name is deliberately not echoed (log injection).
-		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements, auth-permission-defaults, assistant-role-grants)")
+		log.Printf("unknown migration subcommand (available: riskfindings, riskfindingscols, openrouter-disable-causes, pro-entitlements, auth-permission-defaults, assistant-role-grants, audit-kit-runtime-security)")
 		return 2
 	}
 }

@@ -6899,17 +6899,18 @@ func (q *Queries) GetUserSessionIssuerForProject(ctx context.Context, arg GetUse
 const hasLivePrincipalRemoteSessionBindingsForClientBinding = `-- name: HasLivePrincipalRemoteSessionBindingsForClientBinding :one
 SELECT EXISTS (
   SELECT 1
-  FROM principal_remote_session_bindings
-  WHERE project_id = $1
-    AND organization_id = $2
-    AND remote_session_client_id = $3
-    AND user_session_issuer_id = $4
-    AND revoked_at IS NULL
+  FROM principal_remote_session_bindings AS b
+  JOIN projects AS bp ON bp.id = b.project_id AND bp.organization_id = b.organization_id AND bp.deleted IS FALSE
+  JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
+    AND a.deleted IS FALSE AND a.revoked_at IS NULL
+  WHERE b.organization_id = $1
+    AND b.remote_session_client_id = $2
+    AND b.user_session_issuer_id = $3
+    AND b.revoked_at IS NULL
 )
 `
 
 type HasLivePrincipalRemoteSessionBindingsForClientBindingParams struct {
-	ProjectID             uuid.UUID
 	OrganizationID        string
 	RemoteSessionClientID uuid.UUID
 	UserSessionIssuerID   uuid.UUID
@@ -6917,17 +6918,11 @@ type HasLivePrincipalRemoteSessionBindingsForClientBindingParams struct {
 
 // Report whether any unrevoked agent attachment goes through a client's binding
 // to a user session issuer, which deleting that binding would cascade-delete.
-// Only the caller's project can hold them: the caller refuses an
-// organization-wide binding, and any other binding has a project-owned client
-// or user session issuer, which pins every attachment through it to that
-// project.
+// Organization-wide: an organization admin can change an organization-owned
+// client's binding to an organization-level issuer, and attachments through it
+// can live in any project.
 func (q *Queries) HasLivePrincipalRemoteSessionBindingsForClientBinding(ctx context.Context, arg HasLivePrincipalRemoteSessionBindingsForClientBindingParams) (bool, error) {
-	row := q.db.QueryRow(ctx, hasLivePrincipalRemoteSessionBindingsForClientBinding,
-		arg.ProjectID,
-		arg.OrganizationID,
-		arg.RemoteSessionClientID,
-		arg.UserSessionIssuerID,
-	)
+	row := q.db.QueryRow(ctx, hasLivePrincipalRemoteSessionBindingsForClientBinding, arg.OrganizationID, arg.RemoteSessionClientID, arg.UserSessionIssuerID)
 	var exists bool
 	err := row.Scan(&exists)
 	return exists, err
@@ -7202,7 +7197,7 @@ SELECT id, project_id, organization_id, user_session_issuer_id, remote_session_i
 WHERE project_id = $1 AND organization_id = $2
   AND user_session_issuer_id = $3
   AND ($4::uuid IS NULL OR remote_session_issuer_id = $4::uuid)
-  AND rtrim(resource, '/') = $5::text
+  AND resource = $5::text
   AND state IS DISTINCT FROM 'unlinked'
 ORDER BY id
 `
@@ -7264,7 +7259,7 @@ const listEMAChainingBindings = `-- name: ListEMAChainingBindings :many
 SELECT id, project_id, organization_id, user_session_issuer_id, remote_session_issuer_id, resource, remote_session_client_id, generation, state, grant_source, requested_scopes, claim_id, claimed_at, created_at, updated_at FROM remote_session_ema_bindings
 WHERE project_id = $1 AND organization_id = $2
   AND user_session_issuer_id = $3
-  AND rtrim(resource, '/') = $4::text
+  AND resource = $4::text
   AND ($5::uuid IS NULL OR remote_session_issuer_id = $5::uuid)
   AND ($6::uuid IS NULL OR remote_session_client_id = $6::uuid)
   AND state = 'ready' AND remote_session_client_id IS NOT NULL
@@ -7281,9 +7276,8 @@ type ListEMAChainingBindingsParams struct {
 	RemoteSessionClientID uuid.NullUUID
 }
 
-// Ready bindings whose canonical resource names an endpoint's upstream.
-// Endpoint upstreams are recorded without a trailing slash while a binding
-// keeps the exact RFC 9728 identifier, so both compare under the routing trim.
+// Ready bindings whose exact resource names the resolved authorization resource.
+// RFC 8707 resource identity preserves trailing slashes; callers must not trim.
 // Unlinked tombstones and unfinished preparations never select or conflict.
 // A tunneled upstream passes its own derived issuer: its resource identifier is
 // operator supplied, so only a binding for that issuer may serve it. A caller
@@ -12489,6 +12483,82 @@ func (q *Queries) LockTrustedRemoteSessionIssuerForOrganization(ctx context.Cont
 	return i, err
 }
 
+const lockTypedRemoteLoginAuthorization = `-- name: LockTypedRemoteLoginAuthorization :one
+SELECT c.id
+FROM mcp_auth_clients AS c
+JOIN mcp_server_auth_clients AS link
+  ON link.auth_client_id = c.id
+ AND link.organization_id = c.organization_id
+JOIN mcp_servers AS m
+  ON m.id = link.mcp_server_id AND m.project_id = link.project_id
+JOIN projects AS p ON p.id = m.project_id
+JOIN remote_session_clients AS r ON r.id = c.remote_session_client_id
+WHERE c.id = $1::uuid
+  AND c.organization_id = $2::text
+  AND (c.project_id IS NULL OR c.project_id = $3::uuid)
+  AND c.remote_session_client_id = $4::uuid
+  AND c.client_type IN ('remote_session', 'ema')
+  AND r.deleted IS FALSE
+  AND c.enabled AND c.deleted IS FALSE
+  AND link.mcp_server_id = $5::uuid
+  AND link.project_id = $3::uuid AND link.deleted IS FALSE
+  AND m.deleted IS FALSE
+  AND p.organization_id = $2::text AND p.deleted IS FALSE
+FOR SHARE OF c, link, m, p, r
+`
+
+type LockTypedRemoteLoginAuthorizationParams struct {
+	AuthClientID          uuid.UUID
+	OrganizationID        string
+	ProjectID             uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	McpServerID           uuid.UUID
+}
+
+// Keep the exact typed association enabled and live until the callback grant
+// commits. FOR SHARE conflicts with disable, detach and soft-delete updates.
+func (q *Queries) LockTypedRemoteLoginAuthorization(ctx context.Context, arg LockTypedRemoteLoginAuthorizationParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockTypedRemoteLoginAuthorization,
+		arg.AuthClientID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.RemoteSessionClientID,
+		arg.McpServerID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockTypedRemoteLoginServer = `-- name: LockTypedRemoteLoginServer :one
+WITH live_project AS MATERIALIZED (
+  SELECT id FROM projects
+  WHERE id = $2::uuid
+    AND organization_id = $3::text AND deleted IS FALSE
+  FOR SHARE
+)
+SELECT m.id
+FROM mcp_servers AS m
+JOIN live_project AS p ON p.id = m.project_id
+WHERE m.id = $1::uuid AND m.deleted IS FALSE
+FOR SHARE OF m
+`
+
+type LockTypedRemoteLoginServerParams struct {
+	McpServerID    uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// Match typed-auth writers: project and server before issuer, registration,
+// auth client and association rows. Materializing the project locks it first.
+func (q *Queries) LockTypedRemoteLoginServer(ctx context.Context, arg LockTypedRemoteLoginServerParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockTypedRemoteLoginServer, arg.McpServerID, arg.ProjectID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const managedRemoteSessionClientExistsForIssuer = `-- name: ManagedRemoteSessionClientExistsForIssuer :one
 SELECT EXISTS (
   SELECT 1
@@ -15763,7 +15833,10 @@ SET
     token_endpoint_auth_method = COALESCE($5, token_endpoint_auth_method),
     token_endpoint_auth_audience_format = COALESCE($6, token_endpoint_auth_audience_format),
     scope = COALESCE($7::text[], scope),
-    audience = COALESCE($8, audience),
+    audience = CASE
+        WHEN $8::text = '' THEN NULL
+        ELSE COALESCE($8, audience)
+    END,
     legacy_callback_url = COALESCE($9, legacy_callback_url),
     updated_at = clock_timestamp()
 WHERE id = $10 AND project_id = $11 AND deleted IS FALSE

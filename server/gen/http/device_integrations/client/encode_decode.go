@@ -2401,6 +2401,505 @@ func DecodeGetCoverageResponse(decoder func(*http.Response) goahttp.Decoder, res
 	}
 }
 
+// BuildListFleetDevicesRequest instantiates a HTTP request object with method
+// and path set to call the "deviceIntegrations" service "listFleetDevices"
+// endpoint
+func (c *Client) BuildListFleetDevicesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListFleetDevicesDeviceIntegrationsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("deviceIntegrations", "listFleetDevices", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListFleetDevicesRequest returns an encoder for requests sent to the
+// deviceIntegrations listFleetDevices server.
+func EncodeListFleetDevicesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*deviceintegrations.ListFleetDevicesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("deviceIntegrations", "listFleetDevices", "*deviceintegrations.ListFleetDevicesPayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		if p.Provider != nil {
+			values.Add("provider", *p.Provider)
+		}
+		if p.InInventory != nil {
+			values.Add("in_inventory", fmt.Sprintf("%v", *p.InInventory))
+		}
+		if p.CoverageBucket != nil {
+			values.Add("coverage_bucket", *p.CoverageBucket)
+		}
+		if p.PolicyState != nil {
+			values.Add("policy_state", *p.PolicyState)
+		}
+		for _, value := range p.UserIds {
+			values.Add("user_ids", value)
+		}
+		for _, value := range p.UserEmails {
+			values.Add("user_emails", value)
+		}
+		if p.Cursor != nil {
+			values.Add("cursor", *p.Cursor)
+		}
+		values.Add("limit", fmt.Sprintf("%v", p.Limit))
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListFleetDevicesResponse returns a decoder for responses returned by
+// the deviceIntegrations listFleetDevices endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeListFleetDevicesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListFleetDevicesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListFleetDevicesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deviceIntegrations", "listFleetDevices", err)
+			}
+			err = ValidateListFleetDevicesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deviceIntegrations", "listFleetDevices", err)
+			}
+			res := NewListFleetDevicesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListFleetDevicesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deviceIntegrations", "listFleetDevices", err)
+			}
+			err = ValidateListFleetDevicesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deviceIntegrations", "listFleetDevices", err)
+			}
+			return nil, NewListFleetDevicesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListFleetDevicesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deviceIntegrations", "listFleetDevices", err)
+			}
+			err = ValidateListFleetDevicesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deviceIntegrations", "listFleetDevices", err)
+			}
+			return nil, NewListFleetDevicesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListFleetDevicesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deviceIntegrations", "listFleetDevices", err)
+			}
+			err = ValidateListFleetDevicesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deviceIntegrations", "listFleetDevices", err)
+			}
+			return nil, NewListFleetDevicesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListFleetDevicesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deviceIntegrations", "listFleetDevices", err)
+			}
+			err = ValidateListFleetDevicesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deviceIntegrations", "listFleetDevices", err)
+			}
+			return nil, NewListFleetDevicesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListFleetDevicesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deviceIntegrations", "listFleetDevices", err)
+			}
+			err = ValidateListFleetDevicesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deviceIntegrations", "listFleetDevices", err)
+			}
+			return nil, NewListFleetDevicesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListFleetDevicesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deviceIntegrations", "listFleetDevices", err)
+			}
+			err = ValidateListFleetDevicesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deviceIntegrations", "listFleetDevices", err)
+			}
+			return nil, NewListFleetDevicesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListFleetDevicesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deviceIntegrations", "listFleetDevices", err)
+			}
+			err = ValidateListFleetDevicesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deviceIntegrations", "listFleetDevices", err)
+			}
+			return nil, NewListFleetDevicesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListFleetDevicesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deviceIntegrations", "listFleetDevices", err)
+				}
+				err = ValidateListFleetDevicesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deviceIntegrations", "listFleetDevices", err)
+				}
+				return nil, NewListFleetDevicesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListFleetDevicesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deviceIntegrations", "listFleetDevices", err)
+				}
+				err = ValidateListFleetDevicesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deviceIntegrations", "listFleetDevices", err)
+				}
+				return nil, NewListFleetDevicesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("deviceIntegrations", "listFleetDevices", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListFleetDevicesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deviceIntegrations", "listFleetDevices", err)
+			}
+			err = ValidateListFleetDevicesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deviceIntegrations", "listFleetDevices", err)
+			}
+			return nil, NewListFleetDevicesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("deviceIntegrations", "listFleetDevices", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildGetFleetCoverageRequest instantiates a HTTP request object with method
+// and path set to call the "deviceIntegrations" service "getFleetCoverage"
+// endpoint
+func (c *Client) BuildGetFleetCoverageRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: GetFleetCoverageDeviceIntegrationsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("deviceIntegrations", "getFleetCoverage", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeGetFleetCoverageRequest returns an encoder for requests sent to the
+// deviceIntegrations getFleetCoverage server.
+func EncodeGetFleetCoverageRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*deviceintegrations.GetFleetCoveragePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("deviceIntegrations", "getFleetCoverage", "*deviceintegrations.GetFleetCoveragePayload", v)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		values := req.URL.Query()
+		if p.Provider != nil {
+			values.Add("provider", *p.Provider)
+		}
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeGetFleetCoverageResponse returns a decoder for responses returned by
+// the deviceIntegrations getFleetCoverage endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeGetFleetCoverageResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeGetFleetCoverageResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body GetFleetCoverageResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deviceIntegrations", "getFleetCoverage", err)
+			}
+			err = ValidateGetFleetCoverageResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deviceIntegrations", "getFleetCoverage", err)
+			}
+			res := NewGetFleetCoverageFleetCoverageOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body GetFleetCoverageUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deviceIntegrations", "getFleetCoverage", err)
+			}
+			err = ValidateGetFleetCoverageUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deviceIntegrations", "getFleetCoverage", err)
+			}
+			return nil, NewGetFleetCoverageUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body GetFleetCoverageForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deviceIntegrations", "getFleetCoverage", err)
+			}
+			err = ValidateGetFleetCoverageForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deviceIntegrations", "getFleetCoverage", err)
+			}
+			return nil, NewGetFleetCoverageForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body GetFleetCoverageBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deviceIntegrations", "getFleetCoverage", err)
+			}
+			err = ValidateGetFleetCoverageBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deviceIntegrations", "getFleetCoverage", err)
+			}
+			return nil, NewGetFleetCoverageBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body GetFleetCoverageNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deviceIntegrations", "getFleetCoverage", err)
+			}
+			err = ValidateGetFleetCoverageNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deviceIntegrations", "getFleetCoverage", err)
+			}
+			return nil, NewGetFleetCoverageNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body GetFleetCoverageConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deviceIntegrations", "getFleetCoverage", err)
+			}
+			err = ValidateGetFleetCoverageConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deviceIntegrations", "getFleetCoverage", err)
+			}
+			return nil, NewGetFleetCoverageConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body GetFleetCoverageUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deviceIntegrations", "getFleetCoverage", err)
+			}
+			err = ValidateGetFleetCoverageUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deviceIntegrations", "getFleetCoverage", err)
+			}
+			return nil, NewGetFleetCoverageUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body GetFleetCoverageInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deviceIntegrations", "getFleetCoverage", err)
+			}
+			err = ValidateGetFleetCoverageInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deviceIntegrations", "getFleetCoverage", err)
+			}
+			return nil, NewGetFleetCoverageInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body GetFleetCoverageInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deviceIntegrations", "getFleetCoverage", err)
+				}
+				err = ValidateGetFleetCoverageInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deviceIntegrations", "getFleetCoverage", err)
+				}
+				return nil, NewGetFleetCoverageInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body GetFleetCoverageUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("deviceIntegrations", "getFleetCoverage", err)
+				}
+				err = ValidateGetFleetCoverageUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("deviceIntegrations", "getFleetCoverage", err)
+				}
+				return nil, NewGetFleetCoverageUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("deviceIntegrations", "getFleetCoverage", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body GetFleetCoverageGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("deviceIntegrations", "getFleetCoverage", err)
+			}
+			err = ValidateGetFleetCoverageGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("deviceIntegrations", "getFleetCoverage", err)
+			}
+			return nil, NewGetFleetCoverageGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("deviceIntegrations", "getFleetCoverage", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // unmarshalDeviceIntegrationProviderResponseBodyToDeviceintegrationsDeviceIntegrationProvider
 // builds a value of type *deviceintegrations.DeviceIntegrationProvider from a
 // value of type *DeviceIntegrationProviderResponseBody.
@@ -2576,6 +3075,36 @@ func unmarshalManagedDeviceRollbackResponseBodyToDeviceintegrationsManagedDevice
 		At:   *v.At,
 		From: v.From,
 		To:   v.To,
+	}
+
+	return res
+}
+
+// unmarshalFleetDeviceResponseBodyToDeviceintegrationsFleetDevice builds a
+// value of type *deviceintegrations.FleetDevice from a value of type
+// *FleetDeviceResponseBody.
+func unmarshalFleetDeviceResponseBodyToDeviceintegrationsFleetDevice(v *FleetDeviceResponseBody) *deviceintegrations.FleetDevice {
+	res := &deviceintegrations.FleetDevice{
+		ID:               *v.ID,
+		InInventory:      *v.InInventory,
+		Provider:         v.Provider,
+		ExternalID:       v.ExternalID,
+		SerialNumber:     v.SerialNumber,
+		Hostname:         v.Hostname,
+		OsName:           v.OsName,
+		OsVersion:        v.OsVersion,
+		UserEmail:        v.UserEmail,
+		UserID:           v.UserID,
+		MdmLastCheckInAt: v.MdmLastCheckInAt,
+		AgentLastSeenAt:  v.AgentLastSeenAt,
+		CoverageBucket:   *v.CoverageBucket,
+		MissingSince:     v.MissingSince,
+		PolicyState:      v.PolicyState,
+		FirstSeenAt:      *v.FirstSeenAt,
+		LastSeenAt:       *v.LastSeenAt,
+	}
+	if v.AgentState != nil {
+		res.AgentState = unmarshalManagedDeviceAgentStateResponseBodyToDeviceintegrationsManagedDeviceAgentState(v.AgentState)
 	}
 
 	return res

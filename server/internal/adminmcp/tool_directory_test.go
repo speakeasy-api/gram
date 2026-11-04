@@ -71,6 +71,9 @@ func TestToolDirectoryMatchesRegisteredToolsAcrossPages(t *testing.T) {
 	require.Equal(t, directoryRead, byName["list_audit_log_entries"].Access)
 	require.Contains(t, byName["list_audit_log_entries"].Description, "confidential")
 	require.Equal(t, directoryWrite, byName["create_image_upload_url"].Access)
+	require.Contains(t, byName["create_image_upload_url"].Description, "direct write without browser approval")
+	require.Contains(t, byName["create_image_upload_url"].Description, "publicly served immediately and stays stored")
+	require.Contains(t, byName["create_image_upload_url"].Description, "local clip paths")
 }
 
 func TestToolDirectoryReflectsDisabledWritesAndRegistryChanges(t *testing.T) {

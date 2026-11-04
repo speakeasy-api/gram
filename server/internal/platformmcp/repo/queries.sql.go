@@ -1378,6 +1378,16 @@ func (q *Queries) ExpireActivePlatformMCPOnboardingWorkflow(ctx context.Context,
 	return result.RowsAffected(), nil
 }
 
+const expirePlatformMCPFeedbackFixture = `-- name: ExpirePlatformMCPFeedbackFixture :exec
+UPDATE platform_mcp_feedback SET expires_at = clock_timestamp() - interval '1 second' WHERE id = $1
+`
+
+// Test fixture: backdates retention to simulate expiry.
+func (q *Queries) ExpirePlatformMCPFeedbackFixture(ctx context.Context, id uuid.UUID) error {
+	_, err := q.db.Exec(ctx, expirePlatformMCPFeedbackFixture, id)
+	return err
+}
+
 const getActivePlatformMCPCatalogRegistration = `-- name: GetActivePlatformMCPCatalogRegistration :one
 SELECT id, organization_id, project_id, source_kind, catalog_provider, catalog_reference, status, remote_mcp_server_id, remote_mcp_server_owned, user_session_issuer_id, user_session_issuer_owned, mcp_server_id, mcp_server_owned, mcp_endpoint_id, mcp_endpoint_owned, connection_id, connection_generation, user_id, acting_surface, created_at, updated_at, deleted_at, deleted
 FROM platform_mcp_catalog_registrations
@@ -2309,6 +2319,28 @@ func (q *Queries) GetPlatformMCPCatalogRegistrationForLifecycle(ctx context.Cont
 	return i, err
 }
 
+const getPlatformMCPCatalogRegistrationProject = `-- name: GetPlatformMCPCatalogRegistrationProject :one
+SELECT project_id
+FROM platform_mcp_catalog_registrations
+WHERE id = $1
+  AND organization_id = $2
+  AND deleted IS FALSE
+`
+
+type GetPlatformMCPCatalogRegistrationProjectParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+// The project a live registration belongs to, so a caller can name the
+// server it added by registration ID alone.
+func (q *Queries) GetPlatformMCPCatalogRegistrationProject(ctx context.Context, arg GetPlatformMCPCatalogRegistrationProjectParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPCatalogRegistrationProject, arg.ID, arg.OrganizationID)
+	var project_id uuid.UUID
+	err := row.Scan(&project_id)
+	return project_id, err
+}
+
 const getPlatformMCPConnectionForUpdate = `-- name: GetPlatformMCPConnectionForUpdate :one
 SELECT connection.id, connection.organization_id, connection.subject_urn, connection.oauth_client_id, connection.active_generation, connection.authorized_at, connection.reauthorized_at, connection.authorization_expires_at, connection.reauthorization_required_at, connection.reauthorization_reason, connection.revoked_at, connection.created_at, connection.updated_at, client.client_id, client.revoked_at AS client_revoked_at
 FROM platform_mcp_connections AS connection
@@ -2632,6 +2664,38 @@ func (q *Queries) GetPlatformMCPFeedbackByIdempotencyKey(ctx context.Context, ar
 		&i.DeliveryState,
 		&i.ExpiresAt,
 		&i.InputHash,
+	)
+	return i, err
+}
+
+const getPlatformMCPFeedbackFixture = `-- name: GetPlatformMCPFeedbackFixture :one
+SELECT organization_id, connection_id, connection_generation, rating, note, delivery_state, expires_at
+FROM platform_mcp_feedback
+WHERE id = $1
+`
+
+type GetPlatformMCPFeedbackFixtureRow struct {
+	OrganizationID       string
+	ConnectionID         uuid.NullUUID
+	ConnectionGeneration uuid.NullUUID
+	Rating               pgtype.Int4
+	Note                 pgtype.Text
+	DeliveryState        string
+	ExpiresAt            pgtype.Timestamptz
+}
+
+// Test fixture: reads stored feedback columns that no production query returns.
+func (q *Queries) GetPlatformMCPFeedbackFixture(ctx context.Context, id uuid.UUID) (GetPlatformMCPFeedbackFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getPlatformMCPFeedbackFixture, id)
+	var i GetPlatformMCPFeedbackFixtureRow
+	err := row.Scan(
+		&i.OrganizationID,
+		&i.ConnectionID,
+		&i.ConnectionGeneration,
+		&i.Rating,
+		&i.Note,
+		&i.DeliveryState,
+		&i.ExpiresAt,
 	)
 	return i, err
 }
@@ -3120,6 +3184,7 @@ SELECT
     p.slug,
     p.description,
     p.auto_created,
+    p.auto_sync_enabled,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -3183,6 +3248,7 @@ type GetPlatformMCPPluginInventoryItemRow struct {
 	Slug                    string
 	Description             pgtype.Text
 	AutoCreated             bool
+	AutoSyncEnabled         pgtype.Bool
 	IsDefault               bool
 	ServerCount             int64
 	SkillCount              int64
@@ -3202,6 +3268,7 @@ func (q *Queries) GetPlatformMCPPluginInventoryItem(ctx context.Context, arg Get
 		&i.Slug,
 		&i.Description,
 		&i.AutoCreated,
+		&i.AutoSyncEnabled,
 		&i.IsDefault,
 		&i.ServerCount,
 		&i.SkillCount,
@@ -4922,6 +4989,53 @@ func (q *Queries) ListDirectRemoteAdmissionTargetsForPlugin(ctx context.Context,
 	return items, nil
 }
 
+const listHeadlessCallerClients = `-- name: ListHeadlessCallerClients :many
+SELECT c.id, c.client_name
+FROM user_session_clients AS c
+LEFT JOIN projects AS p
+  ON p.id = c.project_id
+WHERE c.user_session_issuer_id = $1
+  AND c.deleted IS FALSE
+  AND (
+    (c.project_id IS NULL AND c.organization_id = $2::text)
+    OR (p.organization_id = $2::text AND p.deleted IS FALSE)
+  )
+ORDER BY c.client_name, c.id
+LIMIT 500
+`
+
+type ListHeadlessCallerClientsParams struct {
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+}
+
+type ListHeadlessCallerClientsRow struct {
+	ID         uuid.UUID
+	ClientName string
+}
+
+// The live OAuth clients that sign in through one sign-in, in the
+// organization: its own, or one of a live project's.
+func (q *Queries) ListHeadlessCallerClients(ctx context.Context, arg ListHeadlessCallerClientsParams) ([]ListHeadlessCallerClientsRow, error) {
+	rows, err := q.db.Query(ctx, listHeadlessCallerClients, arg.UserSessionIssuerID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListHeadlessCallerClientsRow
+	for rows.Next() {
+		var i ListHeadlessCallerClientsRow
+		if err := rows.Scan(&i.ID, &i.ClientName); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOwnedChatSessionsForRecall = `-- name: ListOwnedChatSessionsForRecall :many
 
 SELECT c.id, c.external_chat_id, c.title, c.summary, c.cwd, c.updated_at, c.project_id, p.name AS project_name, p.slug AS project_slug
@@ -5997,6 +6111,7 @@ SELECT
     p.slug,
     p.description,
     p.auto_created,
+    p.auto_sync_enabled,
     COALESCE(p.is_default, FALSE) AS is_default,
     (SELECT count(*) FROM plugin_servers ps WHERE ps.plugin_id = p.id AND ps.deleted IS FALSE) AS server_count,
     (
@@ -6064,6 +6179,7 @@ type ListPlatformMCPPluginInventoryRow struct {
 	Slug                    string
 	Description             pgtype.Text
 	AutoCreated             bool
+	AutoSyncEnabled         pgtype.Bool
 	IsDefault               bool
 	ServerCount             int64
 	SkillCount              int64
@@ -6103,6 +6219,7 @@ func (q *Queries) ListPlatformMCPPluginInventory(ctx context.Context, arg ListPl
 			&i.Slug,
 			&i.Description,
 			&i.AutoCreated,
+			&i.AutoSyncEnabled,
 			&i.IsDefault,
 			&i.ServerCount,
 			&i.SkillCount,
@@ -6578,7 +6695,7 @@ FROM (
       AND projects.deleted IS FALSE
       AND meta_mcp_servers.deleted IS FALSE
 ) AS candidates
-WHERE candidates.id::text = $4::text
+WHERE candidates.id::text = lower($4::text)
    OR (candidates.slug <> '' AND lower(candidates.slug) = lower($4::text))
    OR lower(candidates.name) = lower($4::text)
 ORDER BY candidates.name ASC, candidates.id ASC
@@ -7597,6 +7714,16 @@ func (q *Queries) MarkPlatformMCPConnectionReauthorizationRequired(ctx context.C
 	return i, err
 }
 
+const pingPlatformMCPDatabaseFixture = `-- name: PingPlatformMCPDatabaseFixture :exec
+SELECT 1
+`
+
+// Test fixture: proves a pooled connection is still healthy.
+func (q *Queries) PingPlatformMCPDatabaseFixture(ctx context.Context) error {
+	_, err := q.db.Exec(ctx, pingPlatformMCPDatabaseFixture)
+	return err
+}
+
 const platformMCPOperationReceiptInputClaimed = `-- name: PlatformMCPOperationReceiptInputClaimed :one
 SELECT EXISTS (
     SELECT 1
@@ -8230,6 +8357,22 @@ func (q *Queries) RecordPlatformMCPSetupMilestone(ctx context.Context, arg Recor
 		arg.AttemptID,
 	)
 	return err
+}
+
+const releaseInboundEMAProviderLock = `-- name: ReleaseInboundEMAProviderLock :one
+SELECT pg_advisory_unlock(hashtextextended('inbound-ema-provider:' || $1::text || ':' || $2::text, 0)) AS unlocked
+`
+
+type ReleaseInboundEMAProviderLockParams struct {
+	OrganizationID string
+	Issuer         string
+}
+
+func (q *Queries) ReleaseInboundEMAProviderLock(ctx context.Context, arg ReleaseInboundEMAProviderLockParams) (bool, error) {
+	row := q.db.QueryRow(ctx, releaseInboundEMAProviderLock, arg.OrganizationID, arg.Issuer)
+	var unlocked bool
+	err := row.Scan(&unlocked)
+	return unlocked, err
 }
 
 const resolvePlatformMCPAssignedPluginTarget = `-- name: ResolvePlatformMCPAssignedPluginTarget :many
@@ -8877,6 +9020,25 @@ func (q *Queries) SearchPlatformChatMessages(ctx context.Context, arg SearchPlat
 		return nil, err
 	}
 	return items, nil
+}
+
+const tryAcquireInboundEMAProviderLock = `-- name: TryAcquireInboundEMAProviderLock :one
+SELECT pg_try_advisory_lock(hashtextextended('inbound-ema-provider:' || $1::text || ':' || $2::text, 0))
+`
+
+type TryAcquireInboundEMAProviderLockParams struct {
+	OrganizationID string
+	Issuer         string
+}
+
+// Serialize finding or creating an organization's identity provider record
+// for one issuer URL, so concurrent trusts never create two. Non-blocking: a
+// waiter would hold a pooled connection the holder's nested calls need.
+func (q *Queries) TryAcquireInboundEMAProviderLock(ctx context.Context, arg TryAcquireInboundEMAProviderLockParams) (bool, error) {
+	row := q.db.QueryRow(ctx, tryAcquireInboundEMAProviderLock, arg.OrganizationID, arg.Issuer)
+	var pg_try_advisory_lock bool
+	err := row.Scan(&pg_try_advisory_lock)
+	return pg_try_advisory_lock, err
 }
 
 const updatePlatformMCPCatalogRegistrationComponents = `-- name: UpdatePlatformMCPCatalogRegistrationComponents :one

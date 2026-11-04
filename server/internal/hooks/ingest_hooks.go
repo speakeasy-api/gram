@@ -228,6 +228,15 @@ func (s *Service) ingest(ctx context.Context, payload *gen.IngestPayload) (res *
 		}, nil
 	}
 	orgSlug = authCtx.OrganizationSlug
+	if isInstallCheck(payload) {
+		// The install script's self-test has already proved what it checks:
+		// the plugin ran and the key may send hooks. It is not agent activity,
+		// so no policy runs and nothing is recorded.
+		return &AuthenticatedIngestResult{
+			Result: s.withOrgSettings(ctx, authCtx.ActiveOrganizationID, canonicalAllowResult(), nil),
+			Actor:  ResolvedActor{UserID: "", Email: ""},
+		}, nil
+	}
 	if payload.Session != nil {
 		if sessionID, changed := scopedSessionPtr(ctx, payload.Session.ID); changed {
 			session := *payload.Session

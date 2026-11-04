@@ -278,6 +278,7 @@ func AttachWrites(runtime *Runtime, oauth *StaffOAuth, deps WriteDependencies, w
 		OperationDisableOrganization:                  &organizationAccessWriter{store: store, audit: auditLogger, writes: writes, baseURL: oauth.Resource(), operation: OperationDisableOrganization},
 		OperationUpdateSupportMatrix:                  &supportMatrixWriter{store: store, writes: writes, baseURL: oauth.Resource()},
 		OperationCreateRegistryEntry:                  &registryEntryWriter{store: store, registry: registry, writes: writes, baseURL: oauth.Resource()},
+		OperationSetRegistryIcons:                     &registryIconsWriter{store: store, registry: registry, writes: writes, baseURL: oauth.Resource()},
 	})
 	tools.uploads = deps.ImageUploads
 	if runtime.catalogPromotions != nil {

@@ -186,6 +186,21 @@ WHERE organization_id = @organization_id
   AND email = @email
   AND served_etag IS DISTINCT FROM @served_etag;
 
+-- name: DeviceAgentStateReportExists :one
+-- Whether a report from this user on this machine is already stored, matching
+-- the upsert's dedup key, so only a report that would add a row is charged to
+-- the organization's new-device budget.
+SELECT EXISTS (
+  SELECT 1
+  FROM device_agent_state_reports
+  WHERE organization_id = @organization_id
+    AND LOWER(email) = LOWER(@email)
+    AND (
+      (sqlc.narg('serial_number')::text IS NULL AND serial_number IS NULL)
+      OR LOWER(serial_number) = LOWER(sqlc.narg('serial_number')::text)
+    )
+)::boolean AS found;
+
 -- name: UpsertDeviceAgentStateReport :one
 -- Replaces the latest state report for one enrolled user on one machine
 -- (serial NULL when the machine cannot read one). Infers

@@ -351,6 +351,13 @@ func AttachToServer(ctx context.Context, db *pgxpool.Pool, auditLogger *audit.Lo
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
 
 	queries := repo.New(dbtx)
+	// Match enable and reconciliation writers: server first, then a fresh
+	// client read under its row lock. attachTx rereads the locked server.
+	if _, err := queries.LockAttachableMCPServer(ctx, repo.LockAttachableMCPServerParams{ID: serverID, OrganizationID: organizationID}); errors.Is(err, pgx.ErrNoRows) {
+		return nil, &AttachRefusedError{Code: AttachNotFound, Message: "mcp server not found"}
+	} else if err != nil {
+		return nil, fmt.Errorf("lock mcp server: %w", err)
+	}
 	client, err := queries.LockAuthClient(ctx, repo.LockAuthClientParams{ID: clientID, OrganizationID: organizationID})
 	if errors.Is(err, pgx.ErrNoRows) {
 		return nil, &AttachRefusedError{Code: AttachNotFound, Message: "auth client not found"}
@@ -395,8 +402,6 @@ func attachTx(ctx context.Context, queries *repo.Queries, organizationID string,
 		return server, &AttachRefusedError{Code: AttachInvalid, Message: "tunneled MCP servers are not sent a client's headers; offer them an OAuth-backed client instead"}
 	case client.ProjectID.Valid && client.ProjectID.UUID != server.ProjectID:
 		return server, &AttachRefusedError{Code: AttachInvalid, Message: "this client belongs to another project; only clients shared across the organization can be offered on servers in other projects"}
-	case client.Enabled && server.RequiresUpstreamAuth.Valid && !server.RequiresUpstreamAuth.Bool:
-		return server, &AttachRefusedError{Code: AttachConflict, Message: "the server declares that its upstream needs no authentication; change that declaration before offering it an auth client"}
 	}
 
 	if _, err := queries.AttachAuthClientToServer(ctx, repo.AttachAuthClientToServerParams{

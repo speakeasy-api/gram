@@ -3,10 +3,12 @@ package plugins
 import (
 	"archive/zip"
 	"bytes"
+	"context"
 	"crypto/sha256"
 	"encoding/base64"
 	"encoding/binary"
 	"encoding/json"
+	"errors"
 	"fmt"
 	"maps"
 	"net/http"
@@ -2529,6 +2531,82 @@ setTimeout(() => process.exit(0), 5500)
 	require.Equal(t, "from ctx", ends[""][0]["finalMessage"])
 }
 
+// Some OpenClaw releases load plugins inside short-lived CLI commands such as
+// plugins install. The shim must not start its daemon until a hook fires, and
+// must not keep the process alive once every hook has its reply, or those
+// commands never exit.
+func TestGenerateOpenClawShimLetsShortLivedHostsExit(t *testing.T) {
+	t.Parallel()
+	nodePath, err := exec.LookPath("node")
+	require.NoError(t, err, "node is required to run the generated shim")
+	files, err := GenerateObservabilityPluginPackage(GenerateConfig{
+		OrgName:     "Acme",
+		ServerURL:   "https://app.getgram.ai",
+		HooksAPIKey: "gram_local_secret_xyz",
+	}, "openclaw")
+	require.NoError(t, err)
+
+	dir := t.TempDir()
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "index.js"), files["index.js"], 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "package.json"), []byte(`{"type":"module"}`), 0o600))
+	require.NoError(t, os.MkdirAll(filepath.Join(dir, "hooks"), 0o700))
+	// The fake daemon records that it started, answers every frame, and
+	// stays up until its stdin closes, like the real one.
+	daemon := "echo started >>\"$STARTS\"\n" +
+		"while IFS= read -r line; do\n" +
+		"  seq=$(printf '%s' \"$line\" | sed -n 's/^{\"seq\":\\([0-9]*\\).*/\\1/p')\n" +
+		"  printf '{\"seq\":%s}\\n' \"$seq\"\n" +
+		"done\n"
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "hooks", "bootstrap.sh"), []byte(daemon), 0o600))
+	// Loading the plugin and then stopping, as a Gateway that loaded it while
+	// running does when it shuts down before any other hook.
+	registerOnly := `import plugin from "./index.js"
+const handlers = {}
+plugin.register({ on(name, fn) { (handlers[name] ??= []).push(fn) } })
+for (const stop of handlers.gateway_stop ?? []) await stop({}, {})
+`
+	oneHook := `import plugin from "./index.js"
+const handlers = {}
+plugin.register({ on(name, fn) { handlers[name] = fn } })
+const reply = await handlers.before_tool_call({ toolName: "exec", toolCallId: "t1", params: {} }, { sessionId: "s1" })
+if (reply?.block) throw new Error("the daemon's allow was reported as a block")
+`
+	// An agent_end with no llm_output yet waits for one; a shutdown during
+	// that wait must not let it start the daemon afterwards.
+	endThenStop := `import plugin from "./index.js"
+const handlers = {}
+plugin.register({ on(name, fn) { (handlers[name] ??= []).push(fn) } })
+for (const end of handlers.agent_end) await end({ runId: "r1" }, { sessionId: "s1" })
+for (const stop of handlers.gateway_stop) await stop({}, {})
+await new Promise((resolve) => setTimeout(resolve, 2500))
+`
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "register.mjs"), []byte(registerOnly), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "end-then-stop.mjs"), []byte(endThenStop), 0o600))
+	require.NoError(t, os.WriteFile(filepath.Join(dir, "hook.mjs"), []byte(oneHook), 0o600))
+
+	run := func(script string) string {
+		starts := filepath.Join(dir, script+".starts")
+		ctx, cancel := context.WithTimeout(t.Context(), 10*time.Second)
+		defer cancel()
+		cmd := exec.CommandContext(ctx, nodePath, script)
+		cmd.Dir = dir
+		cmd.Env = append(os.Environ(), "STARTS="+starts)
+		out, err := cmd.CombinedOutput()
+		require.NoError(t, ctx.Err(), "%s did not exit on its own: %s", script, out)
+		require.NoError(t, err, "%s failed: %s", script, out)
+		raw, err := os.ReadFile(starts)
+		if errors.Is(err, os.ErrNotExist) {
+			return ""
+		}
+		require.NoError(t, err)
+		return strings.TrimSpace(string(raw))
+	}
+
+	require.Empty(t, run("register.mjs"), "loading the plugin must not start the daemon")
+	require.Empty(t, run("end-then-stop.mjs"), "a deferred agent_end must not start the daemon after gateway_stop")
+	require.Equal(t, "started", run("hook.mjs"), "the first hook starts the daemon once")
+}
+
 // OpenClaw's Codex app-server harness fires llm_input but no before_agent_run,
 // so the shim must forward llm_input for the daemon to report the prompt of
 // those runs. OpenClaw does not await llm_input, so the shim registers it
@@ -3516,14 +3594,14 @@ func TestMCPFingerprintsIsStableAcrossCalls(t *testing.T) {
 	t.Parallel()
 	cfg := GenerateConfig{OrgName: "Acme Corp", ServerURL: "https://app.getgram.ai", ProjectSlug: "acme"}
 
-	first, err := MCPFingerprints(fingerprintTestPlugins(), cfg, true)
+	first, err := publishMCPFingerprints(fingerprintTestPlugins(), nil, cfg, true)
 	require.NoError(t, err)
 	// One entry per plugin plus the reserved shared entry.
 	require.Contains(t, first, "engineering-tools")
 	require.Contains(t, first, mcpSharedFingerprintKey)
 	require.True(t, strings.HasPrefix(first["engineering-tools"], "sha256:"))
 
-	second, err := MCPFingerprints(fingerprintTestPlugins(), cfg, true)
+	second, err := publishMCPFingerprints(fingerprintTestPlugins(), nil, cfg, true)
 	require.NoError(t, err)
 
 	require.Equal(t, first, second, "same plugins + config must produce the same fingerprints")
@@ -3534,7 +3612,7 @@ func TestMCPFingerprintsIgnoresPerPublishFields(t *testing.T) {
 	plugins := fingerprintTestPlugins()
 	plugins[0].Skills = []PluginSkillInfo{{Name: "release-notes", Content: "v1"}}
 
-	base, err := MCPFingerprints(plugins, GenerateConfig{
+	base, err := publishMCPFingerprints(plugins, nil, GenerateConfig{
 		OrgName:     "Acme Corp",
 		ServerURL:   "https://app.getgram.ai",
 		ProjectSlug: "acme",
@@ -3543,7 +3621,7 @@ func TestMCPFingerprintsIgnoresPerPublishFields(t *testing.T) {
 
 	// Version and the injected API keys vary on every publish; the fingerprints
 	// normalize them so they must not change the result.
-	withNoise, err := MCPFingerprints(plugins, GenerateConfig{
+	withNoise, err := publishMCPFingerprints(plugins, nil, GenerateConfig{
 		OrgName:     "Acme Corp",
 		ServerURL:   "https://app.getgram.ai",
 		ProjectSlug: "acme",
@@ -3567,7 +3645,7 @@ func TestMCPFingerprintsIsolatesChangePerPlugin(t *testing.T) {
 		{Name: "Plugin B", Slug: "plugin-b", Description: "B", Servers: []PluginServerInfo{{DisplayName: "b1", MCPURL: "https://app.getgram.ai/mcp/b1"}}},
 	}
 
-	base, err := MCPFingerprints(plugins, cfg, true)
+	base, err := publishMCPFingerprints(plugins, nil, cfg, true)
 	require.NoError(t, err)
 
 	// Add a server to plugin A only.
@@ -3578,7 +3656,7 @@ func TestMCPFingerprintsIsolatesChangePerPlugin(t *testing.T) {
 		}},
 		{Name: "Plugin B", Slug: "plugin-b", Description: "B", Servers: []PluginServerInfo{{DisplayName: "b1", MCPURL: "https://app.getgram.ai/mcp/b1"}}},
 	}
-	changedFP, err := MCPFingerprints(changed, cfg, true)
+	changedFP, err := publishMCPFingerprints(changed, nil, cfg, true)
 	require.NoError(t, err)
 
 	require.NotEqual(t, base["plugin-a"], changedFP["plugin-a"], "changed plugin's fingerprint must differ")
@@ -3598,9 +3676,9 @@ func TestPublishChangeSignalsFollowServerURL(t *testing.T) {
 	newCfg := oldCfg
 	newCfg.ServerURL = "https://ai.speakeasy.com"
 
-	oldFP, err := MCPFingerprints(pluginsFor(oldCfg.ServerURL), oldCfg, true)
+	oldFP, err := publishMCPFingerprints(pluginsFor(oldCfg.ServerURL), nil, oldCfg, true)
 	require.NoError(t, err)
-	newFP, err := MCPFingerprints(pluginsFor(newCfg.ServerURL), newCfg, true)
+	newFP, err := publishMCPFingerprints(pluginsFor(newCfg.ServerURL), nil, newCfg, true)
 	require.NoError(t, err)
 	require.NotEqual(t, oldFP["plugin-a"], newFP["plugin-a"], "MCP plugin must republish onto the new host")
 
@@ -3629,6 +3707,8 @@ func TestGeneratePlatformMCPPackageEmitsPrivateAccessWorkflow(t *testing.T) {
 	require.Contains(t, workflow, "`failure_category: repository_conflict` cannot be fixed by republishing")
 	require.Contains(t, workflow, "treat it as pending until `last_publish.requested_at` is later than the republish or the publication evidence reports `fresh: true`")
 	require.Contains(t, workflow, "`not_configured: true`, no publish has ever been recorded")
+	require.Contains(t, workflow, "`awaiting_manual_sync: true`, the plugin's auto sync is off and its own package has changes waiting")
+	require.Contains(t, workflow, "it does not override `last_publish`: while `last_publish` is `queued`, `running`, or `retrying`, a sync may already be on its way")
 	require.NotContains(t, workflow, "speakeasy-skill-feedback")
 }
 
@@ -4413,11 +4493,11 @@ func TestMCPFingerprintsChangeWithDistributedSkills(t *testing.T) {
 		return []PluginInfo{a, b}
 	}
 
-	base, err := MCPFingerprints(makePlugins(""), cfg, true)
+	base, err := publishMCPFingerprints(makePlugins(""), nil, cfg, true)
 	require.NoError(t, err)
-	withSkill, err := MCPFingerprints(makePlugins("v1"), cfg, true)
+	withSkill, err := publishMCPFingerprints(makePlugins("v1"), nil, cfg, true)
 	require.NoError(t, err)
-	withNewVersion, err := MCPFingerprints(makePlugins("v2"), cfg, true)
+	withNewVersion, err := publishMCPFingerprints(makePlugins("v2"), nil, cfg, true)
 	require.NoError(t, err)
 
 	require.NotEqual(t, base["plugin-a"], withSkill["plugin-a"], "distributing a skill must change the plugin's fingerprint")

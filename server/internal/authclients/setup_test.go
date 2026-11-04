@@ -107,6 +107,7 @@ func withOrgGrants(t *testing.T, ctx context.Context, scopes ...authz.Scope) con
 type serverFixture struct {
 	id        uuid.UUID
 	projectID uuid.UUID
+	remoteID  uuid.UUID
 }
 
 func seedServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, serverVisibility string) serverFixture {
@@ -129,7 +130,7 @@ func seedServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID
 		Visibility:        serverVisibility,
 	}))
 
-	return serverFixture{id: serverID, projectID: projectID}
+	return serverFixture{id: serverID, projectID: projectID, remoteID: remoteID}
 }
 
 func seedStaticClient(t *testing.T, ctx context.Context, conn *pgxpool.Pool, organizationID string, projectID uuid.UUID, name string) uuid.UUID {

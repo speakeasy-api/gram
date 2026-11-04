@@ -8,7 +8,7 @@ import type { AgentSessionRow } from "./AgentSessions";
 /**
  * One agent's sessions, read once for every panel that needs them.
  *
- * The sessions table and the overview's "Acting for" ranking both read this
+ * The sessions table and the overview's "Authorized by" ranking both read this
  * list, and under query keys of their own each paid for the same request.
  *
  * `all` follows the cursor to exhaustion. A ranking taken from the first page

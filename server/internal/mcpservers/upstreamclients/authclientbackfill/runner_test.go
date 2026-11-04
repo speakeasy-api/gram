@@ -533,70 +533,6 @@ func (f *fixture) requiresUpstreamAuth(serverID uuid.UUID) pgtype.Bool {
 	return value
 }
 
-func TestRun_MarksLinkedServerAsRequiringUpstreamAuth(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	server := f.server()
-	f.associate(server, f.client("subject"))
-	require.False(t, f.requiresUpstreamAuth(server).Valid)
-
-	report := f.run(true)
-
-	require.Equal(t, 1, report.PendingMarkedServers)
-	require.Equal(t, 1, report.ServersMarked)
-	require.Equal(t, pgtype.Bool{Bool: true, Valid: true}, f.requiresUpstreamAuth(server))
-}
-
-func TestRun_NeverOverwritesExplicitNoUpstreamAuth(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	server := f.server()
-	f.associate(server, f.client("subject"))
-	require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(t.Context(), SetRequiresUpstreamAuthFixtureParams{
-		RequiresUpstreamAuth: pgtype.Bool{Bool: false, Valid: true},
-		ID:                   server,
-	}))
-
-	report := f.run(true)
-
-	require.Equal(t, 0, report.PendingMarkedServers)
-	require.Equal(t, 0, report.ServersMarked)
-	require.Equal(t, pgtype.Bool{Bool: false, Valid: true}, f.requiresUpstreamAuth(server))
-}
-
-func TestRun_MarkingRerunIsNoOp(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	server := f.server()
-	f.associate(server, f.client("subject"))
-	f.run(true)
-
-	rerun := f.run(true)
-
-	require.Equal(t, 0, rerun.PendingMarkedServers)
-	require.Equal(t, 0, rerun.ServersMarked)
-	require.Equal(t, pgtype.Bool{Bool: true, Valid: true}, f.requiresUpstreamAuth(server))
-}
-
-func TestRun_DryRunCountsButDoesNotMark(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	first, second := f.server(), f.server()
-	client := f.client("self")
-	f.associate(first, client)
-	f.associate(second, client)
-
-	dry := f.run(false)
-
-	require.Equal(t, 2, dry.PendingMarkedServers)
-	require.Equal(t, 0, dry.ServersMarked)
-	require.False(t, f.requiresUpstreamAuth(first).Valid)
-	require.False(t, f.requiresUpstreamAuth(second).Valid)
-
-	applied := f.run(true)
-	require.Equal(t, dry.PendingMarkedServers, applied.ServersMarked)
-}
-
 func TestRun_RetiresAfterIssuerDeleted(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
@@ -638,44 +574,25 @@ func TestLinkAuthClientToServer_RechecksIssuer(t *testing.T) {
 	require.Empty(t, f.links(server))
 }
 
-func TestMarkServersRequiringUpstreamAuth_RequiresLiveAssociation(t *testing.T) {
+// Whether a server needs upstream authentication follows from the auth
+// clients it offers, so the backfill leaves the stored requirement alone.
+func TestRun_NeverWritesTheStoredRequirement(t *testing.T) {
 	t.Parallel()
 	f := newFixture(t)
-	server := f.server()
-	association := f.associate(server, f.client("subject"))
-	f.run(true)
+	linked, declaredNone, ambiguous := f.server(), f.server(), f.server()
+	f.associate(linked, f.client("subject"))
+	f.associate(declaredNone, f.client("subject"))
 	require.NoError(t, f.q.SetRequiresUpstreamAuthFixture(t.Context(), SetRequiresUpstreamAuthFixtureParams{
-		RequiresUpstreamAuth: pgtype.Bool{Bool: false, Valid: false},
-		ID:                   server,
+		RequiresUpstreamAuth: pgtype.Bool{Bool: false, Valid: true},
+		ID:                   declaredNone,
 	}))
-	require.NoError(t, f.q.HardDeleteAssociationFixture(t.Context(), association))
-
-	undecided, err := f.q.ListUndecidedUpstreamAuthServers(t.Context(), ListUndecidedUpstreamAuthServersParams{
-		OrganizationID: f.orgID,
-		McpServerIds:   []uuid.UUID{server},
-	})
-	require.NoError(t, err)
-	require.Empty(t, undecided, "the dry-run count must match what the mark writes")
-
-	marked, err := f.q.MarkServersRequiringUpstreamAuth(t.Context(), MarkServersRequiringUpstreamAuthParams{
-		OrganizationID: f.orgID,
-		McpServerIds:   []uuid.UUID{server},
-	})
-	require.NoError(t, err)
-	require.Empty(t, marked)
-	require.False(t, f.requiresUpstreamAuth(server).Valid)
-}
-
-func TestRun_AmbiguousServerIsNotMarked(t *testing.T) {
-	t.Parallel()
-	f := newFixture(t)
-	server := f.server()
-	f.associate(server, f.client("someone"))
+	f.associate(ambiguous, f.client("someone"))
 
 	report := f.run(true)
 
 	require.Equal(t, 1, report.Outcomes[OutcomeAmbiguous])
-	require.Zero(t, report.PendingMarkedServers)
-	require.Zero(t, report.ServersMarked)
-	require.False(t, f.requiresUpstreamAuth(server).Valid)
+	require.Len(t, f.links(linked), 1)
+	require.False(t, f.requiresUpstreamAuth(linked).Valid)
+	require.Equal(t, pgtype.Bool{Bool: false, Valid: true}, f.requiresUpstreamAuth(declaredNone))
+	require.False(t, f.requiresUpstreamAuth(ambiguous).Valid)
 }

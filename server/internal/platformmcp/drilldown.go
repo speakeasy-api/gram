@@ -447,9 +447,9 @@ func traceCursorScope(target drilldownTarget, outcome string) string {
 // the whole project under this MCP's name.
 func summaryIdentityParams(target drilldownTarget, start, end int64) telemetryrepo.GetOverviewSummaryParams {
 	params := telemetryrepo.GetOverviewSummaryParams{
-		GramProjectID: target.projectID,
-		TimeStart:     start,
-		TimeEnd:       end,
+		GramProjectIDs: []string{target.projectID},
+		TimeStart:      start,
+		TimeEnd:        end,
 	}
 	if slug := target.identity.toolsetSlug; slug != "" {
 		params.ToolsetSlug = slug

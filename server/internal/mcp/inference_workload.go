@@ -87,14 +87,14 @@ func (s *Service) handleInferenceWorkloadGrant(ctx context.Context, w http.Respo
 	if err != nil {
 		return fmt.Errorf("exchange workload inference: %w", err)
 	}
-	credential := workloadSessionCredential{DelegatedGrants: grants, DelegatedGrantsVersion: int32(version)}
+	credential := workloadSessionCredential{DerivesPolicyAtAdmission: false, DelegatedGrants: grants, DelegatedGrantsVersion: int32(version)}
 	subject := urn.NewWorkloadSubject(presented.issuerID, presented.subject)
 	session := workloadSessionIssuance(workloadSessionTarget{userSessionIssuerID: shared.issuerID, projectID: projectID, organizationID: issuer.organizationID, issuer: shared.issuer, audience: InferenceResource}, subject, credential)
 	// The session row inherits its issuer tenancy (organization issuers have
 	// no project_id). Persist the exact target in the immutable resource and
 	// ceiling so completion never takes tenancy from caller headers.
 	session.Resource = InferenceResource + ":" + projectID.String()
-	return s.issueWorkloadGrantSession(ctx, w, logger, workloadGrantIssuance{client: nil, beforeCommit: nil, presented: presented, credential: credential, projectID: &projectID, endpoint: nil, session: session})
+	return s.issueWorkloadGrantSession(ctx, w, logger, workloadGrantIssuance{client: nil, beforeCommit: nil, presented: presented, credential: credential, projectID: &projectID, endpoint: nil, session: session, choosesUpstream: false, requestedAuthClients: nil})
 }
 
 // AuthorizeWorkloadInference implements the completion-only authentication

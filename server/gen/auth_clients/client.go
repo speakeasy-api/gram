@@ -23,6 +23,10 @@ type Client struct {
 	AttachAuthClientToMcpServerEndpoint         goa.Endpoint
 	SetAuthClientHeadersEndpoint                goa.Endpoint
 	DetachAuthClientFromMcpServerEndpoint       goa.Endpoint
+	ListMcpServerAuthClientChoicesEndpoint      goa.Endpoint
+	ListIssuanceProfilesEndpoint                goa.Endpoint
+	SetIssuanceProfileEndpoint                  goa.Endpoint
+	DeleteIssuanceProfileEndpoint               goa.Endpoint
 	GetMcpServerAuthenticationEndpoint          goa.Endpoint
 	SetMcpServerUpstreamAuthRequirementEndpoint goa.Endpoint
 	GetAuthClientAudienceEndpoint               goa.Endpoint
@@ -30,7 +34,7 @@ type Client struct {
 }
 
 // NewClient initializes a "authClients" service client given the endpoints.
-func NewClient(listAuthClients, getAuthClient, updateAuthClient, createAuthClient, attachAuthClientToMcpServer, setAuthClientHeaders, detachAuthClientFromMcpServer, getMcpServerAuthentication, setMcpServerUpstreamAuthRequirement, getAuthClientAudience, setAuthClientAudience goa.Endpoint) *Client {
+func NewClient(listAuthClients, getAuthClient, updateAuthClient, createAuthClient, attachAuthClientToMcpServer, setAuthClientHeaders, detachAuthClientFromMcpServer, listMcpServerAuthClientChoices, listIssuanceProfiles, setIssuanceProfile, deleteIssuanceProfile, getMcpServerAuthentication, setMcpServerUpstreamAuthRequirement, getAuthClientAudience, setAuthClientAudience goa.Endpoint) *Client {
 	return &Client{
 		ListAuthClientsEndpoint:                     listAuthClients,
 		GetAuthClientEndpoint:                       getAuthClient,
@@ -39,6 +43,10 @@ func NewClient(listAuthClients, getAuthClient, updateAuthClient, createAuthClien
 		AttachAuthClientToMcpServerEndpoint:         attachAuthClientToMcpServer,
 		SetAuthClientHeadersEndpoint:                setAuthClientHeaders,
 		DetachAuthClientFromMcpServerEndpoint:       detachAuthClientFromMcpServer,
+		ListMcpServerAuthClientChoicesEndpoint:      listMcpServerAuthClientChoices,
+		ListIssuanceProfilesEndpoint:                listIssuanceProfiles,
+		SetIssuanceProfileEndpoint:                  setIssuanceProfile,
+		DeleteIssuanceProfileEndpoint:               deleteIssuanceProfile,
 		GetMcpServerAuthenticationEndpoint:          getMcpServerAuthentication,
 		SetMcpServerUpstreamAuthRequirementEndpoint: setMcpServerUpstreamAuthRequirement,
 		GetAuthClientAudienceEndpoint:               getAuthClientAudience,
@@ -205,6 +213,94 @@ func (c *Client) DetachAuthClientFromMcpServer(ctx context.Context, p *DetachAut
 		return
 	}
 	return ires.(*types.AuthClient), nil
+}
+
+// ListMcpServerAuthClientChoices calls the "listMcpServerAuthClientChoices"
+// endpoint of the "authClients" service.
+// ListMcpServerAuthClientChoices may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListMcpServerAuthClientChoices(ctx context.Context, p *ListMcpServerAuthClientChoicesPayload) (res *ListMcpServerAuthClientChoicesResult, err error) {
+	var ires any
+	ires, err = c.ListMcpServerAuthClientChoicesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListMcpServerAuthClientChoicesResult), nil
+}
+
+// ListIssuanceProfiles calls the "listIssuanceProfiles" endpoint of the
+// "authClients" service.
+// ListIssuanceProfiles may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) ListIssuanceProfiles(ctx context.Context, p *ListIssuanceProfilesPayload) (res *ListIssuanceProfilesResult, err error) {
+	var ires any
+	ires, err = c.ListIssuanceProfilesEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*ListIssuanceProfilesResult), nil
+}
+
+// SetIssuanceProfile calls the "setIssuanceProfile" endpoint of the
+// "authClients" service.
+// SetIssuanceProfile may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) SetIssuanceProfile(ctx context.Context, p *SetIssuanceProfilePayload) (res *types.IssuanceProfile, err error) {
+	var ires any
+	ires, err = c.SetIssuanceProfileEndpoint(ctx, p)
+	if err != nil {
+		return
+	}
+	return ires.(*types.IssuanceProfile), nil
+}
+
+// DeleteIssuanceProfile calls the "deleteIssuanceProfile" endpoint of the
+// "authClients" service.
+// DeleteIssuanceProfile may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): unauthorized access
+//   - "forbidden" (type *goa.ServiceError): permission denied
+//   - "bad_request" (type *goa.ServiceError): request is invalid
+//   - "not_found" (type *goa.ServiceError): resource not found
+//   - "conflict" (type *goa.ServiceError): resource already exists
+//   - "unsupported_media" (type *goa.ServiceError): unsupported media type
+//   - "invalid" (type *goa.ServiceError): request contains one or more invalidation fields
+//   - "invariant_violation" (type *goa.ServiceError): an unexpected error occurred
+//   - "unexpected" (type *goa.ServiceError): an unexpected error occurred
+//   - "gateway_error" (type *goa.ServiceError): an unexpected error occurred
+//   - error: internal error
+func (c *Client) DeleteIssuanceProfile(ctx context.Context, p *DeleteIssuanceProfilePayload) (err error) {
+	_, err = c.DeleteIssuanceProfileEndpoint(ctx, p)
+	return
 }
 
 // GetMcpServerAuthentication calls the "getMcpServerAuthentication" endpoint

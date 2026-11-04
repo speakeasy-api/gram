@@ -22,16 +22,8 @@ vi.mock("@/hooks/useRBAC", async (importOriginal) => ({
   ...(await importOriginal<typeof import("@/hooks/useRBAC")>()),
   useRBAC: () => ({ grants: state.grants, isLoading: false }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    mcp: {
-      details: { skills: { href: (slug: string) => `/mcp/${slug}/skills` } },
-      gateway: {
-        skills: { href: (id: string) => `/mcp/gateway/${id}/skills` },
-      },
-    },
-  }),
-  useOrgRoutes: () => ({ gateway: { href: () => "/org/gateway" } }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project" }),
 }));
 vi.mock("@/hooks/useDrainInfiniteQuery", () => ({
   useDrainInfiniteQuery: () => undefined,
@@ -144,15 +136,15 @@ describe("SkillServedOverMcpSection", () => {
     renderSection();
     expect(
       screen.getByRole("link", { name: "Billing" }).getAttribute("href"),
-    ).toBe("/mcp/billing/skills");
+    ).toBe("/org/projects/project/mcp/billing/skills");
     // A server the API names as its toolset's host has the tab too, even
     // when its id differs from the toolset's.
     expect(
       screen.getByRole("link", { name: "Payments" }).getAttribute("href"),
-    ).toBe("/mcp/payments/skills");
+    ).toBe("/org/projects/project/mcp/payments/skills");
     expect(
       screen.getByRole("link", { name: "Ops gateway" }).getAttribute("href"),
-    ).toBe("/mcp/gateway/gw/skills");
+    ).toBe("/org/projects/project/mcp/gateway/gw/skills");
     // Another server built on the toolset has no Skills tab of its own.
     expect(screen.queryByRole("link", { name: "Billing (team)" })).toBeNull();
     expect(screen.getByText("Billing (team)")).toBeDefined();

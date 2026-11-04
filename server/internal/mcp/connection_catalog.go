@@ -23,14 +23,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	usersessionsrepo "github.com/speakeasy-api/gram/server/internal/usersessions/repo"
 )
 
 const (
-	// connectionCatalogVersion identifies the immutable record format.
+	// connectionCatalogVersion identifies the record format.
 	connectionCatalogVersion = 1
-	// connectionCatalogMaxBytes bounds one immutable Redis value to 16 MiB.
+	// connectionCatalogMaxBytes bounds one Redis value to 16 MiB.
 	connectionCatalogMaxBytes = 16 << 20
 )
 
@@ -93,12 +94,15 @@ type connectionCatalogAuth struct {
 	RegistrationID uuid.NullUUID `json:"registration_id"`
 }
 
-// connectionCatalog is immutable data, bound to one approved OAuth connection.
+// connectionCatalog freezes discovery for one approved OAuth connection.
+// Explicit member reconnect consent can update just that member.
 // Session validation and live authorization remain separate from this record.
 type connectionCatalog struct {
 	// Version controls the stored data contract.
 	Version int `json:"version"`
-	// ID identifies this exact immutable catalog.
+	// ApprovalChallengeID recognizes a committed reconnect after a cache-write failure.
+	ApprovalChallengeID string `json:"approval_challenge_id,omitempty"`
+	// ID identifies this connection's catalog.
 	ID uuid.UUID `json:"id"`
 	// OrganizationID isolates the record's tenant.
 	OrganizationID string `json:"organization_id"`
@@ -126,16 +130,10 @@ func connectionCatalogKey(organizationID string, id uuid.UUID) string {
 
 func (c connectionCatalog) CacheKey() string { return connectionCatalogKey(c.OrganizationID, c.ID) }
 
-// publishConnectionCatalog completes all fallible catalog work while the
+// approveInitialConnectionCatalog completes all fallible catalog work while the
 // challenge remains retryable. A losing approval may leave an unreferenced
 // record, which expires; an authorization code never names a partial record.
-func (s *Service) publishConnectionCatalog(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, inventory *consentToolInventory, selection *toolfilter.SessionSelection, mode toolfilter.CatalogMode, allTools bool, upstreamPicks map[uuid.UUID]uuid.UUID, durationHours int, now time.Time) (*toolfilter.CatalogReference, error) {
-	if inventory == nil || !inventory.Complete || inventory.StateID != state.ID || inventory.Resource != endpointToolSelectionResource(endpoint) {
-		return nil, fmt.Errorf("a completed gateway catalog is required; reload consent")
-	}
-	if state.Subject == nil || state.Subject.IsZero() || (mode != toolfilter.CatalogModeCached && mode != toolfilter.CatalogModeLive) {
-		return nil, fmt.Errorf("invalid connection catalog approval")
-	}
+func (s *Service) approveInitialConnectionCatalog(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, inventory *consentToolInventory, selection *toolfilter.SessionSelection, mode toolfilter.CatalogMode, allTools bool, upstreamPicks map[uuid.UUID]uuid.UUID, durationHours int, now time.Time) (*toolfilter.CatalogReference, error) {
 	issuer, err := usersessionsrepo.New(s.db).GetUserSessionIssuerByID(ctx, usersessionsrepo.GetUserSessionIssuerByIDParams{
 		ID: endpoint.UserSessionIssuerID, ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
 	})
@@ -149,6 +147,74 @@ func (s *Service) publishConnectionCatalog(ctx context.Context, endpoint *Resolv
 	}
 	if durationHours > 0 {
 		lifetime = min(lifetime, time.Duration(durationHours)*time.Hour)
+	}
+	catalog, err := s.freezeConnectionCatalog(ctx, endpoint, state, state.ClientID, inventory, selection, mode, upstreamPicks, now.Add(lifetime+userSessionGrantTTL))
+	if err != nil {
+		return nil, err
+	}
+	if err := s.publishConnectionCatalog(ctx, catalog, now); err != nil {
+		return nil, err
+	}
+	return &toolfilter.CatalogReference{ID: catalog.ID, Mode: mode, AllTools: allTools}, nil
+}
+
+// Publish an immutable snapshot before committing its reference. A losing
+// approval can leave an unreferenced snapshot, which expires naturally.
+func (s *Service) publishConnectionCatalog(ctx context.Context, catalog *connectionCatalog, now time.Time) error {
+	ttl := catalog.ExpiresAt.Sub(now)
+	if ttl <= 0 {
+		return errConnectionCatalogExpired
+	}
+	raw, err := catalog.marshal()
+	if err != nil {
+		return err
+	}
+	conditional, ok := s.connectionCatalogCache.(cache.ConditionalCache)
+	if !ok {
+		return fmt.Errorf("connection catalog store does not support atomic publication")
+	}
+	stored, err := conditional.SetIfAbsent(ctx, catalog.CacheKey(), raw, ttl)
+	if err != nil {
+		return fmt.Errorf("publish connection catalog: %w", err)
+	}
+	if !stored {
+		return fmt.Errorf("connection catalog publication conflict")
+	}
+	return nil
+}
+
+// upstreamChoices records only reviewed members, even when their issuer also
+// serves other gateways. An empty scope must stay non-nil: nil means issuer-wide.
+func (c *connectionCatalog) upstreamChoices(credentialID uuid.UUID) usersessionsrepo.RecordUpstreamClientSelectionsParams {
+	picks := usersessionsrepo.RecordUpstreamClientSelectionsParams{
+		UserSessionIssuerID: c.IssuerID,
+		CredentialKind:      upstreamclients.CredentialKindUserSession,
+		CredentialID:        credentialID,
+		Source:              upstreamclients.SelectionSourceIssuance,
+		ScopeMcpServerIds:   make([]uuid.UUID, 0, len(c.Members)),
+		PickedMcpServerIds:  nil,
+		PickedClientIds:     nil,
+		PickedAuthClientIds: nil,
+	}
+	for _, member := range c.Members {
+		picks.ScopeMcpServerIds = append(picks.ScopeMcpServerIds, member.ServerID)
+		if member.Auth != nil {
+			picks.PickedMcpServerIds = append(picks.PickedMcpServerIds, member.ServerID)
+			picks.PickedClientIds = append(picks.PickedClientIds, member.Auth.RegistrationID.UUID)
+			picks.PickedAuthClientIds = append(picks.PickedAuthClientIds, member.Auth.ClientID)
+		}
+	}
+	return picks
+}
+
+// freezeConnectionCatalog validates the captured routes, credentials and tool
+// definitions for both initial approval and a member's reconnect approval.
+func (s *Service) freezeConnectionCatalog(ctx context.Context, endpoint *ResolvedMcpEndpoint, state AuthnChallengeState, clientID string, inventory *consentToolInventory, selection *toolfilter.SessionSelection, mode toolfilter.CatalogMode, upstreamPicks map[uuid.UUID]uuid.UUID, expiresAt time.Time) (*connectionCatalog, error) {
+	if inventory == nil || !inventory.Complete || inventory.StateID != state.ID || inventory.Resource != endpointToolSelectionResource(endpoint) {
+		return nil, fmt.Errorf("a completed gateway catalog is required; reload consent")
+	}
+	if state.Subject == nil || state.Subject.IsZero() || (mode != toolfilter.CatalogModeCached && mode != toolfilter.CatalogModeLive) {
+		return nil, fmt.Errorf("invalid connection catalog approval")
 	}
 	ids := make([]uuid.UUID, 0, len(inventory.MemberBindings))
 	seen := make(map[uuid.UUID]bool, len(inventory.MemberBindings))
@@ -169,7 +235,7 @@ func (s *Service) publishConnectionCatalog(ctx context.Context, endpoint *Resolv
 	}
 	// Each member's credential is judged for the consenting person, as their
 	// requests will be.
-	subjectCtx, err := s.contextForSessionSubject(ctx, endpoint, *state.Subject, "consent:"+state.ID, state.ClientID)
+	subjectCtx, err := s.contextForSessionSubject(ctx, endpoint, *state.Subject, "consent:"+state.ID, clientID)
 	if err != nil {
 		return nil, fmt.Errorf("stamp consent subject context: %w", err)
 	}
@@ -206,30 +272,23 @@ func (s *Service) publishConnectionCatalog(ctx context.Context, endpoint *Resolv
 	}
 	slices.SortFunc(tools, func(a, b *toolListEntry) int { return strings.Compare(a.Name, b.Name) })
 	catalog := connectionCatalog{
-		Version: connectionCatalogVersion, ID: uuid.New(), OrganizationID: endpoint.OrganizationID,
-		IssuerID: endpoint.UserSessionIssuerID, ClientID: state.ClientID, Subject: *state.Subject,
+		Version: connectionCatalogVersion, ApprovalChallengeID: "", ID: uuid.New(), OrganizationID: endpoint.OrganizationID,
+		IssuerID: endpoint.UserSessionIssuerID, ClientID: clientID, Subject: *state.Subject,
 		Resource: inventory.Resource, Members: members, MemberOutcomes: outcomes, Tools: tools,
-		ExpiresAt: now.Add(lifetime + userSessionGrantTTL),
+		ExpiresAt: expiresAt,
 	}
-	raw, err := json.Marshal(catalog)
+	return &catalog, nil
+}
+
+func (c *connectionCatalog) marshal() ([]byte, error) {
+	raw, err := json.Marshal(c)
 	if err != nil {
 		return nil, fmt.Errorf("encode approved catalog: %w", err)
 	}
 	if len(raw) > connectionCatalogMaxBytes {
-		return nil, fmt.Errorf("%w (%d bytes)", errConnectionCatalogTooLarge, connectionCatalogMaxBytes)
+		return nil, errConnectionCatalogTooLarge
 	}
-	conditional, ok := s.connectionCatalogCache.(cache.ConditionalCache)
-	if !ok {
-		return nil, fmt.Errorf("connection catalog store does not support atomic publication")
-	}
-	stored, err := conditional.SetIfAbsent(ctx, catalog.CacheKey(), raw, catalog.ExpiresAt.Sub(now))
-	if err != nil {
-		return nil, fmt.Errorf("publish connection catalog: %w", err)
-	}
-	if !stored {
-		return nil, fmt.Errorf("connection catalog publication conflict")
-	}
-	return &toolfilter.CatalogReference{ID: catalog.ID, Mode: mode, AllTools: allTools}, nil
+	return raw, nil
 }
 
 // loadConnectionCatalog never substitutes a live upstream fetch for a missing

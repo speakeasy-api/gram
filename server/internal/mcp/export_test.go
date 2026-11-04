@@ -2,10 +2,14 @@ package mcp
 
 import (
 	"context"
+	"fmt"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"net/http"
 	"slices"
 	"sync"
 	"time"
+
+	"github.com/google/uuid"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -16,8 +20,16 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/ratelimit"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/posthog"
+	"github.com/speakeasy-api/gram/server/internal/urn"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/idjag"
 	"github.com/speakeasy-api/gram/server/internal/usersessions/assertion/workload"
+	"github.com/speakeasy-api/gram/server/internal/usersessions/cimd"
 )
+
+// SetCIMDResolver replaces the client metadata document resolver.
+func (s *Service) SetCIMDResolver(resolver *cimd.Resolver) {
+	s.cimdResolver = resolver
+}
 
 // ErrWorkloadIssuerUntrusted and ErrWorkloadNotAdmitted expose the workload
 // admission sentinels, so a test can tell which stage refused an assertion.
@@ -114,6 +126,38 @@ func (s *Service) SetPrepareMandatory(prepare func(context.Context) (authz.Manda
 	s.prepareMandatory = prepare
 }
 
+// ConnectionRecoveryLink names what a test connection link binds.
+type ConnectionRecoveryLink struct {
+	OrganizationID string
+	UserID         string
+	ProjectID      uuid.UUID
+	McpServerID    uuid.UUID
+	AuthClientID   uuid.UUID
+	RegistrationID uuid.UUID
+}
+
+// IssueConnectionRecovery stores a connection link and returns its path.
+func (s *Service) IssueConnectionRecovery(ctx context.Context, link ConnectionRecoveryLink) (string, error) {
+	token, err := generateOpaqueToken()
+	if err != nil {
+		return "", err
+	}
+	err = s.connectionRecoveryCache.Store(ctx, connectionRecovery{
+		ID: token, OrganizationID: link.OrganizationID, UserID: link.UserID, ProjectID: link.ProjectID,
+		UserSessionIssuerID: uuid.New(), McpServerID: link.McpServerID, McpSlug: "server", ServerName: "Server",
+		AuthClientID: link.AuthClientID, RegistrationID: link.RegistrationID, CreatedAt: time.Now(),
+	})
+	if err != nil {
+		return "", fmt.Errorf("store connection link: %w", err)
+	}
+	return connectionRecoveryPath + token, nil
+}
+
+// SetBrowserSession replaces how a browser's session token authenticates.
+func (s *Service) SetBrowserSession(authenticate func(context.Context, string) (context.Context, error)) {
+	s.browserSession = authenticate
+}
+
 type fixedPermitter bool
 
 func (p fixedPermitter) Permitted(context.Context, authClientPermitRequest) (bool, error) {
@@ -123,6 +167,49 @@ func (p fixedPermitter) Permitted(context.Context, authClientPermitRequest) (boo
 // SetAuthClientPermitted answers every auth client permission check with allowed.
 func (s *Service) SetAuthClientPermitted(allowed bool) {
 	s.authClientPermitter = fixedPermitter(allowed)
+}
+
+// RemoteLoginState reads a started remote login by its state parameter.
+func (s *Service) RemoteLoginState(ctx context.Context, state string) (remotesessions.RemoteLoginState, error) {
+	remote, err := s.remoteLoginCache.Get(ctx, "remoteLogin:"+state)
+	if err != nil {
+		return remote, fmt.Errorf("load remote login: %w", err)
+	}
+	return remote, nil
+}
+
+// VerifyConnectionRecoveryCompletion runs the completion check of a
+// connection link's login.
+func (s *Service) VerifyConnectionRecoveryCompletion(r *http.Request, remote remotesessions.RemoteLoginState) (bool, error) {
+	return s.verifyConnectionRecoveryCompletion(r, remote)
+}
+
+// ConnectionRecoveryRoute and ConnectionRecoveryDonePath expose the link's routes.
+const (
+	ConnectionRecoveryRoute    = connectionRecoveryRoute
+	ConnectionRecoveryDonePath = connectionRecoveryDonePath
+	RemoteLoginBindPath        = remoteLoginBindPath
+)
+
+// ConnectionSubject exposes whose stored connection a typed auth client
+// serves for the caller in ctx.
+func ConnectionSubject(ctx context.Context, subject urn.SessionSubject) urn.SessionSubject {
+	return connectionSubject(ctx, subject)
+}
+
+// ConnectionRecoveryErrorFor runs the gate's connection answer for a direct
+// endpoint whose typed auth client resolved to clientID.
+func (s *Service) ConnectionRecoveryErrorFor(ctx context.Context, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, clientID, registrationID uuid.UUID, clientType string) (error, bool) {
+	res := gapResolution("")
+	res.outcome = authClientResolved
+	res.clientID = clientID
+	res.clientType = clientType
+	res.serverName = "Linear"
+	authentication := &issuerGateAuthentication{
+		endpoint: endpoint, protectedResourceURL: "", mcpURL: "", surface: "", subject: subject, refreshableUserSession: false,
+		chosenClient: uuid.NullUUID{UUID: registrationID, Valid: true}, chosenNoAuth: false, authClient: &res, authorizerOwner: "",
+	}
+	return s.connectionRecoveryError(ctx, authentication)
 }
 
 type callerRecordingPermitter struct {
@@ -168,4 +255,9 @@ func (f testAuthClientPermission) Permitted(context.Context, authClientPermitReq
 // RecordConnectionPopupGrant exercises the callback's parent-state correlation.
 func (s *Service) RecordConnectionPopupGrant(ctx context.Context, grant remotesessions.RemoteGrant) error {
 	return s.recordConnectionPopupGrant(ctx, grant)
+}
+
+// SetIDJAGTrust replaces the trust lookup metadata uses to advertise the ID-JAG grant.
+func (s *Service) SetIDJAGTrust(store idjag.Store) {
+	s.idJAGTrust = store
 }

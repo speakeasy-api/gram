@@ -18,6 +18,7 @@ import (
 type Endpoints struct {
 	CreateKey       goa.Endpoint
 	RotateKey       goa.Endpoint
+	ExtendAgentKeys goa.Endpoint
 	ListKeys        goa.Endpoint
 	RevokeKey       goa.Endpoint
 	UpdateKeyPolicy goa.Endpoint
@@ -31,6 +32,7 @@ func NewEndpoints(s Service) *Endpoints {
 	return &Endpoints{
 		CreateKey:       NewCreateKeyEndpoint(s, a.APIKeyAuth),
 		RotateKey:       NewRotateKeyEndpoint(s, a.APIKeyAuth),
+		ExtendAgentKeys: NewExtendAgentKeysEndpoint(s, a.APIKeyAuth),
 		ListKeys:        NewListKeysEndpoint(s, a.APIKeyAuth),
 		RevokeKey:       NewRevokeKeyEndpoint(s, a.APIKeyAuth),
 		UpdateKeyPolicy: NewUpdateKeyPolicyEndpoint(s, a.APIKeyAuth),
@@ -42,6 +44,7 @@ func NewEndpoints(s Service) *Endpoints {
 func (e *Endpoints) Use(m func(goa.Endpoint) goa.Endpoint) {
 	e.CreateKey = m(e.CreateKey)
 	e.RotateKey = m(e.RotateKey)
+	e.ExtendAgentKeys = m(e.ExtendAgentKeys)
 	e.ListKeys = m(e.ListKeys)
 	e.RevokeKey = m(e.RevokeKey)
 	e.UpdateKeyPolicy = m(e.UpdateKeyPolicy)
@@ -91,6 +94,29 @@ func NewRotateKeyEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.E
 			return nil, err
 		}
 		return s.RotateKey(ctx, p)
+	}
+}
+
+// NewExtendAgentKeysEndpoint returns an endpoint function that calls the
+// method "extendAgentKeys" of service "keys".
+func NewExtendAgentKeysEndpoint(s Service, authAPIKeyFn security.AuthAPIKeyFunc) goa.Endpoint {
+	return func(ctx context.Context, req any) (any, error) {
+		p := req.(*ExtendAgentKeysPayload)
+		var err error
+		sc := security.APIKeyScheme{
+			Name:           "session",
+			Scopes:         []string{},
+			RequiredScopes: []string{},
+		}
+		var key string
+		if p.SessionToken != nil {
+			key = *p.SessionToken
+		}
+		ctx, err = authAPIKeyFn(ctx, key, &sc)
+		if err != nil {
+			return nil, err
+		}
+		return s.ExtendAgentKeys(ctx, p)
 	}
 }
 

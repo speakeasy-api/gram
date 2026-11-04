@@ -209,7 +209,13 @@ func (s *Service) ServeImage(ctx context.Context, payload *gen.ServeImageForm) (
 		return nil, nil, oops.E(oops.CodeUnexpected, fmt.Errorf("read asset: %w", err), "error fetching asset")
 	}
 
+	var csp *string
+	if row.ContentType == "image/svg+xml" {
+		csp = new("default-src 'none'; script-src 'none'; style-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; sandbox")
+	}
 	return &gen.ServeImageResult{
+		ContentSecurityPolicy:     csp,
+		XContentTypeOptions:       new("nosniff"),
 		ContentType:               row.ContentType,
 		ContentLength:             row.ContentLength,
 		LastModified:              row.UpdatedAt.Time.Format(time.RFC1123),

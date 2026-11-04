@@ -8,8 +8,8 @@ const state = vi.hoisted(() => ({
   project: { id: "project_a", slug: "first" },
 }));
 vi.mock("@/contexts/Auth", () => ({ useProject: () => state.project }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({ mcp: { add: { href: () => "/mcp/add" } } }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "first" }),
 }));
 vi.mock("@/components/require-scope", () => ({
   RequireScope: ({ children }: { children: ReactNode }) => children,
@@ -87,7 +87,7 @@ it("clears the session search when switching projects and scopes the page to the
   );
   expect(
     screen.getByRole("link", { name: "Add MCP server" }).getAttribute("href"),
-  ).toBe("/mcp/add");
+  ).toBe("/org/projects/first/mcp/add");
   fireEvent.change(screen.getByRole("textbox"), {
     target: { value: "old project server" },
   });

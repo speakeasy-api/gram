@@ -52,7 +52,10 @@ const (
 	// KindChatSession marks a validated chat-session token minted for an
 	// embedded chat surface. Its claims may name a Speakeasy user or an external
 	// end-user for attribution, but the credential proves only the session,
-	// so it is never an authoritative acting user.
+	// so it is never an authoritative acting user. A token minted from a
+	// signed-in dashboard session additionally records the minting user (see
+	// Identity.ChatSessionMinterUserID) for the narrow surfaces that accept
+	// that proof; it still does not make the kind a user session.
 	KindChatSession Kind = "chat_session"
 
 	// KindWorkload marks a validated workload-subject session: a machine an
@@ -71,6 +74,9 @@ type Identity struct {
 	apiKeyID   string
 	expiresAt  time.Time
 	sessionJTI string
+	// chatMinterUserID is the dashboard user a KindChatSession token was
+	// minted from, when it was minted from a dashboard session.
+	chatMinterUserID string
 }
 
 // Kind returns the validated credential class.
@@ -80,6 +86,13 @@ func (i Identity) Kind() Kind { return i.kind }
 // KindConsentDiscovery. Other classes return empty. Check Kind before using
 // a user ID for runtime enforcement: consent proves discovery identity only.
 func (i Identity) UserID() string { return i.userID }
+
+// ChatSessionMinterUserID returns the Speakeasy user whose signed-in
+// dashboard session minted a KindChatSession token, or empty for any other
+// kind and for chat sessions minted from an API key. The server copied the
+// user from the minting session into the signed token, so it proves who
+// minted the session; it is not the acting user for runtime enforcement.
+func (i Identity) ChatSessionMinterUserID() string { return i.chatMinterUserID }
 
 // SessionJTI returns the identifier carried by the validated session token.
 func (i Identity) SessionJTI() string { return i.sessionJTI }
@@ -112,7 +125,7 @@ func (b *ValidatorBoundary) withIdentity(ctx context.Context, kind Kind, userID 
 	if b == nil || !b.initialized {
 		return ctx
 	}
-	return context.WithValue(ctx, contextKey{}, Identity{kind: kind, userID: userID, agentID: "", apiKeyID: "", expiresAt: time.Time{}, sessionJTI: ""})
+	return context.WithValue(ctx, contextKey{}, Identity{kind: kind, userID: userID, agentID: "", apiKeyID: "", expiresAt: time.Time{}, sessionJTI: "", chatMinterUserID: ""})
 }
 
 // StampValidatedSession records provenance from an opaque session proof returned
@@ -123,7 +136,7 @@ func (b *ValidatorBoundary) StampValidatedSession(ctx context.Context, session s
 		return ctx
 	}
 	subject := session.Subject()
-	identity := Identity{kind: "", userID: "", agentID: "", apiKeyID: "", expiresAt: session.ExpiresAt(), sessionJTI: session.JTI()}
+	identity := Identity{kind: "", userID: "", agentID: "", apiKeyID: "", expiresAt: session.ExpiresAt(), sessionJTI: session.JTI(), chatMinterUserID: ""}
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser:
 		if subject.ID == "" {
@@ -154,12 +167,18 @@ func (b *ValidatorBoundary) StampAPIKey(ctx context.Context, keyID string) conte
 	if b == nil || !b.initialized {
 		return ctx
 	}
-	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAPIKey, userID: "", agentID: "", apiKeyID: keyID, expiresAt: time.Time{}, sessionJTI: ""})
+	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAPIKey, userID: "", agentID: "", apiKeyID: keyID, expiresAt: time.Time{}, sessionJTI: "", chatMinterUserID: ""})
 }
 
 // StampChatSession records an accepted embedded-chat session token.
-func (b *ValidatorBoundary) StampChatSession(ctx context.Context) context.Context {
-	return b.withIdentity(ctx, KindChatSession, "")
+// minterUserID is the dashboard user the validated token was minted from, or
+// empty when an API key minted it; the chat-session validator reads it from the
+// token's verified claims.
+func (b *ValidatorBoundary) StampChatSession(ctx context.Context, minterUserID string) context.Context {
+	if b == nil || !b.initialized {
+		return ctx
+	}
+	return context.WithValue(ctx, contextKey{}, Identity{kind: KindChatSession, userID: "", agentID: "", apiKeyID: "", expiresAt: time.Time{}, sessionJTI: "", chatMinterUserID: minterUserID})
 }
 
 // FromContext returns the stamped provenance. A false result means the
@@ -180,7 +199,7 @@ func (b *ValidatorBoundary) stampAgentID(ctx context.Context, agentID string) co
 	if b == nil || !b.initialized {
 		return ctx
 	}
-	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAgent, agentID: agentID, userID: "", apiKeyID: "", expiresAt: time.Time{}, sessionJTI: ""})
+	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAgent, agentID: agentID, userID: "", apiKeyID: "", expiresAt: time.Time{}, sessionJTI: "", chatMinterUserID: ""})
 }
 
 // StampConsentDiscovery records a user after the consent owner validates a live,
@@ -190,13 +209,13 @@ func (b *ValidatorBoundary) StampConsentDiscovery(ctx context.Context, userID st
 	if b == nil || !b.initialized || userID == "" || expiresAt.IsZero() || !expiresAt.After(time.Now()) {
 		return ctx
 	}
-	return context.WithValue(ctx, contextKey{}, Identity{kind: KindConsentDiscovery, userID: userID, agentID: "", apiKeyID: "", expiresAt: expiresAt, sessionJTI: ""})
+	return context.WithValue(ctx, contextKey{}, Identity{kind: KindConsentDiscovery, userID: userID, agentID: "", apiKeyID: "", expiresAt: expiresAt, sessionJTI: "", chatMinterUserID: ""})
 }
 
 // WithoutIdentity clears inherited provenance on entry to another authentication
 // surface. It leaves the context without an identity.
 func WithoutIdentity(ctx context.Context) context.Context {
-	return context.WithValue(ctx, contextKey{}, Identity{kind: "", userID: "", agentID: "", apiKeyID: "", expiresAt: time.Time{}, sessionJTI: ""})
+	return context.WithValue(ctx, contextKey{}, Identity{kind: "", userID: "", agentID: "", apiKeyID: "", expiresAt: time.Time{}, sessionJTI: "", chatMinterUserID: ""})
 }
 
 // StampValidatedWorkloadSession binds a validated machine session to the agent
@@ -206,5 +225,5 @@ func (b *ValidatorBoundary) StampValidatedWorkloadSession(ctx context.Context, s
 	if b == nil || !b.initialized || !session.Valid() || session.Subject().Kind != urn.SessionSubjectKindWorkload || agentID == uuid.Nil {
 		return ctx
 	}
-	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAgent, userID: "", apiKeyID: "", agentID: agentID.String(), expiresAt: session.ExpiresAt(), sessionJTI: session.JTI()})
+	return context.WithValue(ctx, contextKey{}, Identity{kind: KindAgent, userID: "", apiKeyID: "", agentID: agentID.String(), expiresAt: session.ExpiresAt(), sessionJTI: session.JTI(), chatMinterUserID: ""})
 }

@@ -300,7 +300,7 @@ func TestSharedAuthorizationServer_ClientAuthenticatedAssertionStillRequiresReso
 
 	w := sharedToken(t, t.Context(), f.ti, f.fx.target.UserSessionIssuerID.String(), form)
 	require.Equal(t, http.StatusBadRequest, w.Code, w.Body.String())
-	require.Equal(t, "invalid_request", decodeSharedTokenResponse(t, w).Error)
+	require.Equal(t, "invalid_target", decodeSharedTokenResponse(t, w).Error)
 	require.Empty(t, f.workloadSessions(t))
 }
 

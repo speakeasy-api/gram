@@ -1698,6 +1698,948 @@ func DecodeDetachAuthClientFromMcpServerResponse(decoder func(*http.Response) go
 	}
 }
 
+// BuildListMcpServerAuthClientChoicesRequest instantiates a HTTP request
+// object with method and path set to call the "authClients" service
+// "listMcpServerAuthClientChoices" endpoint
+func (c *Client) BuildListMcpServerAuthClientChoicesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListMcpServerAuthClientChoicesAuthClientsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("authClients", "listMcpServerAuthClientChoices", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListMcpServerAuthClientChoicesRequest returns an encoder for requests
+// sent to the authClients listMcpServerAuthClientChoices server.
+func EncodeListMcpServerAuthClientChoicesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*authclients.ListMcpServerAuthClientChoicesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("authClients", "listMcpServerAuthClientChoices", "*authclients.ListMcpServerAuthClientChoicesPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		values := req.URL.Query()
+		values.Add("mcp_server_id", p.McpServerID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListMcpServerAuthClientChoicesResponse returns a decoder for responses
+// returned by the authClients listMcpServerAuthClientChoices endpoint.
+// restoreBody controls whether the response body should be restored after
+// having been read.
+// DecodeListMcpServerAuthClientChoicesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListMcpServerAuthClientChoicesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListMcpServerAuthClientChoicesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "listMcpServerAuthClientChoices", err)
+			}
+			err = ValidateListMcpServerAuthClientChoicesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "listMcpServerAuthClientChoices", err)
+			}
+			res := NewListMcpServerAuthClientChoicesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListMcpServerAuthClientChoicesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "listMcpServerAuthClientChoices", err)
+			}
+			err = ValidateListMcpServerAuthClientChoicesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "listMcpServerAuthClientChoices", err)
+			}
+			return nil, NewListMcpServerAuthClientChoicesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListMcpServerAuthClientChoicesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "listMcpServerAuthClientChoices", err)
+			}
+			err = ValidateListMcpServerAuthClientChoicesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "listMcpServerAuthClientChoices", err)
+			}
+			return nil, NewListMcpServerAuthClientChoicesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListMcpServerAuthClientChoicesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "listMcpServerAuthClientChoices", err)
+			}
+			err = ValidateListMcpServerAuthClientChoicesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "listMcpServerAuthClientChoices", err)
+			}
+			return nil, NewListMcpServerAuthClientChoicesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListMcpServerAuthClientChoicesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "listMcpServerAuthClientChoices", err)
+			}
+			err = ValidateListMcpServerAuthClientChoicesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "listMcpServerAuthClientChoices", err)
+			}
+			return nil, NewListMcpServerAuthClientChoicesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListMcpServerAuthClientChoicesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "listMcpServerAuthClientChoices", err)
+			}
+			err = ValidateListMcpServerAuthClientChoicesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "listMcpServerAuthClientChoices", err)
+			}
+			return nil, NewListMcpServerAuthClientChoicesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListMcpServerAuthClientChoicesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "listMcpServerAuthClientChoices", err)
+			}
+			err = ValidateListMcpServerAuthClientChoicesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "listMcpServerAuthClientChoices", err)
+			}
+			return nil, NewListMcpServerAuthClientChoicesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListMcpServerAuthClientChoicesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "listMcpServerAuthClientChoices", err)
+			}
+			err = ValidateListMcpServerAuthClientChoicesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "listMcpServerAuthClientChoices", err)
+			}
+			return nil, NewListMcpServerAuthClientChoicesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListMcpServerAuthClientChoicesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("authClients", "listMcpServerAuthClientChoices", err)
+				}
+				err = ValidateListMcpServerAuthClientChoicesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("authClients", "listMcpServerAuthClientChoices", err)
+				}
+				return nil, NewListMcpServerAuthClientChoicesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListMcpServerAuthClientChoicesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("authClients", "listMcpServerAuthClientChoices", err)
+				}
+				err = ValidateListMcpServerAuthClientChoicesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("authClients", "listMcpServerAuthClientChoices", err)
+				}
+				return nil, NewListMcpServerAuthClientChoicesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("authClients", "listMcpServerAuthClientChoices", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListMcpServerAuthClientChoicesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "listMcpServerAuthClientChoices", err)
+			}
+			err = ValidateListMcpServerAuthClientChoicesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "listMcpServerAuthClientChoices", err)
+			}
+			return nil, NewListMcpServerAuthClientChoicesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("authClients", "listMcpServerAuthClientChoices", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildListIssuanceProfilesRequest instantiates a HTTP request object with
+// method and path set to call the "authClients" service "listIssuanceProfiles"
+// endpoint
+func (c *Client) BuildListIssuanceProfilesRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: ListIssuanceProfilesAuthClientsPath()}
+	req, err := http.NewRequest("GET", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("authClients", "listIssuanceProfiles", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeListIssuanceProfilesRequest returns an encoder for requests sent to
+// the authClients listIssuanceProfiles server.
+func EncodeListIssuanceProfilesRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*authclients.ListIssuanceProfilesPayload)
+		if !ok {
+			return goahttp.ErrInvalidType("authClients", "listIssuanceProfiles", "*authclients.ListIssuanceProfilesPayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		values := req.URL.Query()
+		values.Add("user_session_issuer_id", p.UserSessionIssuerID)
+		req.URL.RawQuery = values.Encode()
+		return nil
+	}
+}
+
+// DecodeListIssuanceProfilesResponse returns a decoder for responses returned
+// by the authClients listIssuanceProfiles endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeListIssuanceProfilesResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeListIssuanceProfilesResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body ListIssuanceProfilesResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "listIssuanceProfiles", err)
+			}
+			err = ValidateListIssuanceProfilesResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "listIssuanceProfiles", err)
+			}
+			res := NewListIssuanceProfilesResultOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body ListIssuanceProfilesUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "listIssuanceProfiles", err)
+			}
+			err = ValidateListIssuanceProfilesUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "listIssuanceProfiles", err)
+			}
+			return nil, NewListIssuanceProfilesUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body ListIssuanceProfilesForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "listIssuanceProfiles", err)
+			}
+			err = ValidateListIssuanceProfilesForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "listIssuanceProfiles", err)
+			}
+			return nil, NewListIssuanceProfilesForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body ListIssuanceProfilesBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "listIssuanceProfiles", err)
+			}
+			err = ValidateListIssuanceProfilesBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "listIssuanceProfiles", err)
+			}
+			return nil, NewListIssuanceProfilesBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body ListIssuanceProfilesNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "listIssuanceProfiles", err)
+			}
+			err = ValidateListIssuanceProfilesNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "listIssuanceProfiles", err)
+			}
+			return nil, NewListIssuanceProfilesNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body ListIssuanceProfilesConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "listIssuanceProfiles", err)
+			}
+			err = ValidateListIssuanceProfilesConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "listIssuanceProfiles", err)
+			}
+			return nil, NewListIssuanceProfilesConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body ListIssuanceProfilesUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "listIssuanceProfiles", err)
+			}
+			err = ValidateListIssuanceProfilesUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "listIssuanceProfiles", err)
+			}
+			return nil, NewListIssuanceProfilesUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body ListIssuanceProfilesInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "listIssuanceProfiles", err)
+			}
+			err = ValidateListIssuanceProfilesInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "listIssuanceProfiles", err)
+			}
+			return nil, NewListIssuanceProfilesInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body ListIssuanceProfilesInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("authClients", "listIssuanceProfiles", err)
+				}
+				err = ValidateListIssuanceProfilesInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("authClients", "listIssuanceProfiles", err)
+				}
+				return nil, NewListIssuanceProfilesInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body ListIssuanceProfilesUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("authClients", "listIssuanceProfiles", err)
+				}
+				err = ValidateListIssuanceProfilesUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("authClients", "listIssuanceProfiles", err)
+				}
+				return nil, NewListIssuanceProfilesUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("authClients", "listIssuanceProfiles", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body ListIssuanceProfilesGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "listIssuanceProfiles", err)
+			}
+			err = ValidateListIssuanceProfilesGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "listIssuanceProfiles", err)
+			}
+			return nil, NewListIssuanceProfilesGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("authClients", "listIssuanceProfiles", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildSetIssuanceProfileRequest instantiates a HTTP request object with
+// method and path set to call the "authClients" service "setIssuanceProfile"
+// endpoint
+func (c *Client) BuildSetIssuanceProfileRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: SetIssuanceProfileAuthClientsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("authClients", "setIssuanceProfile", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeSetIssuanceProfileRequest returns an encoder for requests sent to the
+// authClients setIssuanceProfile server.
+func EncodeSetIssuanceProfileRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*authclients.SetIssuanceProfilePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("authClients", "setIssuanceProfile", "*authclients.SetIssuanceProfilePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		body := NewSetIssuanceProfileRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("authClients", "setIssuanceProfile", err)
+		}
+		return nil
+	}
+}
+
+// DecodeSetIssuanceProfileResponse returns a decoder for responses returned by
+// the authClients setIssuanceProfile endpoint. restoreBody controls whether
+// the response body should be restored after having been read.
+// DecodeSetIssuanceProfileResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeSetIssuanceProfileResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusOK:
+			var (
+				body SetIssuanceProfileResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "setIssuanceProfile", err)
+			}
+			err = ValidateSetIssuanceProfileResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "setIssuanceProfile", err)
+			}
+			res := NewSetIssuanceProfileIssuanceProfileOK(&body)
+			return res, nil
+		case http.StatusUnauthorized:
+			var (
+				body SetIssuanceProfileUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "setIssuanceProfile", err)
+			}
+			err = ValidateSetIssuanceProfileUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "setIssuanceProfile", err)
+			}
+			return nil, NewSetIssuanceProfileUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body SetIssuanceProfileForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "setIssuanceProfile", err)
+			}
+			err = ValidateSetIssuanceProfileForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "setIssuanceProfile", err)
+			}
+			return nil, NewSetIssuanceProfileForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body SetIssuanceProfileBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "setIssuanceProfile", err)
+			}
+			err = ValidateSetIssuanceProfileBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "setIssuanceProfile", err)
+			}
+			return nil, NewSetIssuanceProfileBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body SetIssuanceProfileNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "setIssuanceProfile", err)
+			}
+			err = ValidateSetIssuanceProfileNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "setIssuanceProfile", err)
+			}
+			return nil, NewSetIssuanceProfileNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body SetIssuanceProfileConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "setIssuanceProfile", err)
+			}
+			err = ValidateSetIssuanceProfileConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "setIssuanceProfile", err)
+			}
+			return nil, NewSetIssuanceProfileConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body SetIssuanceProfileUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "setIssuanceProfile", err)
+			}
+			err = ValidateSetIssuanceProfileUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "setIssuanceProfile", err)
+			}
+			return nil, NewSetIssuanceProfileUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body SetIssuanceProfileInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "setIssuanceProfile", err)
+			}
+			err = ValidateSetIssuanceProfileInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "setIssuanceProfile", err)
+			}
+			return nil, NewSetIssuanceProfileInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body SetIssuanceProfileInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("authClients", "setIssuanceProfile", err)
+				}
+				err = ValidateSetIssuanceProfileInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("authClients", "setIssuanceProfile", err)
+				}
+				return nil, NewSetIssuanceProfileInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body SetIssuanceProfileUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("authClients", "setIssuanceProfile", err)
+				}
+				err = ValidateSetIssuanceProfileUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("authClients", "setIssuanceProfile", err)
+				}
+				return nil, NewSetIssuanceProfileUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("authClients", "setIssuanceProfile", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body SetIssuanceProfileGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "setIssuanceProfile", err)
+			}
+			err = ValidateSetIssuanceProfileGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "setIssuanceProfile", err)
+			}
+			return nil, NewSetIssuanceProfileGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("authClients", "setIssuanceProfile", resp.StatusCode, string(body))
+		}
+	}
+}
+
+// BuildDeleteIssuanceProfileRequest instantiates a HTTP request object with
+// method and path set to call the "authClients" service
+// "deleteIssuanceProfile" endpoint
+func (c *Client) BuildDeleteIssuanceProfileRequest(ctx context.Context, v any) (*http.Request, error) {
+	u := &url.URL{Scheme: c.scheme, Host: c.host, Path: DeleteIssuanceProfileAuthClientsPath()}
+	req, err := http.NewRequest("POST", u.String(), nil)
+	if err != nil {
+		return nil, goahttp.ErrInvalidURL("authClients", "deleteIssuanceProfile", u.String(), err)
+	}
+	if ctx != nil {
+		req = req.WithContext(ctx)
+	}
+
+	return req, nil
+}
+
+// EncodeDeleteIssuanceProfileRequest returns an encoder for requests sent to
+// the authClients deleteIssuanceProfile server.
+func EncodeDeleteIssuanceProfileRequest(encoder func(*http.Request) goahttp.Encoder) func(*http.Request, any) error {
+	return func(req *http.Request, v any) error {
+		p, ok := v.(*authclients.DeleteIssuanceProfilePayload)
+		if !ok {
+			return goahttp.ErrInvalidType("authClients", "deleteIssuanceProfile", "*authclients.DeleteIssuanceProfilePayload", v)
+		}
+		if p.SessionToken != nil {
+			head := *p.SessionToken
+			req.Header.Set("Gram-Session", head)
+		}
+		if p.ApikeyToken != nil {
+			head := *p.ApikeyToken
+			req.Header.Set("Gram-Key", head)
+		}
+		body := NewDeleteIssuanceProfileRequestBody(p)
+		if err := encoder(req).Encode(&body); err != nil {
+			return goahttp.ErrEncodingError("authClients", "deleteIssuanceProfile", err)
+		}
+		return nil
+	}
+}
+
+// DecodeDeleteIssuanceProfileResponse returns a decoder for responses returned
+// by the authClients deleteIssuanceProfile endpoint. restoreBody controls
+// whether the response body should be restored after having been read.
+// DecodeDeleteIssuanceProfileResponse may return the following errors:
+//   - "unauthorized" (type *goa.ServiceError): http.StatusUnauthorized
+//   - "forbidden" (type *goa.ServiceError): http.StatusForbidden
+//   - "bad_request" (type *goa.ServiceError): http.StatusBadRequest
+//   - "not_found" (type *goa.ServiceError): http.StatusNotFound
+//   - "conflict" (type *goa.ServiceError): http.StatusConflict
+//   - "unsupported_media" (type *goa.ServiceError): http.StatusUnsupportedMediaType
+//   - "invalid" (type *goa.ServiceError): http.StatusUnprocessableEntity
+//   - "invariant_violation" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "unexpected" (type *goa.ServiceError): http.StatusInternalServerError
+//   - "gateway_error" (type *goa.ServiceError): http.StatusBadGateway
+//   - error: internal error
+func DecodeDeleteIssuanceProfileResponse(decoder func(*http.Response) goahttp.Decoder, restoreBody bool) func(*http.Response) (any, error) {
+	return func(resp *http.Response) (any, error) {
+		if restoreBody {
+			b, err := io.ReadAll(resp.Body)
+			if err != nil {
+				return nil, err
+			}
+			resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			defer func() {
+				resp.Body = io.NopCloser(bytes.NewBuffer(b))
+			}()
+		} else {
+			defer resp.Body.Close()
+		}
+		switch resp.StatusCode {
+		case http.StatusNoContent:
+			return nil, nil
+		case http.StatusUnauthorized:
+			var (
+				body DeleteIssuanceProfileUnauthorizedResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "deleteIssuanceProfile", err)
+			}
+			err = ValidateDeleteIssuanceProfileUnauthorizedResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "deleteIssuanceProfile", err)
+			}
+			return nil, NewDeleteIssuanceProfileUnauthorized(&body)
+		case http.StatusForbidden:
+			var (
+				body DeleteIssuanceProfileForbiddenResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "deleteIssuanceProfile", err)
+			}
+			err = ValidateDeleteIssuanceProfileForbiddenResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "deleteIssuanceProfile", err)
+			}
+			return nil, NewDeleteIssuanceProfileForbidden(&body)
+		case http.StatusBadRequest:
+			var (
+				body DeleteIssuanceProfileBadRequestResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "deleteIssuanceProfile", err)
+			}
+			err = ValidateDeleteIssuanceProfileBadRequestResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "deleteIssuanceProfile", err)
+			}
+			return nil, NewDeleteIssuanceProfileBadRequest(&body)
+		case http.StatusNotFound:
+			var (
+				body DeleteIssuanceProfileNotFoundResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "deleteIssuanceProfile", err)
+			}
+			err = ValidateDeleteIssuanceProfileNotFoundResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "deleteIssuanceProfile", err)
+			}
+			return nil, NewDeleteIssuanceProfileNotFound(&body)
+		case http.StatusConflict:
+			var (
+				body DeleteIssuanceProfileConflictResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "deleteIssuanceProfile", err)
+			}
+			err = ValidateDeleteIssuanceProfileConflictResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "deleteIssuanceProfile", err)
+			}
+			return nil, NewDeleteIssuanceProfileConflict(&body)
+		case http.StatusUnsupportedMediaType:
+			var (
+				body DeleteIssuanceProfileUnsupportedMediaResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "deleteIssuanceProfile", err)
+			}
+			err = ValidateDeleteIssuanceProfileUnsupportedMediaResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "deleteIssuanceProfile", err)
+			}
+			return nil, NewDeleteIssuanceProfileUnsupportedMedia(&body)
+		case http.StatusUnprocessableEntity:
+			var (
+				body DeleteIssuanceProfileInvalidResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "deleteIssuanceProfile", err)
+			}
+			err = ValidateDeleteIssuanceProfileInvalidResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "deleteIssuanceProfile", err)
+			}
+			return nil, NewDeleteIssuanceProfileInvalid(&body)
+		case http.StatusInternalServerError:
+			en := resp.Header.Get("goa-error")
+			switch en {
+			case "invariant_violation":
+				var (
+					body DeleteIssuanceProfileInvariantViolationResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("authClients", "deleteIssuanceProfile", err)
+				}
+				err = ValidateDeleteIssuanceProfileInvariantViolationResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("authClients", "deleteIssuanceProfile", err)
+				}
+				return nil, NewDeleteIssuanceProfileInvariantViolation(&body)
+			case "unexpected":
+				var (
+					body DeleteIssuanceProfileUnexpectedResponseBody
+					err  error
+				)
+				err = decoder(resp).Decode(&body)
+				if err != nil {
+					return nil, goahttp.ErrDecodingError("authClients", "deleteIssuanceProfile", err)
+				}
+				err = ValidateDeleteIssuanceProfileUnexpectedResponseBody(&body)
+				if err != nil {
+					return nil, goahttp.ErrValidationError("authClients", "deleteIssuanceProfile", err)
+				}
+				return nil, NewDeleteIssuanceProfileUnexpected(&body)
+			default:
+				body, _ := io.ReadAll(resp.Body)
+				return nil, goahttp.ErrInvalidResponse("authClients", "deleteIssuanceProfile", resp.StatusCode, string(body))
+			}
+		case http.StatusBadGateway:
+			var (
+				body DeleteIssuanceProfileGatewayErrorResponseBody
+				err  error
+			)
+			err = decoder(resp).Decode(&body)
+			if err != nil {
+				return nil, goahttp.ErrDecodingError("authClients", "deleteIssuanceProfile", err)
+			}
+			err = ValidateDeleteIssuanceProfileGatewayErrorResponseBody(&body)
+			if err != nil {
+				return nil, goahttp.ErrValidationError("authClients", "deleteIssuanceProfile", err)
+			}
+			return nil, NewDeleteIssuanceProfileGatewayError(&body)
+		default:
+			body, _ := io.ReadAll(resp.Body)
+			return nil, goahttp.ErrInvalidResponse("authClients", "deleteIssuanceProfile", resp.StatusCode, string(body))
+		}
+	}
+}
+
 // BuildGetMcpServerAuthenticationRequest instantiates a HTTP request object
 // with method and path set to call the "authClients" service
 // "getMcpServerAuthentication" endpoint
@@ -2777,6 +3719,80 @@ func marshalAuthClientHeaderInputRequestBodyToAuthclientsAuthClientHeaderInput(v
 		if res.IsSecret == zero {
 			res.IsSecret = false
 		}
+	}
+
+	return res
+}
+
+// unmarshalAuthClientChoiceResponseBodyToTypesAuthClientChoice builds a value
+// of type *types.AuthClientChoice from a value of type
+// *AuthClientChoiceResponseBody.
+func unmarshalAuthClientChoiceResponseBodyToTypesAuthClientChoice(v *AuthClientChoiceResponseBody) *types.AuthClientChoice {
+	res := &types.AuthClientChoice{
+		ID:         *v.ID,
+		Name:       *v.Name,
+		ClientType: *v.ClientType,
+	}
+
+	return res
+}
+
+// unmarshalIssuanceProfileResponseBodyToTypesIssuanceProfile builds a value of
+// type *types.IssuanceProfile from a value of type
+// *IssuanceProfileResponseBody.
+func unmarshalIssuanceProfileResponseBodyToTypesIssuanceProfile(v *IssuanceProfileResponseBody) *types.IssuanceProfile {
+	res := &types.IssuanceProfile{
+		ID:                  *v.ID,
+		Name:                *v.Name,
+		UserSessionIssuerID: *v.UserSessionIssuerID,
+		UserSessionClientID: v.UserSessionClientID,
+		WorkloadIssuerID:    v.WorkloadIssuerID,
+		WorkloadSubject:     v.WorkloadSubject,
+		UpdatedAt:           *v.UpdatedAt,
+	}
+	res.Choices = make([]*types.IssuanceProfileChoice, len(v.Choices))
+	for i, val := range v.Choices {
+		if val == nil {
+			res.Choices[i] = nil
+			continue
+		}
+		res.Choices[i] = unmarshalIssuanceProfileChoiceResponseBodyToTypesIssuanceProfileChoice(val)
+	}
+
+	return res
+}
+
+// unmarshalIssuanceProfileChoiceResponseBodyToTypesIssuanceProfileChoice
+// builds a value of type *types.IssuanceProfileChoice from a value of type
+// *IssuanceProfileChoiceResponseBody.
+func unmarshalIssuanceProfileChoiceResponseBodyToTypesIssuanceProfileChoice(v *IssuanceProfileChoiceResponseBody) *types.IssuanceProfileChoice {
+	res := &types.IssuanceProfileChoice{
+		McpServerID:  *v.McpServerID,
+		AuthClientID: v.AuthClientID,
+	}
+
+	return res
+}
+
+// marshalTypesIssuanceProfileChoiceToIssuanceProfileChoiceRequestBody builds a
+// value of type *IssuanceProfileChoiceRequestBody from a value of type
+// *types.IssuanceProfileChoice.
+func marshalTypesIssuanceProfileChoiceToIssuanceProfileChoiceRequestBody(v *types.IssuanceProfileChoice) *IssuanceProfileChoiceRequestBody {
+	res := &IssuanceProfileChoiceRequestBody{
+		McpServerID:  v.McpServerID,
+		AuthClientID: v.AuthClientID,
+	}
+
+	return res
+}
+
+// marshalIssuanceProfileChoiceRequestBodyToTypesIssuanceProfileChoice builds a
+// value of type *types.IssuanceProfileChoice from a value of type
+// *IssuanceProfileChoiceRequestBody.
+func marshalIssuanceProfileChoiceRequestBodyToTypesIssuanceProfileChoice(v *IssuanceProfileChoiceRequestBody) *types.IssuanceProfileChoice {
+	res := &types.IssuanceProfileChoice{
+		McpServerID:  v.McpServerID,
+		AuthClientID: v.AuthClientID,
 	}
 
 	return res

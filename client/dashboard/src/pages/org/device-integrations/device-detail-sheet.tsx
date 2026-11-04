@@ -16,7 +16,7 @@ import { Text } from "@/components/ui/Text";
 import { formatRelativeTime } from "@/lib/dates";
 import { cn } from "@/lib/utils";
 import { useOrgRoutes } from "@/routes";
-import type { ManagedDevice } from "@gram/client/models/components/manageddevice.js";
+import type { FleetDevice } from "@gram/client/models/components/fleetdevice.js";
 import type { ManagedDeviceAgentState } from "@gram/client/models/components/manageddeviceagentstate.js";
 import type { ManagedDeviceTool } from "@gram/client/models/components/manageddevicetool.js";
 import { format } from "date-fns";
@@ -25,6 +25,7 @@ import { Link } from "react-router";
 import {
   coverageDisplay,
   deviceCoverageKey,
+  deviceName,
   osLabel,
   toolLabel,
 } from "./coverage-states";
@@ -39,7 +40,7 @@ export function DeviceDetailSheet({
   open,
   onOpenChange,
 }: {
-  device: ManagedDevice | null;
+  device: FleetDevice | null;
   open: boolean;
   onOpenChange: (open: boolean) => void;
 }): JSX.Element {
@@ -52,18 +53,17 @@ export function DeviceDetailSheet({
   );
 }
 
-function DeviceDetails({ device }: { device: ManagedDevice }): JSX.Element {
+function DeviceDetails({ device }: { device: FleetDevice }): JSX.Element {
   const display = coverageDisplay(deviceCoverageKey(device));
   const Icon = display.icon;
   const state = device.agentState;
   return (
     <>
       <SheetHeader>
-        <SheetTitle className="truncate">
-          {device.hostname ?? device.externalId}
-        </SheetTitle>
+        <SheetTitle className="truncate">{deviceName(device)}</SheetTitle>
         <SheetDescription className="truncate">
-          {device.userEmail ?? "No assigned user"}
+          {device.userEmail ??
+            (device.inInventory ? "No assigned user" : "Unknown user")}
         </SheetDescription>
       </SheetHeader>
       <div className="flex-1 space-y-6 overflow-y-auto px-4 pb-6">
@@ -95,8 +95,9 @@ function DeviceDetails({ device }: { device: ManagedDevice }): JSX.Element {
               {/* Everything below describes that agent, not this machine. */}
               {state.attestation === "user" ? (
                 <Text small muted className="mt-1 block">
-                  From the assigned user's agent, which may run on another
-                  machine.
+                  {device.inInventory
+                    ? "From the assigned user's agent, which may run on another machine."
+                    : "This agent reports no serial number, so it can't be tied to one machine."}
                 </Text>
               ) : null}
             </DetailRow>
@@ -132,9 +133,11 @@ function DeviceDetails({ device }: { device: ManagedDevice }): JSX.Element {
             <DetailRow label="Serial number">
               <Mono>{device.serialNumber ?? "—"}</Mono>
             </DetailRow>
-            <DetailRow label="MDM device ID">
-              <Mono>{device.externalId}</Mono>
-            </DetailRow>
+            {device.externalId ? (
+              <DetailRow label="MDM device ID">
+                <Mono>{device.externalId}</Mono>
+              </DetailRow>
+            ) : null}
           </CollapsibleContent>
         </Collapsible>
       </div>

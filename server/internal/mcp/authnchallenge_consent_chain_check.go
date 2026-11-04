@@ -49,9 +49,20 @@ func (s *Service) consentSessionRouting(ctx context.Context, endpoint *ResolvedM
 	if challengeState.Subject == nil || challengeState.Subject.IsZero() {
 		return nil, routing, nil
 	}
-	statuses, err := s.endpointRemoteSessionStatuses(ctx, *challengeState.Subject, endpoint)
-	if err != nil {
-		return nil, routing, fmt.Errorf("remote session statuses: %w", err)
+	var statuses map[uuid.UUID]remotesessions.RemoteSessionState
+	var err error
+	enforcedDirect := false
+	if endpoint.McpServerID.Valid && !endpoint.ToolsetID.Valid && !endpoint.MetaMcpServerID.Valid && !endpoint.IsOrganizationGateway() {
+		enforcedDirect, err = s.consentAuthChoicesEnforced(ctx, endpoint.OrganizationID)
+		if err != nil {
+			return nil, routing, err
+		}
+	}
+	if !enforcedDirect {
+		statuses, err = s.endpointRemoteSessionStatuses(ctx, *challengeState.Subject, endpoint)
+		if err != nil {
+			return nil, routing, fmt.Errorf("remote session statuses: %w", err)
+		}
 	}
 	statuses, err = s.withTypedRegistrationStatuses(ctx, endpoint.OrganizationID, *challengeState.Subject, statuses, typed)
 	if err != nil {

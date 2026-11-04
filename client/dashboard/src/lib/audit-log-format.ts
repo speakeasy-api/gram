@@ -15,7 +15,17 @@ export function getActorLabel(log: AuditLog): string {
       : log.actorId;
     return `Agent ${id.slice(0, 8)}`;
   }
-  return log.actorDisplayName || log.actorSlug || "Someone";
+  const stored = log.actorDisplayName || log.actorSlug;
+  if (stored) return stored;
+  // A system actor is a Speakeasy component working with no person behind
+  // it. It is never anonymous, so it must not read as "Someone".
+  if (
+    log.actorType === "system" ||
+    ["system", "user:system"].includes(log.actorId)
+  ) {
+    return "Speakeasy";
+  }
+  return "Someone";
 }
 
 export function formatAuditAction(action: string): string {

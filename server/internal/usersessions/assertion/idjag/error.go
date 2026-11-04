@@ -26,3 +26,6 @@ var ErrNotProvisioned = errors.New("enterprise identity is not provisioned")
 // ErrNoTrustedIssuer is returned when the user session issuer has no active,
 // organization-accessible trusted issuer.
 var ErrNoTrustedIssuer = errors.New("user session issuer has no trusted remote issuer")
+
+// ErrTrustedIssuerHasNoJWKS is returned when the linked trusted issuer has no jwks_uri.
+var ErrTrustedIssuerHasNoJWKS = errors.New("linked remote issuer has no jwks_uri")

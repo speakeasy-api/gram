@@ -21,6 +21,9 @@ export const AUDIT_ACTIONS = [
   "access_role:create",
   "access_role:delete",
   "access_role:update",
+  "access_grant:create_temporary",
+  "access_grant:renew_temporary",
+  "access_grant:revoke_temporary",
   "agent:connection_block_create",
   "agent:connection_block_delete",
   "agent:create",
@@ -54,6 +57,7 @@ export const AUDIT_ACTIONS = [
   "auth-client:update-headers",
   "assistant:identity_provision",
   "assistant:tool_call",
+  "assistant:update_execution_profile",
   "aws_iam_credential:create",
   "aws_iam_credential:delete",
   "aws_iam_credential:update",
@@ -121,6 +125,9 @@ export const AUDIT_ACTIONS = [
   "identity-provider-connection:verify",
   "internal_session_issuer:disable",
   "internal_session_issuer:enable",
+  "issuance-selection-profile:create",
+  "issuance-selection-profile:delete",
+  "issuance-selection-profile:update",
   "json_web_key:activate",
   "json_web_key:delete",
   "json_web_key:publish",
@@ -400,6 +407,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "updated access role";
     case "access_role:delete":
       return "deleted access role";
+    case "access_grant:create_temporary":
+      return "gave temporary access to";
+    case "access_grant:renew_temporary":
+      return "renewed temporary access for";
+    case "access_grant:revoke_temporary":
+      return "revoked temporary access for";
 
     case "agent:connection_block_create":
       return "blocked connection access for agent";
@@ -472,6 +485,8 @@ export function staticActionPhrase(action: AuditAction): string {
       return "gave a dedicated agent to assistant";
     case "assistant:tool_call":
       return "ran assistant tool";
+    case "assistant:update_execution_profile":
+      return "changed the upstream credentials of assistant";
 
     case "aws_iam_credential:create":
       return "added AWS IAM credential";
@@ -533,6 +548,12 @@ export function staticActionPhrase(action: AuditAction): string {
       return "enabled Speakeasy signing with issuer";
     case "internal_session_issuer:disable":
       return "disabled Speakeasy signing with issuer";
+    case "issuance-selection-profile:create":
+      return "set the upstream credentials of headless caller";
+    case "issuance-selection-profile:update":
+      return "changed the upstream credentials of headless caller";
+    case "issuance-selection-profile:delete":
+      return "removed the upstream credential choices of headless caller";
     case "json_web_key:publish":
       return "published JSON Web Key";
     case "json_web_key:activate":

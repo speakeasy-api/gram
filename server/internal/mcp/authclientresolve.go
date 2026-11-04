@@ -121,14 +121,24 @@ type authClientResolution struct {
 	// headers are the client's own headers, loaded only when it serves.
 	headers []proxy.ConfiguredHeader
 
-	// noAuthAllowed is a server explicitly marked as needing no upstream
-	// authentication.
+	// noAuthAllowed is a server that needs no upstream authentication: it
+	// offers no enabled auth client and has no upstream credentials an auth
+	// client does not record yet.
 	noAuthAllowed bool
 
 	// attachedSession is the exact remote session an attached agent's
 	// permit was decided for. Its token must come from that row, so a binding
 	// that moves to another user's connection after the check serves nothing.
 	attachedSession uuid.UUID
+
+	// authorizerOwner is the validated authorizer whose own connection an
+	// unattached agent key's permit was decided for; its tokens come from
+	// that user's connection.
+	authorizerOwner string
+
+	// connectionOwner is the user whose personal connection the permit was
+	// decided for, empty when the client is shared or no permit ran.
+	connectionOwner string
 }
 
 // headersOnly reports a resolved client whose material is its headers alone,
@@ -232,7 +242,7 @@ func (p mandatoryPermitter) Permitted(ctx context.Context, req authClientPermitR
 // gapResolution is a choice that cannot be used, for reason.
 func gapResolution(reason string) authClientResolution {
 	none := upstreamChoice{clientID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}, remoteSessionIssuerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false}}
-	return authClientResolution{outcome: authClientGap, reason: reason, clientID: uuid.Nil, clientType: "", serverName: "", tunneled: false, choice: none, headers: nil, noAuthAllowed: false, attachedSession: uuid.Nil}
+	return authClientResolution{outcome: authClientGap, reason: reason, clientID: uuid.Nil, clientType: "", serverName: "", tunneled: false, choice: none, headers: nil, noAuthAllowed: false, attachedSession: uuid.Nil, authorizerOwner: "", connectionOwner: ""}
 }
 
 // decideAuthClient resolves a recorded choice without side effects.
@@ -240,7 +250,7 @@ func decideAuthClient(row upstreamclientsrepo.GetAuthClientSelectionRow) authCli
 	res := gapResolution("")
 	res.serverName = row.ServerName.String
 	res.tunneled = row.Tunneled
-	res.noAuthAllowed = row.RequiresUpstreamAuth.Valid && !row.RequiresUpstreamAuth.Bool
+	res.noAuthAllowed = !row.RequiresUpstreamAuth && !row.UpstreamAuthPending
 	if row.Ambiguous {
 		res.reason = authClientReasonAmbiguous
 		return res
@@ -264,12 +274,14 @@ func decideAuthClient(row upstreamclientsrepo.GetAuthClientSelectionRow) authCli
 				// choice stays usable where nothing falls back to the old path.
 				res.reason = authClientReasonNoAuthDeclared
 			}
-		case row.RequiresUpstreamAuth.Valid && row.RequiresUpstreamAuth.Bool:
+		case row.RequiresUpstreamAuth:
 			res.reason = authClientReasonNoAuthForbidden
-		case !row.RequiresUpstreamAuth.Valid && row.ServerHasClients:
-			res.reason = authClientReasonNoAuthStale
 		case row.CredentialHeadersUncovered:
 			res.reason = authClientReasonSetup
+		case row.UpstreamAuthPending:
+			// The server has upstream credentials no auth client records
+			// yet, so no-auth is not known to be what it needs.
+			res.reason = authClientReasonNoAuthStale
 		default:
 			res.outcome = authClientNoAuth
 		}
@@ -472,6 +484,10 @@ func (s *Service) checkAuthClientPermission(ctx context.Context, permit authClie
 		}
 		permit.ConnectionOwner = connection.owner
 		res.attachedSession = connection.attachedSession
+		res.connectionOwner = connection.owner
+		if connection.authorizer {
+			res.authorizerOwner = connection.owner
+		}
 		permitted, err := permitter.Permitted(ctx, permit)
 		if err != nil {
 			return res, fmt.Errorf("check auth client permission: %w", err)
@@ -666,13 +682,14 @@ func annotateAuthClient(ctx context.Context, logger *slog.Logger, res authClient
 func (s *Service) enforceAuthClient(ctx context.Context, w http.ResponseWriter, authentication *issuerGateAuthentication, selector *upstreamSelector) (upstreamChoice, bool, error) {
 	var none upstreamChoice
 	endpoint := authentication.endpoint
-	res, err := s.resolveEnforcedAuthClient(ctx, selector, endpoint.McpServerID.UUID, endpoint.ProjectID, authentication.subject)
+	res, err := s.resolveEnforcedAuthClient(ctx, selector, endpoint.McpServerID.UUID, endpoint.ProjectID, connectionSubject(ctx, authentication.subject))
 	if err != nil {
 		return none, true, oops.E(oops.CodeUnexpected, err, "resolve auth client").LogError(ctx, s.logger)
 	}
 	// The connection the permit was decided for binds every token path,
 	// including a handback to the upstream client choice.
 	authentication.attachedSession = res.attachedSession
+	authentication.authorizerOwner = res.authorizerOwner
 	switch res.outcome {
 	case authClientLegacy:
 		if res.sendsClientHeaders() {

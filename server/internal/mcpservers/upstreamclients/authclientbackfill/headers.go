@@ -448,6 +448,39 @@ func copyOntoEMAClients(ctx context.Context, tx pgx.Tx, q *Queries, opts Options
 // of them, since the rule refusing a client shared across sources reads them
 // all.
 func copyOntoEMAClient(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, report *Report, clientID uuid.UUID, recorded bool, servers []uuid.UUID) error {
+	if opts.Apply && recorded {
+		if _, err := q.LockEMARegistrationForSync(ctx, LockEMARegistrationForSyncParams{
+			OrganizationID: opts.OrganizationID,
+			AuthClientID:   uuid.NullUUID{UUID: clientID, Valid: true},
+			BindingID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		}); err != nil {
+			return fmt.Errorf("lock EMA credential registration: %w", err)
+		}
+		if err := q.LockEMACopyClient(ctx, LockEMACopyClientParams{
+			OrganizationID: opts.OrganizationID, AuthClientID: clientID,
+		}); err != nil {
+			return fmt.Errorf("lock EMA credential client: %w", err)
+		}
+		// Serialize link retirement/detach before rereading the owner set. A
+		// registration lock alone does not protect administrator link mutations.
+		if err := q.LockEMALifecycleLinks(ctx, LockEMALifecycleLinksParams{
+			OrganizationID: opts.OrganizationID, AuthClientIds: []uuid.UUID{clientID},
+		}); err != nil {
+			return fmt.Errorf("lock EMA credential links: %w", err)
+		}
+		// The caller's link snapshot can precede a concurrent binding writer.
+		var err error
+		servers, err = q.ListEMAClientLiveServers(ctx, ListEMAClientLiveServersParams{
+			OrganizationID: opts.OrganizationID, AuthClientID: clientID,
+		})
+		if err != nil {
+			return fmt.Errorf("reload EMA credential owners: %w", err)
+		}
+		if len(servers) == 0 {
+			return retireClientCopies(ctx, tx, q, opts, report, KindEMA, clientID,
+				uuid.NullUUID{UUID: uuid.Nil, Valid: false}, uuid.NullUUID{UUID: clientID, Valid: true})
+		}
+	}
 	used, err := q.ListServerCredentialSources(ctx, ListServerCredentialSourcesParams{OrganizationID: opts.OrganizationID, McpServerIds: servers})
 	if err != nil {
 		return fmt.Errorf("list credential sources of ema auth client %s: %w", clientID, err)
@@ -511,6 +544,14 @@ func copyOntoEMAClient(ctx context.Context, tx pgx.Tx, q *Queries, opts Options,
 	}
 	report.add(result)
 	return nil
+}
+
+type atomicHeaderSyncKey struct{}
+
+// withAtomicHeaderSync makes normal writers roll back when a copy write loses
+// its ownership evidence. Backfill retains its report-and-retry behavior.
+func withAtomicHeaderSync(ctx context.Context) context.Context {
+	return context.WithValue(ctx, atomicHeaderSyncKey{}, true)
 }
 
 // syncHeaders brings an auth client's header copies in line with the given
@@ -593,6 +634,9 @@ func syncHeaders(ctx context.Context, tx pgx.Tx, q *Queries, opts Options, repor
 			return changed, raced, fmt.Errorf("sync a header copy of auth client %s: %w", authClientID, err)
 		}
 		if n == 0 {
+			if atomic, _ := ctx.Value(atomicHeaderSyncKey{}).(bool); atomic {
+				return changed, true, fmt.Errorf("credential copy ownership changed concurrently; retry transaction")
+			}
 			raced = true
 			continue
 		}

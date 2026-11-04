@@ -89,7 +89,10 @@ const (
 	GatewayOutcomeDerived GatewayOutcome = "derived"
 
 	// GatewayOutcomeConfigured is a server already associated with the
-	// decided client.
+	// decided client, or one whose evidence names several clients but whose
+	// explicit configuration settles it: exactly one of the issuer's clients
+	// is associated with it, and every other client with grants for its
+	// upstream was explicitly detached from it.
 	GatewayOutcomeConfigured GatewayOutcome = "configured"
 
 	// GatewayOutcomeDetached is a server whose decided client was explicitly
@@ -444,7 +447,8 @@ func decideByEvidence(granted, derived []ListUpstreamClientBackfillCandidatesRow
 // candidate rows, which all belong to that pair. Grants decide first, since
 // requests route by them today; the derived authorization server decides
 // only a server nobody has a grant for. More than one match, or the two
-// disagreeing, is left for explicit configuration.
+// disagreeing, is left for explicit configuration, unless that configuration
+// already exists (see settledByConfiguration).
 func DecideGateway(rows []ListGatewayAssociationCandidatesRow) GatewayResult {
 	first := rows[0]
 	result := GatewayResult{
@@ -469,19 +473,19 @@ func DecideGateway(rows []ListGatewayAssociationCandidatesRow) GatewayResult {
 	switch {
 	case len(granted) > 1:
 		result.Outcome = GatewayOutcomeAmbiguous
-		return result
+		return settledByConfiguration(result, rows)
 	case len(granted) == 1:
 		decided = granted[0]
 		for _, row := range derived {
 			if row.RemoteSessionClientID != decided.RemoteSessionClientID {
 				result.Outcome = GatewayOutcomeConflict
-				return result
+				return settledByConfiguration(result, rows)
 			}
 		}
 		result.Outcome = GatewayOutcomeGrant
 	case len(derived) > 1:
 		result.Outcome = GatewayOutcomeAmbiguous
-		return result
+		return settledByConfiguration(result, rows)
 	case len(derived) == 1:
 		decided = derived[0]
 		result.Outcome = GatewayOutcomeDerived
@@ -495,6 +499,32 @@ func DecideGateway(rows []ListGatewayAssociationCandidatesRow) GatewayResult {
 		result.Outcome = GatewayOutcomeDetached
 	default:
 		result.Associate = uuid.NullUUID{UUID: decided.RemoteSessionClientID, Valid: true}
+	}
+	return result
+}
+
+// settledByConfiguration marks an ambiguous or conflicting pair configured
+// when an administrator's explicit associations already settle it: exactly one
+// of the issuer's clients is associated with the server, and no client the
+// server was never associated with holds grants for its upstream. Clients on
+// one authorization server all share its derived issuer, so a derived match
+// does not distinguish them and never outweighs an association. A grant for a
+// client detached from the server stays detached, as it does when evidence
+// decides. Several associations, or a grant for a client never associated
+// with the server, still need explicit configuration. It decides nothing new
+// and writes nothing.
+func settledByConfiguration(result GatewayResult, rows []ListGatewayAssociationCandidatesRow) GatewayResult {
+	live := 0
+	for _, row := range rows {
+		switch {
+		case row.PairLive:
+			live++
+		case row.GrantMatch && !row.PairRecorded:
+			return result
+		}
+	}
+	if live == 1 {
+		result.Outcome = GatewayOutcomeConfigured
 	}
 	return result
 }

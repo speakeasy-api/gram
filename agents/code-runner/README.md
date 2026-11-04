@@ -51,10 +51,10 @@ The default listen address is `127.0.0.1:8081`. The dedicated Docker image
 listens on port 8081 and runs as UID 65532. Build it from the repository root:
 `docker build -f agents/code-runner/Dockerfile -t gram-code-runner:dev .`.
 
-## Transport contract, version 1
+## Transport contract, version 2
 
 Speakeasy initiates `GET /v1/connect` with `Authorization: Bearer <runner secret>`,
-`Connection: upgrade`, `Upgrade: gram-code-yamux`, and `Gram-Code-Protocol: 1`.
+`Connection: upgrade`, `Upgrade: gram-code-yamux`, and `Gram-Code-Protocol: 2`.
 The runner verifies authentication and version before returning 101. The upgraded
 byte stream carries yamux, with Speakeasy as client and the runner as server. One
 stream owns one execution. `/health` returns the runtime and protocol version.
@@ -64,7 +64,7 @@ routed connections require TLS termination and authenticated ingress.
 Each frame is a four-byte big-endian length followed by UTF-8 JSON, limited to
 1 MiB plus 4 KiB of envelope. `src/wire.rs` defines the exact tagged messages:
 
-1. Speakeasy sends `start` with `version: 1`, a UUID `execution_id`, `code`, and
+1. Speakeasy sends `start` with `version: 2`, a UUID `execution_id`, `code`, and
    `wall_ms` between 1 and 30000. The runner either refuses admission or sends
    `started`. IDs are retained for two minutes in a bounded replay window;
    callers must mint a new ID for each deliberate user execution and never
@@ -73,7 +73,7 @@ Each frame is a four-byte big-endian length followed by UTF-8 JSON, limited to
    was not received. Only `admission_refused` and `capacity_exceeded` prove
    code did not run; both are sent before the execution is admitted.
 2. The runner emits `callback` with a unique integer `id`, `method` and JSON
-   `arguments`. Methods are `search`, `describe`, `call`, and `servers`.
+   `arguments`. Methods are `search`, `describe`, `call`, `servers`, and `connect`.
 3. Speakeasy answers once with `callback_result`, the same `id`, and exactly one of
    `value` or a bounded public `error`; a reply with both or neither ends the
    execution. Replies can arrive out of order. Python receives
@@ -122,3 +122,8 @@ The tests exercise fresh state, discovery/calls, concurrent futures, filesystem
 denial, allocator/time/output limits, cancellation, deadlines, framing, duplicate
 IDs, authentication and multiplexing against real Monty subprocesses. This
 runner layer does not expose a public MCP tool or change management settings.
+
+Protocol 2 adds the `connect` Python helper; `servers` includes connection state.
+Both use the bounded host callback channel; OAuth credentials remain in the gateway.
+Protocol 1 peers are refused before a program is submitted. Deploy the new
+runner image with the matching server version.

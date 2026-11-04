@@ -42,6 +42,41 @@ func (q *Queries) AdminAuditProjectBelongsToOrganization(ctx context.Context, ar
 	return exists, err
 }
 
+const adminBackdateUserSessionFixture = `-- name: AdminBackdateUserSessionFixture :exec
+UPDATE user_sessions SET created_at = $1 WHERE id = $2
+`
+
+type AdminBackdateUserSessionFixtureParams struct {
+	CreatedAt pgtype.Timestamptz
+	ID        uuid.UUID
+}
+
+// Test fixture: no writer backdates a session.
+func (q *Queries) AdminBackdateUserSessionFixture(ctx context.Context, arg AdminBackdateUserSessionFixtureParams) error {
+	_, err := q.db.Exec(ctx, adminBackdateUserSessionFixture, arg.CreatedAt, arg.ID)
+	return err
+}
+
+const adminBackfillMCPAuthFromConnect = `-- name: AdminBackfillMCPAuthFromConnect :execrows
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
+SELECT DISTINCT g.organization_id, g.principal_urn, 'mcp:auth', '{"resource_kind":"mcp_auth_client","resource_id":"*"}'::jsonb
+FROM principal_grants AS g
+WHERE g.scope = 'mcp:connect'
+  AND g.expires_at IS NULL
+ON CONFLICT (organization_id, principal_urn, scope, selectors) DO NOTHING
+`
+
+// Grants unrestricted mcp:auth to every principal holding any mcp:connect
+// grant, whatever its selectors. Temporary grants are skipped: a permanent
+// grant must not be derived from access that ends.
+func (q *Queries) AdminBackfillMCPAuthFromConnect(ctx context.Context) (int64, error) {
+	result, err := q.db.Exec(ctx, adminBackfillMCPAuthFromConnect)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const adminBulkUpdateAccountType = `-- name: AdminBulkUpdateAccountType :many
 UPDATE organization_metadata
 SET

@@ -596,3 +596,12 @@ SELECT id, name
 FROM meta_mcp_servers
 WHERE project_id = @project_id
 ORDER BY deleted ASC, created_at DESC;
+
+-- name: UpdateMetaMCPServerNetworkAccessMode :execrows
+UPDATE meta_mcp_servers
+SET network_access_mode = @network_access_mode,
+    updated_at = clock_timestamp()
+WHERE id = @id
+  AND organization_id = @organization_id
+  AND project_id = @project_id
+  AND deleted IS FALSE;

@@ -1253,7 +1253,10 @@ SET
     token_endpoint_auth_method = COALESCE(sqlc.narg('token_endpoint_auth_method'), token_endpoint_auth_method),
     token_endpoint_auth_audience_format = COALESCE(sqlc.narg('token_endpoint_auth_audience_format'), token_endpoint_auth_audience_format),
     scope = COALESCE(sqlc.narg('scope')::text[], scope),
-    audience = COALESCE(sqlc.narg('audience'), audience),
+    audience = CASE
+        WHEN sqlc.narg('audience')::text = '' THEN NULL
+        ELSE COALESCE(sqlc.narg('audience'), audience)
+    END,
     legacy_callback_url = COALESCE(sqlc.narg('legacy_callback_url'), legacy_callback_url),
     updated_at = clock_timestamp()
 WHERE id = @id AND project_id = @project_id AND deleted IS FALSE
@@ -3658,18 +3661,19 @@ FOR UPDATE;
 -- name: HasLivePrincipalRemoteSessionBindingsForClientBinding :one
 -- Report whether any unrevoked agent attachment goes through a client's binding
 -- to a user session issuer, which deleting that binding would cascade-delete.
--- Only the caller's project can hold them: the caller refuses an
--- organization-wide binding, and any other binding has a project-owned client
--- or user session issuer, which pins every attachment through it to that
--- project.
+-- Organization-wide: an organization admin can change an organization-owned
+-- client's binding to an organization-level issuer, and attachments through it
+-- can live in any project.
 SELECT EXISTS (
   SELECT 1
-  FROM principal_remote_session_bindings
-  WHERE project_id = @project_id
-    AND organization_id = @organization_id
-    AND remote_session_client_id = @remote_session_client_id
-    AND user_session_issuer_id = @user_session_issuer_id
-    AND revoked_at IS NULL
+  FROM principal_remote_session_bindings AS b
+  JOIN projects AS bp ON bp.id = b.project_id AND bp.organization_id = b.organization_id AND bp.deleted IS FALSE
+  JOIN agents AS a ON a.id = b.principal_id AND a.organization_id = b.organization_id
+    AND a.deleted IS FALSE AND a.revoked_at IS NULL
+  WHERE b.organization_id = @organization_id
+    AND b.remote_session_client_id = @remote_session_client_id
+    AND b.user_session_issuer_id = @user_session_issuer_id
+    AND b.revoked_at IS NULL
 );
 
 -- name: ListOrganizationRemoteSessionsByClientID :many
@@ -5110,9 +5114,8 @@ WHERE id = @id AND project_id = @project_id AND organization_id = @organization_
   AND state = 'in_progress';
 
 -- name: ListEMAChainingBindings :many
--- Ready bindings whose canonical resource names an endpoint's upstream.
--- Endpoint upstreams are recorded without a trailing slash while a binding
--- keeps the exact RFC 9728 identifier, so both compare under the routing trim.
+-- Ready bindings whose exact resource names the resolved authorization resource.
+-- RFC 8707 resource identity preserves trailing slashes; callers must not trim.
 -- Unlinked tombstones and unfinished preparations never select or conflict.
 -- A tunneled upstream passes its own derived issuer: its resource identifier is
 -- operator supplied, so only a binding for that issuer may serve it. A caller
@@ -5121,7 +5124,7 @@ WHERE id = @id AND project_id = @project_id AND organization_id = @organization_
 SELECT * FROM remote_session_ema_bindings
 WHERE project_id = @project_id AND organization_id = @organization_id
   AND user_session_issuer_id = @user_session_issuer_id
-  AND rtrim(resource, '/') = @upstream_resource::text
+  AND resource = @upstream_resource::text
   AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
   AND (sqlc.narg('remote_session_client_id')::uuid IS NULL OR remote_session_client_id = sqlc.narg('remote_session_client_id')::uuid)
   AND state = 'ready' AND remote_session_client_id IS NOT NULL
@@ -5136,7 +5139,7 @@ SELECT * FROM remote_session_ema_bindings
 WHERE project_id = @project_id AND organization_id = @organization_id
   AND user_session_issuer_id = @user_session_issuer_id
   AND (sqlc.narg('remote_session_issuer_id')::uuid IS NULL OR remote_session_issuer_id = sqlc.narg('remote_session_issuer_id')::uuid)
-  AND rtrim(resource, '/') = @upstream_resource::text
+  AND resource = @upstream_resource::text
   AND state IS DISTINCT FROM 'unlinked'
 ORDER BY id;
 
@@ -6277,3 +6280,43 @@ WHERE s.id = @id AND s.remote_session_client_id = @remote_session_client_id
   AND (s.authorization_expires_at IS NULL OR s.authorization_expires_at > now())
   AND (s.access_expires_at IS NULL OR s.access_expires_at > now() OR (s.refresh_token_encrypted IS NOT NULL AND (s.refresh_expires_at IS NULL OR s.refresh_expires_at > now())))
 FOR UPDATE OF s;
+
+-- name: LockTypedRemoteLoginServer :one
+-- Match typed-auth writers: project and server before issuer, registration,
+-- auth client and association rows. Materializing the project locks it first.
+WITH live_project AS MATERIALIZED (
+  SELECT id FROM projects
+  WHERE id = @project_id::uuid
+    AND organization_id = @organization_id::text AND deleted IS FALSE
+  FOR SHARE
+)
+SELECT m.id
+FROM mcp_servers AS m
+JOIN live_project AS p ON p.id = m.project_id
+WHERE m.id = @mcp_server_id::uuid AND m.deleted IS FALSE
+FOR SHARE OF m;
+
+-- name: LockTypedRemoteLoginAuthorization :one
+-- Keep the exact typed association enabled and live until the callback grant
+-- commits. FOR SHARE conflicts with disable, detach and soft-delete updates.
+SELECT c.id
+FROM mcp_auth_clients AS c
+JOIN mcp_server_auth_clients AS link
+  ON link.auth_client_id = c.id
+ AND link.organization_id = c.organization_id
+JOIN mcp_servers AS m
+  ON m.id = link.mcp_server_id AND m.project_id = link.project_id
+JOIN projects AS p ON p.id = m.project_id
+JOIN remote_session_clients AS r ON r.id = c.remote_session_client_id
+WHERE c.id = @auth_client_id::uuid
+  AND c.organization_id = @organization_id::text
+  AND (c.project_id IS NULL OR c.project_id = @project_id::uuid)
+  AND c.remote_session_client_id = @remote_session_client_id::uuid
+  AND c.client_type IN ('remote_session', 'ema')
+  AND r.deleted IS FALSE
+  AND c.enabled AND c.deleted IS FALSE
+  AND link.mcp_server_id = @mcp_server_id::uuid
+  AND link.project_id = @project_id::uuid AND link.deleted IS FALSE
+  AND m.deleted IS FALSE
+  AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
+FOR SHARE OF c, link, m, p, r;

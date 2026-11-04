@@ -47,7 +47,7 @@ impl Run {
         write_frame(
             &mut client,
             &ClientFrame::Start {
-                version: 1,
+                version: 2,
                 execution_id: id,
                 code: code.into(),
                 wall_ms,
@@ -839,7 +839,7 @@ async fn cancellation_during_a_partial_write_keeps_frames_intact() {
     write_frame(
         &mut stream,
         &ClientFrame::Start {
-            version: 1,
+            version: 2,
             execution_id: Uuid::new_v4().to_string(),
             code: "await tools.call('a--write', {'payload': 'x' * 300000})".into(),
             wall_ms: 5000,
@@ -878,7 +878,7 @@ async fn a_preopened_stream_cannot_start_execution_after_shutdown() {
     let shutdown = CancellationToken::new();
     let task = tokio::spawn(serve_stream(server, state(1).await, shutdown.clone()));
     let start = serde_json::to_vec(&ClientFrame::Start {
-        version: 1,
+        version: 2,
         execution_id: Uuid::new_v4().to_string(),
         code: "await tools.call('a--write', {})".into(),
         wall_ms: 30000,
@@ -894,4 +894,43 @@ async fn a_preopened_stream_cannot_start_execution_after_shutdown() {
     );
     drop(stream);
     task.await.unwrap().unwrap();
+}
+
+#[tokio::test(flavor = "multi_thread")]
+async fn server_verification_arguments_round_trip() {
+    let mut run = Run::new(
+        state(1).await,
+        Uuid::new_v4().to_string(),
+        "await tools.servers(server='linear', verify=True)",
+        5000,
+    )
+    .await;
+    run.started().await;
+    let ServerFrame::Callback {
+        id,
+        method,
+        arguments,
+    } = run.next().await
+    else {
+        panic!("expected callback")
+    };
+    assert_eq!(method, "servers");
+    assert_eq!(
+        arguments,
+        json!({"limit":10,"cursor":null,"server":"linear","verify":true})
+    );
+    write_frame(
+        &mut run.stream,
+        &ClientFrame::CallbackResult {
+            id,
+            value: Some(json!({"items":[]})),
+            error: None,
+        },
+    )
+    .await
+    .unwrap();
+    assert!(
+        matches!(run.next().await, ServerFrame::Complete { value, .. } if value == json!({"items":[]}))
+    );
+    run.close().await.unwrap();
 }

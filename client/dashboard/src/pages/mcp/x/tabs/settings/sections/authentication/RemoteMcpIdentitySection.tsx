@@ -9,6 +9,7 @@ import {
 } from "@/components/ui/HoverCard";
 import { RadioCard, RadioCardGroup } from "@/components/ui/RadioCard";
 import { Text } from "@/components/ui/Text";
+import { useOrganization } from "@/contexts/Auth";
 import { useRBAC } from "@/hooks/useRBAC";
 import { cn } from "@/lib/utils";
 import { useRoutes } from "@/routes";
@@ -91,9 +92,12 @@ export function RemoteMcpIdentitySectionBody({
   const remoteMcpServerId = target.remoteMcpServerId ?? "";
   const queryClient = useQueryClient();
   const routes = useRoutes();
+  const organization = useOrganization();
   const { hasScope, isLoading: rbacLoading } = useRBAC();
   const canWrite =
     !rbacLoading && hasScope("mcp:write", target.permissionResourceId);
+  const organizationAdmin =
+    !rbacLoading && hasScope("org:admin", organization.id);
   const headersQuery = useRemoteMcpServerHeaders(
     { remoteMcpServerId },
     undefined,
@@ -119,12 +123,14 @@ export function RemoteMcpIdentitySectionBody({
   );
   // On an organization-level issuer, a binding to an organization-owned
   // client is shared by every project's servers on that issuer, so the server
-  // refuses to replace it from one project (ErrIdentityOrgWideBinding).
-  // Project-owned clients stay editable, so only that case locks the panel.
+  // refuses to replace it without organization admin
+  // (ErrIdentityOrgWideBinding). Project-owned clients stay editable, so only
+  // that case locks the panel, and only for someone who is not an admin.
   const organizationIssuer = userSessionIssuer?.projectId === "";
   const orgSharedClient = organizationIssuer
     ? clients.find((linked) => linked.projectId === "")
     : undefined;
+  const orgSharedClientLocked = !!orgSharedClient && !organizationAdmin;
   const sourceQuery = useGetRemoteMcpServer(
     { id: remoteMcpServerId },
     undefined,
@@ -154,7 +160,7 @@ export function RemoteMcpIdentitySectionBody({
   // failed lookup may leave the controls open.
   const identityReadOnly =
     sharedSource ||
-    !!orgSharedClient ||
+    orgSharedClientLocked ||
     issuerLoading ||
     issuerError ||
     siblingsQuery.isLoading ||
@@ -670,7 +676,7 @@ export function RemoteMcpIdentitySectionBody({
               </Alert>
             ) : null}
 
-            {orgSharedClient && !sharedSource ? (
+            {orgSharedClient && orgSharedClientLocked && !sharedSource ? (
               <Alert variant="warning" dismissible={false}>
                 This server uses a client shared by every project on the
                 organization&apos;s session issuer, so it can&apos;t be changed

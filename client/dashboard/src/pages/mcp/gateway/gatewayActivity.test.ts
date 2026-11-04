@@ -65,6 +65,22 @@ describe("memberUsageRows", () => {
     ]);
   });
 
+  it("falls back to the server name the usage carries", () => {
+    const rows = memberUsageRows(
+      [
+        {
+          mcpServerId: "a",
+          toolCalls: 1,
+          errorCount: 0,
+          mcpServerName: "Alpha",
+        },
+        { mcpServerId: "b", toolCalls: 1, errorCount: 0 },
+      ],
+      [],
+    );
+    expect(rows.map((r) => r.label)).toEqual(["Alpha", "b"]);
+  });
+
   it("computes the error rate and keeps a zero-call member at 0%", () => {
     const rows = memberUsageRows(
       [

@@ -54,6 +54,10 @@ const (
 	// AuthClientTypeKey is the type of the typed auth client a request resolved through.
 	AuthClientTypeKey = attribute.Key("gram.auth_client.type")
 
+	// AuthClientConnectionOwnerUserIDKey is the user whose personal connection a
+	// typed auth client served a request with. Absent for a shared credential.
+	AuthClientConnectionOwnerUserIDKey = attribute.Key("gram.auth_client.connection_owner_user_id")
+
 	// AuthClientOutcomeKey is the outcome of resolving a request's typed auth client.
 	AuthClientOutcomeKey = attribute.Key("gram.auth_client.outcome")
 
@@ -304,6 +308,7 @@ const (
 	MCPRegistryIDKey            = attribute.Key("gram.mcp_registry.id")
 	MCPRegistryURLKey           = attribute.Key("gram.mcp_registry.url")
 	MCPApprovalRequestIDKey     = attribute.Key("gram.mcp_approval.request_id")
+	ExternalMCPFailureReasonKey = attribute.Key("gram.external_mcp.failure_reason")
 	ExternalMCPIDKey            = attribute.Key("gram.external_mcp.id")
 	ExternalMCPSlugKey          = attribute.Key("gram.external_mcp.slug")
 	ExternalMCPNameKey          = attribute.Key("gram.external_mcp.name")
@@ -577,6 +582,15 @@ const (
 	OAuthFlowStageKey = attribute.Key("gram.oauth.flow_stage")
 	OAuthGrantKey     = attribute.Key("gram.oauth.grant")
 	OAuthIssuerKey    = attribute.Key("gram.oauth.issuer")
+
+	// OAuthIDJAGOutcomeKey is an ID-JAG token exchange's outcome: accepted, rejected, or error for an unexpected server failure.
+	OAuthIDJAGOutcomeKey = attribute.Key("gram.oauth.id_jag.outcome")
+
+	// OAuthIDJAGRejectionReasonKey is the bounded reason an ID-JAG token exchange was rejected.
+	OAuthIDJAGRejectionReasonKey = attribute.Key("gram.oauth.id_jag.rejection_reason")
+
+	// OAuthIDJAGResourceSourceKey is where a shared token endpoint took an ID-JAG exchange's target MCP server from when neither the request nor the assertion named it.
+	OAuthIDJAGResourceSourceKey = attribute.Key("gram.oauth.id_jag.resource_source")
 
 	// OAuthAssertionAudienceKey records which accepted audience form a verified client assertion carried.
 	OAuthAssertionAudienceKey = attribute.Key("gram.oauth.assertion_audience")
@@ -946,6 +960,23 @@ const (
 	AgentDeviceSerialKey      = attribute.Key("gram.agent.device.serial")
 	AgentDeviceHostnameKey    = attribute.Key("gram.agent.device.hostname")
 	AgentDeviceEnvironmentKey = attribute.Key("gram.agent.device.environment")
+	// A device agent crash report (device-agent ADR-0030). Build fields name
+	// the build that crashed, which is not always the one that reported it.
+	AgentCrashIDKey              = attribute.Key("gram.agent.crash.id")
+	AgentCrashKindKey            = attribute.Key("gram.agent.crash.kind")
+	AgentCrashComponentKey       = attribute.Key("gram.agent.crash.component")
+	AgentCrashSignatureKey       = attribute.Key("gram.agent.crash.signature")
+	AgentCrashOccurredAtKey      = attribute.Key("gram.agent.crash.occurred_at")
+	AgentCrashCountKey           = attribute.Key("gram.agent.crash.count")
+	AgentCrashSchemaVersionKey   = attribute.Key("gram.agent.crash.schema_version")
+	AgentCrashOtherGoroutinesKey = attribute.Key("gram.agent.crash.other_goroutines")
+	AgentCrashRollbackFromKey    = attribute.Key("gram.agent.crash.rollback.from")
+	AgentCrashRollbackToKey      = attribute.Key("gram.agent.crash.rollback.to")
+	AgentBuildBinaryKey          = attribute.Key("gram.agent.build.binary")
+	AgentBuildVersionKey         = attribute.Key("gram.agent.build.version")
+	AgentBuildChannelKey         = attribute.Key("gram.agent.build.channel")
+	AgentBuildOSKey              = attribute.Key("gram.agent.build.os")
+	AgentBuildArchKey            = attribute.Key("gram.agent.build.arch")
 	// HookBlockReasonKey is set on hook telemetry entries when the Speakeasy hook
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
@@ -1616,6 +1647,66 @@ func SlogAgentDeviceHostname(v string) slog.Attr {
 
 func SlogAgentDeviceEnvironment(v string) slog.Attr {
 	return slog.String(string(AgentDeviceEnvironmentKey), v)
+}
+
+func SlogAgentCrashID(v string) slog.Attr {
+	return slog.String(string(AgentCrashIDKey), v)
+}
+
+func SlogAgentCrashKind(v string) slog.Attr {
+	return slog.String(string(AgentCrashKindKey), v)
+}
+
+func SlogAgentCrashComponent(v string) slog.Attr {
+	return slog.String(string(AgentCrashComponentKey), v)
+}
+
+func SlogAgentCrashSignature(v string) slog.Attr {
+	return slog.String(string(AgentCrashSignatureKey), v)
+}
+
+func SlogAgentCrashOccurredAt(v string) slog.Attr {
+	return slog.String(string(AgentCrashOccurredAtKey), v)
+}
+
+func SlogAgentCrashCount(v int) slog.Attr {
+	return slog.Int(string(AgentCrashCountKey), v)
+}
+
+func SlogAgentCrashSchemaVersion(v int) slog.Attr {
+	return slog.Int(string(AgentCrashSchemaVersionKey), v)
+}
+
+func SlogAgentCrashOtherGoroutines(v int) slog.Attr {
+	return slog.Int(string(AgentCrashOtherGoroutinesKey), v)
+}
+
+func SlogAgentCrashRollbackFrom(v string) slog.Attr {
+	return slog.String(string(AgentCrashRollbackFromKey), v)
+}
+
+func SlogAgentCrashRollbackTo(v string) slog.Attr {
+	return slog.String(string(AgentCrashRollbackToKey), v)
+}
+
+func SlogAgentBuildBinary(v string) slog.Attr {
+	return slog.String(string(AgentBuildBinaryKey), v)
+}
+
+func SlogAgentBuildVersion(v string) slog.Attr {
+	return slog.String(string(AgentBuildVersionKey), v)
+}
+
+func SlogAgentBuildChannel(v string) slog.Attr {
+	return slog.String(string(AgentBuildChannelKey), v)
+}
+
+func SlogAgentBuildOS(v string) slog.Attr {
+	return slog.String(string(AgentBuildOSKey), v)
+}
+
+func SlogAgentBuildArch(v string) slog.Attr {
+	return slog.String(string(AgentBuildArchKey), v)
 }
 
 func HookReplayed(v bool) attribute.KeyValue { return HookReplayedKey.Bool(v) }
@@ -2406,6 +2497,26 @@ func SlogOAuthErrorDescription(v string) slog.Attr {
 func OAuthFailureReason(v string) attribute.KeyValue { return OAuthFailureReasonKey.String(v) }
 func SlogOAuthFailureReason(v string) slog.Attr {
 	return slog.String(string(OAuthFailureReasonKey), v)
+}
+
+func OAuthIDJAGOutcome(v string) attribute.KeyValue { return OAuthIDJAGOutcomeKey.String(v) }
+func SlogOAuthIDJAGOutcome(v string) slog.Attr {
+	return slog.String(string(OAuthIDJAGOutcomeKey), v)
+}
+
+func OAuthIDJAGRejectionReason[V ~string](v V) attribute.KeyValue {
+	return OAuthIDJAGRejectionReasonKey.String(string(v))
+}
+
+func SlogOAuthIDJAGRejectionReason[V ~string](v V) slog.Attr {
+	return slog.String(string(OAuthIDJAGRejectionReasonKey), string(v))
+}
+
+func OAuthIDJAGResourceSource(v string) attribute.KeyValue {
+	return OAuthIDJAGResourceSourceKey.String(v)
+}
+func SlogOAuthIDJAGResourceSource(v string) slog.Attr {
+	return slog.String(string(OAuthIDJAGResourceSourceKey), v)
 }
 
 func OAuthGrant(v string) attribute.KeyValue { return OAuthGrantKey.String(v) }
@@ -3613,6 +3724,10 @@ func SlogMCPApprovalRequestID(v string) slog.Attr {
 
 func MCPRegistryURL(v string) attribute.KeyValue { return MCPRegistryURLKey.String(v) }
 func SlogMCPRegistryURL(v string) slog.Attr      { return slog.String(string(MCPRegistryURLKey), v) }
+
+func SlogExternalMCPFailureReason(v string) slog.Attr {
+	return slog.String(string(ExternalMCPFailureReasonKey), v)
+}
 
 func ExternalMCPID(v string) attribute.KeyValue { return ExternalMCPIDKey.String(v) }
 func SlogExternalMCPID(v string) slog.Attr      { return slog.String(string(ExternalMCPIDKey), v) }

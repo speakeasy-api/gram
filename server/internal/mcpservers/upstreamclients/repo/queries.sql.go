@@ -59,7 +59,7 @@ func (q *Queries) AssociateMCPServerRemoteSessionClient(ctx context.Context, arg
 	return result.RowsAffected(), nil
 }
 
-const captureGatewayDerivedAssociations = `-- name: CaptureGatewayDerivedAssociations :execrows
+const captureGatewayDerivedAssociations = `-- name: CaptureGatewayDerivedAssociations :many
 WITH fronted AS (
     SELECT gateway.user_session_issuer_id AS issuer_id, member.mcp_server_id AS server_id
     FROM meta_mcp_servers AS gateway
@@ -165,6 +165,7 @@ WHERE (f.issuer_id = ANY($3::uuid[]) OR s.user_session_issuer_id = ANY($3::uuid[
       AND recorded.remote_session_client_id = c.id
   )
 ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING
+RETURNING mcp_server_id
 `
 
 type CaptureGatewayDerivedAssociationsParams struct {
@@ -173,6 +174,8 @@ type CaptureGatewayDerivedAssociationsParams struct {
 	UserSessionIssuerIds []uuid.UUID
 }
 
+// Returns the server of each association it adds, so the caller can record
+// the typed auth clients those associations need.
 // Associates a gateway-fronted server in the project with the one client its
 // gateway issuer binds for the server's derived authorization server, which
 // is how consent claims a member for a gateway client. Runs for a gateway
@@ -183,15 +186,27 @@ type CaptureGatewayDerivedAssociationsParams struct {
 // another client (a grant minted through the issuer, or one for a client the
 // issuer binds, whichever issuer minted it; a tunnel's claimed resource
 // proves nothing), or when an explicit detach was recorded for the pair.
-func (q *Queries) CaptureGatewayDerivedAssociations(ctx context.Context, arg CaptureGatewayDerivedAssociationsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, captureGatewayDerivedAssociations, arg.ProjectID, arg.OrganizationID, arg.UserSessionIssuerIds)
+func (q *Queries) CaptureGatewayDerivedAssociations(ctx context.Context, arg CaptureGatewayDerivedAssociationsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, captureGatewayDerivedAssociations, arg.ProjectID, arg.OrganizationID, arg.UserSessionIssuerIds)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var mcp_server_id uuid.UUID
+		if err := rows.Scan(&mcp_server_id); err != nil {
+			return nil, err
+		}
+		items = append(items, mcp_server_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
-const captureSoleConsumerAssociations = `-- name: CaptureSoleConsumerAssociations :execrows
+const captureSoleConsumerAssociations = `-- name: CaptureSoleConsumerAssociations :many
 INSERT INTO mcp_server_remote_session_clients (project_id, organization_id, mcp_server_id, remote_session_client_id, client_attachment_scope)
 SELECT s.project_id, p.organization_id, s.id, c.id, c.attachment_scope
 FROM mcp_servers AS s
@@ -237,6 +252,7 @@ WHERE s.project_id = $2::uuid
       AND gateway.deleted IS FALSE
   )
 ON CONFLICT (mcp_server_id, remote_session_client_id) WHERE deleted IS FALSE DO NOTHING
+RETURNING mcp_server_id
 `
 
 type CaptureSoleConsumerAssociationsParams struct {
@@ -245,6 +261,8 @@ type CaptureSoleConsumerAssociationsParams struct {
 	UserSessionIssuerIds []uuid.UUID
 }
 
+// Returns the server of each association it adds, so the caller can record
+// the typed auth clients those associations need.
 // Associates every client bound to a user session issuer with the issuer's
 // MCP server when that server is the issuer's only consumer in the
 // organization. With one consumer the binding can only be meant for that
@@ -256,8 +274,58 @@ type CaptureSoleConsumerAssociationsParams struct {
 // re-pinned to the caller's project and organization so a foreign id writes
 // nothing, and only the organization's own servers and gateways count as
 // other consumers.
-func (q *Queries) CaptureSoleConsumerAssociations(ctx context.Context, arg CaptureSoleConsumerAssociationsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, captureSoleConsumerAssociations, arg.OrganizationID, arg.ProjectID, arg.UserSessionIssuerIds)
+func (q *Queries) CaptureSoleConsumerAssociations(ctx context.Context, arg CaptureSoleConsumerAssociationsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, captureSoleConsumerAssociations, arg.OrganizationID, arg.ProjectID, arg.UserSessionIssuerIds)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var mcp_server_id uuid.UUID
+		if err := rows.Scan(&mcp_server_id); err != nil {
+			return nil, err
+		}
+		items = append(items, mcp_server_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const copyCredentialChoices = `-- name: CopyCredentialChoices :execrows
+INSERT INTO upstream_client_selections (
+    project_id, organization_id, credential_kind, credential_id, mcp_server_id,
+    remote_session_client_id, client_attachment_scope, no_auth, auth_client_id,
+    auth_client_attachment_scope, source
+)
+SELECT project_id, organization_id, credential_kind, $1::uuid, mcp_server_id,
+       remote_session_client_id, client_attachment_scope, no_auth, auth_client_id,
+       auth_client_attachment_scope, source
+FROM upstream_client_selections
+WHERE credential_kind = $2::text
+  AND credential_id = $3::uuid
+  AND organization_id = $4::text
+  AND deleted IS FALSE
+ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE DO NOTHING
+`
+
+type CopyCredentialChoicesParams struct {
+	ToCredentialID   uuid.UUID
+	CredentialKind   string
+	FromCredentialID uuid.UUID
+	OrganizationID   string
+}
+
+// Gives a replacement credential the choices of the one it replaces.
+func (q *Queries) CopyCredentialChoices(ctx context.Context, arg CopyCredentialChoicesParams) (int64, error) {
+	result, err := q.db.Exec(ctx, copyCredentialChoices,
+		arg.ToCredentialID,
+		arg.CredentialKind,
+		arg.FromCredentialID,
+		arg.OrganizationID,
+	)
 	if err != nil {
 		return 0, err
 	}
@@ -371,27 +439,76 @@ SELECT sel.mcp_server_id,
            AND link.organization_id = sel.organization_id
            AND link.deleted IS FALSE
        )::boolean AS associated,
-       m.requires_upstream_auth,
+       EXISTS (
+         -- The server needs upstream authentication when it offers a live,
+         -- enabled auth client in its tenant.
+         SELECT 1
+         FROM mcp_server_auth_clients AS req_link
+         JOIN mcp_auth_clients AS req_client
+           ON req_client.id = req_link.auth_client_id
+          AND req_client.organization_id = req_link.organization_id
+          AND (req_client.project_id IS NULL OR req_client.project_id = req_link.project_id)
+          AND req_client.deleted IS FALSE
+          AND req_client.enabled
+         WHERE req_link.mcp_server_id = m.id
+           AND req_link.project_id = m.project_id
+           AND req_link.organization_id = sel.organization_id
+           AND req_link.deleted IS FALSE
+       )::boolean AS requires_upstream_auth,
        (
-         EXISTS (
+         -- Upstream credentials the auth client records do not cover yet: no
+         -- auth client was ever linked to the server, live or detached, but it
+         -- has a live upstream OAuth client or a credential header on its source.
+         NOT EXISTS (
            SELECT 1
-           FROM mcp_server_auth_clients AS link
-           JOIN mcp_auth_clients AS other
-             ON other.id = link.auth_client_id
-            AND other.organization_id = link.organization_id
-            AND other.deleted IS FALSE
-           WHERE link.mcp_server_id = sel.mcp_server_id
-             AND link.organization_id = sel.organization_id
-             AND link.deleted IS FALSE
+           FROM mcp_server_auth_clients AS pend_link
+           WHERE pend_link.mcp_server_id = m.id
+             AND pend_link.project_id = m.project_id
+             AND pend_link.organization_id = sel.organization_id
          )
-         OR EXISTS (
-           SELECT 1
-           FROM mcp_server_remote_session_clients AS a
-           WHERE a.mcp_server_id = sel.mcp_server_id
-             AND a.organization_id = sel.organization_id
-             AND a.deleted IS FALSE
+         AND (
+           EXISTS (
+             SELECT 1
+             FROM mcp_server_remote_session_clients AS pend_assoc
+             JOIN remote_session_clients AS pend_client
+               ON pend_client.id = pend_assoc.remote_session_client_id
+              AND pend_client.attachment_scope = pend_assoc.client_attachment_scope
+              AND pend_client.deleted IS FALSE
+             JOIN remote_session_issuers AS pend_issuer
+               ON pend_issuer.id = pend_client.remote_session_issuer_id
+              AND pend_issuer.deleted IS FALSE
+              AND (pend_issuer.project_id = pend_assoc.project_id
+                   OR (pend_issuer.project_id IS NULL AND pend_issuer.organization_id = pend_assoc.organization_id)
+                   OR (pend_issuer.project_id IS NULL AND pend_issuer.organization_id IS NULL))
+             WHERE pend_assoc.mcp_server_id = m.id
+               AND pend_assoc.project_id = m.project_id
+               AND pend_assoc.organization_id = sel.organization_id
+               AND pend_assoc.deleted IS FALSE
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM remote_mcp_server_headers AS pend_header
+             JOIN remote_mcp_servers AS pend_source
+               ON pend_source.id = pend_header.remote_mcp_server_id
+              AND pend_source.project_id = m.project_id
+              AND pend_source.deleted IS FALSE
+             WHERE pend_header.remote_mcp_server_id = m.remote_mcp_server_id
+               AND pend_header.deleted IS FALSE
+               AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM tunneled_mcp_server_headers AS pend_header
+             JOIN tunneled_mcp_servers AS pend_source
+               ON pend_source.id = pend_header.tunneled_mcp_server_id
+              AND pend_source.project_id = m.project_id
+              AND pend_source.deleted IS FALSE
+             WHERE pend_header.tunneled_mcp_server_id = m.tunneled_mcp_server_id
+               AND pend_header.deleted IS FALSE
+               AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
+           )
          )
-       )::boolean AS server_has_clients,
+       )::boolean AS upstream_auth_pending,
        EXISTS (
          SELECT 1
          FROM mcp_server_auth_clients AS link
@@ -542,8 +659,8 @@ type GetAuthClientSelectionRow struct {
 	RegistrationLive           bool
 	RegistrationAttached       bool
 	Associated                 bool
-	RequiresUpstreamAuth       pgtype.Bool
-	ServerHasClients           bool
+	RequiresUpstreamAuth       bool
+	UpstreamAuthPending        bool
 	ServerHasHeaderClients     bool
 	ServerHasOauthClients      bool
 	HeadersStale               bool
@@ -598,7 +715,7 @@ func (q *Queries) GetAuthClientSelection(ctx context.Context, arg GetAuthClientS
 			&i.RegistrationAttached,
 			&i.Associated,
 			&i.RequiresUpstreamAuth,
-			&i.ServerHasClients,
+			&i.UpstreamAuthPending,
 			&i.ServerHasHeaderClients,
 			&i.ServerHasOauthClients,
 			&i.HeadersStale,
@@ -614,6 +731,74 @@ func (q *Queries) GetAuthClientSelection(ctx context.Context, arg GetAuthClientS
 		return nil, err
 	}
 	return items, nil
+}
+
+const getIssuanceProfileForCaller = `-- name: GetIssuanceProfileForCaller :one
+SELECT p.id
+FROM issuance_selection_profiles AS p
+WHERE p.user_session_issuer_id = $1::uuid
+  AND p.organization_id = $2::text
+  AND p.deleted IS FALSE
+  AND (
+    ($3::uuid IS NOT NULL AND p.user_session_client_id = $3::uuid)
+    OR ($4::uuid IS NOT NULL
+        AND p.workload_issuer_id = $4::uuid
+        AND p.workload_subject = $5::text)
+  )
+`
+
+type GetIssuanceProfileForCallerParams struct {
+	UserSessionIssuerID uuid.UUID
+	OrganizationID      string
+	UserSessionClientID uuid.NullUUID
+	WorkloadIssuerID    uuid.NullUUID
+	WorkloadSubject     pgtype.Text
+}
+
+// The profile configured for one headless caller signing in through one user
+// session issuer: a client, or a workload issuer and subject.
+func (q *Queries) GetIssuanceProfileForCaller(ctx context.Context, arg GetIssuanceProfileForCallerParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, getIssuanceProfileForCaller,
+		arg.UserSessionIssuerID,
+		arg.OrganizationID,
+		arg.UserSessionClientID,
+		arg.WorkloadIssuerID,
+		arg.WorkloadSubject,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const hasCredentialChoice = `-- name: HasCredentialChoice :one
+SELECT EXISTS (
+  SELECT 1
+  FROM upstream_client_selections
+  WHERE credential_kind = $1::text
+    AND credential_id = $2::uuid
+    AND mcp_server_id = $3::uuid
+    AND organization_id = $4::text
+    AND deleted IS FALSE
+)::boolean AS has_choice
+`
+
+type HasCredentialChoiceParams struct {
+	CredentialKind string
+	CredentialID   uuid.UUID
+	McpServerID    uuid.UUID
+	OrganizationID string
+}
+
+func (q *Queries) HasCredentialChoice(ctx context.Context, arg HasCredentialChoiceParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasCredentialChoice,
+		arg.CredentialKind,
+		arg.CredentialID,
+		arg.McpServerID,
+		arg.OrganizationID,
+	)
+	var has_choice bool
+	err := row.Scan(&has_choice)
+	return has_choice, err
 }
 
 const isSoleConsumerBinding = `-- name: IsSoleConsumerBinding :one
@@ -715,6 +900,57 @@ func (q *Queries) ListAuthClientHeaders(ctx context.Context, arg ListAuthClientH
 			&i.Value,
 			&i.ValueFromRequestHeader,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listCredentialChoices = `-- name: ListCredentialChoices :many
+SELECT sel.mcp_server_id,
+       sel.auth_client_id,
+       sel.no_auth
+FROM upstream_client_selections AS sel
+WHERE sel.credential_kind = $1::text
+  AND sel.credential_id = $2::uuid
+  AND sel.organization_id = $3::text
+  AND sel.mcp_server_id = ANY($4::uuid[])
+  AND sel.deleted IS FALSE
+`
+
+type ListCredentialChoicesParams struct {
+	CredentialKind string
+	CredentialID   uuid.UUID
+	OrganizationID string
+	McpServerIds   []uuid.UUID
+}
+
+type ListCredentialChoicesRow struct {
+	McpServerID  uuid.UUID
+	AuthClientID uuid.NullUUID
+	NoAuth       bool
+}
+
+// One credential's (or profile's) recorded choices for the given servers.
+func (q *Queries) ListCredentialChoices(ctx context.Context, arg ListCredentialChoicesParams) ([]ListCredentialChoicesRow, error) {
+	rows, err := q.db.Query(ctx, listCredentialChoices,
+		arg.CredentialKind,
+		arg.CredentialID,
+		arg.OrganizationID,
+		arg.McpServerIds,
+	)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListCredentialChoicesRow
+	for rows.Next() {
+		var i ListCredentialChoicesRow
+		if err := rows.Scan(&i.McpServerID, &i.AuthClientID, &i.NoAuth); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -971,7 +1207,76 @@ func (q *Queries) ListServerAssociatedClients(ctx context.Context, arg ListServe
 
 const listServerConsentAuthClients = `-- name: ListServerConsentAuthClients :many
 SELECT m.id AS mcp_server_id,
-       m.requires_upstream_auth,
+       EXISTS (
+         -- The server needs upstream authentication when it offers a live,
+         -- enabled auth client in its tenant.
+         SELECT 1
+         FROM mcp_server_auth_clients AS req_link
+         JOIN mcp_auth_clients AS req_client
+           ON req_client.id = req_link.auth_client_id
+          AND req_client.organization_id = req_link.organization_id
+          AND (req_client.project_id IS NULL OR req_client.project_id = req_link.project_id)
+          AND req_client.deleted IS FALSE
+          AND req_client.enabled
+         WHERE req_link.mcp_server_id = m.id
+           AND req_link.project_id = m.project_id
+           AND req_link.organization_id = p.organization_id
+           AND req_link.deleted IS FALSE
+       )::boolean AS requires_upstream_auth,
+       (
+         -- Upstream credentials the auth client records do not cover yet: no
+         -- auth client was ever linked to the server, live or detached, but it
+         -- has a live upstream OAuth client or a credential header on its source.
+         NOT EXISTS (
+           SELECT 1
+           FROM mcp_server_auth_clients AS pend_link
+           WHERE pend_link.mcp_server_id = m.id
+             AND pend_link.project_id = m.project_id
+             AND pend_link.organization_id = p.organization_id
+         )
+         AND (
+           EXISTS (
+             SELECT 1
+             FROM mcp_server_remote_session_clients AS pend_assoc
+             JOIN remote_session_clients AS pend_client
+               ON pend_client.id = pend_assoc.remote_session_client_id
+              AND pend_client.attachment_scope = pend_assoc.client_attachment_scope
+              AND pend_client.deleted IS FALSE
+             JOIN remote_session_issuers AS pend_issuer
+               ON pend_issuer.id = pend_client.remote_session_issuer_id
+              AND pend_issuer.deleted IS FALSE
+              AND (pend_issuer.project_id = pend_assoc.project_id
+                   OR (pend_issuer.project_id IS NULL AND pend_issuer.organization_id = pend_assoc.organization_id)
+                   OR (pend_issuer.project_id IS NULL AND pend_issuer.organization_id IS NULL))
+             WHERE pend_assoc.mcp_server_id = m.id
+               AND pend_assoc.project_id = m.project_id
+               AND pend_assoc.organization_id = p.organization_id
+               AND pend_assoc.deleted IS FALSE
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM remote_mcp_server_headers AS pend_header
+             JOIN remote_mcp_servers AS pend_source
+               ON pend_source.id = pend_header.remote_mcp_server_id
+              AND pend_source.project_id = m.project_id
+              AND pend_source.deleted IS FALSE
+             WHERE pend_header.remote_mcp_server_id = m.remote_mcp_server_id
+               AND pend_header.deleted IS FALSE
+               AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
+           )
+           OR EXISTS (
+             SELECT 1
+             FROM tunneled_mcp_server_headers AS pend_header
+             JOIN tunneled_mcp_servers AS pend_source
+               ON pend_source.id = pend_header.tunneled_mcp_server_id
+              AND pend_source.project_id = m.project_id
+              AND pend_source.deleted IS FALSE
+             WHERE pend_header.tunneled_mcp_server_id = m.tunneled_mcp_server_id
+               AND pend_header.deleted IS FALSE
+               AND (lower(pend_header.name) = 'authorization' OR pend_header.value_from_request_header IS NOT NULL OR pend_header.is_secret)
+           )
+         )
+       )::boolean AS upstream_auth_pending,
        c.id AS auth_client_id,
        c.name AS auth_client_name,
        c.client_type,
@@ -1003,7 +1308,8 @@ type ListServerConsentAuthClientsParams struct {
 
 type ListServerConsentAuthClientsRow struct {
 	McpServerID           uuid.UUID
-	RequiresUpstreamAuth  pgtype.Bool
+	RequiresUpstreamAuth  bool
+	UpstreamAuthPending   bool
 	AuthClientID          uuid.NullUUID
 	AuthClientName        pgtype.Text
 	ClientType            pgtype.Text
@@ -1011,9 +1317,10 @@ type ListServerConsentAuthClientsRow struct {
 }
 
 // The enabled auth clients each MCP server offers, for the consent screen to
-// choose among, with whether the server needs upstream authentication. A
-// server with no enabled client still has a row, with no client, so the
-// screen can tell no-auth from incomplete setup.
+// choose among, with whether the server needs upstream authentication and
+// whether it has upstream credentials no auth client records yet. A server
+// with no enabled client still has a row, with no client, so the screen can
+// tell no-auth from incomplete setup.
 func (q *Queries) ListServerConsentAuthClients(ctx context.Context, arg ListServerConsentAuthClientsParams) ([]ListServerConsentAuthClientsRow, error) {
 	rows, err := q.db.Query(ctx, listServerConsentAuthClients, arg.OrganizationID, arg.McpServerIds)
 	if err != nil {
@@ -1026,11 +1333,55 @@ func (q *Queries) ListServerConsentAuthClients(ctx context.Context, arg ListServ
 		if err := rows.Scan(
 			&i.McpServerID,
 			&i.RequiresUpstreamAuth,
+			&i.UpstreamAuthPending,
 			&i.AuthClientID,
 			&i.AuthClientName,
 			&i.ClientType,
 			&i.RemoteSessionClientID,
 		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listServersAssociatedWithClient = `-- name: ListServersAssociatedWithClient :many
+SELECT DISTINCT a.organization_id, a.mcp_server_id, a.project_id
+FROM mcp_server_remote_session_clients AS a
+JOIN mcp_servers AS s ON s.id = a.mcp_server_id AND s.deleted IS FALSE
+WHERE a.remote_session_client_id = $1::uuid
+  AND ($2::text IS NULL OR a.organization_id = $2::text)
+ORDER BY a.organization_id, a.mcp_server_id
+`
+
+type ListServersAssociatedWithClientParams struct {
+	RemoteSessionClientID uuid.UUID
+	OrganizationID        pgtype.Text
+}
+
+type ListServersAssociatedWithClientRow struct {
+	OrganizationID string
+	McpServerID    uuid.UUID
+	ProjectID      uuid.UUID
+}
+
+// Every live MCP server with an association to the client, tombstoned ones
+// included, with the organization and project it sits in. Without an
+// organization it spans every organization, for a platform-global client.
+func (q *Queries) ListServersAssociatedWithClient(ctx context.Context, arg ListServersAssociatedWithClientParams) ([]ListServersAssociatedWithClientRow, error) {
+	rows, err := q.db.Query(ctx, listServersAssociatedWithClient, arg.RemoteSessionClientID, arg.OrganizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListServersAssociatedWithClientRow
+	for rows.Next() {
+		var i ListServersAssociatedWithClientRow
+		if err := rows.Scan(&i.OrganizationID, &i.McpServerID, &i.ProjectID); err != nil {
 			return nil, err
 		}
 		items = append(items, i)
@@ -1115,7 +1466,7 @@ func (q *Queries) PruneRemoteSessionClientAssociations(ctx context.Context, arg 
 	return result.RowsAffected(), nil
 }
 
-const pruneUnservableAssociations = `-- name: PruneUnservableAssociations :execrows
+const pruneUnservableAssociations = `-- name: PruneUnservableAssociations :many
 DELETE FROM mcp_server_remote_session_clients AS a
 USING mcp_servers AS s
 WHERE a.mcp_server_id = s.id
@@ -1170,6 +1521,7 @@ WHERE a.mcp_server_id = s.id
         )
     )
   )
+RETURNING a.mcp_server_id
 `
 
 type PruneUnservableAssociationsParams struct {
@@ -1185,15 +1537,27 @@ type PruneUnservableAssociationsParams struct {
 // than soft-deleted: a soft-deleted row records an explicit detach, which
 // capture and the backfill keep, and automatic cleanup must not read as one,
 // so a server that regains its binding or rejoins a gateway is captured again.
-func (q *Queries) PruneUnservableAssociations(ctx context.Context, arg PruneUnservableAssociationsParams) (int64, error) {
-	result, err := q.db.Exec(ctx, pruneUnservableAssociations, arg.ProjectID, arg.OrganizationID)
+func (q *Queries) PruneUnservableAssociations(ctx context.Context, arg PruneUnservableAssociationsParams) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, pruneUnservableAssociations, arg.ProjectID, arg.OrganizationID)
 	if err != nil {
-		return 0, err
+		return nil, err
 	}
-	return result.RowsAffected(), nil
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var mcp_server_id uuid.UUID
+		if err := rows.Scan(&mcp_server_id); err != nil {
+			return nil, err
+		}
+		items = append(items, mcp_server_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
 }
 
-const recordNewMemberSelection = `-- name: RecordNewMemberSelection :execrows
+const recordAuthClientChoice = `-- name: RecordAuthClientChoice :execrows
 INSERT INTO upstream_client_selections (
     project_id,
     organization_id,
@@ -1247,7 +1611,7 @@ WHERE s.id = $6::uuid
 ON CONFLICT (credential_kind, credential_id, mcp_server_id) WHERE deleted IS FALSE DO NOTHING
 `
 
-type RecordNewMemberSelectionParams struct {
+type RecordAuthClientChoiceParams struct {
 	CredentialKind string
 	CredentialID   uuid.UUID
 	Source         string
@@ -1256,12 +1620,13 @@ type RecordNewMemberSelectionParams struct {
 	McpServerID    uuid.UUID
 }
 
-// Records a credential's choice for a gateway member added after it was
-// issued: the one auth client named, which must still be enabled and offered
-// by the server, or no-auth when none is. A choice already recorded, by a
-// concurrent request or otherwise, is kept.
-func (q *Queries) RecordNewMemberSelection(ctx context.Context, arg RecordNewMemberSelectionParams) (int64, error) {
-	result, err := q.db.Exec(ctx, recordNewMemberSelection,
+// Records one credential's choice for one MCP server: the auth client named,
+// which must still be enabled and offered by the server, or no-auth when none
+// is. A choice already recorded, by a concurrent request or otherwise, is
+// kept. Callers validate the choice first; this only refuses one the server
+// no longer offers.
+func (q *Queries) RecordAuthClientChoice(ctx context.Context, arg RecordAuthClientChoiceParams) (int64, error) {
+	result, err := q.db.Exec(ctx, recordAuthClientChoice,
 		arg.CredentialKind,
 		arg.CredentialID,
 		arg.Source,

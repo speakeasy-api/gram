@@ -111,9 +111,12 @@ export function GatewayOverviewTab({
       <GatewayMembersSection metaMcpServer={metaMcpServer} />
 
       <GatewayActivitySection
-        metaMcpServerId={metaMcpServer.id}
-        memberRows={rows}
-        isLoadingMembers={isLoading}
+        scope={{
+          kind: "gateway",
+          metaMcpServerId: metaMcpServer.id,
+          memberRows: rows,
+          isLoadingMembers: isLoading,
+        }}
       />
     </>
   );
