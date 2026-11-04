@@ -45,6 +45,7 @@ type LogAwsIamCredentialCreateEvent struct {
 
 func (l *Logger) LogAwsIamCredentialCreate(ctx context.Context, dbtx repo.DBTX, event LogAwsIamCredentialCreateEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 
@@ -97,6 +98,7 @@ func (l *Logger) LogAwsIamCredentialUpdate(ctx context.Context, dbtx repo.DBTX, 
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 
@@ -134,6 +136,7 @@ type LogAwsIamCredentialDeleteEvent struct {
 
 func (l *Logger) LogAwsIamCredentialDelete(ctx context.Context, dbtx repo.DBTX, event LogAwsIamCredentialDeleteEvent) error {
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 

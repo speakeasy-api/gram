@@ -35,6 +35,7 @@ func (l *Logger) LogProjectCreate(ctx context.Context, dbtx repo.DBTX, event Log
 	action := ActionProjectCreate
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -87,6 +88,7 @@ func (l *Logger) LogProjectUpdate(ctx context.Context, dbtx repo.DBTX, event Log
 	}
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -126,6 +128,7 @@ func (l *Logger) LogProjectDelete(ctx context.Context, dbtx repo.DBTX, event Log
 	action := ActionProjectDelete
 
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

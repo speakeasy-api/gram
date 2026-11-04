@@ -47,7 +47,8 @@ INSERT INTO security_audit_logs (
   after_snapshot,
   metadata,
   acting_surface,
-  acting_client_id
+  acting_client_id,
+  is_internal
 ) VALUES (
   $1,
   $2,
@@ -64,7 +65,8 @@ INSERT INTO security_audit_logs (
   $13,
   $14,
   $15,
-  $16
+  $16,
+  $17
 )
 RETURNING id, organization_id
 `
@@ -86,6 +88,7 @@ type InsertSecurityAuditLogParams struct {
 	Metadata           []byte
 	ActingSurface      pgtype.Text
 	ActingClientID     pgtype.Text
+	IsInternal         bool
 }
 
 type InsertSecurityAuditLogRow struct {
@@ -113,6 +116,7 @@ func (q *Queries) InsertSecurityAuditLog(ctx context.Context, arg InsertSecurity
 		arg.Metadata,
 		arg.ActingSurface,
 		arg.ActingClientID,
+		arg.IsInternal,
 	)
 	var i InsertSecurityAuditLogRow
 	err := row.Scan(&i.ID, &i.OrganizationID)
@@ -207,6 +211,7 @@ SELECT
 FROM security_audit_logs
 WHERE organization_id = $1
   AND subject_type <> 'assistant'
+  AND NOT is_internal
   AND (
     $2::uuid IS NULL
     OR project_id = $2::uuid
@@ -254,6 +259,7 @@ WITH filtered_logs AS (
   FROM security_audit_logs
   WHERE organization_id = $1
     AND subject_type <> 'assistant'
+    AND NOT is_internal
     AND (
       $2::uuid IS NULL
       OR project_id = $2::uuid
@@ -369,25 +375,26 @@ WHERE a.organization_id = $1
     )
     OR a.subject_type = $6::text
   )
+  AND ($8::boolean OR NOT a.is_internal)
   AND (
-    $8::text IS NULL
-    OR a.subject_id = $8::text
+    $9::text IS NULL
+    OR a.subject_id = $9::text
   )
   AND (
-    coalesce(cardinality($9::text[]), 0) = 0
-    OR a.subject_id = ANY($9::text[])
+    coalesce(cardinality($10::text[]), 0) = 0
+    OR a.subject_id = ANY($10::text[])
   )
   AND (
-    $10::text IS NULL
-    OR COALESCE(a.acting_surface, 'unknown') = $10::text
-  )
-  AND (
-    $11::timestamptz IS NULL
-    OR a.created_at >= $11::timestamptz
+    $11::text IS NULL
+    OR COALESCE(a.acting_surface, 'unknown') = $11::text
   )
   AND (
     $12::timestamptz IS NULL
-    OR a.created_at < $12::timestamptz
+    OR a.created_at >= $12::timestamptz
+  )
+  AND (
+    $13::timestamptz IS NULL
+    OR a.created_at < $13::timestamptz
   )
 ORDER BY a.seq DESC
 LIMIT 51
@@ -401,6 +408,7 @@ type ListSecurityAuditLogsParams struct {
 	Action                 pgtype.Text
 	SubjectType            pgtype.Text
 	IncludeAssistantEvents bool
+	IncludeInternalEvents  bool
 	SubjectID              pgtype.Text
 	SubjectIds             []string
 	ActingSurface          pgtype.Text
@@ -445,6 +453,7 @@ func (q *Queries) ListSecurityAuditLogs(ctx context.Context, arg ListSecurityAud
 		arg.Action,
 		arg.SubjectType,
 		arg.IncludeAssistantEvents,
+		arg.IncludeInternalEvents,
 		arg.SubjectID,
 		arg.SubjectIds,
 		arg.ActingSurface,
@@ -500,6 +509,7 @@ SELECT
 FROM security_audit_logs
 WHERE organization_id = $1
   AND subject_type <> 'assistant'
+  AND NOT is_internal
   AND (
     $2::uuid IS NULL
     OR project_id = $2::uuid
@@ -578,6 +588,7 @@ INSERT INTO security_audit_logs (
   metadata,
   acting_surface,
   acting_client_id,
+  is_internal,
   created_at
 )
 SELECT
@@ -599,6 +610,7 @@ SELECT
   metadata,
   acting_surface,
   acting_client_id,
+  is_internal,
   created_at
 FROM moved
 `

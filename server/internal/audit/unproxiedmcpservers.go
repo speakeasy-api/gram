@@ -31,6 +31,7 @@ type LogUnproxiedMcpServerCreateEvent struct {
 func (l *Logger) LogUnproxiedMcpServerCreate(ctx context.Context, dbtx repo.DBTX, event LogUnproxiedMcpServerCreateEvent) error {
 	action := ActionUnproxiedMcpServerCreate
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 
@@ -69,6 +70,7 @@ type LogUnproxiedMcpServerDeleteEvent struct {
 func (l *Logger) LogUnproxiedMcpServerDelete(ctx context.Context, dbtx repo.DBTX, event LogUnproxiedMcpServerDeleteEvent) error {
 	action := ActionUnproxiedMcpServerDelete
 	entry := repo.InsertAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      uuid.NullUUID{UUID: event.ProjectID, Valid: event.ProjectID != uuid.Nil},
 

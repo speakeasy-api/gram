@@ -23,6 +23,7 @@ func LogWorkloadAdmissionAdmit(ctx context.Context, dbtx repo.DBTX, event audit.
 		return fmt.Errorf("marshal %s after snapshot: %w", action, err)
 	}
 	return record(ctx, dbtx, repo.InsertSecurityAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 
@@ -57,6 +58,7 @@ func LogWorkloadAdmissionWithdraw(ctx context.Context, dbtx repo.DBTX, event aud
 		return fmt.Errorf("marshal %s before snapshot: %w", action, err)
 	}
 	return record(ctx, dbtx, repo.InsertSecurityAuditLogParams{
+		IsInternal:     false,
 		OrganizationID: event.OrganizationID,
 		ProjectID:      event.ProjectID,
 
