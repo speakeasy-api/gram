@@ -82,6 +82,11 @@ Stop instead. Everywhere else it relays per-event hooks as before. Every event
 of a session reads the same entrypoint, so a session never mixes per-event
 rows with `claude-transcript:` rows.
 
+Capture needs both halves deployed: a pinned hooks binary that includes the
+Cowork mode, and an ingress rule forwarding `/transcript` to the server.
+Production ingress routes only listed prefixes to the server; without the
+rule, uploads are answered by the dashboard and stay queued in the VM.
+
 `POST /transcript` uses the same hooks-scoped key and project selection as
 `/ahp`. The body's `schema_version` selects the transcript format;
 `claude.transcript.v1` (raw Claude Code JSONL lines) is the only one accepted.

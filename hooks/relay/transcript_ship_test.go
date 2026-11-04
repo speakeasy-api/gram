@@ -700,7 +700,7 @@ func TestStopOutsideCoworkRelaysToIngest(t *testing.T) {
 // CLAUDE_CODE_ENTRYPOINT in the hook environment, the transcript's own
 // entrypoint decides.
 func TestCoworkReadsEntrypointFromTranscript(t *testing.T) {
-	for entrypoint, ships := range map[string]bool{"remote_cowork": true, "cli": false, "": false} {
+	for entrypoint, ships := range map[string]bool{"remote_cowork": true, "cli": false, "": false, "not_cowork": false, "remote": false} {
 		t.Setenv("XDG_STATE_HOME", t.TempDir())
 		ts := newTranscriptServer(t)
 		cfg := coworkConfig(t, ts.URL)

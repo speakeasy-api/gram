@@ -250,8 +250,12 @@ func coworkTranscriptMode(base *agenthooks.Event) bool {
 	return coworkEntrypoint(transcriptEntrypoint(path))
 }
 
+// coworkVMEntrypoint is the entrypoint Claude Code reports inside the Cowork
+// VM. Anything else, including entrypoints not seen yet, keeps per-event hooks.
+const coworkVMEntrypoint = "remote_cowork"
+
 func coworkEntrypoint(entrypoint string) bool {
-	return strings.Contains(strings.ToLower(entrypoint), "cowork")
+	return strings.EqualFold(strings.TrimSpace(entrypoint), coworkVMEntrypoint)
 }
 
 // transcriptEntrypoint returns the first "entrypoint" a transcript line
