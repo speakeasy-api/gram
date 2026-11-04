@@ -81,9 +81,21 @@ the backend parses the provider's own transcript format, because a
 transcript-only install relays no per-event hooks to translate.
 
 Each entry's uuid keys its rows (`external_message_id` prefixed
-`claude-transcript:`), so a re-sent line is never stored twice. The response
-`{"stored": n}` is the acknowledgement the binary waits for before it advances
-its read offset.
+`claude-transcript:`), so a re-sent line is never stored twice.
+
+The binary advances its read offset past a batch only once the batch is
+settled, and resends anything unsettled on the next Stop:
+
+- A 2xx carrying the `{"stored": n}` acknowledgement settles the batch as
+  stored.
+- Any other 4xx (400 malformed body, 409 session owned by another project,
+  413 too large) settles the batch as dropped. The server would reject it
+  the same way on every retry, so those lines are lost for good. The binary's
+  debug log records the status.
+- 401, 403, 404, 405, 408, 429, 5xx, transport failures, and a 2xx without
+  the acknowledgement leave the batch queued for retry. Credentials,
+  throttling, and routing can recover, and a 2xx from anything but this
+  endpoint must not count as stored.
 
 ## Legacy Compatibility
 
