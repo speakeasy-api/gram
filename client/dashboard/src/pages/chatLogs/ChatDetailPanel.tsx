@@ -417,7 +417,11 @@ function SessionSummary({
               <MetaRow label="Tool calls">{toolCount}</MetaRow>
             )}
             <MetaRow label="Total cost">
-              {hasCost ? formatUsageCost(chat.totalCost!) : "unknown"}
+              <TotalCostValue
+                cost={chat.totalCost}
+                hasCost={hasCost}
+                costUnknown={costUnknown}
+              />
             </MetaRow>
             {costUnknown && (
               <p className="text-muted-foreground py-1.5 text-xs">
@@ -465,6 +469,31 @@ function HeaderMetadataBadge({ children }: { children: ReactNode }) {
       <Badge.Text>{children}</Badge.Text>
     </Badge>
   );
+}
+
+/**
+ * The session's total cost in its details: the figure, a dash when its agent
+ * does not report cost (the explanation follows the row), or "unknown" when
+ * no usage arrived at all.
+ */
+function TotalCostValue({
+  cost,
+  hasCost,
+  costUnknown,
+}: {
+  cost: number | undefined;
+  hasCost: boolean;
+  costUnknown: boolean;
+}): JSX.Element {
+  if (hasCost && cost !== undefined) return <>{formatUsageCost(cost)}</>;
+  if (costUnknown) {
+    return (
+      <span className="tabular-nums" aria-label="Unknown cost">
+        —
+      </span>
+    );
+  }
+  return <>unknown</>;
 }
 
 function ChatDetailMetadataBadges({

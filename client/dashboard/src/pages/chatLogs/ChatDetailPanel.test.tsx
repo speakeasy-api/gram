@@ -11,7 +11,6 @@ import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import { MemoryRouter } from "react-router";
 import { afterEach, describe, expect, it, vi } from "vitest";
 import { ChatDetailSheet } from "./ChatDetailPanel";
-import { UNKNOWN_COST_EXPLANATION } from "./claudeUsage";
 
 const state = vi.hoisted(() => ({ chat: undefined as Chat | undefined }));
 
@@ -358,11 +357,17 @@ describe("ChatDetailSheet session cost", () => {
 
     expect(screen.queryByText("$0.00")).toBeNull();
     // The details trigger reads a dash where the cost would be.
-    expect(screen.getByLabelText("Unknown cost")).toBeTruthy();
+    expect(screen.getByLabelText("Unknown cost").textContent).toBe("—");
 
     fireEvent.click(screen.getByRole("button", { name: /tokens/ }));
     const details = screen.getByText("Session details").parentElement!;
-    expect(within(details).getByText(UNKNOWN_COST_EXPLANATION)).toBeTruthy();
+    expect(
+      within(details).getByText(
+        "Unknown cost: this agent doesn't report cost.",
+      ),
+    ).toBeTruthy();
+    // The Total cost row reads a dash too, not "unknown".
+    expect(within(details).queryByText("unknown")).toBeNull();
   });
 
   it("shows the cost a session reports", () => {
