@@ -90,3 +90,13 @@ Review follow-ups adopted on #8442 (each fails closed):
 3. **Chat grants are anchored at the organization, the project and the chat.** The stored selectors carry only `resource_kind` and `resource_id`, so a project-wide grant is expressed through the project-level operations C3 adds. Anchoring records where grants may be written; it changes no match.
 4. **The sensitive-content gate stays outside the registry.** `CheckSensitiveContentAccess` refuses impersonated sessions before any chat data is read. The migration inventory classes it as an independent gate with its own fixtures, so its row stays.
 5. **The chat service receives the client beside the engine.** The engine still builds `auth.Auth` and answers the collection checks C3 migrates.
+
+## C3 (AIS-872): chat visibility, summaries and trends
+
+### Decided without reviewer input
+
+1. **C3 goes ahead of Q1 for its point checks.** Q1 owns the chat collection queries (the SQL that narrows listings to the caller's own and owned-agent sessions) and has no call site in the inventory. C3's call sites are point decisions: whether the caller may read every chat in the project, and project read for session summaries. They do not touch the SQL, so they migrate now and Q1 stays independent. _If reversed:_ hold C3 until Q1 has characterised the collection queries; nothing here would change.
+2. **"Read every chat in the project" is `Project(...).ReadChats()`.** Today it is `chat:read` with the project ID as the resource. The constructor reproduces that request exactly, on the chat type's `read_grant`. _Worth simplifying later:_ a project permission such as `project.read_chats` would name the meaning instead of overloading a chat ID with a project ID, but it changes which grants match.
+3. **`ShouldEnforce` stays on the engine.** The trend and visibility paths branch on whether RBAC is enforced at all before deciding. That is an admission question the client has no method for, so the two `ShouldEnforce` rows stay with C3 and the integrator decides whether the client exposes it. _If reversed:_ add `Client.ShouldEnforce` and switch both calls.
+4. **The sensitive-content gate in `ReadableConversations` stays** as an independent gate, as in C1.
+5. **`ReadableConversations` uses `MatchMany`** and maps results by position, so a repeated ID keeps its own answer.

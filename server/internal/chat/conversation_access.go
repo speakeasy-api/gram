@@ -21,17 +21,19 @@ func (s *Service) ReadableConversations(ctx context.Context, ids []string) ([]st
 	if !ok || auth == nil || auth.ProjectID == nil || len(ids) == 0 || authz.CheckSensitiveContentAccess(ctx) != nil {
 		return visible, nil
 	}
-	checks := make([]authz.Check, len(ids))
+	ops := make([]authz.Operation, len(ids))
 	for i, id := range ids {
-		checks[i] = authz.ChatReadCheck(id)
+		ops[i] = authz.Chat(auth.ActiveOrganizationID, auth.ProjectID.String(), id).Read()
 	}
-	granted, err := s.authz.Filter(ctx, checks)
+	granted, err := s.authzClient.MatchMany(ctx, ops)
 	if err != nil {
 		return nil, fmt.Errorf("filter conversation grants: %w", err)
 	}
-	allowed := make(map[string]bool, len(granted))
-	for _, id := range granted {
-		allowed[id] = true
+	allowed := make(map[string]bool, len(ids))
+	for i, id := range ids {
+		if granted[i] {
+			allowed[id] = true
+		}
 	}
 	for _, raw := range ids {
 		id, err := uuid.Parse(raw)
