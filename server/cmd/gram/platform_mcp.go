@@ -586,7 +586,8 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithToolUsageBreakdown(config.ToolUsage).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB)).
 		WithUserSearch(config.UserSearch).
-		WithToolCallSearch(config.ToolCallSearch)
+		WithToolCallSearch(config.ToolCallSearch).
+		WithAuthorization(config.Authz)
 	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, recallRiskFindingReader(config.RiskFindingList), budgets.SensitiveSessionRecall).
 		WithHandoffMinter(sessionhandoff.NewSessionHandoffMinter(config.Logger, config.DB, config.AssetStorage, config.ServerURL.String(), audit.NewLogger()))
 	riskMutationControls, err := platformmcp.NewRiskMutationControls(config.DB, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), budgets.RiskMutations, config.JWTSigningKey)
@@ -1382,7 +1383,8 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithToolUsageBreakdown(config.ToolUsage).
 		WithDrilldown(config.TelemetryDrilldown, config.JWTSigningKey, budgets.SensitiveDiagnostics, budgets.DrilldownVolume, platformmcp.NewPostgresDrilldownAuditor(config.DB)).
 		WithUserSearch(config.UserSearch).
-		WithToolCallSearch(config.ToolCallSearch)
+		WithToolCallSearch(config.ToolCallSearch).
+		WithAuthorization(config.Authz)
 	sessionRecall := platformmcp.NewSessionRecallService(config.Logger, config.DB, platformrepo.New(config.DB), audit.NewLogger(), config.SessionPortability, recallRiskFindingReader(config.RiskFindingList), budgets.SensitiveSessionRecall).
 		WithHandoffMinter(sessionhandoff.NewSessionHandoffMinter(config.Logger, config.DB, config.AssetStorage, config.ServerURL.String(), audit.NewLogger()))
 	riskMutationControls, err := platformmcp.NewRiskMutationControls(config.DB, config.FeatureFlags, platformmcp.NewPostgresOrganizationSlugResolver(config.DB), budgets.RiskMutations, config.JWTSigningKey)

@@ -702,7 +702,7 @@ func (s *DiagnosticsService) toolCallSearchMatchers(ctx context.Context, organiz
 	if err != nil {
 		return toolUsageMatchers{}, fmt.Errorf("load tool call search matchers: %w", err)
 	}
-	meta, err := telemetrysvc.LoadMetaMCPMatchers(ctx, s.db, organizationID, parsedProject)
+	meta, err := telemetrysvc.LoadMetaMCPMatchers(ctx, s.db, s.authz, organizationID, parsedProject)
 	if err != nil {
 		return toolUsageMatchers{}, fmt.Errorf("load tool call search gateway matchers: %w", err)
 	}

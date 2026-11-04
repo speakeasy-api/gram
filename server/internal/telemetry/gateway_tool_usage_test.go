@@ -21,6 +21,7 @@ import (
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orggateway"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
+	"github.com/speakeasy-api/gram/server/internal/telemetry"
 	"github.com/speakeasy-api/gram/server/internal/telemetry/repo"
 )
 
@@ -642,4 +643,128 @@ func TestListToolUsageTraces_ClassifiesOpenClawGatewayCallsByURL(t *testing.T) {
 	filtered, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{From: from, To: to, Limit: 10, MetaMcpServerIds: []string{agentGatewayID}})
 	require.NoError(t, err)
 	require.Len(t, filtered.Traces, 2, "the agent gateway filter covers both agent gateway calls")
+}
+
+// A call that reached a gateway by URL is labelled the way LoadGatewayLabels
+// labels it: a gateway in a project, or serving an agent, the viewer may not
+// read is "Gateway in another project", on the summary path and the raw path.
+func TestListToolUsageTraces_HidesOpenClawGatewayCallsTheCallerCannotRead(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+	now := time.Now().UTC()
+
+	otherProject, err := projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name: "Private project", Slug: "private-" + uuid.NewString()[:8], OrganizationID: ti.orgID,
+	})
+	require.NoError(t, err)
+	hiddenAgent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: ti.orgID,
+		OwnerUserID:    authCtx.UserID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Name:           "Hidden bot",
+	})
+	require.NoError(t, err)
+	grantedAgent, err := agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: ti.orgID,
+		OwnerUserID:    authCtx.UserID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Name:           "Granted bot",
+	})
+	require.NoError(t, err)
+	organization, err := orgrepo.New(ti.conn).GetOrganizationMetadata(ctx, ti.orgID)
+	require.NoError(t, err)
+
+	// Only the viewed project and one agent are readable, by someone other
+	// than the agents' owner.
+	ctx = authztest.WithExactGrants(t, ctx,
+		authz.NewGrant(authz.ScopeLogRead, ti.projectID),
+		authz.NewGrant(authz.ScopeProjectRead, ti.projectID),
+		authz.NewGrant(authz.ScopeAgentRead, grantedAgent.ID.String()),
+	)
+	viewer := *authCtx
+	viewer.UserID = "viewer-" + uuid.NewString()[:8]
+	viewerCtx := contextvalues.SetAuthContext(ctx, &viewer)
+
+	orgGatewayURL := "https://app.example.com/mcp/gateway/" + organization.Slug
+	calls := []struct {
+		call  openClawGatewayCall
+		label string
+	}{
+		{call: openClawGatewayCall{conversationID: "conv-hidden-agent", toolName: "hidden__list_servers", serverName: "hidden", url: "https://app.example.com/agent-mcp/" + hiddenAgent.ID.String(), preServerName: "", preURLOnly: false}, label: "Gateway in another project"},
+		{call: openClawGatewayCall{conversationID: "conv-granted-agent", toolName: "granted__list_servers", serverName: "granted", url: "https://app.example.com/agent-mcp/" + grantedAgent.ID.String(), preServerName: "", preURLOnly: false}, label: "Granted bot gateway"},
+		{call: openClawGatewayCall{conversationID: "conv-other-project", toolName: "private__search", serverName: "private", url: orgGatewayURL + "/projects/" + otherProject.Slug, preServerName: "", preURLOnly: false}, label: "Gateway in another project"},
+		{call: openClawGatewayCall{conversationID: "conv-organization", toolName: "org__search", serverName: "org", url: orgGatewayURL, preServerName: "", preURLOnly: false}, label: organization.Name},
+	}
+	for i, tc := range calls {
+		insertOpenClawGatewayCall(t, ctx, ti, now.Add(-time.Duration(len(calls)-i)*time.Minute), tc.call)
+	}
+	from := now.Add(-time.Hour).Format(time.RFC3339)
+	to := now.Add(time.Hour).Format(time.RFC3339)
+
+	all := requireToolUsageTraces(t, viewerCtx, ti, &gen.ListToolUsageTracesPayload{From: from, To: to, Limit: 20}, func(result *gen.ListToolUsageTracesResult) bool {
+		return len(result.Traces) == len(calls)
+	})
+	byTool := map[string]string{}
+	for _, trace := range all.Traces {
+		byTool[trace.ToolName] = trace.TargetLabel
+	}
+	for _, tc := range calls {
+		require.Equal(t, tc.label, byTool[tc.call.toolName], "summary path: %s", tc.call.toolName)
+
+		query := tc.call.conversationID
+		raw, err := ti.service.ListToolUsageTraces(viewerCtx, &gen.ListToolUsageTracesPayload{From: from, To: to, Limit: 10, Query: &query})
+		require.NoError(t, err)
+		require.Len(t, raw.Traces, 1)
+		require.Equal(t, tc.label, raw.Traces[0].TargetLabel, "raw path: %s", tc.call.toolName)
+	}
+
+	// The owner sees their agent's gateway with no agent grant.
+	query := "conv-hidden-agent"
+	owner, err := ti.service.ListToolUsageTraces(ctx, &gen.ListToolUsageTracesPayload{From: from, To: to, Limit: 10, Query: &query})
+	require.NoError(t, err)
+	require.Len(t, owner.Traces, 1)
+	require.Equal(t, "Hidden bot gateway", owner.Traces[0].TargetLabel)
+}
+
+// The matchers and the labels of one request share one read of the
+// organization's gateway owners: a later read returns what the first saw.
+func TestGatewayOwnersReadsEachListOnce(t *testing.T) {
+	t.Parallel()
+
+	ctx, ti := newTestLogsService(t)
+	authCtx, ok := contextvalues.GetAuthContext(ctx)
+	require.True(t, ok)
+
+	owners := telemetry.NewGatewayOwnersForTest(ti.conn, ti.orgID)
+	agents, err := owners.Agents(ctx)
+	require.NoError(t, err)
+	projects, err := owners.Projects(ctx)
+	require.NoError(t, err)
+	organization, err := owners.Organization(ctx)
+	require.NoError(t, err)
+
+	_, err = agentsrepo.New(ti.conn).CreateAgent(ctx, agentsrepo.CreateAgentParams{
+		OrganizationID: ti.orgID,
+		OwnerUserID:    authCtx.UserID,
+		ProjectID:      uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		Name:           "Later bot",
+	})
+	require.NoError(t, err)
+	_, err = projectsrepo.New(ti.conn).CreateProject(ctx, projectsrepo.CreateProjectParams{
+		Name: "Later project", Slug: "later-" + uuid.NewString()[:8], OrganizationID: ti.orgID,
+	})
+	require.NoError(t, err)
+
+	again, err := owners.Agents(ctx)
+	require.NoError(t, err)
+	require.Equal(t, agents, again)
+	againProjects, err := owners.Projects(ctx)
+	require.NoError(t, err)
+	require.Equal(t, projects, againProjects)
+	againOrganization, err := owners.Organization(ctx)
+	require.NoError(t, err)
+	require.Equal(t, organization, againOrganization)
 }

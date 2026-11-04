@@ -158,7 +158,7 @@ func (s *DiagnosticsService) GetToolUsageSummary(ctx context.Context, principal 
 	if err != nil {
 		return GetToolUsageSummaryOutput{}, fmt.Errorf("load tool usage matchers: %w", err)
 	}
-	metaMatchers, err := telemetrysvc.LoadMetaMCPMatchers(ctx, s.db, principal.OrganizationID, projectUUID)
+	metaMatchers, err := telemetrysvc.LoadMetaMCPMatchers(ctx, s.db, s.authz, principal.OrganizationID, projectUUID)
 	if err != nil {
 		return GetToolUsageSummaryOutput{}, fmt.Errorf("load tool usage gateway matchers: %w", err)
 	}
