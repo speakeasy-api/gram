@@ -182,7 +182,7 @@ func newTestComparer(t *testing.T, budget ShadowBudget) (*shadowComparer, *captu
 	return comparer, recorder
 }
 
-var testRoute = route{mode: MigrationModeShadow, units: []string{"project"}}
+var testRoute = route{mode: MigrationModeShadow, units: []string{"project"}, organizationID: ""}
 
 func allow() shadowAnswer { return shadowAnswer{allowed: []bool{true}, err: nil} }
 func deny() shadowAnswer  { return shadowAnswer{allowed: []bool{false}, err: nil} }

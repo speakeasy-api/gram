@@ -81,6 +81,9 @@ func TestClientLoadedPoliciesMatchTheEngine(t *testing.T) {
 
 				if mode == MigrationModeShadow {
 					require.Equal(t, []ShadowOutcome{ShadowMatch, ShadowMatch}, recorder.outcomes())
+					for _, comparison := range recorder.all() {
+						require.Equal(t, fixtureOrgID, comparison.OrganizationID, "an unadmitted loaded decision records its loaded organization")
+					}
 				} else {
 					require.Empty(t, recorder.outcomes())
 				}
