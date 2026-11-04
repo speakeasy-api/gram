@@ -694,7 +694,7 @@ func TestServePublic_MetaEndpoint_ExecuteTool_UnauthorizedNamesAnonymousDial(t *
 	insertQualifiedRemoteSessionToken(t, ctx, ti, sharedIssuerID, clientID, subject, "token-legacy", "")
 	text, isError := metaToolResultText(t, executeMetaTool(t, ti, metaSlug, bearer, "member--ping"))
 	require.True(t, isError)
-	require.Contains(t, text, "holds no credential that routes to it")
+	require.Contains(t, text, "has no credential for this caller")
 
 	// A grant qualified to the member ties the client to it, and migrating
 	// again replaces the credential's no-auth choice with that client. The

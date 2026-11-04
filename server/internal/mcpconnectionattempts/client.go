@@ -158,7 +158,8 @@ func FromRequest(r *http.Request) Option {
 
 // ReportedClient names the client an MCP session reported, read first when the writer names a
 // row's client. read runs on the writer, so a slow lookup costs the request nothing. It must bound
-// its own time and must not touch the request. Nil sets nothing.
+// its own time and must not touch the request: a slow read stalls the single writer
+// and delays other queued rows until it returns. Nil sets nothing.
 func ReportedClient(read func() (name, version string)) Option {
 	if read == nil {
 		return Option{apply: nil}

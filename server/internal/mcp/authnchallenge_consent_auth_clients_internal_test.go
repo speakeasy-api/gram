@@ -187,6 +187,25 @@ func TestPersonalReadinessOfIdentityProviderClients(t *testing.T) {
 	require.Equal(t, registration.String(), connect)
 }
 
+// An outage leaves the connection in place, so the picker doesn't ask to connect first.
+func TestPersonalReadinessOfAConnectionInAnOutage(t *testing.T) {
+	t.Parallel()
+
+	registration := uuid.New()
+	card := remoteSessionCard{ClientID: registration.String(), Connected: true, Unavailable: true}
+	state, connect := personalReadiness(authClientTypeRemoteSession, validUUID(registration), []remoteSessionCard{card})
+	require.Equal(t, consentClientReady, state)
+	require.Empty(t, connect)
+}
+
+func TestCardPanelHidesLiveDetailsDuringAnOutage(t *testing.T) {
+	t.Parallel()
+
+	panel := remoteSessionCard{Connected: true, Unavailable: true, TokenActive: true}.Panel()
+	require.False(t, panel.GrantLive)
+	require.False(t, panel.ShowToken)
+}
+
 func TestConsentCardsApprovable(t *testing.T) {
 	t.Parallel()
 
@@ -196,6 +215,8 @@ func TestConsentCardsApprovable(t *testing.T) {
 		want  bool
 	}{
 		{name: "no cards", cards: nil, want: true},
+		{name: "connected but unavailable", cards: []remoteSessionCard{{Connected: true, Unavailable: true}}, want: false},
+		{name: "unavailable but chained", cards: []remoteSessionCard{{Connected: true, Unavailable: true, Chained: true}}, want: true},
 		{name: "never connected", cards: []remoteSessionCard{{}}, want: false},
 		{name: "expired", cards: []remoteSessionCard{{Expired: true}}, want: false},
 		{name: "unroutable", cards: []remoteSessionCard{{Unroutable: true}}, want: false},

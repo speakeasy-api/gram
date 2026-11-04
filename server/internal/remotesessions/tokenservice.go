@@ -52,6 +52,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauthwire"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urls"
@@ -275,6 +276,7 @@ func (m *ChallengeManager) resolveUpstreamToken(
 func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, attribution RefreshAttribution, sess remotesessions_repo.RemoteSession, resource string) (resolvedUpstreamToken, error) {
 	var zero resolvedUpstreamToken
 	selectedID := sess.ID
+	selectedResource := conv.FromPGTextOrEmpty[string](sess.Resource)
 	clientID := sess.RemoteSessionClientID
 	// Rebinds sess to the row the token came from, so a refresh that backfilled
 	// a legacy NULL resource routes on this same request. resolvedFromUpdatedAt
@@ -287,6 +289,10 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, attributi
 		if errors.Is(err, ErrNoValidToken) {
 			return zero, nil
 		}
+		// The caller left, which says nothing about the session; the outcome metric counts it.
+		if refreshErr, ok := errors.AsType[*RefreshError](err); ok && refreshErr.Outcome == remotesessionmetrics.RefreshOutcomeCanceled {
+			return zero, fmt.Errorf("refresh canceled: %w", err)
+		}
 		// validateAndRefresh errors only when a refresh was required (the
 		// stored access token is past its deadline) and could not be
 		// completed. The specific upstream answer is logged here because
@@ -295,9 +301,14 @@ func (m *ChallengeManager) resolveCredentialToken(ctx context.Context, attributi
 		// pgx.ErrNoRows case above), while one that clears on its own or
 		// needs an administrator comes back as its refined ErrNoValidToken.
 		m.logger.WarnContext(ctx, "remote session unusable: upstream token refresh failed", refreshFailureAttrs(sess, err)...)
+		// A broken query is ours to fix: neither an outage nor a reconnect.
+		if oops.IsStoreFailure(err) && !oops.IsInfrastructureFailure(err) {
+			return unavailableSessionCredential(selectedID, clientID, selectedResource, &SessionOutageError{err: err}), fmt.Errorf("%w: %w", errRefreshStoreFault, err)
+		}
 		switch {
 		case errors.Is(err, ErrRemoteSessionUnavailable):
-			return zero, ErrRemoteSessionUnavailable
+			outage := &SessionOutageError{err: err}
+			return unavailableSessionCredential(selectedID, clientID, selectedResource, outage), outage
 		case errors.Is(err, ErrRemoteSessionMisconfigured):
 			return zero, ErrRemoteSessionMisconfigured
 		}
@@ -419,6 +430,8 @@ type UpstreamToken struct {
 	// empty Token it marks a self client whose credential could not be
 	// obtained, which only ResolveAvailableAccessTokens returns, and
 	// ClientCredentialErr says why.
+	//
+	// A CredentialOwnerSubject entry with ClientCredentialErr set is SessionUnavailable.
 	CredentialOwner CredentialOwner
 
 	// RemoteSessionClientID is the remote_session_client the credential
@@ -529,9 +542,10 @@ func (m *ChallengeManager) CheckAccessTokens(ctx context.Context, attribution Re
 // connected degrades member-scoped while every other member keeps serving.
 // Returns the resolvable subset — possibly empty — and errors only on
 // infrastructure failures, never on missing or expired grants. A self client
-// whose credential cannot be obtained keeps an entry with an empty Token
-// and UpstreamToken.ClientCredentialErr set, so routing to it names the
-// remedy instead of calling anonymously.
+// whose credential cannot be obtained, and a connection whose refresh failed in
+// an outage, keep an entry with an empty Token and
+// UpstreamToken.ClientCredentialErr set, so routing to it names the remedy
+// instead of calling anonymously.
 func (m *ChallengeManager) ResolveAvailableAccessTokens(
 	ctx context.Context,
 	attribution RefreshAttribution,
@@ -656,8 +670,11 @@ func (m *ChallengeManager) resolveClientTokens(
 		switch {
 		case errors.Is(err, ErrNoValidToken):
 			if skipUnusable {
-				if self {
+				switch {
+				case self:
 					tokens[c.RemoteSessionIssuerID] = unavailableClientCredential(c.ClientID, selfResource, err)
+				case errors.Is(err, ErrRemoteSessionUnavailable):
+					tokens[c.RemoteSessionIssuerID] = resolved
 				}
 				attribution.skipped.Note(projectID, c.RemoteSessionIssuerID, c.ClientID, err)
 				continue
@@ -673,6 +690,10 @@ func (m *ChallengeManager) resolveClientTokens(
 				return nil, ErrNoValidToken
 			}
 			return nil, err
+		case errors.Is(err, errRefreshStoreFault) && skipUnusable:
+			m.logger.ErrorContext(ctx, "gateway member refresh hit a store fault", attr.SlogRemoteSessionClientID(c.ClientID.String()), attr.SlogError(err))
+			tokens[c.RemoteSessionIssuerID] = resolved
+			continue
 		case err != nil:
 			return nil, fmt.Errorf("resolve access token: %w", err)
 		case resolved.Token == "":
@@ -734,6 +755,77 @@ func unavailableClientCredential(clientID uuid.UUID, resource string, err error)
 		ClientCredentialErr:                err,
 		renewal:                            nil,
 	}
+}
+
+// unavailableSessionCredential keeps the grant's identity so an outage routes and pins as its token would.
+func unavailableSessionCredential(sessionID, clientID uuid.UUID, resource string, outage error) UpstreamToken {
+	return UpstreamToken{
+		Token:                              "",
+		Resource:                           resource,
+		CredentialOwner:                    CredentialOwnerSubject,
+		RemoteSessionClientID:              clientID,
+		RemoteSessionID:                    sessionID,
+		RemoteSessionUpdatedAt:             time.Time{},
+		RemoteSessionResolvedFromUpdatedAt: time.Time{},
+		ClientCredentialErr:                outage,
+		renewal:                            nil,
+	}
+}
+
+// SessionOutageError is a subject's connection whose refresh failed in an outage.
+type SessionOutageError struct{ err error }
+
+func (e *SessionOutageError) Error() string { return e.err.Error() }
+
+func (e *SessionOutageError) Unwrap() []error { return []error{ErrRemoteSessionUnavailable, e.err} }
+
+// RetryAfter is how long to wait before retrying err, zero when unknown.
+func RetryAfter(err error) time.Duration {
+	if refreshErr, ok := errors.AsType[*RefreshError](err); ok {
+		return refreshErr.retryAfter
+	}
+	return 0
+}
+
+// OutageKindOf says what kind of outage stopped err's refresh, none when unknown.
+func OutageKindOf(err error) RefreshOutageKind {
+	if refreshErr, ok := errors.AsType[*RefreshError](err); ok {
+		return refreshErr.outageKind
+	}
+	return RefreshOutageNone
+}
+
+// errRefreshStoreFault marks a broken query or write: a retry can't help, and it fails only this member on a gateway.
+var errRefreshStoreFault = errors.New("refresh store fault")
+
+// TokenEndpointCausedOutage reports a client credential outage the token endpoint caused, not signing or our own stores.
+func TokenEndpointCausedOutage(err error) bool {
+	endpoint, ok := errors.AsType[*TokenEndpointError](err)
+	return ok && !endpoint.Signing
+}
+
+// OutageProviderHost is the issuer host behind a provider outage; a tunneled provider's stays off the page.
+func OutageProviderHost(err error) string {
+	refreshErr, ok := errors.AsType[*RefreshError](err)
+	if !ok || refreshErr.outageKind != RefreshOutageProvider {
+		return ""
+	}
+	parsed, perr := url.Parse(refreshErr.IssuerURL)
+	if perr != nil {
+		return ""
+	}
+	return parsed.Hostname()
+}
+
+// RefreshBusy reports a refresh that waited on another request and made no call of its own.
+func RefreshBusy(err error) bool {
+	refreshErr, ok := errors.AsType[*RefreshError](err)
+	return ok && refreshErr.Outcome == remotesessionmetrics.RefreshOutcomeDeferred && refreshErr.outageKind == RefreshOutageNone
+}
+
+// SessionUnavailable reports a subject's connection that an outage stopped refreshing.
+func (t UpstreamToken) SessionUnavailable() bool {
+	return t.CredentialOwner == CredentialOwnerSubject && errors.Is(t.ClientCredentialErr, ErrRemoteSessionUnavailable)
 }
 
 // RemoteSessionsNeedReconnect reports whether any remote session subject must
@@ -1018,6 +1110,7 @@ func (s *RefreshService) refreshSessionTokens(
 	client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow,
 	sess remotesessions_repo.RemoteSession,
 	resource string,
+	postDeadline time.Time,
 ) (remotesessions_repo.RemoteSession, tokenResponse, error) {
 	var zero remotesessions_repo.RemoteSession
 	var noToken tokenResponse
@@ -1070,7 +1163,7 @@ func (s *RefreshService) refreshSessionTokens(
 
 	// One deadline bounds both POSTs so an unresponsive upstream cannot
 	// outlive the single-flight lease; the persist below still runs on ctx.
-	postCtx, cancel := context.WithTimeout(ctx, refreshUpstreamTimeout)
+	postCtx, cancel := context.WithDeadline(ctx, postDeadline)
 	defer cancel()
 
 	clientAuth := TokenEndpointClientAuth{
@@ -1317,10 +1410,13 @@ func (s *RefreshService) postRefreshGrant(
 
 	doer, err := upstreamHTTPDoer(noRedirectClient(s.policy.PooledClient()), s.tunnels, client.TunneledMcpServerID)
 	if err != nil {
-		return zero, newTokenRefreshError("the tunnel transport for this identity provider is unavailable", errors.Join(errRefreshTunnelTransport, err), refreshRemedyRetry)
+		return zero, newTokenRefreshError("the tunnel transport for this identity provider is unavailable", fmt.Errorf("%w: %w", errRefreshTunnelTransport, err), refreshRemedyRetry)
 	}
 
 	resp, err := doer.Do(req)
+	if errors.Is(err, tunnelrouting.ErrRouteStoreUnavailable) {
+		return zero, fmt.Errorf("post refresh: %w", err)
+	}
 	if err != nil {
 		return zero, fmt.Errorf("post refresh: %w: %w", errRefreshUpstreamUnreachable, err)
 	}
@@ -1328,16 +1424,17 @@ func (s *RefreshService) postRefreshGrant(
 
 	body, err := io.ReadAll(io.LimitReader(resp.Body, 64<<10))
 	if err != nil {
-		return zero, fmt.Errorf("read refresh response: %w: %w", errRefreshUpstreamUnreachable, err)
+		return zero, fmt.Errorf("read refresh response: %w: %w: %w", errRefreshUpstreamUnreachable, errRefreshUnusableAnswer, err)
 	}
 	if resp.StatusCode/100 != 2 {
 		refreshErr := newTokenRefreshErrorFromHTTP(resp.StatusCode, resp.Status, body)
 		refreshErr.tunnelError = resp.Header.Get(tunnelrouting.ErrorHeader)
+		refreshErr.retryAfter = parseRetryAfter(resp.Header.Get("Retry-After"), time.Now())
 		return zero, refreshErr
 	}
 	var tok tokenResponse
 	if err := json.Unmarshal(body, &tok); err != nil {
-		return zero, fmt.Errorf("decode refresh response: %w", err)
+		return zero, fmt.Errorf("decode refresh response: %w: %w", errRefreshUnusableAnswer, err)
 	}
 	tok.raw = body
 	if tok.AccessToken == "" {
