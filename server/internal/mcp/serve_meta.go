@@ -50,8 +50,8 @@ import (
 type metaGateContext struct {
 	projectID uuid.UUID
 	// metaServerID is a stored meta_mcp_servers row for an operator-built
-	// gateway, and a synthetic per-agent id for an agent gateway — see
-	// agentGatewayID. Treat it as a telemetry grouping key, never as
+	// gateway, and a synthetic per-agent id (agentgateway.GatewayID) for an
+	// agent gateway. Treat it as a telemetry grouping key, never as
 	// something to read a row back by.
 	metaServerID uuid.UUID
 	// agentID is set only when this request is an agent gateway, which

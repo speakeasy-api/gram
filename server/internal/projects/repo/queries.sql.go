@@ -409,6 +409,48 @@ func (q *Queries) ListApprovedOriginsByProjectID(ctx context.Context, projectID 
 	return items, nil
 }
 
+const listProjectNamesIncludingDeleted = `-- name: ListProjectNamesIncludingDeleted :many
+SELECT id, name, slug, deleted
+FROM projects
+WHERE organization_id = $1
+ORDER BY deleted ASC, created_at DESC
+`
+
+type ListProjectNamesIncludingDeletedRow struct {
+	ID      uuid.UUID
+	Name    string
+	Slug    string
+	Deleted bool
+}
+
+// Every project of an organization, deleted ones included, for labelling
+// records written while they existed. The deleted flag says whether the
+// project still has a page to link to.
+func (q *Queries) ListProjectNamesIncludingDeleted(ctx context.Context, organizationID string) ([]ListProjectNamesIncludingDeletedRow, error) {
+	rows, err := q.db.Query(ctx, listProjectNamesIncludingDeleted, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListProjectNamesIncludingDeletedRow
+	for rows.Next() {
+		var i ListProjectNamesIncludingDeletedRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.Name,
+			&i.Slug,
+			&i.Deleted,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listProjectsByOrganization = `-- name: ListProjectsByOrganization :many
 SELECT id, name, slug, organization_id, logo_asset_id, functions_runner_version, created_at, updated_at, deleted_at, deleted
 FROM projects

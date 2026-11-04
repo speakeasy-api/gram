@@ -9,6 +9,7 @@ import { LoggingPageHeader } from "@/components/observe/LoggingPageHeader";
 import { ErrorAlert } from "@/components/ui/Alert";
 import { Button } from "@/components/ui/Button";
 import { SimpleTooltip } from "@/components/ui/Tooltip";
+import { GatewayDispatchLink } from "@/components/observe/GatewayDispatchLink";
 import {
   FilterChip,
   type ObserveStatusFilterValue,
@@ -2033,18 +2034,7 @@ function LogsToolsTraceRow({
           )}
           {trace.viaMetaMcpServerId && (
             // The gateway that dispatched this member call.
-            <SimpleTooltip
-              tooltip={`Dispatched through gateway "${trace.viaMetaMcpServerName ?? trace.viaMetaMcpServerId}"`}
-            >
-              <Link
-                to={routes.mcp.gateway.overview.href(trace.viaMetaMcpServerId)}
-                onClick={(event) => event.stopPropagation()}
-                aria-label={`Dispatched through gateway "${trace.viaMetaMcpServerName ?? trace.viaMetaMcpServerId}"`}
-                className="flex shrink-0 items-center text-[var(--color-feedback-blue-700)] hover:text-[var(--color-feedback-blue-500)] dark:text-[var(--color-feedback-blue-500)] dark:hover:text-[var(--color-feedback-blue-400)]"
-              >
-                <Icon name="network" className="size-4" />
-              </Link>
-            </SimpleTooltip>
+            <GatewayDispatchLink trace={trace} />
           )}
         </div>
 
