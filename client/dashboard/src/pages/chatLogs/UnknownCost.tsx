@@ -8,13 +8,16 @@ import { UNKNOWN_COST_EXPLANATION } from "./claudeUsage";
  */
 export function UnknownCost({
   className,
+  focusable = true,
 }: {
   className?: string;
+  /** False inside a control that already takes focus, such as a row button. */
+  focusable?: boolean;
 }): JSX.Element {
   return (
     <SimpleTooltip tooltip={UNKNOWN_COST_EXPLANATION}>
       <span
-        tabIndex={0}
+        tabIndex={focusable ? 0 : undefined}
         aria-label={UNKNOWN_COST_EXPLANATION}
         className={cn("cursor-help tabular-nums", className)}
       >

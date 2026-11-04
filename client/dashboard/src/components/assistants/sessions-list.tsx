@@ -368,7 +368,7 @@ function SessionRow({
         {isCostUnknown(chat) && (
           <>
             <span className="text-muted-foreground/40">·</span>
-            <UnknownCost />
+            <UnknownCost focusable={false} />
           </>
         )}
         <span className="text-muted-foreground/40">·</span>
