@@ -51,12 +51,14 @@ type CanonicalFoldGate interface {
 }
 
 type Service struct {
-	tracer   trace.Tracer
-	logger   *slog.Logger
-	db       *pgxpool.Pool
-	chConn   driver.Conn
-	auth     *auth.Auth
-	authz    *authz.Engine
+	tracer trace.Tracer
+	logger *slog.Logger
+	db     *pgxpool.Pool
+	chConn driver.Conn
+	auth   *auth.Auth
+	authz  *authz.Engine
+	// client answers the decisions that have moved to typed operations.
+	client   *authz.Client
 	roleMgr  *RoleManager
 	audit    *audit.Logger
 	email    *email.Service
@@ -84,6 +86,7 @@ func NewService(
 	sessions *sessions.Manager,
 	roleMgr *RoleManager,
 	authz *authz.Engine,
+	authzClient *authz.Client,
 	auditLogger *audit.Logger,
 	emailService *email.Service,
 	orgHosts *orghost.Resolver,
@@ -98,6 +101,7 @@ func NewService(
 		chConn:   chConn,
 		auth:     auth.New(logger, db, sessions, authz),
 		authz:    authz,
+		client:   authzClient,
 		roleMgr:  roleMgr,
 		audit:    auditLogger,
 		email:    emailService,

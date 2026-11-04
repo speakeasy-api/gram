@@ -236,17 +236,24 @@ type AccessReadService struct {
 	// directoryReview backs the directory review tools; nil leaves them
 	// reporting unavailable.
 	directoryReview DirectoryReviewBackend
+	// pluginDisclosure decides whether matching role plugins may be shown.
+	// It has no migration router, so it always answers through the engine.
+	pluginDisclosure *authz.Client
 }
 
 func NewAccessReadService(logger *slog.Logger, db *pgxpool.Pool, budget OperationBudget, keyMaterial string) *AccessReadService {
 	if logger == nil {
-		return &AccessReadService{logger: nil, db: nil, roles: nil, budget: OperationBudget{Connection: nil, Organization: nil}, references: nil, now: nil, versionKey: nil, directoryReview: nil}
+		return &AccessReadService{logger: nil, db: nil, roles: nil, budget: OperationBudget{Connection: nil, Organization: nil}, references: nil, now: nil, versionKey: nil, directoryReview: nil, pluginDisclosure: nil}
 	}
 	references, err := newSubjectReferenceCodec(keyMaterial)
 	if err != nil {
 		logger.ErrorContext(context.Background(), "build Platform MCP access reference codec", attr.SlogError(err))
 	}
 	versionKey := sha256.Sum256([]byte("platform-mcp-access-role-version:" + keyMaterial))
+	pluginDisclosure, err := authz.NewDefaultClient(authz.NewEngine(logger, db, nil, nil))
+	if err != nil {
+		logger.ErrorContext(context.Background(), "build Platform MCP plugin disclosure authorization", attr.SlogError(err))
+	}
 	return &AccessReadService{
 		logger:     logger,
 		db:         db,
@@ -256,12 +263,13 @@ func NewAccessReadService(logger *slog.Logger, db *pgxpool.Pool, budget Operatio
 		now:        time.Now,
 		versionKey: versionKey[:],
 
-		directoryReview: nil,
+		directoryReview:  nil,
+		pluginDisclosure: pluginDisclosure,
 	}
 }
 
 func (s *AccessReadService) valid() bool {
-	return s != nil && s.db != nil && s.roles != nil && s.budget.valid() && s.references != nil && s.now != nil && len(s.versionKey) == sha256.Size
+	return s != nil && s.db != nil && s.roles != nil && s.budget.valid() && s.references != nil && s.pluginDisclosure != nil && s.now != nil && len(s.versionKey) == sha256.Size
 }
 
 func (s *AccessReadService) ListRoles(ctx context.Context, principal Principal) (ListAccessRolesOutput, error) {
@@ -640,7 +648,7 @@ func (s *AccessReadService) GetMCPAccess(ctx context.Context, principal Principa
 	for _, role := range roles.Roles {
 		principals = append(principals, role.PrincipalUrn)
 	}
-	matches, err := plugins.RolePluginsForResource(ctx, s.db, authz.NewEngine(s.logger, s.db, nil, nil), principal.OrganizationID, projectID, mcpID, principals)
+	matches, err := plugins.RolePluginsForResource(ctx, s.db, s.pluginDisclosure, principal.OrganizationID, projectID, mcpID, principals)
 	if err != nil {
 		return GetMCPAccessOutput{}, fmt.Errorf("read MCP role plugins: %w", err)
 	}

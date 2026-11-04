@@ -61,7 +61,7 @@ func TestRolePluginsForResource(t *testing.T) {
 	}
 	read := func(ctx context.Context, organization string, project, resource uuid.UUID) []pluginsrepo.ListRolePluginsForResourceRow {
 		t.Helper()
-		rows, err := plugins.RolePluginsForResource(ctx, ti.conn, ti.service.authz, organization, project, resource, []string{"role:admin", "user:all"})
+		rows, err := plugins.RolePluginsForResource(ctx, ti.conn, ti.service.client, organization, project, resource, []string{"role:admin", "user:all"})
 		require.NoError(t, err)
 		return rows
 	}
