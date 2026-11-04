@@ -62,7 +62,7 @@ func sessionStatus(t *testing.T, ctx context.Context, env syntheticExpiryEnv) re
 
 func requireNoToken(t *testing.T, ctx context.Context, env syntheticExpiryEnv) {
 	t.Helper()
-	token, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+	token, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 	require.NoError(t, err)
 	require.Empty(t, token)
 }
@@ -119,7 +119,7 @@ func TestRemoteLoginCallback_UnusableLifetimeIsUnreported(t *testing.T) {
 			require.False(t, env.session.AuthorizationExpiresAt.Valid)
 			require.False(t, env.session.RefreshExpiresAt.Valid)
 			require.Equal(t, remotesessions.RemoteSessionActive, sessionStatus(t, ctx, env))
-			token, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+			token, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 			require.NoError(t, err)
 			require.Equal(t, "live-access", token)
 		})
@@ -186,7 +186,7 @@ func TestReconnectRecoversGrantStoredDead(t *testing.T) {
 			require.False(t, row.AuthorizationExpiresAt.Valid)
 			require.False(t, row.RefreshExpiresAt.Valid)
 			require.Equal(t, remotesessions.RemoteSessionActive, sessionStatus(t, ctx, env))
-			token, err := env.mgr.ResolveAccessToken(ctx, env.clientID, env.subject, "")
+			token, err := env.mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, env.clientID, env.subject, "")
 			require.NoError(t, err)
 			require.Equal(t, "reconnected-access", token)
 		})
@@ -225,7 +225,7 @@ func TestRefreshHandlesUnusableLifetimes(t *testing.T) {
 			})
 			known, knownRefresh := env.session.AuthorizationExpiresAt.Time, env.session.RefreshExpiresAt.Time
 
-			_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled)
+			_, err := env.refresher.RefreshNow(ctx, env.session, "", remotesessionmetrics.RefreshTriggerScheduled, remotesessions.RefreshAttribution{})
 			require.NoError(t, err)
 
 			row := activeSession(t, ctx, env)

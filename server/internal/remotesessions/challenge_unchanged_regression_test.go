@@ -191,7 +191,7 @@ func TestRefreshGrant_Unchanged_ResourceSentWhenIndicatorSupportUnset(t *testing
 	require.NoError(t, err)
 	require.False(t, client.ResourceIndicatorSupported.Valid, "the issuer's flag starts NULL")
 
-	tok, err := mgr.ResolveAccessToken(ctx, clientID, subject, unchangedResource)
+	tok, err := mgr.ResolveAccessToken(ctx, remotesessions.RefreshAttribution{}, clientID, subject, unchangedResource)
 	require.NoError(t, err)
 	require.NoError(t, spy.handlerErr)
 	require.Equal(t, "refreshed-access", tok)

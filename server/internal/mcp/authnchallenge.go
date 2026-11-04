@@ -1056,6 +1056,12 @@ type issuerGateAuthentication struct {
 	// unattached agent key's permit was decided for, typed or handed back.
 	authorizerOwner string
 
+	// skippedUpstreams says why partial resolution left a client out; nil off a gateway.
+	skippedUpstreams *remotesessions.SkippedClients
+
+	// request is the caller's request, read only if a row is written.
+	request *http.Request
+
 	// agentKeyClients, when not nil, are the only clients an agent key
 	// without a credential choice is served by on a direct endpoint: the
 	// server's own clients, each with the connection its permit was decided
@@ -1081,6 +1087,7 @@ type issuerGateAuthentication struct {
 func (s *Service) authenticateIssuerGate(
 	ctx context.Context,
 	w http.ResponseWriter,
+	r *http.Request,
 	authToken, baseURL string,
 	endpoint *ResolvedMcpEndpoint,
 ) (context.Context, *issuerGateAuthentication, *toolfilter.SessionPolicy, error) {
@@ -1199,6 +1206,8 @@ func (s *Service) authenticateIssuerGate(
 		chainingAuthClient:     nil,
 		attachedSession:        uuid.Nil,
 		authorizerOwner:        "",
+		skippedUpstreams:       nil,
+		request:                r,
 		agentKeyClients:        nil,
 	}, toolSelection, nil
 }
@@ -1221,6 +1230,7 @@ func (s *Service) resolveIssuerGateAccessTokens(ctx context.Context, w http.Resp
 	// all-or-nothing ErrNoValidToken challenge below stays for direct
 	// endpoints, whose toolset dispatch has no per-upstream routing (AIS-152).
 	if endpoint.MetaMcpServerID.Valid {
+		authentication.skippedUpstreams = new(remotesessions.SkippedClients)
 		tokens, err := s.resolveAccessTokens(ctx, authentication, true)
 		if err != nil {
 			return nil, oops.E(oops.CodeUnexpected, err, "resolve remote session").LogError(ctx, s.logger)
@@ -1364,10 +1374,11 @@ func (s *Service) subjectReauthorizesToReconnect(ctx context.Context, organizati
 func (s *Service) ApplyIssuerGate(
 	ctx context.Context,
 	w http.ResponseWriter,
+	r *http.Request,
 	authToken, baseURL string,
 	endpoint *ResolvedMcpEndpoint,
 ) (context.Context, map[uuid.UUID]remotesessions.UpstreamToken, *toolfilter.SessionPolicy, error) {
-	newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, authToken, baseURL, endpoint)
+	newCtx, authentication, toolSelection, err := s.authenticateIssuerGate(ctx, w, r, authToken, baseURL, endpoint)
 	if err != nil {
 		return ctx, nil, nil, err
 	}

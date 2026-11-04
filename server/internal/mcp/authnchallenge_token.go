@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
@@ -883,7 +884,7 @@ func (s *Service) handleTokenAuthorizationCodeGrant(
 		}
 		// Attachments may be revoked between consent and code exchange.
 		// Recheck before persisting an agent session or issuing its tokens.
-		if cerr := s.remoteChallengeMgr.CheckAccessTokens(authorizationCtx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject); cerr != nil {
+		if cerr := s.remoteChallengeMgr.CheckAccessTokens(authorizationCtx, remotesessions.RefreshIn(connectionScope(endpoint, mcpconnectionattempts.AppOf(grant.ClientID))).InAttempt(grant.Attempt).FromRequest(r), endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject); cerr != nil {
 			if errors.Is(cerr, remotesessions.ErrRemoteSessionUnavailable) {
 				return remoteSessionUnavailableError(w, cerr).LogWarn(ctx, logger)
 			}
@@ -1045,8 +1046,13 @@ func (s *Service) handleTokenRefreshTokenGrant(
 ) error {
 	req := usersessions.RefreshTokenRequestFromForm(r.PostForm)
 	req.SetDefaults()
+	tracker := s.connections.Track(connectionScope(endpoint, mcpconnectionattempts.AppOf(clientRow.ClientID)), mcpconnectionattempts.StepInboundToken,
+		mcpconnectionattempts.Grant(oauthwire.GrantTypeRefreshToken), mcpconnectionattempts.UserSessionClient(clientRow.ID), mcpconnectionattempts.UserSessionIssuer(endpoint.UserSessionIssuerID))
+	defer tracker.Finish(ctx)
+
 	if err := req.Validate(); err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "invalid_request")
+		refuseInboundRefresh(ctx, tracker, r, "invalid_request")
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
 
@@ -1061,6 +1067,7 @@ func (s *Service) handleTokenRefreshTokenGrant(
 	}
 	if err := oauthwire.ValidateResourceIndicators(req.Resources, canonicalResource); err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "resource_mismatch")
+		refuseInboundRefresh(ctx, tracker, r, "resource_mismatch")
 		s.recordSharedTokenResourceMismatch(ctx, logger, endpoint, req.Resources)
 		return writeTokenOAuthError(ctx, w, logger, http.StatusBadRequest, err)
 	}
@@ -1083,7 +1090,7 @@ func (s *Service) handleTokenRefreshTokenGrant(
 		// A completed outcome is authoritative and avoids renewing a coordination
 		// lock after the original winner has already published.
 		if replay, replayErr := s.userSessionRefreshReplayCache.Get(ctx, replayKey); replayErr == nil {
-			return s.writeRefreshTokenReplay(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, replayKey, replay, logger)
+			return s.writeRefreshTokenReplay(ctx, tracker, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, replayKey, replay, logger)
 		}
 
 		rotationWinner := !waitForWinner
@@ -1107,6 +1114,7 @@ func (s *Service) handleTokenRefreshTokenGrant(
 		if rotationWinner {
 			releaseLease, rotationErr := s.rotateRefreshToken(
 				ctx,
+				tracker,
 				w,
 				r,
 				endpoint,
@@ -1143,11 +1151,12 @@ func (s *Service) handleTokenRefreshTokenGrant(
 
 		replay, replayErr := s.userSessionRefreshReplayCache.Get(ctx, replayKey)
 		if replayErr == nil {
-			return s.writeRefreshTokenReplay(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, replayKey, replay, logger)
+			return s.writeRefreshTokenReplay(ctx, tracker, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, replayKey, replay, logger)
 		}
 		if !errors.Is(replayErr, redisCache.ErrCacheMiss) {
 			logger.WarnContext(ctx, "failed to read refresh token replay response", attr.SlogError(replayErr))
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay unavailable", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_cache_error")
+			tracker.Continue()
 			return writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "refresh token rotation is still in progress")
 		}
 
@@ -1155,16 +1164,19 @@ func (s *Service) handleTokenRefreshTokenGrant(
 		case <-ctx.Done():
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay interrupted", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_context_cancelled")
 			if errors.Is(ctx.Err(), context.DeadlineExceeded) {
+				tracker.Continue()
 				return writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "refresh token rotation is still in progress")
 			}
+			tracker.Continue()
 			return oops.E(oops.CodeCanceled, ctx.Err(), "wait for refresh token rotation")
 		case <-timeout.C:
 			if replay, finalErr := s.userSessionRefreshReplayCache.Get(ctx, replayKey); finalErr == nil {
-				return s.writeRefreshTokenReplay(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, replayKey, replay, logger)
+				return s.writeRefreshTokenReplay(ctx, tracker, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, replayKey, replay, logger)
 			} else if !errors.Is(finalErr, redisCache.ErrCacheMiss) {
 				logger.WarnContext(ctx, "failed final refresh token replay lookup", attr.SlogError(finalErr))
 			}
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay unavailable", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_wait_timeout")
+			tracker.Continue()
 			return writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "refresh token rotation is still in progress")
 		case <-poll.C:
 			pollWait = min(pollWait*2, refreshTokenReplayMaxPollWait)
@@ -1175,6 +1187,7 @@ func (s *Service) handleTokenRefreshTokenGrant(
 
 func (s *Service) rotateRefreshToken(
 	ctx context.Context,
+	tracker *mcpconnectionattempts.Tracker,
 	w http.ResponseWriter,
 	r *http.Request,
 	endpoint *ResolvedMcpEndpoint,
@@ -1217,20 +1230,26 @@ func (s *Service) rotateRefreshToken(
 			if admissionErr != nil {
 				var rolloutErr *oops.ShareableError
 				if errors.As(admissionErr, &rolloutErr) && rolloutErr.Code == oops.CodeNotFound {
+					tracker.Continue()
 					return true, admissionErr
 				}
 				logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
+				refuseInboundRefresh(ctx, tracker, r, agentAdmissionRejection(admissionErr), mcpconnectionattempts.Subject(&refreshSession.SubjectUrn))
 				return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
 			}
 			admittedAgentSessionID = refreshSession.ID
 		}
 	}
+	upstreamCheck := upstreamRefreshServed
 	if lookupErr == nil &&
 		refreshSession.UserSessionClientID.Valid && refreshSession.UserSessionClientID.UUID == clientRow.ID &&
-		refreshSession.RefreshExpiresAt.Valid && refreshSession.RefreshExpiresAt.Time.After(time.Now()) &&
-		s.refreshNeedsUpstreamReconnect(ctx, logger, endpoint, refreshSession.SubjectUrn, refreshSession.Jti) {
-		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "upstream_reconnect_required", attr.SlogUserSessionSubjectKind(string(refreshSession.SubjectUrn.Kind)))
-		return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, remoteSessionReconnectDescription)
+		refreshSession.RefreshExpiresAt.Valid && refreshSession.RefreshExpiresAt.Time.After(time.Now()) {
+		upstreamCheck = s.refreshNeedsUpstreamReconnect(ctx, logger, endpoint, refreshSession.SubjectUrn, refreshSession.Jti)
+		if upstreamCheck.reconnect() {
+			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "upstream_reconnect_required", attr.SlogUserSessionSubjectKind(string(refreshSession.SubjectUrn.Kind)))
+			refuseInboundRefresh(ctx, tracker, r, string(upstreamCheck), mcpconnectionattempts.Subject(&refreshSession.SubjectUrn))
+			return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, remoteSessionReconnectDescription)
+		}
 	}
 
 	dbtx, err := s.db.BeginTx(ctx, pgx.TxOptions{
@@ -1254,11 +1273,17 @@ func (s *Service) rotateRefreshToken(
 		ID: endpoint.UserSessionIssuerID, ProjectID: endpoint.ProjectID, OrganizationID: endpoint.OrganizationID,
 	}); err != nil {
 		if errors.Is(err, pgx.ErrNoRows) {
+			if lookupErr == nil {
+				tracker.Refuse(ctx, mcpconnectionattempts.CodeRefreshTokenRevoked, mcpconnectionattempts.Detail("issuer_retired"), mcpconnectionattempts.Subject(&refreshSession.SubjectUrn), mcpconnectionattempts.FromRequest(r))
+			} else {
+				tracker.Continue()
+			}
 			return true, oops.NewOAuthError(http.StatusBadRequest, oautherr.CodeInvalidGrant, "authorization issuer is no longer available", err)
 		}
 		var pgErr *pgconn.PgError
 		if errors.As(err, &pgErr) && pgErr.Code == pgerrcode.SerializationFailure {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request deferred", clientRow.ClientID, presentedAuthMethod, "refresh_token", "issuer_changed_during_rotation")
+			tracker.Continue()
 			return true, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "the identity provider changed during rotation; retry")
 		}
 		return true, oops.E(oops.CodeUnexpected, err, "lock user session issuer for refresh token rotation").LogError(ctx, logger)
@@ -1276,11 +1301,13 @@ func (s *Service) rotateRefreshToken(
 		switch {
 		case errors.As(err, &pgErr) && pgErr.Code == pgerrcode.SerializationFailure:
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request deferred", clientRow.ClientID, presentedAuthMethod, "refresh_token", "sign_in_changed_during_rotation")
+			tracker.Continue()
 			return true, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "the sign-in changed during rotation; retry")
 		case err != nil && !errors.Is(err, pgx.ErrNoRows):
 			return true, oops.E(oops.CodeUnexpected, err, "lock sign-in for refresh token rotation").LogError(ctx, logger)
 		case err == nil && (signIn.Fenced || (signIn.RevokedAt.Valid && signIn.RevokeReason.String != string(signins.RevokeReasonSignOut))):
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "sign_in_revoked")
+			refuseInboundRefresh(ctx, tracker, r, "sign_in_revoked", mcpconnectionattempts.Subject(&refreshSession.SubjectUrn))
 			return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "the sign-in that authorized this grant was revoked; sign in again")
 		}
 	}
@@ -1308,16 +1335,18 @@ func (s *Service) rotateRefreshToken(
 			// during a Redis reconnect. Adopt a completed winner when possible.
 			replay, replayErr := s.userSessionRefreshReplayCache.Get(ctx, replayKey)
 			if replayErr == nil {
-				return true, s.writeRefreshTokenReplay(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, replayKey, replay, logger)
+				return true, s.writeRefreshTokenReplay(ctx, tracker, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, replayKey, replay, logger)
 			}
 			if !errors.Is(replayErr, redisCache.ErrCacheMiss) {
 				logger.WarnContext(ctx, "failed to read refresh token replay after database claim loss", attr.SlogError(replayErr))
+				tracker.Continue()
 				return true, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "refresh token rotation outcome is unavailable")
 			}
 
 			if !canPublishFailure {
 				// Without an owned coordination lease, a missing active row is
 				// indistinguishable from another winner's unpublished commit.
+				tracker.Continue()
 				return true, writeTokenError(ctx, w, logger, http.StatusServiceUnavailable, "temporarily_unavailable", "refresh token rotation outcome is unavailable")
 			}
 
@@ -1328,10 +1357,11 @@ func (s *Service) rotateRefreshToken(
 			)
 			if !published {
 				if existing, existingErr := s.userSessionRefreshReplayCache.Get(ctx, replayKey); existingErr == nil {
-					return true, s.writeRefreshTokenReplay(ctx, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, replayKey, existing, logger)
+					return true, s.writeRefreshTokenReplay(ctx, tracker, w, r, endpoint, clientRow, baseURL, presentedAuthMethod, replayKey, existing, logger)
 				}
 			}
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_unknown_or_already_used")
+			refuseInboundRefresh(ctx, tracker, r, "refresh_token_unknown_or_already_used")
 			return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token is unknown or already used")
 		}
 		return true, oops.E(oops.CodeUnexpected, err, "revoke old refresh token").LogError(ctx, logger)
@@ -1349,6 +1379,7 @@ func (s *Service) rotateRefreshToken(
 	}
 	if oldSession.Resource.String != sessionResource {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_resource_mismatch")
+		refuseInboundRefresh(ctx, tracker, r, "refresh_token_resource_mismatch", mcpconnectionattempts.Subject(&oldSession.SubjectUrn))
 		return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "refresh_token was issued for a different resource")
 	}
 
@@ -1372,6 +1403,7 @@ func (s *Service) rotateRefreshToken(
 			logger,
 		)
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_client_mismatch")
+		refuseInboundRefresh(ctx, tracker, r, "refresh_token_client_mismatch", mcpconnectionattempts.Subject(&oldSession.SubjectUrn))
 		return published, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token was issued to a different client")
 	}
 
@@ -1393,6 +1425,7 @@ func (s *Service) rotateRefreshToken(
 			logger,
 		)
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_expired")
+		refuseInboundRefresh(ctx, tracker, r, "refresh_token_expired", mcpconnectionattempts.Subject(&oldSession.SubjectUrn))
 		return published, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token has expired")
 	}
 
@@ -1405,10 +1438,12 @@ func (s *Service) rotateRefreshToken(
 	oldSelection, perr := toolfilter.ParseSessionPolicy(oldSession.ToolSelection)
 	if perr != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "tool_selection_malformed")
+		refuseInboundRefresh(ctx, tracker, r, "tool_selection_malformed", mcpconnectionattempts.Subject(&oldSession.SubjectUrn))
 		return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "session tool selection is malformed; reauthorize")
 	}
 	if oldSelection != nil && oldSelection.Resource != endpointToolSelectionResource(endpoint) {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "tool_selection_resource_mismatch")
+		refuseInboundRefresh(ctx, tracker, r, "tool_selection_resource_mismatch", mcpconnectionattempts.Subject(&oldSession.SubjectUrn))
 		return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "session tool selection is bound to a different MCP endpoint; reauthorize")
 	}
 	if oldSession.SubjectUrn.Kind == urn.SessionSubjectKindAgent {
@@ -1423,6 +1458,7 @@ func (s *Service) rotateRefreshToken(
 		}
 		if admissionErr != nil {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token request rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
+			refuseInboundRefresh(ctx, tracker, r, agentAdmissionRejection(admissionErr), mcpconnectionattempts.Subject(&oldSession.SubjectUrn))
 			return true, writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
 		}
 		ctx = admittedAgentContext
@@ -1484,6 +1520,14 @@ func (s *Service) rotateRefreshToken(
 		logger.WarnContext(postCommitCtx, "failed to revoke old access token jti on refresh", attr.SlogError(revokeErr))
 	}
 
+	switch upstreamCheck {
+	case upstreamRefreshUnverified:
+		tracker.Refuse(ctx, mcpconnectionattempts.CodeRefreshedUnverified, mcpconnectionattempts.Subject(&minted.Subject), mcpconnectionattempts.FromRequest(r))
+	case upstreamRefreshCheckFailed:
+		tracker.Succeed(ctx, mcpconnectionattempts.ResultRefreshed, mcpconnectionattempts.Subject(&minted.Subject), mcpconnectionattempts.Detail(string(upstreamRefreshCheckFailed)), mcpconnectionattempts.FromRequest(r))
+	case upstreamRefreshServed, upstreamRefreshReconnect, upstreamRefreshEMARefused:
+		tracker.Succeed(ctx, mcpconnectionattempts.ResultRefreshed, mcpconnectionattempts.Subject(&minted.Subject), mcpconnectionattempts.FromRequest(r))
+	}
 	return published, writeTokenSuccess(ctx, w, logger, minted.Body)
 }
 
@@ -1510,16 +1554,16 @@ func (s *Service) rotateRefreshToken(
 // provider just refused chaining for good, which only the consent page's
 // separate sign-in works around. Anything chaining cannot confirm, a failed
 // read included, fails open, because no reconnect would change it.
-func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, jti string) bool {
+func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, jti string) upstreamRefreshCheck {
 	switch subject.Kind {
 	case urn.SessionSubjectKindUser, urn.SessionSubjectKindAgent, urn.SessionSubjectKindWorkload, urn.SessionSubjectKindAnonymous:
 	case urn.SessionSubjectKindAPIKey:
-		return false
+		return upstreamRefreshServed
 	default:
-		return false
+		return upstreamRefreshServed
 	}
 	if endpoint.MetaMcpServerID.Valid {
-		return false
+		return upstreamRefreshServed
 	}
 	// Where the auth client resolver serves the organization, a choice it
 	// cannot use sends the session to reconnect rather than refreshing into
@@ -1527,35 +1571,35 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 	if reconnect, decided, err := s.refreshNeedsAuthClientReconnect(ctx, endpoint, subject, jti); err != nil {
 		logger.WarnContext(ctx, "resolve auth client before refresh", attr.SlogError(err))
 	} else if decided {
-		return reconnect
+		return upstreamRefreshOf(reconnect)
 	}
 	reauthorizes := s.subjectReauthorizesToReconnect(ctx, endpoint.OrganizationID, subject)
 	routing := consentRouting{backend: consentBackendNone, upstream: endpoint.UpstreamResource, members: nil}
 	tunneled, proxied, err := s.consentDirectBackend(ctx, endpoint, routing)
 	if err != nil {
-		return false
+		return upstreamRefreshCheckFailed
 	}
 	if !proxied {
 		if !reauthorizes {
-			return false
+			return upstreamRefreshServed
 		}
 		reconnect, err := s.remoteChallengeMgr.RemoteSessionsNeedReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject)
 		if err != nil {
 			logger.WarnContext(ctx, "check upstream remote sessions before refresh", attr.SlogError(err))
-			return false
+			return upstreamRefreshCheckFailed
 		}
-		return reconnect
+		return upstreamRefreshOf(reconnect)
 	}
 
 	choice, err := s.refreshUpstreamChoice(ctx, endpoint, jti)
 	switch {
 	case errors.Is(err, errUpstreamSelectionMissing), errors.Is(err, errUpstreamSelectionUnusable):
-		return true
+		return upstreamRefreshReconnect
 	case err != nil:
 		logger.WarnContext(ctx, "load upstream client choice before refresh", attr.SlogError(err))
-		return false
+		return upstreamRefreshCheckFailed
 	case choice.noAuth(), !reauthorizes:
-		return false
+		return upstreamRefreshServed
 	}
 	routing.backend = consentBackendRemote
 	if tunneled {
@@ -1564,18 +1608,17 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 	reconnect, err := s.remoteChallengeMgr.ClientNeedsReconnect(ctx, endpoint.ProjectID, endpoint.OrganizationID, endpoint.UserSessionIssuerID, subject, choice.clientID.UUID)
 	if err != nil {
 		logger.WarnContext(ctx, "check chosen upstream remote session before refresh", attr.SlogError(err))
-		return false
+		return upstreamRefreshCheckFailed
 	}
-	// Identity chaining vouches for a known user, which an anonymous subject is not.
 	if !reconnect || s.identityChainer == nil || subject.Kind != urn.SessionSubjectKindUser || subject.ID == "" {
-		return reconnect
+		return upstreamRefreshOf(reconnect)
 	}
 	req, ok, err := s.directChainingRequest(ctx, endpoint, subject.ID, routing, choice)
 	switch {
 	case err != nil:
-		return false
+		return upstreamRefreshCheckFailed
 	case !ok:
-		return true
+		return upstreamRefreshReconnect
 	}
 	req.UserSessionJTI = jti
 	verdict := s.identityChainer.RefreshDecision(ctx, req)
@@ -1586,12 +1629,16 @@ func (s *Service) refreshNeedsUpstreamReconnect(ctx context.Context, logger *slo
 		attr.SlogRemoteSessionIssuerID(verdict.RemoteSessionIssuerID.String()),
 	)
 	switch verdict.Decision {
-	case identitychaining.RefreshServed, identitychaining.RefreshUnconfirmed:
-		return false
-	case identitychaining.RefreshNotChained, identitychaining.RefreshReauthenticate, identitychaining.RefreshRefused:
-		return true
+	case identitychaining.RefreshServed:
+		return upstreamRefreshServed
+	case identitychaining.RefreshUnconfirmed:
+		return unconfirmedRefreshCheck(verdict.Reason)
+	case identitychaining.RefreshRefused:
+		return upstreamRefreshEMARefused
+	case identitychaining.RefreshNotChained, identitychaining.RefreshReauthenticate:
+		return upstreamRefreshReconnect
 	}
-	return true
+	return upstreamRefreshReconnect
 }
 
 func (s *Service) releaseRefreshTokenReplayLock(ctx context.Context, lockKey, lockOwner string, logger *slog.Logger) {
@@ -1612,6 +1659,7 @@ func (s *Service) releaseRefreshTokenReplayLock(ctx context.Context, lockKey, lo
 
 func (s *Service) writeRefreshTokenReplay(
 	ctx context.Context,
+	tracker *mcpconnectionattempts.Tracker,
 	w http.ResponseWriter,
 	r *http.Request,
 	endpoint *ResolvedMcpEndpoint,
@@ -1642,10 +1690,12 @@ func (s *Service) writeRefreshTokenReplay(
 			failureReason = "refresh_token_replay_rejected"
 		}
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", failureReason)
+		refuseInboundRefresh(ctx, tracker, r, failureReason, mcpconnectionattempts.Subject(payload.Subject))
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", payload.ErrorDescription)
 	}
 	if payload.ClientID != clientRow.ID {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_client_mismatch")
+		refuseInboundRefresh(ctx, tracker, r, "refresh_token_client_mismatch", mcpconnectionattempts.Subject(payload.Subject))
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token was issued to a different client")
 	}
 	// Re-signing below moves an issuer-scoped session between surfaces of the
@@ -1657,10 +1707,12 @@ func (s *Service) writeRefreshTokenReplay(
 	}
 	if payload.Resource != sessionResource {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_resource_mismatch")
+		refuseInboundRefresh(ctx, tracker, r, "refresh_token_resource_mismatch", mcpconnectionattempts.Subject(payload.Subject))
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "refresh_token was issued for a different resource")
 	}
 	if now := time.Now(); !payload.AccessExpiresAt.After(now) || !payload.AuthorizationExpiresAt.After(now) {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_expired")
+		refuseInboundRefresh(ctx, tracker, r, "refresh_token_expired", mcpconnectionattempts.Subject(payload.Subject))
 		return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refresh_token has expired")
 	}
 	if payload.Subject == nil {
@@ -1676,6 +1728,7 @@ func (s *Service) writeRefreshTokenReplay(
 		}
 		if reason, ok := check(ctx, endpoint, payload.JTI); !ok {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", reason)
+			refuseInboundRefresh(ctx, tracker, r, reason, mcpconnectionattempts.Subject(payload.Subject))
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, oautherr.CodeInvalidGrant, "refreshed session is no longer active; sign in again")
 		}
 	}
@@ -1696,6 +1749,7 @@ func (s *Service) writeRefreshTokenReplay(
 		if err != nil {
 			if errors.Is(err, pgx.ErrNoRows) {
 				logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_revoked")
+				refuseInboundRefresh(ctx, tracker, r, "refresh_token_revoked", mcpconnectionattempts.Subject(payload.Subject))
 				return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refreshed session is no longer active")
 			}
 			return oops.E(oops.CodeUnexpected, err, "load refreshed session for replay").LogError(ctx, logger)
@@ -1703,10 +1757,12 @@ func (s *Service) writeRefreshTokenReplay(
 		if !replaySession.UserSessionClientID.Valid || replaySession.UserSessionClientID.UUID != clientRow.ID ||
 			replaySession.SubjectUrn.String() != payload.Subject.String() || !replaySession.ExpiresAt.Valid || !replaySession.ExpiresAt.Time.After(time.Now()) {
 			logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_session_mismatch")
+			refuseInboundRefresh(ctx, tracker, r, "refresh_token_replay_session_mismatch", mcpconnectionattempts.Subject(payload.Subject))
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "refreshed session is no longer active")
 		}
 		policy, policyErr := toolfilter.ParseSessionPolicy(replaySession.ToolSelection)
 		if policyErr != nil || (policy != nil && !endpointAcceptsToolSelectionResource(endpoint, policy.Resource)) {
+			tracker.Refuse(ctx, mcpconnectionattempts.CodeRefreshTokenRevoked, mcpconnectionattempts.Detail("session_policy_invalid"), mcpconnectionattempts.Subject(payload.Subject), mcpconnectionattempts.FromRequest(r))
 			return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "session policy is invalid for this MCP endpoint; reauthorize")
 		}
 		if payload.Subject.Kind == urn.SessionSubjectKindAgent {
@@ -1724,9 +1780,11 @@ func (s *Service) writeRefreshTokenReplay(
 			if cerr != nil {
 				var rolloutErr *oops.ShareableError
 				if errors.As(cerr, &rolloutErr) && rolloutErr.Code == oops.CodeNotFound {
+					tracker.Continue()
 					return cerr
 				}
 				logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay rejected", clientRow.ClientID, presentedAuthMethod, "refresh_token", "agent_admission_denied")
+				refuseInboundRefresh(ctx, tracker, r, agentAdmissionRejection(cerr), mcpconnectionattempts.Subject(payload.Subject))
 				return writeTokenError(ctx, w, logger, http.StatusBadRequest, "invalid_grant", "agent authorization is no longer valid; reauthorize")
 			}
 		}
@@ -1759,10 +1817,12 @@ func (s *Service) writeRefreshTokenReplay(
 	}
 	if err := writeTokenSuccess(ctx, w, logger, body); err != nil {
 		logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay failed", clientRow.ClientID, presentedAuthMethod, "refresh_token", "refresh_token_replay_write_error")
+		tracker.Continue()
 		return err
 	}
 
 	logOAuthClientCredentialEvent(ctx, logger, r, "oauth refresh_token replay served", clientRow.ClientID, presentedAuthMethod, "refresh_token", "")
+	tracker.Succeed(ctx, mcpconnectionattempts.ResultRefreshReplayed, mcpconnectionattempts.Subject(payload.Subject), mcpconnectionattempts.FromRequest(r))
 	s.metrics.RecordOAuthRefreshTokenReplayServed(ctx, endpoint.UserSessionIssuerID.String(), endpoint.Slug)
 	return nil
 }
