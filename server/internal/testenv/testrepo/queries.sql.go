@@ -1757,6 +1757,23 @@ func (q *Queries) ExpirePlatformMCPSetupHandoffFixture(ctx context.Context, id u
 	return err
 }
 
+const expirePrincipalGrantFixture = `-- name: ExpirePrincipalGrantFixture :execrows
+UPDATE principal_grants
+SET expires_at = clock_timestamp()
+WHERE id = $1
+  AND expires_at IS NOT NULL
+`
+
+// Test-only fixture: moves a temporary grant's deadline into the past so
+// tests can observe expiry without waiting for it.
+func (q *Queries) ExpirePrincipalGrantFixture(ctx context.Context, id uuid.UUID) (int64, error) {
+	result, err := q.db.Exec(ctx, expirePrincipalGrantFixture, id)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const expireRemoteSessionAccessTokenFixture = `-- name: ExpireRemoteSessionAccessTokenFixture :exec
 UPDATE remote_sessions
 SET access_expires_at = clock_timestamp() - interval '1 minute'
@@ -2675,6 +2692,18 @@ func (q *Queries) GetPreparationFixtureRegistration(ctx context.Context, arg Get
 		&i.ClientSecretEncrypted,
 	)
 	return i, err
+}
+
+const getPrincipalGrantExpiresAtFixture = `-- name: GetPrincipalGrantExpiresAtFixture :one
+SELECT expires_at FROM principal_grants WHERE id = $1
+`
+
+// Test-only fixture: reads a grant row's deadline (NULL when permanent).
+func (q *Queries) GetPrincipalGrantExpiresAtFixture(ctx context.Context, id uuid.UUID) (pgtype.Timestamptz, error) {
+	row := q.db.QueryRow(ctx, getPrincipalGrantExpiresAtFixture, id)
+	var expires_at pgtype.Timestamptz
+	err := row.Scan(&expires_at)
+	return expires_at, err
 }
 
 const getPrincipalRemoteSessionBindingIssuerFixture = `-- name: GetPrincipalRemoteSessionBindingIssuerFixture :one
@@ -6588,6 +6617,25 @@ func (q *Queries) SetDeviceAgentServedEtagFixture(ctx context.Context, arg SetDe
 	return err
 }
 
+const setDeviceAgentStateReportOSFixture = `-- name: SetDeviceAgentStateReportOSFixture :exec
+UPDATE device_agent_state_reports
+SET os = $1
+WHERE organization_id = $2
+  AND email = $3
+`
+
+type SetDeviceAgentStateReportOSFixtureParams struct {
+	Os             pgtype.Text
+	OrganizationID string
+	Email          string
+}
+
+// Sets the OS a user's state reports carry, as their agent would report it.
+func (q *Queries) SetDeviceAgentStateReportOSFixture(ctx context.Context, arg SetDeviceAgentStateReportOSFixtureParams) error {
+	_, err := q.db.Exec(ctx, setDeviceAgentStateReportOSFixture, arg.Os, arg.OrganizationID, arg.Email)
+	return err
+}
+
 const setDeviceAgentStateReportUpdateFixture = `-- name: SetDeviceAgentStateReportUpdateFixture :exec
 UPDATE device_agent_state_reports
 SET auto_update = $1
@@ -6920,6 +6968,25 @@ func (q *Queries) SetMcpMetadataHeaderDisplayNamesFixture(ctx context.Context, a
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const setMdmDeviceOSNameFixture = `-- name: SetMdmDeviceOSNameFixture :exec
+UPDATE mdm_devices
+SET os_name = $1
+WHERE organization_id = $2
+  AND external_id = $3
+`
+
+type SetMdmDeviceOSNameFixtureParams struct {
+	OsName         pgtype.Text
+	OrganizationID string
+	ExternalID     string
+}
+
+// Sets the OS name an MDM reported for a device.
+func (q *Queries) SetMdmDeviceOSNameFixture(ctx context.Context, arg SetMdmDeviceOSNameFixtureParams) error {
+	_, err := q.db.Exec(ctx, setMdmDeviceOSNameFixture, arg.OsName, arg.OrganizationID, arg.ExternalID)
+	return err
 }
 
 const setMetaMCPServerNetworkAccessModeFixture = `-- name: SetMetaMCPServerNetworkAccessModeFixture :execrows

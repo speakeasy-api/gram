@@ -318,7 +318,7 @@ func ListTypedTools(
 		if urnPrefix != "" && !strings.HasPrefix(descriptor.ToolURN().String(), urnPrefix) {
 			continue
 		}
-		tools = append(tools, descriptor.ToTool(projectID))
+		tools = append(tools, DescriptorForContext(ctx, descriptor).ToTool(projectID))
 	}
 	for _, extra := range extras {
 		if extra.Executor == nil {
@@ -333,7 +333,7 @@ func ListTypedTools(
 		if urnPrefix != "" && !strings.HasPrefix(descriptor.ToolURN().String(), urnPrefix) {
 			continue
 		}
-		tools = append(tools, descriptor.ToTool(projectID))
+		tools = append(tools, DescriptorForContext(ctx, descriptor).ToTool(projectID))
 	}
 	return tools
 }

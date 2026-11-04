@@ -81,11 +81,11 @@ const (
 	// TLS, connection refused, or the refresh POST's own timeout).
 	RefreshOutcomeUnreachable RefreshOutcome = "unreachable"
 
-	// RefreshOutcomeCanceled: the caller's context was canceled or hit its
-	// own deadline while the attempt was in flight, most often an MCP client
-	// disconnecting mid-refresh or a worker activity timing out. Its own
-	// outcome so that neither unreachable (upstream health) nor
-	// internal_error (Speakeasy faults) absorbs routine client disconnects.
+	// RefreshOutcomeCanceled: the caller's context ended before the POST
+	// started, most often an MCP client disconnecting or a worker activity
+	// timing out. A started POST runs on and reports its own outcome. Separate
+	// so that neither unreachable (upstream health) nor internal_error
+	// (Speakeasy faults) absorbs routine client disconnects.
 	RefreshOutcomeCanceled RefreshOutcome = "canceled"
 
 	// RefreshOutcomeInternalError: Speakeasy could not build or persist the request.
@@ -93,4 +93,7 @@ const (
 	// invalid client authentication method, an empty upstream response, a
 	// database or encryption failure, or a lost compare-and-swap on persist.
 	RefreshOutcomeInternalError RefreshOutcome = "internal_error"
+
+	// RefreshOutcomeDeferred: no upstream call, an outage is cooling down or the lock is held.
+	RefreshOutcomeDeferred RefreshOutcome = "deferred"
 )

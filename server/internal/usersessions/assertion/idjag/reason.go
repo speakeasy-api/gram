@@ -1,6 +1,10 @@
 package idjag
 
-import "errors"
+import (
+	"errors"
+
+	"github.com/speakeasy-api/gram/server/internal/oops"
+)
 
 // Reason identifies a rejected assertion or an unavailable validation input.
 type Reason string
@@ -12,6 +16,9 @@ const (
 	ReasonIssuerMismatch         Reason = "assertion_issuer_mismatch"
 	ReasonKeyUnknown             Reason = "assertion_key_unknown"
 	ReasonKeyUnresolvable        Reason = "assertion_key_unresolvable"
+	ReasonKeyStoreUnavailable    Reason = "assertion_key_store_unavailable"
+	ReasonKeyUnusable            Reason = "assertion_key_unusable"
+	ReasonKeyBudgetExhausted     Reason = "assertion_key_budget_exhausted"
 	ReasonSignatureInvalid       Reason = "assertion_signature_invalid"
 	ReasonClaimsMalformed        Reason = "assertion_claims_malformed"
 	ReasonAudienceMismatch       Reason = "assertion_audience_mismatch"
@@ -32,6 +39,28 @@ const (
 	ReasonReplayStoreUnavailable Reason = "assertion_replay_store_unavailable"
 	ReasonVerifierMisconfigured  Reason = "assertion_verifier_misconfigured"
 )
+
+// IsOutage reports a refusal caused by a dependency being down, not the assertion or configuration.
+func IsOutage(err error) bool {
+	switch ReasonOf(err) {
+	case ReasonKeyUnresolvable, ReasonKeyBudgetExhausted:
+		return true
+	case ReasonKeyStoreUnavailable, ReasonSubjectUnavailable, ReasonReplayStoreUnavailable, ReasonTrustUnavailable:
+		return oops.IsInfrastructureFailure(err)
+	default:
+		return false
+	}
+}
+
+// IsStoreFault reports a refusal our own store caused without being down, such as a broken query.
+func IsStoreFault(err error) bool {
+	switch ReasonOf(err) {
+	case ReasonKeyStoreUnavailable, ReasonSubjectUnavailable, ReasonReplayStoreUnavailable, ReasonTrustUnavailable:
+		return !IsOutage(err) && !errors.Is(err, ErrNoTrustedIssuer) && !errors.Is(err, ErrTrustedIssuerHasNoJWKS)
+	default:
+		return false
+	}
+}
 
 // ReasonOf returns the rejection reason, or an empty value for another error.
 func ReasonOf(err error) Reason {

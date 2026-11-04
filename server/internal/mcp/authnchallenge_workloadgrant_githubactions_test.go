@@ -232,7 +232,8 @@ func TestGitHubActionsRule_AdmitsEveryJobOfTheRepository(t *testing.T) {
 // The narrower choices admit one exact context. A branch rule admits jobs on
 // that branch alone, not its sub-branches or pull requests; an environment
 // rule admits only jobs that reference that environment, which GitHub runs
-// only after its protection rules pass, and not one that differs only in case.
+// only after its protection rules pass, and not one that differs only in case;
+// a pull request rule admits pull request jobs alone.
 func TestGitHubActionsRule_NarrowerChoicesAdmitOneContext(t *testing.T) {
 	t.Parallel()
 
@@ -250,6 +251,11 @@ func TestGitHubActionsRule_NarrowerChoicesAdmitOneContext(t *testing.T) {
 			choice: "environment",
 			values: map[string]string{"owner": "acme", "repo": "payments-api", "environment": "production"},
 			refuse: []string{"environment:Production", "environment:production-eu", "ref:refs/heads/main", "pull_request"},
+		},
+		{
+			choice: "pull_request",
+			values: map[string]string{"owner": "acme", "repo": "payments-api"},
+			refuse: []string{"pull_request_target", "ref:refs/heads/main", "environment:pull_request"},
 		},
 	} {
 		t.Run(tc.choice, func(t *testing.T) {

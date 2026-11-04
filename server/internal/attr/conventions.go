@@ -533,6 +533,7 @@ const (
 	MetaMemberBackendKey   = attribute.Key("gram.meta.member.backend")
 	MetaDispatchOutcomeKey = attribute.Key("gram.meta.dispatch.outcome")
 	McpURLKey              = attribute.Key("gram.mcp.url")
+	McpSessionSubjectKey   = attribute.Key("gram.mcp.session_subject")
 
 	// Gateway consent diagnostics contain IDs and comparison results only,
 	// never credentials, configuration hashes, or captured tool definitions.
@@ -768,6 +769,12 @@ const (
 	DirectoryMembershipsOpenedKey     = attribute.Key("gram.directory_group.memberships_opened")
 	DirectoryMembershipsClosedKey     = attribute.Key("gram.directory_group.memberships_closed")
 	OutcomeKey                        = attribute.Key("gram.outcome")
+	ConnectionDropCountsKey           = attribute.Key("gram.connection.drop_counts")
+	ConnectionDropReasonKey           = attribute.Key("gram.connection.drop_reason")
+	ConnectionOutcomeKey              = attribute.Key("gram.connection.outcome")
+	ConnectionReasonKey               = attribute.Key("gram.connection.reason")
+	ConnectionStepKey                 = attribute.Key("gram.connection.step")
+	ConnectionWhoFixesKey             = attribute.Key("gram.connection.who_fixes")
 	PackageNameKey                    = attribute.Key("gram.package.name")
 	PackageVersionKey                 = attribute.Key("gram.package.version")
 	PKCEMethodKey                     = attribute.Key("gram.pkce.method")
@@ -785,6 +792,7 @@ const (
 	UserSessionClientIDKey            = attribute.Key("gram.user_session_client.id")
 	UserSessionClientMigratedCountKey = attribute.Key("gram.user_session_client.migrated_count")
 	UserSessionIDKey                  = attribute.Key("gram.user_session.id")
+	UserSessionSubjectKindKey         = attribute.Key("gram.user_session.subject_kind")
 
 	// WorkloadIssuerIDKey is the workload_issuers row that vouches for a
 	// workload, never its issuer URL.
@@ -977,6 +985,7 @@ const (
 	AgentBuildChannelKey         = attribute.Key("gram.agent.build.channel")
 	AgentBuildOSKey              = attribute.Key("gram.agent.build.os")
 	AgentBuildArchKey            = attribute.Key("gram.agent.build.arch")
+	AgentBuildOSVersionKey       = attribute.Key("gram.agent.build.os_version")
 	// HookBlockReasonKey is set on hook telemetry entries when the Speakeasy hook
 	// denied the tool call (e.g. shadow-MCP guard). Its presence (non-empty)
 	// signals the trace should render as "blocked" in dashboards.
@@ -1707,6 +1716,10 @@ func SlogAgentBuildOS(v string) slog.Attr {
 
 func SlogAgentBuildArch(v string) slog.Attr {
 	return slog.String(string(AgentBuildArchKey), v)
+}
+
+func SlogAgentBuildOSVersion(v string) slog.Attr {
+	return slog.String(string(AgentBuildOSVersionKey), v)
 }
 
 func HookReplayed(v bool) attribute.KeyValue { return HookReplayedKey.Bool(v) }
@@ -3007,6 +3020,20 @@ func SlogPKCEMethod(v string) slog.Attr      { return slog.String(string(PKCEMet
 
 func PKCESupport[V ~string](v V) attribute.KeyValue { return PKCESupportKey.String(string(v)) }
 
+func SlogConnectionDropCounts(v string) slog.Attr {
+	return slog.String(string(ConnectionDropCountsKey), v)
+}
+
+func ConnectionDropReason(v string) attribute.KeyValue { return ConnectionDropReasonKey.String(v) }
+func SlogConnectionDropReason(v string) slog.Attr {
+	return slog.String(string(ConnectionDropReasonKey), v)
+}
+
+func ConnectionOutcome(v string) attribute.KeyValue  { return ConnectionOutcomeKey.String(v) }
+func ConnectionReason(v string) attribute.KeyValue   { return ConnectionReasonKey.String(v) }
+func ConnectionStep(v string) attribute.KeyValue     { return ConnectionStepKey.String(v) }
+func ConnectionWhoFixes(v string) attribute.KeyValue { return ConnectionWhoFixesKey.String(v) }
+
 func ProductFeatureName(v string) attribute.KeyValue { return ProductFeatureNameKey.String(v) }
 func SlogProductFeatureName(v string) slog.Attr {
 	return slog.String(string(ProductFeatureNameKey), v)
@@ -3054,6 +3081,11 @@ func SlogWorkloadSubject(v string) slog.Attr      { return slog.String(string(Wo
 func UserSessionIssuerID(v string) attribute.KeyValue { return UserSessionIssuerIDKey.String(v) }
 func SlogUserSessionIssuerID(v string) slog.Attr {
 	return slog.String(string(UserSessionIssuerIDKey), v)
+}
+
+func UserSessionSubjectKind(v string) attribute.KeyValue { return UserSessionSubjectKindKey.String(v) }
+func SlogUserSessionSubjectKind(v string) slog.Attr {
+	return slog.String(string(UserSessionSubjectKindKey), v)
 }
 
 func UserSessionClientID(v string) attribute.KeyValue { return UserSessionClientIDKey.String(v) }
@@ -3511,6 +3543,8 @@ func SlogToolsetMCPEnabled(v bool) slog.Attr      { return slog.Bool(string(Tool
 
 func McpURL(v string) attribute.KeyValue { return McpURLKey.String(v) }
 func SlogMcpURL(v string) slog.Attr      { return slog.String(string(McpURLKey), v) }
+
+func SlogMcpSessionSubject(v string) slog.Attr { return slog.String(string(McpSessionSubjectKey), v) }
 
 func McpClientName(v string) attribute.KeyValue { return McpClientNameKey.String(v) }
 func SlogMcpClientName(v string) slog.Attr      { return slog.String(string(McpClientNameKey), v) }

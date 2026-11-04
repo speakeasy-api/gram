@@ -1,3 +1,5 @@
+import { useProviderSetupRollout } from "@/hooks/useProviderSetupRollout";
+import { setupProviderForUrl } from "@/pages/mcp/x/setup/provider-setup";
 import { useOrganization, useProject } from "@/contexts/Auth";
 import { usePluginWriteAccess } from "@/hooks/usePluginWriteAccess";
 import { usePluginQueryScope } from "@/pages/plugins/usePluginQueryScope";
@@ -398,6 +400,7 @@ export function McpServerCardStatus({
 }
 
 export function McpServerXSidebarNav(): React.JSX.Element | null {
+  const providerSetupRollout = useProviderSetupRollout();
   const routes = useRoutes();
   const location = useLocation();
   const { mcpServerSlug } = useParams<{ mcpServerSlug: string }>();
@@ -728,6 +731,20 @@ export function McpServerXSidebarNav(): React.JSX.Element | null {
     : [];
 
   const items: DetailSidebarNavItem[] = [
+    ...(providerSetupRollout === "enabled" &&
+    mcpServer?.remoteMcpServerId &&
+    setupProviderForUrl(upstreamUrl) &&
+    hasScope("mcp:write", mcpServer.id)
+      ? [
+          {
+            key: "setup",
+            title: "Setup",
+            Icon: Wrench,
+            href: mcpServerTabHref(routes, idOrSlug, "setup"),
+            active: activeTab === "setup",
+          },
+        ]
+      : []),
     {
       key: "overview",
       title: "Overview",

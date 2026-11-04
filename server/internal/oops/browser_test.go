@@ -42,6 +42,16 @@ func TestBrowserErrHandlePreservesPublicError(t *testing.T) {
 	require.JSONEq(t, original.Body.String(), machine.Body.String())
 }
 
+func TestBrowserErrHandleNamesProviderOnOutage(t *testing.T) {
+	t.Parallel()
+	response := httptest.NewRecorder()
+	oops.BrowserErrHandle(testenv.NewLogger(t), func(http.ResponseWriter, *http.Request) error {
+		return oops.WithBrowserProvider(oops.WithBrowserReason(oops.E(oops.CodeUnavailable, nil, "provider down"), oauthui.ReasonProviderUnavailable), "auth.example.com")
+	}).ServeHTTP(response, httptest.NewRequest(http.MethodGet, "/callback", nil))
+	require.Equal(t, http.StatusServiceUnavailable, response.Code)
+	require.Contains(t, response.Body.String(), "auth.example.com")
+}
+
 func TestBrowserErrHandleMasksUnexpectedError(t *testing.T) {
 	t.Parallel()
 	response := httptest.NewRecorder()

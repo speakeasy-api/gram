@@ -106,8 +106,11 @@ export default defineConfig(({ command }) => {
     },
     resolve: {
       alias: {
-        "@": path.resolve(__dirname, "./src"),
-        "@gram/admin-client": path.resolve(__dirname, "./src/sdk/src"),
+        "@": path.resolve(import.meta.dirname, "./src"),
+        "@gram/admin-client": path.resolve(
+          import.meta.dirname,
+          "./src/sdk/src",
+        ),
       },
     },
     server: {

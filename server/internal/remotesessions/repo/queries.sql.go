@@ -12483,6 +12483,82 @@ func (q *Queries) LockTrustedRemoteSessionIssuerForOrganization(ctx context.Cont
 	return i, err
 }
 
+const lockTypedRemoteLoginAuthorization = `-- name: LockTypedRemoteLoginAuthorization :one
+SELECT c.id
+FROM mcp_auth_clients AS c
+JOIN mcp_server_auth_clients AS link
+  ON link.auth_client_id = c.id
+ AND link.organization_id = c.organization_id
+JOIN mcp_servers AS m
+  ON m.id = link.mcp_server_id AND m.project_id = link.project_id
+JOIN projects AS p ON p.id = m.project_id
+JOIN remote_session_clients AS r ON r.id = c.remote_session_client_id
+WHERE c.id = $1::uuid
+  AND c.organization_id = $2::text
+  AND (c.project_id IS NULL OR c.project_id = $3::uuid)
+  AND c.remote_session_client_id = $4::uuid
+  AND c.client_type IN ('remote_session', 'ema')
+  AND r.deleted IS FALSE
+  AND c.enabled AND c.deleted IS FALSE
+  AND link.mcp_server_id = $5::uuid
+  AND link.project_id = $3::uuid AND link.deleted IS FALSE
+  AND m.deleted IS FALSE
+  AND p.organization_id = $2::text AND p.deleted IS FALSE
+FOR SHARE OF c, link, m, p, r
+`
+
+type LockTypedRemoteLoginAuthorizationParams struct {
+	AuthClientID          uuid.UUID
+	OrganizationID        string
+	ProjectID             uuid.UUID
+	RemoteSessionClientID uuid.UUID
+	McpServerID           uuid.UUID
+}
+
+// Keep the exact typed association enabled and live until the callback grant
+// commits. FOR SHARE conflicts with disable, detach and soft-delete updates.
+func (q *Queries) LockTypedRemoteLoginAuthorization(ctx context.Context, arg LockTypedRemoteLoginAuthorizationParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockTypedRemoteLoginAuthorization,
+		arg.AuthClientID,
+		arg.OrganizationID,
+		arg.ProjectID,
+		arg.RemoteSessionClientID,
+		arg.McpServerID,
+	)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
+const lockTypedRemoteLoginServer = `-- name: LockTypedRemoteLoginServer :one
+WITH live_project AS MATERIALIZED (
+  SELECT id FROM projects
+  WHERE id = $2::uuid
+    AND organization_id = $3::text AND deleted IS FALSE
+  FOR SHARE
+)
+SELECT m.id
+FROM mcp_servers AS m
+JOIN live_project AS p ON p.id = m.project_id
+WHERE m.id = $1::uuid AND m.deleted IS FALSE
+FOR SHARE OF m
+`
+
+type LockTypedRemoteLoginServerParams struct {
+	McpServerID    uuid.UUID
+	ProjectID      uuid.UUID
+	OrganizationID string
+}
+
+// Match typed-auth writers: project and server before issuer, registration,
+// auth client and association rows. Materializing the project locks it first.
+func (q *Queries) LockTypedRemoteLoginServer(ctx context.Context, arg LockTypedRemoteLoginServerParams) (uuid.UUID, error) {
+	row := q.db.QueryRow(ctx, lockTypedRemoteLoginServer, arg.McpServerID, arg.ProjectID, arg.OrganizationID)
+	var id uuid.UUID
+	err := row.Scan(&id)
+	return id, err
+}
+
 const managedRemoteSessionClientExistsForIssuer = `-- name: ManagedRemoteSessionClientExistsForIssuer :one
 SELECT EXISTS (
   SELECT 1
@@ -14545,6 +14621,45 @@ func (q *Queries) SetRemoteSessionValidation(ctx context.Context, arg SetRemoteS
 		arg.ExpectedUpdatedAt,
 		arg.ProjectID,
 		arg.OrganizationID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
+const setTrustedDelegationStateFixture = `-- name: SetTrustedDelegationStateFixture :execrows
+UPDATE trusted_issuer_sessions SET
+  observation_status = COALESCE($1, observation_status),
+  refresh_claim_id = COALESCE($2::uuid, refresh_claim_id),
+  retry_after = COALESCE($3::timestamptz, retry_after),
+  observed_at = COALESCE($4::timestamptz, observed_at),
+  updated_at = COALESCE($5::timestamptz, updated_at)
+WHERE organization_id = $6::text
+  AND remote_session_client_id = $7::uuid
+  AND deleted IS FALSE
+`
+
+type SetTrustedDelegationStateFixtureParams struct {
+	ObservationStatus pgtype.Text
+	RefreshClaimID    uuid.NullUUID
+	RetryAfter        pgtype.Timestamptz
+	ObservedAt        pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	OrganizationID    string
+	ClientID          uuid.UUID
+}
+
+// Test-only fixture for delegation states that take real time to reach.
+func (q *Queries) SetTrustedDelegationStateFixture(ctx context.Context, arg SetTrustedDelegationStateFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setTrustedDelegationStateFixture,
+		arg.ObservationStatus,
+		arg.RefreshClaimID,
+		arg.RetryAfter,
+		arg.ObservedAt,
+		arg.UpdatedAt,
+		arg.OrganizationID,
+		arg.ClientID,
 	)
 	if err != nil {
 		return 0, err

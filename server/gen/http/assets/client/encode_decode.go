@@ -2673,10 +2673,13 @@ func DecodeServeChatAttachmentResponse(decoder func(*http.Response) goahttp.Deco
 		switch resp.StatusCode {
 		case http.StatusOK:
 			var (
-				contentType   string
-				contentLength int64
-				lastModified  string
-				err           error
+				contentType           string
+				contentLength         int64
+				lastModified          string
+				contentDisposition    string
+				contentSecurityPolicy string
+				xContentTypeOptions   string
+				err                   error
 			)
 			contentTypeRaw := resp.Header.Get("Content-Type")
 			if contentTypeRaw == "" {
@@ -2699,10 +2702,25 @@ func DecodeServeChatAttachmentResponse(decoder func(*http.Response) goahttp.Deco
 				err = goa.MergeErrors(err, goa.MissingFieldError("last_modified", "header"))
 			}
 			lastModified = lastModifiedRaw
+			contentDispositionRaw := resp.Header.Get("Content-Disposition")
+			if contentDispositionRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("content_disposition", "header"))
+			}
+			contentDisposition = contentDispositionRaw
+			contentSecurityPolicyRaw := resp.Header.Get("Content-Security-Policy")
+			if contentSecurityPolicyRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("content_security_policy", "header"))
+			}
+			contentSecurityPolicy = contentSecurityPolicyRaw
+			xContentTypeOptionsRaw := resp.Header.Get("X-Content-Type-Options")
+			if xContentTypeOptionsRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("x_content_type_options", "header"))
+			}
+			xContentTypeOptions = xContentTypeOptionsRaw
 			if err != nil {
 				return nil, goahttp.ErrValidationError("assets", "serveChatAttachment", err)
 			}
-			res := NewServeChatAttachmentResultOK(contentType, contentLength, lastModified)
+			res := NewServeChatAttachmentResultOK(contentType, contentLength, lastModified, contentDisposition, contentSecurityPolicy, xContentTypeOptions)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (
@@ -3170,6 +3188,9 @@ func DecodeServeChatAttachmentSignedResponse(decoder func(*http.Response) goahtt
 				contentLength            int64
 				lastModified             string
 				accessControlAllowOrigin *string
+				contentDisposition       string
+				contentSecurityPolicy    string
+				xContentTypeOptions      string
 				err                      error
 			)
 			contentTypeRaw := resp.Header.Get("Content-Type")
@@ -3197,10 +3218,25 @@ func DecodeServeChatAttachmentSignedResponse(decoder func(*http.Response) goahtt
 			if accessControlAllowOriginRaw != "" {
 				accessControlAllowOrigin = &accessControlAllowOriginRaw
 			}
+			contentDispositionRaw := resp.Header.Get("Content-Disposition")
+			if contentDispositionRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("content_disposition", "header"))
+			}
+			contentDisposition = contentDispositionRaw
+			contentSecurityPolicyRaw := resp.Header.Get("Content-Security-Policy")
+			if contentSecurityPolicyRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("content_security_policy", "header"))
+			}
+			contentSecurityPolicy = contentSecurityPolicyRaw
+			xContentTypeOptionsRaw := resp.Header.Get("X-Content-Type-Options")
+			if xContentTypeOptionsRaw == "" {
+				err = goa.MergeErrors(err, goa.MissingFieldError("x_content_type_options", "header"))
+			}
+			xContentTypeOptions = xContentTypeOptionsRaw
 			if err != nil {
 				return nil, goahttp.ErrValidationError("assets", "serveChatAttachmentSigned", err)
 			}
-			res := NewServeChatAttachmentSignedResultOK(contentType, contentLength, lastModified, accessControlAllowOrigin)
+			res := NewServeChatAttachmentSignedResultOK(contentType, contentLength, lastModified, accessControlAllowOrigin, contentDisposition, contentSecurityPolicy, xContentTypeOptions)
 			return res, nil
 		case http.StatusUnauthorized:
 			var (

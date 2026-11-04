@@ -2,6 +2,7 @@ package catalog_test
 
 import (
 	"fmt"
+	"os"
 	"regexp"
 	"strings"
 	"testing"
@@ -105,6 +106,7 @@ func TestEmbeddedGitHubActionsPinsOneRepository(t *testing.T) {
 	require.Equal(t, []catalog.SubjectAlternative{
 		{Key: "branch", Label: "One branch", Template: "repo:{owner}/{repo}:ref:refs/heads/{branch}", Wildcard: false},
 		{Key: "environment", Label: "One environment", Template: "repo:{owner}/{repo}:environment:{environment}", Wildcard: false},
+		{Key: "pull_request", Label: "Pull requests", Template: "repo:{owner}/{repo}:pull_request", Wildcard: false},
 	}, github.Subject.Alternatives)
 
 	patterns := make(map[string]*regexp.Regexp, len(github.Variables))
@@ -159,6 +161,33 @@ func TestEmbeddedGitHubActionsPinsOneRepository(t *testing.T) {
 		require.True(t, environment.MatchString(valid), "environment refuses %q", valid)
 	}
 	require.False(t, environment.MatchString(strings.Repeat("e", 256)), "environment admits 256 characters")
+}
+
+// The pull request choice ends on text no repository name can hold, so the
+// branch and environment choices cannot produce its subject, and the embedded
+// catalog loads. A choice that could produce it too is refused, since a saved
+// rule would then read back as either.
+func TestParseRefusesAGitHubChoiceOverlappingPullRequests(t *testing.T) {
+	t.Parallel()
+
+	raw, err := os.ReadFile("platforms/github-actions.yaml")
+	require.NoError(t, err)
+	// extraAlternative continues the alternative that ends the file.
+	const last = "      wildcard: false\n"
+	require.True(t, strings.HasSuffix(string(raw), last), "github-actions.yaml must end on its last alternative")
+
+	for name, template := range map[string]string{
+		"the same rule under another key":  "repo:{owner}/{repo}:pull_request",
+		"an environment that can spell it": "repo:{owner}/{repo}:pull_{environment}",
+	} {
+		t.Run(name, func(t *testing.T) {
+			t.Parallel()
+
+			overlapping := strings.TrimSuffix(string(raw), last) + extraAlternative("overlapping", template)
+			_, err := catalog.Parse([]byte(overlapping))
+			require.ErrorContains(t, err, `subject alternative "overlapping" could match the same subject as alternative "pull_request"`)
+		})
+	}
 }
 
 func TestParseAcceptsAValidPlatform(t *testing.T) {
