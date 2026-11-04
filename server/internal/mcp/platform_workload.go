@@ -29,8 +29,11 @@ import (
 )
 
 // platformWorkloadResource accepts only exact, registered builtin URLs.
+// platformWorkloadResource accepts the built-in toolsets an assistant runtime
+// can be granted. It does not consult the process's served toolsets: the token
+// endpoint may run in a process that issues tokens without serving the tools.
 func (s *Service) platformWorkloadResource(resource string) (string, bool) {
-	for slug := range s.platformToolsets {
+	for _, slug := range []string{platformtools.AssistantsPlatformToolsetSlug, platformtools.ManagedAssistantPlatformToolsetSlug, platformtools.PlatformMCPReadToolsetSlug} {
 		if resource == platformtools.PlatformToolsetURL(s.serverURL, slug) {
 			return slug, true
 		}
