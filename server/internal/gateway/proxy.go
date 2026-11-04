@@ -503,11 +503,18 @@ func (tp *ToolProxy) doFunction(
 			if resp.Header.Get("Gram-Invoke-ID") != invocationID.String() {
 				return fmt.Errorf("failed to verify function invocation ID")
 			}
-			if resp.StatusCode >= http.StatusBadRequest && len(missingVariables) > 0 {
-				responseStatusCode = resp.StatusCode
-				return oops.E(oops.CodeFailedPrecondition, nil, "server not configured: missing environment variables %s", strings.Join(missingVariables, ", ")).LogWarn(ctx, logger)
+			if resp.StatusCode < http.StatusBadRequest || len(missingVariables) == 0 {
+				return nil
 			}
-			return nil
+			named, err := namesMissingVariable(resp, missingVariables)
+			if err != nil {
+				return err
+			}
+			if !named {
+				return nil
+			}
+			responseStatusCode = resp.StatusCode
+			return oops.E(oops.CodeFailedPrecondition, nil, "server not configured: missing environment variables %s", strings.Join(missingVariables, ", ")).LogWarn(ctx, logger)
 		},
 		RetryConfig:       functionRunnerRetryConfig(),
 		Timeout:           functionRunnerCallTimeout,
@@ -520,6 +527,30 @@ func (tp *ToolProxy) doFunction(
 		OrganizationID:    descriptor.OrganizationID,
 		OrganizationSlug:  descriptor.OrganizationSlug,
 	})
+}
+
+// maxMissingVariablePeek bounds how much of a failed runner response is read
+// for the names of missing variables.
+const maxMissingVariablePeek = 64 * 1024
+
+// namesMissingVariable reports whether a failed runner response names one of
+// the missing variables, so an unrelated failure keeps the runner's answer.
+// The body stays readable from its start.
+func namesMissingVariable(resp *http.Response, missing []string) (bool, error) {
+	peek, err := io.ReadAll(io.LimitReader(resp.Body, maxMissingVariablePeek))
+	if err != nil {
+		return false, fmt.Errorf("read function runner response: %w", err)
+	}
+	resp.Body = struct {
+		io.Reader
+		io.Closer
+	}{io.MultiReader(bytes.NewReader(peek), resp.Body), resp.Body}
+	for _, name := range missing {
+		if bytes.Contains(peek, []byte(name)) {
+			return true, nil
+		}
+	}
+	return false, nil
 }
 
 // missingFunctionVariables lists, sorted, the variables a function declares
@@ -1182,12 +1213,15 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 	})
 
 	if err := opts.VerifyResponse(resp); err != nil {
-		span.SetStatus(codes.Error, err.Error())
 		// A verifier that already explains the failure to the caller keeps
-		// its own code and message.
+		// its own code and message, and the span status its logging chose.
 		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
+			if !shareable.SpanHandled() {
+				span.SetStatus(codes.Error, err.Error())
+			}
 			return shareable
 		}
+		span.SetStatus(codes.Error, err.Error())
 		return oops.E(oops.CodeGatewayError, err, "response verification failed").LogError(ctx, opts.Logger)
 	}
 
