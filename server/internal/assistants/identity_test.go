@@ -27,7 +27,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 )
 
-var testIdentityService = assistantidentity.New("https://platform.example.invalid", audit.NewLogger())
+var testIdentityService = assistantidentity.New("https://platform.example.invalid", audit.NewLogger(), authztest.NewLoadedGrantsClient())
 
 func newTestAuthzEngine(t *testing.T, db *pgxpool.Pool) *authz.Engine {
 	t.Helper()

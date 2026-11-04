@@ -7,6 +7,7 @@ package mcp_test
 import (
 	"context"
 	"fmt"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -164,6 +165,7 @@ func TestRuntimeMethods_MountedOnMux(t *testing.T) {
 		ti.siteURL,
 		ti.cacheAdapter,
 		authz.NewEngine(ti.logger, ti.conn, nil, workos.NewStubClient()),
+		authztest.NewParityClient(t, authz.NewEngine(ti.logger, ti.conn, nil, workos.NewStubClient())),
 		ti.audit,
 		nil,
 	)

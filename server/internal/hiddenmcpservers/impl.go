@@ -33,7 +33,7 @@ type Service struct {
 	logger *slog.Logger
 	db     *pgxpool.Pool
 	auth   *auth.Auth
-	authz  *authz.Engine
+	authz  *authz.Client
 }
 
 var (
@@ -41,14 +41,14 @@ var (
 	_ srv.Auther  = (*Service)(nil)
 )
 
-func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine) *Service {
+func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, authzClient *authz.Client) *Service {
 	logger = logger.With(attr.SlogComponent("hiddenmcpservers"))
 	return &Service{
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"),
 		logger: logger,
 		db:     db,
 		auth:   auth.New(logger, db, sessionManager, authzEngine),
-		authz:  authzEngine,
+		authz:  authzClient,
 	}
 }
 
@@ -174,7 +174,7 @@ func (s *Service) canConnect(ctx context.Context, serverVisibility string, serve
 	if toolsetID.Valid {
 		resourceID = toolsetID.UUID
 	}
-	err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, resourceID.String(), projectID.String()))
+	err := s.authz.Require(ctx, authz.MCPServer(projectID.String(), resourceID.String()).Connect())
 	if err == nil {
 		return true, nil
 	}

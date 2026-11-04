@@ -161,7 +161,7 @@ func (s *Service) authorizedMetaMembers(
 		return nil, nil
 	}
 
-	ctx, err := s.authz.PrepareContext(ctx)
+	ctx, err := s.authzClient.PrepareContext(ctx)
 	if err != nil {
 		return nil, fmt.Errorf("load access grants: %w", err)
 	}
@@ -180,7 +180,7 @@ func (s *Service) authorizedMetaMembers(
 			// caller, as the runtime snapshot treats it); dropping on a fault
 			// narrows the candidate set and turns ambiguous into a confident
 			// wrong answer.
-			err := s.authz.Require(ctx, connect)
+			err := s.authzClient.Require(ctx, authz.MCPServer(row.ProjectID.String(), row.McpServerID.String()).Connect())
 			shadow.shadowRequireServer(ctx, mandatorySurfaceConsent, err, authz.MandatoryServerPrivate, connect)
 			if err != nil {
 				if shareable, ok := errors.AsType[*oops.ShareableError](err); ok && (shareable.Code == oops.CodeForbidden || shareable.Code == oops.CodeUnauthorized) {

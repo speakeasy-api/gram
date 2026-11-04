@@ -163,5 +163,11 @@ func DefaultDeclarations() []s.TypeDecl {
 			s.Permission("write", s.Rel("writer"),
 				s.Checks(string(ScopeAssistantWrite)), s.ExcludedBy("write_blocked", "read_blocked")),
 		),
+		s.NewType("inference", s.Parent("project"), s.WrittenBy(access),
+			s.SelectorKeys(SelectorKeyProjectID),
+			s.Grant("executor", s.StoredAs(string(ScopeInferenceExecute)), s.AnchoredAt("organization", "project"),
+				s.Describe("Run inference through Speakeasy as a workload"), s.RuntimeSafeSince(6)),
+			s.Permission("execute", s.Rel("executor"), s.Checks(string(ScopeInferenceExecute))),
+		),
 	}
 }

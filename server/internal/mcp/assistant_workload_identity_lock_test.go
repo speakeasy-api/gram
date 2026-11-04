@@ -11,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/assistantidentity"
 	identityrepo "github.com/speakeasy-api/gram/server/internal/assistantidentity/repo"
 	assistantrepo "github.com/speakeasy-api/gram/server/internal/assistants/repo"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	triggerrepo "github.com/speakeasy-api/gram/server/internal/triggers/repo"
@@ -31,7 +32,7 @@ func TestAssistantWorkloadIdentityLockedUntilRegistrationCommit(t *testing.T) {
 		OrganizationID: fx.orgID, ProjectID: fx.target.ProjectID, DefinitionSlug: "manual", Name: "Locked root", TargetKind: "assistant", TargetRef: a.ID.String(), TargetDisplay: "Locked workload test", ConfigJson: []byte(`{}`), Status: "active",
 	})
 	require.NoError(t, err)
-	identities := assistantidentity.New(ti.serverURL.String(), ti.audit)
+	identities := assistantidentity.New(ti.serverURL.String(), ti.audit, authztest.NewLoadedGrantsClient())
 	setup := testenv.BeginTx(t, ctx, ti.conn)
 	require.NoError(t, identities.Provision(ctx, setup, assistantidentity.ProvisionParams{OrganizationID: fx.orgID, ProjectID: fx.target.ProjectID, AssistantID: a.ID, ActorUserID: fx.userID}))
 	require.NoError(t, setup.Commit(ctx))

@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"bytes"
 	"context"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -405,7 +406,7 @@ func issueMemberAuthRegressionKey(t *testing.T, ctx context.Context, ti *testIns
 	require.True(t, ok)
 	projectID := ac.ProjectID.String()
 	agentID := fx.agent.ID.String()
-	audience := authclients.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, ti.authzEngine, ti.audit, ti.enc)
+	audience := authclients.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, ti.authzEngine, authztest.NewParityClient(t, ti.authzEngine), ti.audit, ti.enc)
 	agents := agentmanagement.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, ti.authzEngine, ti.audit, nil, nil)
 	requested := []*keysgen.AgentPolicyGrantForm{{Scope: string(authz.ScopeMCPConnect), Effect: "allow", Selector: &keysgen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: serverID.String(), ProjectID: &projectID}}}
 	clients, err := authclientsrepo.New(ti.conn).ListServerAuthClients(ctx, authclientsrepo.ListServerAuthClientsParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, McpServerID: serverID})

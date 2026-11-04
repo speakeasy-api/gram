@@ -65,7 +65,7 @@ type Service struct {
 	logger   *slog.Logger
 	db       *pgxpool.Pool
 	auth     *auth.Auth
-	authz    *authz.Engine
+	authz    *authz.Client
 	audit    *audit.Logger
 	features feature.Provider
 }
@@ -81,6 +81,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessionManager *sessions.Manager,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	auditLogger *audit.Logger,
 	features feature.Provider,
 ) *Service {
@@ -90,7 +91,7 @@ func NewService(
 		logger:   logger,
 		db:       db,
 		auth:     auth.New(logger, db, sessionManager, authzEngine),
-		authz:    authzEngine,
+		authz:    authzClient,
 		audit:    auditLogger,
 		features: features,
 	}
@@ -138,7 +139,7 @@ func (s *Service) authorize(ctx context.Context, mutation bool) (*contextvalues.
 		return nil, s.logger, oops.C(oops.CodeUnauthorized)
 	}
 	logger := s.logger.With(attr.SlogOrganizationID(authCtx.ActiveOrganizationID), attr.SlogUserID(authCtx.UserID))
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: authCtx.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Organization(authCtx.ActiveOrganizationID).Administer()); err != nil {
 		return nil, logger, err
 	}
 	if mutation {
@@ -155,21 +156,17 @@ func (s *Service) authorize(ctx context.Context, mutation bool) (*contextvalues.
 // readable keeps the servers the caller may read, as the MCP server lists do:
 // org:admin does not imply mcp:read.
 func (s *Service) readable(ctx context.Context, servers []repo.ListEligibleServersRow) ([]repo.ListEligibleServersRow, error) {
-	checks := make([]authz.Check, len(servers))
+	ops := make([]authz.Operation, len(servers))
 	for i, sv := range servers {
-		checks[i] = authz.MCPCheck(authz.ScopeMCPRead, sv.ID.String(), sv.ProjectID.String())
+		ops[i] = authz.MCPServer(sv.ProjectID.String(), sv.ID.String()).Read()
 	}
-	allowedIDs, err := s.authz.Filter(ctx, checks)
+	matched, err := s.authz.MatchMany(ctx, ops)
 	if err != nil {
 		return nil, fmt.Errorf("filter readable servers: %w", err)
 	}
-	allowed := make(map[string]struct{}, len(allowedIDs))
-	for _, id := range allowedIDs {
-		allowed[id] = struct{}{}
-	}
-	out := make([]repo.ListEligibleServersRow, 0, len(allowedIDs))
-	for _, sv := range servers {
-		if _, ok := allowed[sv.ID.String()]; ok {
+	out := make([]repo.ListEligibleServersRow, 0, len(servers))
+	for i, sv := range servers {
+		if matched[i] {
 			out = append(out, sv)
 		}
 	}

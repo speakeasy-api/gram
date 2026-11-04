@@ -198,6 +198,7 @@ var consumerEntryPoints = map[string]consumerCategory{
 	"Assistant":             "",
 	"AssistantsInProject":   "",
 	"Skill":                 "",
+	"Inference":             "",
 }
 
 // engineEntryPoints are Engine methods whose names are distinctive enough to

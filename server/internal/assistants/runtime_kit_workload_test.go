@@ -21,6 +21,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
@@ -60,11 +61,11 @@ func TestKitWorkloadInferenceRequiresBothPolicies(t *testing.T) {
 	t.Parallel()
 	project := uuid.New()
 	allowed := []authz.Grant{authz.NewGrant(authz.ScopeInferenceExecute, authz.WildcardResource)}
-	require.NoError(t, kitWorkloadInferenceAllowed(project, allowed, allowed))
-	require.Error(t, kitWorkloadInferenceAllowed(project, nil, allowed))
-	require.Error(t, kitWorkloadInferenceAllowed(project, allowed, nil))
-	require.Error(t, kitWorkloadInferenceAllowed(project, allowed))
-	require.Error(t, kitWorkloadInferenceAllowed(uuid.Nil, allowed, allowed))
+	require.NoError(t, kitWorkloadInferenceAllowed(t.Context(), authztest.NewLoadedGrantsClient(), project, allowed, allowed))
+	require.Error(t, kitWorkloadInferenceAllowed(t.Context(), authztest.NewLoadedGrantsClient(), project, nil, allowed))
+	require.Error(t, kitWorkloadInferenceAllowed(t.Context(), authztest.NewLoadedGrantsClient(), project, allowed, nil))
+	require.Error(t, kitWorkloadInferenceAllowed(t.Context(), authztest.NewLoadedGrantsClient(), project, allowed))
+	require.Error(t, kitWorkloadInferenceAllowed(t.Context(), authztest.NewLoadedGrantsClient(), uuid.Nil, allowed, allowed))
 }
 
 func TestKitWorkloadRejectsForeignIdentityBeforeDatabase(t *testing.T) {

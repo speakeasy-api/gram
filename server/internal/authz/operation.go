@@ -311,6 +311,40 @@ func (e EnvironmentRef) Write() Operation {
 	return newOperation("environment", "write", e.id, map[string]string{SelectorKeyProjectID: e.projectID})
 }
 
+// CallTool asks to connect to the server for one tool. A grant or block
+// limited to other tools does not decide it. When disposition is not empty the
+// request also names that disposition, so a grant or block limited to other
+// dispositions does not decide it either. With an empty disposition, ordinary
+// allows limited to a disposition still match, while blocks and direct
+// exceptions limited to one match strictly and do not apply.
+func (m MCPServerRef) CallTool(tool, disposition string) Operation {
+	dimensions := m.dimensions()
+	if tool != "" {
+		dimensions[SelectorKeyTool] = tool
+	}
+	if disposition != "" {
+		dimensions[SelectorKeyDisposition] = disposition
+	}
+	return newOperation("mcp_server", "connect", m.id, dimensions)
+}
+
+// InferenceRef names inference in one project for typed operations.
+type InferenceRef struct {
+	projectID string
+}
+
+// Inference names inference in a project. Inference grants are stored against
+// every resource of the project, so the operation targets the project ID and
+// carries it as a dimension.
+func Inference(projectID string) InferenceRef {
+	return InferenceRef{projectID: projectID}
+}
+
+// Execute asks to run inference in the project.
+func (i InferenceRef) Execute() Operation {
+	return newOperation("inference", "execute", i.projectID, map[string]string{SelectorKeyProjectID: i.projectID})
+}
+
 // typedOperations lists one instance of every operation the typed
 // constructors build. NewClient rejects a registry that does not declare
 // each of them, so a constructor can never name a missing permission at
@@ -323,9 +357,10 @@ func typedOperations() []Operation {
 	return []Operation{
 		org.Read(), org.Administer(),
 		project.Read(), project.Write(), project.PublishPlugin(),
-		mcpServer.Read(), mcpServer.Edit(), mcpServer.Connect(),
+		mcpServer.Read(), mcpServer.Edit(), mcpServer.Connect(), mcpServer.CallTool("tool", "read_only"),
 		project.ReadSkills(), project.WriteSkills(), Skill("project", "skill").Read(),
 		Assistant("project", "assistant").Read(), Assistant("project", "assistant").Write(),
 		environment.Read(), environment.Write(),
+		Inference("project").Execute(),
 	}
 }

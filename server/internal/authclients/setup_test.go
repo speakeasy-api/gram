@@ -80,7 +80,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential})
 	enc := testenv.NewEncryptionClient(t)
-	svc := authclients.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), enc)
+	svc := authclients.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, authztest.NewParityClient(t, authzEngine), audit.NewLogger(), enc)
 
 	return ctx, &testInstance{
 		service:        svc,
