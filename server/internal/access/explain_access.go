@@ -274,12 +274,7 @@ func (s *Service) ExplainResourceAccess(ctx context.Context, payload *gen.Explai
 	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPRead, payload.ResourceID, projectID)); err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeOrgRead,
-		ResourceKind: "",
-		ResourceID:   ac.ActiveOrganizationID,
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(ac.ActiveOrganizationID).Read()); err != nil {
 		return nil, err
 	}
 
@@ -346,12 +341,7 @@ func (s *Service) ExplainResourceAccess(ctx context.Context, payload *gen.Explai
 	}
 	// Directory attribute values can carry personal data, so which mapping
 	// produced a role is shown to the same audience as the mappings.
-	showSources, err := s.authz.Evaluate(ctx, authz.Check{
-		Scope:        authz.ScopeOrgAdmin,
-		ResourceKind: "",
-		ResourceID:   ac.ActiveOrganizationID,
-		Dimensions:   nil,
-	})
+	showSources, err := s.authzClient.Evaluate(ctx, authz.Organization(ac.ActiveOrganizationID).Administer())
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "evaluate directory mapping visibility").LogError(ctx, logger)
 	}

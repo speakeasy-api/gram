@@ -62,7 +62,7 @@ func TestDirectoryRoleInventoryImportPreservesMappingsAndIsIdempotent(t *testing
 	require.NoError(t, err)
 	inventory := directoryInventoryFixture(t, ctx, ti, workosGroup, "builder")
 	inventory.Assignments = append(inventory.Assignments, inventory.Assignments[0], DirectoryRoleInventoryAssignment{WorkOSGroupID: otherGroup, RoleSlug: "viewer"})
-	report, err := RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.audit, inventory, false, true)
+	report, err := RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.authzClient, ti.service.audit, inventory, false, true)
 	require.NoError(t, err)
 	require.True(t, report.Committed)
 	require.Equal(t, 2, report.AddedMappings)
@@ -76,7 +76,7 @@ func TestDirectoryRoleInventoryImportPreservesMappingsAndIsIdempotent(t *testing
 	auditEntry, err := audittest.LatestAuditLogByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingSet)
 	require.NoError(t, err)
 	require.Equal(t, testAccessAuthContext(t, ctx).UserID, auditEntry.ActorID)
-	report, err = RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.audit, inventory, false, true)
+	report, err = RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.authzClient, ti.service.audit, inventory, false, true)
 	require.NoError(t, err)
 	require.Zero(t, report.AddedMappings)
 	after, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingSet)
@@ -92,7 +92,7 @@ func TestDirectoryRoleInventoryImportDryRunDoesNotWrite(t *testing.T) {
 	seedRole(t, ctx, ti.conn, orgID, mockRole("role_builder", "Builder", "builder", ""))
 	_, group := seedMappingDirectoryGroupWithWorkOSID(t, ctx, ti.conn, orgID, "Engineering")
 	inventory := directoryInventoryFixture(t, ctx, ti, group, "builder")
-	report, err := RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.audit, inventory, false, false)
+	report, err := RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.authzClient, ti.service.audit, inventory, false, false)
 	require.NoError(t, err)
 	require.False(t, report.Committed)
 	require.Equal(t, 1, report.AddedMappings)
@@ -137,7 +137,7 @@ func TestDirectoryRoleInventoryInvalidTargetsWriteNothing(t *testing.T) {
 			case "revoked operator":
 				require.NoError(t, testrepo.New(ti.conn).SetUserPlatformAdminFixture(ctx, testrepo.SetUserPlatformAdminFixtureParams{ID: testAccessAuthContext(t, ctx).UserID, Admin: false}))
 			}
-			report, err := RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.audit, inventory, false, true)
+			report, err := RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.authzClient, ti.service.audit, inventory, false, true)
 			require.Error(t, err)
 			require.False(t, report.Committed)
 			mappings, err := repo.New(ti.conn).ListDirectoryRoleMappings(ctx, orgID)
@@ -167,7 +167,7 @@ func TestDirectoryRoleInventoryReportsStalePreservedMappings(t *testing.T) {
 	baseline, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingSet)
 	require.NoError(t, err)
 	inventory := directoryInventoryFixture(t, ctx, ti, group, "builder")
-	report, err := RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.audit, inventory, false, true)
+	report, err := RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.authzClient, ti.service.audit, inventory, false, true)
 	require.Error(t, err)
 	require.False(t, report.Committed)
 	require.Equal(t, []DirectoryRoleInventoryStaleMapping{{WorkOSGroupID: group, RoleURN: viewer}}, report.StaleMappings)
@@ -191,7 +191,7 @@ func TestDirectoryRoleInventoryRollsBackWriterFailure(t *testing.T) {
 	_, group := seedMappingDirectoryGroupWithWorkOSID(t, ctx, ti.conn, orgID, "Engineering")
 	inventory := directoryInventoryFixture(t, ctx, ti, group, "builder")
 	inventory.Assignments = append(inventory.Assignments, DirectoryRoleInventoryAssignment{WorkOSGroupID: group, RoleSlug: "viewer"})
-	report, err := RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.audit, inventory, false, true)
+	report, err := RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.authzClient, ti.service.audit, inventory, false, true)
 	require.Error(t, err)
 	require.False(t, report.Committed)
 	mappings, err := repo.New(ti.conn).ListDirectoryRoleMappings(ctx, orgID)
@@ -218,11 +218,11 @@ func TestDirectoryRoleInventoryShadowReportsLossAndRetainsOtherSources(t *testin
 	profile, workosUser := seedMappingDirectoryUser(t, ctx, ti.conn, orgID, "mapped-member", "mapped-member@example.com", `{}`)
 	addMappingGroupMember(t, ctx, ti.conn, profile, workosUser, groupID, group)
 	inventory := directoryInventoryFixture(t, ctx, ti, group, "builder")
-	_, err := RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.audit, inventory, false, true)
+	_, err := RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.authzClient, ti.service.audit, inventory, false, true)
 	require.NoError(t, err)
 	baseline, err := audittest.AuditLogCountByAction(ctx, ti.conn, audit.ActionDirectoryRoleMappingSet)
 	require.NoError(t, err)
-	report, err := RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.audit, inventory, true, false)
+	report, err := RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.authzClient, ti.service.audit, inventory, true, false)
 	require.NoError(t, err)
 	require.False(t, report.Committed)
 	require.GreaterOrEqual(t, report.MembersChecked, 2)
@@ -255,12 +255,12 @@ func TestDirectoryRoleInventoryShadowFlagsDefaultRoleChange(t *testing.T) {
 	inventory := directoryInventoryFixture(t, ctx, ti, group, "builder")
 	inventory.DefaultRoleSlug = "legacy-default"
 
-	report, err := RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.audit, inventory, true, false)
+	report, err := RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.authzClient, ti.service.audit, inventory, true, false)
 	require.NoError(t, err)
 	require.Empty(t, report.Differences, "without a target default nothing changes")
 
 	inventory.TargetDefaultRoleSlug = "least-privilege"
-	report, err = RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.audit, inventory, true, false)
+	report, err = RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.authzClient, ti.service.audit, inventory, true, false)
 	require.NoError(t, err)
 	require.Equal(t, []DirectoryRoleInventoryDifference{{
 		UserID: "default-member", LostRoleURNs: []string{}, GainedRoleURNs: []string{}, CoveredRoleURNs: []string{},
@@ -268,13 +268,13 @@ func TestDirectoryRoleInventoryShadowFlagsDefaultRoleChange(t *testing.T) {
 	}}, report.Differences)
 
 	inventory.TargetDefaultRoleSlug = "missing-default"
-	report, err = RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.audit, inventory, true, false)
+	report, err = RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.authzClient, ti.service.audit, inventory, true, false)
 	require.Error(t, err)
 	require.Equal(t, []string{"missing-default"}, report.MissingRoleSlugs)
 	require.Empty(t, report.Differences)
 
 	inventory.DefaultRoleSlug, inventory.TargetDefaultRoleSlug = "missing-current", ""
-	report, err = RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.audit, inventory, true, false)
+	report, err = RunDirectoryRoleInventory(ctx, testenv.NewLogger(t), ti.conn, ti.service.authz, ti.service.authzClient, ti.service.audit, inventory, true, false)
 	require.Error(t, err, "an unresolved current default blocks the report even without a target")
 	require.Equal(t, []string{"missing-current"}, report.MissingRoleSlugs)
 	require.Empty(t, report.Differences)

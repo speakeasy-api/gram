@@ -24,12 +24,7 @@ func (s *Service) requireLiveOrgAdmin(ctx context.Context, ac *contextvalues.Aut
 
 func (s *Service) requireLiveOrgAdminWithDBTX(ctx context.Context, ac *contextvalues.AuthContext, db repo.DBTX) error {
 	if contextvalues.IsSupportSession(ctx) {
-		return s.authz.Require(ctx, authz.Check{
-			Scope:        authz.ScopeOrgAdmin,
-			ResourceKind: "",
-			ResourceID:   ac.ActiveOrganizationID,
-			Dimensions:   nil,
-		})
+		return s.authzClient.Require(ctx, authz.Organization(ac.ActiveOrganizationID).Administer())
 	}
 	if err := s.authz.RequireUserOrganizationScopeWithDBTX(ctx, db, ac.ActiveOrganizationID, ac.UserID, authz.ScopeOrgAdmin); err != nil {
 		return fmt.Errorf("authorize organization administrator: %w", err)

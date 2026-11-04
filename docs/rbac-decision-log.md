@@ -133,3 +133,19 @@ Review follow-ups adopted on #8442 (each fails closed):
 1. **Two organization operations join the typed constructors.** `Organization(id).SyncDeviceAgent()` and `Organization(id).IngestHooks(projectID)` name the `sync_device_agent` and `ingest_hooks` permissions, which the registry already declared. `IngestHooks` always carries the project, as `HooksIngestCheck` did, so a grant bounded to another project never matches. A client test checks both operations in old and new modes. _If reversed:_ keep both checks on the engine until X1.
 2. **Device-agent admission takes anything that prepares a context.** `deviceagenttoken.Issuer.Admit` now takes a `ContextPreparer` instead of the engine. The agent and hooks services pass the client, and the MCP slice's tests keep passing the engine until they migrate. _If reversed:_ make `Admit` take `*authz.Client` and update the MCP tests in the same change.
 3. **Hooks' project checks use the typed project operations.** Server names and status ask `Project(org, project).Read()` or `.Write()`, with the organization from the authenticated context. _If reversed:_ leave them for the project slices.
+
+## O2 (AIS-838), first part: access service organization and project checks
+
+### Decided without reviewer input
+
+1. **O2 lands in two parts.** This part moves the access service's 29 plain organization and project checks, which need nothing beyond the operations F6 already has. The second part covers the remaining 46 rows:
+   - the organization-or-project read alternatives in `ListRoles` and `ListMembers`;
+   - the MCP checks in explain access and resource audiences, which need M1's MCP server operations;
+   - challenge-role assignment;
+   - the access loaders, evaluators and writers;
+   - role deletion from directory events.
+
+   _If reversed:_ hold this part and land O2 as one PR after M1.
+
+2. **The directory role inventory command builds a client without a router.** `cmd/directory-roles` has no feature-flag provider, so it builds `authz.NewDefaultClient(engine)`, with which the engine decides every call, as before. `RunDirectoryRoleInventory` takes the client next to the engine, because its writer still needs the engine's live-membership check. _If reversed:_ give the command a flag provider and route it like the server.
+3. **Support sessions in the live admin check go through the client; everyone else still goes through the engine.** `requireLiveOrgAdminWithDBTX` asks the client when a support session is administering, and keeps `RequireUserOrganizationScopeWithDBTX` for everyone else, because that reads live role membership inside the caller's transaction. That engine call belongs to the second part. _If reversed:_ move both together in the second part.
