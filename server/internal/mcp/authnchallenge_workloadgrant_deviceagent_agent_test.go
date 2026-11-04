@@ -51,7 +51,7 @@ func TestDeviceAgentToken_ActsAsTheAgentAdmissionGranted(t *testing.T) {
 
 	callerIssuer, err := sharedCallerIssuer()
 	require.NoError(t, err)
-	admitted, agent, err := deviceagenttoken.New(callerIssuer, f.ti.conn).Admit(t.Context(), token, engine)
+	admitted, agent, err := deviceagenttoken.New(callerIssuer, f.ti.conn).Admit(t.Context(), token, authztest.NewClient(t, engine))
 	require.NoError(t, err)
 	require.Equal(t, f.agentID.String(), agent.Principal.ID, "the request acts as the admitted agent, not the one assigned afterwards")
 
@@ -68,7 +68,7 @@ func TestDeviceAgentToken_ActsAsTheAgentAdmissionGranted(t *testing.T) {
 		AdmitWorkloadSession:             runtimepolicy.AdmitWorkloadSession,
 		DevMode:                          false,
 	})
-	current, currentAgent, err := deviceagenttoken.New(callerIssuer, f.ti.conn).Admit(t.Context(), token, currentEngine)
+	current, currentAgent, err := deviceagenttoken.New(callerIssuer, f.ti.conn).Admit(t.Context(), token, authztest.NewClient(t, currentEngine))
 	require.NoError(t, err)
 	require.Equal(t, other.ID.String(), currentAgent.Principal.ID)
 	currentEffective, ok := contextvalues.EffectiveAgent(current)
