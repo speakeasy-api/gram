@@ -1127,6 +1127,47 @@ type BillingMetadatum struct {
 	UpdatedAt pgtype.Timestamptz
 }
 
+type BuiltinMcpServerMember struct {
+	// @access: confidential
+	ID uuid.UUID
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	MetaMcpServerID uuid.NullUUID
+	// @access: confidential
+	BuiltinKey string
+	// @access: confidential
+	EnvironmentID uuid.NullUUID
+	// @access: confidential
+	SortOrder int32
+	// @access: confidential
+	CreatedAt pgtype.Timestamptz
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+}
+
+type BuiltinMcpSetting struct {
+	// @access: confidential
+	ProjectID uuid.NullUUID
+	// @access: confidential
+	BuiltinKey string
+	// @access: confidential
+	Hidden bool
+	// @access: confidential
+	EnvironmentID uuid.NullUUID
+	// @access: confidential
+	UserSessionIssuerID uuid.NullUUID
+	// Records an explicit issuer binding even after issuer deletion, preventing implicit fallback.
+	// @access: confidential
+	UserSessionIssuerBound bool
+	// @access: confidential
+	Version int64
+	// @access: confidential
+	UpdatedAt pgtype.Timestamptz
+	// @access: confidential
+	ID uuid.UUID
+}
+
 type BusinessMemory struct {
 	// @access: confidential
 	ID uuid.UUID
