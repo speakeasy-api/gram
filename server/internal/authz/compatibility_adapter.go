@@ -28,11 +28,11 @@ type legacyForm struct {
 // only from ownership facts, has no equivalent and returns false.
 func (c *Client) legacyCheck(op Operation) (Check, bool) {
 	def, ok := c.registry.Permission(op.permission)
-	if !ok || def.Checks == "" {
+	if !ok || def.AnswersScope == "" {
 		return Check{Scope: "", ResourceKind: c.registryKind(op.permission.Type), ResourceID: op.instance.resourceID, Dimensions: maps.Clone(op.instance.dimensions), selectorMatch: selectorMatchNormal, representedUser: ""}, false
 	}
 	check := Check{
-		Scope:        Scope(def.Checks),
+		Scope:        Scope(def.AnswersScope),
 		ResourceKind: c.registryKind(op.permission.Type),
 		ResourceID:   op.instance.resourceID,
 		Dimensions:   maps.Clone(op.instance.dimensions),
@@ -57,7 +57,7 @@ func (c *Client) legacyFormFor(op Operation) (legacyForm, bool) {
 	if !ok {
 		return legacyForm{checks: nil, anyUnblocked: false, alternatives: false}, false
 	}
-	form := legacyForm{checks: make([]Check, 0, len(op.options)), anyUnblocked: set.VetoBlocks, alternatives: true}
+	form := legacyForm{checks: make([]Check, 0, len(op.options)), anyUnblocked: set.Blocks == schema.AnyBlockVetoes, alternatives: true}
 	for _, option := range op.options {
 		check, ok := c.legacyCheck(option)
 		if !ok {

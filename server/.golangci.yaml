@@ -371,6 +371,9 @@ linters:
         - ifElseChain
     exhaustruct:
       exclude:
+        # Authorization specs list optional catalogue metadata; an omitted field
+        # is its zero value by design, and the compiler validates the rest.
+        - '^github.com/speakeasy-api/gram/server/internal/authz/schema\.(GrantSpec|BlockSpec)$'
         - '^crypto/tls\.Config$'
         - '^net\.Dialer$'
         - '^net/url\.URL$'

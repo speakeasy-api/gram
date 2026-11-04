@@ -85,7 +85,7 @@ func renderCompiledScope(scope s.ScopeDefinition) string {
 	fmt.Fprintf(&b, "%s\n", scope.Name)
 	fmt.Fprintf(&b, "  visibility: %s\n", scope.Visibility)
 	fmt.Fprintf(&b, "  resource_kind: %s\n", scope.ResourceKind)
-	fmt.Fprintf(&b, "  surface: %s\n", cmp.Or(scope.WrittenBy, "-"))
+	fmt.Fprintf(&b, "  surface: %s\n", cmp.Or(scope.GrantSurface, "-"))
 	fmt.Fprintf(&b, "  satisfied_by: %v\n", scope.SatisfiedBy)
 	fmt.Fprintf(&b, "  exclusion: %s\n", cmp.Or(scope.Exclusion, "-"))
 	fmt.Fprintf(&b, "  closure: %v\n", scope.Closure)

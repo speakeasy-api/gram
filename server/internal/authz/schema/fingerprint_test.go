@@ -21,7 +21,7 @@ func TestFingerprintTracksTheCompiledModel(t *testing.T) {
 	base := func() variant {
 		return variant{
 			readExpr:     s.Union(s.Rel("reader"), s.Rel("admin")),
-			readOpts:     []s.PermissionOption{s.Checks("org:read"), s.ExcludedBy("read_blocked")},
+			readOpts:     []s.PermissionOption{s.AnswersScope("org:read"), s.ExcludedBy("read_blocked")},
 			readerDesc:   "Read the organization",
 			alternatives: false,
 			blockScope:   "org:blocked_read",
@@ -30,16 +30,15 @@ func TestFingerprintTracksTheCompiledModel(t *testing.T) {
 	compile := func(t *testing.T, v variant) *s.Registry {
 		t.Helper()
 		opts := []s.TypeOption{
-			s.StoredKind("org"), s.WrittenBy("access"),
-			s.Grant("reader", s.StoredAs("org:read"), s.Describe(v.readerDesc)),
-			s.Grant("admin", s.StoredAs("org:admin"), s.Describe("Administer the organization")),
-			s.Block("read_blocked", s.StoredAs(v.blockScope)),
+			s.StoredKind("org"), s.GrantSurface("access"),
+			s.Grant("reader", s.GrantSpec{StoredAs: "org:read", Description: v.readerDesc}),
+			s.Grant("admin", s.GrantSpec{StoredAs: "org:admin", Description: "Administer the organization"}),
+			s.Block("read_blocked", s.BlockSpec{StoredAs: v.blockScope}),
 			s.Permission("read", v.readExpr, v.readOpts...),
-			s.Permission("administer", s.Rel("admin"), s.Checks("org:admin")),
+			s.Permission("administer", s.Rel("admin"), s.AnswersScope("org:admin")),
 		}
 		if v.alternatives {
-			opts = append(opts, s.Alternatives("read_or_administer",
-				s.Alternative("organization", "read"), s.Alternative("organization", "administer")))
+			opts = append(opts, s.Alternatives("read_or_administer", s.AlternativesSpec{Options: []s.PermissionRef{{Type: "organization", Permission: "read"}, {Type: "organization", Permission: "administer"}}, Blocks: s.BlocksApplyPerOption}))
 		}
 		reg, err := s.Compile(testConfig, s.NewType("organization", opts...))
 		require.NoError(t, err)
@@ -54,7 +53,7 @@ func TestFingerprintTracksTheCompiledModel(t *testing.T) {
 	changes := map[string]func(v *variant){
 		"permission expression": func(v *variant) { v.readExpr = s.Rel("reader") },
 		"guard": func(v *variant) {
-			v.readOpts = []s.PermissionOption{s.Checks("org:read")}
+			v.readOpts = []s.PermissionOption{s.AnswersScope("org:read")}
 		},
 		"stored block":   func(v *variant) { v.blockScope = "org:blocked_admin" },
 		"grant metadata": func(v *variant) { v.readerDesc = "View the organization" },

@@ -21,9 +21,9 @@ import (
 func evaluatorSliceDeclarations() []s.TypeDecl {
 	access := string(GrantSurfaceAccess)
 	return append(frozenSliceDeclarations(),
-		s.NewType("agent", s.Parent("organization"), s.WrittenBy(access),
-			s.Grant("reader", s.StoredAs(string(ScopeAgentRead)), s.Describe("Read agents"), s.DefaultFor(SystemRoleAdmin)),
-			s.Permission("read", s.Rel("reader"), s.Checks(string(ScopeAgentRead))),
+		s.NewType("agent", s.Parent("organization"), s.GrantSurface(access),
+			s.Grant("reader", s.GrantSpec{StoredAs: string(ScopeAgentRead), Description: "Read agents", DefaultFor: []string{SystemRoleAdmin}}),
+			s.Permission("read", s.Rel("reader"), s.AnswersScope(string(ScopeAgentRead))),
 		),
 	)
 }
@@ -32,7 +32,7 @@ func compileEvaluatorSlice(t *testing.T) *s.Registry {
 	t.Helper()
 	reg, err := s.Compile(s.Config{
 		Roles:         []string{SystemRoleAdmin, SystemRoleMember},
-		WriteSurfaces: []string{string(GrantSurfaceAccess), string(GrantSurfaceRiskPolicy)},
+		GrantSurfaces: []string{string(GrantSurfaceAccess), string(GrantSurfaceRiskPolicy)},
 		Conditions: []s.Condition{
 			{Name: "mcp_tools", SelectorKeys: []string{SelectorKeyTool, SelectorKeyDisposition}},
 		},
@@ -200,18 +200,18 @@ func grantOf(principal string, scope string, kind string, id string, extra ...st
 // around and inside it, and an ExcludedBy wrapping a subtraction.
 func docDeclarations() []s.TypeDecl {
 	return []s.TypeDecl{
-		s.NewType("doc", s.WrittenBy("access"), s.SelectorKeys(SelectorKeyTool, SelectorKeyDisposition),
-			s.Grant("viewer", s.StoredAs("doc:read"), s.Describe("Read")),
-			s.Grant("editor", s.StoredAs("doc:write"), s.Describe("Write")),
-			s.Grant("archived", s.StoredAs("doc:archived"), s.Describe("Archived")),
-			s.Grant("hidden", s.StoredAs("doc:hidden"), s.Describe("Hidden")),
-			s.Block("read_blocked", s.StoredAs("doc:blocked_read")),
-			s.Block("write_blocked", s.StoredAs("doc:blocked_write")),
+		s.NewType("doc", s.GrantSurface("access"), s.SelectorKeys(SelectorKeyTool, SelectorKeyDisposition),
+			s.Grant("viewer", s.GrantSpec{StoredAs: "doc:read", Description: "Read"}),
+			s.Grant("editor", s.GrantSpec{StoredAs: "doc:write", Description: "Write"}),
+			s.Grant("archived", s.GrantSpec{StoredAs: "doc:archived", Description: "Archived"}),
+			s.Grant("hidden", s.GrantSpec{StoredAs: "doc:hidden", Description: "Hidden"}),
+			s.Block("read_blocked", s.BlockSpec{StoredAs: "doc:blocked_read"}),
+			s.Block("write_blocked", s.BlockSpec{StoredAs: "doc:blocked_write"}),
 			s.Permission("read", s.Union(s.Rel("viewer"), s.Rel("editor")),
-				s.Checks("doc:read"), s.ExcludedBy("read_blocked")),
-			s.Permission("write", s.Rel("editor"), s.Checks("doc:write"), s.ExcludedBy("write_blocked")),
-			s.Permission("is_archived", s.Rel("archived"), s.Checks("doc:archived")),
-			s.Permission("is_hidden", s.Rel("hidden"), s.Checks("doc:hidden")),
+				s.AnswersScope("doc:read"), s.ExcludedBy("read_blocked")),
+			s.Permission("write", s.Rel("editor"), s.AnswersScope("doc:write"), s.ExcludedBy("write_blocked")),
+			s.Permission("is_archived", s.Rel("archived"), s.AnswersScope("doc:archived")),
+			s.Permission("is_hidden", s.Rel("hidden"), s.AnswersScope("doc:hidden")),
 			// An exception to the inner block cannot undo the outer subtraction.
 			s.Permission("live_read", s.Minus(s.Perm("read"), s.Rel("archived"))),
 			// An exception to the outer block cannot undo the inner subtraction.
@@ -222,10 +222,10 @@ func docDeclarations() []s.TypeDecl {
 			// The block of the reused permission applies to its branch only.
 			s.Permission("read_or_write", s.Union(s.Perm("read"), s.Perm("write"))),
 		),
-		s.NewType("note", s.WrittenBy("access"),
+		s.NewType("note", s.GrantSurface("access"),
 			s.Attr("owner", "user"),
-			s.Grant("viewer", s.StoredAs("note:read"), s.Describe("Read")),
-			s.Permission("read", s.Rel("viewer"), s.Checks("note:read")),
+			s.Grant("viewer", s.GrantSpec{StoredAs: "note:read", Description: "Read"}),
+			s.Permission("read", s.Rel("viewer"), s.AnswersScope("note:read")),
 			s.Permission("own_first", s.Union(s.Is("owner"), s.Rel("viewer"))),
 			s.Permission("own_last", s.Union(s.Rel("viewer"), s.Is("owner"))),
 			s.Permission("via_own", s.Perm("own_last")),
@@ -235,7 +235,7 @@ func docDeclarations() []s.TypeDecl {
 
 func docEvaluator(t *testing.T) *RegistryEvaluator {
 	t.Helper()
-	reg, err := s.Compile(s.Config{Roles: nil, WriteSurfaces: []string{"access"}, Conditions: nil, RetiredRuntimeScopes: nil}, docDeclarations()...)
+	reg, err := s.Compile(s.Config{Roles: nil, GrantSurfaces: []string{"access"}, Conditions: nil, RetiredRuntimeScopes: nil}, docDeclarations()...)
 	require.NoError(t, err)
 	evaluator, err := NewRegistryEvaluator(reg)
 	require.NoError(t, err)

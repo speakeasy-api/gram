@@ -87,17 +87,17 @@ func TestOrganizationAdministratorEmailsShadowFindsDisagreement(t *testing.T) {
 func brokenAdministerRegistry(t *testing.T) *s.Registry {
 	t.Helper()
 	access := string(GrantSurfaceAccess)
-	decls := []s.TypeDecl{s.NewType("organization", s.StoredKind(ResourceKindOrg), s.WrittenBy(access),
-		s.Grant("reader", s.StoredAs(string(ScopeOrgRead)), s.Describe("Read the organization")),
-		s.Grant("admin", s.StoredAs(string(ScopeOrgAdmin)), s.Describe("Administer the organization")),
-		s.Grant("device_agent_sync", s.StoredAs(string(ScopeOrgDeviceAgentSync)), s.Describe("Sync device agents")),
-		s.Grant("hooks_ingest", s.StoredAs(string(ScopeOrgHooksIngest)), s.SelectorKeys(SelectorKeyProjectID), s.Describe("Ingest hook events")),
-		s.Block("read_blocked", s.StoredAs(string(ScopeOrgBlockedRead))),
-		s.Block("admin_blocked", s.StoredAs(string(ScopeOrgBlockedAdmin))),
-		s.Permission("read", s.Union(s.Rel("reader"), s.Rel("admin")), s.Checks(string(ScopeOrgRead)), s.ExcludedBy("read_blocked")),
-		s.Permission("administer", s.Rel("admin"), s.Checks(string(ScopeOrgAdmin))),
-		s.Permission("sync_device_agent", s.Union(s.Rel("device_agent_sync"), s.Rel("admin")), s.Checks(string(ScopeOrgDeviceAgentSync))),
-		s.Permission("ingest_hooks", s.Union(s.Rel("hooks_ingest"), s.Rel("admin")), s.Checks(string(ScopeOrgHooksIngest))),
+	decls := []s.TypeDecl{s.NewType("organization", s.StoredKind(ResourceKindOrg), s.GrantSurface(access),
+		s.Grant("reader", s.GrantSpec{StoredAs: string(ScopeOrgRead), Description: "Read the organization"}),
+		s.Grant("admin", s.GrantSpec{StoredAs: string(ScopeOrgAdmin), Description: "Administer the organization"}),
+		s.Grant("device_agent_sync", s.GrantSpec{StoredAs: string(ScopeOrgDeviceAgentSync), Description: "Sync device agents"}),
+		s.Grant("hooks_ingest", s.GrantSpec{StoredAs: string(ScopeOrgHooksIngest), SelectorKeys: []string{SelectorKeyProjectID}, Description: "Ingest hook events"}),
+		s.Block("read_blocked", s.BlockSpec{StoredAs: string(ScopeOrgBlockedRead)}),
+		s.Block("admin_blocked", s.BlockSpec{StoredAs: string(ScopeOrgBlockedAdmin)}),
+		s.Permission("read", s.Union(s.Rel("reader"), s.Rel("admin")), s.AnswersScope(string(ScopeOrgRead)), s.ExcludedBy("read_blocked")),
+		s.Permission("administer", s.Rel("admin"), s.AnswersScope(string(ScopeOrgAdmin))),
+		s.Permission("sync_device_agent", s.Union(s.Rel("device_agent_sync"), s.Rel("admin")), s.AnswersScope(string(ScopeOrgDeviceAgentSync))),
+		s.Permission("ingest_hooks", s.Union(s.Rel("hooks_ingest"), s.Rel("admin")), s.AnswersScope(string(ScopeOrgHooksIngest))),
 	)}
 	for _, decl := range DefaultDeclarations() {
 		if decl.Name() != "organization" {

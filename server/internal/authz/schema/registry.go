@@ -66,8 +66,8 @@ type ScopeDefinition struct {
 	// Sensitive marks scopes that expose sensitive content.
 	Sensitive bool
 
-	// WrittenBy is the grant surface that owns writes for the scope.
-	WrittenBy string
+	// GrantSurface is the grant surface that owns writes for the scope.
+	GrantSurface string
 
 	// Anchors lists where grants may be stored, in declaration order. A
 	// relation without AnchoredAt is anchored at Self only.
@@ -84,9 +84,9 @@ type ScopeDefinition struct {
 	// Roles lists the system roles that hold the scope by default, sorted.
 	Roles []string
 
-	// RuntimeSafeSince is the runtime registry version from which the scope is
-	// safe in a delegated policy; 0 means never.
-	RuntimeSafeSince int
+	// DelegatableSince is the runtime registry version from which the scope
+	// may be placed in a delegated policy; 0 means never.
+	DelegatableSince int
 
 	// SatisfiedBy lists the other stored scopes whose grants also satisfy an
 	// authz.Check for this scope, one step and sorted.
@@ -158,14 +158,15 @@ type PermissionDefinition struct {
 	Expr Expr
 
 	// ExcludedBy lists the blocking scopes this permission applies with block
-	// precedence, in declaration order. Blocks of a permission reused through
+	// precedence: the direct block first, then the blocks that imply it,
+	// sorted. Blocks of a permission reused through
 	// Perm stay on that permission and apply to its branch only; Scopes lists
 	// them.
 	ExcludedBy []string
 
-	// Checks is the stored scope whose authz.Check this permission answers, or
-	// "".
-	Checks string
+	// AnswersScope is the stored scope whose authz.Check this permission
+	// answers, or "".
+	AnswersScope string
 
 	// Facts lists the type's own facts the permission may read, sorted.
 	Facts []string
@@ -203,9 +204,8 @@ type AlternativeSet struct {
 	// Options lists the complete permissions in declaration order.
 	Options []PermissionRef
 
-	// VetoBlocks rejects the request when any option's block matches in any
-	// policy.
-	VetoBlocks bool
+	// Blocks says how the options' blocks combine.
+	Blocks BlockRule
 }
 
 // TypeDefinition is a compiled resource type.
@@ -379,16 +379,16 @@ func (c *compiler) build() *Registry {
 			ref := PermissionRef{Type: t.name, Permission: p.name}
 			reg.permIndex[ref] = len(reg.permissions)
 			reg.permissions = append(reg.permissions, c.compilePermission(t, m, p))
-			if p.checks != "" {
-				reg.checks[p.checks] = ref
+			if p.answers != "" {
+				reg.checks[p.answers] = ref
 			}
 		}
 		for _, a := range t.alternatives {
 			reg.alternatives[PermissionRef{Type: t.name, Permission: a.name}] = AlternativeSet{
-				Type:       t.name,
-				Name:       a.name,
-				Options:    slices.Clone(a.options),
-				VetoBlocks: a.veto,
+				Type:    t.name,
+				Name:    a.name,
+				Options: slices.Clone(a.options),
+				Blocks:  a.blocks,
 			}
 		}
 	}
@@ -467,12 +467,12 @@ func compileScope(t *TypeDecl, r relationDecl) ScopeDefinition {
 		Visibility:       visibility,
 		Description:      r.description,
 		Sensitive:        r.sensitive,
-		WrittenBy:        cmp.Or(r.writtenBy, t.writtenBy),
+		GrantSurface:     cmp.Or(r.grantSurface, t.grantSurface),
 		Anchors:          anchors,
 		Conditions:       slices.Clone(r.conditions),
 		SelectorKeys:     keys,
 		Roles:            roles,
-		RuntimeSafeSince: r.runtimeSince,
+		DelegatableSince: r.delegatable,
 		SatisfiedBy:      nil,
 		Exclusion:        "",
 		Closure:          nil,
@@ -482,16 +482,16 @@ func compileScope(t *TypeDecl, r relationDecl) ScopeDefinition {
 
 func (c *compiler) compilePermission(t *TypeDecl, m members, p permissionDecl) PermissionDefinition {
 	out := PermissionDefinition{
-		Type:        t.name,
-		Name:        p.name,
-		Description: p.description,
-		Expr:        c.resolve(t, m, p.expr),
-		ExcludedBy:  nil,
-		Checks:      p.checks,
-		Facts:       nil,
-		Conditions:  nil,
-		Scopes:      nil,
-		Traverses:   nil,
+		Type:         t.name,
+		Name:         p.name,
+		Description:  p.description,
+		Expr:         c.resolve(t, m, p.expr),
+		ExcludedBy:   nil,
+		AnswersScope: p.answers,
+		Facts:        nil,
+		Conditions:   nil,
+		Scopes:       nil,
+		Traverses:    nil,
 	}
 	w := prerequisiteWalker{c: c, t: t, m: m, out: &out, visiting: []string{p.name}}
 	w.walk(p.expr)
@@ -604,19 +604,18 @@ func (w *prerequisiteWalker) addCondFacts(cond Cond) {
 // projectChecks derives the legacy authz.Check projection: which other scopes
 // satisfy a check for each scope and which block directly excludes it.
 func (c *compiler) projectChecks(reg *Registry, scopes map[string]ScopeDefinition) {
-	broaderByBlock := make(map[string][]string)
 	for _, p := range reg.permissions {
-		if p.Checks == "" {
+		if p.AnswersScope == "" {
 			continue
 		}
 		t := c.byName[p.Type]
 		m := c.members(t)
 		decl := t.permissions[slices.IndexFunc(t.permissions, func(d permissionDecl) bool { return d.name == p.Name })]
 
-		s := scopes[p.Checks]
+		s := scopes[p.AnswersScope]
 		var satisfied []string
 		for _, name := range satisfyingRelations(m, decl.expr, []string{decl.name}) {
-			if scope := m.relations[name].storedAs; scope != p.Checks {
+			if scope := m.relations[name].storedAs; scope != p.AnswersScope {
 				satisfied = append(satisfied, scope)
 			}
 		}
@@ -627,19 +626,13 @@ func (c *compiler) projectChecks(reg *Registry, scopes map[string]ScopeDefinitio
 		case decl.expr.op == OpMinus && decl.expr.operands[1].op == OpRel:
 			s.Exclusion = m.relations[decl.expr.operands[1].name].storedAs
 		}
-		scopes[p.Checks] = s
+		scopes[p.AnswersScope] = s
 
 		if len(p.ExcludedBy) == 0 {
 			continue
 		}
 		direct := scopes[p.ExcludedBy[0]]
-		broader := sortedUnique(p.ExcludedBy[1:])
-		if previous, seen := broaderByBlock[direct.Name]; seen && !slices.Equal(previous, broader) {
-			c.problemf("type %q: block %q directly excludes several permissions with different broader blocks (%v and %v)", p.Type, direct.Relation, previous, broader)
-			continue
-		}
-		broaderByBlock[direct.Name] = broader
-		direct.SatisfiedBy = broader
+		direct.SatisfiedBy = sortedUnique(p.ExcludedBy[1:])
 		scopes[p.ExcludedBy[0]] = direct
 	}
 }
@@ -691,7 +684,7 @@ func projectClosures(scopes map[string]ScopeDefinition) {
 func (c *compiler) projectRuntime(scopes []ScopeDefinition) []RuntimeScope {
 	out := make([]RuntimeScope, 0, len(scopes)+len(c.cfg.RetiredRuntimeScopes))
 	for _, s := range scopes {
-		out = append(out, RuntimeScope{Name: s.Name, Lifecycle: RuntimeActive, SafeSince: s.RuntimeSafeSince})
+		out = append(out, RuntimeScope{Name: s.Name, Lifecycle: RuntimeActive, SafeSince: s.DelegatableSince})
 	}
 	seen := make(map[string]bool, len(c.cfg.RetiredRuntimeScopes))
 	for _, name := range c.cfg.RetiredRuntimeScopes {
