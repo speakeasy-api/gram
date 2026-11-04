@@ -60,7 +60,8 @@ type ShadowComparison struct {
 	OrganizationID string
 	// Units are the migration units the call touched.
 	Units []string
-	// Entry is the client entry point: require, evaluate or match_many.
+	// Entry is the client entry point: require, evaluate, evaluate_grants,
+	// match_many or audience.
 	Entry string
 	// Permissions are the typed permissions the call asked for, such as
 	// project.read, in call order.
@@ -70,7 +71,8 @@ type ShadowComparison struct {
 	// classifies a new_error, and is empty otherwise.
 	Detail string
 	// Duration is how long the registry evaluator ran, or how long the
-	// comparison waited before it gave up.
+	// comparison waited before it gave up. For an audience it is the sum of
+	// the registry evaluator's per-member decisions, without the grant reads.
 	Duration time.Duration
 	// BuildVersion is the server build that ran the comparison.
 	BuildVersion string
