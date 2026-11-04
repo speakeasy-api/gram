@@ -23,7 +23,7 @@ func (s *Service) ReadableConversations(ctx context.Context, ids []string) ([]st
 	}
 	ops := make([]authz.Operation, len(ids))
 	for i, id := range ids {
-		ops[i] = authz.Chat(auth.ActiveOrganizationID, auth.ProjectID.String(), id).Read()
+		ops[i] = authz.Chat(id).Read()
 	}
 	granted, err := s.authzClient.MatchMany(ctx, ops)
 	if err != nil {

@@ -77,7 +77,7 @@ func (s *Service) writeHostedServer(ctx context.Context, toolsetID uuid.UUID, ch
 	}
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()), attr.SlogToolsetID(toolsetID.String()))
 
-	if err := s.authz.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, toolsetID.String(), authCtx.ProjectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), toolsetID.String()).Edit()); err != nil {
 		return mcpserversrepo.McpServer{}, nil, err
 	}
 	if change.Name != nil && utf8.RuneCountInString(*change.Name) > maxToolsetNameLength {

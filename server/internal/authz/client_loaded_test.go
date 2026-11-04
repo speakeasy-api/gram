@@ -22,8 +22,8 @@ func roleGrant(scope Scope, selector Selector) Grant {
 func TestClientLoadedPoliciesMatchTheEngine(t *testing.T) {
 	t.Parallel()
 
-	assistantRead := Assistant(fixtureOrgID, "proj_1", "asst_1").Read()
-	assistantWrite := Assistant(fixtureOrgID, "proj_1", "asst_1").Write()
+	assistantRead := Assistant("proj_1", "asst_1").Read()
+	assistantWrite := Assistant("proj_1", "asst_1").Write()
 	projectRead := Project(fixtureOrgID, "proj_1").Read()
 
 	projectWide := roleGrant(ScopeAssistantWrite, Selector{
@@ -112,4 +112,6 @@ func TestClientLoadedPoliciesRefuseCredentialTransports(t *testing.T) {
 	actor := urn.NewPrincipal(urn.PrincipalTypeAgent, "agent_fixture")
 	ctx := contextvalues.WithPrincipalCredentialAuthorization(context.Background(), authCtx, actor, contextvalues.PrincipalCredential{})
 	require.Error(t, client.RequireLoaded(ctx, loaded, Project(fixtureOrgID, "proj_1").Read()))
+	_, err := client.EvaluateLoaded(ctx, loaded, Project(fixtureOrgID, "proj_1").Read())
+	require.Error(t, err)
 }

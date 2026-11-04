@@ -27,7 +27,7 @@ func (s *Service) ListExecutionProfiles(ctx context.Context, payload *gen.ListEx
 	if err != nil {
 		return nil, oops.E(oops.CodeBadRequest, err, "invalid assistant id").LogWarn(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.Assistant(authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), assistantID.String()).Read()); err != nil {
+	if err := s.authz.Require(ctx, authz.Assistant(authCtx.ProjectID.String(), assistantID.String()).Read()); err != nil {
 		return nil, err
 	}
 	record, err := s.core.GetAssistant(ctx, *authCtx.ProjectID, assistantID)
@@ -93,7 +93,7 @@ func (s *Service) SetExecutionProfileChoice(ctx context.Context, payload *gen.Se
 	if modes != 1 {
 		return nil, oops.E(oops.CodeBadRequest, nil, "name exactly one of auth_client_id, no_auth or automatic").LogWarn(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.Assistant(authCtx.ActiveOrganizationID, authCtx.ProjectID.String(), assistantID.String()).Write()); err != nil {
+	if err := s.authz.Require(ctx, authz.Assistant(authCtx.ProjectID.String(), assistantID.String()).Write()); err != nil {
 		return nil, err
 	}
 	record, err := s.core.GetAssistant(ctx, *authCtx.ProjectID, assistantID)
