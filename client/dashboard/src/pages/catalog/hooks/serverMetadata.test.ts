@@ -1,41 +1,36 @@
 import { describe, expect, it } from "vitest";
 import type { FilterValues } from "../filter-defaults";
-import type { PulseMCPServer } from "../hooks";
+import type { CatalogServer } from "../hooks";
 import type { FilterState } from "./useFilterState";
 import {
   filterAndSortServers,
   requiresManualSetup,
   serverSetupType,
   extractAuthType,
+  parseServerMetadata,
 } from "./serverMetadata";
 
 function server(
   registrySpecifier: string,
   supportsDcr: boolean,
-): PulseMCPServer {
+): CatalogServer {
   return {
     description: "test",
     registrySpecifier,
     version: "1.0.0",
     meta: {},
-    toolCount: 0,
-    isReadOnly: false,
     supportsDcr,
   };
 }
 
 const NO_FILTERS: FilterValues = {
   authTypes: [],
-  toolBehaviors: [],
-  minUsers: 0,
   updatedRange: "any",
-  minTools: 0,
   setupTypes: [],
 };
 
 function filterState(filters: Partial<FilterValues>): FilterState {
   return {
-    category: "all",
     sort: "alphabetical",
     filters: { ...NO_FILTERS, ...filters },
   };
@@ -65,7 +60,7 @@ describe("requiresManualSetup", () => {
     ).toBe("auto");
   });
 
-  it("uses explicit legacy auth metadata when capability discovery is unknown", () => {
+  it("ignores legacy auth metadata when native evidence is unknown", () => {
     const legacy = {
       ...server("legacy/server", false),
       authSetup: "unknown" as const,
@@ -75,11 +70,12 @@ describe("requiresManualSetup", () => {
         },
       },
     };
-    expect(serverSetupType(legacy)).toBe("manual");
+    expect(serverSetupType(legacy)).toBe("unknown");
+    expect(extractAuthType(legacy)).toBe("unknown");
     legacy.meta["com.pulsemcp/server-version"][
       "remotes[0]"
     ].authOptions[0]!.type = "none";
-    expect(serverSetupType(legacy)).toBe("auto");
+    expect(serverSetupType(legacy)).toBe("unknown");
   });
 
   it("does not label unknown authentication as no-auth", () => {
@@ -88,12 +84,12 @@ describe("requiresManualSetup", () => {
         ...server("unknown/server", false),
         authSetup: "unknown",
       }),
-    ).toBe("other");
+    ).toBe("unknown");
   });
 });
 
 describe("filterAndSortServers setup filter", () => {
-  const servers: PulseMCPServer[] = [
+  const servers: CatalogServer[] = [
     server("auto/server", true),
     { ...server("manual/server", false), authSetup: "manual" },
     server("unknown/server", false),
@@ -141,3 +137,107 @@ describe("filterAndSortServers setup filter", () => {
     expect(result).toHaveLength(2);
   });
 });
+
+describe("native catalog metadata", () => {
+  it("keeps sparse records unknown without fabricated tool or popularity evidence", () => {
+    const sparse = { ...server("example/sparse", false), meta: undefined };
+    expect(parseServerMetadata(sparse)).toEqual({
+      authType: "unknown",
+      authTypeDisplay: "Unknown",
+      setupType: "unknown",
+      status: undefined,
+      publishedAt: undefined,
+      updatedAt: undefined,
+    });
+    expect(
+      filterAndSortServers([sparse], filterState({ updatedRange: "week" })),
+    ).toEqual([]);
+  });
+
+  it("reads projected auth capabilities and standard lifecycle, not vendor verification", () => {
+    const native = {
+      ...server("example/native", false),
+      supportsCimd: true,
+      authSetup: "cimd" as const,
+      meta: {
+        "io.modelcontextprotocol.registry/official": {
+          status: "active",
+          updatedAt: "2026-10-01T00:00:00Z",
+        },
+      },
+    };
+    expect(parseServerMetadata(native)).toMatchObject({
+      authType: "oauth",
+      setupType: "auto",
+      status: "active",
+      updatedAt: new Date("2026-10-01T00:00:00Z"),
+    });
+    expect(parseServerMetadata(native)).not.toHaveProperty("isOfficial");
+    expect(parseServerMetadata(native).publishedAt).toBeUndefined();
+  });
+
+  it("accepts explicit native no-auth but not unavailable discovery", () => {
+    const native = server("example/native", false);
+    expect(extractAuthType({ ...native, authSetup: "none" })).toBe("none");
+    expect(
+      extractAuthType({
+        ...native,
+        supportsCimd: false,
+        authSetup: "unknown",
+      }),
+    ).toBe("unknown");
+  });
+
+  it("prefers the registry publication time, then the backend-owned one", () => {
+    const native = server("example/native", false);
+    const owned = {
+      "com.speakeasy.ai/registry": { publishedAt: "2026-09-01T00:00:00Z" },
+    };
+    expect(parseServerMetadata({ ...native, meta: owned }).publishedAt).toEqual(
+      new Date("2026-09-01T00:00:00Z"),
+    );
+    expect(
+      parseServerMetadata({
+        ...native,
+        meta: {
+          ...owned,
+          "io.modelcontextprotocol.registry/official": {
+            publishedAt: "2026-10-01T00:00:00Z",
+          },
+        },
+      }).publishedAt,
+    ).toEqual(new Date("2026-10-01T00:00:00Z"));
+    expect(
+      parseServerMetadata({
+        ...native,
+        meta: {
+          ...owned,
+          "io.modelcontextprotocol.registry/official": {
+            publishedAt: "not a date",
+          },
+        },
+      }).publishedAt,
+    ).toEqual(new Date("2026-09-01T00:00:00Z"));
+  });
+});
+
+it.each([false, true])(
+  "ignores upstream isLatest=%s in catalog facts",
+  (isLatest) => {
+    const native = server("example/native", false);
+    const lifecycle = { status: "active", updatedAt: "2026-10-01T00:00:00Z" };
+    const baseline = {
+      ...native,
+      meta: { "io.modelcontextprotocol.registry/official": lifecycle },
+    };
+    const upstream = {
+      ...native,
+      meta: {
+        "io.modelcontextprotocol.registry/official": { ...lifecycle, isLatest },
+      },
+    };
+    expect(parseServerMetadata(upstream)).toEqual(
+      parseServerMetadata(baseline),
+    );
+  },
+);

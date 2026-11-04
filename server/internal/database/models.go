@@ -6963,6 +6963,9 @@ type SlackDirectoryConnection struct {
 	LastSyncFailedAt pgtype.Timestamptz
 	// @access: confidential
 	LastErrorCode pgtype.Text
+	// Project whose managed assistant answers the Speakeasy app in this workspace.
+	// @access: confidential
+	DefaultProjectID uuid.NullUUID
 	// @access: confidential
 	CreatedAt pgtype.Timestamptz
 	// @access: confidential

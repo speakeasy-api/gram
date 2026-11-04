@@ -72,7 +72,7 @@ VALUES (@project_id, @organization_id, @parent_chat_id::uuid, @child_chat_id::uu
 
 -- name: ActivityInsertAssistantThread :exec
 INSERT INTO assistant_threads (id, assistant_id, project_id, correlation_id, chat_id, source_kind, last_event_at)
-VALUES (@id, @assistant_id, @project_id, @correlation_id, @chat_id, 'dashboard', now() - interval '38 minutes');
+VALUES (@id, @assistant_id, @project_id, @correlation_id, @chat_id, @source_kind, now() - interval '38 minutes');
 
 -- Historical shortened trial: audit history shows both dates, not an extension.
 -- name: ActivityInsertTrialEndChangedAuditLog :exec
