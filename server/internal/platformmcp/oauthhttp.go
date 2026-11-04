@@ -1693,6 +1693,7 @@ func writePreAuthenticationOAuthError(w http.ResponseWriter, r *http.Request, cl
 		ClientID:       clientID,
 		ClientIDOrigin: clientIDOrigin(client),
 		ServerName:     "Speakeasy",
+		ProviderName:   "",
 	}
 	_ = oauthui.WriteAuthorizationError(r.Context(), w, page)
 }
@@ -1752,6 +1753,7 @@ func writeBrowserOAuthError(ctx context.Context, w http.ResponseWriter, status i
 		ClientID:       "",
 		ClientIDOrigin: "",
 		ServerName:     "Speakeasy",
+		ProviderName:   "",
 	})
 }
 

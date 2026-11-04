@@ -899,6 +899,8 @@ func kitGKEFailedProjectedWorkload(m kitGKEBackendMetadata, r assistantRuntimeRe
 		m.Workload.Subject == "system:serviceaccount:"+namespace+":"+m.Workload.ServiceAccount
 }
 
+// invalidateLegacy resets a row's recorded objects by exact identity. It also
+// collects retired rows that never published checkpoint authority.
 func (k *KitGKERuntimeBackend) invalidateLegacy(ctx context.Context, r assistantRuntimeRecord, m kitGKEBackendMetadata) error {
 	if m.RuntimeID != r.ID || m.AssistantID != r.AssistantID || m.ProjectID != r.ProjectID || m.Namespace != k.config.GKE.Namespace || m.Version != 3 || m.Fingerprint == "" {
 		return ErrKitRuntimeBinding
@@ -923,7 +925,7 @@ func (k *KitGKERuntimeBackend) invalidateLegacy(ctx context.Context, r assistant
 		{claimGVR, kitGKEName(r), m.ClaimUID}, {gkePodGVR, m.PodName, m.PodUID},
 		{kitWarmPoolGVR, m.WarmPoolName, m.WarmPoolUID}, {templateGVR, m.templateName(r), m.TemplateUID}, {kitSecretGVR, m.SecretName, m.SecretUID},
 	}
-	if projected {
+	if m.Workload != nil {
 		steps = append(steps, struct {
 			gvr  schema.GroupVersionResource
 			name string

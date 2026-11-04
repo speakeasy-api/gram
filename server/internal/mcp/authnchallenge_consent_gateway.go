@@ -80,6 +80,12 @@ type gatewayServer struct {
 	// cardIDs are the services the server signs in through.
 	cardIDs []string
 
+	// providerOutage marks a service of this server a provider outage stopped, which reconnecting may repair.
+	providerOutage bool
+
+	// connectionDown marks a service of this server any recorded outage stopped.
+	connectionDown bool
+
 	// Auth is the server's upstream credential choice, where typed auth
 	// client resolution is enforced.
 	Auth *consentServerAuth
@@ -100,7 +106,7 @@ func (g gatewayServer) Ready() bool {
 func (g gatewayServer) StatusLabel() string {
 	switch g.Status {
 	case gatewayServerUnavailable:
-		return "Unavailable · try again later"
+		return "Unavailable · try again shortly, or ask your administrator"
 	case gatewayServerNoAccess:
 		return "No access"
 	case gatewayServerNoSignIn:
@@ -123,7 +129,17 @@ func (g gatewayServer) StatusLabel() string {
 
 // NeedsAttention reports whether the status line should warn.
 func (g gatewayServer) NeedsAttention() bool {
-	return g.Status == gatewayServerReconnect || g.Status == gatewayServerNotSetUp
+	return g.Status == gatewayServerReconnect || g.Status == gatewayServerNotSetUp || g.reconnectsOutage()
+}
+
+// ConnectionUnavailable reports a server a recorded outage stopped; its page keeps Refresh in reach.
+func (g gatewayServer) ConnectionUnavailable() bool {
+	return g.Status == gatewayServerUnavailable && g.connectionDown
+}
+
+// reconnectsOutage reports an unavailable server whose connection a person can try replacing.
+func (g gatewayServer) reconnectsOutage() bool {
+	return g.Status == gatewayServerUnavailable && g.providerOutage
 }
 
 // NeedsSignIn reports whether the server signs in through a service the
@@ -297,17 +313,19 @@ func (s *Service) gatewayConsent(
 func gatewayServersView(members []metaMember, cards []remoteSessionCard) *gatewayConsentView {
 	view := &gatewayConsentView{Servers: make([]gatewayServer, 0, len(members)), ReadyCount: 0, ListOpen: false, Focus: nil, FocusUnavailable: false, CanHide: false, members: members, cards: cards, auth: nil}
 	for _, member := range members {
-		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", ServerID: member.serverID.String(), Hidden: false, cardIDs: nil, Auth: nil}
+		server := gatewayServer{Slug: member.slug, Name: cmp.Or(member.name, member.slug), Status: gatewayServerNoSignIn, ConnectClientID: "", ServerID: member.serverID.String(), Hidden: false, cardIDs: nil, providerOutage: false, connectionDown: false, Auth: nil}
 		for _, card := range cards {
 			if cardServesMember(card, member) {
 				server.cardIDs = append(server.cardIDs, card.ClientID)
 				server.Status = strongerStatus(server.Status, cardStatus(card))
+				server.providerOutage = server.providerOutage || (card.Unavailable && !card.UnavailableTunnel)
+				server.connectionDown = server.connectionDown || card.Unavailable
 			}
 		}
 		if memberNeedsSignIn(member) && len(server.cardIDs) == 0 {
 			server.Status = gatewayServerNotSetUp
 		}
-		if len(server.cardIDs) == 1 && (server.Status == gatewayServerNotConnected || server.Status == gatewayServerReconnect) {
+		if len(server.cardIDs) == 1 && (server.Status == gatewayServerNotConnected || server.Status == gatewayServerReconnect || server.reconnectsOutage()) {
 			server.ConnectClientID = server.cardIDs[0]
 		}
 		view.Servers = append(view.Servers, server)
@@ -335,7 +353,7 @@ func (v *gatewayConsentView) applyOutcomes(outcomes []consentMemberOutcome) {
 			}
 		}
 		server.ConnectClientID = ""
-		if len(server.cardIDs) == 1 && (server.Status == gatewayServerReconnect || server.Status == gatewayServerNotConnected) {
+		if len(server.cardIDs) == 1 && (server.Status == gatewayServerReconnect || server.Status == gatewayServerNotConnected || server.reconnectsOutage()) {
 			server.ConnectClientID = server.cardIDs[0]
 		}
 	}
@@ -359,6 +377,9 @@ func cardServesMember(card remoteSessionCard, member metaMember) bool {
 
 // cardStatus is the status one service gives the servers it signs in to.
 func cardStatus(card remoteSessionCard) gatewayServerStatus {
+	if card.Unavailable {
+		return gatewayServerUnavailable
+	}
 	reconnect := card.Expired || card.Unroutable || card.IdentityReconnect || card.Rejected || card.Inactive
 	switch {
 	case card.Connected && !reconnect:
@@ -460,6 +481,16 @@ func gatewayServerConnectURL(endpointRoot string, serverSlug string) string {
 	u = u.JoinPath("connect", "first-party")
 	u.RawQuery = url.Values{"server": []string{serverSlug}}.Encode()
 	return u.String()
+}
+
+// memberReconnectURL is the connect page for a person; agents and workloads have no page to reconnect on.
+func (g metaGateContext) memberReconnectURL(member metaMember) string {
+	// The Platform gateway has no authentication here and serves only people.
+	person := g.authentication == nil && g.userID != "" && g.agentID == uuid.Nil
+	if !person && !codeConnectAvailable(&g) {
+		return ""
+	}
+	return g.memberConnectURL(member)
 }
 
 // memberConnectURL is the URL a person opens to connect member on this

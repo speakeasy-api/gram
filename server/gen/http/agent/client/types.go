@@ -3666,6 +3666,8 @@ type AgentCrashBuildRequestBody struct {
 	Channel *string `form:"channel,omitempty" json:"channel,omitempty" xml:"channel,omitempty"`
 	Os      *string `form:"os,omitempty" json:"os,omitempty" xml:"os,omitempty"`
 	Arch    *string `form:"arch,omitempty" json:"arch,omitempty" xml:"arch,omitempty"`
+	// OS release, e.g. 15.4 on macOS or the kernel release on Linux.
+	OsVersion *string `form:"os_version,omitempty" json:"os_version,omitempty" xml:"os_version,omitempty"`
 }
 
 // AgentCrashFrameRequestBody is used to define fields on request body types.
@@ -11223,6 +11225,11 @@ func ValidateAgentCrashBuildRequestBody(body *AgentCrashBuildRequestBody) (err e
 	if body.Arch != nil {
 		if utf8.RuneCountInString(*body.Arch) > 16 {
 			err = goa.MergeErrors(err, goa.InvalidLengthError("body.arch", *body.Arch, utf8.RuneCountInString(*body.Arch), 16, false))
+		}
+	}
+	if body.OsVersion != nil {
+		if utf8.RuneCountInString(*body.OsVersion) > 64 {
+			err = goa.MergeErrors(err, goa.InvalidLengthError("body.os_version", *body.OsVersion, utf8.RuneCountInString(*body.OsVersion), 64, false))
 		}
 	}
 	return

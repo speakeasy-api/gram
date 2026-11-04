@@ -16,6 +16,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/chat/chattitle"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -303,7 +304,7 @@ func (s *ChatSearchService) Search(ctx context.Context, principal Principal, inp
 		if err != nil {
 			return zero, err
 		}
-		title, titleChanged, err := s.redactText(ctx, row.ChatTitle)
+		title, titleChanged, err := s.redactText(ctx, chattitle.Display(row.ChatTitle, row.ChatTitleManuallySet))
 		if err != nil {
 			return zero, err
 		}
@@ -465,7 +466,7 @@ func (s *ChatSearchService) Read(ctx context.Context, principal Principal, input
 	if len(rows) == 0 {
 		return zero, ErrRiskReadNotFound
 	}
-	title, _, err := s.redactText(ctx, chat.Title)
+	title, _, err := s.redactText(ctx, chattitle.Display(chat.Title, chat.TitleManuallySet))
 	if err != nil {
 		return zero, err
 	}

@@ -4,6 +4,7 @@ import (
 	"errors"
 	"fmt"
 	"net/http"
+	"net/url"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -56,6 +57,62 @@ func TestExchangeFailure_FixedReasons(t *testing.T) {
 			wantCode: oops.CodeUnauthorized,
 		},
 		{
+			name:     "provider rate limited",
+			err:      newTokenEndpointError(http.StatusTooManyRequests, "429 Too Many Requests", nil),
+			tunneled: false,
+			want:     "token exchange with the identity provider failed: HTTP 429",
+			wantCode: oops.CodeUnavailable,
+		},
+		{
+			name:     "parsed refusal under a 429 stays a refusal",
+			err:      newTokenEndpointError(http.StatusTooManyRequests, "429 Too Many Requests", []byte(`{"error":"invalid_grant"}`)),
+			tunneled: false,
+			want:     "token exchange with the identity provider failed: invalid_grant",
+			wantCode: oops.CodeUnauthorized,
+		},
+		{
+			name:     "slow_down under a 429 is rate limited",
+			err:      newTokenEndpointError(http.StatusTooManyRequests, "429 Too Many Requests", []byte(`{"error":"slow_down"}`)),
+			tunneled: false,
+			want:     "token exchange with the identity provider failed: slow_down",
+			wantCode: oops.CodeUnavailable,
+		},
+		{
+			name:     "vendor rate limit code under a 429 is rate limited",
+			err:      newTokenEndpointError(http.StatusTooManyRequests, "429 Too Many Requests", []byte(`{"error":"rate_limit_exceeded"}`)),
+			tunneled: false,
+			want:     "token exchange with the identity provider failed: HTTP 429",
+			wantCode: oops.CodeUnavailable,
+		},
+		{
+			name:     "vendor code under a 500 is the provider's outage",
+			err:      newTokenEndpointError(http.StatusInternalServerError, "500 Internal Server Error", []byte(`{"error":"internal_failure"}`)),
+			tunneled: false,
+			want:     "token exchange with the identity provider failed: HTTP 500",
+			wantCode: oops.CodeGatewayError,
+		},
+		{
+			name:     "vendor code under a 503 is the provider's outage",
+			err:      newTokenEndpointError(http.StatusServiceUnavailable, "503 Service Unavailable", []byte(`{"error":"maintenance"}`)),
+			tunneled: false,
+			want:     "token exchange with the identity provider failed: HTTP 503",
+			wantCode: oops.CodeUnavailable,
+		},
+		{
+			name:     "refusal under a 500 stays a refusal",
+			err:      newTokenEndpointError(http.StatusInternalServerError, "500 Internal Server Error", []byte(`{"error":"invalid_grant"}`)),
+			tunneled: false,
+			want:     "token exchange with the identity provider failed: invalid_grant",
+			wantCode: oops.CodeUnauthorized,
+		},
+		{
+			name:     "vendor code under a 400 stays a refusal",
+			err:      newTokenEndpointError(http.StatusBadRequest, "400 Bad Request", []byte(`{"error":"vendor_refused"}`)),
+			tunneled: false,
+			want:     "token exchange with the identity provider failed: HTTP 400",
+			wantCode: oops.CodeUnauthorized,
+		},
+		{
 			name:     "no tunnel route",
 			err:      &tokenExchangeUnavailableError{err: fmt.Errorf("post token: %w", tunnelrouting.ErrNoTunnelRoute)},
 			tunneled: true,
@@ -86,4 +143,30 @@ func TestExchangeFailure_FixedReasons(t *testing.T) {
 			require.Equal(t, tc.wantCode, shareable.Code)
 		})
 	}
+}
+
+// Our own route store failing is ours: not the provider's outage page, and not tagged external.
+func TestExchangeFailure_RouteStoreIsNotAProviderOutage(t *testing.T) {
+	t.Parallel()
+
+	err := &tokenExchangeUnavailableError{err: fmt.Errorf("post token: list tunnel routes: %w: %w", tunnelrouting.ErrRouteStoreUnavailable, errors.New("redis: client is closed"))}
+	failure := exchangeFailure(t.Context(), testenv.NewLogger(t), err, true)
+	require.False(t, exchangeFailureIsProviderOutage(failure, err))
+	require.Contains(t, failure.Error(), "could not read the MCP tunnel's routes")
+}
+
+// Our route store failing on a self client isn't the provider's token endpoint failing.
+func TestTokenEndpointPost_RouteStoreFailureIsNotATransportFailure(t *testing.T) {
+	t.Parallel()
+
+	endpoint := &TokenEndpoint{endpoint: "https://as.example.test/token", doer: routeStoreDownDoer{}}
+	_, err := endpoint.Post(t.Context(), url.Values{"grant_type": {"client_credentials"}})
+	require.ErrorIs(t, err, tunnelrouting.ErrRouteStoreUnavailable)
+	require.False(t, TokenEndpointCausedOutage(err))
+}
+
+type routeStoreDownDoer struct{}
+
+func (routeStoreDownDoer) Do(*http.Request) (*http.Response, error) {
+	return nil, fmt.Errorf("list tunnel routes: %w: %w", tunnelrouting.ErrRouteStoreUnavailable, errors.New("redis down"))
 }

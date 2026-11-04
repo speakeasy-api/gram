@@ -14,7 +14,11 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
+	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
+	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // The verdict never quotes the member: a rejection on either leg wins, then the deadline, then the last status seen.
@@ -111,6 +115,55 @@ func TestCombineUpstreamVerdict(t *testing.T) {
 		got, gotReason := combineUpstreamVerdict(tc.verdict, tc.reason, remotesessions.UpstreamVerification{Inactive: tc.inactive}, "linear")
 		require.Equal(t, tc.want, got, tc.name)
 		require.Equal(t, tc.wantReason, gotReason, tc.name)
+	}
+}
+
+func TestUnservedCredentialReason(t *testing.T) {
+	t.Parallel()
+
+	require.Contains(t, unservedCredentialReason(0, false), "no project")
+	require.Contains(t, unservedCredentialReason(1, false), "not linked")
+	require.Empty(t, unservedCredentialReason(1, true))
+}
+
+// An organization gateway scoped to a project reaches no other project's client.
+func TestProbeRemoteSession_ClientOnNoProjectCannotBeChecked(t *testing.T) {
+	t.Parallel()
+
+	service := &Service{}
+	subject := urn.NewUserSubject("user_1")
+	endpoint := &ResolvedMcpEndpoint{RouteBase: mcproute.OrganizationGateway, ProjectID: uuid.New()}
+	client := remotesessions.Client{ProjectID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
+
+	err := service.probeRemoteSession(t.Context(), testenv.NewLogger(t), endpoint, AuthnChallengeState{Subject: &subject}, client, nil, remotesessionmetrics.ValidationTriggerVerify)
+	var shareable *oops.ShareableError
+	require.ErrorAs(t, err, &shareable)
+	require.Equal(t, oops.CodeBadRequest, shareable.Code)
+	require.ErrorContains(t, err, "This connection can't be checked here.")
+}
+
+func TestDescribeNoUsableCredential(t *testing.T) {
+	t.Parallel()
+
+	now := time.Now()
+	past, future := now.Add(-time.Minute), now.Add(time.Minute)
+	for _, tc := range []struct {
+		name      string
+		state     remotesessions.RemoteSessionState
+		connected bool
+		contains  string
+	}{
+		{name: "no grant", connected: false, contains: "no grant"},
+		{name: "authorization ended", connected: true, state: remotesessions.RemoteSessionState{AuthorizationExpiresAt: &past, RefreshExpiresAt: &future}, contains: "authorization lifetime"},
+		{name: "refresh ended", connected: true, state: remotesessions.RemoteSessionState{RefreshExpiresAt: &past}, contains: "refresh token lifetime"},
+		{name: "access expired without refresh", connected: true, state: remotesessions.RemoteSessionState{AccessExpiresAt: &past}, contains: "no refresh token"},
+		{name: "refresh failed", connected: true, state: remotesessions.RemoteSessionState{AccessExpiresAt: &past, CanRefresh: true}, contains: "could not be obtained"},
+		{name: "live deadlines", connected: true, state: remotesessions.RemoteSessionState{AuthorizationExpiresAt: &future, RefreshExpiresAt: &future}, contains: "could not be obtained"},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			require.Contains(t, describeNoUsableCredential(tc.state, tc.connected, now), tc.contains)
+		})
 	}
 }
 

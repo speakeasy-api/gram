@@ -10,7 +10,12 @@ import { Stack } from "@/components/ui/Stack";
 import { Text } from "@/components/ui/Text";
 import { formatPlatform } from "@/lib/formatPlatform";
 import { cn } from "@/lib/utils";
-import { formatUsageCost } from "@/pages/chatLogs/claudeUsage";
+import {
+  formatUsageCost,
+  isCostUnknown,
+  UNKNOWN_COST_EXPLANATION,
+} from "@/pages/chatLogs/claudeUsage";
+import { UnknownCost } from "@/pages/chatLogs/UnknownCost";
 import { useChatDetailSheet } from "@/pages/chatLogs/useChatDetailSheet";
 import { AgentProviderIcon } from "@/components/agent-providers/AgentProviderIcon";
 import { useRoutes } from "@/routes";
@@ -229,6 +234,10 @@ function SessionSummaryTiles({
   error: Error | null;
 }): JSX.Element {
   const displayValue = isLoading ? "—" : undefined;
+  // The totals come from the server with no per-session breakdown, so a
+  // range that used tokens but cost nothing is one whose agents do not
+  // report cost. $0 there would read as free.
+  const costUnknown = !isLoading && data !== undefined && isCostUnknown(data);
   return (
     <>
       <Stack gap={0}>
@@ -252,7 +261,8 @@ function SessionSummaryTiles({
           <StatTile
             title="Cost"
             value={data?.totalCost ?? 0}
-            displayValue={displayValue}
+            displayValue={costUnknown ? "—" : displayValue}
+            tooltip={costUnknown ? UNKNOWN_COST_EXPLANATION : undefined}
             format="currency"
             tone="neutral"
           />
@@ -353,6 +363,12 @@ function SessionRow({
           <>
             <span className="text-muted-foreground/40">·</span>
             <span>{formatUsageCost(chat.totalCost)}</span>
+          </>
+        )}
+        {isCostUnknown(chat) && (
+          <>
+            <span className="text-muted-foreground/40">·</span>
+            <UnknownCost focusable={false} />
           </>
         )}
         <span className="text-muted-foreground/40">·</span>

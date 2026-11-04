@@ -49,12 +49,14 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/cache"
+	"github.com/speakeasy-api/gram/server/internal/constants"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	customdomainsrepo "github.com/speakeasy-api/gram/server/internal/customdomains/repo"
 	"github.com/speakeasy-api/gram/server/internal/encryption"
 	"github.com/speakeasy-api/gram/server/internal/guardian"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcproute"
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/networkingress"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oauth/protectedresource"
@@ -136,6 +138,8 @@ type ParentChallenge struct {
 	// from the host holding the parent challenge's callback cookie.
 	BrowserCookieID string
 	BrowserHash     string
+	// Attempt is the connection attempt this login belongs to. Zero records nothing.
+	Attempt mcpconnectionattempts.Attempt
 }
 
 // RemoteLoginState is the per-remote-leg Redis state, keyed by the opaque
@@ -208,6 +212,14 @@ type RemoteLoginState struct {
 	BrowserCookieID string    `json:"browser_cookie_id,omitempty"`
 	BrowserHash     string    `json:"browser_hash,omitempty"`
 	CreatedAt       time.Time `json:"created_at"`
+	// Attempt joins this login to the connection attempt that led to it. Zero records nothing.
+	Attempt mcpconnectionattempts.Attempt `json:"attempt,omitzero" msgpack:",omitempty"`
+	// ResourceMcpServerID is the gateway member this login qualified to.
+	ResourceMcpServerID uuid.NullUUID `json:"resource_mcp_server_id,omitzero"`
+	// ProviderHost is the normalized host of the issuer this login went to.
+	ProviderHost string `json:"provider_host,omitempty"`
+	// RemoteSessionIssuerID is the issuer this login went to.
+	RemoteSessionIssuerID uuid.UUID `json:"remote_session_issuer_id,omitzero"`
 }
 
 // parent rebuilds the ParentChallenge this state was minted from, so the
@@ -229,13 +241,34 @@ func (s RemoteLoginState) parent() ParentChallenge {
 		Resource:            s.Resource,
 		McpServerID:         s.McpServerID,
 		MetaMcpServerID:     s.MetaMcpServerID,
-		// The retry leg reuses the first leg's scopes, so it reads no resource.
-		ResourceMcpServerID: uuid.NullUUID{UUID: uuid.Nil, Valid: false},
+		// Carried so the retry leg's row names the member. Its scopes come from the first leg.
+		ResourceMcpServerID: s.ResourceMcpServerID,
 		AutoRefresh:         s.AutoRefresh,
 		Authority:           s.Authority,
 		BrowserCookieID:     s.BrowserCookieID,
 		BrowserHash:         s.BrowserHash,
+		Attempt:             s.Attempt,
 	}
+}
+
+// recordSignInStep records the end of a provider sign-in. A login with a final
+// destination ends its attempt here. One returning to consent does not, because
+// the person can still finish connecting.
+func (m *ChallengeManager) recordSignInStep(ctx context.Context, r *http.Request, state RemoteLoginState, what mcpconnectionattempts.Happened, remoteSessionID uuid.UUID) {
+	record := m.connections.Step
+	if state.FinalRedirectURI != "" {
+		record = m.connections.End
+	}
+	record(ctx, state.Attempt, mcpconnectionattempts.StepProviderSignIn, what,
+		mcpconnectionattempts.Provider(state.ProviderHost),
+		mcpconnectionattempts.RemoteSession(remoteSessionID),
+		mcpconnectionattempts.Member(state.ResourceMcpServerID.UUID),
+		mcpconnectionattempts.RemoteSessionIssuer(state.RemoteSessionIssuerID),
+		mcpconnectionattempts.UserSessionIssuer(state.UserSessionIssuerID),
+		mcpconnectionattempts.RemoteSessionClient(state.RemoteSessionClientID),
+		mcpconnectionattempts.Subject(state.Subject),
+		mcpconnectionattempts.FromRequest(r),
+	)
 }
 
 var _ cache.CacheableObject[RemoteLoginState] = (*RemoteLoginState)(nil)
@@ -245,15 +278,16 @@ func (s RemoteLoginState) TTL() time.Duration { return 10 * time.Minute }
 
 // ChallengeManager drives the per-remote OAuth authn-challenge leg.
 type ChallengeManager struct {
-	logger    *slog.Logger
-	db        *pgxpool.Pool
-	enc       *encryption.Client
-	policy    *guardian.Policy
-	tunnels   *tunnelrouting.HTTPClient
-	cache     cache.TypedCacheObject[RemoteLoginState]
-	locks     cache.Cache
-	refresher *RefreshService
-	serverURL *url.URL
+	connections *mcpconnectionattempts.Recorder
+	logger      *slog.Logger
+	db          *pgxpool.Pool
+	enc         *encryption.Client
+	policy      *guardian.Policy
+	tunnels     *tunnelrouting.HTTPClient
+	cache       cache.TypedCacheObject[RemoteLoginState]
+	locks       cache.Cache
+	refresher   *RefreshService
+	serverURL   *url.URL
 
 	// origins pins the redirect_uri and client identity URLs each client was
 	// registered with, independent of serverURL.
@@ -410,6 +444,11 @@ func WithCallbackOrigins(origins CallbackOrigins) ChallengeManagerOption {
 	return func(m *ChallengeManager) { m.origins = origins }
 }
 
+// WithConnectionRecorder records provider sign-in steps. Without it nothing is recorded.
+func WithConnectionRecorder(recorder *mcpconnectionattempts.Recorder) ChallengeManagerOption {
+	return func(m *ChallengeManager) { m.connections = recorder }
+}
+
 // WithProtectedResourceProber lets logins read, and when the organization is
 // enrolled probe, the protected resource row of the MCP server they are for.
 // It is the same prober the proxy refreshes rows with, so one replica has one
@@ -443,6 +482,7 @@ func NewChallengeManager(
 			cache.SuffixNone,
 		),
 		locks:          cacheImpl,
+		connections:    nil,
 		refresher:      nil,
 		issuerMetadata: nil,
 		serverURL:      serverURL,
@@ -1056,6 +1096,23 @@ type RemoteSessionState struct {
 	ValidationReason string
 }
 
+// ConnectionOutage reads the outage on record for subject's grant on clientID, and
+// the tunnel its provider sits behind. It calls nothing upstream, for pages to render from.
+func (m *ChallengeManager) ConnectionOutage(ctx context.Context, subject urn.SessionSubject, clientID uuid.UUID) (RefreshOutageKind, uuid.NullUUID, bool) {
+	none := uuid.NullUUID{UUID: uuid.Nil, Valid: false}
+	queries := remotesessions_repo.New(m.db)
+	sess, err := queries.GetActiveRemoteSession(ctx, remotesessions_repo.GetActiveRemoteSessionParams{SubjectUrn: subject, RemoteSessionClientID: clientID})
+	if err != nil {
+		return RefreshOutageNone, none, false
+	}
+	kind, known := m.refresher.RecordedOutage(ctx, sess)
+	client, err := queries.GetRemoteSessionClientWithIssuerByID(ctx, clientID)
+	if err != nil {
+		return kind, none, false
+	}
+	return kind, client.TunneledMcpServerID, known
+}
+
 // RemoteSessionStatuses returns, per remote_session_client_id, the state of
 // `subject`'s remote_session on every client bound to the requesting
 // `userSessionIssuerID`. Clients with no non-deleted session are omitted
@@ -1210,6 +1267,11 @@ func (m *ChallengeManager) RefreshRemoteSession(
 	}
 
 	return m.refresher.RefreshNow(ctx, session, "", remotesessionmetrics.RefreshTriggerManual)
+}
+
+// DrainRefreshes waits for request-path refreshes that outlived their callers.
+func (m *ChallengeManager) DrainRefreshes(ctx context.Context) error {
+	return m.refresher.DrainRefreshes(ctx)
 }
 
 // FallbackResourceForClient derives one client's RFC 8707 resource from its
@@ -1465,6 +1527,10 @@ func (m *ChallengeManager) mintAuthorization(
 		BrowserCookieID:       parent.BrowserCookieID,
 		BrowserHash:           parent.BrowserHash,
 		CreatedAt:             time.Now(),
+		Attempt:               parent.Attempt,
+		ResourceMcpServerID:   parent.ResourceMcpServerID,
+		ProviderHost:          mcpconnectionattempts.NormalizeProviderHost(client.IssuerURL),
+		RemoteSessionIssuerID: client.RemoteSessionIssuerID,
 	}
 	if err := m.cache.Store(ctx, state); err != nil {
 		return "", fmt.Errorf("store remote login state: %w", err)
@@ -1539,6 +1605,7 @@ func storeRemoteSessionGrant(ctx context.Context, q *remotesessions_repo.Queries
 func (m *ChallengeManager) HandleRemoteLoginCallback(w http.ResponseWriter, r *http.Request) error {
 	result, err := m.CompleteRemoteLogin(r)
 	if err != nil {
+		TagExternalOutage(w, err)
 		return err
 	}
 	http.Redirect(w, r, result.RedirectURL, http.StatusSeeOther)
@@ -1615,6 +1682,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 
 	if errCode != "" {
 		if errCode == oautherr.CodeAccessDenied {
+			m.recordSignInStep(ctx, r, state, mcpconnectionattempts.CodeProviderDenied, uuid.Nil)
 			// Final destinations acknowledge a completed connection, so a canceled
 			// flow must stay on the callback page instead of claiming success.
 			if state.FinalRedirectURI != "" {
@@ -1635,6 +1703,10 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 			return m.retryWithoutResource(ctx, logger, state, cause)
 		}
 		m.recordCIMDAuthorizationFailure(ctx, state, errCode, q.Get("error_description"))
+		// RFC 6749 §4.1.2.1: the provider's own codes for an outage at authorize.
+		if errCode == oautherr.CodeTemporarilyUnavailable || errCode == oautherr.CodeServerError {
+			return none, providerOutageError(oops.E(oops.CodeUnavailable, nil, "The sign-in provider returned an error: %s", errCode).LogWarn(ctx, logger, attr.SlogOAuthError(errCode)), m.providerLabel(ctx, state))
+		}
 		return none, denied(ctx, logger, q)
 	}
 
@@ -1736,7 +1808,11 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 			return m.retryWithoutResource(ctx, logger, state, err)
 		}
 		m.noteExchangeTokenEndpointMissing(ctx, logger, client.ID, err)
-		return none, exchangeFailure(ctx, logger, err, clientRow.TunneledMcpServerID.Valid)
+		failure := exchangeFailure(ctx, logger, err, clientRow.TunneledMcpServerID.Valid)
+		if !exchangeFailureIsProviderOutage(failure, err) {
+			return none, failure
+		}
+		return none, providerOutageError(failure, m.providerLabel(ctx, state))
 	}
 	// The pair is live upstream from this line on, and every path out of here
 	// that does not store it strands it: unreachable through Speakeasy, and outside
@@ -1940,6 +2016,7 @@ func (m *ChallengeManager) CompleteRemoteLogin(r *http.Request) (RemoteLoginResu
 		return none, oops.E(oops.CodeUnexpected, err, "commit remote session").LogError(ctx, logger)
 	}
 	stranded = false
+	m.recordSignInStep(ctx, r, state, mcpconnectionattempts.ResultSignedIn, storedSession.ID)
 
 	redirect, err := m.remoteLoginDestination(ctx, state, mcpSlug)
 	if err != nil {
@@ -2037,6 +2114,46 @@ func denied(ctx context.Context, logger *slog.Logger, q url.Values) error {
 		attr.SlogOAuthError(truncateForMessage(errCode)),
 		attr.SlogOAuthErrorDescription(truncateForMessage(q.Get("error_description"))),
 	)
+}
+
+// ErrProviderOutageExternal marks a provider-caused 5xx at sign-in that shouldn't alert on-call.
+var ErrProviderOutageExternal = errors.New("sign-in provider outage")
+
+// TagExternalOutage marks the response to err as caused outside Speakeasy.
+func TagExternalOutage(w http.ResponseWriter, err error) {
+	if errors.Is(err, ErrProviderOutageExternal) {
+		w.Header().Set(constants.HeaderProxiedResponse, "1")
+	}
+}
+
+// providerOutageError presents a provider outage as one to try again shortly.
+func providerOutageError(err *oops.ShareableError, provider string) error {
+	presented := oops.WithBrowserProvider(oops.WithBrowserReason(err, oauthui.ReasonProviderUnavailable), provider)
+	return fmt.Errorf("complete remote login: %w: %w", ErrProviderOutageExternal, presented)
+}
+
+// providerLabel is the issuer's host; a tunneled provider's host stays off the page.
+func (m *ChallengeManager) providerLabel(ctx context.Context, state RemoteLoginState) string {
+	row, err := remotesessions_repo.New(m.db).GetRemoteSessionClientWithIssuerByID(ctx, state.RemoteSessionClientID)
+	if err != nil || row.TunneledMcpServerID.Valid {
+		return ""
+	}
+	parsed, err := url.Parse(row.IssuerUrl)
+	if err != nil {
+		return ""
+	}
+	return parsed.Hostname()
+}
+
+// exchangeFailureIsProviderOutage excludes failures Speakeasy's own signing caused.
+func exchangeFailureIsProviderOutage(failure *oops.ShareableError, err error) bool {
+	if errors.Is(err, tunnelrouting.ErrRouteStoreUnavailable) {
+		return false
+	}
+	if _, signing := errors.AsType[*tokenEndpointSigningError](err); signing {
+		return false
+	}
+	return failure.Code == oops.CodeUnavailable || failure.Code == oops.CodeGatewayError
 }
 
 // retryWithoutResource mints one resource-less leg of the same login after
@@ -2212,6 +2329,9 @@ func exchangeFailure(ctx context.Context, logger *slog.Logger, err error, tunnel
 		if errors.Is(err, tunnelrouting.ErrNoTunnelRoute) {
 			reason = "the MCP tunnel is not connected"
 		}
+		if errors.Is(err, tunnelrouting.ErrRouteStoreUnavailable) {
+			reason = "Speakeasy could not read the MCP tunnel's routes"
+		}
 		return oops.E(oops.CodeGatewayError, err, "%s: %s", message, reason).LogError(ctx, logger)
 	}
 	endpointErr, ok := errors.AsType[*tokenEndpointError](err)
@@ -2245,12 +2365,30 @@ func exchangeFailure(ctx context.Context, logger *slog.Logger, err error, tunnel
 	}
 }
 
+// exchangeRefusalCodes judge the request, so they stay a refusal under any status; other codes leave it to the status.
+var exchangeRefusalCodes = map[string]bool{
+	oautherr.CodeAccessDenied:         true,
+	oautherr.CodeInvalidClient:        true,
+	oautherr.CodeInvalidGrant:         true,
+	oautherr.CodeInvalidRequest:       true,
+	oautherr.CodeInvalidScope:         true,
+	oautherr.CodeInvalidTarget:        true,
+	oautherr.CodeUnauthorizedClient:   true,
+	oautherr.CodeUnsupportedGrantType: true,
+}
+
 // exchangeFailureCode answers a provider outage with 503 or 502 rather than blaming the user's credentials with 401.
 func exchangeFailureCode(status int, oauthCode string) oops.Code {
 	switch {
-	case oauthCode == oautherr.CodeTemporarilyUnavailable, status == http.StatusServiceUnavailable:
+	case oauthCode == oautherr.CodeTemporarilyUnavailable:
 		return oops.CodeUnavailable
-	case oauthCode == oautherr.CodeServerError, status >= http.StatusInternalServerError:
+	case oauthCode == oautherr.CodeServerError:
+		return oops.CodeGatewayError
+	case exchangeRefusalCodes[oauthCode]:
+		return oops.CodeUnauthorized
+	case status == http.StatusServiceUnavailable, status == http.StatusTooManyRequests:
+		return oops.CodeUnavailable
+	case status >= http.StatusInternalServerError:
 		return oops.CodeGatewayError
 	default:
 		return oops.CodeUnauthorized

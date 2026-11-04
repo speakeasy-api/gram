@@ -1,11 +1,11 @@
 import { cleanup, render, screen } from "@testing-library/react";
 import { afterEach, expect, it } from "vitest";
 import { TooltipProvider } from "@/components/ui/Tooltip";
-import type { PulseMCPServer } from "./hooks";
+import type { CatalogServer } from "./hooks";
 import { ManualSetupBadge } from "./ManualSetupBadge";
 
 afterEach(cleanup);
-const server: PulseMCPServer = {
+const server: CatalogServer = {
   registrySpecifier: "com.example/server",
   description: "Example server",
   version: "1.0.0",
