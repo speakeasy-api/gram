@@ -315,8 +315,9 @@ func restoreLocalPluginRepositories(
 // (POST /mcp/{mcpSlug}).
 //
 // Note: the effective drain is also bounded by infrastructure settings such as
-// terminationGracePeriodSeconds in Kubernetes, which must be set above this
-// value for the full window to be honored.
+// terminationGracePeriodSeconds in Kubernetes. The MCP service drains for up to
+// this plus probeDrainTimeout plus its 15s upstream refresh drain, about 95s,
+// so the grace period must exceed that for the full window to be honored.
 const shutdownDrainTimeout = 60 * time.Second
 
 // relayedRequestInterruptAfter is how long after SIGTERM a request relayed to

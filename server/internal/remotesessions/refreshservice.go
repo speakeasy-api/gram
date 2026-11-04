@@ -557,6 +557,9 @@ func (s *RefreshService) refresh(
 		if winner, ok := s.awaitRefreshedSession(ctx, q, sess); ok {
 			return winner, nil, nil, nil
 		}
+		if err := ctx.Err(); err != nil {
+			return zero, nil, nil, fmt.Errorf("wait for a concurrent refresh: %w", err)
+		}
 		// A duplicate POST beats a guaranteed reconnect prompt.
 		s.logger.WarnContext(ctx, "timed out waiting on a concurrent remote session refresh; refreshing directly",
 			attr.SlogRemoteSessionClientID(sess.RemoteSessionClientID.String()),
