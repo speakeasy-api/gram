@@ -106,6 +106,7 @@ type platformMCPConfig struct {
 	FeatureFlags           feature.Provider
 	DistributionAdmission  *admission.Guard
 	Authz                  *authz.Engine
+	AuthzClient            *authz.Client
 	Encryption             *encryption.Client
 	Identity               *identity.Resolver
 	Sessions               *sessions.Manager
@@ -544,7 +545,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithCodeModeAvailability(config.CodeModeAvailable).
-		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
+		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuthzClient, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
 		WithInboundEMATrust(config.InboundEMAUserIssuers, config.InboundEMARemoteIssuers).
 		WithXAAIdentityChaining(chaining, config.OutboundCallbackOrigin).
@@ -951,7 +952,7 @@ func newPlatformMCPProjectLifecycle(config platformMCPConfig, authorizer platfor
 func newPlatformMCPGateways(config platformMCPConfig, authorizer platformmcp.Authorizer, limitStore ratelimit.Store) *platformmcp.GatewayService {
 	service, err := platformmcp.NewGatewayService(
 		config.Logger, config.DB, config.AuditLogger, config.Authz, authorizer, config.DistributionAdmission,
-		mcpendpoints.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.TemporalEnv, config.PluginPublisher != nil),
+		mcpendpoints.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuthzClient, config.AuditLogger, config.TemporalEnv, config.PluginPublisher != nil),
 		config.PublicationRequests, config.PluginPublishSignaler,
 		platformmcp.OperationBudget{
 			Connection:   ratelimit.New(limitStore, platformmcp.GatewayMutationConnectionLimitName, ratelimit.PerMinute(platformmcp.GatewayMutationsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
@@ -985,7 +986,7 @@ func newPlatformMCPConnectionMutations(config platformMCPConfig) *platformmcp.MC
 	service, err := platformmcp.NewMCPConnectionMutationService(
 		config.DB,
 		platformmcp.NewMCPConnectionSettingsService(config.DB).WithCodeModeAvailability(config.CodeModeAvailable),
-		mcpendpoints.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.TemporalEnv, config.PluginPublisher != nil),
+		mcpendpoints.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuthzClient, config.AuditLogger, config.TemporalEnv, config.PluginPublisher != nil),
 		config.AuditLogger, config.Authz, config.NetworkAccessAdmission, config.PublicationRequests, config.PluginPublishSignaler,
 	)
 	if err != nil {
@@ -1326,7 +1327,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithCodeModeAvailability(config.CodeModeAvailable).
-		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
+		WithXAAReadiness(oktaresourceconnections.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuthzClient, config.AuditLogger, config.FeatureFlags), newPlatformMCPOktaSignIn(config), config.FeatureFlags).
 		WithInternalSessionIssuer(config.IssuerGate).
 		WithInboundEMATrust(config.InboundEMAUserIssuers, config.InboundEMARemoteIssuers).
 		WithXAAIdentityChaining(chaining, config.OutboundCallbackOrigin).

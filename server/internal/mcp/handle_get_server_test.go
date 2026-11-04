@@ -3,6 +3,7 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -33,6 +34,7 @@ func TestHandleGetServer_ContentNegotiation(t *testing.T) {
 		testInstance.siteURL,
 		testInstance.cacheAdapter,
 		authz.NewEngine(testInstance.logger, testInstance.conn, nil, workos.NewStubClient()),
+		authztest.NewParityClient(t, authz.NewEngine(testInstance.logger, testInstance.conn, nil, workos.NewStubClient())),
 		testInstance.audit,
 		nil,
 	)
