@@ -110,7 +110,7 @@ func Perm(permission string) Expr {
 // listed permission passes in every policy, so one policy cannot satisfy one
 // branch while another policy satisfies a different one. Each branch keeps
 // its own ExcludedBy blocks, so a block stops only its branch unless the
-// permission also declares AnyBlockVetoes. A denial names the first branch.
+// permission also declares AnyBlockVetoes.
 func AnyOf(branches ...Expr) Expr {
 	return newExpr(OpAnyOf, "", "", "", slices.Clone(branches))
 }
