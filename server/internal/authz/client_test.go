@@ -272,7 +272,7 @@ func TestClientTypedOperations(t *testing.T) {
 		unenforced := *authCtx
 		unenforced.SessionID = nil
 		ctx = contextvalues.SetAuthContext(ctx, &unenforced)
-		enforce, err := client.engine.ShouldEnforce(ctx)
+		enforce, err := client.ShouldEnforce(ctx)
 		require.NoError(t, err)
 		require.False(t, enforce)
 
