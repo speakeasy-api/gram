@@ -480,5 +480,6 @@ These resolutions are in the base branch's merge commit and are listed here so t
    - Policy-grant containment (`policyAuthorityChecker`) bounds what a delegate may hand an agent. It is in-package containment, the same gap as AG1 decision 6.
 
    _If reversed:_ any of these can move once the client grows a containment or validation API.
+
 4. **The key service gets the client beside the engine.** `auth.Auth` still takes the engine. `NewAuthorizer(engine, client)` now gets the client, so the agent decisions behind key issuance (AG1) run through it too.
 5. **Parity is proven by the key suite in shadow.** `newTestKeysService` builds the service with `authztest.NewParityClient`.
