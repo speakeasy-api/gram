@@ -44,6 +44,7 @@ func TestRenewal_SuccessRecordsRenewed(t *testing.T) {
 	require.Equal(t, b.OrganizationID, row.OrganizationID)
 	require.Equal(t, "identity_provider", row.ServerKind)
 	require.Equal(t, b.IssuerID.String(), row.RemoteSessionIssuerID)
+	require.Equal(t, b.ClientID.String(), row.RemoteSessionClientID)
 	require.Equal(t, urn.NewUserSubject(b.HumanID).String(), row.SubjectURN)
 }
 
@@ -169,4 +170,27 @@ func TestRenewal_UnauthorizedCallerRecordsNothing(t *testing.T) {
 	_, err := s.Resolve(t.Context(), b, denied)
 	require.Error(t, err)
 	rec.RequireNothing()
+}
+
+func TestRenewal_RegistrationChangedDuringRefreshRecordsSignInRequired(t *testing.T) {
+	t.Parallel()
+
+	s, _, p, b, allow := newDelegationUnitFixture(t)
+	rec := mcpconnectionattemptstest.New(t)
+	s.connections = rec.Recorder
+	require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+	s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+		s.loadBinding = func(context.Context, string, uuid.UUID, uuid.UUID) (Provider, error) {
+			changed := *p
+			changed.client.ClientID = "changed-client"
+			return &changed, nil
+		}
+		return delegationRenewal(p, s.now(), "new-id", "new-refresh"), nil
+	}
+
+	_, err := s.Resolve(t.Context(), b, allow)
+	require.ErrorIs(t, err, ErrStaleRegistration)
+	row := rec.RequireEnded(mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.CodeReauthenticationRequired)
+	require.Equal(t, b.IssuerID.String(), row.RemoteSessionIssuerID)
+	require.Equal(t, b.ClientID.String(), row.RemoteSessionClientID)
 }

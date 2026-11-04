@@ -729,6 +729,7 @@ func (s *Service) Resolve(ctx context.Context, b Binding, authority Authorizer) 
 		return Assertion{}, ErrTemporary
 	}
 	if liveErr == nil && live != nil && live.DelegationConfigurationHash() != c.config {
+		s.recordRenewal(persistCtx, b, mcpconnectionattempts.CodeReauthenticationRequired)
 		return Assertion{}, ErrStaleRegistration
 	}
 	if next.status == "configuration_failure" {
