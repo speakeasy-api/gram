@@ -86,7 +86,7 @@ type Change struct {
 
 // Authorize admits the request's caller to its project's widgets.
 func (s *Service) Authorize(ctx context.Context) (Caller, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
 	if err != nil {
 		return Caller{}, err
 	}
@@ -129,7 +129,7 @@ func (c Caller) admitted() (*contextvalues.AuthContext, error) {
 // Read returns one widget of the request's project, validated as it is read,
 // with its dashboards and version.
 func (s *Service) Read(ctx context.Context, id string) (Snapshot, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -161,7 +161,7 @@ func (s *Service) read(ctx context.Context, authCtx *contextvalues.AuthContext, 
 // a caller who may not change it, so a preview never shows a change
 // that would be refused.
 func (s *Service) ReadForChange(ctx context.Context, id string) (Snapshot, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
 	if err != nil {
 		return Snapshot{}, err
 	}
@@ -188,7 +188,7 @@ func (s *Service) ReadRecent(ctx context.Context, limit int32) ([]Snapshot, erro
 }
 
 func (s *Service) list(ctx context.Context, limit pgtype.Int4) ([]Snapshot, error) {
-	authCtx, err := s.authorize(ctx, authz.ScopeProjectRead)
+	authCtx, err := s.authorize(ctx, authz.ProjectRef.Read)
 	if err != nil {
 		return nil, err
 	}
@@ -222,7 +222,7 @@ func (s *Service) list(ctx context.Context, limit pgtype.Int4) ([]Snapshot, erro
 // Check validates a widget as a save would, without writing it: the query
 // against the catalog and the visualization against the query.
 func (s *Service) Check(ctx context.Context, input Input) error {
-	if _, err := s.authorize(ctx, authz.ScopeProjectRead); err != nil {
+	if _, err := s.authorize(ctx, authz.ProjectRef.Read); err != nil {
 		return err
 	}
 	_, _, err := s.checkInput(ctx, input)

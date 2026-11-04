@@ -51,7 +51,7 @@ func newDashboardToolFixture(t *testing.T) (context.Context, dashboardToolFixtur
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagExplore, principal.OrganizationID, true)
 	engine := authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	management := dashboards.NewService(logger, tracer, db, &sessions.Manager{}, engine, audit.NewLogger())
+	management := dashboards.NewService(logger, tracer, db, &sessions.Manager{}, engine, authztest.NewParityClient(t, engine), audit.NewLogger())
 	service := NewDashboardsService(logger, management, NewPostgresReader(logger, db), engine, flags, NewPostgresOrganizationSlugResolver(db), "test-dashboard-key")
 	require.NotNil(t, service)
 	require.Nil(t, NewDashboardsService(logger, management, NewPostgresReader(logger, db), engine, nil, NewPostgresOrganizationSlugResolver(db), "test-dashboard-key"), "without flags the tools are served as unavailable")

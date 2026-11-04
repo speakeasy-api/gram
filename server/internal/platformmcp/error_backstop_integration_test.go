@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -198,7 +199,7 @@ func composeRegistryOnPool(t *testing.T, logger *slog.Logger, pool, live *pgxpoo
 
 	tracer := testenv.NewTracerProvider(t)
 	features := productfeatures.NewClient(logger, tracer, pool, redis)
-	management := sigint.NewService(logger, tracer, pool, &sessions.Manager{}, liveEngine, auditLogger, features)
+	management := sigint.NewService(logger, tracer, pool, &sessions.Manager{}, liveEngine, authztest.NewParityClient(t, liveEngine), auditLogger, features)
 	signalAuthoring := NewSignalAuthoringService(management, reader, liveEngine, key)
 
 	_, registrar := newServerWithRiskMutations(reader, nil, registrations, key, nil, NewFeedbackService(pool), NewOnboardingService(pool),

@@ -43,7 +43,7 @@ func newSignalAuthoringFixture(t *testing.T) (context.Context, signalAuthoringFi
 	features := productfeatures.NewClient(logger, tracer, db, redis)
 	require.NoError(t, features.SetFeatureEnabled(t.Context(), principal.OrganizationID, productfeatures.FeatureSignalsIntelligence, true))
 	engine := authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	management := sigint.NewService(logger, tracer, db, &sessions.Manager{}, engine, audit.NewLogger(), features)
+	management := sigint.NewService(logger, tracer, db, &sessions.Manager{}, engine, authztest.NewParityClient(t, engine), audit.NewLogger(), features)
 	ctx := contextvalues.WithAuthenticatedActor(t.Context(), &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID, ProjectID: &project.ID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	ctx = contextWithPrincipal(ctx, principal)
 	ctx = authz.GrantsToContext(ctx, []authz.Grant{authz.NewGrant(authz.ScopeProjectRead, project.ID.String()), authz.NewGrant(authz.ScopeProjectWrite, project.ID.String())})

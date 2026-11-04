@@ -48,7 +48,7 @@ type Service struct {
 	tracer          trace.Tracer
 	db              *pgxpool.Pool
 	auth            *auth.Auth
-	authz           *authz.Engine
+	authz           *authz.Client
 	audit           *audit.Logger
 	productFeatures *productfeatures.Client
 }
@@ -62,6 +62,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	auditLogger *audit.Logger,
 	productFeatures *productfeatures.Client,
 ) *Service {
@@ -71,7 +72,7 @@ func NewService(
 		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/sigint"),
 		db:              db,
 		auth:            auth.New(logger, db, sessions, authzEngine),
-		authz:           authzEngine,
+		authz:           authzClient,
 		audit:           auditLogger,
 		productFeatures: productFeatures,
 	}
@@ -88,7 +89,7 @@ func (s *Service) APIKeyAuth(ctx context.Context, key string, schema *security.A
 	return s.auth.Authorize(ctx, key, schema)
 }
 
-func (s *Service) requireAccess(ctx context.Context, organizationID string, check authz.Check) error {
+func (s *Service) requireAccess(ctx context.Context, organizationID string, operation authz.Operation) error {
 	enabled, err := s.productFeatures.IsFeatureEnabled(ctx, organizationID, productfeatures.FeatureSignalsIntelligence)
 	if err != nil {
 		return oops.E(oops.CodeUnexpected, err, "check signals intelligence availability").LogError(ctx, s.logger)
@@ -97,7 +98,7 @@ func (s *Service) requireAccess(ctx context.Context, organizationID string, chec
 	if !enabled {
 		return oops.E(oops.CodeForbidden, nil, "signals intelligence is not enabled for this organization")
 	}
-	return s.authz.Require(ctx, check)
+	return s.authz.Require(ctx, operation)
 }
 
 func (s *Service) CreateSignal(ctx context.Context, payload *gen.CreateSignalPayload) (*types.SigintSignal, error) {
@@ -127,7 +128,7 @@ func (s *Service) CreateSignalWithTx(ctx context.Context, dbtx pgx.Tx, payload *
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Write()); err != nil {
 		return nil, err
 	}
 
@@ -188,7 +189,7 @@ func (s *Service) GetSignal(ctx context.Context, payload *gen.GetSignalPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -214,7 +215,7 @@ func (s *Service) ListSignals(ctx context.Context, payload *gen.ListSignalsPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -263,7 +264,7 @@ func (s *Service) UpdateSignalWithTx(ctx context.Context, dbtx pgx.Tx, payload *
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Write()); err != nil {
 		return nil, err
 	}
 
@@ -347,7 +348,7 @@ func (s *Service) DeleteSignal(ctx context.Context, payload *gen.DeleteSignalPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Write()); err != nil {
 		return nil, err
 	}
 
@@ -475,7 +476,7 @@ func (s *Service) CreateSensorWithTx(ctx context.Context, dbtx pgx.Tx, payload *
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Write()); err != nil {
 		return nil, err
 	}
 
@@ -577,7 +578,7 @@ func (s *Service) GetSensor(ctx context.Context, payload *gen.GetSensorPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -603,7 +604,7 @@ func (s *Service) ListSensors(ctx context.Context, payload *gen.ListSensorsPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -652,7 +653,7 @@ func (s *Service) UpdateSensorWithTx(ctx context.Context, dbtx pgx.Tx, payload *
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Write()); err != nil {
 		return nil, err
 	}
 
@@ -783,7 +784,7 @@ func (s *Service) DeleteSensor(ctx context.Context, payload *gen.DeleteSensorPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil}); err != nil {
+	if err := s.requireAccess(ctx, authCtx.ActiveOrganizationID, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Write()); err != nil {
 		return nil, err
 	}
 

@@ -99,7 +99,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 
 	require.NoError(t, features.SetFeatureEnabled(ctx, orgID, productfeatures.FeatureSignalsIntelligence, true))
 	return ctx, &testInstance{
-		service:  sigint.NewService(logger, tracerProvider, conn, sessions, engine, audit.NewLogger(), features),
+		service:  sigint.NewService(logger, tracerProvider, conn, sessions, engine, authztest.NewParityClient(t, engine), audit.NewLogger(), features),
 		conn:     conn,
 		features: features,
 	}
