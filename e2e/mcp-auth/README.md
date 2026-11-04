@@ -7,11 +7,10 @@ Local OAuth issuers, MCP upstreams, a protocol-driving MCP client, and dashboard
 The supplied gap catalog is a list of hypotheses, not expected failures. New `*-paths.spec.ts` and card-action cases assert working authorization, execution, administration and recovery paths; unsupported or blocked stages are not counted as visited. Every browser case still verifies persisted typed enforcement before UI provisioning.
 
 - `mise run test:mcp-auth:unit`: strict mock/protocol infrastructure checks.
-- `mise run test:mcp-auth:contracts`: real product decision/parser/delegation-memory boundaries, separately from browser evidence.
 - `mise run test:mcp-auth`: browser runner; accepts Playwright file/grep/list arguments.
-- `mise run test:mcp-auth:all`: units, product contracts, then browser files **serially**, with a separate bounded budget and preserved ignored artifacts per file. A failing contract does not prevent browser measurement; an invalid mock unit suite does. No retries or ordinary seed/API/SQL provisioning; separately authorized setup exceptions are recorded below.
+- `mise run test:mcp-auth:all`: mock units, then browser files **serially**, with a separate bounded budget and preserved ignored artifacts per file. An invalid mock unit suite prevents browser measurement. No retries or ordinary seed/API/SQL provisioning; separately authorized setup exceptions are recorded below.
 
-[STATE-CONSTRUCTION.md](./STATE-CONSTRUCTION.md) separately records UI-created, in-memory, historical/hand-built persisted-state, and environment requirements. Hand-built SQL state has not been created. The earlier 44-case measured ledger remains historical evidence; [PATH-EVIDENCE.md](./PATH-EVIDENCE.md) tracks the expanded inventory, latest recorded outcomes, and the actual evidence boundary for each hypothesis. A persisted enforcement flag does not attest that every credential type avoids an internal compatibility hand-back.
+[STATE-CONSTRUCTION.md](./STATE-CONSTRUCTION.md) separately records UI-created, historical/hand-built persisted-state, and environment requirements. Hand-built SQL state has not been created. The earlier 44-case measured ledger remains historical evidence; [PATH-EVIDENCE.md](./PATH-EVIDENCE.md) tracks the expanded inventory, latest recorded outcomes, and the actual evidence boundary for each hypothesis. A persisted enforcement flag does not attest that every credential type avoids an internal compatibility hand-back.
 
 ## Run
 
@@ -111,8 +110,6 @@ The initial `.logs/mcp-auth/code-mode-auth-evidence/results.json` records **1 fa
 G23 is **unsupported backend graph construction**, not merely a missing UI control: `server/internal/authclients/create.go:390–403` (`attachTx`) rejects static/pass-through credentials on tunneled servers, for both create-with-IDs and attach APIs. Setup exceptions cannot unlock it through supported APIs. Do not manufacture an OAuth bridge, substitute a remote server for a tunnel, or bypass persistence constraints to report a pass. Historical/adversarial/aged-keepalive variants remain unexecuted; no default SQL writes are authorized.
 
 ### Final verification
-
-The separate `mise run test:mcp-auth:contracts` check (`.logs/mcp-auth/final-verification/contracts.log`) reports **DONE 49 tests, 11 failures, 25.467s**. The failure count includes **9 leaf assertions plus 2 parent entries**, not 11 independent bugs: six desired typed-serving boundary leaves (G22 EMA/chaining, G23 tunneled static/pass-through, G24 stale OAuth/static) and three G11 grant-retention leaves (WAF 403, 400 invalid_client, 404 moved endpoint). These hypothesis assertions remain red; they use in-memory query structs and dependency-injected `RefreshConfiguration` state-machine checks, **not HTTP, SQL, browser/worker execution, or persistence evidence**. They are not all proven product regressions.
 
 The earlier final-verification batch also reports **36 unit tests passed**, repository type-check passed, **83 browser tests in 22 files** listed, formatting passed, and whitespace checks clean (all 64 untracked files and `git diff --check`). Both trace artifact roots are ignored. That batch completed without product edits; the separately authorized bootstrap and subsequent workload validation now await results.
 
