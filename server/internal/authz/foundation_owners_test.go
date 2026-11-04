@@ -125,8 +125,6 @@ var foundationPackageOwners = map[string]string{
 	"internal/skills":                                        ownerS1,
 	"internal/slackdirectoryconnections":                     ownerO3,
 	"internal/spendrules":                                    ownerO6,
-	"internal/telemetry":                                     ownerL1,
-	"internal/telemetry/analytics":                           ownerL1,
 	"internal/templates":                                     ownerP2,
 	"internal/tools":                                         ownerP3,
 	"internal/triggers":                                      ownerP5,
@@ -155,6 +153,10 @@ var foundationFileOwners = map[string]string{
 	"internal/plugins/delivery_principals.go":                   ownerS2,
 	"internal/plugins/distribution_projection.go":               ownerS2,
 	"internal/plugins/role_matches.go":                          ownerS2,
+	// The dataset access check outlives the analytics service's migration
+	// until the dashboards, widgets and Platform MCP callers move to
+	// AccessOperation.
+	"internal/telemetry/analytics/catalog.go": ownerP4,
 }
 
 var foundationFunctionOwners = map[string]string{

@@ -650,6 +650,7 @@ func buildTestMCPService(
 		sessionCaptureEnabled,
 		posthog,
 		authzEngine,
+		authztest.NewParityClient(t, authzEngine),
 		nil,
 	)
 

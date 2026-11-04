@@ -109,3 +109,12 @@ Review follow-ups adopted on #8442 (each fails closed):
 3. **Organization issuer handlers pass the operation, not a scope.** `requireOrganizationIssuerAccess(ctx, authz.OrganizationRef.Read)` takes a method expression, so the helper can no longer be called with an arbitrary scope. _If reversed:_ pass a bool for read or administer.
 4. **The meta-server attach target carries its project.** `loadAttachTarget` asked `mcp:write` on the project ID with no dimension; it now uses `MCPServersInProject(projectID).Edit()`, the MCP slice's cross-project fix. This is the only intended decision change in the slice.
 5. **The service keeps the engine only for its auth middleware**, as in the remote sessions slice.
+
+## L1 (AIS-867): telemetry and analytics
+
+### Decided without reviewer input
+
+1. **`project.ReadToolLogs()` names the existing `read_logs` permission.** The RFC's example calls the operation `ReadToolLogs`; the declared permission stays `read_logs` so the catalogue and frozen projections do not change. Tool-call and raw-log endpoints use it; aggregate and per-person summaries use `project.Read()`. `prepareTelemetrySearch` takes the operation as a method expression (`authz.ProjectRef.ReadToolLogs`) instead of a scope. _If reversed:_ rename the permission to `read_tool_logs`, which changes the compiled catalogue entry.
+2. **`Dataset.AccessOperation` sits beside `Dataset.AccessCheck`.** The analytics service asks the typed operation (`organization.administer` for restricted datasets). `AccessCheck` stays for the dashboards, widgets and Platform MCP callers, which have not migrated; its inventory row moves from L1 to P4, the first of those owners, and the builder is deleted when the last caller moves. _If reversed:_ change `AccessCheck` to return an operation in this PR, which would force the dashboards, widgets and Platform MCP services onto the client early.
+3. **The services keep the engine only for their auth middleware**, as in the session slices. The telemetry service is also built by workers without sessions; they pass the client like every other caller.
+4. **No decision changes.** Every telemetry check maps to an existing permission with the same scope, resource and dimensions; the MCP network-traffic check already carried the project.
