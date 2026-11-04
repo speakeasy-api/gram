@@ -109,7 +109,7 @@ func CanBypassBatchWithGrants(ctx context.Context, logger *slog.Logger, client *
 			decisions[input] = false
 			continue
 		}
-		allowed, err := client.EvaluateGrants(ctx, grants, authz.RiskPolicy(input.PolicyID, policyBypassCheckDimensions(input.Target)).Bypass())
+		allowed, err := client.EvaluateGrantsInOrganization(ctx, input.OrganizationID, grants, authz.RiskPolicy(input.PolicyID, policyBypassCheckDimensions(input.Target)).Bypass())
 		if err != nil {
 			logger.WarnContext(ctx, "failed to evaluate risk policy bypass",
 				attr.SlogError(err),

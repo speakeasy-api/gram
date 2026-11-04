@@ -52,11 +52,11 @@ func servers(ctx context.Context, tx pgx.Tx, org string, projectID uuid.UUID) ([
 // deliver: read and write still satisfy connect at the endpoint (see
 // authz scopeExpansions[ScopeMCPConnect]), but counting them here would make a
 // narrowed connect rule meaningless.
-func allowed(ctx context.Context, client *authz.Client, grants []authz.Grant, s server) (bool, error) {
+func allowed(ctx context.Context, client *authz.Client, org string, grants []authz.Grant, s server) (bool, error) {
 	grants = slices.DeleteFunc(slices.Clone(grants), func(g authz.Grant) bool {
 		return g.Scope == authz.ScopeMCPRead || g.Scope == authz.ScopeMCPWrite
 	})
-	allowed, err := client.EvaluateGrants(ctx, grants, authz.MCPServer(s.ProjectID.String(), s.ResourceID.String()).Connect())
+	allowed, err := client.EvaluateGrantsInOrganization(ctx, org, grants, authz.MCPServer(s.ProjectID.String(), s.ResourceID.String()).Connect())
 	if err != nil {
 		return false, fmt.Errorf("evaluate role delivery Use access: %w", err)
 	}
@@ -78,9 +78,9 @@ func roleGrants(ctx context.Context, tx pgx.Tx, org string, roles []string) (map
 	return result, nil
 }
 
-func supplied(ctx context.Context, client *authz.Client, grants map[string][]authz.Grant, s server) (bool, error) {
+func supplied(ctx context.Context, client *authz.Client, org string, grants map[string][]authz.Grant, s server) (bool, error) {
 	for _, g := range grants {
-		yes, err := allowed(ctx, client, g, s)
+		yes, err := allowed(ctx, client, org, g, s)
 		if err != nil {
 			return false, err
 		}
@@ -193,15 +193,15 @@ func AudienceChanged(ctx context.Context, tx pgx.Tx, org string, projectID, plug
 	}
 	changed := false
 	for _, s := range candidates {
-		add, err := supplied(ctx, client, added, s)
+		add, err := supplied(ctx, client, org, added, s)
 		if err != nil {
 			return false, err
 		}
-		remove, err := supplied(ctx, client, removed, s)
+		remove, err := supplied(ctx, client, org, removed, s)
 		if err != nil {
 			return false, err
 		}
-		survives, err := supplied(ctx, client, next, s)
+		survives, err := supplied(ctx, client, org, next, s)
 		if err != nil {
 			return false, err
 		}
@@ -230,7 +230,7 @@ func Populate(ctx context.Context, tx pgx.Tx, org string, projectID, pluginID uu
 	}
 	changed := false
 	for _, s := range candidates {
-		yes, err := allowed(ctx, client, grants, s)
+		yes, err := allowed(ctx, client, org, grants, s)
 		if err != nil {
 			return false, err
 		}
@@ -307,18 +307,18 @@ func RoleChanged(ctx context.Context, tx pgx.Tx, org, role string, before []auth
 			return nil, err
 		}
 		for _, s := range candidates {
-			was, err := allowed(ctx, client, before, s)
+			was, err := allowed(ctx, client, org, before, s)
 			if err != nil {
 				return nil, err
 			}
-			now, err := allowed(ctx, client, after, s)
+			now, err := allowed(ctx, client, org, after, s)
 			if err != nil {
 				return nil, err
 			}
 			if was == now {
 				// A genuinely new grant may restore contents even when another scope
 				// already supplied Use. Unchanged replay and unrelated grants cannot.
-				newlySupplied, err := allowed(ctx, client, fresh, s)
+				newlySupplied, err := allowed(ctx, client, org, fresh, s)
 				if err != nil {
 					return nil, err
 				}
@@ -327,7 +327,7 @@ func RoleChanged(ctx context.Context, tx pgx.Tx, org, role string, before []auth
 				}
 			}
 			if !now {
-				survives, err := supplied(ctx, client, remaining, s)
+				survives, err := supplied(ctx, client, org, remaining, s)
 				if err != nil {
 					return nil, err
 				}

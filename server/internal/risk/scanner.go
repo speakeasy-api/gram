@@ -561,7 +561,7 @@ func (s *Scanner) scanForEnforcement(
 
 	applicablePolicies := make([]repo.RiskPolicy, 0, len(policies))
 	for _, p := range policies {
-		applies, err := s.policyApplies(ctx, grants, p.ID.String())
+		applies, err := s.policyApplies(ctx, organizationID, grants, p.ID.String())
 		if err != nil {
 			s.recordScan(ctx, projectID.String(), o11y.OutcomeFailure, time.Since(start))
 			return nil, err
@@ -804,7 +804,7 @@ func (s *Scanner) LookupShadowMCPBlockingPolicy(ctx context.Context, organizatio
 		return nil, fmt.Errorf("list shadow_mcp policies: %w", err)
 	}
 	for _, p := range policies {
-		applies, err := s.policyApplies(ctx, grants, p.ID.String())
+		applies, err := s.policyApplies(ctx, organizationID, grants, p.ID.String())
 		if err != nil {
 			return nil, err
 		}
@@ -858,11 +858,11 @@ func (s *Scanner) WithAuthorization(client *authz.Client) *Scanner {
 
 // policyApplies asks whether a risk policy's audience covers the loaded
 // grants, after subtracting bypasses.
-func (s *Scanner) policyApplies(ctx context.Context, grants []authz.Grant, policyID string) (bool, error) {
+func (s *Scanner) policyApplies(ctx context.Context, organizationID string, grants []authz.Grant, policyID string) (bool, error) {
 	if s.authorization == nil {
 		return false, errors.New("risk scanner has no authorization client")
 	}
-	applies, err := s.authorization.EvaluateGrants(ctx, grants, authz.RiskPolicy(policyID, authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate())
+	applies, err := s.authorization.EvaluateGrantsInOrganization(ctx, organizationID, grants, authz.RiskPolicy(policyID, authz.RiskPolicyDimensions{ServerURL: "", ServerIdentity: ""}).Evaluate())
 	if err != nil {
 		return false, fmt.Errorf("evaluate risk policy application: %w", err)
 	}

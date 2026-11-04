@@ -54,7 +54,7 @@ func canDelegateInference(ctx context.Context, db orgrepo.DBTX, client *authz.Cl
 	if err != nil {
 		return false, fmt.Errorf("load inference owner grants: %w", err)
 	}
-	allowed, err := client.EvaluateGrants(ctx, grants, authz.Inference(project.String()).Execute())
+	allowed, err := client.EvaluateGrantsInOrganization(ctx, org, grants, authz.Inference(project.String()).Execute())
 	if err != nil {
 		return false, fmt.Errorf("check inference delegation: %w", err)
 	}
