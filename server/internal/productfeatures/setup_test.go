@@ -128,7 +128,7 @@ func newTestProductFeaturesService(t *testing.T) (context.Context, *testInstance
 	ctx = authztest.WithAdminGrants(ctx)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := productfeatures.NewService(logger, tracerProvider, conn, sessionManager, redisClient, authzEngine, audit.NewLogger())
+	svc := productfeatures.NewService(logger, tracerProvider, conn, sessionManager, redisClient, authzEngine, authztest.NewParityClient(t, authzEngine), audit.NewLogger())
 
 	return ctx, &testInstance{
 		service:        svc,
