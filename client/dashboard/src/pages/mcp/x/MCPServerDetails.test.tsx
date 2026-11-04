@@ -6,6 +6,8 @@ import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 const mocks = vi.hoisted(() => ({
   server: undefined as unknown,
   error: null as unknown,
+  canWrite: true,
+  providerSetup: "enabled" as "enabled" | "disabled" | "loading",
   toolSource: {
     status: "ready",
     tools: [
@@ -24,6 +26,27 @@ const mocks = vi.hoisted(() => ({
   hostedToolset: undefined as unknown,
 }));
 
+vi.mock("@/hooks/useProviderSetupRollout", () => ({
+  useProviderSetupRollout: () => mocks.providerSetup,
+}));
+vi.mock("./setup/ProviderSetupPage", () => ({
+  ProviderSetupPage: ({ mcpServer }: { mcpServer: { id: string } }) => (
+    <output data-testid="setup-page">{mcpServer.id}</output>
+  ),
+}));
+vi.mock("@/hooks/useRBAC", () => ({
+  useRBAC: () => ({
+    hasScope: (scope: string) => scope !== "mcp:write" || mocks.canWrite,
+    hasAnyScope: (scopes: string[]) =>
+      scopes.some((scope) => scope !== "mcp:write" || mocks.canWrite),
+    hasAllScopes: (scopes: string[]) =>
+      scopes.every((scope) => scope !== "mcp:write" || mocks.canWrite),
+    isLoading: false,
+  }),
+}));
+vi.mock("@gram/client/react-query/requestAccess.js", () => ({
+  useRequestAccessMutation: () => ({ mutateAsync: vi.fn(), isPending: false }),
+}));
 vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
   useGetMcpServer: () => ({
     data: mocks.server,
@@ -82,14 +105,6 @@ vi.mock("@/pages/access/useServerTools", () => ({
     return mocks.toolSource;
   },
 }));
-vi.mock("@/hooks/useRBAC", () => ({
-  useRBAC: () => ({ hasAnyScope: () => true }),
-}));
-vi.mock("@/components/require-scope", () => ({
-  RequireScope: ({ children }: { children: React.ReactNode }) => (
-    <>{children}</>
-  ),
-}));
 vi.mock("@/components/insights-context", () => ({
   useHideInsightsDock: vi.fn(),
 }));
@@ -140,8 +155,8 @@ function Landed() {
   );
 }
 
-function visit(url: string) {
-  render(
+function Fixture({ url }: { url: string }) {
+  return (
     <MemoryRouter initialEntries={[url]}>
       <Routes>
         <Route
@@ -156,10 +171,18 @@ function visit(url: string) {
           path="/acme/projects/default/mcp/my-server/inspect"
           element={<Landed />}
         />
+        <Route
+          path="/acme/projects/default/mcp/my-server/overview"
+          element={<Landed />}
+        />
         <Route path="/acme/projects/default/mcp" element={<Landed />} />
       </Routes>
-    </MemoryRouter>,
+    </MemoryRouter>
   );
+}
+
+function visit(url: string) {
+  return render(<Fixture url={url} />);
 }
 
 const REMOTE_SERVER = {
@@ -170,6 +193,8 @@ const REMOTE_SERVER = {
 };
 
 beforeEach(() => {
+  mocks.canWrite = true;
+  mocks.providerSetup = "enabled";
   mocks.server = REMOTE_SERVER;
   mocks.error = null;
   mocks.readTools.mockClear();
@@ -377,4 +402,45 @@ describe("Team access unavailable tool picker states", () => {
       screen.queryByRole("button", { name: "Connect to load tools" }),
     ).toBeNull();
   });
+});
+
+describe("MCPServerDetails setup authorization", () => {
+  it("hands the exact server to setup for a writer", () => {
+    visit("/acme/projects/default/mcp/my-server/setup");
+    expect(screen.getByTestId("setup-page").textContent).toBe("server-1");
+  });
+  it("refuses setup without mcp:write", () => {
+    mocks.canWrite = false;
+    visit("/acme/projects/default/mcp/my-server/setup");
+    expect(screen.queryByTestId("setup-page")).toBeNull();
+    expect(
+      screen.getByRole("heading", { name: "Access restricted" }),
+    ).toBeDefined();
+  });
+});
+
+it("redirects a disabled Setup route to Overview", () => {
+  mocks.providerSetup = "disabled";
+  visit("/acme/projects/default/mcp/my-server/setup");
+  expect(screen.queryByTestId("setup-page")).toBeNull();
+  expect(screen.getByTestId("landed").textContent).toBe(
+    "/acme/projects/default/mcp/my-server/overview",
+  );
+});
+it("does not render or redirect Setup before the rollout resolves", () => {
+  mocks.providerSetup = "loading";
+  const view = visit("/acme/projects/default/mcp/my-server/setup");
+  expect(screen.queryByTestId("setup-page")).toBeNull();
+  expect(screen.queryByTestId("landed")).toBeNull();
+  mocks.providerSetup = "enabled";
+  view.rerender(<Fixture url="/acme/projects/default/mcp/my-server/setup" />);
+  expect(screen.getByTestId("setup-page").textContent).toBe("server-1");
+});
+it("removes Setup when the rollout is disabled during an active setup", () => {
+  const view = visit("/acme/projects/default/mcp/my-server/setup");
+  expect(screen.getByTestId("setup-page")).toBeDefined();
+  mocks.providerSetup = "disabled";
+  view.rerender(<Fixture url="/acme/projects/default/mcp/my-server/setup" />);
+  expect(screen.queryByTestId("setup-page")).toBeNull();
+  expect(screen.getByTestId("landed").textContent).toContain("/overview");
 });

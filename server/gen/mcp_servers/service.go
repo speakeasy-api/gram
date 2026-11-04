@@ -68,6 +68,12 @@ type Service interface {
 	// stays listed with visibility disabled. Other servers, including other
 	// toolset-backed ones, are deleted.
 	DeleteMcpServer(context.Context, *DeleteMcpServerPayload) (err error)
+	// Preview who a breaking change to an MCP server affects: the server's active
+	// signed-in connections and when each subject last used them. Authorizes the
+	// caller as updateMcpServer does. Only sessions issued by the server's user
+	// session issuer are counted, so servers without sign-in report
+	// sign_in_required=false and no subjects.
+	GetMcpServerUsageImpact(context.Context, *GetMcpServerUsageImpactPayload) (res *types.McpServerUsageImpact, err error)
 }
 
 // Auther defines the authorization functions to be implemented by the service.
@@ -90,7 +96,7 @@ const ServiceName = "mcpServers"
 // MethodNames lists the service method names as defined in the design. These
 // are the same values that are set in the endpoint request contexts under the
 // MethodKey key.
-var MethodNames = [12]string{"createMcpServer", "getMcpServer", "listMcpServers", "listMcpServersForOrg", "updateMcpServer", "listToolFilters", "setToolMetadataBatch", "addToolMetadataBatch", "listToolMetadata", "setToolMetadata", "deleteToolMetadata", "deleteMcpServer"}
+var MethodNames = [13]string{"createMcpServer", "getMcpServer", "listMcpServers", "listMcpServersForOrg", "updateMcpServer", "listToolFilters", "setToolMetadataBatch", "addToolMetadataBatch", "listToolMetadata", "setToolMetadata", "deleteToolMetadata", "deleteMcpServer", "getMcpServerUsageImpact"}
 
 // AddToolMetadataBatchPayload is the payload type of the mcpServers service
 // addToolMetadataBatch method.
@@ -175,6 +181,16 @@ type GetMcpServerPayload struct {
 	// Resolve the preferred MCP server for this toolset. Mutually exclusive with
 	// id and slug.
 	ToolsetID        *string
+	SessionToken     *string
+	ApikeyToken      *string
+	ProjectSlugInput *string
+}
+
+// GetMcpServerUsageImpactPayload is the payload type of the mcpServers service
+// getMcpServerUsageImpact method.
+type GetMcpServerUsageImpactPayload struct {
+	// The ID of the MCP server
+	ID               string
 	SessionToken     *string
 	ApikeyToken      *string
 	ProjectSlugInput *string

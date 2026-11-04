@@ -65,6 +65,7 @@ import {
   type JobScope,
 } from "./githubActions";
 import type { AgentPolicyGrantForm } from "@gram/client/models/components/agentpolicygrantform.js";
+import { SharedServerChoice } from "./SetupFields";
 import { CUSTOM_PLATFORM_KEY } from "./CustomSetupInstructions";
 import {
   CONNECT_SCOPE,
@@ -87,6 +88,7 @@ import type { AgentPolicyGrantCheck } from "@gram/client/models/components/agent
 import { useAgentAdmissions } from "@/pages/agents/agentAdmissions";
 import {
   catalogEntryForIssuer,
+  SUBJECT_CHOICE,
   useCatalogEntries,
   valuesFromIssuer,
   valuesFromSubject,
@@ -204,6 +206,7 @@ const SUMMARY_ROW_FOR_FIELD = new Map<string, string>([
   ["org_id", "Anthropic organization"],
   ["owner", "Repository"],
   ["repo", "Repository"],
+  [SUBJECT_CHOICE, "Jobs"],
   ["branch", "Branch"],
   ["environment", "Environment"],
   ["project", "Cluster"],
@@ -216,19 +219,28 @@ const SUMMARY_ROW_FOR_FIELD = new Map<string, string>([
 ]);
 
 /**
- * The rail's row for the branch or environment a GitHub Actions rule is
- * narrowed to, once it is named. None for the whole repository.
+ * The rail's row for what a GitHub Actions rule narrows the repository to:
+ * its pull requests, or a branch or environment once it is named. None for
+ * the whole repository.
  */
 function githubActionsScopeRow(
   scope: JobScope,
 ): { label: string; value: ReactNode }[] {
-  if (scope.kind === "repository" || scope.name === "") return [];
-  return [
-    {
-      label: scope.kind === "branch" ? "Branch" : "Environment",
-      value: <code className="text-xs break-all">{scope.name}</code>,
-    },
-  ];
+  switch (scope.kind) {
+    case "repository":
+      return [];
+    case "pull_request":
+      return [{ label: "Jobs", value: "Pull requests" }];
+    case "branch":
+    case "environment":
+      if (scope.name === "") return [];
+      return [
+        {
+          label: scope.kind === "branch" ? "Branch" : "Environment",
+          value: <code className="text-xs break-all">{scope.name}</code>,
+        },
+      ];
+  }
 }
 
 /**
@@ -1378,7 +1390,14 @@ export function CredentialsWizard({
       ? inventory.servers.filter((server) =>
           reachCoversProject(allServersProjectIDs, server.projectId),
         )
-      : selected.map((entry) => entry.server);
+      : // A selection holds the server as it was when ticked; read it back
+        // from the list so a change made since, such as a server moved to
+        // another provider in its settings, shows here.
+        selected.map(
+          (entry) =>
+            inventory.servers.find((server) => server.id === entry.server.id) ??
+            entry.server,
+        );
 
   const attachSelectedConnections = async (
     targetId: string,
@@ -1408,6 +1427,7 @@ export function CredentialsWizard({
   };
 
   const workload = useWorkloadSetup({
+    requireOneProvider: !editing,
     entry: credential === "workload" ? platform : undefined,
     platformKey: credential === "workload" ? platformKey : null,
     agentName: name.trim(),
@@ -1419,6 +1439,10 @@ export function CredentialsWizard({
               resourceId: server.resourceId,
               name: server.name,
               mcpUrl: server.mcpUrl,
+              issuerId: server.issuerId,
+              projectSlug: server.projectSlug,
+              projectId: server.projectId,
+              slug: server.slug,
             },
           ]
         : [],
@@ -1754,7 +1778,7 @@ export function CredentialsWizard({
               },
             ]
           : []),
-        // The one branch or environment the rule narrows the repository to.
+        // What the rule narrows the repository to, if anything.
         ...(credential === "workload" && platformKey === GITHUB_ACTIONS_KEY
           ? githubActionsScopeRow(jobScope(workload.values))
           : []),
@@ -1975,6 +1999,14 @@ export function CredentialsWizard({
                 setHighlight("Platform");
               }}
             />
+            {credential === "workload" &&
+              platformKey !== null &&
+              workload.usesSharedServer && (
+                <SharedServerChoice
+                  setupValues={workload.exchange}
+                  onMoved={inventory.refetch}
+                />
+              )}
           </div>
         );
       case 4:
@@ -2149,13 +2181,37 @@ export function CredentialsWizard({
             note =
               "Using a platform's tokens needs permission to manage workload identities. Choose an API key instead.";
           }
+          // Its one token works only at servers sharing a provider, so a new
+          // agent is not created until they do.
+          const mismatched =
+            !editing &&
+            platformKey !== null &&
+            workload.exchange.mismatch !== null;
+          if (mismatched && !refused) {
+            note =
+              workload.exchange.mismatch?.target === null
+                ? "Set up a shared authorization server for this agent's servers, or remove the ones that sign people in, to continue."
+                : "Move this agent's servers onto the shared authorization server you chose, or remove the ones that aren't, to continue.";
+          }
+          // Until the providers load, a mismatch can't be ruled out.
+          const checkingProviders =
+            !editing && platformKey !== null && workload.exchange.checking;
+          if (checkingProviders && !refused && !mismatched) {
+            note =
+              "Checking which shared authorization server the servers use…";
+          }
           return (
             <WizardFooter
               note={note}
               onBack={() => setStep(2)}
               primary={
                 <Button
-                  disabled={refused || workload.steps.length === 0}
+                  disabled={
+                    refused ||
+                    mismatched ||
+                    checkingProviders ||
+                    workload.steps.length === 0
+                  }
                   onClick={() => setStep(4)}
                 >
                   Continue

@@ -74,7 +74,8 @@ export function parseGatewayInventoryBootstrap(
  * termination against the URL the page provided; state and CSRF ride
  * headers so every message stays pure MCP. The attempt id keys the
  * server-side inventory snapshot this session accumulates — approval later
- * binds to it, so the caller must submit it only after this resolves.
+ * binds to it, so the caller must submit it only after this resolves. Direct
+ * typed clients pass their selected auth client on every transport request.
  */
 export async function fetchConsentInventory(
   toolsUrl: string,
@@ -82,18 +83,26 @@ export async function fetchConsentInventory(
   csrfToken: string,
   attempt: string,
   signal?: AbortSignal,
+  authClient?: string,
 ): Promise<ConsentInventory> {
   const transport = new StreamableHTTPClientTransport(
     new URL(toolsUrl, window.location.origin),
     {
       // The SDK replaces requestInit.signal with its own controller. Combine
-      // the deadline at the fetch boundary so discovery and DELETE both stop.
+      // the discovery deadline at the fetch boundary. Session termination must
+      // survive discovery cancellation, but gets its own bounded deadline.
       fetch: (input, init) =>
         fetch(input, {
           ...init,
-          signal: signal
-            ? AbortSignal.any([signal, ...(init?.signal ? [init.signal] : [])])
-            : init?.signal,
+          signal:
+            init?.method === "DELETE"
+              ? AbortSignal.timeout(2000)
+              : signal
+                ? AbortSignal.any([
+                    signal,
+                    ...(init?.signal ? [init.signal] : []),
+                  ])
+                : init?.signal,
         }),
       requestInit: {
         credentials: "omit",
@@ -101,6 +110,7 @@ export async function fetchConsentInventory(
           "Gram-Consent-State": state,
           "Gram-Consent-Csrf": csrfToken,
           "Gram-Consent-Inventory-Attempt": attempt,
+          ...(authClient ? { "Gram-Consent-Auth-Client": authClient } : {}),
         },
       },
     },

@@ -2377,6 +2377,48 @@ func TestServiceCoreReapInactiveAssistantRuntimesSkipsAssistantWithRecentActivit
 	require.Equal(t, runtimeStateStopped, oldRuntime.State)
 }
 
+func TestServiceCoreReapInactiveAssistantRuntimesCollectsRetiredKitRuntimeOnBusyAssistant(t *testing.T) {
+	t.Parallel()
+
+	conn, err := assistantsInfra.CloneTestDatabase(t, "reap_inactive_retired_kit")
+	require.NoError(t, err)
+
+	projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
+	queries := assistantsrepo.New(conn)
+	now := time.Now().UTC()
+	insertKitRow := func(state string) uuid.UUID {
+		const metadata = `{"runtime_version":3}`
+		runtimeID := insertReapableRuntimeRowWithMetadata(t, conn, projectID, assistantID, threadID, state, metadata, now)
+		require.NoError(t, queries.SetKitRuntimeMetadataFixture(t.Context(), assistantsrepo.SetKitRuntimeMetadataFixtureParams{
+			RuntimeVersion: 3, Metadata: []byte(metadata), ProjectID: projectID, RuntimeID: runtimeID,
+		}))
+		return runtimeID
+	}
+	retiredID := insertKitRow(runtimeStateStopped)
+	switchingID := insertKitRow("switch_retiring")
+	liveID := insertKitRow(runtimeStateActive)
+
+	reapCalls := &atomic.Int64{}
+	backend := testRuntimeBackend{backend: runtimeBackendGKE, reapCalls: reapCalls}
+	core := NewServiceCore(testenv.NewLogger(t), testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, backend, nil, nil, nil, telemetry.NewStub(testenv.NewLogger(t)), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	require.NoError(t, core.installKitRuntime(backend))
+
+	result, err := core.ReapInactiveAssistantRuntimes(t.Context(), ReapInactiveAssistantRuntimesParams{
+		InactivityThreshold: 7 * 24 * time.Hour,
+		BatchSize:           10,
+		OnRowProcessed:      nil,
+	})
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Reaped)
+	require.EqualValues(t, 1, reapCalls.Load())
+
+	for id, want := range map[uuid.UUID]string{retiredID: runtimeStateReaped, switchingID: "switch_retiring", liveID: runtimeStateActive} {
+		row, err := queries.GetAssistantRuntime(t.Context(), assistantsrepo.GetAssistantRuntimeParams{ID: id, ProjectID: projectID})
+		require.NoError(t, err)
+		require.Equal(t, want, row.State)
+	}
+}
+
 func TestServiceCoreReapInactiveAssistantRuntimesReapsSiblingsAcrossSweeps(t *testing.T) {
 	t.Parallel()
 
@@ -2915,6 +2957,51 @@ func TestAssistantChatOwnerID(t *testing.T) {
 		t.Run(tt.name, func(t *testing.T) {
 			t.Parallel()
 			require.Equal(t, tt.want, assistantChatOwnerID(tt.sourceKind, tt.payload, tt.creator))
+		})
+	}
+}
+
+func TestServiceCoreProcessThreadEventsRetiresUnrecoverableKitRuntime(t *testing.T) {
+	t.Parallel()
+
+	for _, tc := range []struct {
+		name    string
+		err     error
+		retired bool
+	}{
+		{name: "unrecoverable", err: fmt.Errorf("%w: interrupted restore", errKitRuntimeUnrecoverable), retired: true},
+		{name: "retryable", err: errors.New("pod not ready"), retired: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			conn, err := assistantsInfra.CloneTestDatabase(t, "assistants_kit_unrecoverable")
+			require.NoError(t, err)
+			projectID, assistantID, _, threadID := insertAssistantFixture(t, conn)
+			require.NoError(t, assistantsrepo.New(conn).SetAssistantDesiredRuntimeVersionForTest(t.Context(), assistantsrepo.SetAssistantDesiredRuntimeVersionForTestParams{ProjectID: projectID, AssistantID: assistantID, RuntimeVersion: 3}))
+
+			logger := testenv.NewLogger(t)
+			tokens := assistanttokens.New("test-jwt-secret", conn, nil, nil, nil)
+			legacy := testRuntimeBackend{backend: runtimeBackendGKE}
+			core := NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, legacy, nil, tokens, mustParseURLForServiceTest(t, "https://gram.example.com"), telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+			require.NoError(t, core.installKitRuntime(testRuntimeBackend{backend: runtimeBackendGKE, ensureErr: tc.err}))
+
+			admitted, err := core.AdmitPendingThreads(t.Context(), assistantID)
+			require.NoError(t, err)
+			require.Equal(t, []uuid.UUID{threadID}, admitted.ThreadIDs)
+
+			result, err := core.ProcessThreadEvents(t.Context(), projectID, threadID)
+			runtime, rerr := assistantsrepo.New(conn).GetLatestAssistantRuntimeByThreadID(t.Context(), assistantsrepo.GetLatestAssistantRuntimeByThreadIDParams{AssistantThreadID: threadID, ProjectID: projectID})
+			require.NoError(t, rerr)
+			require.EqualValues(t, 3, runtime.RuntimeVersion)
+			if tc.retired {
+				require.NoError(t, err)
+				require.True(t, result.RetryAdmission, "an unrecoverable Kit runtime is replaced on readmission")
+				require.Equal(t, runtimeStateFailed, runtime.State)
+				require.True(t, runtime.Deleted)
+				return
+			}
+			require.ErrorContains(t, err, "without retiring session authority")
+			require.False(t, runtime.Deleted, "a retryable Kit failure keeps its runtime")
 		})
 	}
 }

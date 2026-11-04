@@ -218,6 +218,7 @@ WHERE organization_id = $1
     'resource_id', $4::text
   )
   AND principal_type <> 'api_key'
+  AND expires_at IS NULL
 `
 
 type DeletePrincipalGrantsByResourceParams struct {
@@ -227,7 +228,9 @@ type DeletePrincipalGrantsByResourceParams struct {
 	ResourceID     string
 }
 
-// Removes grant rows for a single resource selector.
+// Removes permanent grant rows for a single resource selector. Used by
+// audience replacement writes; temporary grants are not part of an audience
+// and survive.
 func (q *Queries) DeletePrincipalGrantsByResource(ctx context.Context, arg DeletePrincipalGrantsByResourceParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deletePrincipalGrantsByResource,
 		arg.OrganizationID,
@@ -247,6 +250,7 @@ WHERE organization_id = $1
   AND scope = $2
   AND selectors = $3
   AND principal_type <> 'api_key'
+  AND expires_at IS NULL
 `
 
 type DeletePrincipalGrantsByTargetParams struct {
@@ -255,8 +259,9 @@ type DeletePrincipalGrantsByTargetParams struct {
 	Selectors      []byte
 }
 
-// Removes every principal row for one exact grant target. Used by audience
-// replacement writes where the caller supplies the full desired principal set.
+// Removes every permanent principal row for one exact grant target. Used by
+// audience replacement writes where the caller supplies the full desired
+// principal set. Temporary grants are not part of an audience and survive.
 func (q *Queries) DeletePrincipalGrantsByTarget(ctx context.Context, arg DeletePrincipalGrantsByTargetParams) (int64, error) {
 	result, err := q.db.Exec(ctx, deletePrincipalGrantsByTarget, arg.OrganizationID, arg.Scope, arg.Selectors)
 	if err != nil {
@@ -873,6 +878,40 @@ func (q *Queries) GetOrganizationRoleBySlug(ctx context.Context, arg GetOrganiza
 	return i, err
 }
 
+const getPrincipalGrantByIdentity = `-- name: GetPrincipalGrantByIdentity :one
+SELECT id, expires_at, clock_timestamp()::timestamptz AS observed_at
+FROM principal_grants
+WHERE organization_id = $1
+  AND principal_urn = $2
+  AND scope = $3
+  AND selectors = $4
+`
+
+type GetPrincipalGrantByIdentityParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+}
+
+type GetPrincipalGrantByIdentityRow struct {
+	ID         uuid.UUID
+	ExpiresAt  pgtype.Timestamptz
+	ObservedAt pgtype.Timestamptz
+}
+
+func (q *Queries) GetPrincipalGrantByIdentity(ctx context.Context, arg GetPrincipalGrantByIdentityParams) (GetPrincipalGrantByIdentityRow, error) {
+	row := q.db.QueryRow(ctx, getPrincipalGrantByIdentity,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+	)
+	var i GetPrincipalGrantByIdentityRow
+	err := row.Scan(&i.ID, &i.ExpiresAt, &i.ObservedAt)
+	return i, err
+}
+
 const getPrincipalGrants = `-- name: GetPrincipalGrants :many
 SELECT g.principal_urn, g.scope, g.selectors,
   EXISTS (
@@ -887,6 +926,9 @@ SELECT g.principal_urn, g.scope, g.selectors,
 FROM principal_grants g
 WHERE g.organization_id = $1
   AND g.principal_urn = ANY($2::text[])
+  -- Grants are loaded per request, so an expired temporary grant stops
+  -- authorizing the next request without a sign-out or role change.
+  AND (g.expires_at IS NULL OR g.expires_at > clock_timestamp())
 `
 
 type GetPrincipalGrantsParams struct {
@@ -941,6 +983,76 @@ func (q *Queries) GetRemoteSessionRowDigestFixture(ctx context.Context, id uuid.
 	var row_digest string
 	err := row.Scan(&row_digest)
 	return row_digest, err
+}
+
+const getTemporaryGrantForUpdate = `-- name: GetTemporaryGrantForUpdate :one
+SELECT id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at
+FROM principal_grants
+WHERE id = $1
+  AND organization_id = $2
+  AND expires_at IS NOT NULL
+FOR UPDATE
+`
+
+type GetTemporaryGrantForUpdateParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type GetTemporaryGrantForUpdateRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+	ExpiresAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	ObservedAt     pgtype.Timestamptz
+}
+
+// Locks one temporary grant so a renewal or revocation sees the state it
+// changes. Permanent rows are never returned.
+func (q *Queries) GetTemporaryGrantForUpdate(ctx context.Context, arg GetTemporaryGrantForUpdateParams) (GetTemporaryGrantForUpdateRow, error) {
+	row := q.db.QueryRow(ctx, getTemporaryGrantForUpdate, arg.ID, arg.OrganizationID)
+	var i GetTemporaryGrantForUpdateRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.PrincipalUrn,
+		&i.Scope,
+		&i.Selectors,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ObservedAt,
+	)
+	return i, err
+}
+
+const hasPermanentPrincipalGrants = `-- name: HasPermanentPrincipalGrants :one
+SELECT EXISTS (
+  SELECT 1
+  FROM principal_grants
+  WHERE organization_id = $1
+    AND principal_urn = $2
+    AND expires_at IS NULL
+)::boolean AS has_grants
+`
+
+type HasPermanentPrincipalGrantsParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+}
+
+// Reports whether a principal holds any permanent grant. Provisioning uses it
+// to decide whether default grants were already written, so a temporary grant
+// given to the principal never stands in for them.
+func (q *Queries) HasPermanentPrincipalGrants(ctx context.Context, arg HasPermanentPrincipalGrantsParams) (bool, error) {
+	row := q.db.QueryRow(ctx, hasPermanentPrincipalGrants, arg.OrganizationID, arg.PrincipalUrn)
+	var has_grants bool
+	err := row.Scan(&has_grants)
+	return has_grants, err
 }
 
 const insertChallengeResolutions = `-- name: InsertChallengeResolutions :many
@@ -1105,7 +1217,8 @@ const insertPrincipalGrantIfAbsent = `-- name: InsertPrincipalGrantIfAbsent :exe
 INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (organization_id, principal_urn, scope, selectors)
-DO NOTHING
+DO UPDATE SET expires_at = NULL, updated_at = clock_timestamp()
+WHERE principal_grants.expires_at IS NOT NULL
 `
 
 type InsertPrincipalGrantIfAbsentParams struct {
@@ -1115,7 +1228,9 @@ type InsertPrincipalGrantIfAbsentParams struct {
 	Selectors      []byte
 }
 
-// Creates a single grant row and leaves an existing identical row untouched.
+// Creates a single permanent grant row and leaves an existing identical
+// permanent row untouched. An identical temporary row, live or expired, is
+// made permanent and counts as written: the permanent grant did not exist.
 func (q *Queries) InsertPrincipalGrantIfAbsent(ctx context.Context, arg InsertPrincipalGrantIfAbsentParams) (int64, error) {
 	result, err := q.db.Exec(ctx, insertPrincipalGrantIfAbsent,
 		arg.OrganizationID,
@@ -1127,6 +1242,69 @@ func (q *Queries) InsertPrincipalGrantIfAbsent(ctx context.Context, arg InsertPr
 		return 0, err
 	}
 	return result.RowsAffected(), nil
+}
+
+const insertTemporaryGrant = `-- name: InsertTemporaryGrant :one
+
+INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors, expires_at)
+VALUES ($1, $2, $3, $4, $5)
+ON CONFLICT (organization_id, principal_urn, scope, selectors)
+DO UPDATE SET
+  expires_at = EXCLUDED.expires_at,
+  created_at = clock_timestamp(),
+  updated_at = clock_timestamp()
+WHERE principal_grants.expires_at IS NOT NULL
+  AND principal_grants.expires_at <= clock_timestamp()
+RETURNING id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at
+`
+
+type InsertTemporaryGrantParams struct {
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+	ExpiresAt      pgtype.Timestamptz
+}
+
+type InsertTemporaryGrantRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+	ExpiresAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	ObservedAt     pgtype.Timestamptz
+}
+
+// Queries for temporary grants: principal_grants rows with a non-NULL
+// expires_at. One row per org/principal/scope/selectors still holds, so a
+// temporary grant and a permanent grant for the same target never coexist.
+// Creates a temporary grant, or restarts an expired one for the same target.
+// Returns no row when the target is already held permanently or by a live
+// temporary grant; the caller reports which with GetPrincipalGrantByIdentity.
+func (q *Queries) InsertTemporaryGrant(ctx context.Context, arg InsertTemporaryGrantParams) (InsertTemporaryGrantRow, error) {
+	row := q.db.QueryRow(ctx, insertTemporaryGrant,
+		arg.OrganizationID,
+		arg.PrincipalUrn,
+		arg.Scope,
+		arg.Selectors,
+		arg.ExpiresAt,
+	)
+	var i InsertTemporaryGrantRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.PrincipalUrn,
+		&i.Scope,
+		&i.Selectors,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ObservedAt,
+	)
+	return i, err
 }
 
 const listAccessMemberDirectoryRoleSources = `-- name: ListAccessMemberDirectoryRoleSources :many
@@ -1497,6 +1675,7 @@ WITH user_grants AS (
   FROM principal_grants pg
   WHERE pg.organization_id = $1
     AND pg.principal_urn = ANY($2::text[])
+    AND (pg.expires_at IS NULL OR pg.expires_at > clock_timestamp())
     AND pg.scope IN (
       'mcp:connect', 'mcp:read', 'mcp:write',
       'mcp:blocked_connect', 'mcp:blocked_read', 'mcp:blocked_write'
@@ -1622,6 +1801,7 @@ WITH user_grants AS (
   FROM principal_grants pg
   WHERE pg.organization_id = $1
     AND pg.principal_urn = ANY($2::text[])
+    AND (pg.expires_at IS NULL OR pg.expires_at > clock_timestamp())
     AND pg.scope IN (
       'skill:read', 'skill:write',
       'skill:blocked_read', 'skill:blocked_write'
@@ -2963,6 +3143,7 @@ SELECT id, organization_id, principal_urn, principal_type, scope, selectors, cre
 FROM principal_grants
 WHERE organization_id = $1
   AND ($2::text = '' OR principal_urn = $2)
+  AND (expires_at IS NULL OR expires_at > clock_timestamp())
 ORDER BY principal_urn, scope
 `
 
@@ -2985,7 +3166,15 @@ type ListPrincipalGrantsByOrgRow struct {
 // Queries for managing principal grants (RBAC).
 // principal_grants is org-scoped (no project_id); every query is scoped to organization_id.
 // Audience reads and replacements skip api_key rows: a key's policy is owned by the keys service.
-// Returns all grant rows for an organization, optionally filtered by principal URN.
+//
+// A row with a non-NULL expires_at is a temporary grant. Once expires_at has
+// passed it grants nothing: every read used for authorization or display
+// filters it out, and a permanent write of the same grant takes the row over
+// by clearing expires_at. Audience reads and replacements see permanent rows
+// only, so saving an audience never turns a temporary grant permanent or
+// removes one.
+// Returns all live grant rows for an organization, optionally filtered by
+// principal URN.
 func (q *Queries) ListPrincipalGrantsByOrg(ctx context.Context, arg ListPrincipalGrantsByOrgParams) ([]ListPrincipalGrantsByOrgRow, error) {
 	rows, err := q.db.Query(ctx, listPrincipalGrantsByOrg, arg.OrganizationID, arg.PrincipalUrn)
 	if err != nil {
@@ -3025,6 +3214,7 @@ WHERE organization_id = $1
     'resource_id', $4::text
   )
   AND principal_type <> 'api_key'
+  AND expires_at IS NULL
 ORDER BY principal_urn
 `
 
@@ -3077,6 +3267,7 @@ WHERE organization_id = $1
   )
   AND selectors->>'resource_id' = ANY($4::text[])
   AND principal_type <> 'api_key'
+  AND expires_at IS NULL
 ORDER BY principal_urn
 `
 
@@ -3143,6 +3334,68 @@ func (q *Queries) ListRetainedResolvedChallengeIDs(ctx context.Context, organiza
 			return nil, err
 		}
 		items = append(items, challenge_id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
+const listTemporaryGrants = `-- name: ListTemporaryGrants :many
+SELECT id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at
+FROM principal_grants
+WHERE organization_id = $1
+  AND expires_at IS NOT NULL
+  AND ($2::text = '' OR principal_urn = $2)
+  AND ($3::boolean OR expires_at > clock_timestamp())
+ORDER BY expires_at, id
+LIMIT 500
+`
+
+type ListTemporaryGrantsParams struct {
+	OrganizationID string
+	PrincipalUrn   string
+	IncludeExpired bool
+}
+
+type ListTemporaryGrantsRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+	ExpiresAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	ObservedAt     pgtype.Timestamptz
+}
+
+// Lists an organization's temporary grants, soonest deadline first, optionally
+// for one principal. Expired grants are included only on request; revoked
+// grants are deleted and live on in the audit log.
+func (q *Queries) ListTemporaryGrants(ctx context.Context, arg ListTemporaryGrantsParams) ([]ListTemporaryGrantsRow, error) {
+	rows, err := q.db.Query(ctx, listTemporaryGrants, arg.OrganizationID, arg.PrincipalUrn, arg.IncludeExpired)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []ListTemporaryGrantsRow
+	for rows.Next() {
+		var i ListTemporaryGrantsRow
+		if err := rows.Scan(
+			&i.ID,
+			&i.OrganizationID,
+			&i.PrincipalUrn,
+			&i.Scope,
+			&i.Selectors,
+			&i.ExpiresAt,
+			&i.CreatedAt,
+			&i.UpdatedAt,
+			&i.ObservedAt,
+		); err != nil {
+			return nil, err
+		}
+		items = append(items, i)
 	}
 	if err := rows.Err(); err != nil {
 		return nil, err
@@ -3738,6 +3991,51 @@ func (q *Queries) RecordAuthPermissionPolicyTakeover(ctx context.Context, arg Re
 	return err
 }
 
+const renewTemporaryGrant = `-- name: RenewTemporaryGrant :one
+UPDATE principal_grants
+SET expires_at = $1, updated_at = clock_timestamp()
+WHERE id = $2
+  AND organization_id = $3
+  AND expires_at > clock_timestamp()
+RETURNING id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at
+`
+
+type RenewTemporaryGrantParams struct {
+	ExpiresAt      pgtype.Timestamptz
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type RenewTemporaryGrantRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+	ExpiresAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	ObservedAt     pgtype.Timestamptz
+}
+
+// Moves a live temporary grant's deadline. The caller has locked it.
+func (q *Queries) RenewTemporaryGrant(ctx context.Context, arg RenewTemporaryGrantParams) (RenewTemporaryGrantRow, error) {
+	row := q.db.QueryRow(ctx, renewTemporaryGrant, arg.ExpiresAt, arg.ID, arg.OrganizationID)
+	var i RenewTemporaryGrantRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.PrincipalUrn,
+		&i.Scope,
+		&i.Selectors,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ObservedAt,
+	)
+	return i, err
+}
+
 const repairOrganizationRoleAssignmentUserLink = `-- name: RepairOrganizationRoleAssignmentUserLink :execrows
 UPDATE organization_role_assignments
 SET user_id = $1::text, updated_at = clock_timestamp()
@@ -3854,6 +4152,51 @@ func (q *Queries) ReplaceOrganizationRoleAssignment(ctx context.Context, arg Rep
 	var column_1 int64
 	err := row.Scan(&column_1)
 	return column_1, err
+}
+
+const revokeTemporaryGrant = `-- name: RevokeTemporaryGrant :one
+DELETE FROM principal_grants
+WHERE id = $1
+  AND organization_id = $2
+  AND expires_at IS NOT NULL
+  AND expires_at > clock_timestamp()
+RETURNING id, organization_id, principal_urn, scope, selectors, expires_at, created_at, updated_at, clock_timestamp()::timestamptz AS observed_at
+`
+
+type RevokeTemporaryGrantParams struct {
+	ID             uuid.UUID
+	OrganizationID string
+}
+
+type RevokeTemporaryGrantRow struct {
+	ID             uuid.UUID
+	OrganizationID string
+	PrincipalUrn   urn.Principal
+	Scope          string
+	Selectors      []byte
+	ExpiresAt      pgtype.Timestamptz
+	CreatedAt      pgtype.Timestamptz
+	UpdatedAt      pgtype.Timestamptz
+	ObservedAt     pgtype.Timestamptz
+}
+
+// Ends a live temporary grant early by deleting it. The expires_at condition
+// means a permanent grant is never removed this way.
+func (q *Queries) RevokeTemporaryGrant(ctx context.Context, arg RevokeTemporaryGrantParams) (RevokeTemporaryGrantRow, error) {
+	row := q.db.QueryRow(ctx, revokeTemporaryGrant, arg.ID, arg.OrganizationID)
+	var i RevokeTemporaryGrantRow
+	err := row.Scan(
+		&i.ID,
+		&i.OrganizationID,
+		&i.PrincipalUrn,
+		&i.Scope,
+		&i.Selectors,
+		&i.ExpiresAt,
+		&i.CreatedAt,
+		&i.UpdatedAt,
+		&i.ObservedAt,
+	)
+	return i, err
 }
 
 const softDeleteAgentRoleAssignmentsByRole = `-- name: SoftDeleteAgentRoleAssignmentsByRole :exec
@@ -4220,6 +4563,7 @@ INSERT INTO principal_grants (organization_id, principal_urn, scope, selectors)
 VALUES ($1, $2, $3, $4)
 ON CONFLICT (organization_id, principal_urn, scope, selectors)
 DO UPDATE SET
+  expires_at = NULL,
   updated_at = clock_timestamp()
 RETURNING id, organization_id, principal_urn, principal_type, scope, selectors, created_at, updated_at
 `
@@ -4242,8 +4586,10 @@ type UpsertPrincipalGrantRow struct {
 	UpdatedAt      pgtype.Timestamptz
 }
 
-// Creates or updates a single grant row. On conflict (same org/principal/scope/selectors),
-// the existing row is kept and its updated_at is bumped.
+// Creates or updates a single permanent grant row. On conflict (same
+// org/principal/scope/selectors), the existing row is kept and its updated_at
+// is bumped; a temporary row becomes permanent, since this write asks for
+// access with no deadline.
 func (q *Queries) UpsertPrincipalGrant(ctx context.Context, arg UpsertPrincipalGrantParams) (UpsertPrincipalGrantRow, error) {
 	row := q.db.QueryRow(ctx, upsertPrincipalGrant,
 		arg.OrganizationID,

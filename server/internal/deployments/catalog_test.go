@@ -28,7 +28,7 @@ func TestDeploymentsService_RejectNewCatalogSelection(t *testing.T) {
 			} else {
 				_, err = ti.service.Evolve(ctx, &gen.EvolvePayload{UpsertExternalMcps: []*gen.AddExternalMCPForm{form}, NonBlocking: new(true)})
 			}
-			require.ErrorIs(t, err, externalmcp.ErrCatalogSourceNotFound)
+			require.ErrorIs(t, err, mcpregistry.ErrNotFound)
 		})
 	}
 }
@@ -67,7 +67,7 @@ func TestDeploymentsService_EvolveRetainsCatalogIdentityAfterFlip(t *testing.T) 
 			require.Equal(t, "example/server", attachments[0].RegistryServerSpecifier)
 			// The same slug must not grandfather a different catalog server.
 			_, err = ti.service.Evolve(ctx, &gen.EvolvePayload{NonBlocking: new(true), UpsertExternalMcps: []*gen.AddExternalMCPForm{{RegistryID: new(externalmcp.NativeCatalogRegistryID.String()), Name: "Other", Slug: "test", RegistryServerSpecifier: "example/other"}}})
-			require.ErrorIs(t, err, externalmcp.ErrCatalogSourceNotFound)
+			require.ErrorIs(t, err, mcpregistry.ErrNotFound)
 		})
 	}
 }

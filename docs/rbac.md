@@ -177,6 +177,18 @@ Read this map as "if a handler requires the key scope, any scope in the value li
 
 Expansion happens when the engine evaluates a check. If code asks for `project:read`, the engine checks for `root`, `project:read`, and `project:write` against the same resource selector. The API also exposes the inverse relationship as `sub_scopes` so role UIs can show what a broader grant implies; those sub-scopes are derived from code and are not additional database rows.
 
+#### Scope catalogue
+
+What a person reads about a scope lives in one place, `server/internal/authz/catalog.go`, beside the tables that define its semantics. `access.listScopes` projects the catalogue, so every entry carries:
+
+- `label`: the short name shown instead of the slug (`log:read` is "View tool logs").
+- `description`: what a holder can do and, where it matters, what the scope does not include.
+- `category`: how the dashboard groups the scope. It differs from `resource_type` where one resource kind carries several permission families: `plugin:write` and `log:read` are checked against a project, but a role editor lists them under plugins and tool logs, not under projects.
+- `sensitive` and `sensitivity`: whether granting the scope deserves a warning, and why. The set is a product decision: `chat:read` and `chat:write` (`conversations`, other members' transcripts), `log:read` (`tool_logs`, every member's tool arguments, results and prompt text), and `org:admin` (`destructive_admin`, removes members and rewrites every role). Secrets and credentials are deliberately not in it. A scope that includes a sensitive scope is itself sensitive, so a broader grant never loses the warning.
+- `sub_scopes`: the scopes a grant of this one also satisfies, from `scopeExpansions`.
+
+`TestScopeCatalog_CoversEveryRegisteredScope` fails when a scope is added without an entry, and `TestService_ListScopes_CategoriesAndSensitivitiesAreInTheDesignEnum` fails when the catalogue emits a category or reason the Goa design does not declare; generated clients would otherwise reject the whole `listScopes` response. Dashboard copy for a permission comes from these fields; the client keeps no list of its own.
+
 ### Grant
 
 A grant gives a principal a scope for some resource selector.
@@ -510,6 +522,7 @@ CREATE TABLE IF NOT EXISTS principal_grants (
   scope TEXT NOT NULL,
   drop_resource TEXT,
   selectors JSONB NOT NULL,
+  expires_at timestamptz,
 
   created_at timestamptz NOT NULL DEFAULT clock_timestamp(),
   updated_at timestamptz NOT NULL DEFAULT clock_timestamp(),
@@ -520,7 +533,7 @@ CREATE TABLE IF NOT EXISTS principal_grants (
 );
 ```
 
-The important columns mirror the authorization model. `organization_id` keeps every grant inside one organization. `principal_urn` identifies the user, role, or agent receiving the grant, and `principal_type` is generated from that URN prefix. `scope` stores the permission being granted, while `selectors` stores the JSONB constraints that describe where the grant applies. `drop_resource` is deprecated and scheduled for removal.
+The important columns mirror the authorization model. `organization_id` keeps every grant inside one organization. `principal_urn` identifies the user, role, or agent receiving the grant, and `principal_type` is generated from that URN prefix. `scope` stores the permission being granted, while `selectors` stores the JSONB constraints that describe where the grant applies. `drop_resource` is deprecated and scheduled for removal. `expires_at` is `NULL` for a permanent grant and set for a temporary one (see [Temporary grants](#temporary-grants)).
 
 There are two important indexes:
 
@@ -573,7 +586,8 @@ Grant loading is intentionally simple. For a request, the engine builds the list
 SELECT scope, selectors
 FROM principal_grants
 WHERE organization_id = @organization_id
-  AND principal_urn = ANY(@principal_urns::text[]);
+  AND principal_urn = ANY(@principal_urns::text[])
+  AND (expires_at IS NULL OR expires_at > clock_timestamp());
 ```
 
 The principal list usually contains the user and their role:
@@ -584,6 +598,20 @@ role:global:00000000-0000-0000-0000-000000000002
 ```
 
 The engine then evaluates checks in memory against the loaded grants.
+
+### Temporary grants
+
+A temporary grant is an ordinary `principal_grants` row with `expires_at` set, given to one principal: a member (`user:<id>`), everyone (`user:all`), a role (`role:organization:<id>` or `role:global:<id>`) or an active agent (`agent:<id>`). API key, workload, system and email principals cannot hold one, and a suspended or revoked agent cannot be given one. Administrators with `org:admin` give, renew and revoke them through `access.createTemporaryGrant`, `access.renewTemporaryGrant` and `access.revokeTemporaryGrant`; a member may also revoke a grant given directly to their own `user:<id>`. `access.listTemporaryGrants` takes a required `principal_urn` and shows the grants given to that principal directly, with each one's boundary and remaining time. Administrators may list any principal; members may list only their own `user:<id>`. A grant given to a role a member holds is listed under the role, not the member. It returns active grants by default and at most 500, soonest deadline first; `include_expired` adds expired rows as history. A window is between five minutes and 24 hours; longer access is a role assignment. Only the read, use and manage scopes in `access.temporaryGrantScopes` can be given temporarily. `org:admin` cannot, because it authorizes role, member and audience changes that a holder could use to give themselves permanent access before the deadline. Blocklist scopes, `mcp:auth`, risk policy, plugin, inference, agent credential and machine scopes cannot either, because other subsystems derive standing configuration from who holds them.
+
+The rules that keep a temporary grant from changing other access:
+
+- **Expiry is enforced at load time.** Grants are loaded for each request, so once `expires_at` passes the next request is not authorized by that row. No sign-out, role change or cleanup job is involved. Every read used for authorization or for showing current access filters out expired rows, including `ListAccessibleMCPServersForUser` and `ListAccessibleSkillsForUser`. The only read of expired rows is `access.listTemporaryGrants` with `include_expired`, as history. Provisioning checks such as system role seeding count permanent grants only, so a temporary grant to a role never stands in for its defaults.
+- **One operation is one request.** Authorization is prepared once per HTTP request, so an already-authorized request may finish, including a streamed response or download, but nothing renews it. A long-lived MCP session is not one operation: each JSON-RPC message arrives as its own HTTP request and is authorized afresh, so an open session cannot keep expired access alive.
+- **One row per target.** The unique index still holds, so a temporary and a permanent grant for the same principal, scope and selector never coexist. Giving a temporary grant over a permanent one, or over a live temporary one, is a conflict. A permanent write of the same grant (`UpsertPrincipalGrant`, `InsertPrincipalGrantIfAbsent`) takes the row over by clearing `expires_at`; an expired row never blocks one.
+- **Ending a grant removes only that grant.** Revocation deletes the row only while `expires_at` is set and in the future, so it can never remove a permanent grant. Role grants and other routes to the same access are untouched; `other_access` on each listed grant names them.
+- **Audiences ignore temporary grants.** Resource audience reads and replacements (`ListPrincipalGrantsByResource*`, `DeletePrincipalGrantsByTarget`, `DeletePrincipalGrantsByResource`) see permanent rows only, so saving an audience leaves a temporary grant in place. Adding the same principal to the audience is a permanent grant of that access and takes the row over, like any other permanent write. Default auth permission backfills never derive a permanent `mcp:auth` from a temporary `mcp:connect`.
+- **Temporary grants evaluate like any grant to their principal.** The row belongs to the principal it was given to, so [principal precedence](#principal-precedence) applies as it would to a permanent grant made to that principal: a grant to a member is a direct grant, a grant to a role reaches the role's holders as a role grant, and a grant to `user:all` reaches everyone.
+- **The audit log is the record.** `access_grant:create_temporary`, `:renew_temporary` and `:revoke_temporary` events (subject `access_grant`, the grant row) carry the recipient, scope, deadline, optional reason, and `self_granted` when the actor is the recipient. Administrators may give themselves temporary access; the event makes that visible.
 
 ## System Roles
 
