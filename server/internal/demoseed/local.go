@@ -196,7 +196,6 @@ func RunLocalFixtures(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool
 		{"default environment", func() error {
 			return q.LocalUpsertEnvironment(ctx, repo.LocalUpsertEnvironmentParams{ID: uuid.MustParse(localEnvironmentID()), OrganizationID: spec.OrgID, ProjectID: projectID})
 		}},
-		{"mcp registry", func() error { return q.LocalEnsureMCPRegistry(ctx) }},
 		{"enable code mode", func() error { return q.LocalEnableCodeModeFeature(ctx, spec.OrgID) }},
 		{"code mode gateway", func() error {
 			return q.LocalSetCodeModeGateway(ctx, repo.LocalSetCodeModeGatewayParams{OrganizationID: spec.OrgID, ProjectID: projectID})

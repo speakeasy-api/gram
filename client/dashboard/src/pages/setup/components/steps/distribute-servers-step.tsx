@@ -9,7 +9,7 @@ import { useSdkClient } from "@/contexts/Sdk";
 import { useRoutes } from "@/routes";
 import { StepContainer } from "../step-container";
 import { supportsAutomaticOAuth } from "@/pages/catalog/hooks/serverMetadata";
-import { type PulseMCPServer, useListMCPCatalog } from "@/pages/catalog/hooks";
+import { type CatalogServer, useListMCPCatalog } from "@/pages/catalog/hooks";
 import {
   filterToHttpRemotes,
   normalizeRemoteUrl,
@@ -56,7 +56,7 @@ interface DistributeServersStepProps {
 }
 
 /** Stable selection key for a catalog server, matching the catalog page convention. */
-function serverKey(server: PulseMCPServer): string {
+function serverKey(server: CatalogServer): string {
   return `${server.registryId}-${server.registrySpecifier}`;
 }
 
@@ -111,7 +111,7 @@ export function DistributeServersStep({
   const [drawerStep, setDrawerStep] = useState<DrawerStep>("adding");
   const [drawerError, setDrawerError] = useState<string | null>(null);
   // Servers handed to the release workflow once the user hits Distribute.
-  const [serversToDeploy, setServersToDeploy] = useState<PulseMCPServer[]>([]);
+  const [serversToDeploy, setServersToDeploy] = useState<CatalogServer[]>([]);
   // Slug of the Default plugin found/created during this run — captured so
   // the install-instructions step below can address it precisely.
   const [distributedPluginSlug, setDistributedPluginSlug] = useState<
@@ -173,7 +173,7 @@ export function DistributeServersStep({
   ]);
 
   const isDistributed = useCallback(
-    (server: PulseMCPServer) =>
+    (server: CatalogServer) =>
       (server.remotes ?? []).some((remote) =>
         distributedUrls.has(normalizeRemoteUrl(remote.url)),
       ),
@@ -184,7 +184,7 @@ export function DistributeServersStep({
   const catalogInitialLoadFailed = catalogLoadFailed && !catalogHasData;
   const catalogRefetchFailed = catalogLoadFailed && catalogHasData;
   const servers = useMemo(
-    () => (data?.servers as PulseMCPServer[]) ?? [],
+    () => (data?.servers as CatalogServer[]) ?? [],
     [data],
   );
   // Onboarding offers advertised automatic OAuth setup; installation still

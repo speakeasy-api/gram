@@ -222,7 +222,6 @@ func NewActivities(
 	functionsDeployer functions.Deployer,
 	functionsVersion functions.RunnerVersion,
 	ragService *rag.ToolsetVectorStore,
-	mcpRegistryClient *externalmcp.RegistryClient,
 	mcpCatalog *externalmcp.CatalogService,
 	temporalEnv *tenv.Environment,
 	telemetryLogger *telemetry.Logger,
