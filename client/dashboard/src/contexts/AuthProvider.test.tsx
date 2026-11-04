@@ -45,20 +45,6 @@ vi.mock("@/contexts/Sdk", async () => {
   };
 });
 
-// The route table pulls in every page; the provider only reads the org-level
-// path list from it.
-vi.mock("@/routes", () => ({
-  orgRoutePaths: [
-    "data",
-    "data/event-feed",
-    "data/exports",
-    "setup",
-    "setup/:taskSlug",
-    "access-hub",
-    "access-hub/:issuerId",
-  ],
-}));
-
 vi.mock("@/pages/demo/BookDemo", () => ({
   default: () => <div data-testid="book-demo" />,
 }));
@@ -186,6 +172,21 @@ describe("AuthProvider organization telemetry group", () => {
     expect(screen.queryByTestId("book-demo")).toBeNull();
     expect(registeredOrgGroups()).toEqual([["organization", ORG.slug, {}]]);
   });
+
+  it.each([
+    "/test-org/billing/setup",
+    "/test-org/billing/payment-method",
+    "/test-org/billing?session_id=cs_test_example",
+  ])(
+    "allows only active-organization billing recovery through the lockout: %s",
+    (path) => {
+      mocks.sessionData.mockReturnValue(gatedSession());
+      renderGate(path);
+      expect(screen.getByTestId("location").textContent).toBe(path);
+      expect(screen.getByTestId("app")).toBeTruthy();
+      expect(screen.queryByTestId("book-demo")).toBeNull();
+    },
+  );
 
   it("registers the organization when the switcher takes precedence", () => {
     mocks.sessionData.mockReturnValue(
@@ -330,28 +331,31 @@ describe("AuthProvider legacy project redirects", () => {
   });
 
   it.each([
-    "/test-org/access-hub",
-    "/test-org/access-hub/11111111-1111-1111-1111-111111111111",
-    "/test-org/access-hub/11111111-1111-1111-1111-111111111111?tab=machines#rules",
-  ])("preserves Access Hub URL %s over a same-named project", (path) => {
-    const ACCESS_HUB_PROJECT_ORG = {
-      ...ORG,
-      projects: [{ ...PROJECT, slug: "access-hub" }],
-    };
-    mocks.sessionData.mockReturnValue(
-      gatedSession({
-        organizations: [ACCESS_HUB_PROJECT_ORG],
-        organization: ACCESS_HUB_PROJECT_ORG,
-        activeOrganizationId: ACCESS_HUB_PROJECT_ORG.id,
-        whitelisted: true,
-      }),
-    );
+    "/test-org/user-session-issuers",
+    "/test-org/user-session-issuers/11111111-1111-1111-1111-111111111111",
+    "/test-org/user-session-issuers/11111111-1111-1111-1111-111111111111?tab=machines#rules",
+  ])(
+    "preserves authorization server URL %s over a same-named project",
+    (path) => {
+      const ISSUERS_PROJECT_ORG = {
+        ...ORG,
+        projects: [{ ...PROJECT, slug: "user-session-issuers" }],
+      };
+      mocks.sessionData.mockReturnValue(
+        gatedSession({
+          organizations: [ISSUERS_PROJECT_ORG],
+          organization: ISSUERS_PROJECT_ORG,
+          activeOrganizationId: ISSUERS_PROJECT_ORG.id,
+          whitelisted: true,
+        }),
+      );
 
-    renderGate(path);
+      renderGate(path);
 
-    expect(screen.getByTestId("app")).toBeTruthy();
-    expect(screen.getByTestId("location").textContent).toBe(path);
-  });
+      expect(screen.getByTestId("app")).toBeTruthy();
+      expect(screen.getByTestId("location").textContent).toBe(path);
+    },
+  );
 
   it("preserves a legacy project whose slug is agents", () => {
     mocks.sessionData.mockReturnValue(

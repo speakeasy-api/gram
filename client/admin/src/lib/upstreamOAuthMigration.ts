@@ -20,7 +20,6 @@ export function needsMigrationRun(
       a.pendingLinks +
       a.pendingHeaders +
       a.pendingRetirements +
-      a.pendingMarkedServers +
       (a.pendingSelectionMappings ?? 0) +
       (a.pendingGrants ?? 0) +
       a.failedPhases.length >

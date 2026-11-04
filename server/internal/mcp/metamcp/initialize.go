@@ -14,14 +14,14 @@ const Instructions = `This endpoint fronts a set of MCP servers as one, exposing
 
 Work from the outside in:
 
-1. list_servers — what is reachable, what each system is for, and each member's status: "available", "unavailable" when the member's tunnel is down, or "unknown" when the gateway cannot observe the member's health.
+1. list_servers — what is reachable, what each system is for, and each member's status: "available", "unavailable" when the member's tunnel is down, or "unknown" when it was not checked (this list does not contact remote servers; call connection_status to check sign-in).
 2. describe_server — that server's tools, as qualified names (server--tool) with descriptions but no input schemas.
 3. describe_tools — input schemas for the specific tools you intend to call.
 4. execute_tool — run one: the qualified name goes in "name", its JSON payload in "arguments".
 
 Never execute a name you have not described: arguments guessed from a tool name will fail validation.
 
-If a call fails, re-check list_servers before retrying. "unknown" means unobserved, not broken — such members usually answer describe and execute calls normally. Only "unavailable" means the member cannot currently be reached.
+If a call fails, re-check list_servers before retrying. "unknown" means not checked, not broken: call connection_status to check sign-in. Such members usually answer describe and execute calls normally. Only "unavailable" means the member cannot currently be reached.
 
 If a member says it needs authentication, call connection_status. Live connections show current sign-in status and, when this gateway has a sign-in page, link to it. Cached connections report verification at consent without a new probe; tool calls check current authorization. If new consent is required, restart authorization in your AI client.`
 

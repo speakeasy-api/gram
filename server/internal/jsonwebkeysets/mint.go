@@ -12,8 +12,8 @@ import (
 	"github.com/speakeasy-api/gram/internal/jwk"
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/idpmanagedresources"
 	"github.com/speakeasy-api/gram/server/internal/jsonwebkeysets/repo"
-	"github.com/speakeasy-api/gram/server/internal/managedrows"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/thirdparty/gcp/gcpauth"
@@ -109,7 +109,7 @@ func (s *Service) mintFromExternalKey(ctx context.Context, logger *slog.Logger, 
 	if row.ExternalKey.Provider != externalKeyProviderGcpKms {
 		return nil, oops.E(oops.CodeBadRequest, nil, "AWS KMS keys cannot back a JSON Web Key Set yet; choose a GCP KMS key").LogError(ctx, logger)
 	}
-	if err := managedrows.RequireUnmanaged(row.ExternalKey.IdentityProviderConnectionID, "this external key"); err != nil {
+	if err := idpmanagedresources.RequireUnmanaged(row.ExternalKey.IdentityProviderConnectionID, "this external key"); err != nil {
 		return nil, err
 	}
 	if !row.ResourceName.Valid {

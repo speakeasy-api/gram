@@ -30,9 +30,11 @@ const (
 	// guide pull request again. Guide reviews take days, so a daily check keeps
 	// the status current without repeatedly listing pull requests.
 	guideReviewRecheck = 24 * time.Hour
-	// guideReviewStallAfter parks a request for staff when the guide pull
-	// request it waits on has been open this long: two weeks covers a normal
-	// review, so anything longer has probably been forgotten.
+	// guideReviewStallAfter parks a request for staff once this long has
+	// passed since delivery first saw the guide pull request it waits on
+	// open (docs_review_since), not since the pull request was opened. Two
+	// weeks covers a normal review, so anything longer has probably been
+	// forgotten.
 	guideReviewStallAfter = 14 * 24 * time.Hour
 	// codeGuideReviewStalled is the persisted delivery error for a stalled guide pull request.
 	codeGuideReviewStalled = "docs_guide_pr_stalled"

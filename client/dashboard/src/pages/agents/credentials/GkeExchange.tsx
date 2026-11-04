@@ -120,7 +120,7 @@ export function ExchangeValues({
               ? undefined
               : servers.length > 0
                 ? "This agent's servers are only served over plaintext HTTP, so their URLs are withheld: the access token would cross the network unencrypted. Serve them over HTTPS and reload."
-                : "This agent can't reach any MCP servers yet. Go back to MCP selection and choose at least one."
+                : "This agent can't reach any MCP servers yet. Go back to MCP Selection and choose at least one."
           }
         />
       </ol>

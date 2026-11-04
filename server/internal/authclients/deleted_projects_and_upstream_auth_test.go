@@ -4,13 +4,10 @@ import (
 	"testing"
 
 	"github.com/google/uuid"
-	"github.com/jackc/pgx/v5/pgtype"
 	"github.com/stretchr/testify/require"
 
 	gen "github.com/speakeasy-api/gram/server/gen/auth_clients"
-	"github.com/speakeasy-api/gram/server/internal/authclients/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
-	"github.com/speakeasy-api/gram/server/internal/mcpservers/visibility"
 	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 )
@@ -52,29 +49,4 @@ func TestAuthClientsOfDeletedProjectsAreGone(t *testing.T) {
 
 	_, err = ti.service.UpdateAuthClient(ctx, &gen.UpdateAuthClientPayload{ID: gone.String(), Name: new("Renamed")})
 	requireOopsCode(t, err, oops.CodeNotFound)
-}
-
-// The upstream auth requirement write checks the server's organization itself.
-func TestSetMCPServerRequiresUpstreamAuthIsOrganizationScoped(t *testing.T) {
-	t.Parallel()
-
-	ctx, ti := newTestService(t)
-	server := seedServer(t, ctx, ti.conn, ti.projectID, visibility.Private)
-	otherOrganization, _ := seedOtherOrganization(t, ctx, ti.conn)
-	queries := repo.New(ti.conn)
-	params := repo.SetMCPServerRequiresUpstreamAuthParams{
-		RequiresUpstreamAuth: pgtype.Bool{Bool: false, Valid: true},
-		ID:                   server.id,
-		ProjectID:            server.projectID,
-		OrganizationID:       otherOrganization,
-	}
-
-	n, err := queries.SetMCPServerRequiresUpstreamAuth(ctx, params)
-	require.NoError(t, err)
-	require.Zero(t, n, "another organization cannot write the server")
-
-	params.OrganizationID = ti.organizationID
-	n, err = queries.SetMCPServerRequiresUpstreamAuth(ctx, params)
-	require.NoError(t, err)
-	require.Equal(t, int64(1), n)
 }

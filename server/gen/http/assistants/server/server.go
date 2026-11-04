@@ -18,17 +18,19 @@ import (
 
 // Server lists the assistants service endpoint HTTP handlers.
 type Server struct {
-	Mounts                   []*MountPoint
-	ListAssistants           http.Handler
-	GetAssistant             http.Handler
-	CreateAssistant          http.Handler
-	UpgradeAssistantIdentity http.Handler
-	UpdateAssistant          http.Handler
-	DeleteAssistant          http.Handler
-	SendMessage              http.Handler
-	InterruptTurn            http.Handler
-	GetManagedAssistant      http.Handler
-	EnsureManagedAssistant   http.Handler
+	Mounts                    []*MountPoint
+	ListAssistants            http.Handler
+	GetAssistant              http.Handler
+	CreateAssistant           http.Handler
+	UpgradeAssistantIdentity  http.Handler
+	UpdateAssistant           http.Handler
+	DeleteAssistant           http.Handler
+	SendMessage               http.Handler
+	InterruptTurn             http.Handler
+	GetManagedAssistant       http.Handler
+	EnsureManagedAssistant    http.Handler
+	ListExecutionProfiles     http.Handler
+	SetExecutionProfileChoice http.Handler
 }
 
 // MountPoint holds information about the mounted endpoints.
@@ -68,17 +70,21 @@ func New(
 			{"InterruptTurn", "POST", "/rpc/assistants.interruptTurn"},
 			{"GetManagedAssistant", "GET", "/rpc/assistants.getManagedAssistant"},
 			{"EnsureManagedAssistant", "POST", "/rpc/assistants.ensureManagedAssistant"},
+			{"ListExecutionProfiles", "GET", "/rpc/assistants.listExecutionProfiles"},
+			{"SetExecutionProfileChoice", "POST", "/rpc/assistants.setExecutionProfileChoice"},
 		},
-		ListAssistants:           NewListAssistantsHandler(e.ListAssistants, mux, decoder, encoder, errhandler, formatter),
-		GetAssistant:             NewGetAssistantHandler(e.GetAssistant, mux, decoder, encoder, errhandler, formatter),
-		CreateAssistant:          NewCreateAssistantHandler(e.CreateAssistant, mux, decoder, encoder, errhandler, formatter),
-		UpgradeAssistantIdentity: NewUpgradeAssistantIdentityHandler(e.UpgradeAssistantIdentity, mux, decoder, encoder, errhandler, formatter),
-		UpdateAssistant:          NewUpdateAssistantHandler(e.UpdateAssistant, mux, decoder, encoder, errhandler, formatter),
-		DeleteAssistant:          NewDeleteAssistantHandler(e.DeleteAssistant, mux, decoder, encoder, errhandler, formatter),
-		SendMessage:              NewSendMessageHandler(e.SendMessage, mux, decoder, encoder, errhandler, formatter),
-		InterruptTurn:            NewInterruptTurnHandler(e.InterruptTurn, mux, decoder, encoder, errhandler, formatter),
-		GetManagedAssistant:      NewGetManagedAssistantHandler(e.GetManagedAssistant, mux, decoder, encoder, errhandler, formatter),
-		EnsureManagedAssistant:   NewEnsureManagedAssistantHandler(e.EnsureManagedAssistant, mux, decoder, encoder, errhandler, formatter),
+		ListAssistants:            NewListAssistantsHandler(e.ListAssistants, mux, decoder, encoder, errhandler, formatter),
+		GetAssistant:              NewGetAssistantHandler(e.GetAssistant, mux, decoder, encoder, errhandler, formatter),
+		CreateAssistant:           NewCreateAssistantHandler(e.CreateAssistant, mux, decoder, encoder, errhandler, formatter),
+		UpgradeAssistantIdentity:  NewUpgradeAssistantIdentityHandler(e.UpgradeAssistantIdentity, mux, decoder, encoder, errhandler, formatter),
+		UpdateAssistant:           NewUpdateAssistantHandler(e.UpdateAssistant, mux, decoder, encoder, errhandler, formatter),
+		DeleteAssistant:           NewDeleteAssistantHandler(e.DeleteAssistant, mux, decoder, encoder, errhandler, formatter),
+		SendMessage:               NewSendMessageHandler(e.SendMessage, mux, decoder, encoder, errhandler, formatter),
+		InterruptTurn:             NewInterruptTurnHandler(e.InterruptTurn, mux, decoder, encoder, errhandler, formatter),
+		GetManagedAssistant:       NewGetManagedAssistantHandler(e.GetManagedAssistant, mux, decoder, encoder, errhandler, formatter),
+		EnsureManagedAssistant:    NewEnsureManagedAssistantHandler(e.EnsureManagedAssistant, mux, decoder, encoder, errhandler, formatter),
+		ListExecutionProfiles:     NewListExecutionProfilesHandler(e.ListExecutionProfiles, mux, decoder, encoder, errhandler, formatter),
+		SetExecutionProfileChoice: NewSetExecutionProfileChoiceHandler(e.SetExecutionProfileChoice, mux, decoder, encoder, errhandler, formatter),
 	}
 }
 
@@ -97,6 +103,8 @@ func (s *Server) Use(m func(http.Handler) http.Handler) {
 	s.InterruptTurn = m(s.InterruptTurn)
 	s.GetManagedAssistant = m(s.GetManagedAssistant)
 	s.EnsureManagedAssistant = m(s.EnsureManagedAssistant)
+	s.ListExecutionProfiles = m(s.ListExecutionProfiles)
+	s.SetExecutionProfileChoice = m(s.SetExecutionProfileChoice)
 }
 
 // MethodNames returns the methods served.
@@ -114,6 +122,8 @@ func Mount(mux goahttp.Muxer, h *Server) {
 	MountInterruptTurnHandler(mux, h.InterruptTurn)
 	MountGetManagedAssistantHandler(mux, h.GetManagedAssistant)
 	MountEnsureManagedAssistantHandler(mux, h.EnsureManagedAssistant)
+	MountListExecutionProfilesHandler(mux, h.ListExecutionProfiles)
+	MountSetExecutionProfileChoiceHandler(mux, h.SetExecutionProfileChoice)
 }
 
 // Mount configures the mux to serve the assistants endpoints.
@@ -629,6 +639,113 @@ func NewEnsureManagedAssistantHandler(
 	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
 		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
 		ctx = context.WithValue(ctx, goa.MethodKey, "ensureManagedAssistant")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "assistants")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountListExecutionProfilesHandler configures the mux to serve the
+// "assistants" service "listExecutionProfiles" endpoint.
+func MountListExecutionProfilesHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("GET", "/rpc/assistants.listExecutionProfiles", f)
+}
+
+// NewListExecutionProfilesHandler creates a HTTP handler which loads the HTTP
+// request and calls the "assistants" service "listExecutionProfiles" endpoint.
+func NewListExecutionProfilesHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeListExecutionProfilesRequest(mux, decoder)
+		encodeResponse = EncodeListExecutionProfilesResponse(encoder)
+		encodeError    = EncodeListExecutionProfilesError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "listExecutionProfiles")
+		ctx = context.WithValue(ctx, goa.ServiceKey, "assistants")
+		payload, err := decodeRequest(r)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		res, err := endpoint(ctx, payload)
+		if err != nil {
+			if err := encodeError(ctx, w, err); err != nil && errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+			return
+		}
+		if err := encodeResponse(ctx, w, res); err != nil {
+			if errhandler != nil {
+				errhandler(ctx, w, err)
+			}
+		}
+	})
+}
+
+// MountSetExecutionProfileChoiceHandler configures the mux to serve the
+// "assistants" service "setExecutionProfileChoice" endpoint.
+func MountSetExecutionProfileChoiceHandler(mux goahttp.Muxer, h http.Handler) {
+	f, ok := h.(http.HandlerFunc)
+	if !ok {
+		f = func(w http.ResponseWriter, r *http.Request) {
+			h.ServeHTTP(w, r)
+		}
+	}
+	mux.Handle("POST", "/rpc/assistants.setExecutionProfileChoice", f)
+}
+
+// NewSetExecutionProfileChoiceHandler creates a HTTP handler which loads the
+// HTTP request and calls the "assistants" service "setExecutionProfileChoice"
+// endpoint.
+func NewSetExecutionProfileChoiceHandler(
+	endpoint goa.Endpoint,
+	mux goahttp.Muxer,
+	decoder func(*http.Request) goahttp.Decoder,
+	encoder func(context.Context, http.ResponseWriter) goahttp.Encoder,
+	errhandler func(context.Context, http.ResponseWriter, error),
+	formatter func(ctx context.Context, err error) goahttp.Statuser,
+) http.Handler {
+	var (
+		decodeRequest  = DecodeSetExecutionProfileChoiceRequest(mux, decoder)
+		encodeResponse = EncodeSetExecutionProfileChoiceResponse(encoder)
+		encodeError    = EncodeSetExecutionProfileChoiceError(encoder, formatter)
+	)
+	return http.HandlerFunc(func(w http.ResponseWriter, r *http.Request) {
+		ctx := context.WithValue(r.Context(), goahttp.AcceptTypeKey, r.Header.Get("Accept"))
+		ctx = context.WithValue(ctx, goa.MethodKey, "setExecutionProfileChoice")
 		ctx = context.WithValue(ctx, goa.ServiceKey, "assistants")
 		payload, err := decodeRequest(r)
 		if err != nil {

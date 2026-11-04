@@ -17,6 +17,13 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// SetOrganizationProviderSetupRequestBody is the type of the "admin" service
+// "setOrganizationProviderSetup" endpoint HTTP request body.
+type SetOrganizationProviderSetupRequestBody struct {
+	OrganizationID string `form:"organization_id" json:"organization_id" xml:"organization_id"`
+	Enabled        bool   `form:"enabled" json:"enabled" xml:"enabled"`
+}
+
 // SetOrganizationFeatureRequestBody is the type of the "admin" service
 // "setOrganizationFeature" endpoint HTTP request body.
 type SetOrganizationFeatureRequestBody struct {
@@ -650,6 +657,9 @@ type GetSessionResponseBody struct {
 // GetOrganizationFeaturesResponseBody is the type of the "admin" service
 // "getOrganizationFeatures" endpoint HTTP response body.
 type GetOrganizationFeaturesResponseBody struct {
+	// Whether the staff-managed provider setup rollout is enabled. Defaults to
+	// false when absent.
+	ProviderSetupEnabled *bool `form:"provider_setup_enabled,omitempty" json:"provider_setup_enabled,omitempty" xml:"provider_setup_enabled,omitempty"`
 	// Whether logging is enabled
 	LogsEnabled *bool `form:"logs_enabled,omitempty" json:"logs_enabled,omitempty" xml:"logs_enabled,omitempty"`
 	// Whether tool I/O logging is enabled
@@ -707,11 +717,87 @@ type GetOrganizationFeaturesResponseBody struct {
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent *bool `form:"device_agent,omitempty" json:"device_agent,omitempty" xml:"device_agent,omitempty"`
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool `form:"upstream_auth_enforced,omitempty" json:"upstream_auth_enforced,omitempty" xml:"upstream_auth_enforced,omitempty"`
+}
+
+// SetOrganizationProviderSetupResponseBody is the type of the "admin" service
+// "setOrganizationProviderSetup" endpoint HTTP response body.
+type SetOrganizationProviderSetupResponseBody struct {
+	// Whether the staff-managed provider setup rollout is enabled. Defaults to
+	// false when absent.
+	ProviderSetupEnabled *bool `form:"provider_setup_enabled,omitempty" json:"provider_setup_enabled,omitempty" xml:"provider_setup_enabled,omitempty"`
+	// Whether logging is enabled
+	LogsEnabled *bool `form:"logs_enabled,omitempty" json:"logs_enabled,omitempty" xml:"logs_enabled,omitempty"`
+	// Whether tool I/O logging is enabled
+	ToolIoLogsEnabled *bool `form:"tool_io_logs_enabled,omitempty" json:"tool_io_logs_enabled,omitempty" xml:"tool_io_logs_enabled,omitempty"`
+	// Whether Claude Code session capture is enabled
+	SessionCaptureEnabled *bool `form:"session_capture_enabled,omitempty" json:"session_capture_enabled,omitempty" xml:"session_capture_enabled,omitempty"`
+	// Whether authz challenge logging to ClickHouse is enabled
+	AuthzChallengeLoggingEnabled *bool `form:"authz_challenge_logging_enabled,omitempty" json:"authz_challenge_logging_enabled,omitempty" xml:"authz_challenge_logging_enabled,omitempty"`
+	// Whether SSO setup is enabled for the organization
+	SsoEnabled *bool `form:"sso_enabled,omitempty" json:"sso_enabled,omitempty" xml:"sso_enabled,omitempty"`
+	// Whether SCIM/directory sync setup is enabled for the organization
+	ScimEnabled *bool `form:"scim_enabled,omitempty" json:"scim_enabled,omitempty" xml:"scim_enabled,omitempty"`
+	// Whether generated hook plugins may mint per-user keys via the interactive
+	// browser login
+	HooksBrowserLoginEnabled *bool `form:"hooks_browser_login_enabled,omitempty" json:"hooks_browser_login_enabled,omitempty" xml:"hooks_browser_login_enabled,omitempty"`
+	// Whether hooks fail open when the Speakeasy control plane is unreachable or
+	// erroring — blocking policies are not enforced for the duration of the outage
+	HooksFailOpenEnabled *bool `form:"hooks_fail_open_enabled,omitempty" json:"hooks_fail_open_enabled,omitempty" xml:"hooks_fail_open_enabled,omitempty"`
+	// Whether the organization can supply its own model provider API keys (BYOK)
+	CustomModelKeysEnabled *bool `form:"custom_model_keys_enabled,omitempty" json:"custom_model_keys_enabled,omitempty" xml:"custom_model_keys_enabled,omitempty"`
+	// Whether the Skills page is enabled for the organization
+	SkillsEnabled *bool `form:"skills_enabled,omitempty" json:"skills_enabled,omitempty" xml:"skills_enabled,omitempty"`
+	// Whether skill capture stores activation metadata without requesting manifest
+	// content
+	SkillCaptureMetadataOnly *bool `form:"skill_capture_metadata_only,omitempty" json:"skill_capture_metadata_only,omitempty" xml:"skill_capture_metadata_only,omitempty"`
+	// Whether the organization can provision push integrations for AI platforms
+	AiPlatformPushIntegrationsEnabled *bool `form:"ai_platform_push_integrations_enabled,omitempty" json:"ai_platform_push_integrations_enabled,omitempty" xml:"ai_platform_push_integrations_enabled,omitempty"`
+	// Whether the organization can use the Speakeasy Platform MCP capability
+	PlatformMcpEnabled *bool `form:"platform_mcp_enabled,omitempty" json:"platform_mcp_enabled,omitempty" xml:"platform_mcp_enabled,omitempty"`
+	// Whether the organization can manage the external credentials and cloud KMS
+	// keys backing customer-managed encryption
+	CustomerManagedEncryptionKeysEnabled *bool `form:"customer_managed_encryption_keys_enabled,omitempty" json:"customer_managed_encryption_keys_enabled,omitempty" xml:"customer_managed_encryption_keys_enabled,omitempty"`
+	// Whether consent screens expose automatic remote-session refresh for the
+	// organization
+	RemoteSessionAutoRefreshEnabled *bool `form:"remote_session_auto_refresh_enabled,omitempty" json:"remote_session_auto_refresh_enabled,omitempty" xml:"remote_session_auto_refresh_enabled,omitempty"`
+	// Whether automatic remote-session refresh is enforced as the organization
+	// default: forced on for every user, shown locked on consent screens, and
+	// applied by the keepalive regardless of per-session preference
+	RemoteSessionAutoRefreshEnforcedEnabled *bool `form:"remote_session_auto_refresh_enforced_enabled,omitempty" json:"remote_session_auto_refresh_enforced_enabled,omitempty" xml:"remote_session_auto_refresh_enforced_enabled,omitempty"`
+	// Whether agent session portability is enabled for the organization: session
+	// sharing links, move reporting with lineage, and picker title enrichment via
+	// the device agent
+	SessionPortabilityEnabled *bool `form:"session_portability_enabled,omitempty" json:"session_portability_enabled,omitempty" xml:"session_portability_enabled,omitempty"`
+	// Whether the organization has the staff-managed private network ingress
+	// entitlement
+	NetworkIngressEnabled *bool `form:"network_ingress_enabled,omitempty" json:"network_ingress_enabled,omitempty" xml:"network_ingress_enabled,omitempty"`
+	// Whether the organization can configure signals intelligence
+	SignalsIntelligenceEnabled *bool `form:"signals_intelligence_enabled,omitempty" json:"signals_intelligence_enabled,omitempty" xml:"signals_intelligence_enabled,omitempty"`
+	// Whether an organization admin turned the organization gateway off, so its
+	// routes answer 404
+	OrganizationGatewayDisabled *bool `form:"organization_gateway_disabled,omitempty" json:"organization_gateway_disabled,omitempty" xml:"organization_gateway_disabled,omitempty"`
+	// Whether the organization has the staff-managed gateway Code Mode entitlement
+	CodeModeEnabled *bool `form:"code_mode_enabled,omitempty" json:"code_mode_enabled,omitempty" xml:"code_mode_enabled,omitempty"`
+	// Whether the organization uses the device agent (any device has polled
+	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
+	// feature.
+	DeviceAgent *bool `form:"device_agent,omitempty" json:"device_agent,omitempty" xml:"device_agent,omitempty"`
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool `form:"upstream_auth_enforced,omitempty" json:"upstream_auth_enforced,omitempty" xml:"upstream_auth_enforced,omitempty"`
 }
 
 // SetOrganizationFeatureResponseBody is the type of the "admin" service
 // "setOrganizationFeature" endpoint HTTP response body.
 type SetOrganizationFeatureResponseBody struct {
+	// Whether the staff-managed provider setup rollout is enabled. Defaults to
+	// false when absent.
+	ProviderSetupEnabled *bool `form:"provider_setup_enabled,omitempty" json:"provider_setup_enabled,omitempty" xml:"provider_setup_enabled,omitempty"`
 	// Whether logging is enabled
 	LogsEnabled *bool `form:"logs_enabled,omitempty" json:"logs_enabled,omitempty" xml:"logs_enabled,omitempty"`
 	// Whether tool I/O logging is enabled
@@ -769,6 +855,10 @@ type SetOrganizationFeatureResponseBody struct {
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent *bool `form:"device_agent,omitempty" json:"device_agent,omitempty" xml:"device_agent,omitempty"`
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool `form:"upstream_auth_enforced,omitempty" json:"upstream_auth_enforced,omitempty" xml:"upstream_auth_enforced,omitempty"`
 }
 
 // GetOrganizationChatAnalysisSettingsResponseBody is the type of the "admin"
@@ -1932,8 +2022,10 @@ type MigrateToGlobalIssuerResponseBody struct {
 // UploadPlatformImageResponseBody is the type of the "admin" service
 // "uploadPlatformImage" endpoint HTTP response body.
 type UploadPlatformImageResponseBody struct {
-	// The asset entry that was created in Speakeasy
+	// The uploaded platform image asset
 	Asset *AssetResponseBody `form:"asset,omitempty" json:"asset,omitempty" xml:"asset,omitempty"`
+	// Canonical public URL for the uploaded image
+	URL *string `form:"url,omitempty" json:"url,omitempty" xml:"url,omitempty"`
 }
 
 // StartTrialResponseBody is the type of the "admin" service "startTrial"
@@ -2156,7 +2248,8 @@ type GetHookClientsResponseBody struct {
 	// When the grids were read from ClickHouse.
 	QueriedAt *string `form:"queried_at,omitempty" json:"queried_at,omitempty" xml:"queried_at,omitempty"`
 	// True when the grids came from the cache rather than a fresh ClickHouse read.
-	// Cached grids last 24 hours and refresh in the background once an hour old.
+	// Cached grids last 48 hours and refresh in the background once an hour old.
+	// The default window is also refreshed nightly.
 	FromCache *bool `form:"from_cache,omitempty" json:"from_cache,omitempty" xml:"from_cache,omitempty"`
 	// Every organization that appears in any grid.
 	Organizations []*AdminHookClientOrganizationResponseBody `form:"organizations,omitempty" json:"organizations,omitempty" xml:"organizations,omitempty"`
@@ -2789,8 +2882,8 @@ type RunUpstreamOAuthMigrationResponseBody struct {
 	AuthClientsWritten *int64 `form:"auth_clients_written,omitempty" json:"auth_clients_written,omitempty" xml:"auth_clients_written,omitempty"`
 	// Server to auth client links recorded.
 	AuthClientLinksWritten *int64 `form:"auth_client_links_written,omitempty" json:"auth_client_links_written,omitempty" xml:"auth_client_links_written,omitempty"`
-	// Servers marked as needing upstream authentication because they offer a
-	// backfilled auth client.
+	// Deprecated: always omitted. Whether a server needs upstream authentication
+	// follows from the auth clients it offers, so no server is marked.
 	ServersMarkedRequiringUpstreamAuth *int64 `form:"servers_marked_requiring_upstream_auth,omitempty" json:"servers_marked_requiring_upstream_auth,omitempty" xml:"servers_marked_requiring_upstream_auth,omitempty"`
 	// Credential choices this run named a typed auth client on.
 	SelectionsMapped *int64 `form:"selections_mapped,omitempty" json:"selections_mapped,omitempty" xml:"selections_mapped,omitempty"`
@@ -2874,6 +2967,13 @@ type DisableUpstreamAuthEnforcementResponseBody struct {
 	// Whether upstream auth enforcement is on for the organization, and whether it
 	// can be turned on.
 	Enforcement *AdminUpstreamAuthEnforcementResponseBody `form:"enforcement,omitempty" json:"enforcement,omitempty" xml:"enforcement,omitempty"`
+}
+
+// BackfillMcpAuthGrantsResponseBody is the type of the "admin" service
+// "backfillMcpAuthGrants" endpoint HTTP response body.
+type BackfillMcpAuthGrantsResponseBody struct {
+	// How many principals gained the mcp:auth grant.
+	Granted *int64 `form:"granted,omitempty" json:"granted,omitempty" xml:"granted,omitempty"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -3771,6 +3871,196 @@ type GetOrganizationFeaturesUnexpectedResponseBody struct {
 // service "getOrganizationFeatures" endpoint HTTP response body for the
 // "gateway_error" error.
 type GetOrganizationFeaturesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationProviderSetupUnauthorizedResponseBody is the type of the
+// "admin" service "setOrganizationProviderSetup" endpoint HTTP response body
+// for the "unauthorized" error.
+type SetOrganizationProviderSetupUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationProviderSetupForbiddenResponseBody is the type of the "admin"
+// service "setOrganizationProviderSetup" endpoint HTTP response body for the
+// "forbidden" error.
+type SetOrganizationProviderSetupForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationProviderSetupBadRequestResponseBody is the type of the
+// "admin" service "setOrganizationProviderSetup" endpoint HTTP response body
+// for the "bad_request" error.
+type SetOrganizationProviderSetupBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationProviderSetupNotFoundResponseBody is the type of the "admin"
+// service "setOrganizationProviderSetup" endpoint HTTP response body for the
+// "not_found" error.
+type SetOrganizationProviderSetupNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationProviderSetupConflictResponseBody is the type of the "admin"
+// service "setOrganizationProviderSetup" endpoint HTTP response body for the
+// "conflict" error.
+type SetOrganizationProviderSetupConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationProviderSetupUnsupportedMediaResponseBody is the type of the
+// "admin" service "setOrganizationProviderSetup" endpoint HTTP response body
+// for the "unsupported_media" error.
+type SetOrganizationProviderSetupUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationProviderSetupInvalidResponseBody is the type of the "admin"
+// service "setOrganizationProviderSetup" endpoint HTTP response body for the
+// "invalid" error.
+type SetOrganizationProviderSetupInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationProviderSetupInvariantViolationResponseBody is the type of
+// the "admin" service "setOrganizationProviderSetup" endpoint HTTP response
+// body for the "invariant_violation" error.
+type SetOrganizationProviderSetupInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationProviderSetupUnexpectedResponseBody is the type of the
+// "admin" service "setOrganizationProviderSetup" endpoint HTTP response body
+// for the "unexpected" error.
+type SetOrganizationProviderSetupUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// SetOrganizationProviderSetupGatewayErrorResponseBody is the type of the
+// "admin" service "setOrganizationProviderSetup" endpoint HTTP response body
+// for the "gateway_error" error.
+type SetOrganizationProviderSetupGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -22616,6 +22906,194 @@ type DisableUpstreamAuthEnforcementGatewayErrorResponseBody struct {
 	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
 }
 
+// BackfillMcpAuthGrantsUnauthorizedResponseBody is the type of the "admin"
+// service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "unauthorized" error.
+type BackfillMcpAuthGrantsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillMcpAuthGrantsForbiddenResponseBody is the type of the "admin"
+// service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "forbidden" error.
+type BackfillMcpAuthGrantsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillMcpAuthGrantsBadRequestResponseBody is the type of the "admin"
+// service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "bad_request" error.
+type BackfillMcpAuthGrantsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillMcpAuthGrantsNotFoundResponseBody is the type of the "admin" service
+// "backfillMcpAuthGrants" endpoint HTTP response body for the "not_found"
+// error.
+type BackfillMcpAuthGrantsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillMcpAuthGrantsConflictResponseBody is the type of the "admin" service
+// "backfillMcpAuthGrants" endpoint HTTP response body for the "conflict" error.
+type BackfillMcpAuthGrantsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillMcpAuthGrantsUnsupportedMediaResponseBody is the type of the "admin"
+// service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "unsupported_media" error.
+type BackfillMcpAuthGrantsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillMcpAuthGrantsInvalidResponseBody is the type of the "admin" service
+// "backfillMcpAuthGrants" endpoint HTTP response body for the "invalid" error.
+type BackfillMcpAuthGrantsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillMcpAuthGrantsInvariantViolationResponseBody is the type of the
+// "admin" service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "invariant_violation" error.
+type BackfillMcpAuthGrantsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillMcpAuthGrantsUnexpectedResponseBody is the type of the "admin"
+// service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "unexpected" error.
+type BackfillMcpAuthGrantsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
+// BackfillMcpAuthGrantsGatewayErrorResponseBody is the type of the "admin"
+// service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "gateway_error" error.
+type BackfillMcpAuthGrantsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name *string `form:"name,omitempty" json:"name,omitempty" xml:"name,omitempty"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message *string `form:"message,omitempty" json:"message,omitempty" xml:"message,omitempty"`
+	// Is the error temporary?
+	Temporary *bool `form:"temporary,omitempty" json:"temporary,omitempty" xml:"temporary,omitempty"`
+	// Is the error a timeout?
+	Timeout *bool `form:"timeout,omitempty" json:"timeout,omitempty" xml:"timeout,omitempty"`
+	// Is the error a server-side fault?
+	Fault *bool `form:"fault,omitempty" json:"fault,omitempty" xml:"fault,omitempty"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -22679,7 +23157,13 @@ type AuditLogResponseBody struct {
 	ActingSurface *string `form:"acting_surface,omitempty" json:"acting_surface,omitempty" xml:"acting_surface,omitempty"`
 	// The registered OAuth client the call authenticated as, when it had one.
 	// Absent for calls that carried no OAuth client.
-	ActingClientID     *string         `form:"acting_client_id,omitempty" json:"acting_client_id,omitempty" xml:"acting_client_id,omitempty"`
+	ActingClientID *string `form:"acting_client_id,omitempty" json:"acting_client_id,omitempty" xml:"acting_client_id,omitempty"`
+	// What kind of event the entry records: 'configuration' for a change to the
+	// platform's configuration, 'security' for machine access and other
+	// security-relevant activity that is not a configuration decision. Always
+	// present in responses; optional in the schema so clients built against it
+	// still read responses from servers that predate it.
+	Category           *string         `form:"category,omitempty" json:"category,omitempty" xml:"category,omitempty"`
 	SubjectID          *string         `form:"subject_id,omitempty" json:"subject_id,omitempty" xml:"subject_id,omitempty"`
 	SubjectType        *string         `form:"subject_type,omitempty" json:"subject_type,omitempty" xml:"subject_type,omitempty"`
 	SubjectDisplayName *string         `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
@@ -23394,10 +23878,12 @@ type AdminMcpServerHealthRemoteSessionsResponseBody struct {
 // AdminMcpServerHealthUpstreamAuthResponseBody is used to define fields on
 // response body types.
 type AdminMcpServerHealthUpstreamAuthResponseBody struct {
-	// configured, setup_incomplete (required with no enabled client),
-	// no_auth_required or undecided.
+	// configured (at least one enabled auth client), setup_incomplete (no auth
+	// client was ever linked to it, live or detached, but it has upstream
+	// credentials that no auth client records yet) or no_auth_required.
 	Status *string `form:"status,omitempty" json:"status,omitempty" xml:"status,omitempty"`
-	// Whether the upstream needs authentication. Omitted while undecided.
+	// Whether the upstream needs authentication: true when the server offers at
+	// least one enabled auth client.
 	RequiresUpstreamAuth *bool                                         `form:"requires_upstream_auth,omitempty" json:"requires_upstream_auth,omitempty" xml:"requires_upstream_auth,omitempty"`
 	AuthClients          []*AdminMcpServerHealthAuthClientResponseBody `form:"auth_clients,omitempty" json:"auth_clients,omitempty" xml:"auth_clients,omitempty"`
 }
@@ -23912,14 +24398,14 @@ type AdminUpstreamOAuthMigrationServerResponseBody struct {
 // on response body types.
 type AdminUpstreamOAuthMigrationAuthClientsResponseBody struct {
 	// Whether every configured identity has its auth client, server links and
-	// header copies recorded, no backfilled record is left to retire, no server
-	// offering one is left undecided, and no phase failed.
+	// header copies recorded, no backfilled record is left to retire, and no phase
+	// failed.
 	Complete *bool `form:"complete,omitempty" json:"complete,omitempty" xml:"complete,omitempty"`
 	// Whether a run is recording typed auth clients for the organization right
 	// now. The other counts are then empty; check again when it finishes.
 	InProgress *bool `form:"in_progress,omitempty" json:"in_progress,omitempty" xml:"in_progress,omitempty"`
-	// Servers offering a backfilled auth client whose need for upstream
-	// authentication is still undecided, not yet marked as needing it.
+	// Deprecated: always 0. Whether a server needs upstream authentication follows
+	// from the auth clients it offers, so no server is marked.
 	PendingMarkedServers *int64 `form:"pending_marked_servers,omitempty" json:"pending_marked_servers,omitempty" xml:"pending_marked_servers,omitempty"`
 	// Configured identities and server links decided.
 	Associations *int64 `form:"associations,omitempty" json:"associations,omitempty" xml:"associations,omitempty"`
@@ -24088,9 +24574,8 @@ type AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody struct {
 	// Why there is no choice: selection_required (several clients could serve it),
 	// personal_requires_user (only a personal client serves it, and the turn has
 	// no user), no_client (no live, enabled auth client carries its upstream OAuth
-	// client), setup_incomplete (it needs upstream authentication and offers no
-	// auth client) or upstream_auth_undecided (it offers no auth client and an
-	// administrator has not decided whether it needs upstream authentication).
+	// client) or setup_incomplete (no auth client was ever linked to it, live or
+	// detached, but it has upstream credentials that no auth client records yet).
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
 	// Profile and server pairs with no choice for this reason.
 	Servers *int64 `form:"servers,omitempty" json:"servers,omitempty" xml:"servers,omitempty"`
@@ -24139,6 +24624,17 @@ type AdminUpstreamOAuthMigrationStatusResponseBody struct {
 	// Whether upstream auth enforcement is on for the organization, and whether it
 	// can be turned on.
 	Enforcement *AdminUpstreamAuthEnforcementResponseBody `form:"enforcement,omitempty" json:"enforcement,omitempty" xml:"enforcement,omitempty"`
+}
+
+// NewSetOrganizationProviderSetupRequestBody builds the HTTP request body from
+// the payload of the "setOrganizationProviderSetup" endpoint of the "admin"
+// service.
+func NewSetOrganizationProviderSetupRequestBody(p *admin.SetOrganizationProviderSetupPayload) *SetOrganizationProviderSetupRequestBody {
+	body := &SetOrganizationProviderSetupRequestBody{
+		OrganizationID: p.OrganizationID,
+		Enabled:        p.Enabled,
+	}
+	return body
 }
 
 // NewSetOrganizationFeatureRequestBody builds the HTTP request body from the
@@ -25531,6 +26027,7 @@ func NewGetSessionGatewayError(body *GetSessionGatewayErrorResponseBody) *goa.Se
 // "getOrganizationFeatures" endpoint result from a HTTP "OK" response.
 func NewGetOrganizationFeaturesProductFeaturesOK(body *GetOrganizationFeaturesResponseBody) *adminviews.ProductFeaturesView {
 	v := &adminviews.ProductFeaturesView{
+		ProviderSetupEnabled:                    body.ProviderSetupEnabled,
 		LogsEnabled:                             body.LogsEnabled,
 		ToolIoLogsEnabled:                       body.ToolIoLogsEnabled,
 		SessionCaptureEnabled:                   body.SessionCaptureEnabled,
@@ -25553,6 +26050,7 @@ func NewGetOrganizationFeaturesProductFeaturesOK(body *GetOrganizationFeaturesRe
 		OrganizationGatewayDisabled:             body.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         body.CodeModeEnabled,
 		DeviceAgent:                             body.DeviceAgent,
+		UpstreamAuthEnforced:                    body.UpstreamAuthEnforced,
 	}
 
 	return v
@@ -25708,10 +26206,11 @@ func NewGetOrganizationFeaturesGatewayError(body *GetOrganizationFeaturesGateway
 	return v
 }
 
-// NewSetOrganizationFeatureProductFeaturesOK builds a "admin" service
-// "setOrganizationFeature" endpoint result from a HTTP "OK" response.
-func NewSetOrganizationFeatureProductFeaturesOK(body *SetOrganizationFeatureResponseBody) *adminviews.ProductFeaturesView {
+// NewSetOrganizationProviderSetupProductFeaturesOK builds a "admin" service
+// "setOrganizationProviderSetup" endpoint result from a HTTP "OK" response.
+func NewSetOrganizationProviderSetupProductFeaturesOK(body *SetOrganizationProviderSetupResponseBody) *adminviews.ProductFeaturesView {
 	v := &adminviews.ProductFeaturesView{
+		ProviderSetupEnabled:                    body.ProviderSetupEnabled,
 		LogsEnabled:                             body.LogsEnabled,
 		ToolIoLogsEnabled:                       body.ToolIoLogsEnabled,
 		SessionCaptureEnabled:                   body.SessionCaptureEnabled,
@@ -25734,6 +26233,190 @@ func NewSetOrganizationFeatureProductFeaturesOK(body *SetOrganizationFeatureResp
 		OrganizationGatewayDisabled:             body.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         body.CodeModeEnabled,
 		DeviceAgent:                             body.DeviceAgent,
+		UpstreamAuthEnforced:                    body.UpstreamAuthEnforced,
+	}
+
+	return v
+}
+
+// NewSetOrganizationProviderSetupUnauthorized builds a admin service
+// setOrganizationProviderSetup endpoint unauthorized error.
+func NewSetOrganizationProviderSetupUnauthorized(body *SetOrganizationProviderSetupUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationProviderSetupForbidden builds a admin service
+// setOrganizationProviderSetup endpoint forbidden error.
+func NewSetOrganizationProviderSetupForbidden(body *SetOrganizationProviderSetupForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationProviderSetupBadRequest builds a admin service
+// setOrganizationProviderSetup endpoint bad_request error.
+func NewSetOrganizationProviderSetupBadRequest(body *SetOrganizationProviderSetupBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationProviderSetupNotFound builds a admin service
+// setOrganizationProviderSetup endpoint not_found error.
+func NewSetOrganizationProviderSetupNotFound(body *SetOrganizationProviderSetupNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationProviderSetupConflict builds a admin service
+// setOrganizationProviderSetup endpoint conflict error.
+func NewSetOrganizationProviderSetupConflict(body *SetOrganizationProviderSetupConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationProviderSetupUnsupportedMedia builds a admin service
+// setOrganizationProviderSetup endpoint unsupported_media error.
+func NewSetOrganizationProviderSetupUnsupportedMedia(body *SetOrganizationProviderSetupUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationProviderSetupInvalid builds a admin service
+// setOrganizationProviderSetup endpoint invalid error.
+func NewSetOrganizationProviderSetupInvalid(body *SetOrganizationProviderSetupInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationProviderSetupInvariantViolation builds a admin service
+// setOrganizationProviderSetup endpoint invariant_violation error.
+func NewSetOrganizationProviderSetupInvariantViolation(body *SetOrganizationProviderSetupInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationProviderSetupUnexpected builds a admin service
+// setOrganizationProviderSetup endpoint unexpected error.
+func NewSetOrganizationProviderSetupUnexpected(body *SetOrganizationProviderSetupUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationProviderSetupGatewayError builds a admin service
+// setOrganizationProviderSetup endpoint gateway_error error.
+func NewSetOrganizationProviderSetupGatewayError(body *SetOrganizationProviderSetupGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewSetOrganizationFeatureProductFeaturesOK builds a "admin" service
+// "setOrganizationFeature" endpoint result from a HTTP "OK" response.
+func NewSetOrganizationFeatureProductFeaturesOK(body *SetOrganizationFeatureResponseBody) *adminviews.ProductFeaturesView {
+	v := &adminviews.ProductFeaturesView{
+		ProviderSetupEnabled:                    body.ProviderSetupEnabled,
+		LogsEnabled:                             body.LogsEnabled,
+		ToolIoLogsEnabled:                       body.ToolIoLogsEnabled,
+		SessionCaptureEnabled:                   body.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled:            body.AuthzChallengeLoggingEnabled,
+		SsoEnabled:                              body.SsoEnabled,
+		ScimEnabled:                             body.ScimEnabled,
+		HooksBrowserLoginEnabled:                body.HooksBrowserLoginEnabled,
+		HooksFailOpenEnabled:                    body.HooksFailOpenEnabled,
+		CustomModelKeysEnabled:                  body.CustomModelKeysEnabled,
+		SkillsEnabled:                           body.SkillsEnabled,
+		SkillCaptureMetadataOnly:                body.SkillCaptureMetadataOnly,
+		AiPlatformPushIntegrationsEnabled:       body.AiPlatformPushIntegrationsEnabled,
+		PlatformMcpEnabled:                      body.PlatformMcpEnabled,
+		CustomerManagedEncryptionKeysEnabled:    body.CustomerManagedEncryptionKeysEnabled,
+		RemoteSessionAutoRefreshEnabled:         body.RemoteSessionAutoRefreshEnabled,
+		RemoteSessionAutoRefreshEnforcedEnabled: body.RemoteSessionAutoRefreshEnforcedEnabled,
+		SessionPortabilityEnabled:               body.SessionPortabilityEnabled,
+		NetworkIngressEnabled:                   body.NetworkIngressEnabled,
+		SignalsIntelligenceEnabled:              body.SignalsIntelligenceEnabled,
+		OrganizationGatewayDisabled:             body.OrganizationGatewayDisabled,
+		CodeModeEnabled:                         body.CodeModeEnabled,
+		DeviceAgent:                             body.DeviceAgent,
+		UpstreamAuthEnforced:                    body.UpstreamAuthEnforced,
 	}
 
 	return v
@@ -33840,10 +34523,12 @@ func NewMigrateToGlobalIssuerGatewayError(body *MigrateToGlobalIssuerGatewayErro
 	return v
 }
 
-// NewUploadPlatformImageUploadImageResultOK builds a "admin" service
+// NewUploadPlatformImageAdminUploadImageResultOK builds a "admin" service
 // "uploadPlatformImage" endpoint result from a HTTP "OK" response.
-func NewUploadPlatformImageUploadImageResultOK(body *UploadPlatformImageResponseBody) *admin.UploadImageResult {
-	v := &admin.UploadImageResult{}
+func NewUploadPlatformImageAdminUploadImageResultOK(body *UploadPlatformImageResponseBody) *admin.AdminUploadImageResult {
+	v := &admin.AdminUploadImageResult{
+		URL: *body.URL,
+	}
 	v.Asset = unmarshalAssetResponseBodyToAdminAsset(body.Asset)
 
 	return v
@@ -34016,13 +34701,15 @@ func NewUploadPlatformImageGatewayError(body *UploadPlatformImageGatewayErrorRes
 
 // NewServeImageResultOK builds a "admin" service "serveImage" endpoint result
 // from a HTTP "OK" response.
-func NewServeImageResultOK(contentType string, contentLength int64, lastModified string, accessControlAllowOrigin *string, crossOriginResourcePolicy string) *admin.ServeImageResult {
+func NewServeImageResultOK(contentType string, contentLength int64, lastModified string, accessControlAllowOrigin *string, crossOriginResourcePolicy string, contentSecurityPolicy *string, xContentTypeOptions *string) *admin.ServeImageResult {
 	v := &admin.ServeImageResult{}
 	v.ContentType = contentType
 	v.ContentLength = contentLength
 	v.LastModified = lastModified
 	v.AccessControlAllowOrigin = accessControlAllowOrigin
 	v.CrossOriginResourcePolicy = crossOriginResourcePolicy
+	v.ContentSecurityPolicy = contentSecurityPolicy
+	v.XContentTypeOptions = xContentTypeOptions
 
 	return v
 }
@@ -43265,6 +43952,166 @@ func NewDisableUpstreamAuthEnforcementGatewayError(body *DisableUpstreamAuthEnfo
 	return v
 }
 
+// NewBackfillMcpAuthGrantsAdminBackfillMCPAuthGrantsResultOK builds a "admin"
+// service "backfillMcpAuthGrants" endpoint result from a HTTP "OK" response.
+func NewBackfillMcpAuthGrantsAdminBackfillMCPAuthGrantsResultOK(body *BackfillMcpAuthGrantsResponseBody) *admin.AdminBackfillMCPAuthGrantsResult {
+	v := &admin.AdminBackfillMCPAuthGrantsResult{
+		Granted: *body.Granted,
+	}
+
+	return v
+}
+
+// NewBackfillMcpAuthGrantsUnauthorized builds a admin service
+// backfillMcpAuthGrants endpoint unauthorized error.
+func NewBackfillMcpAuthGrantsUnauthorized(body *BackfillMcpAuthGrantsUnauthorizedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillMcpAuthGrantsForbidden builds a admin service
+// backfillMcpAuthGrants endpoint forbidden error.
+func NewBackfillMcpAuthGrantsForbidden(body *BackfillMcpAuthGrantsForbiddenResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillMcpAuthGrantsBadRequest builds a admin service
+// backfillMcpAuthGrants endpoint bad_request error.
+func NewBackfillMcpAuthGrantsBadRequest(body *BackfillMcpAuthGrantsBadRequestResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillMcpAuthGrantsNotFound builds a admin service
+// backfillMcpAuthGrants endpoint not_found error.
+func NewBackfillMcpAuthGrantsNotFound(body *BackfillMcpAuthGrantsNotFoundResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillMcpAuthGrantsConflict builds a admin service
+// backfillMcpAuthGrants endpoint conflict error.
+func NewBackfillMcpAuthGrantsConflict(body *BackfillMcpAuthGrantsConflictResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillMcpAuthGrantsUnsupportedMedia builds a admin service
+// backfillMcpAuthGrants endpoint unsupported_media error.
+func NewBackfillMcpAuthGrantsUnsupportedMedia(body *BackfillMcpAuthGrantsUnsupportedMediaResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillMcpAuthGrantsInvalid builds a admin service backfillMcpAuthGrants
+// endpoint invalid error.
+func NewBackfillMcpAuthGrantsInvalid(body *BackfillMcpAuthGrantsInvalidResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillMcpAuthGrantsInvariantViolation builds a admin service
+// backfillMcpAuthGrants endpoint invariant_violation error.
+func NewBackfillMcpAuthGrantsInvariantViolation(body *BackfillMcpAuthGrantsInvariantViolationResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillMcpAuthGrantsUnexpected builds a admin service
+// backfillMcpAuthGrants endpoint unexpected error.
+func NewBackfillMcpAuthGrantsUnexpected(body *BackfillMcpAuthGrantsUnexpectedResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
+// NewBackfillMcpAuthGrantsGatewayError builds a admin service
+// backfillMcpAuthGrants endpoint gateway_error error.
+func NewBackfillMcpAuthGrantsGatewayError(body *BackfillMcpAuthGrantsGatewayErrorResponseBody) *goa.ServiceError {
+	v := &goa.ServiceError{
+		Name:      *body.Name,
+		ID:        *body.ID,
+		Message:   *body.Message,
+		Temporary: *body.Temporary,
+		Timeout:   *body.Timeout,
+		Fault:     *body.Fault,
+	}
+
+	return v
+}
+
 // ValidateGetSessionResponseBody runs the validations defined on
 // GetSessionResponseBody
 func ValidateGetSessionResponseBody(body *GetSessionResponseBody) (err error) {
@@ -44671,6 +45518,9 @@ func ValidateMigrateToGlobalIssuerResponseBody(body *MigrateToGlobalIssuerRespon
 func ValidateUploadPlatformImageResponseBody(body *UploadPlatformImageResponseBody) (err error) {
 	if body.Asset == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("asset", "body"))
+	}
+	if body.URL == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("url", "body"))
 	}
 	if body.Asset != nil {
 		if err2 := ValidateAssetResponseBody(body.Asset); err2 != nil {
@@ -46547,6 +47397,15 @@ func ValidateDisableUpstreamAuthEnforcementResponseBody(body *DisableUpstreamAut
 	return
 }
 
+// ValidateBackfillMcpAuthGrantsResponseBody runs the validations defined on
+// BackfillMcpAuthGrantsResponseBody
+func ValidateBackfillMcpAuthGrantsResponseBody(body *BackfillMcpAuthGrantsResponseBody) (err error) {
+	if body.Granted == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("granted", "body"))
+	}
+	return
+}
+
 // ValidateLoginUnauthorizedResponseBody runs the validations defined on
 // login_unauthorized_response_body
 func ValidateLoginUnauthorizedResponseBody(body *LoginUnauthorizedResponseBody) (err error) {
@@ -47728,6 +48587,250 @@ func ValidateGetOrganizationFeaturesUnexpectedResponseBody(body *GetOrganization
 // ValidateGetOrganizationFeaturesGatewayErrorResponseBody runs the validations
 // defined on getOrganizationFeatures_gateway_error_response_body
 func ValidateGetOrganizationFeaturesGatewayErrorResponseBody(body *GetOrganizationFeaturesGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationProviderSetupUnauthorizedResponseBody runs the
+// validations defined on
+// setOrganizationProviderSetup_unauthorized_response_body
+func ValidateSetOrganizationProviderSetupUnauthorizedResponseBody(body *SetOrganizationProviderSetupUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationProviderSetupForbiddenResponseBody runs the
+// validations defined on setOrganizationProviderSetup_forbidden_response_body
+func ValidateSetOrganizationProviderSetupForbiddenResponseBody(body *SetOrganizationProviderSetupForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationProviderSetupBadRequestResponseBody runs the
+// validations defined on setOrganizationProviderSetup_bad_request_response_body
+func ValidateSetOrganizationProviderSetupBadRequestResponseBody(body *SetOrganizationProviderSetupBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationProviderSetupNotFoundResponseBody runs the
+// validations defined on setOrganizationProviderSetup_not_found_response_body
+func ValidateSetOrganizationProviderSetupNotFoundResponseBody(body *SetOrganizationProviderSetupNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationProviderSetupConflictResponseBody runs the
+// validations defined on setOrganizationProviderSetup_conflict_response_body
+func ValidateSetOrganizationProviderSetupConflictResponseBody(body *SetOrganizationProviderSetupConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationProviderSetupUnsupportedMediaResponseBody runs the
+// validations defined on
+// setOrganizationProviderSetup_unsupported_media_response_body
+func ValidateSetOrganizationProviderSetupUnsupportedMediaResponseBody(body *SetOrganizationProviderSetupUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationProviderSetupInvalidResponseBody runs the validations
+// defined on setOrganizationProviderSetup_invalid_response_body
+func ValidateSetOrganizationProviderSetupInvalidResponseBody(body *SetOrganizationProviderSetupInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationProviderSetupInvariantViolationResponseBody runs the
+// validations defined on
+// setOrganizationProviderSetup_invariant_violation_response_body
+func ValidateSetOrganizationProviderSetupInvariantViolationResponseBody(body *SetOrganizationProviderSetupInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationProviderSetupUnexpectedResponseBody runs the
+// validations defined on setOrganizationProviderSetup_unexpected_response_body
+func ValidateSetOrganizationProviderSetupUnexpectedResponseBody(body *SetOrganizationProviderSetupUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateSetOrganizationProviderSetupGatewayErrorResponseBody runs the
+// validations defined on
+// setOrganizationProviderSetup_gateway_error_response_body
+func ValidateSetOrganizationProviderSetupGatewayErrorResponseBody(body *SetOrganizationProviderSetupGatewayErrorResponseBody) (err error) {
 	if body.Name == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
 	}
@@ -72153,6 +73256,247 @@ func ValidateDisableUpstreamAuthEnforcementGatewayErrorResponseBody(body *Disabl
 	return
 }
 
+// ValidateBackfillMcpAuthGrantsUnauthorizedResponseBody runs the validations
+// defined on backfillMcpAuthGrants_unauthorized_response_body
+func ValidateBackfillMcpAuthGrantsUnauthorizedResponseBody(body *BackfillMcpAuthGrantsUnauthorizedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillMcpAuthGrantsForbiddenResponseBody runs the validations
+// defined on backfillMcpAuthGrants_forbidden_response_body
+func ValidateBackfillMcpAuthGrantsForbiddenResponseBody(body *BackfillMcpAuthGrantsForbiddenResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillMcpAuthGrantsBadRequestResponseBody runs the validations
+// defined on backfillMcpAuthGrants_bad_request_response_body
+func ValidateBackfillMcpAuthGrantsBadRequestResponseBody(body *BackfillMcpAuthGrantsBadRequestResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillMcpAuthGrantsNotFoundResponseBody runs the validations
+// defined on backfillMcpAuthGrants_not_found_response_body
+func ValidateBackfillMcpAuthGrantsNotFoundResponseBody(body *BackfillMcpAuthGrantsNotFoundResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillMcpAuthGrantsConflictResponseBody runs the validations
+// defined on backfillMcpAuthGrants_conflict_response_body
+func ValidateBackfillMcpAuthGrantsConflictResponseBody(body *BackfillMcpAuthGrantsConflictResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillMcpAuthGrantsUnsupportedMediaResponseBody runs the
+// validations defined on backfillMcpAuthGrants_unsupported_media_response_body
+func ValidateBackfillMcpAuthGrantsUnsupportedMediaResponseBody(body *BackfillMcpAuthGrantsUnsupportedMediaResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillMcpAuthGrantsInvalidResponseBody runs the validations
+// defined on backfillMcpAuthGrants_invalid_response_body
+func ValidateBackfillMcpAuthGrantsInvalidResponseBody(body *BackfillMcpAuthGrantsInvalidResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillMcpAuthGrantsInvariantViolationResponseBody runs the
+// validations defined on
+// backfillMcpAuthGrants_invariant_violation_response_body
+func ValidateBackfillMcpAuthGrantsInvariantViolationResponseBody(body *BackfillMcpAuthGrantsInvariantViolationResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillMcpAuthGrantsUnexpectedResponseBody runs the validations
+// defined on backfillMcpAuthGrants_unexpected_response_body
+func ValidateBackfillMcpAuthGrantsUnexpectedResponseBody(body *BackfillMcpAuthGrantsUnexpectedResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
+// ValidateBackfillMcpAuthGrantsGatewayErrorResponseBody runs the validations
+// defined on backfillMcpAuthGrants_gateway_error_response_body
+func ValidateBackfillMcpAuthGrantsGatewayErrorResponseBody(body *BackfillMcpAuthGrantsGatewayErrorResponseBody) (err error) {
+	if body.Name == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("name", "body"))
+	}
+	if body.ID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("id", "body"))
+	}
+	if body.Message == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("message", "body"))
+	}
+	if body.Temporary == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("temporary", "body"))
+	}
+	if body.Timeout == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("timeout", "body"))
+	}
+	if body.Fault == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("fault", "body"))
+	}
+	return
+}
+
 // ValidateAdminOrganizationMemberResponseBody runs the validations defined on
 // AdminOrganizationMemberResponseBody
 func ValidateAdminOrganizationMemberResponseBody(body *AdminOrganizationMemberResponseBody) (err error) {
@@ -72273,6 +73617,11 @@ func ValidateAuditLogResponseBody(body *AuditLogResponseBody) (err error) {
 	}
 	if body.CreatedAt == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("created_at", "body"))
+	}
+	if body.Category != nil {
+		if !(*body.Category == "configuration" || *body.Category == "security") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.category", *body.Category, []any{"configuration", "security"}))
+		}
 	}
 	if body.CreatedAt != nil {
 		err = goa.MergeErrors(err, goa.ValidateFormat("body.created_at", *body.CreatedAt, goa.FormatDateTime))
@@ -73447,12 +74796,15 @@ func ValidateAdminMcpServerHealthUpstreamAuthResponseBody(body *AdminMcpServerHe
 	if body.Status == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("status", "body"))
 	}
+	if body.RequiresUpstreamAuth == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("requires_upstream_auth", "body"))
+	}
 	if body.AuthClients == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("auth_clients", "body"))
 	}
 	if body.Status != nil {
-		if !(*body.Status == "configured" || *body.Status == "setup_incomplete" || *body.Status == "no_auth_required" || *body.Status == "undecided") {
-			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"configured", "setup_incomplete", "no_auth_required", "undecided"}))
+		if !(*body.Status == "configured" || *body.Status == "setup_incomplete" || *body.Status == "no_auth_required") {
+			err = goa.MergeErrors(err, goa.InvalidEnumValueError("body.status", *body.Status, []any{"configured", "setup_incomplete", "no_auth_required"}))
 		}
 	}
 	for _, e := range body.AuthClients {

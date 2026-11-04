@@ -138,11 +138,12 @@ func (s *Service) RotateObservabilityCredential(ctx context.Context, payload *ge
 				Slug:            nil,
 				CreatedByUserID: ac.UserID,
 			},
-			GitHubUsernames:   nil,
-			CommitMessage:     "Rotate observability plugin credential",
-			SkipIfUnchanged:   true,
-			RotateHooksKey:    true,
-			HooksKeyCandidate: &candidate,
+			GitHubUsernames:      nil,
+			CommitMessage:        "Rotate observability plugin credential",
+			SkipIfUnchanged:      true,
+			IncludePausedPlugins: false,
+			RotateHooksKey:       true,
+			HooksKeyCandidate:    &candidate,
 		})
 		if err != nil {
 			return nil, err

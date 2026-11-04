@@ -95,14 +95,13 @@ export const TelemetryProvider = (props: {
     }
 
     const serverURL = getServerURL();
-    if (isGramHost(serverURL)) {
-      const env = isProdHost(serverURL) ? "prod" : "dev";
+    if (isProdHost(serverURL)) {
       datadogRum.init({
         applicationId: "93afb64a-dd15-490c-a749-51b4c5c5a171",
         clientToken: "pub8358667232c624e2f91e1eaa0bd380fd",
         site: "datadoghq.com",
         service: "gram",
-        env,
+        env: "prod",
         sessionSampleRate: 100,
         sessionReplaySampleRate: 100,
         trackUserInteractions: true,

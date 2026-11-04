@@ -66,7 +66,7 @@ func testServerHealth() *gen.AdminMcpServerHealth {
 			},
 		},
 		UpstreamAuth: &gen.AdminMcpServerHealthUpstreamAuth{
-			Status: "configured", RequiresUpstreamAuth: new(true),
+			Status: "configured", RequiresUpstreamAuth: true,
 			AuthClients: []*gen.AdminMcpServerHealthAuthClient{{
 				ID: testHealthOtherID, ClientType: "service_account", Source: "backfill", Enabled: true,
 				RemoteSessionClientID: new(testHealthClientID), ServerCount: 2, HeaderCount: 1,
@@ -167,7 +167,7 @@ func TestDescribeMCPServerHealthExactTargetAndProjection(t *testing.T) {
 	require.Equal(t, "2026-08-01T00:00:00Z", *client.Issuer.MetadataLastErrorAt)
 	require.Equal(t, MCPServerHealthOutcomes{Success: 90, Unauthorized: 5, ClientError: 2, ServerError: 1, Blocked: 1, Failed: 1}, *output.ToolCalls.Outcomes)
 	require.NotNil(t, output.UpstreamAuth)
-	require.Equal(t, MCPServerHealthUpstream{Status: "configured", RequiresUpstreamAuth: new(true), AuthClients: []MCPServerHealthAuthClient{{
+	require.Equal(t, MCPServerHealthUpstream{Status: "configured", RequiresUpstreamAuth: true, AuthClients: []MCPServerHealthAuthClient{{
 		ID: testHealthOtherID, ClientType: "service_account", Source: "backfill", Enabled: true,
 		RemoteSessionClientID: new(testHealthClientID), ServerCount: 2, HeaderCount: 1,
 	}}}, *output.UpstreamAuth)

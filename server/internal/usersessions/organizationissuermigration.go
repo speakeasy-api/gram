@@ -24,6 +24,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/o11y"
 	"github.com/speakeasy-api/gram/server/internal/oops"
@@ -434,9 +435,10 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 		return nil, oops.E(oops.CodeUnexpected, err, "begin transaction").LogError(ctx, logger)
 	}
 	defer o11y.NoLogDefer(func() error { return dbtx.Rollback(ctx) })
-	// Hosted toolset saves take this lock before issuer and toolset locks.
-	if err := networkingressrepo.New(dbtx).AcquireNetworkIngressOrganizationLock(ctx, authCtx.ActiveOrganizationID); err != nil {
-		return nil, oops.E(oops.CodeUnexpected, err, "lock network ingress lifecycle").LogError(ctx, logger)
+	// An inherited issuer can gain its first server in another project. Protect
+	// discovery before any ingress/issuer locks; never upgrade a shared gate.
+	if err := authclientbackfill.New(dbtx).LockEMAGatewayReachWriter(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock issuer migration reach").LogError(ctx, logger)
 	}
 	q := repo.New(dbtx)
 	source, target, err := loadUserSessionMigrationPair(ctx, q, authCtx.ActiveOrganizationID, sourceID, targetID, false)
@@ -445,6 +447,24 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 			return nil, oops.E(oops.CodeNotFound, err, "source or target user session issuer not found").LogError(ctx, logger)
 		}
 		return nil, oops.E(oops.CodeBadRequest, err, "%v", err).LogError(ctx, logger)
+	}
+	lockProjects, err := q.ListMCPServerProjectIDsForUserSessionIssuerMigration(ctx, repo.ListMCPServerProjectIDsForUserSessionIssuerMigrationParams{
+		SourceIssuerID: conv.ToNullUUID(source.ID), TargetIssuerID: conv.ToNullUUID(target.ID), OrganizationID: authCtx.ActiveOrganizationID,
+	})
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "discover issuer migration writer scope").LogError(ctx, logger)
+	}
+	for _, issuer := range []repo.UserSessionIssuer{source, target} {
+		if issuer.ProjectID.Valid {
+			lockProjects = append(lockProjects, issuer.ProjectID.UUID)
+		}
+	}
+	if err := authclientbackfill.LockEMAWriterScope(ctx, dbtx, authCtx.ActiveOrganizationID, lockProjects); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock issuer migration writer scope").LogError(ctx, logger)
+	}
+	// Hosted toolset saves take this lock before issuer and toolset locks.
+	if err := networkingressrepo.New(dbtx).AcquireNetworkIngressOrganizationLock(ctx, authCtx.ActiveOrganizationID); err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "lock network ingress lifecycle").LogError(ctx, logger)
 	}
 	if err := lockUserSessionIssuersForMigration(ctx, q, source.ID, target.ID); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "lock issuers for migration").LogError(ctx, logger)
@@ -529,10 +549,6 @@ func (s *Service) MigrateIssuer(ctx context.Context, payload *orggen.MigrateIssu
 		name string
 		fn   func() (int64, error)
 	}{
-		// Only toolsets without a canonical wrapper: a wrapper owns its toolset's issuer.
-		{name: "toolsets", fn: func() (int64, error) {
-			return q.UpdateToolsetsToUserSessionIssuer(ctx, repo.UpdateToolsetsToUserSessionIssuerParams{TargetIssuerID: conv.ToNullUUID(target.ID), SourceIssuerID: conv.ToNullUUID(source.ID), OrganizationID: authCtx.ActiveOrganizationID})
-		}},
 		{name: "MCP servers", fn: func() (int64, error) {
 			moved, err := q.UpdateMCPServersToUserSessionIssuer(ctx, repo.UpdateMCPServersToUserSessionIssuerParams{TargetIssuerID: conv.ToNullUUID(target.ID), SourceIssuerID: conv.ToNullUUID(source.ID), OrganizationID: authCtx.ActiveOrganizationID})
 			if err != nil {

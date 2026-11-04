@@ -121,6 +121,8 @@ LIMIT 1;
 -- name: ResolveToolsetsForWrite :many
 -- Also locks the toolsets behind canonical wrappers named by slug, so server
 -- attachments take the toolset lock before the server lock, as deletion does.
+-- enables_mcp needs an endpoint; disabled_wrapper lets the caller count the legacy alias instead.
+-- legacyalias: drop disabled_wrapper with AIM-670.
 SELECT t.id, t.slug, EXISTS (
   SELECT 1
   FROM mcp_servers w
@@ -129,11 +131,16 @@ SELECT t.id, t.slug, EXISTS (
     AND w.project_id = t.project_id
     AND w.visibility = 'disabled'
     AND w.deleted IS FALSE
-    AND (
-      t.mcp_slug IS NOT NULL
-      OR EXISTS (SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = w.id AND e.project_id = w.project_id AND e.deleted IS FALSE)
-    )
-)::bool AS enables_mcp
+    AND EXISTS (SELECT 1 FROM mcp_endpoints e WHERE e.mcp_server_id = w.id AND e.project_id = w.project_id AND e.deleted IS FALSE)
+)::bool AS enables_mcp, EXISTS (
+  SELECT 1
+  FROM mcp_servers w
+  WHERE w.id = t.id
+    AND w.toolset_id = t.id
+    AND w.project_id = t.project_id
+    AND w.visibility = 'disabled'
+    AND w.deleted IS FALSE
+)::bool AS disabled_wrapper
 FROM toolsets t
 WHERE t.project_id = @project_id
   AND t.deleted IS FALSE
@@ -345,15 +352,17 @@ LIMIT 1;
 -- default environment, and sort first so they win runtime id
 -- collisions. The address is the server's own endpoint: platform first, else
 -- one on a verified, activated custom domain (ListAddressableMCPEndpointsByMCPServerIDs).
--- A hosted row with neither keeps its legacy /mcp/{mcp_slug} alias until the
--- toolset slug fallback is removed.
+-- A hosted row with neither keeps its legacy /mcp/{mcp_slug} alias, which the
+-- caller fills in from legacyalias until the toolset slug fallback is removed.
 SELECT
   ams.assistant_id,
   ams.mcp_server_id,
   ms.slug AS server_slug,
   t.slug AS toolset_slug,
   ms.visibility::text AS visibility,
-  COALESCE(ep.slug, t.mcp_slug, '')::text AS endpoint_slug,
+  COALESCE(ep.slug, '')::text AS endpoint_slug,
+  -- legacyalias: drop with AIM-670.
+  (t.id IS NOT NULL)::bool AS hosted_toolset,
   COALESCE(ep.domain, '')::text AS endpoint_domain,
   t.default_environment_slug,
   ams.environment_id,
@@ -1853,8 +1862,10 @@ FOR SHARE OF r, a;
 
 -- name: GetKitRuntimeSessionBinding :one
 -- Existence only: never load any previous transcript contents into the guest.
+-- Pending user input is the current turn; only a non-user message shows the
+-- assistant took part in earlier turns.
 SELECT r.id AS runtime_id, t.id AS thread_id, t.chat_id, s.acp_session_id,
-  EXISTS(SELECT 1 FROM chat_messages m WHERE m.chat_id = t.chat_id) AS has_prior_transcript
+  EXISTS(SELECT 1 FROM chat_messages m WHERE m.chat_id = t.chat_id AND m.role <> 'user') AS has_prior_transcript
 FROM assistant_runtimes r
 JOIN assistants a ON a.id = r.assistant_id AND a.project_id = r.project_id
 JOIN assistant_threads t ON t.assistant_id = a.id AND t.project_id = a.project_id
@@ -1912,11 +1923,6 @@ LEFT JOIN assistant_threads t ON t.id = s.assistant_thread_id
 LEFT JOIN chats c ON c.id = t.chat_id AND c.project_id = s.project_id AND c.deleted IS FALSE
 WHERE s.project_id = @project_id AND s.assistant_id = @assistant_id AND s.runtime_id = @runtime_id
 ORDER BY s.acp_session_id;
-
--- name: KitProtocolHasPriorMessages :one
-SELECT EXISTS(SELECT 1 FROM chat_messages
-WHERE project_id= @project_id AND chat_id= @chat_id
-AND id <> ALL(@current_message_ids::uuid[])) AS has_prior;
 
 -- name: ResolveKitCurrentUserMessage :many
 -- Dashboard idempotency_key is the caller's message ID, not an event UUID or text match.
@@ -2038,3 +2044,23 @@ SELECT pg_advisory_unlock(hashtext('asst:' || @assistant_id::text))::boolean AS 
 
 -- name: GetAssistantTransactionIsolationForTest :one
 SELECT current_setting('transaction_isolation')::text AS isolation;
+
+-- name: RetireMCPServerEndpointsFixture :exec
+-- Test fixture: retires every endpoint of one MCP server.
+UPDATE mcp_endpoints SET deleted_at = clock_timestamp() WHERE mcp_server_id = @mcp_server_id AND project_id = @project_id;
+
+-- name: SoftDeleteCustomDomainFixture :exec
+-- Test fixture: soft-deletes a custom domain under its endpoints.
+UPDATE custom_domains SET deleted_at = clock_timestamp() WHERE id = @id AND organization_id = @organization_id;
+
+-- name: BackdateMCPEndpointBySlugFixture :exec
+-- Test fixture: makes one endpoint a day older than when it was created.
+UPDATE mcp_endpoints SET created_at = created_at - interval '1 day' WHERE slug = @slug AND project_id = @project_id;
+
+-- name: LockKitLocalWorkloadSubject :exec
+-- Serializes kit workload provisioning for one external subject across
+-- projects. The key is the caller's canonical JSON encoding of the subject.
+SELECT pg_advisory_xact_lock(hashtextextended(@subject_key::text, 0));
+
+-- name: LockProjectForKitWorkload :one
+SELECT id FROM projects WHERE id = @project_id AND organization_id = @organization_id FOR UPDATE;

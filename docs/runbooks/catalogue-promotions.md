@@ -28,9 +28,12 @@ The repository needs its `guide:draft` label, enabled **Guide draft** workflow,
 credentials never count as queued delivery.
 
 Widen an existing token to Contents read and Pull requests read before deploying
-the existing-guide checks. Without them, each delivery stops at
-`docs_not_configured` and needs a staff retry once the token is fixed. No guide
-request is filed while the lookups fail.
+the existing-guide checks. A delivery stops at `docs_not_configured` when a
+lookup it needs is refused, and needs a staff retry once the token is fixed.
+Without Contents read, that is every delivery without an earlier request issue.
+Without Pull requests read, it is only deliveries whose guide is not already on
+the default branch: a published guide is recorded as `existing_guide` before the
+PR lookup runs. No guide request is filed while a lookup fails.
 
 Ship generated database migrations in a separate migration-only PR and apply
 them before merging and deploying the API and worker change. Configure external
@@ -136,6 +139,8 @@ promoting the same provider. Existing native catalogue rollout remains unchanged
    earlier request issue always wins, including while its factory PR is open.
 3. Without one, it checks the default branch for `guides/<slug>/meta.yaml`. If
    present, it records `existing_guide` with a link to the guide and files nothing.
+   GitHub also answers 404 when the token lacks Contents read, so a missing file
+   only counts as absent once the `guides` directory reads successfully.
 4. Otherwise it looks for an open PR changing any file under `guides/<slug>/`. If
    one exists, it records `guide_in_review` with a link to the PR and files nothing.
 5. Otherwise it creates the issue, then separately adds `guide:draft`.
@@ -174,8 +179,12 @@ underlying problem, then explicitly retry from the admin UI or Admin MCP.
 Success receipts are never cleared by retrying another attempt.
 
 Guide issue reconciliation scans at most 100 pages of 100 issues, events or open
-PRs, and 30 pages of changed files per PR, and also obeys the attempt deadline. Reaching a history limit blocks creation to
+PRs, and also obeys the attempt deadline. Reaching a history limit blocks creation to
 avoid duplicates; large repositories may require indexed reconciliation.
+GitHub lists at most 3000 changed files per PR, so a larger PR only counts as
+changing a guide when one of the listed files is in that guide's folder. The
+worker caches each open PR's changed guide folders by head commit, so later
+checks list files only for new or updated PRs.
 An issue with the same marker but a different body requires manual reconciliation.
 Preserve the original body and put factory questions and answers in comments.
 

@@ -14,7 +14,12 @@ import (
 // requestPublicationForMCPMembership only enqueues when an affected backend is
 // distributed by a plugin. The probes share the endpoint mutation transaction.
 func (s *Service) requestPublicationForMCPMembership(ctx context.Context, tx pgx.Tx, authCtx *contextvalues.AuthContext, serverIDs []uuid.NullUUID, gatewayIDs ...uuid.NullUUID) error {
+	// Without outbox emission there is no need to probe membership, but
+	// the package-content lock must still serialize this mutation with a pause.
 	if !s.publicationRequests.Enabled {
+		if err := s.publicationRequests.Project(ctx, tx, authCtx.ActiveOrganizationID, *authCtx.ProjectID, authCtx.UserID); err != nil {
+			return fmt.Errorf("lock plugin package content: %w", err)
+		}
 		return nil
 	}
 	attached, err := hasPluginMembershipForEndpoint(ctx, pluginsrepo.New(tx), *authCtx.ProjectID, serverIDs, gatewayIDs)

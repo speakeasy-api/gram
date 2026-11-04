@@ -15,7 +15,8 @@ import (
 	toolsetsRepo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
-func seedToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID string, projectID uuid.UUID, slug string, mcpEnabled bool) uuid.UUID {
+// seedToolset creates a toolset; hosted gives it a private canonical wrapper without endpoints.
+func seedToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID string, projectID uuid.UUID, slug string, hosted bool) uuid.UUID {
 	t.Helper()
 
 	ts, err := toolsetsRepo.New(conn).CreateToolset(ctx, toolsetsRepo.CreateToolsetParams{
@@ -23,10 +24,19 @@ func seedToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, orgID st
 		ProjectID:      projectID,
 		Name:           slug,
 		Slug:           slug,
-		McpSlug:        pgtype.Text{String: slug, Valid: true},
-		McpEnabled:     mcpEnabled,
 	})
 	require.NoError(t, err)
+	if hosted {
+		_, err = mcpserversRepo.New(conn).CreateMCPServer(ctx, mcpserversRepo.CreateMCPServerParams{
+			ID:         ts.ID,
+			ProjectID:  projectID,
+			Name:       pgtype.Text{String: slug, Valid: true},
+			Slug:       pgtype.Text{String: slug, Valid: true},
+			ToolsetID:  uuid.NullUUID{UUID: ts.ID, Valid: true},
+			Visibility: "private",
+		})
+		require.NoError(t, err)
+	}
 
 	return ts.ID
 }
@@ -48,16 +58,6 @@ func seedMCPServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projec
 	require.NoError(t, err)
 
 	return srv.ID
-}
-
-func deleteToolset(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, slug string) {
-	t.Helper()
-
-	_, err := toolsetsRepo.New(conn).DeleteToolset(ctx, toolsetsRepo.DeleteToolsetParams{
-		Slug:      slug,
-		ProjectID: projectID,
-	})
-	require.NoError(t, err)
 }
 
 func deleteMCPServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, projectID uuid.UUID, id uuid.UUID) {
@@ -94,8 +94,8 @@ func TestListOrganizationProjects_CountIsZeroWithoutServers(t *testing.T) {
 	require.Equal(t, map[string]int{"empty": 0}, listProjects(t, ctx, svc, "org_one"))
 }
 
-// A toolset is only an MCP server when mcp_enabled says so.
-func TestListOrganizationProjects_CountsOnlyMCPEnabledToolsets(t *testing.T) {
+// A toolset is only an MCP server through its canonical wrapper.
+func TestListOrganizationProjects_CountsOnlyHostedToolsets(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn := newTestAdminService(t)
@@ -121,64 +121,7 @@ func TestListOrganizationProjects_CountsMCPServerRows(t *testing.T) {
 	require.Equal(t, map[string]int{"new-model": 2}, listProjects(t, ctx, svc, "org_one"))
 }
 
-// The shape AGE-1880's data copy produces: one server described twice, by an
-// mcp_enabled toolset and by the mcp_servers row that points at it. A plain sum
-// of the two halves would report 2.
-func TestListOrganizationProjects_DoesNotDoubleCountAMigratedServer(t *testing.T) {
-	t.Parallel()
-
-	ctx, svc, conn := newTestAdminService(t)
-	seedOrg(t, ctx, conn, orgFixture{id: "org_one", name: "One", slug: "one"})
-	projectID := seedProject(t, ctx, conn, "org_one", "migrated")
-	toolsetID := seedToolset(t, ctx, conn, "org_one", projectID, "served", true)
-	seedMCPServer(t, ctx, conn, projectID, toolsetID, "served")
-
-	require.Equal(t, map[string]int{"migrated": 1}, listProjects(t, ctx, svc, "org_one"))
-}
-
-// And the dedupe is per toolset, not a blanket "this project has both models".
-func TestListOrganizationProjects_DedupesPerToolsetNotPerProject(t *testing.T) {
-	t.Parallel()
-
-	ctx, svc, conn := newTestAdminService(t)
-	seedOrg(t, ctx, conn, orgFixture{id: "org_one", name: "One", slug: "one"})
-	projectID := seedProject(t, ctx, conn, "org_one", "half-migrated")
-	migrated := seedToolset(t, ctx, conn, "org_one", projectID, "migrated", true)
-	seedToolset(t, ctx, conn, "org_one", projectID, "legacy", true)
-	seedMCPServer(t, ctx, conn, projectID, migrated, "migrated")
-
-	require.Equal(t, map[string]int{"half-migrated": 2}, listProjects(t, ctx, svc, "org_one"))
-}
-
-// A deleted mcp_servers row stops hiding the toolset it pointed at, so the
-// count has to stay 1 rather than fall to 0.
 func TestListOrganizationProjects_IgnoresDeletedMCPServerRows(t *testing.T) {
-	t.Parallel()
-
-	ctx, svc, conn := newTestAdminService(t)
-	seedOrg(t, ctx, conn, orgFixture{id: "org_one", name: "One", slug: "one"})
-	projectID := seedProject(t, ctx, conn, "org_one", "deleted-server")
-	toolsetID := seedToolset(t, ctx, conn, "org_one", projectID, "served", true)
-	serverID := seedMCPServer(t, ctx, conn, projectID, toolsetID, "served")
-	deleteMCPServer(t, ctx, conn, projectID, serverID)
-
-	require.Equal(t, map[string]int{"deleted-server": 1}, listProjects(t, ctx, svc, "org_one"))
-}
-
-func TestListOrganizationProjects_IgnoresDeletedToolsets(t *testing.T) {
-	t.Parallel()
-
-	ctx, svc, conn := newTestAdminService(t)
-	seedOrg(t, ctx, conn, orgFixture{id: "org_one", name: "One", slug: "one"})
-	projectID := seedProject(t, ctx, conn, "org_one", "deleted-toolset")
-	seedToolset(t, ctx, conn, "org_one", projectID, "served", true)
-	deleteToolset(t, ctx, conn, projectID, "served")
-
-	require.Equal(t, map[string]int{"deleted-toolset": 0}, listProjects(t, ctx, svc, "org_one"))
-}
-
-// A deleted mcp_servers row is not counted on its own half either.
-func TestListOrganizationProjects_IgnoresDeletedServersWithoutAnMCPEnabledToolset(t *testing.T) {
 	t.Parallel()
 
 	ctx, svc, conn := newTestAdminService(t)
@@ -218,8 +161,7 @@ func TestListOrganizationProjects_CountIsScopedToTheProject(t *testing.T) {
 	seedOrg(t, ctx, conn, orgFixture{id: "org_one", name: "One", slug: "one"})
 	seedOrg(t, ctx, conn, orgFixture{id: "org_two", name: "Two", slug: "two"})
 
-	// Both halves of the count are scoped, so both halves are seeded in every
-	// project here: a bare mcp_servers row as well as an mcp_enabled toolset.
+	// Canonical wrappers and other mcp_servers rows are seeded in every project here.
 	mine := seedProject(t, ctx, conn, "org_one", "mine")
 	seedMCPServer(t, ctx, conn, mine, seedToolset(t, ctx, conn, "org_one", mine, "m1", false), "m1")
 

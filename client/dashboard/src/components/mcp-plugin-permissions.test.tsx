@@ -9,6 +9,7 @@ import {
 } from "@testing-library/react";
 import { QueryClient, QueryClientProvider } from "@tanstack/react-query";
 import type { ReactNode } from "react";
+import { MemoryRouter } from "react-router";
 import { afterEach, beforeEach, describe, expect, it, vi } from "vitest";
 
 const state = vi.hoisted(() => ({
@@ -39,12 +40,22 @@ const state = vi.hoisted(() => ({
     id: string;
     name: string;
     tunneledMcpServerId?: string;
+    remoteMcpServerId?: string;
   },
   tunnelConnections: vi.fn(() => ({
     data: undefined as unknown,
     isLoading: false,
     isError: false,
   })),
+  skillsOverMcp: false,
+}));
+vi.mock("@/hooks/useFeatureFlag", () => ({
+  useFeatureFlag: (flag: string) => ({
+    status:
+      flag === "skills-over-mcp" && state.skillsOverMcp
+        ? "enabled"
+        : "disabled",
+  }),
 }));
 vi.mock("@/contexts/Auth", () => ({
   useOrganization: () => ({ id: "org-a" }),
@@ -76,21 +87,27 @@ vi.mock("@gram/client/react-query/marketplaceSettings", () => ({
 vi.mock("@/contexts/Fetcher", () => ({
   useFetcher: () => ({ fetch: vi.fn() }),
 }));
-vi.mock("@/routes", () => ({
-  useRoutes: () => ({
-    plugins: {
-      href: () => "/plugins",
-      Link: ({ children }: { children: ReactNode }) => (
-        <a href="/plugins">{children}</a>
-      ),
-    },
-    playground: { Link: () => null },
-    mcp: { href: () => "/mcp" },
-  }),
+vi.mock("@/contexts/Sdk", () => ({
+  useSlugs: () => ({ orgSlug: "org", projectSlug: "project-slug" }),
 }));
-vi.mock("react-router", () => ({
+vi.mock("react-router", async (importOriginal) => ({
+  ...(await importOriginal<typeof import("react-router")>()),
   useParams: () => ({ mcpServerSlug: "server-a" }),
   useLocation: () => ({ pathname: "/mcp/server-a" }),
+  Link: ({
+    to,
+    children,
+    ...rest
+  }: {
+    to: string;
+    children: ReactNode;
+    "aria-label"?: string;
+    className?: string;
+  }) => (
+    <a href={to} {...rest}>
+      {children}
+    </a>
+  ),
 }));
 vi.mock("@gram/client/react-query/getMcpServer.js", () => ({
   useGetMcpServer: () => ({ data: state.mcpServer }),
@@ -154,7 +171,8 @@ vi.mock("@/lib/remote-identity", async (importOriginal) => ({
     isLoading: false,
     isError: false,
   }),
-  useUpstreamProbe: () => "idle",
+  useUpstreamProbe: (remoteMcpServerId: string, enabled: boolean) =>
+    identityGate.probe(remoteMcpServerId, enabled),
 }));
 vi.mock("@gram/client/react-query/remoteMcpServerHeaders.js", () => ({
   useRemoteMcpServerHeaders: () => ({
@@ -163,6 +181,29 @@ vi.mock("@gram/client/react-query/remoteMcpServerHeaders.js", () => ({
     isError: false,
   }),
 }));
+// The organization's upstream auth enforcement state and the server's
+// credentials status, read by the sidebar's Identity summary.
+const identityGate = vi.hoisted(() => ({
+  features: {
+    isPending: false,
+    isError: false,
+    data: { upstreamAuthEnforced: false } as
+      | { upstreamAuthEnforced?: boolean }
+      | undefined,
+  },
+  authentication: {
+    isPending: false,
+    isError: false,
+    data: { status: "configured" } as { status: string } | undefined,
+  },
+  probe: vi.fn((_remoteMcpServerId: string, _enabled: boolean) => "idle"),
+}));
+vi.mock("@gram/client/react-query/productFeatures.js", () => ({
+  useProductFeatures: () => identityGate.features,
+}));
+vi.mock("@gram/client/react-query/mcpServerAuthentication.js", () => ({
+  useMcpServerAuthentication: () => identityGate.authentication,
+}));
 vi.mock("@/components/sources/SourceCard", () => ({
   SourceMcpIcon: () => null,
 }));
@@ -170,10 +211,20 @@ vi.mock("@/components/setup-guide/SetupGuideCard", () => ({
   SetupGuideCard: () => null,
 }));
 vi.mock("@/components/mcp-server-readiness-bar", () => ({
-  McpServerReadinessBar: ({ checks }: { checks: { label: string }[] }) => (
+  McpServerReadinessBar: ({
+    checks,
+  }: {
+    checks: { label: string; ready: boolean; description: string }[];
+  }) => (
     <>
       {checks.map((check) => (
-        <span key={check.label}>{check.label}</span>
+        <span
+          key={check.label}
+          data-ready={String(check.ready)}
+          title={check.description}
+        >
+          {check.label}
+        </span>
       ))}
     </>
   ),
@@ -183,15 +234,18 @@ vi.mock("@/components/detail/detail-sidebar-nav", () => ({
   DetailSidebarNav: ({
     items,
     topContent,
+    cardContent,
   }: {
     items: { title: string }[];
     topContent: ReactNode;
+    cardContent: ReactNode;
   }) => (
     <>
       {items.map((item) => (
         <span key={item.title}>{item.title}</span>
       ))}
       {topContent}
+      {cardContent}
     </>
   ),
 }));
@@ -203,6 +257,7 @@ beforeEach(() => {
   vi.clearAllMocks();
   state.grants = [];
   state.mcpServer = { id: "server-a", name: "Server" };
+  state.skillsOverMcp = false;
   state.tunnelConnections.mockReturnValue({
     data: undefined,
     isLoading: false,
@@ -229,7 +284,7 @@ function banner() {
       </TooltipProvider>
     </QueryClientProvider>
   );
-  const view = render(content());
+  const view = render(content(), { wrapper: MemoryRouter });
   return { ...view, refresh: () => view.rerender(content()) };
 }
 describe("MCP plugin permission boundaries", () => {
@@ -271,7 +326,7 @@ describe("MCP plugin permission boundaries", () => {
     "scopes sidebar queries for %s",
     (grant) => {
       state.grants = [{ scope: grant }];
-      render(<McpServerXSidebarNav />);
+      render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
       expect(screen.getByText("Included in Plugin")).toBeTruthy();
       expect(state.plugins).toHaveBeenCalledWith(
         scope,
@@ -294,7 +349,7 @@ describe("MCP plugin permission boundaries", () => {
             { scope: "org:blocked_read", selectors: [{ resourceId: "org-a" }] },
           ]
         : [];
-      render(<McpServerXSidebarNav />);
+      render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
       expect(state.plugins).toHaveBeenCalledWith(
         scope,
         undefined,
@@ -314,7 +369,7 @@ describe("MCP plugin permission boundaries", () => {
       { scope: "mcp:read" },
       { scope: "org:blocked_read", selectors: [{ resourceId: "org-a" }] },
     ];
-    render(<McpServerXSidebarNav />);
+    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
     expect(screen.queryByText("Team Access")).toBeNull();
   });
   it.each([
@@ -366,10 +421,56 @@ describe("MCP plugin permission boundaries", () => {
   );
 });
 
+describe("remote MCP server Skills tab", () => {
+  const remote = {
+    id: "server-a",
+    name: "Server",
+    remoteMcpServerId: "remote-source-a",
+  };
+
+  it("shows for a remote server with the flag on and project skill read", () => {
+    state.skillsOverMcp = true;
+    state.mcpServer = remote;
+    state.grants = [{ scope: "skill:read" }];
+    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
+    expect(screen.getByText("Skills")).toBeTruthy();
+  });
+
+  it.each([
+    {
+      case: "flag off",
+      flag: false,
+      server: remote,
+      grants: [{ scope: "skill:read" }],
+    },
+    {
+      case: "server not remote-backed",
+      flag: true,
+      server: { id: "server-a", name: "Server", tunneledMcpServerId: "t-1" },
+      grants: [{ scope: "skill:read" }],
+    },
+    { case: "no skill read", flag: true, server: remote, grants: [] },
+    {
+      case: "skill read on another project",
+      flag: true,
+      server: remote,
+      grants: [
+        { scope: "skill:read", selectors: [{ resourceId: "project-b" }] },
+      ],
+    },
+  ])("is hidden with $case", ({ flag, server, grants }) => {
+    state.skillsOverMcp = flag;
+    state.mcpServer = server;
+    state.grants = grants;
+    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
+    expect(screen.queryByText("Skills")).toBeNull();
+  });
+});
+
 describe("MCP server readiness", () => {
   it("leaves servers without a tunnel unchanged", () => {
     state.grants = [{ scope: "org:read" }];
-    render(<McpServerXSidebarNav />);
+    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
     for (const label of [
       "Server URL",
       "Authentication",
@@ -394,9 +495,143 @@ describe("MCP server readiness", () => {
       isLoading: false,
       isError: false,
     });
-    render(<McpServerXSidebarNav />);
+    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
     expect(screen.getByText("Tunnel agent")).toBeTruthy();
     // The Overview polls; the sidebar reads the same cached snapshot.
     expect(state.tunnelConnections).toHaveBeenCalledWith("tunnel-a");
+  });
+});
+
+describe("remote MCP server Identity summary", () => {
+  const remote = {
+    id: "server-a",
+    name: "Server",
+    remoteMcpServerId: "remote-source-a",
+  };
+  function setFeatures(features: typeof identityGate.features): void {
+    identityGate.features = features;
+  }
+  afterEach(() => {
+    setFeatures({
+      isPending: false,
+      isError: false,
+      data: { upstreamAuthEnforced: false },
+    });
+  });
+
+  it("reports the credentials status when enforcement is on", () => {
+    state.mcpServer = remote;
+    setFeatures({
+      isPending: false,
+      isError: false,
+      data: { upstreamAuthEnforced: true },
+    });
+    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
+    expect(
+      screen.getByRole("link", { name: /Identity: Credentials set up/ }),
+    ).toBeTruthy();
+    expect(screen.queryByRole("link", { name: /Identity: Manual/ })).toBeNull();
+  });
+
+  it("keeps the legacy identity mode when enforcement is off", () => {
+    state.mcpServer = remote;
+    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
+    expect(screen.getByRole("link", { name: /Identity: Manual/ })).toBeTruthy();
+    expect(
+      screen.queryByRole("link", { name: /Credentials set up/ }),
+    ).toBeNull();
+  });
+
+  it.each([
+    [
+      "loading",
+      { isPending: true, isError: false, data: undefined },
+      "Loading…",
+    ],
+    [
+      "failed",
+      { isPending: false, isError: true, data: undefined },
+      "Identity unavailable",
+    ],
+    [
+      "unreadable",
+      { isPending: false, isError: false, data: {} },
+      "Identity unavailable",
+    ],
+  ] as const)(
+    "shows no identity mode while enforcement is %s",
+    (_state, features, text) => {
+      state.mcpServer = remote;
+      setFeatures(features);
+      render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
+      expect(screen.getByText(text)).toBeTruthy();
+      expect(screen.queryByRole("link", { name: /^Identity:/ })).toBeNull();
+    },
+  );
+});
+
+describe("remote MCP server readiness under enforcement", () => {
+  const remote = {
+    id: "server-a",
+    name: "Server",
+    remoteMcpServerId: "remote-source-a",
+  };
+  afterEach(() => {
+    identityGate.features = {
+      isPending: false,
+      isError: false,
+      data: { upstreamAuthEnforced: false },
+    };
+    identityGate.authentication = {
+      isPending: false,
+      isError: false,
+      data: { status: "configured" },
+    };
+  });
+
+  function authenticationCheck(): HTMLElement {
+    return screen.getByText("Authentication");
+  }
+
+  it.each([
+    ["configured", "true", "Credentials are set up for the upstream service."],
+    [
+      "setup_incomplete",
+      "false",
+      "Add a credential so Speakeasy can sign in to the upstream service.",
+    ],
+  ])("reads %s from the credentials status", (status, ready, description) => {
+    state.mcpServer = remote;
+    identityGate.features = {
+      isPending: false,
+      isError: false,
+      data: { upstreamAuthEnforced: true },
+    };
+    identityGate.authentication = {
+      isPending: false,
+      isError: false,
+      data: { status },
+    };
+    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
+    expect(authenticationCheck().getAttribute("data-ready")).toBe(ready);
+    expect(authenticationCheck().getAttribute("title")).toBe(description);
+  });
+
+  it("is not ready and does not probe the upstream while enforcement loads", () => {
+    state.mcpServer = remote;
+    identityGate.features = {
+      isPending: true,
+      isError: false,
+      data: undefined,
+    };
+    render(<McpServerXSidebarNav />, { wrapper: MemoryRouter });
+    expect(authenticationCheck().getAttribute("data-ready")).toBe("false");
+    expect(authenticationCheck().getAttribute("title")).toBe(
+      "The identity status is not available yet.",
+    );
+    expect(identityGate.probe).not.toHaveBeenCalledWith(
+      "remote-source-a",
+      true,
+    );
   });
 });

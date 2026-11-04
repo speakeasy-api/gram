@@ -9,7 +9,6 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/networkaccess"
-	"github.com/speakeasy-api/gram/server/internal/plugins/repo"
 )
 
 // packageMCPURL selects the same namespace the serving policy permits. A
@@ -34,7 +33,7 @@ func packageMCPURL(modeValue pgtype.Text, publicBase, publicSlug, privateDNS, pr
 // remoteServerURL resolves a plugin server's package address. unproxied means
 // the address is the vendor's own server, which must never get a Speakeasy
 // credential; it wins whenever set, even if an mcp_endpoints row also exists.
-func remoteServerURL(serverURL string, r repo.ListPluginsWithMcpServersForProjectRow) (mcpURL string, unproxied bool, err error) {
+func remoteServerURL(serverURL string, r pluginMCPServerRow) (mcpURL string, unproxied bool, err error) {
 	if r.UnproxiedUrl.Valid {
 		mode, err := networkaccess.Effective(r.NetworkAccessMode)
 		if err != nil {

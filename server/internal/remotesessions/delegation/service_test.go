@@ -587,7 +587,10 @@ func TestDelegationServiceRefusalDoesNotReleaseRefreshClaim(t *testing.T) {
 	go func() { _, err := s.Resolve(t.Context(), b, allow); done <- err }()
 	<-started
 	// Always unblock the original refresh, even if a regression fails assertions.
-	defer func() { close(release); <-done }()
+	defer func() {
+		close(release)
+		require.NoError(t, <-done)
+	}()
 	claimed, err := store.load(t.Context(), b)
 	require.NoError(t, err)
 	require.NoError(t, s.RecordOfflineRefusal(t.Context(), p, b.HumanID))

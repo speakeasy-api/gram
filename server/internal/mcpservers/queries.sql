@@ -666,6 +666,23 @@ WHERE s.user_session_issuer_id = resolved.user_session_issuer_id
   AND s.deleted IS FALSE
   AND s.remote_session_issuer_id IS DISTINCT FROM resolved.remote_session_issuer_id;
 
+-- name: ListProjectsSharingOrganizationUserSessionIssuers :many
+-- Projects of the organization with a live MCP server on one of the named
+-- organization-level user session issuers. Their servers share the issuer's
+-- client bindings, so a binding change on it is resynced in each of them.
+SELECT DISTINCT s.project_id
+FROM mcp_servers AS s
+JOIN projects AS p ON p.id = s.project_id
+JOIN user_session_issuers AS usi ON usi.id = s.user_session_issuer_id
+WHERE s.user_session_issuer_id = ANY(@user_session_issuer_ids::uuid[])
+  AND usi.project_id IS NULL
+  AND usi.organization_id = @organization_id::text
+  AND usi.deleted IS FALSE
+  AND p.organization_id = @organization_id::text
+  AND p.deleted IS FALSE
+  AND s.deleted IS FALSE
+ORDER BY s.project_id;
+
 -- name: DeleteAssistantMCPServersByMCPServer :exec
 DELETE FROM assistant_mcp_servers
 WHERE mcp_server_id = @mcp_server_id AND project_id = @project_id;
@@ -862,49 +879,6 @@ WHERE e.project_id = ANY(@project_ids::uuid[])
   AND e.mcp_server_id = ANY(@mcp_server_ids::uuid[])
   AND e.deleted IS FALSE;
 
--- name: ListLegacyPlatformAliasSlugs :many
--- Canonical hosted servers whose toolset alias sits on a custom domain and is the only alias with its slug, with no
--- live platform endpoint holding it: the loose legacy lookup serves that alias on the platform host too.
-SELECT t.id AS mcp_server_id, t.mcp_slug::text AS slug
-FROM toolsets t
-JOIN projects p
-  ON p.id = t.project_id
-  AND p.organization_id = @organization_id
-  AND p.deleted IS FALSE
-JOIN mcp_servers s
-  ON s.id = t.id
-  AND s.project_id = t.project_id
-  AND s.toolset_id = t.id
-  AND s.deleted IS FALSE
-WHERE t.id = ANY(@mcp_server_ids::uuid[])
-  AND t.project_id = ANY(@project_ids::uuid[])
-  AND t.organization_id = @organization_id
-  AND t.mcp_slug IS NOT NULL
-  AND t.custom_domain_id IS NOT NULL
-  AND t.deleted IS FALSE
-  AND NOT EXISTS (
-    SELECT 1
-    FROM toolsets o
-    WHERE o.mcp_slug = t.mcp_slug
-      AND o.custom_domain_id IS NULL
-      AND o.deleted IS FALSE
-  )
-  AND NOT EXISTS (
-    SELECT 1
-    FROM toolsets o
-    WHERE o.mcp_slug = t.mcp_slug
-      AND o.custom_domain_id IS NOT NULL
-      AND o.id <> t.id
-      AND o.deleted IS FALSE
-  )
-  AND NOT EXISTS (
-    SELECT 1
-    FROM mcp_endpoints e
-    WHERE e.slug = t.mcp_slug
-      AND e.custom_domain_id IS NULL
-      AND e.deleted IS FALSE
-  );
-
 -- name: ListToolsetHostingMCPServerIDs :many
 -- A toolset's host is its canonical wrapper (id = toolset id); without one, its
 -- oldest server with an endpoint. Visibility is ignored so a toggle never moves it.
@@ -963,3 +937,110 @@ LEFT JOIN remote_mcp_servers AS r ON r.id = m.remote_mcp_server_id
 LEFT JOIN tunneled_mcp_servers AS t ON t.id = m.tunneled_mcp_server_id
  AND t.project_id = m.project_id AND t.deleted IS FALSE
 WHERE m.id = ANY(@mcp_server_ids::uuid[]) AND m.deleted IS FALSE;
+
+-- name: CountEMAClientHeadersFixture :one
+SELECT count(*) FROM mcp_auth_client_headers
+WHERE auth_client_id = @auth_client_id AND organization_id = @organization_id AND NOT deleted;
+
+-- name: SetEMABindingGatewayIssuerFixture :exec
+UPDATE remote_session_ema_bindings SET user_session_issuer_id = @user_session_issuer_id
+WHERE remote_session_client_id = @remote_session_client_id AND project_id = @project_id;
+
+-- name: UpdateMCPServerNetworkAccessMode :execrows
+UPDATE mcp_servers
+SET network_access_mode = @network_access_mode,
+    updated_at = clock_timestamp()
+WHERE mcp_servers.id = @id
+  AND mcp_servers.project_id = @project_id
+  AND mcp_servers.deleted IS FALSE
+  AND EXISTS (SELECT 1 FROM projects p WHERE p.id = mcp_servers.project_id AND p.deleted IS FALSE);
+
+-- name: LockLiveRemoteMCPSource :one
+SELECT TRUE
+FROM remote_mcp_servers
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: LockLiveTunneledMCPSource :one
+SELECT TRUE
+FROM tunneled_mcp_servers
+WHERE id = @id
+  AND project_id = @project_id
+  AND deleted IS FALSE
+FOR UPDATE;
+
+-- name: CountUserSessionIssuerServingServers :one
+-- MCP servers and gateways that authenticate against the issuer, across the
+-- organization. More than one means the issuer is a shared sign-in.
+SELECT (
+  (SELECT count(*) FROM mcp_servers AS ms
+   JOIN projects AS p ON p.id = ms.project_id AND p.organization_id = @organization_id::text AND p.deleted IS FALSE
+   WHERE ms.user_session_issuer_id = @user_session_issuer_id::uuid AND ms.deleted IS FALSE)
+  +
+  (SELECT count(*) FROM meta_mcp_servers AS g
+   WHERE g.user_session_issuer_id = @user_session_issuer_id::uuid
+     AND g.organization_id = @organization_id::text AND g.deleted IS FALSE)
+)::bigint AS server_count;
+
+-- name: SummarizeMCPServerUsage :one
+-- Active sessions able to reach one MCP server: issued by its issuer and either
+-- issuer-scoped (resource IS NULL) or bound to one of its addresses. Custom
+-- domain addresses match by full URL; platform addresses match by path, since
+-- the platform answers under several hosts.
+SELECT count(*)::bigint AS connection_count,
+       count(DISTINCT s.subject_urn)::bigint AS subject_count,
+       count(*) FILTER (WHERE s.resource IS NULL)::bigint AS issuer_scoped_count,
+       max(s.last_used_at)::timestamptz AS last_used_at
+FROM user_sessions AS s
+WHERE s.organization_id = @organization_id::text
+  AND s.user_session_issuer_id = @user_session_issuer_id::uuid
+  AND s.deleted IS FALSE
+  AND s.refresh_expires_at > clock_timestamp()
+  AND (s.resource IS NULL
+       OR s.resource = ANY(@resources::text[])
+       OR substring(s.resource FROM '^https?://[^/]+(/.*)$') = ANY(@platform_paths::text[]));
+
+-- name: ListMCPServerUsageSubjects :many
+-- Per-subject view of SummarizeMCPServerUsage, most recently used first.
+WITH grouped AS (
+  SELECT s.subject_urn::text AS subject_urn,
+         count(*)::bigint AS connection_count,
+         count(*) FILTER (WHERE s.resource IS NULL)::bigint AS issuer_scoped_count,
+         max(s.last_used_at)::timestamptz AS last_used_at,
+         array_remove(array_agg(DISTINCT c.client_name), NULL)::text[] AS client_names
+  FROM user_sessions AS s
+  LEFT JOIN user_session_clients AS c
+    ON c.id = s.user_session_client_id
+    AND c.organization_id = s.organization_id
+    AND c.user_session_issuer_id = s.user_session_issuer_id
+    AND c.deleted IS FALSE
+  WHERE s.organization_id = @organization_id::text
+    AND s.user_session_issuer_id = @user_session_issuer_id::uuid
+    AND s.deleted IS FALSE
+    AND s.refresh_expires_at > clock_timestamp()
+    AND (s.resource IS NULL
+         OR s.resource = ANY(@resources::text[])
+         OR substring(s.resource FROM '^https?://[^/]+(/.*)$') = ANY(@platform_paths::text[]))
+  GROUP BY s.subject_urn
+)
+SELECT g.subject_urn, g.connection_count, g.issuer_scoped_count, g.last_used_at, g.client_names,
+       u.display_name AS user_display_name,
+       u.email AS user_email,
+       u.photo_url AS user_photo_url,
+       k.name AS api_key_name,
+       agent.name AS agent_name
+FROM grouped AS g
+LEFT JOIN users AS u
+  ON g.subject_urn LIKE 'user:%'
+  AND u.id = split_part(g.subject_urn, ':', 2)
+  AND u.deleted_at IS NULL
+LEFT JOIN api_keys AS k
+  ON k.id = CASE WHEN g.subject_urn LIKE 'apikey:%' THEN split_part(g.subject_urn, ':', 2)::uuid END
+  AND k.organization_id = @organization_id::text
+LEFT JOIN agents AS agent
+  ON g.subject_urn = 'agent:' || agent.id::text
+  AND agent.organization_id = @organization_id::text AND agent.deleted IS FALSE
+ORDER BY g.last_used_at DESC NULLS LAST, g.subject_urn
+LIMIT @row_limit::int;

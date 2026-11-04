@@ -2,6 +2,7 @@ package gram
 
 import (
 	"fmt"
+	"net/url"
 	"os"
 
 	"github.com/urfave/cli/v2"
@@ -25,6 +26,11 @@ func newDemoSeedCommand() *cli.Command {
 				Usage: "Seed the local development organization as well as the shared demo org: the same data " +
 					"retargeted at the dev-idp org, writable, plus the local-only fixtures (your user, API key).",
 				EnvVars: []string{"GRAM_DEMO_SEED_LOCAL"},
+			},
+			&cli.StringFlag{
+				Name:    "site-url",
+				Usage:   "Canonical public site URL for local catalog assets; required with --local",
+				EnvVars: []string{"GRAM_SITE_URL"},
 			},
 			&cli.StringFlag{
 				Name:    "local-user-email",
@@ -72,6 +78,14 @@ func newDemoSeedCommand() *cli.Command {
 			},
 		}, append(clickHouseFlags(), redisFlags()...)...),
 		Action: func(c *cli.Context) error {
+			var siteURL *url.URL
+			if c.Bool("local") {
+				var err error
+				siteURL, err = parseSiteURL(c.String("site-url"))
+				if err != nil {
+					return fmt.Errorf("local seed site-url: %w", err)
+				}
+			}
 			ctx := c.Context
 			logger := PullLogger(ctx)
 
@@ -155,6 +169,7 @@ func newDemoSeedCommand() *cli.Command {
 
 			if err := demoseed.RunLocalFixtures(ctx, logger, db, blob, redisClient, demoseed.LocalFixturesOptions{
 				DeveloperEmail: c.String("local-user-email"),
+				SiteURL:        siteURL,
 				Environment:    c.String("environment"),
 				ObservedEnv:    observed,
 				Slack:          slack,

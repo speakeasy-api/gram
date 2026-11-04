@@ -102,7 +102,14 @@ func (v *Validator) Validate(ctx context.Context, raw string, request Request) (
 	if len(claims.Audience) != 1 || claims.Audience[0] != request.Audience {
 		return nil, reject(ReasonAudienceMismatch, errors.New("aud must be only the authorization server issuer"))
 	}
-	if extra.Resource == "" || extra.Resource != request.Resource {
+	// The resource claim is optional (ID-JAG draft; MCP EMA §4.3 constrains it only if present).
+	resource, hasResource, err := parseResourceClaim(extra.Resource)
+	switch {
+	case err != nil:
+		return nil, reject(ReasonResourceMismatch, err)
+	case !hasResource && !request.ResourceIndicated:
+		return nil, reject(ReasonResourceNotIndicated, errors.New("assertion has no resource and the request names none"))
+	case hasResource && resource != request.Resource:
 		return nil, reject(ReasonResourceMismatch, errors.New("resource does not name this MCP server"))
 	}
 	if extra.ClientID == "" || extra.ClientID != request.ClientID {
@@ -160,6 +167,6 @@ func (v *Validator) Validate(ctx context.Context, raw string, request Request) (
 	}
 	return &Result{
 		Subject: urn.NewUserSubject(userID), TrustedIssuerID: trusted.ID,
-		Claims: Claims{Issuer: claims.Issuer, ExternalSubject: claims.Subject, Email: email, Resource: extra.Resource, ClientID: extra.ClientID, JTI: claims.ID, Scope: extra.Scope, ExpiresAt: expiresAt},
+		Claims: Claims{Issuer: claims.Issuer, ExternalSubject: claims.Subject, Email: email, Resource: resource, ClientID: extra.ClientID, JTI: claims.ID, Scope: extra.Scope, ExpiresAt: expiresAt},
 	}, nil
 }

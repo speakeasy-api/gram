@@ -27,12 +27,26 @@ func testClient(t *testing.T, handler http.HandlerFunc) *client {
 	return c
 }
 
+// answerMissingGuide answers the existing-guide lookup as absent from a
+// readable guides directory, reporting whether the request was part of it.
+func answerMissingGuide(w http.ResponseWriter, r *http.Request) bool {
+	switch {
+	case r.Method == http.MethodGet && r.URL.Path == "/repos/example/guides/contents/guides":
+		_, _ = w.Write([]byte(`[{"type":"dir","name":"other"}]`))
+		return true
+	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/repos/example/guides/contents/"):
+		w.WriteHeader(http.StatusNotFound)
+		return true
+	default:
+		return false
+	}
+}
+
 // answerNoGuide answers the existing-guide and open-pull-request lookups as
 // absent, reporting whether the request was one of them.
 func answerNoGuide(w http.ResponseWriter, r *http.Request) bool {
 	switch {
-	case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/repos/example/guides/contents/"):
-		w.WriteHeader(http.StatusNotFound)
+	case answerMissingGuide(w, r):
 		return true
 	case r.Method == http.MethodGet && r.URL.Path == "/repos/example/guides/pulls":
 		_, _ = w.Write([]byte(`[]`))
@@ -259,8 +273,7 @@ func TestEnsureGuideWaitsForOpenGuidePullRequest(t *testing.T) {
 			w.WriteHeader(http.StatusInternalServerError)
 		case r.URL.Path == "/repos/example/guides/issues":
 			_, _ = w.Write([]byte(`[]`))
-		case strings.HasPrefix(r.URL.Path, "/repos/example/guides/contents/"):
-			w.WriteHeader(http.StatusNotFound)
+		case answerMissingGuide(w, r):
 		case r.URL.Path == "/repos/example/guides/pulls":
 			_, _ = w.Write([]byte(`[{"number":7},{"number":9}]`))
 		case r.URL.Path == "/repos/example/guides/pulls/7/files":
@@ -285,8 +298,7 @@ func TestEnsureGuideIgnoresPullRequestForSimilarSlug(t *testing.T) {
 		switch {
 		case r.Method == http.MethodGet && r.URL.Path == "/repos/example/guides/issues":
 			_, _ = w.Write([]byte(`[]`))
-		case r.Method == http.MethodGet && strings.HasPrefix(r.URL.Path, "/repos/example/guides/contents/"):
-			w.WriteHeader(http.StatusNotFound)
+		case answerMissingGuide(w, r):
 		case r.Method == http.MethodGet && r.URL.Path == "/repos/example/guides/pulls":
 			_, _ = w.Write([]byte(`[{"number":7}]`))
 		case r.Method == http.MethodGet && r.URL.Path == "/repos/example/guides/pulls/7/files":
@@ -341,7 +353,7 @@ func TestEnsureGuideKeepsOwnIssueWhenFactoryPullRequestIsOpen(t *testing.T) {
 
 func TestEnsureGuideLookupAccessFailureNeedsAttention(t *testing.T) {
 	t.Parallel()
-	for _, path := range []string{"/repos/example/guides/contents/guides/example/meta.yaml", "/repos/example/guides/pulls"} {
+	for _, path := range []string{"/repos/example/guides/contents/guides/example/meta.yaml", "/repos/example/guides/contents/guides", "/repos/example/guides/pulls"} {
 		t.Run(path, func(t *testing.T) {
 			t.Parallel()
 			var writes atomic.Int32
@@ -366,13 +378,9 @@ func TestEnsureGuideLookupAccessFailureNeedsAttention(t *testing.T) {
 	}
 }
 
-func TestEnsureGuidePullRequestFileLimitDoesNotFileRequest(t *testing.T) {
+func TestEnsureGuideMissingContentsAccessNeedsAttention(t *testing.T) {
 	t.Parallel()
-	var writes atomic.Int32
-	page := make([]pullRequestFile, pageSize)
-	for i := range page {
-		page[i] = pullRequestFile{Filename: "guides/other/research.md", PreviousFilename: ""}
-	}
+	var writes, pulls atomic.Int32
 	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
 		switch {
 		case r.Method != http.MethodGet:
@@ -381,20 +389,114 @@ func TestEnsureGuidePullRequestFileLimitDoesNotFileRequest(t *testing.T) {
 		case r.URL.Path == "/repos/example/guides/issues":
 			_, _ = w.Write([]byte(`[]`))
 		case strings.HasPrefix(r.URL.Path, "/repos/example/guides/contents/"):
+			// A token without Contents read gets 404 for every path, the
+			// guides directory included, not 403.
 			w.WriteHeader(http.StatusNotFound)
 		case r.URL.Path == "/repos/example/guides/pulls":
-			_, _ = w.Write([]byte(`[{"number":7}]`))
+			pulls.Add(1)
+			_, _ = w.Write([]byte(`[]`))
 		default:
-			if err := json.NewEncoder(w).Encode(page); err != nil {
-				t.Error(err)
-			}
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
 		}
 	})
 	_, err := c.EnsureGuide(t.Context(), testGuide())
-	require.ErrorContains(t, err, "exceeded page limit")
+	require.ErrorContains(t, err, "HTTP 404")
 	kind, _ := Classify(err)
-	require.Equal(t, ErrorPermanent, kind)
-	require.Zero(t, writes.Load())
+	require.Equal(t, ErrorConfiguration, kind)
+	require.Zero(t, writes.Load(), "unreadable contents must not file a request")
+	require.Zero(t, pulls.Load(), "unreadable contents must stop before the pull request lookup")
+}
+
+func TestEnsureGuideJudgesPullRequestOnGitHubFileListingLimit(t *testing.T) {
+	t.Parallel()
+	var creates, filePages atomic.Int32
+	page := make([]pullRequestFile, pageSize)
+	for i := range page {
+		page[i] = pullRequestFile{Filename: "guides/other/research.md", PreviousFilename: ""}
+	}
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/repos/example/guides/issues":
+			_, _ = w.Write([]byte(`[]`))
+		case answerMissingGuide(w, r):
+		case r.Method == http.MethodGet && r.URL.Path == "/repos/example/guides/pulls":
+			_, _ = w.Write([]byte(`[{"number":7,"head":{"sha":"abc"}}]`))
+		case r.Method == http.MethodGet && r.URL.Path == "/repos/example/guides/pulls/7/files":
+			// Exactly 3000 files: GitHub lists no more, and none is this guide's.
+			filePages.Add(1)
+			if err := json.NewEncoder(w).Encode(page); err != nil {
+				t.Error(err)
+			}
+		case r.Method == http.MethodPost && r.URL.Path == "/repos/example/guides/issues":
+			creates.Add(1)
+			_, _ = w.Write([]byte(`{"number":42,"state":"open"}`))
+		case r.Method == http.MethodGet && strings.HasSuffix(r.URL.Path, "/events"):
+			_, _ = w.Write([]byte(`[]`))
+		case r.Method == http.MethodPost && strings.HasSuffix(r.URL.Path, "/labels"):
+			_, _ = w.Write([]byte(`[{"name":"guide:draft"}]`))
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+	result, err := c.EnsureGuide(t.Context(), testGuide())
+	require.NoError(t, err)
+	require.Equal(t, OutcomeRequested, result.Outcome)
+	require.EqualValues(t, maxPullRequestFilePages, filePages.Load())
+	require.EqualValues(t, 1, creates.Load())
+}
+
+func TestOpenGuidePullRequestReusesFilesForUnchangedHead(t *testing.T) {
+	t.Parallel()
+	var mu sync.Mutex
+	pulls := `[{"number":7,"head":{"sha":"first"}}]`
+	filesRequests := 0
+	c := testClient(t, func(w http.ResponseWriter, r *http.Request) {
+		mu.Lock()
+		defer mu.Unlock()
+		switch {
+		case r.Method == http.MethodGet && r.URL.Path == "/repos/example/guides/pulls":
+			_, _ = w.Write([]byte(pulls))
+		case r.Method == http.MethodGet && r.URL.Path == "/repos/example/guides/pulls/7/files":
+			filesRequests++
+			_, _ = w.Write([]byte(`[{"filename":"guides/example/meta.yaml"}]`))
+		default:
+			t.Errorf("unexpected request: %s %s", r.Method, r.URL.Path)
+			w.WriteHeader(http.StatusNotFound)
+		}
+	})
+	setPulls := func(value string) {
+		mu.Lock()
+		defer mu.Unlock()
+		pulls = value
+	}
+	requests := func() int {
+		mu.Lock()
+		defer mu.Unlock()
+		return filesRequests
+	}
+
+	for range 2 {
+		number, err := c.openGuidePullRequest(t.Context(), "example")
+		require.NoError(t, err)
+		require.Equal(t, 7, number)
+	}
+	require.Equal(t, 1, requests(), "an unchanged head reuses the file listing")
+
+	setPulls(`[{"number":7,"head":{"sha":"second"}}]`)
+	number, err := c.openGuidePullRequest(t.Context(), "example")
+	require.NoError(t, err)
+	require.Equal(t, 7, number)
+	require.Equal(t, 2, requests(), "a new head lists the files again")
+
+	setPulls(`[]`)
+	number, err = c.openGuidePullRequest(t.Context(), "example")
+	require.NoError(t, err)
+	require.Zero(t, number)
+	c.pullsMu.Lock()
+	defer c.pullsMu.Unlock()
+	require.Empty(t, c.pullFolders, "pull requests that are no longer open are forgotten")
 }
 
 // expectedIssueBody captures the issue body EnsureGuide would create for guide.

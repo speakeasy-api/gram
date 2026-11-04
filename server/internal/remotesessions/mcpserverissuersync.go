@@ -20,10 +20,12 @@ import (
 	"time"
 
 	"github.com/google/uuid"
+	"github.com/jackc/pgx/v5"
 
 	"github.com/speakeasy-api/gram/server/internal/attr"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 )
 
 const issuerResyncTimeout = 10 * time.Second
@@ -38,8 +40,29 @@ func ResyncMCPServerRemoteSessionIssuers(ctx context.Context, dbtx mcpserversrep
 	if organizationID == "" || projectID == uuid.Nil {
 		return fmt.Errorf("resync mcp server remote session issuers: no tenant scope")
 	}
+	tx, existing := dbtx.(pgx.Tx)
+	if !existing {
+		beginner, ok := dbtx.(interface {
+			Begin(context.Context) (pgx.Tx, error)
+		})
+		if !ok {
+			return fmt.Errorf("resync mcp server remote session issuers: %T cannot begin a transaction", dbtx)
+		}
+		var err error
+		tx, err = beginner.Begin(ctx)
+		if err != nil {
+			return fmt.Errorf("begin issuer resynchronization: %w", err)
+		}
+		defer func() { _ = tx.Rollback(context.WithoutCancel(ctx)) }()
+	}
+	// The denormalized server update also takes row locks. Acquire the same
+	// complete scope before it and retain it through capture and typed copies.
+	// A caller supplying a transaction must preflight before its earlier writes.
+	if err := authclientbackfill.LockEMAWriterScope(ctx, tx, organizationID, []uuid.UUID{projectID}); err != nil {
+		return fmt.Errorf("lock issuer resynchronization scope: %w", err)
+	}
 	if len(userIssuerIDs) > 0 {
-		if _, err := mcpserversrepo.New(dbtx).ResyncMCPServerRemoteSessionIssuers(ctx, mcpserversrepo.ResyncMCPServerRemoteSessionIssuersParams{
+		if _, err := mcpserversrepo.New(tx).ResyncMCPServerRemoteSessionIssuers(ctx, mcpserversrepo.ResyncMCPServerRemoteSessionIssuersParams{
 			UserSessionIssuerIds: userIssuerIDs,
 			OrganizationID:       organizationID,
 			ProjectID:            projectID,
@@ -47,8 +70,13 @@ func ResyncMCPServerRemoteSessionIssuers(ctx context.Context, dbtx mcpserversrep
 			return fmt.Errorf("resync mcp server remote session issuers: %w", err)
 		}
 	}
-	if err := upstreamclients.Reconcile(ctx, dbtx, organizationID, projectID, userIssuerIDs); err != nil {
+	if err := upstreamclients.Reconcile(ctx, tx, organizationID, projectID, userIssuerIDs); err != nil {
 		return fmt.Errorf("resync mcp server remote session issuers: %w", err)
+	}
+	if !existing {
+		if err := tx.Commit(ctx); err != nil {
+			return fmt.Errorf("commit issuer resynchronization: %w", err)
+		}
 	}
 	return nil
 }
@@ -56,12 +84,43 @@ func ResyncMCPServerRemoteSessionIssuers(ctx context.Context, dbtx mcpserversrep
 // BestEffortResyncMCPServerRemoteSessionIssuers is the post-commit form: the
 // mutation it follows has already committed, so a failure is logged rather
 // than returned and the stale value it leaves is recoverable.
+//
+// It resyncs projectID, then every other project with a server on one of the
+// organization-level issuers among userIssuerIDs: an organization admin can
+// change those bindings from one project, and every project's servers share
+// them.
 func BestEffortResyncMCPServerRemoteSessionIssuers(ctx context.Context, logger *slog.Logger, db mcpserversrepo.DBTX, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) {
 	// Detached from request cancellation like RevokeAllDetached: already committed.
-	ctx, cancel := context.WithTimeout(context.WithoutCancel(ctx), issuerResyncTimeout)
-	defer cancel()
+	ctx = context.WithoutCancel(ctx)
 
+	bestEffortResyncProject(ctx, logger, db, organizationID, projectID, userIssuerIDs)
+	if len(userIssuerIDs) == 0 {
+		return
+	}
+	listCtx, cancel := context.WithTimeout(ctx, issuerResyncTimeout)
+	sharing, err := mcpserversrepo.New(db).ListProjectsSharingOrganizationUserSessionIssuers(listCtx, mcpserversrepo.ListProjectsSharingOrganizationUserSessionIssuersParams{
+		UserSessionIssuerIds: userIssuerIDs,
+		OrganizationID:       organizationID,
+	})
+	cancel()
+	if err != nil {
+		logger.ErrorContext(ctx, "list projects sharing organization user session issuers", attr.SlogError(err))
+		return
+	}
+	for _, sharingProjectID := range sharing {
+		if sharingProjectID == projectID {
+			continue
+		}
+		bestEffortResyncProject(ctx, logger, db, organizationID, sharingProjectID, userIssuerIDs)
+	}
+}
+
+// bestEffortResyncProject gives each project its own deadline, so one slow
+// project cannot starve the ones after it.
+func bestEffortResyncProject(ctx context.Context, logger *slog.Logger, db mcpserversrepo.DBTX, organizationID string, projectID uuid.UUID, userIssuerIDs []uuid.UUID) {
+	ctx, cancel := context.WithTimeout(ctx, issuerResyncTimeout)
+	defer cancel()
 	if err := ResyncMCPServerRemoteSessionIssuers(ctx, db, organizationID, projectID, userIssuerIDs); err != nil {
-		logger.ErrorContext(ctx, "resync mcp server remote session issuers", attr.SlogError(err))
+		logger.ErrorContext(ctx, "resync mcp server remote session issuers", attr.SlogError(err), attr.SlogProjectID(projectID.String()))
 	}
 }

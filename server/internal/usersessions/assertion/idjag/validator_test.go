@@ -5,6 +5,7 @@ import (
 	"crypto/ecdsa"
 	"crypto/elliptic"
 	"crypto/rand"
+	"encoding/json"
 	"errors"
 	"testing"
 	"time"
@@ -99,7 +100,12 @@ func validTestClaims() jwt.Claims {
 }
 
 func validTestExtra() additionalClaims {
-	return additionalClaims{Resource: testResource, ClientID: testClientID, Email: "person@example.com", Scope: "read"}
+	return additionalClaims{Resource: resourceClaim(testResource), ClientID: testClientID, Email: "person@example.com", Scope: "read"}
+}
+
+func resourceClaim(value string) json.RawMessage {
+	raw, _ := json.Marshal(value)
+	return raw
 }
 
 func signTestAssertion(t *testing.T, signer jose.Signer, claims jwt.Claims, extra additionalClaims) string {
@@ -136,6 +142,7 @@ func TestValidateAcceptsProvisionedIDJAGAndRejectsReplay(t *testing.T) {
 	require.Equal(t, urn.NewUserSubject("gram-user-1"), result.Subject)
 	require.Equal(t, store.trusted.ID, result.TrustedIssuerID)
 	require.Equal(t, "enterprise-user-1", result.Claims.ExternalSubject)
+	require.Equal(t, testResource, result.Claims.Resource)
 	require.Equal(t, 1, guard.calls)
 	_, err = validator.Validate(t.Context(), raw, request)
 	require.Equal(t, ReasonReplayed, ReasonOf(err))
@@ -239,7 +246,13 @@ func TestValidateRejectsInvalidClaimsBeforeSpendingJTI(t *testing.T) {
 		{name: "token endpoint audience", mutate: func(claims *jwt.Claims, _ *additionalClaims) {
 			claims.Audience = jwt.Audience{"https://gram.example.com/token"}
 		}, reason: ReasonAudienceMismatch},
-		{name: "missing resource", mutate: func(_ *jwt.Claims, extra *additionalClaims) { extra.Resource = "" }, reason: ReasonResourceMismatch},
+		{name: "missing resource", mutate: func(_ *jwt.Claims, extra *additionalClaims) { extra.Resource = nil }, reason: ReasonResourceNotIndicated},
+		{name: "empty resource", mutate: func(_ *jwt.Claims, extra *additionalClaims) { extra.Resource = resourceClaim("") }, reason: ReasonResourceMismatch},
+		{name: "null resource", mutate: func(_ *jwt.Claims, extra *additionalClaims) { extra.Resource = json.RawMessage("null") }, reason: ReasonResourceMismatch},
+		{name: "non-string resource", mutate: func(_ *jwt.Claims, extra *additionalClaims) { extra.Resource = json.RawMessage("42") }, reason: ReasonResourceMismatch},
+		{name: "resource mismatch", mutate: func(_ *jwt.Claims, extra *additionalClaims) {
+			extra.Resource = resourceClaim("https://gram.example.com/mcp/other/mcp")
+		}, reason: ReasonResourceMismatch},
 		{name: "client mismatch", mutate: func(_ *jwt.Claims, extra *additionalClaims) { extra.ClientID = "https://other.example.com/client" }, reason: ReasonClientMismatch},
 	}
 	for _, testCase := range cases {
@@ -250,5 +263,64 @@ func TestValidateRejectsInvalidClaimsBeforeSpendingJTI(t *testing.T) {
 		_, err := validator.Validate(t.Context(), raw, request)
 		require.Equal(t, testCase.reason, ReasonOf(err), testCase.name)
 		require.Zero(t, guard.calls, testCase.name)
+	}
+}
+
+// oktaStyleExtra is an ID-JAG's additional claims as Okta issues them, with no resource claim.
+type oktaStyleExtra struct {
+	ClientID string `json:"client_id"`
+	Email    string `json:"email"`
+}
+
+func TestValidateAcceptsAssertionWithoutResourceWhenRequestIndicatesOne(t *testing.T) {
+	t.Parallel()
+	assertion := newTestAssertion(t, Type)
+	validator, _, _, guard, request := newTestValidator(t, assertion.key)
+	request.ResourceIndicated = true
+	raw, err := jwt.Signed(assertion.signer).Claims(validTestClaims()).Claims(oktaStyleExtra{ClientID: testClientID, Email: "person@example.com"}).Serialize()
+	require.NoError(t, err)
+	result, err := validator.Validate(t.Context(), raw, request)
+	require.NoError(t, err)
+	require.Empty(t, result.Claims.Resource)
+	require.Equal(t, 1, guard.calls)
+}
+
+func TestValidateRejectsAssertionWithoutResourceWhenRequestIndicatesNone(t *testing.T) {
+	t.Parallel()
+	assertion := newTestAssertion(t, Type)
+	validator, _, _, guard, request := newTestValidator(t, assertion.key)
+	raw, err := jwt.Signed(assertion.signer).Claims(validTestClaims()).Claims(oktaStyleExtra{ClientID: testClientID, Email: "person@example.com"}).Serialize()
+	require.NoError(t, err)
+	_, err = validator.Validate(t.Context(), raw, request)
+	require.Equal(t, ReasonResourceNotIndicated, ReasonOf(err))
+	require.Zero(t, guard.calls)
+}
+
+func TestValidateRejectsMismatchedResourceClaimEvenWhenRequestIndicatesOne(t *testing.T) {
+	t.Parallel()
+	assertion := newTestAssertion(t, Type)
+	validator, _, _, guard, request := newTestValidator(t, assertion.key)
+	request.ResourceIndicated = true
+	extra := validTestExtra()
+	extra.Resource = resourceClaim("https://gram.example.com/mcp/other/mcp")
+	raw := signTestAssertion(t, assertion.signer, validTestClaims(), extra)
+	_, err := validator.Validate(t.Context(), raw, request)
+	require.Equal(t, ReasonResourceMismatch, ReasonOf(err))
+	require.Zero(t, guard.calls)
+}
+
+// A present but empty or null resource claim never falls back to the request's resource.
+func TestValidateRejectsEmptyOrNullResourceClaimWhenRequestIndicatesOne(t *testing.T) {
+	t.Parallel()
+	assertion := newTestAssertion(t, Type)
+	for name, claim := range map[string]json.RawMessage{"empty": resourceClaim(""), "null": json.RawMessage("null")} {
+		validator, _, _, guard, request := newTestValidator(t, assertion.key)
+		request.ResourceIndicated = true
+		extra := validTestExtra()
+		extra.Resource = claim
+		raw := signTestAssertion(t, assertion.signer, validTestClaims(), extra)
+		_, err := validator.Validate(t.Context(), raw, request)
+		require.Equal(t, ReasonResourceMismatch, ReasonOf(err), name)
+		require.Zero(t, guard.calls, name)
 	}
 }

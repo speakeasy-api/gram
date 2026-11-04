@@ -67,6 +67,7 @@ func TestDemoSeedSafety(t *testing.T) {
 	// server dependents that the demo cleanup must not touch.
 	otherSeed, err := seedPostgres(ctx, logger, db, blob, otherTenantSpec)
 	require.NoError(t, err)
+	require.NoError(t, migrateUpstreamAuth(ctx, logger, db, otherTenantSpec.OrgID))
 	require.NoError(t, demoseedtest.PlantMCPServerDependents(
 		ctx, db, otherTenantSpec.OrgID, otherTenantSpec.ProjectID(),
 	))

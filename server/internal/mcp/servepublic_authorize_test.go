@@ -17,6 +17,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	toolsets_repo "github.com/speakeasy-api/gram/server/internal/toolsets/repo"
 )
 
@@ -31,30 +32,19 @@ func TestServePublic_AllowsUnauthenticatedAccessToPublicMCP(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	// Create a public toolset
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Public Unauthenticated MCP",
 		Slug:                   "public-unauth-mcp",
 		Description:            conv.ToPGText("A public MCP accessible without auth"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("public-unauth-mcp"),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "public-unauth-mcp", "private", noIssuer())
 
 	// Make the toolset public
-	toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "public"})
 
 	reqBody := map[string]any{
 		"jsonrpc": "2.0",
@@ -108,30 +98,19 @@ func TestServePublic_AllowsCrossOrgAccessToPublicMCP(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	// Create toolset in the original org
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Public Cross-Org MCP",
 		Slug:                   "public-cross-org-mcp",
 		Description:            conv.ToPGText("A public MCP accessible from other orgs"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("public-cross-org-mcp"),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "public-cross-org-mcp", "private", noIssuer())
 
 	// Make the toolset public
-	toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "public"})
 
 	// Create a different organization
 	differentOrgID := uuid.New().String()
@@ -196,18 +175,17 @@ func TestServePublic_DeniesCrossOrgAccessToPrivateMCP(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	// Create a PRIVATE toolset in the original org
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Private Cross-Org MCP",
 		Slug:                   "private-cross-org-mcp",
 		Description:            conv.ToPGText("A private MCP not accessible from other orgs"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                conv.ToPGText("private-cross-org-mcp"),
-		McpEnabled:             true,
 		// McpIsPublic defaults to false
 	})
 	require.NoError(t, err)
+	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "private-cross-org-mcp", "private", noIssuer())
 
 	// Create a different organization
 	differentOrgID := uuid.New().String()
@@ -258,30 +236,19 @@ func TestServePublic_SameOrgAuthenticatedUserGetsFullAccess(t *testing.T) {
 	require.NotNil(t, authCtx.ProjectID)
 
 	// Create a public toolset with a default environment
-	toolset, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
+	toolsetRow, err := toolsetsRepo.CreateToolset(ctx, toolsets_repo.CreateToolsetParams{
 		OrganizationID:         authCtx.ActiveOrganizationID,
 		ProjectID:              *authCtx.ProjectID,
 		Name:                   "Public Same-Org MCP",
 		Slug:                   "public-same-org-mcp",
 		Description:            conv.ToPGText("A public MCP for same-org test"),
 		DefaultEnvironmentSlug: pgtype.Text{String: "production", Valid: true},
-		McpSlug:                conv.ToPGText("public-same-org-mcp"),
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
+	toolset := hostLegacyToolset(t, ctx, ti, toolsetRow, "public-same-org-mcp", "private", noIssuer())
 
 	// Make the toolset public
-	toolset, err = toolsetsRepo.UpdateToolset(ctx, toolsets_repo.UpdateToolsetParams{
-		Name:                   toolset.Name,
-		Description:            toolset.Description,
-		DefaultEnvironmentSlug: toolset.DefaultEnvironmentSlug,
-		McpSlug:                toolset.McpSlug,
-		McpIsPublic:            true,
-		McpEnabled:             toolset.McpEnabled,
-		Slug:                   toolset.Slug,
-		ProjectID:              toolset.ProjectID,
-	})
-	require.NoError(t, err)
+	testenv.SetHostedMCP(t, ctx, ti.conn, toolset.ProjectID, toolset.ID, testenv.HostedMCP{Visibility: "public"})
 
 	reqBody := map[string]any{
 		"jsonrpc": "2.0",

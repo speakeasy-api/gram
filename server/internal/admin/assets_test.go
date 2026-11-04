@@ -3,6 +3,7 @@ package admin
 import (
 	"bytes"
 	"encoding/json"
+	"fmt"
 	gen "github.com/speakeasy-api/gram/server/gen/admin"
 	adminserver "github.com/speakeasy-api/gram/server/gen/http/admin/server"
 	"github.com/speakeasy-api/gram/server/internal/assets"
@@ -15,6 +16,7 @@ import (
 	goahttp "goa.design/goa/v3/http"
 	"net/http"
 	"net/http/httptest"
+	"net/url"
 	"testing"
 	"time"
 )
@@ -48,6 +50,7 @@ func TestStandaloneImageRoutes_ValidAdminDispatch(t *testing.T) {
 	tp := testenv.NewTracerProvider(t)
 	policy, err := guardian.NewUnsafePolicy(tp, nil)
 	require.NoError(t, err)
+	svc.dashboardURL, _ = url.Parse("https://public.example.test")
 	svc.SetAssetService(assets.NewPlatformService(svc.logger, tp, policy, db, assetstest.NewTestBlobStore(t)))
 	sessionID, err := svc.sessions.Store(ctx, StoreParams{Email: "operator@example.com", Name: "Test Operator", OIDCSubject: "sub-admin", HD: testAdminHD, AccessToken: "access-token", RefreshToken: "refresh-token", ExpiresAt: time.Now().Add(time.Hour)})
 	require.NoError(t, err)
@@ -93,4 +96,72 @@ func TestStandaloneImageRoutes_ValidAdminDispatch(t *testing.T) {
 			require.Equal(t, tc.status, rec.Code, rec.Body.String())
 		})
 	}
+}
+
+func TestStandaloneImageRoutes_SVGPublicURLAndHeaders(t *testing.T) {
+	t.Parallel()
+	ctx, svc, db := newTestAdminService(t)
+	tp := testenv.NewTracerProvider(t)
+	policy, err := guardian.NewUnsafePolicy(tp, nil)
+	require.NoError(t, err)
+	svc.dashboardURL, _ = url.Parse("https://public.example.test")
+	svc.SetAssetService(assets.NewPlatformService(svc.logger, tp, policy, db, assetstest.NewTestBlobStore(t)))
+	sessionID, err := svc.sessions.Store(ctx, StoreParams{Email: "operator@example.com", Name: "Test Operator", OIDCSubject: "sub-admin", HD: testAdminHD, AccessToken: "access-token", RefreshToken: "refresh-token", ExpiresAt: time.Now().Add(time.Hour)})
+	require.NoError(t, err)
+	mux := goahttp.NewMuxer()
+	Attach(mux, svc)
+	req := httptest.NewRequest(http.MethodPost, "https://admin.example.test/admin/assets.uploadImage", bytes.NewBufferString(`<svg xmlns="http://www.w3.org/2000/svg" viewBox="0 0 10 10"><path d="M0 0h10v10H0z"/></svg>`))
+	req.Header.Set("Content-Type", "image/svg+xml")
+	req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
+	rec := httptest.NewRecorder()
+	SessionMiddleware(mux).ServeHTTP(rec, req)
+	require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+	var uploaded struct {
+		Asset struct {
+			ID string `json:"id"`
+		} `json:"asset"`
+		URL string `json:"url"`
+	}
+	require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &uploaded))
+	// Independent assertions expose both regressions in the red run.
+	t.Run("canonical public URL", func(t *testing.T) {
+		t.Parallel()
+		require.Equal(t, "https://public.example.test/rpc/assets.serveImage?id="+uploaded.Asset.ID, uploaded.URL)
+	})
+	svc.registry.WithAssetBaseURL(svc.dashboardURL)
+	t.Run("public URL persists in catalog metadata", func(t *testing.T) {
+		t.Parallel()
+		raw := fmt.Sprintf(`{"server":{"name":"example.test/icon","description":"Demo","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://example.test/mcp"}]},"_meta":{"com.speakeasy.ai/icons":{"default":{"src":%q,"mimeType":"image/svg+xml","sizes":["any"]}}}}`, uploaded.URL)
+		body, err := json.Marshal(map[string]string{"data_json": raw})
+		require.NoError(t, err)
+		req := httptest.NewRequest(http.MethodPost, "https://admin.example.test/admin/registry.create", bytes.NewReader(body))
+		req.Header.Set("Content-Type", "application/json")
+		req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
+		rec := httptest.NewRecorder()
+		SessionMiddleware(mux).ServeHTTP(rec, req)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		var entry struct {
+			ID       string `json:"id"`
+			DataJSON string `json:"data_json"`
+		}
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &entry))
+		req = httptest.NewRequest(http.MethodGet, "https://admin.example.test/admin/registry.get?id="+entry.ID, nil)
+		req.AddCookie(&http.Cookie{Name: constants.AdminSessionCookie, Value: sessionID})
+		rec = httptest.NewRecorder()
+		SessionMiddleware(mux).ServeHTTP(rec, req)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		require.NoError(t, json.Unmarshal(rec.Body.Bytes(), &entry))
+		require.Contains(t, entry.DataJSON, uploaded.URL)
+		require.NotContains(t, entry.DataJSON, "https://admin.example.test")
+	})
+	t.Run("mounted admin serving headers", func(t *testing.T) {
+		t.Parallel()
+		req := httptest.NewRequest(http.MethodGet, "https://admin.example.test/admin/assets.serveImage?id="+uploaded.Asset.ID, nil)
+		rec := httptest.NewRecorder()
+		SessionMiddleware(mux).ServeHTTP(rec, req)
+		require.Equal(t, http.StatusOK, rec.Code, rec.Body.String())
+		require.Equal(t, "image/svg+xml", rec.Header().Get("Content-Type"))
+		require.Equal(t, "nosniff", rec.Header().Get("X-Content-Type-Options"))
+		require.Equal(t, "default-src 'none'; script-src 'none'; style-src 'none'; object-src 'none'; base-uri 'none'; form-action 'none'; frame-ancestors 'none'; sandbox", rec.Header().Get("Content-Security-Policy"))
+	})
 }

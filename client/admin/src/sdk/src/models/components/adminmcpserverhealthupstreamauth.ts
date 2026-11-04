@@ -14,16 +14,15 @@ import {
 } from "./adminmcpserverhealthauthclient.js";
 
 /**
- * configured, setup_incomplete (required with no enabled client), no_auth_required or undecided.
+ * configured (at least one enabled auth client), setup_incomplete (no auth client was ever linked to it, live or detached, but it has upstream credentials that no auth client records yet) or no_auth_required.
  */
 export const AdminMcpServerHealthUpstreamAuthStatus = {
   Configured: "configured",
   SetupIncomplete: "setup_incomplete",
   NoAuthRequired: "no_auth_required",
-  Undecided: "undecided",
 } as const;
 /**
- * configured, setup_incomplete (required with no enabled client), no_auth_required or undecided.
+ * configured (at least one enabled auth client), setup_incomplete (no auth client was ever linked to it, live or detached, but it has upstream credentials that no auth client records yet) or no_auth_required.
  */
 export type AdminMcpServerHealthUpstreamAuthStatus = ClosedEnum<
   typeof AdminMcpServerHealthUpstreamAuthStatus
@@ -35,11 +34,11 @@ export type AdminMcpServerHealthUpstreamAuthStatus = ClosedEnum<
 export type AdminMcpServerHealthUpstreamAuth = {
   authClients: Array<AdminMcpServerHealthAuthClient>;
   /**
-   * Whether the upstream needs authentication. Omitted while undecided.
+   * Whether the upstream needs authentication: true when the server offers at least one enabled auth client.
    */
-  requiresUpstreamAuth?: boolean | undefined;
+  requiresUpstreamAuth: boolean;
   /**
-   * configured, setup_incomplete (required with no enabled client), no_auth_required or undecided.
+   * configured (at least one enabled auth client), setup_incomplete (no auth client was ever linked to it, live or detached, but it has upstream credentials that no auth client records yet) or no_auth_required.
    */
   status: AdminMcpServerHealthUpstreamAuthStatus;
 };
@@ -57,7 +56,7 @@ export const AdminMcpServerHealthUpstreamAuth$inboundSchema: z.ZodMiniType<
 > = z.pipe(
   z.object({
     auth_clients: z.array(AdminMcpServerHealthAuthClient$inboundSchema),
-    requires_upstream_auth: z.optional(z.boolean()),
+    requires_upstream_auth: z.boolean(),
     status: AdminMcpServerHealthUpstreamAuthStatus$inboundSchema,
   }),
   z.transform((v) => {

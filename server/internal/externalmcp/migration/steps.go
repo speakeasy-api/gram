@@ -13,9 +13,9 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp/migration/repo"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
+	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
 	"github.com/speakeasy-api/gram/server/internal/mv"
 	networkingressrepo "github.com/speakeasy-api/gram/server/internal/networkingress/repo"
 	"github.com/speakeasy-api/gram/server/internal/remotemcp"
@@ -83,16 +83,16 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 	}
 	outcome.Action = candidate.Action
 	if candidate.Action == ActionDelete {
-		outcome.McpSlug = hostingstate.LegacyAlias(toolset).Slug.String
-		err := m.deleteInTx(ctx, tx, actor, toolset, &outcome)
+		outcome.McpSlug = candidate.Alias.Slug.String
+		err := m.deleteInTx(ctx, tx, actor, toolset, candidate.Alias.Slug, &outcome)
 		return outcome, err
 	}
-	outcome.McpSlug = hostingstate.LegacyAlias(toolset).Slug.String
+	outcome.McpSlug = candidate.Alias.Slug.String
 	outcome.Warnings = append(outcome.Warnings, candidate.Warnings...)
 
 	// Lock order matches hostedmcp: custom domains, then the server's
 	// endpoints, then the server row, which the switch locks as it updates it.
-	if _, err := hostedmcp.LockDomains(ctx, tx, organizationID, hostingstate.LegacyAlias(toolset).CustomDomainID); err != nil {
+	if _, err := hostedmcp.LockDomains(ctx, tx, organizationID, candidate.Alias.CustomDomainID); err != nil {
 		return outcome, fmt.Errorf("lock custom domain: %w", err)
 	}
 	serverID, err := queries.GetToolsetServerID(ctx, repo.GetToolsetServerIDParams{ToolsetID: conv.ToNullUUID(toolset.ID), ProjectID: projectID})
@@ -144,6 +144,17 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 		return outcome, err
 	}
 
+	// The headers written above are upstream credentials, so the server now on
+	// the source gets the typed auth client they yield in the same
+	// transaction, as every other credential header writer does. This runs
+	// after the switch so the source already names the server it serves.
+	if err := authclientbackfill.SyncEMAServers(ctx, tx, organizationID, []uuid.UUID{serverID}); err != nil {
+		return outcome, fmt.Errorf("sync migrated server EMA clients: %w", err)
+	}
+	if err := authclientbackfill.SyncRemoteSource(ctx, tx, organizationID, remote.ID); err != nil {
+		return outcome, fmt.Errorf("sync migrated source auth clients: %w", err)
+	}
+
 	if hasUpstreamClient(candidate) {
 		filled, err := queries.FillRemoteSessionResources(ctx, repo.FillRemoteSessionResourcesParams{
 			Resource: conv.ToPGText(remote.Url), UserSessionIssuerID: candidate.Row.UserSessionIssuerID.UUID, ProjectID: projectID, OrganizationID: organizationID,
@@ -155,15 +166,6 @@ func (m *Migrator) migrateInTx(ctx context.Context, tx pgx.Tx, actor Actor, requ
 			outcome.Actions = append(outcome.Actions, fmt.Sprintf("Record the upstream URL on %d signed-in sessions", filled))
 		}
 	}
-
-	disabled, err := queries.DisableToolset(ctx, repo.DisableToolsetParams{ID: toolset.ID, ProjectID: projectID})
-	if err != nil {
-		return outcome, fmt.Errorf("disable toolset: %w", err)
-	}
-	if disabled != 1 {
-		return outcome, errNotCandidate
-	}
-	outcome.Actions = append(outcome.Actions, "Disable the old toolset")
 
 	entries, err := queries.CountServerPluginEntries(ctx, repo.CountServerPluginEntriesParams{ProjectID: projectID, McpServerID: conv.ToNullUUID(serverID)})
 	if err != nil {

@@ -30,7 +30,7 @@ export function identityModeCards(upstreamName: string): IdentityModeCard[] {
     },
     {
       value: "agent",
-      title: "Service Account",
+      title: "Shared credential",
       description:
         "Every caller shares one identity. Manage what it may do in the control plane.",
       icon: <Bot aria-hidden="true" className="size-4" />,

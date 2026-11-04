@@ -19,7 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
-	"github.com/speakeasy-api/gram/server/internal/hostedmcp/hostingstate"
+	"github.com/speakeasy-api/gram/server/internal/hostedmcp/legacyalias"
 	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcp/toolfilter"
 	"github.com/speakeasy-api/gram/server/internal/mcpaccess"
@@ -234,6 +234,7 @@ func (s *Service) MintUserSession(ctx context.Context, payload *gen.MintUserSess
 		PickedMcpServerIds:  []uuid.UUID{},
 		PickedClientIds:     []uuid.UUID{},
 		PickedAuthClientIds: nil,
+		ScopeMcpServerIds:   nil,
 	}); err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "record upstream client selections").LogError(ctx, s.logger)
 	}
@@ -306,7 +307,10 @@ func (s *Service) resolveToolsetMintTarget(ctx context.Context, toolsetIDStr str
 	if !hosting.UserSessionIssuerID.Valid {
 		return nil, oops.E(oops.CodeBadRequest, nil, "toolset is not issuer-gated; minting a user-session JWT is only meaningful for issuer-gated toolsets").LogError(ctx, s.logger)
 	}
-	alias := hostingstate.LegacyAlias(toolset)
+	alias, err := legacyalias.Get(ctx, s.db, projectID, toolset.ID)
+	if err != nil {
+		return nil, oops.E(oops.CodeUnexpected, err, "load toolset alias").LogError(ctx, s.logger)
+	}
 	if alias.Slug.String == "" {
 		return nil, oops.E(oops.CodeBadRequest, nil, "the hosted MCP server has no address; add one before minting a user-session token").LogWarn(ctx, s.logger)
 	}

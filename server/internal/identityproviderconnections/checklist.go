@@ -38,7 +38,7 @@ const (
 
 // RequiredOktaScopes are the Okta API scopes the connection verifies and the
 // sync relies on.
-var RequiredOktaScopes = []string{"okta.apps.read", "okta.users.read", "okta.groups.read"}
+var RequiredOktaScopes = []string{"okta.apps.read"}
 
 // RequiredOktaAdminRoles are the admin roles the checklist asks operators to
 // assign to the service app.
@@ -95,7 +95,7 @@ type AgentAppSignal struct {
 }
 
 const (
-	accessInstruction   = "On the app's Admin roles tab, assign these roles. Speakeasy checks whether it can read apps, users, and groups through the Okta API; it does not check which named admin roles are assigned. Okta will ask you to confirm your identity with multi-factor authentication first."
+	accessInstruction   = "On the app's Admin roles tab, assign these roles. Speakeasy checks whether it can read your apps through the Okta API; it does not check which named admin roles are assigned. Okta will ask you to confirm your identity with multi-factor authentication first."
 	linkInstruction     = "On User access and authentication, keep Allow users to access this agent checked and Create a new OIDC app linked to this AI agent selected, then click Next. You can skip the Add owners step that follows. The linked app becomes the app your people use to sign in to Speakeasy, which is what lets Okta turn that sign-in into Cross App Access assertions."
 	activateInstruction = "Okta creates the agent in Staged status and its linked app as Inactive. Open the linked app (linked from the agent's User access section), set it to Active, and on its Assignments tab assign the users or groups who use MCP servers through Speakeasy. Okta issues assertions only for the users assigned here. People who sign in through Okta must already exist in Speakeasy, provisioned through directory sync (SCIM); Speakeasy does not create accounts at sign-in."
 )
@@ -172,7 +172,7 @@ func observe(signal ChecklistSignal) completions {
 
 func accessDescription(apiAccess *bool) string {
 	if apiAccess != nil && *apiAccess {
-		return "Speakeasy can read apps, users, and groups"
+		return "Speakeasy can read your apps"
 	}
 	return accessInstruction
 }
@@ -256,14 +256,14 @@ func connectItems(authMethod remotesessions.TokenEndpointAuthMethod, done comple
 			Key:         ChecklistKeyGrantScopes,
 			Group:       ChecklistGroupConnect,
 			Title:       "Allow read-only permissions",
-			Description: "On the app's Okta API Scopes tab, grant these permissions. They let Speakeasy read apps, users, and groups without changing them.",
+			Description: "On the app's Okta API Scopes tab, grant this permission. It lets Speakeasy read your apps without changing them.",
 			Details:     slices.Clone(RequiredOktaScopes),
 			Completed:   done.scopesGranted,
 		},
 		{
 			Key:         ChecklistKeyAssignAdminRoles,
 			Group:       ChecklistGroupConnect,
-			Title:       "Allow access to apps, users, and groups",
+			Title:       "Allow access to apps",
 			Description: accessDescription(done.apiAccess),
 			Details:     accessDetails(done.apiAccess),
 			Completed:   done.apiAccess,
@@ -272,7 +272,7 @@ func connectItems(authMethod remotesessions.TokenEndpointAuthMethod, done comple
 			Key:         ChecklistKeySubmitClientID,
 			Group:       ChecklistGroupConnect,
 			Title:       "Submit the app's client ID",
-			Description: "Copy the Client ID (it starts with 0oa) from the app's General tab and enter it here. Speakeasy will check the connection and whether it can read apps, users, and groups.",
+			Description: "Copy the Client ID (it starts with 0oa) from the app's General tab and enter it here. Speakeasy will check the connection and whether it can read your apps.",
 			Details:     []string{},
 			Completed:   done.clientID,
 		},
@@ -297,14 +297,14 @@ func oinConnectItems(done completions) []ChecklistItem {
 			Key:         ChecklistKeyGrantScopes,
 			Group:       ChecklistGroupConnect,
 			Title:       "Allow read-only permissions",
-			Description: "Okta asks you to approve these read-only permissions during installation. They let Speakeasy read apps, users, and groups without changing them.",
+			Description: "Okta asks you to approve this read-only permission during installation. It lets Speakeasy read your apps without changing them.",
 			Details:     slices.Clone(RequiredOktaScopes),
 			Completed:   done.scopesGranted,
 		},
 		{
 			Key:         ChecklistKeyAssignAdminRoles,
 			Group:       ChecklistGroupConnect,
-			Title:       "Allow access to apps, users, and groups",
+			Title:       "Allow access to apps",
 			Description: accessDescription(done.apiAccess),
 			Details:     accessDetails(done.apiAccess),
 			Completed:   done.apiAccess,
@@ -313,7 +313,7 @@ func oinConnectItems(done completions) []ChecklistItem {
 			Key:         ChecklistKeySubmitClientID,
 			Group:       ChecklistGroupConnect,
 			Title:       "Enter the integration's credentials",
-			Description: "Enter the client ID (it starts with 0oa) and client secret from the Speakeasy integration here. Speakeasy will check the connection and whether it can read apps, users, and groups.",
+			Description: "Enter the client ID (it starts with 0oa) and client secret from the Speakeasy integration here. Speakeasy will check the connection and whether it can read your apps.",
 			Details:     []string{},
 			Completed:   done.clientID,
 		},

@@ -17,6 +17,13 @@ import (
 	goa "goa.design/goa/v3/pkg"
 )
 
+// SetOrganizationProviderSetupRequestBody is the type of the "admin" service
+// "setOrganizationProviderSetup" endpoint HTTP request body.
+type SetOrganizationProviderSetupRequestBody struct {
+	OrganizationID *string `form:"organization_id,omitempty" json:"organization_id,omitempty" xml:"organization_id,omitempty"`
+	Enabled        *bool   `form:"enabled,omitempty" json:"enabled,omitempty" xml:"enabled,omitempty"`
+}
+
 // SetOrganizationFeatureRequestBody is the type of the "admin" service
 // "setOrganizationFeature" endpoint HTTP request body.
 type SetOrganizationFeatureRequestBody struct {
@@ -650,6 +657,9 @@ type GetSessionResponseBody struct {
 // GetOrganizationFeaturesResponseBody is the type of the "admin" service
 // "getOrganizationFeatures" endpoint HTTP response body.
 type GetOrganizationFeaturesResponseBody struct {
+	// Whether the staff-managed provider setup rollout is enabled. Defaults to
+	// false when absent.
+	ProviderSetupEnabled *bool `form:"provider_setup_enabled,omitempty" json:"provider_setup_enabled,omitempty" xml:"provider_setup_enabled,omitempty"`
 	// Whether logging is enabled
 	LogsEnabled bool `form:"logs_enabled" json:"logs_enabled" xml:"logs_enabled"`
 	// Whether tool I/O logging is enabled
@@ -707,11 +717,87 @@ type GetOrganizationFeaturesResponseBody struct {
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent bool `form:"device_agent" json:"device_agent" xml:"device_agent"`
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool `form:"upstream_auth_enforced,omitempty" json:"upstream_auth_enforced,omitempty" xml:"upstream_auth_enforced,omitempty"`
+}
+
+// SetOrganizationProviderSetupResponseBody is the type of the "admin" service
+// "setOrganizationProviderSetup" endpoint HTTP response body.
+type SetOrganizationProviderSetupResponseBody struct {
+	// Whether the staff-managed provider setup rollout is enabled. Defaults to
+	// false when absent.
+	ProviderSetupEnabled *bool `form:"provider_setup_enabled,omitempty" json:"provider_setup_enabled,omitempty" xml:"provider_setup_enabled,omitempty"`
+	// Whether logging is enabled
+	LogsEnabled bool `form:"logs_enabled" json:"logs_enabled" xml:"logs_enabled"`
+	// Whether tool I/O logging is enabled
+	ToolIoLogsEnabled bool `form:"tool_io_logs_enabled" json:"tool_io_logs_enabled" xml:"tool_io_logs_enabled"`
+	// Whether Claude Code session capture is enabled
+	SessionCaptureEnabled bool `form:"session_capture_enabled" json:"session_capture_enabled" xml:"session_capture_enabled"`
+	// Whether authz challenge logging to ClickHouse is enabled
+	AuthzChallengeLoggingEnabled bool `form:"authz_challenge_logging_enabled" json:"authz_challenge_logging_enabled" xml:"authz_challenge_logging_enabled"`
+	// Whether SSO setup is enabled for the organization
+	SsoEnabled bool `form:"sso_enabled" json:"sso_enabled" xml:"sso_enabled"`
+	// Whether SCIM/directory sync setup is enabled for the organization
+	ScimEnabled bool `form:"scim_enabled" json:"scim_enabled" xml:"scim_enabled"`
+	// Whether generated hook plugins may mint per-user keys via the interactive
+	// browser login
+	HooksBrowserLoginEnabled bool `form:"hooks_browser_login_enabled" json:"hooks_browser_login_enabled" xml:"hooks_browser_login_enabled"`
+	// Whether hooks fail open when the Speakeasy control plane is unreachable or
+	// erroring — blocking policies are not enforced for the duration of the outage
+	HooksFailOpenEnabled bool `form:"hooks_fail_open_enabled" json:"hooks_fail_open_enabled" xml:"hooks_fail_open_enabled"`
+	// Whether the organization can supply its own model provider API keys (BYOK)
+	CustomModelKeysEnabled bool `form:"custom_model_keys_enabled" json:"custom_model_keys_enabled" xml:"custom_model_keys_enabled"`
+	// Whether the Skills page is enabled for the organization
+	SkillsEnabled bool `form:"skills_enabled" json:"skills_enabled" xml:"skills_enabled"`
+	// Whether skill capture stores activation metadata without requesting manifest
+	// content
+	SkillCaptureMetadataOnly bool `form:"skill_capture_metadata_only" json:"skill_capture_metadata_only" xml:"skill_capture_metadata_only"`
+	// Whether the organization can provision push integrations for AI platforms
+	AiPlatformPushIntegrationsEnabled bool `form:"ai_platform_push_integrations_enabled" json:"ai_platform_push_integrations_enabled" xml:"ai_platform_push_integrations_enabled"`
+	// Whether the organization can use the Speakeasy Platform MCP capability
+	PlatformMcpEnabled bool `form:"platform_mcp_enabled" json:"platform_mcp_enabled" xml:"platform_mcp_enabled"`
+	// Whether the organization can manage the external credentials and cloud KMS
+	// keys backing customer-managed encryption
+	CustomerManagedEncryptionKeysEnabled bool `form:"customer_managed_encryption_keys_enabled" json:"customer_managed_encryption_keys_enabled" xml:"customer_managed_encryption_keys_enabled"`
+	// Whether consent screens expose automatic remote-session refresh for the
+	// organization
+	RemoteSessionAutoRefreshEnabled bool `form:"remote_session_auto_refresh_enabled" json:"remote_session_auto_refresh_enabled" xml:"remote_session_auto_refresh_enabled"`
+	// Whether automatic remote-session refresh is enforced as the organization
+	// default: forced on for every user, shown locked on consent screens, and
+	// applied by the keepalive regardless of per-session preference
+	RemoteSessionAutoRefreshEnforcedEnabled bool `form:"remote_session_auto_refresh_enforced_enabled" json:"remote_session_auto_refresh_enforced_enabled" xml:"remote_session_auto_refresh_enforced_enabled"`
+	// Whether agent session portability is enabled for the organization: session
+	// sharing links, move reporting with lineage, and picker title enrichment via
+	// the device agent
+	SessionPortabilityEnabled bool `form:"session_portability_enabled" json:"session_portability_enabled" xml:"session_portability_enabled"`
+	// Whether the organization has the staff-managed private network ingress
+	// entitlement
+	NetworkIngressEnabled bool `form:"network_ingress_enabled" json:"network_ingress_enabled" xml:"network_ingress_enabled"`
+	// Whether the organization can configure signals intelligence
+	SignalsIntelligenceEnabled bool `form:"signals_intelligence_enabled" json:"signals_intelligence_enabled" xml:"signals_intelligence_enabled"`
+	// Whether an organization admin turned the organization gateway off, so its
+	// routes answer 404
+	OrganizationGatewayDisabled bool `form:"organization_gateway_disabled" json:"organization_gateway_disabled" xml:"organization_gateway_disabled"`
+	// Whether the organization has the staff-managed gateway Code Mode entitlement
+	CodeModeEnabled bool `form:"code_mode_enabled" json:"code_mode_enabled" xml:"code_mode_enabled"`
+	// Whether the organization uses the device agent (any device has polled
+	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
+	// feature.
+	DeviceAgent bool `form:"device_agent" json:"device_agent" xml:"device_agent"`
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool `form:"upstream_auth_enforced,omitempty" json:"upstream_auth_enforced,omitempty" xml:"upstream_auth_enforced,omitempty"`
 }
 
 // SetOrganizationFeatureResponseBody is the type of the "admin" service
 // "setOrganizationFeature" endpoint HTTP response body.
 type SetOrganizationFeatureResponseBody struct {
+	// Whether the staff-managed provider setup rollout is enabled. Defaults to
+	// false when absent.
+	ProviderSetupEnabled *bool `form:"provider_setup_enabled,omitempty" json:"provider_setup_enabled,omitempty" xml:"provider_setup_enabled,omitempty"`
 	// Whether logging is enabled
 	LogsEnabled bool `form:"logs_enabled" json:"logs_enabled" xml:"logs_enabled"`
 	// Whether tool I/O logging is enabled
@@ -769,6 +855,10 @@ type SetOrganizationFeatureResponseBody struct {
 	// agent.getPlugins). Derived from device-agent syncs, not an admin-settable
 	// feature.
 	DeviceAgent bool `form:"device_agent" json:"device_agent" xml:"device_agent"`
+	// Whether upstream auth enforcement is on for the organization. Absent when
+	// the state could not be read. Staff change it through the admin enforcement
+	// endpoint.
+	UpstreamAuthEnforced *bool `form:"upstream_auth_enforced,omitempty" json:"upstream_auth_enforced,omitempty" xml:"upstream_auth_enforced,omitempty"`
 }
 
 // GetOrganizationChatAnalysisSettingsResponseBody is the type of the "admin"
@@ -1940,8 +2030,10 @@ type MigrateToGlobalIssuerResponseBody struct {
 // UploadPlatformImageResponseBody is the type of the "admin" service
 // "uploadPlatformImage" endpoint HTTP response body.
 type UploadPlatformImageResponseBody struct {
-	// The asset entry that was created in Speakeasy
+	// The uploaded platform image asset
 	Asset *AssetResponseBody `form:"asset" json:"asset" xml:"asset"`
+	// Canonical public URL for the uploaded image
+	URL string `form:"url" json:"url" xml:"url"`
 }
 
 // StartTrialResponseBody is the type of the "admin" service "startTrial"
@@ -2164,7 +2256,8 @@ type GetHookClientsResponseBody struct {
 	// When the grids were read from ClickHouse.
 	QueriedAt string `form:"queried_at" json:"queried_at" xml:"queried_at"`
 	// True when the grids came from the cache rather than a fresh ClickHouse read.
-	// Cached grids last 24 hours and refresh in the background once an hour old.
+	// Cached grids last 48 hours and refresh in the background once an hour old.
+	// The default window is also refreshed nightly.
 	FromCache bool `form:"from_cache" json:"from_cache" xml:"from_cache"`
 	// Every organization that appears in any grid.
 	Organizations []*AdminHookClientOrganizationResponseBody `form:"organizations" json:"organizations" xml:"organizations"`
@@ -2797,8 +2890,8 @@ type RunUpstreamOAuthMigrationResponseBody struct {
 	AuthClientsWritten *int64 `form:"auth_clients_written,omitempty" json:"auth_clients_written,omitempty" xml:"auth_clients_written,omitempty"`
 	// Server to auth client links recorded.
 	AuthClientLinksWritten *int64 `form:"auth_client_links_written,omitempty" json:"auth_client_links_written,omitempty" xml:"auth_client_links_written,omitempty"`
-	// Servers marked as needing upstream authentication because they offer a
-	// backfilled auth client.
+	// Deprecated: always omitted. Whether a server needs upstream authentication
+	// follows from the auth clients it offers, so no server is marked.
 	ServersMarkedRequiringUpstreamAuth *int64 `form:"servers_marked_requiring_upstream_auth,omitempty" json:"servers_marked_requiring_upstream_auth,omitempty" xml:"servers_marked_requiring_upstream_auth,omitempty"`
 	// Credential choices this run named a typed auth client on.
 	SelectionsMapped *int64 `form:"selections_mapped,omitempty" json:"selections_mapped,omitempty" xml:"selections_mapped,omitempty"`
@@ -2882,6 +2975,13 @@ type DisableUpstreamAuthEnforcementResponseBody struct {
 	// Whether upstream auth enforcement is on for the organization, and whether it
 	// can be turned on.
 	Enforcement *AdminUpstreamAuthEnforcementResponseBody `form:"enforcement,omitempty" json:"enforcement,omitempty" xml:"enforcement,omitempty"`
+}
+
+// BackfillMcpAuthGrantsResponseBody is the type of the "admin" service
+// "backfillMcpAuthGrants" endpoint HTTP response body.
+type BackfillMcpAuthGrantsResponseBody struct {
+	// How many principals gained the mcp:auth grant.
+	Granted int64 `form:"granted" json:"granted" xml:"granted"`
 }
 
 // LoginUnauthorizedResponseBody is the type of the "admin" service "login"
@@ -3779,6 +3879,196 @@ type GetOrganizationFeaturesUnexpectedResponseBody struct {
 // service "getOrganizationFeatures" endpoint HTTP response body for the
 // "gateway_error" error.
 type GetOrganizationFeaturesGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupUnauthorizedResponseBody is the type of the
+// "admin" service "setOrganizationProviderSetup" endpoint HTTP response body
+// for the "unauthorized" error.
+type SetOrganizationProviderSetupUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupForbiddenResponseBody is the type of the "admin"
+// service "setOrganizationProviderSetup" endpoint HTTP response body for the
+// "forbidden" error.
+type SetOrganizationProviderSetupForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupBadRequestResponseBody is the type of the
+// "admin" service "setOrganizationProviderSetup" endpoint HTTP response body
+// for the "bad_request" error.
+type SetOrganizationProviderSetupBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupNotFoundResponseBody is the type of the "admin"
+// service "setOrganizationProviderSetup" endpoint HTTP response body for the
+// "not_found" error.
+type SetOrganizationProviderSetupNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupConflictResponseBody is the type of the "admin"
+// service "setOrganizationProviderSetup" endpoint HTTP response body for the
+// "conflict" error.
+type SetOrganizationProviderSetupConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupUnsupportedMediaResponseBody is the type of the
+// "admin" service "setOrganizationProviderSetup" endpoint HTTP response body
+// for the "unsupported_media" error.
+type SetOrganizationProviderSetupUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupInvalidResponseBody is the type of the "admin"
+// service "setOrganizationProviderSetup" endpoint HTTP response body for the
+// "invalid" error.
+type SetOrganizationProviderSetupInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupInvariantViolationResponseBody is the type of
+// the "admin" service "setOrganizationProviderSetup" endpoint HTTP response
+// body for the "invariant_violation" error.
+type SetOrganizationProviderSetupInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupUnexpectedResponseBody is the type of the
+// "admin" service "setOrganizationProviderSetup" endpoint HTTP response body
+// for the "unexpected" error.
+type SetOrganizationProviderSetupUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// SetOrganizationProviderSetupGatewayErrorResponseBody is the type of the
+// "admin" service "setOrganizationProviderSetup" endpoint HTTP response body
+// for the "gateway_error" error.
+type SetOrganizationProviderSetupGatewayErrorResponseBody struct {
 	// Name is the name of this class of errors.
 	Name string `form:"name" json:"name" xml:"name"`
 	// ID is a unique identifier for this particular occurrence of the problem.
@@ -22624,6 +22914,194 @@ type DisableUpstreamAuthEnforcementGatewayErrorResponseBody struct {
 	Fault bool `form:"fault" json:"fault" xml:"fault"`
 }
 
+// BackfillMcpAuthGrantsUnauthorizedResponseBody is the type of the "admin"
+// service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "unauthorized" error.
+type BackfillMcpAuthGrantsUnauthorizedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsForbiddenResponseBody is the type of the "admin"
+// service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "forbidden" error.
+type BackfillMcpAuthGrantsForbiddenResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsBadRequestResponseBody is the type of the "admin"
+// service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "bad_request" error.
+type BackfillMcpAuthGrantsBadRequestResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsNotFoundResponseBody is the type of the "admin" service
+// "backfillMcpAuthGrants" endpoint HTTP response body for the "not_found"
+// error.
+type BackfillMcpAuthGrantsNotFoundResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsConflictResponseBody is the type of the "admin" service
+// "backfillMcpAuthGrants" endpoint HTTP response body for the "conflict" error.
+type BackfillMcpAuthGrantsConflictResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsUnsupportedMediaResponseBody is the type of the "admin"
+// service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "unsupported_media" error.
+type BackfillMcpAuthGrantsUnsupportedMediaResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsInvalidResponseBody is the type of the "admin" service
+// "backfillMcpAuthGrants" endpoint HTTP response body for the "invalid" error.
+type BackfillMcpAuthGrantsInvalidResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsInvariantViolationResponseBody is the type of the
+// "admin" service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "invariant_violation" error.
+type BackfillMcpAuthGrantsInvariantViolationResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsUnexpectedResponseBody is the type of the "admin"
+// service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "unexpected" error.
+type BackfillMcpAuthGrantsUnexpectedResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
+// BackfillMcpAuthGrantsGatewayErrorResponseBody is the type of the "admin"
+// service "backfillMcpAuthGrants" endpoint HTTP response body for the
+// "gateway_error" error.
+type BackfillMcpAuthGrantsGatewayErrorResponseBody struct {
+	// Name is the name of this class of errors.
+	Name string `form:"name" json:"name" xml:"name"`
+	// ID is a unique identifier for this particular occurrence of the problem.
+	ID string `form:"id" json:"id" xml:"id"`
+	// Message is a human-readable explanation specific to this occurrence of the
+	// problem.
+	Message string `form:"message" json:"message" xml:"message"`
+	// Is the error temporary?
+	Temporary bool `form:"temporary" json:"temporary" xml:"temporary"`
+	// Is the error a timeout?
+	Timeout bool `form:"timeout" json:"timeout" xml:"timeout"`
+	// Is the error a server-side fault?
+	Fault bool `form:"fault" json:"fault" xml:"fault"`
+}
+
 // AdminOrganizationMemberResponseBody is used to define fields on response
 // body types.
 type AdminOrganizationMemberResponseBody struct {
@@ -22687,7 +23165,13 @@ type AuditLogResponseBody struct {
 	ActingSurface string `form:"acting_surface" json:"acting_surface" xml:"acting_surface"`
 	// The registered OAuth client the call authenticated as, when it had one.
 	// Absent for calls that carried no OAuth client.
-	ActingClientID     *string         `form:"acting_client_id,omitempty" json:"acting_client_id,omitempty" xml:"acting_client_id,omitempty"`
+	ActingClientID *string `form:"acting_client_id,omitempty" json:"acting_client_id,omitempty" xml:"acting_client_id,omitempty"`
+	// What kind of event the entry records: 'configuration' for a change to the
+	// platform's configuration, 'security' for machine access and other
+	// security-relevant activity that is not a configuration decision. Always
+	// present in responses; optional in the schema so clients built against it
+	// still read responses from servers that predate it.
+	Category           *string         `form:"category,omitempty" json:"category,omitempty" xml:"category,omitempty"`
 	SubjectID          string          `form:"subject_id" json:"subject_id" xml:"subject_id"`
 	SubjectType        string          `form:"subject_type" json:"subject_type" xml:"subject_type"`
 	SubjectDisplayName *string         `form:"subject_display_name,omitempty" json:"subject_display_name,omitempty" xml:"subject_display_name,omitempty"`
@@ -23382,11 +23866,13 @@ type AdminMcpServerHealthRemoteSessionsResponseBody struct {
 // AdminMcpServerHealthUpstreamAuthResponseBody is used to define fields on
 // response body types.
 type AdminMcpServerHealthUpstreamAuthResponseBody struct {
-	// configured, setup_incomplete (required with no enabled client),
-	// no_auth_required or undecided.
+	// configured (at least one enabled auth client), setup_incomplete (no auth
+	// client was ever linked to it, live or detached, but it has upstream
+	// credentials that no auth client records yet) or no_auth_required.
 	Status string `form:"status" json:"status" xml:"status"`
-	// Whether the upstream needs authentication. Omitted while undecided.
-	RequiresUpstreamAuth *bool                                         `form:"requires_upstream_auth,omitempty" json:"requires_upstream_auth,omitempty" xml:"requires_upstream_auth,omitempty"`
+	// Whether the upstream needs authentication: true when the server offers at
+	// least one enabled auth client.
+	RequiresUpstreamAuth bool                                          `form:"requires_upstream_auth" json:"requires_upstream_auth" xml:"requires_upstream_auth"`
 	AuthClients          []*AdminMcpServerHealthAuthClientResponseBody `form:"auth_clients" json:"auth_clients" xml:"auth_clients"`
 }
 
@@ -23884,14 +24370,14 @@ type AdminUpstreamOAuthMigrationServerResponseBody struct {
 // on response body types.
 type AdminUpstreamOAuthMigrationAuthClientsResponseBody struct {
 	// Whether every configured identity has its auth client, server links and
-	// header copies recorded, no backfilled record is left to retire, no server
-	// offering one is left undecided, and no phase failed.
+	// header copies recorded, no backfilled record is left to retire, and no phase
+	// failed.
 	Complete bool `form:"complete" json:"complete" xml:"complete"`
 	// Whether a run is recording typed auth clients for the organization right
 	// now. The other counts are then empty; check again when it finishes.
 	InProgress bool `form:"in_progress" json:"in_progress" xml:"in_progress"`
-	// Servers offering a backfilled auth client whose need for upstream
-	// authentication is still undecided, not yet marked as needing it.
+	// Deprecated: always 0. Whether a server needs upstream authentication follows
+	// from the auth clients it offers, so no server is marked.
 	PendingMarkedServers int64 `form:"pending_marked_servers" json:"pending_marked_servers" xml:"pending_marked_servers"`
 	// Configured identities and server links decided.
 	Associations int64 `form:"associations" json:"associations" xml:"associations"`
@@ -24060,9 +24546,8 @@ type AdminUpstreamOAuthMigrationExecutionProfileGapResponseBody struct {
 	// Why there is no choice: selection_required (several clients could serve it),
 	// personal_requires_user (only a personal client serves it, and the turn has
 	// no user), no_client (no live, enabled auth client carries its upstream OAuth
-	// client), setup_incomplete (it needs upstream authentication and offers no
-	// auth client) or upstream_auth_undecided (it offers no auth client and an
-	// administrator has not decided whether it needs upstream authentication).
+	// client) or setup_incomplete (no auth client was ever linked to it, live or
+	// detached, but it has upstream credentials that no auth client records yet).
 	Reason string `form:"reason" json:"reason" xml:"reason"`
 	// Profile and server pairs with no choice for this reason.
 	Servers int64 `form:"servers" json:"servers" xml:"servers"`
@@ -24163,6 +24648,7 @@ func NewGetSessionResponseBody(res *admin.AdminSession) *GetSessionResponseBody 
 // the result of the "getOrganizationFeatures" endpoint of the "admin" service.
 func NewGetOrganizationFeaturesResponseBody(res *adminviews.ProductFeaturesView) *GetOrganizationFeaturesResponseBody {
 	body := &GetOrganizationFeaturesResponseBody{
+		ProviderSetupEnabled:                    res.ProviderSetupEnabled,
 		LogsEnabled:                             *res.LogsEnabled,
 		ToolIoLogsEnabled:                       *res.ToolIoLogsEnabled,
 		SessionCaptureEnabled:                   *res.SessionCaptureEnabled,
@@ -24185,6 +24671,40 @@ func NewGetOrganizationFeaturesResponseBody(res *adminviews.ProductFeaturesView)
 		OrganizationGatewayDisabled:             *res.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         *res.CodeModeEnabled,
 		DeviceAgent:                             *res.DeviceAgent,
+		UpstreamAuthEnforced:                    res.UpstreamAuthEnforced,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupResponseBody builds the HTTP response body
+// from the result of the "setOrganizationProviderSetup" endpoint of the
+// "admin" service.
+func NewSetOrganizationProviderSetupResponseBody(res *adminviews.ProductFeaturesView) *SetOrganizationProviderSetupResponseBody {
+	body := &SetOrganizationProviderSetupResponseBody{
+		ProviderSetupEnabled:                    res.ProviderSetupEnabled,
+		LogsEnabled:                             *res.LogsEnabled,
+		ToolIoLogsEnabled:                       *res.ToolIoLogsEnabled,
+		SessionCaptureEnabled:                   *res.SessionCaptureEnabled,
+		AuthzChallengeLoggingEnabled:            *res.AuthzChallengeLoggingEnabled,
+		SsoEnabled:                              *res.SsoEnabled,
+		ScimEnabled:                             *res.ScimEnabled,
+		HooksBrowserLoginEnabled:                *res.HooksBrowserLoginEnabled,
+		HooksFailOpenEnabled:                    *res.HooksFailOpenEnabled,
+		CustomModelKeysEnabled:                  *res.CustomModelKeysEnabled,
+		SkillsEnabled:                           *res.SkillsEnabled,
+		SkillCaptureMetadataOnly:                *res.SkillCaptureMetadataOnly,
+		AiPlatformPushIntegrationsEnabled:       *res.AiPlatformPushIntegrationsEnabled,
+		PlatformMcpEnabled:                      *res.PlatformMcpEnabled,
+		CustomerManagedEncryptionKeysEnabled:    *res.CustomerManagedEncryptionKeysEnabled,
+		RemoteSessionAutoRefreshEnabled:         *res.RemoteSessionAutoRefreshEnabled,
+		RemoteSessionAutoRefreshEnforcedEnabled: *res.RemoteSessionAutoRefreshEnforcedEnabled,
+		SessionPortabilityEnabled:               *res.SessionPortabilityEnabled,
+		NetworkIngressEnabled:                   *res.NetworkIngressEnabled,
+		SignalsIntelligenceEnabled:              *res.SignalsIntelligenceEnabled,
+		OrganizationGatewayDisabled:             *res.OrganizationGatewayDisabled,
+		CodeModeEnabled:                         *res.CodeModeEnabled,
+		DeviceAgent:                             *res.DeviceAgent,
+		UpstreamAuthEnforced:                    res.UpstreamAuthEnforced,
 	}
 	return body
 }
@@ -24193,6 +24713,7 @@ func NewGetOrganizationFeaturesResponseBody(res *adminviews.ProductFeaturesView)
 // result of the "setOrganizationFeature" endpoint of the "admin" service.
 func NewSetOrganizationFeatureResponseBody(res *adminviews.ProductFeaturesView) *SetOrganizationFeatureResponseBody {
 	body := &SetOrganizationFeatureResponseBody{
+		ProviderSetupEnabled:                    res.ProviderSetupEnabled,
 		LogsEnabled:                             *res.LogsEnabled,
 		ToolIoLogsEnabled:                       *res.ToolIoLogsEnabled,
 		SessionCaptureEnabled:                   *res.SessionCaptureEnabled,
@@ -24215,6 +24736,7 @@ func NewSetOrganizationFeatureResponseBody(res *adminviews.ProductFeaturesView) 
 		OrganizationGatewayDisabled:             *res.OrganizationGatewayDisabled,
 		CodeModeEnabled:                         *res.CodeModeEnabled,
 		DeviceAgent:                             *res.DeviceAgent,
+		UpstreamAuthEnforced:                    res.UpstreamAuthEnforced,
 	}
 	return body
 }
@@ -25339,8 +25861,10 @@ func NewMigrateToGlobalIssuerResponseBody(res *admin.MigrateRemoteSessionIssuerR
 
 // NewUploadPlatformImageResponseBody builds the HTTP response body from the
 // result of the "uploadPlatformImage" endpoint of the "admin" service.
-func NewUploadPlatformImageResponseBody(res *admin.UploadImageResult) *UploadPlatformImageResponseBody {
-	body := &UploadPlatformImageResponseBody{}
+func NewUploadPlatformImageResponseBody(res *admin.AdminUploadImageResult) *UploadPlatformImageResponseBody {
+	body := &UploadPlatformImageResponseBody{
+		URL: res.URL,
+	}
 	if res.Asset != nil {
 		body.Asset = marshalAdminAssetToAssetResponseBody(res.Asset)
 	}
@@ -26796,6 +27320,15 @@ func NewDisableUpstreamAuthEnforcementResponseBody(res *admin.AdminUpstreamOAuth
 	return body
 }
 
+// NewBackfillMcpAuthGrantsResponseBody builds the HTTP response body from the
+// result of the "backfillMcpAuthGrants" endpoint of the "admin" service.
+func NewBackfillMcpAuthGrantsResponseBody(res *admin.AdminBackfillMCPAuthGrantsResult) *BackfillMcpAuthGrantsResponseBody {
+	body := &BackfillMcpAuthGrantsResponseBody{
+		Granted: res.Granted,
+	}
+	return body
+}
+
 // NewLoginUnauthorizedResponseBody builds the HTTP response body from the
 // result of the "login" endpoint of the "admin" service.
 func NewLoginUnauthorizedResponseBody(res *goa.ServiceError) *LoginUnauthorizedResponseBody {
@@ -27496,6 +28029,156 @@ func NewGetOrganizationFeaturesUnexpectedResponseBody(res *goa.ServiceError) *Ge
 // "admin" service.
 func NewGetOrganizationFeaturesGatewayErrorResponseBody(res *goa.ServiceError) *GetOrganizationFeaturesGatewayErrorResponseBody {
 	body := &GetOrganizationFeaturesGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupUnauthorizedResponseBody builds the HTTP
+// response body from the result of the "setOrganizationProviderSetup" endpoint
+// of the "admin" service.
+func NewSetOrganizationProviderSetupUnauthorizedResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupUnauthorizedResponseBody {
+	body := &SetOrganizationProviderSetupUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupForbiddenResponseBody builds the HTTP
+// response body from the result of the "setOrganizationProviderSetup" endpoint
+// of the "admin" service.
+func NewSetOrganizationProviderSetupForbiddenResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupForbiddenResponseBody {
+	body := &SetOrganizationProviderSetupForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupBadRequestResponseBody builds the HTTP
+// response body from the result of the "setOrganizationProviderSetup" endpoint
+// of the "admin" service.
+func NewSetOrganizationProviderSetupBadRequestResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupBadRequestResponseBody {
+	body := &SetOrganizationProviderSetupBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupNotFoundResponseBody builds the HTTP response
+// body from the result of the "setOrganizationProviderSetup" endpoint of the
+// "admin" service.
+func NewSetOrganizationProviderSetupNotFoundResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupNotFoundResponseBody {
+	body := &SetOrganizationProviderSetupNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupConflictResponseBody builds the HTTP response
+// body from the result of the "setOrganizationProviderSetup" endpoint of the
+// "admin" service.
+func NewSetOrganizationProviderSetupConflictResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupConflictResponseBody {
+	body := &SetOrganizationProviderSetupConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "setOrganizationProviderSetup" endpoint
+// of the "admin" service.
+func NewSetOrganizationProviderSetupUnsupportedMediaResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupUnsupportedMediaResponseBody {
+	body := &SetOrganizationProviderSetupUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupInvalidResponseBody builds the HTTP response
+// body from the result of the "setOrganizationProviderSetup" endpoint of the
+// "admin" service.
+func NewSetOrganizationProviderSetupInvalidResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupInvalidResponseBody {
+	body := &SetOrganizationProviderSetupInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupInvariantViolationResponseBody builds the
+// HTTP response body from the result of the "setOrganizationProviderSetup"
+// endpoint of the "admin" service.
+func NewSetOrganizationProviderSetupInvariantViolationResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupInvariantViolationResponseBody {
+	body := &SetOrganizationProviderSetupInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupUnexpectedResponseBody builds the HTTP
+// response body from the result of the "setOrganizationProviderSetup" endpoint
+// of the "admin" service.
+func NewSetOrganizationProviderSetupUnexpectedResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupUnexpectedResponseBody {
+	body := &SetOrganizationProviderSetupUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewSetOrganizationProviderSetupGatewayErrorResponseBody builds the HTTP
+// response body from the result of the "setOrganizationProviderSetup" endpoint
+// of the "admin" service.
+func NewSetOrganizationProviderSetupGatewayErrorResponseBody(res *goa.ServiceError) *SetOrganizationProviderSetupGatewayErrorResponseBody {
+	body := &SetOrganizationProviderSetupGatewayErrorResponseBody{
 		Name:      res.Name,
 		ID:        res.ID,
 		Message:   res.Message,
@@ -42277,6 +42960,156 @@ func NewDisableUpstreamAuthEnforcementGatewayErrorResponseBody(res *goa.ServiceE
 	return body
 }
 
+// NewBackfillMcpAuthGrantsUnauthorizedResponseBody builds the HTTP response
+// body from the result of the "backfillMcpAuthGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpAuthGrantsUnauthorizedResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsUnauthorizedResponseBody {
+	body := &BackfillMcpAuthGrantsUnauthorizedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsForbiddenResponseBody builds the HTTP response body
+// from the result of the "backfillMcpAuthGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpAuthGrantsForbiddenResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsForbiddenResponseBody {
+	body := &BackfillMcpAuthGrantsForbiddenResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsBadRequestResponseBody builds the HTTP response body
+// from the result of the "backfillMcpAuthGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpAuthGrantsBadRequestResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsBadRequestResponseBody {
+	body := &BackfillMcpAuthGrantsBadRequestResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsNotFoundResponseBody builds the HTTP response body
+// from the result of the "backfillMcpAuthGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpAuthGrantsNotFoundResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsNotFoundResponseBody {
+	body := &BackfillMcpAuthGrantsNotFoundResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsConflictResponseBody builds the HTTP response body
+// from the result of the "backfillMcpAuthGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpAuthGrantsConflictResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsConflictResponseBody {
+	body := &BackfillMcpAuthGrantsConflictResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsUnsupportedMediaResponseBody builds the HTTP
+// response body from the result of the "backfillMcpAuthGrants" endpoint of the
+// "admin" service.
+func NewBackfillMcpAuthGrantsUnsupportedMediaResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsUnsupportedMediaResponseBody {
+	body := &BackfillMcpAuthGrantsUnsupportedMediaResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsInvalidResponseBody builds the HTTP response body
+// from the result of the "backfillMcpAuthGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpAuthGrantsInvalidResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsInvalidResponseBody {
+	body := &BackfillMcpAuthGrantsInvalidResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsInvariantViolationResponseBody builds the HTTP
+// response body from the result of the "backfillMcpAuthGrants" endpoint of the
+// "admin" service.
+func NewBackfillMcpAuthGrantsInvariantViolationResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsInvariantViolationResponseBody {
+	body := &BackfillMcpAuthGrantsInvariantViolationResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsUnexpectedResponseBody builds the HTTP response body
+// from the result of the "backfillMcpAuthGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpAuthGrantsUnexpectedResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsUnexpectedResponseBody {
+	body := &BackfillMcpAuthGrantsUnexpectedResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
+// NewBackfillMcpAuthGrantsGatewayErrorResponseBody builds the HTTP response
+// body from the result of the "backfillMcpAuthGrants" endpoint of the "admin"
+// service.
+func NewBackfillMcpAuthGrantsGatewayErrorResponseBody(res *goa.ServiceError) *BackfillMcpAuthGrantsGatewayErrorResponseBody {
+	body := &BackfillMcpAuthGrantsGatewayErrorResponseBody{
+		Name:      res.Name,
+		ID:        res.ID,
+		Message:   res.Message,
+		Temporary: res.Temporary,
+		Timeout:   res.Timeout,
+		Fault:     res.Fault,
+	}
+	return body
+}
+
 // NewLoginPayload builds a admin service login endpoint payload.
 func NewLoginPayload(returnTo *string, prompt *string) *admin.LoginPayload {
 	v := &admin.LoginPayload{}
@@ -42319,6 +43152,18 @@ func NewGetSessionPayload(adminSessionToken *string) *admin.GetSessionPayload {
 func NewGetOrganizationFeaturesPayload(organizationID string, adminSessionToken *string) *admin.GetOrganizationFeaturesPayload {
 	v := &admin.GetOrganizationFeaturesPayload{}
 	v.OrganizationID = organizationID
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// NewSetOrganizationProviderSetupPayload builds a admin service
+// setOrganizationProviderSetup endpoint payload.
+func NewSetOrganizationProviderSetupPayload(body *SetOrganizationProviderSetupRequestBody, adminSessionToken *string) *admin.SetOrganizationProviderSetupPayload {
+	v := &admin.SetOrganizationProviderSetupPayload{
+		OrganizationID: *body.OrganizationID,
+		Enabled:        *body.Enabled,
+	}
 	v.AdminSessionToken = adminSessionToken
 
 	return v
@@ -43660,6 +44505,27 @@ func NewDisableUpstreamAuthEnforcementPayload(body *DisableUpstreamAuthEnforceme
 	v.AdminSessionToken = adminSessionToken
 
 	return v
+}
+
+// NewBackfillMcpAuthGrantsPayload builds a admin service backfillMcpAuthGrants
+// endpoint payload.
+func NewBackfillMcpAuthGrantsPayload(adminSessionToken *string) *admin.BackfillMcpAuthGrantsPayload {
+	v := &admin.BackfillMcpAuthGrantsPayload{}
+	v.AdminSessionToken = adminSessionToken
+
+	return v
+}
+
+// ValidateSetOrganizationProviderSetupRequestBody runs the validations defined
+// on SetOrganizationProviderSetupRequestBody
+func ValidateSetOrganizationProviderSetupRequestBody(body *SetOrganizationProviderSetupRequestBody) (err error) {
+	if body.OrganizationID == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("organization_id", "body"))
+	}
+	if body.Enabled == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("enabled", "body"))
+	}
+	return
 }
 
 // ValidateSetOrganizationFeatureRequestBody runs the validations defined on

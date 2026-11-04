@@ -159,8 +159,6 @@ func createToolsetServer(t *testing.T, ctx context.Context, conn *pgxpool.Pool, 
 		Slug:                   slug + "-" + uuid.NewString()[:8],
 		Description:            pgtype.Text{String: "", Valid: false},
 		DefaultEnvironmentSlug: pgtype.Text{String: "", Valid: false},
-		McpSlug:                pgtype.Text{String: "", Valid: false},
-		McpEnabled:             true,
 	})
 	require.NoError(t, err)
 	server, err := mcpserversrepo.New(conn).CreateMCPServer(ctx, mcpserversrepo.CreateMCPServerParams{

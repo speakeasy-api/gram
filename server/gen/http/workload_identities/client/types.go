@@ -2635,6 +2635,25 @@ type WorkloadPlatformSubjectResponseBody struct {
 	Template *string `form:"template,omitempty" json:"template,omitempty" xml:"template,omitempty"`
 	// Whether the rule is the filled template followed by *.
 	Wildcard *bool `form:"wildcard,omitempty" json:"wildcard,omitempty" xml:"wildcard,omitempty"`
+	// Names the default rule beside its alternatives. Empty where there are none.
+	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
+	// Other rules the operator may choose instead, in the order they are offered.
+	// Absent where there are none.
+	Alternatives []*WorkloadPlatformSubjectAlternativeResponseBody `form:"alternatives,omitempty" json:"alternatives,omitempty" xml:"alternatives,omitempty"`
+}
+
+// WorkloadPlatformSubjectAlternativeResponseBody is used to define fields on
+// response body types.
+type WorkloadPlatformSubjectAlternativeResponseBody struct {
+	// Identifies the choice within the platform.
+	Key *string `form:"key,omitempty" json:"key,omitempty" xml:"key,omitempty"`
+	// What the operator chooses it by.
+	Label *string `form:"label,omitempty" json:"label,omitempty" xml:"label,omitempty"`
+	// The subject with {key} placeholders for rule-tier variables; the stem, for a
+	// wildcard rule.
+	Template *string `form:"template,omitempty" json:"template,omitempty" xml:"template,omitempty"`
+	// Whether the rule is the filled template followed by *.
+	Wildcard *bool `form:"wildcard,omitempty" json:"wildcard,omitempty" xml:"wildcard,omitempty"`
 }
 
 // WorkloadFormResponseBody is used to define fields on response body types.
@@ -8277,6 +8296,31 @@ func ValidateWorkloadPlatformVariableResponseBody(body *WorkloadPlatformVariable
 // ValidateWorkloadPlatformSubjectResponseBody runs the validations defined on
 // WorkloadPlatformSubjectResponseBody
 func ValidateWorkloadPlatformSubjectResponseBody(body *WorkloadPlatformSubjectResponseBody) (err error) {
+	if body.Template == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("template", "body"))
+	}
+	if body.Wildcard == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("wildcard", "body"))
+	}
+	for _, e := range body.Alternatives {
+		if e != nil {
+			if err2 := ValidateWorkloadPlatformSubjectAlternativeResponseBody(e); err2 != nil {
+				err = goa.MergeErrors(err, err2)
+			}
+		}
+	}
+	return
+}
+
+// ValidateWorkloadPlatformSubjectAlternativeResponseBody runs the validations
+// defined on WorkloadPlatformSubjectAlternativeResponseBody
+func ValidateWorkloadPlatformSubjectAlternativeResponseBody(body *WorkloadPlatformSubjectAlternativeResponseBody) (err error) {
+	if body.Key == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("key", "body"))
+	}
+	if body.Label == nil {
+		err = goa.MergeErrors(err, goa.MissingFieldError("label", "body"))
+	}
 	if body.Template == nil {
 		err = goa.MergeErrors(err, goa.MissingFieldError("template", "body"))
 	}

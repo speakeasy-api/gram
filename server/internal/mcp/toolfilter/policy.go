@@ -19,7 +19,7 @@ type GatewayOptions struct {
 	DiscoveryMode *metamcp.DiscoveryMode `json:"discovery_mode,omitempty"`
 }
 
-// CatalogMode chooses live discovery or the immutable consent catalog.
+// CatalogMode chooses live discovery or the consent catalog.
 type CatalogMode string
 
 const (
@@ -31,7 +31,7 @@ const (
 
 // CatalogReference binds a connection to its server-owned consent catalog.
 type CatalogReference struct {
-	// ID identifies one immutable catalog in the connection store.
+	// ID identifies one catalog in the connection store.
 	ID uuid.UUID `json:"id"`
 	// Mode determines whether discovery reads the stored or live definitions.
 	Mode CatalogMode `json:"mode"`
