@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
@@ -347,7 +348,7 @@ func (s *Service) directUpstreamChoice(ctx context.Context, w http.ResponseWrite
 	}
 	switch {
 	case errors.Is(err, errUpstreamSelectionMissing), errors.Is(err, errUpstreamSelectionUnusable):
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: "+err.Error(), issuerGateReasonUpstreamSelectionUnavailable)
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: "+err.Error(), issuerGateReasonUpstreamSelectionUnavailable, mcpconnectionattempts.CodeInvalidRemoteSession)
 		return none, true, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	case err != nil:
 		return none, true, oops.E(oops.CodeUnexpected, err, "load upstream client choice").LogError(ctx, s.logger)
@@ -377,7 +378,7 @@ func (s *Service) directPrincipalChoice(ctx context.Context, w http.ResponseWrit
 		}
 		// A key's choice is served only through the typed resolver, never by
 		// the issuer's credentials.
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: agent key choice unusable", issuerGateReasonUpstreamSelectionUnavailable)
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: agent key choice unusable", issuerGateReasonUpstreamSelectionUnavailable, mcpconnectionattempts.CodeCredentialMisconfigured)
 		return none, true, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 	}
 	if agentID, ok := directAgentKeyActor(ctx, authentication.endpoint); ok {
@@ -400,7 +401,7 @@ func (s *Service) directPrincipalChoice(ctx context.Context, w http.ResponseWrit
 			return choice, true, err
 		}
 	}
-	s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: no execution profile choice", issuerGateReasonUpstreamSelectionUnavailable)
+	s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: no execution profile choice", issuerGateReasonUpstreamSelectionUnavailable, mcpconnectionattempts.CodeCredentialMisconfigured)
 	return none, true, s.writeRemoteSessionReconnectChallenge(ctx, w, authentication)
 }
 
@@ -491,7 +492,7 @@ func (s *Service) directAgentKeyError(ctx context.Context, authentication *issue
 	case err == nil:
 		return nil
 	case errors.As(err, &refused):
-		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: agent may not use the server's connection", issuerGateReasonUpstreamSelectionUnavailable)
+		s.recordRemoteSessionRejection(ctx, authentication, "mcp issuer gate rejected: agent may not use the server's connection", issuerGateReasonUpstreamSelectionUnavailable, mcpconnectionattempts.CodeNoServerAccess)
 		return oops.E(oops.CodeForbidden, err, "this agent may not use this server's connection")
 	default:
 		return oops.E(oops.CodeUnexpected, err, "authorize agent key").LogError(ctx, s.logger)

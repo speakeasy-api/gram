@@ -84,6 +84,7 @@ func (m *McpInputs) toInternal() *mcpInputs {
 	}
 
 	return &mcpInputs{
+		request:          nil,
 		projectID:        m.ProjectID,
 		organizationID:   "",
 		toolset:          m.Toolset,

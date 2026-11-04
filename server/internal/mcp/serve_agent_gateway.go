@@ -266,7 +266,7 @@ func (s *Service) agentMemberClientTokens(ctx context.Context, gate *metaGateCon
 	}
 	resolved, err = pinAttachedSession(resolved, connection.attachedSession, false)
 	if err != nil {
-		return nil, agentMemberCredentialError(member)
+		return nil, memberConnectionError{agentMemberCredentialError(member), resolveFailureHappened(err)}
 	}
 	return resolved, nil
 }
