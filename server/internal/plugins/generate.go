@@ -394,7 +394,7 @@ const platformMCPGeneratorVersion = "4"
 // line when it pins a new binary, because new checksums always change the
 // rendered bootstrap script. Any other change to hooks generation needs a
 // manual bump, which the Plugin Generate Check CI workflow enforces.
-const hooksGeneratorVersion = "57"
+const hooksGeneratorVersion = "58"
 
 // Fixed, non-empty sentinels substituted for the per-publish API keys when
 // computing a fingerprint. They must be non-empty: an empty HooksAPIKey omits
@@ -2265,6 +2265,38 @@ export default {
       return daemon
     }
 
+    // The MCP servers in the live OpenClaw config, so the daemon can tell
+    // which URL a <server>__<tool> call reached. Only each entry's name and
+    // its URL without userinfo, query or fragment leave the process: headers,
+    // env and command carry credentials and are never read. A failed config
+    // read sends no servers rather than breaking the hook.
+    const configuredMcpServers = () => {
+      try {
+        const config = api.runtime?.config?.current?.() ?? api.config
+        const servers = config?.mcp?.servers
+        if (servers == null || typeof servers !== "object") return []
+        const out = []
+        for (const [name, server] of Object.entries(servers)) {
+          if (server == null || typeof server !== "object" || server.enabled === false) continue
+          if (typeof server.url !== "string") continue
+          let url
+          try {
+            url = new URL(server.url)
+          } catch {
+            continue
+          }
+          url.username = ""
+          url.password = ""
+          url.search = ""
+          url.hash = ""
+          out.push({ name, url: url.toString() })
+        }
+        return out
+      } catch {
+        return []
+      }
+    }
+
     const call = (hook, event, ctx, timeoutMs) => {
       if (child === null) {
         if (stopped) return Promise.resolve({ timedOut: true })
@@ -2278,6 +2310,10 @@ export default {
       // as soon as the shim gives up (observe frames omit it).
       const frame = { seq: id, hook, event, ctx }
       if (timeoutMs !== undefined) frame.timeoutMs = timeoutMs
+      if (hook === "before_tool_call" || hook === "after_tool_call") {
+        const mcpServers = configuredMcpServers()
+        if (mcpServers.length > 0) frame.mcpServers = mcpServers
+      }
       child.stdin.write(JSON.stringify(frame) + "\n")
       return new Promise((resolve) => {
         pending.set(id, resolve)
