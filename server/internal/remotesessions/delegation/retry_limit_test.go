@@ -76,6 +76,37 @@ func TestDelegationRetryLimitIgnoresClientRejections(t *testing.T) {
 	require.Equal(t, "old-refresh", delegationPlain(t, s, c.refresh))
 }
 
+func TestDelegationRetryLimitStartsAfterClientOrSetupRecovery(t *testing.T) {
+	t.Parallel()
+	for _, initial := range []RefreshFailure{RefreshClientRejected, RefreshSetup} {
+		for _, refusal := range []RefreshFailure{RefreshConfiguration, RefreshRetryable} {
+			t.Run(string(initial)+"/"+string(refusal), func(t *testing.T) {
+				t.Parallel()
+				s, store, p, b, allow := newDelegationUnitFixture(t)
+				require.NoError(t, s.RetainVerifiedLogin(t.Context(), p, b.HumanID, delegationLogin(p, s.now(), "old-id", "old-refresh", 30*time.Second), true))
+				s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+					return nil, &RefreshError{Kind: initial}
+				}
+				_, err := s.Resolve(t.Context(), b, allow)
+				require.ErrorIs(t, err, ErrRetainedConfiguration)
+				require.True(t, store.rows[b].observedAt.IsZero())
+				delegationMoveClock(s, configurationRetryLimit+24*time.Hour)
+				s.refreshIdentity = func(context.Context, Provider, string, string, string) (*RefreshResult, error) {
+					return nil, &RefreshError{Kind: refusal}
+				}
+				_, err = s.Resolve(t.Context(), b, allow)
+				require.ErrorIs(t, err, ErrRetainedConfiguration)
+				require.Equal(t, "old-refresh", delegationPlain(t, s, store.rows[b].refresh))
+				require.Equal(t, s.now(), store.rows[b].observedAt)
+				delegationMoveClock(s, configurationRetryLimit)
+				_, err = s.Resolve(t.Context(), b, allow)
+				require.ErrorIs(t, err, ErrReauthentication)
+				require.Empty(t, store.rows[b].refresh)
+			})
+		}
+	}
+}
+
 func TestDelegationRetryLimitCountsThroughTemporaryFailures(t *testing.T) {
 	t.Parallel()
 	s, store, _, b, allow := failedConfigurationFixture(t)

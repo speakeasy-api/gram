@@ -691,7 +691,7 @@ func TestDelegationServiceRefreshScopeErrorRequiresRemediation(t *testing.T) {
 	}
 	for range 2 {
 		a, err := s.Resolve(t.Context(), b, allow)
-		require.ErrorIs(t, err, ErrConfiguration)
+		require.ErrorIs(t, err, ErrRetainedConfiguration)
 		require.Empty(t, a.Value())
 		require.NotContains(t, err.Error(), "secret-")
 	}
@@ -765,10 +765,14 @@ func TestDelegationConfigurationFailurePausesEveryCheckUntilRetry(t *testing.T) 
 		_, err := probe.Resolve(t.Context(), b, allow)
 		require.ErrorIs(t, err, ErrConfiguration)
 		err = probe.Check(t.Context(), b, allow)
-		require.ErrorIs(t, err, ErrConfiguration)
+		require.ErrorIs(t, err, ErrRetainedConfiguration)
 		require.NotErrorIs(t, err, ErrStaleRegistration)
 		require.ErrorIs(t, probe.CheckResolvable(t.Context(), b, allow), ErrConfiguration)
 	}
+	refused := delegationTestAuthority(func(context.Context, Binding) error { return ErrConfiguration })
+	err := s.Check(t.Context(), b, refused)
+	require.ErrorIs(t, err, ErrConfiguration)
+	require.NotErrorIs(t, err, ErrRetainedConfiguration, "a refused authority keeps no sign-in to retry")
 }
 
 func TestDelegationConfigurationFailureRetriesOncePerDelay(t *testing.T) {
