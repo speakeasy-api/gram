@@ -68,7 +68,8 @@ func newTestPackagesService(t *testing.T) (context.Context, *testInstance) {
 	ctx = authztest.InitAuthContext(t, ctx, conn, sessionManager)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	svc := packages.NewService(logger, tracerProvider, conn, sessionManager, authzEngine)
+	authzClient := authztest.NewParityClient(t, authzEngine)
+	svc := packages.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, authzClient)
 
 	return ctx, &testInstance{
 		service:        svc,
