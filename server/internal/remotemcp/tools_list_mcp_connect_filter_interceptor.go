@@ -45,7 +45,7 @@ import (
 // member ever carry tool identities the way tools does, this filter will not
 // scrub it.
 type ToolsListMCPConnectFilterInterceptor struct {
-	authz       *authz.Engine
+	authz       *authz.Client
 	resolver    ToolDispositionResolver
 	mcpServerID string
 	projectID   string
@@ -55,14 +55,13 @@ type ToolsListMCPConnectFilterInterceptor struct {
 var _ proxy.ToolsListResponseInterceptor = (*ToolsListMCPConnectFilterInterceptor)(nil)
 
 // NewToolsListMCPConnectFilterInterceptor constructs an interceptor scoped to
-// a single Remote MCP Server. mcpServerID is the [authz.Check] ResourceID, the
-// mcp_servers row id (NOT the remote_mcp_servers id), so the filter resolves
-// grants against the same row as the handler's upfront server-level
-// `mcp:connect` check and as [authz.MCPToolCallCheck] does for the paired
-// tools/call enforcement.
-func NewToolsListMCPConnectFilterInterceptor(authzEngine *authz.Engine, resolver ToolDispositionResolver, mcpServerID, projectID string, logger *slog.Logger) *ToolsListMCPConnectFilterInterceptor {
+// a single Remote MCP Server. mcpServerID is the mcp_servers row id (NOT the
+// remote_mcp_servers id), so the filter resolves grants against the same row
+// as the handler's upfront server-level connect check and as the paired
+// tools/call enforcement does through [authz.MCPServerRef.CallTool].
+func NewToolsListMCPConnectFilterInterceptor(authzClient *authz.Client, resolver ToolDispositionResolver, mcpServerID, projectID string, logger *slog.Logger) *ToolsListMCPConnectFilterInterceptor {
 	return &ToolsListMCPConnectFilterInterceptor{
-		authz:       authzEngine,
+		authz:       authzClient,
 		resolver:    resolver,
 		mcpServerID: mcpServerID,
 		projectID:   projectID,
@@ -76,8 +75,8 @@ func (i *ToolsListMCPConnectFilterInterceptor) Name() string {
 }
 
 // InterceptToolsListResponse implements [proxy.ToolsListResponseInterceptor].
-// It builds one [authz.MCPToolCallCheck] per tool, hands the batch to
-// [authz.Engine.FindMatched] for per-tool match indicators (one challenge-log
+// It builds one [authz.MCPServerRef.CallTool] operation per tool, hands the
+// batch to [authz.Client.MatchMany] for per-tool match indicators (one challenge-log
 // entry for the batch, not N), and rebuilds the tool slice in input order
 // keeping only authorized entries.
 //
@@ -106,16 +105,12 @@ func (i *ToolsListMCPConnectFilterInterceptor) InterceptToolsListResponse(ctx co
 		return fmt.Errorf("resolve remote MCP tool dispositions: %w", err)
 	}
 
-	checks := make([]authz.Check, len(tools))
+	ops := make([]authz.Operation, len(tools))
 	for idx, t := range tools {
-		checks[idx] = authz.MCPToolCallCheck(i.mcpServerID, authz.MCPToolCallDimensions{
-			Tool:        t.Name,
-			Disposition: dispositions[t.Name],
-			ProjectID:   i.projectID,
-		})
+		ops[idx] = authz.MCPServer(i.projectID, i.mcpServerID).CallTool(t.Name, dispositions[t.Name])
 	}
 
-	matched, err := i.authz.FindMatched(ctx, checks)
+	matched, err := i.authz.MatchMany(ctx, ops)
 	if err != nil {
 		return fmt.Errorf("filter mcp:connect tools: %w", err)
 	}

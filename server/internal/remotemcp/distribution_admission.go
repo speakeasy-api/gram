@@ -28,7 +28,7 @@ func (s *Service) checkRemoteDistributionAdmission(ctx context.Context, tx pgx.T
 	}
 	// Changing the URL is a write: an organization administrator's own change
 	// is recorded as the Shadow MCP approval it stands for.
-	ctx, err := admission.AdministratorWriteContext(ctx, s.authz, organizationID)
+	ctx, err := admission.AdministratorWriteContext(ctx, s.authzEngine, organizationID)
 	if err != nil {
 		return oops.E(oops.CodeUnavailable, err, "distribution approval could not be verified safely").LogError(ctx, s.logger)
 	}
