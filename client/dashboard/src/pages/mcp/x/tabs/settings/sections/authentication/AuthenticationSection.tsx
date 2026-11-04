@@ -271,6 +271,7 @@ function StandardAuthenticationSectionBody({
           onOpenChange={setDeleteOpen}
           userSessionIssuerId={userSessionIssuerId}
           issuer={deleteTarget}
+          mcpServerId={target.mcpServerId}
         />
       )}
 

@@ -143,9 +143,7 @@ type consentTemplateData struct {
 	RedirectURI        string
 	ScriptURL          string
 	RemoteSessionCards []remoteSessionCard
-	// ConsentEnabled gates the "Give Access" button. True when there are no
-	// remote-session challenges, or when at least one challenge has been
-	// completed (a card is Connected). Cancel is always available.
+	// ConsentEnabled gates the "Give Access" button; the service cards, a typed choice or a gateway's inventory decide it.
 	ConsentEnabled bool
 	// ApprovalError blocks approval while keeping Cancel available.
 	ApprovalError *consentApprovalError
@@ -640,6 +638,14 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 			}
 		}
 	}
+	if failed := r.URL.Query().Get("validate_failed"); failed != "" {
+		for i := range cards {
+			// An expired or unconnected card already names its action.
+			if cards[i].ClientID == failed && cards[i].Connected {
+				cards[i].ValidationNotice = noWorkingSignInMessage
+			}
+		}
+	}
 
 	// A gateway's page approves the gateway and lists its servers; the
 	// services it shows are those of one server, on that server's connect
@@ -687,18 +693,14 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 
 	connectedCardCount := 0
-	chainedCardCount := 0
 	autoRefreshHasSessions := false
 	// Every card already carries the organization's policy applied to its own
 	// stored preference, so the page value is on only when none of them is off.
 	everyCardAutoRefreshes := true
 	for _, c := range cards {
-		// A chained service counts once its exchange is known to work; access rules use chainedCardCount.
+		// The page's count: a chained service counts once its exchange works. consentCardsApprovable decides approval.
 		if c.Connected || c.ChainCheck == chainCheckConnected {
 			connectedCardCount++
-		}
-		if c.Chained {
-			chainedCardCount++
 		}
 		if c.Connected || c.Expired || c.Unroutable {
 			autoRefreshHasSessions = true
@@ -707,7 +709,7 @@ func (s *Service) serveConsentGet(w http.ResponseWriter, r *http.Request, endpoi
 	}
 	autoRefreshOn := len(cards) > 0 && everyCardAutoRefreshes
 	// Gateway capture below decides whether any member can be approved.
-	consentEnabled := gateway != nil || len(cards) == 0 || connectedCardCount > 0 || chainedCardCount > 0
+	consentEnabled := gateway != nil || consentCardsApprovable(cards)
 	if upstreamAuth != nil {
 		// The chosen credential decides, not whether some service card is
 		// connected: a shared credential needs no connection at all.
@@ -1433,12 +1435,25 @@ func (s *Service) serveConsentPost(w http.ResponseWriter, r *http.Request, endpo
 	}
 	authClientPicks, err := s.consentDirectAuthClientPick(ctx, endpoint, pickState, r.PostForm.Get("auth_client"), upstreamPicks, cards)
 	if err != nil {
+		if errors.Is(err, errConsentNoUsableConnection) {
+			// Keeps the challenge, so the person can connect and approve.
+			logger.InfoContext(ctx, "consent approval refused", attr.SlogError(err))
+			http.Redirect(w, r, consentFullPageURL(endpoint, challengeState), http.StatusSeeOther)
+			return nil
+		}
 		if errors.Is(err, errConsentConfigurationChanged) {
 			t.Refuse(ctx, mcpconnectionattempts.CodeConnectionChanged)
 			return oops.E(oops.CodeFailedPrecondition, err, "The credential you chose can no longer be used. Reload this page to choose again.").LogWarn(ctx, logger)
 		}
 		t.Refuse(ctx, mcpconnectionattempts.CodeInternalError)
 		return oops.E(oops.CodeUnavailable, err, "read upstream credential choice").LogError(ctx, logger)
+	}
+
+	if err := s.validateDirectConsentInventory(ctx, endpoint, boundInventory, authClientPicks); err != nil {
+		if errors.Is(err, errConsentConfigurationChanged) {
+			return oops.E(oops.CodeFailedPrecondition, err, "The credential changed; reload the tool preview before approving.").LogWarn(ctx, logger)
+		}
+		return oops.E(oops.CodeUnavailable, err, "validate consent inventory credential").LogError(ctx, logger)
 	}
 
 	if materializeGateway {

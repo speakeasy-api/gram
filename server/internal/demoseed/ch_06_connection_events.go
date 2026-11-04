@@ -33,15 +33,18 @@ const (
 	// seededDevices is how many devices seeded attempts come from.
 	seededDevices = 6
 
-	// repeatedOneIn makes one failed attempt in this many stand for repeated failures.
-	repeatedOneIn = 4
+	// onceOneIn makes one attempt in this many a single refused MCP request, as Once records it.
+	onceOneIn = 6
+
+	// repeatedOneIn makes one such request in this many stand for repeated ones.
+	repeatedOneIn = 2
 
 	// maxSeededRepeats is the most held-back rows one seeded row stands for.
 	maxSeededRepeats = 40
 
-	// demoConnectionProvider and demoConnectionApp are fictional example hosts.
+	// demoConnectionProvider is a fictional host. demoConnectionApp is a catalog app, since only those keep their host.
 	demoConnectionProvider = "https://auth.provider.example.com/oauth"
-	demoConnectionApp      = "https://client.example.com/oauth/metadata.json"
+	demoConnectionApp      = "https://claude.ai/oauth/claude-code-client-metadata"
 )
 
 // connectionEnding is how one seeded attempt ends.
@@ -98,6 +101,14 @@ func (s *seeder) chConnectionEvents(ctx context.Context, ch driver.Conn) error {
 			scope := scopes[hash64(s.name(key), "scope")%uint64(len(scopes))]
 			started := s.now.AddDate(0, 0, -day-1).Add(time.Duration(hash64(s.name(key), "at")%connectionAttemptWindowSeconds) * time.Second)
 			attempt := mcpconnectionattempts.AttemptAt(s.det(key), started, scope)
+			if hash64(s.name(key), "once")%onceOneIn == 0 {
+				row, err := s.connectionOnceRow(attempt, key)
+				if err != nil {
+					return err
+				}
+				rows = append(rows, row)
+				continue
+			}
 			ending := connectionEndings[hash64(s.name(key), "ending")%uint64(len(connectionEndings))]
 			abandoned := hash64(s.name(key), "abandoned")%abandonedOneIn == 0
 
@@ -132,20 +143,46 @@ func (s *seeder) chConnectionEvents(ctx context.Context, ch driver.Conn) error {
 			settings: "",
 			msg:      "demo seed postflight: connection attempts must cover several clients and some repeats",
 		},
+		{
+			cond:     `(SELECT countIf(client_family = 'browser') FROM mcp_connection_events WHERE organization_id = @org) = 0 OR (SELECT countIf(client_family != 'browser' AND step NOT IN ('inbound_token', 'mcp_request')) FROM mcp_connection_events WHERE organization_id = @org) > 0 OR (SELECT countIf(repeats > 0 AND NOT (is_final AND step = 'mcp_request')) FROM mcp_connection_events WHERE organization_id = @org) > 0`,
+			settings: "",
+			msg:      "demo seed postflight: sign-in rows come from a browser, and only one-row requests carry repeats",
+		},
 	})
 }
 
+// connectionOnceRow is one refused MCP request. Only these rows carry repeats, as Once
+// holds back a repeating key and counts it on the next row.
+func (s *seeder) connectionOnceRow(attempt mcpconnectionattempts.Attempt, key string) (mcpconnectionattempts.Row, error) {
+	row, err := mcpconnectionattempts.RowAt(attempt, mcpconnectionattempts.StepMCPRequest, mcpconnectionattempts.CodeInvalidBearerToken, true, attempt.StartedAt())
+	if err != nil {
+		return row, fmt.Errorf("build connection event: %w", err)
+	}
+	row.TraceID = md5Hex(s.name(key + "-once"))
+	client := connectionClients[hash64(s.name(key), "client")%uint64(len(connectionClients))]
+	row.ClientFamily, row.ClientVersion = client.family, client.version
+	row.DeviceKey = s.connectionDevice(key)
+	if hash64(s.name(key), "repeats")%repeatedOneIn == 0 {
+		row.Repeats = uint32(hash64(s.name(key), "repeat-count")%maxSeededRepeats) + 1
+	}
+	return row, nil
+}
+
+func (s *seeder) connectionDevice(key string) string {
+	return md5Hex(s.name("connection-device-" + strconv.FormatUint(hash64(s.name(key), "device")%seededDevices, 10)))
+}
+
 // connectionAttemptRows builds one attempt: the authorize step, then its ending
-// unless it was abandoned there.
+// unless it was abandoned there. Sign-in pages are opened in a browser, and only
+// the token step comes from the client itself.
 func (s *seeder) connectionAttemptRows(attempt mcpconnectionattempts.Attempt, key string, ending connectionEnding, abandoned bool) ([]mcpconnectionattempts.Row, error) {
 	first, err := mcpconnectionattempts.RowAt(attempt, mcpconnectionattempts.StepInboundAuthorize, mcpconnectionattempts.ResultAccepted, false, attempt.StartedAt())
 	if err != nil {
 		return nil, fmt.Errorf("build connection event: %w", err)
 	}
 	first.TraceID = md5Hex(s.name(key + "-authorize"))
-	client := connectionClients[hash64(s.name(key), "client")%uint64(len(connectionClients))]
-	first.ClientFamily, first.ClientVersion = client.family, client.version
-	first.DeviceKey = md5Hex(s.name("connection-device-" + strconv.FormatUint(hash64(s.name(key), "device")%seededDevices, 10)))
+	first.ClientFamily = mcpconnectionattempts.FamilyBrowser
+	first.DeviceKey = s.connectionDevice(key)
 	if abandoned {
 		return s.stoppedAttemptRows(attempt, key, first)
 	}
@@ -169,9 +206,10 @@ func (s *seeder) connectionAttemptRows(attempt mcpconnectionattempts.Attempt, ke
 		return nil, fmt.Errorf("build connection event: %w", err)
 	}
 	last.TraceID = md5Hex(s.name(key + "-ending"))
-	last.ClientFamily, last.ClientVersion, last.DeviceKey = client.family, client.version, first.DeviceKey
-	if ending.what != mcpconnectionattempts.ResultCodeIssued && hash64(s.name(key), "repeats")%repeatedOneIn == 0 {
-		last.Repeats = uint32(hash64(s.name(key), "repeat-count")%maxSeededRepeats) + 1
+	last.ClientFamily, last.DeviceKey = mcpconnectionattempts.FamilyBrowser, first.DeviceKey
+	if ending.step == mcpconnectionattempts.StepInboundToken {
+		client := connectionClients[hash64(s.name(key), "client")%uint64(len(connectionClients))]
+		last.ClientFamily, last.ClientVersion = client.family, client.version
 	}
 	return append(rows, last), nil
 }

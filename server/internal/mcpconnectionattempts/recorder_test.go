@@ -488,6 +488,41 @@ func TestRecord_FailedInsertIsNotRetried(t *testing.T) {
 	require.Equal(t, int64(2), recorder.dropped(t, dropInsertFailed))
 }
 
+// With ClickHouse stalled, shutdown waits for one failed insert, not one per batch.
+func TestShutdown_StopsWritingAfterAFailedInsert(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	conn := &scriptedConn{Conn: nil, block: release, err: errors.New("stalled"), prepares: atomic.Int64{}}
+	cfg := testConfig()
+	cfg.maxBatch = 1
+	cfg.insertTimeout = time.Minute
+	recorder := newTestRecorder(t, conn, cfg)
+	attempt := Begin(testScope())
+
+	recorder.Step(t.Context(), attempt, StepInboundAuthorize, ResultAccepted)
+	require.Eventually(t, func() bool { return conn.prepares.Load() == 1 }, 10*time.Second, time.Millisecond)
+	for range 5 {
+		recorder.Step(t.Context(), attempt, StepInboundAuthorize, ResultAccepted)
+	}
+	stopped := make(chan error, 1)
+	go func() { stopped <- recorder.Shutdown(t.Context()) }()
+	require.Eventually(t, func() bool {
+		select {
+		case <-recorder.stop:
+			return true
+		default:
+			return false
+		}
+	}, 10*time.Second, time.Millisecond)
+	close(release)
+	require.NoError(t, <-stopped)
+
+	require.Equal(t, int64(1), conn.prepares.Load())
+	require.Equal(t, int64(1), recorder.dropped(t, dropInsertFailed))
+	require.Equal(t, int64(5), recorder.dropped(t, dropShutdown))
+}
+
 func TestRecord_AfterShutdownDropsAndCounts(t *testing.T) {
 	t.Parallel()
 
@@ -617,29 +652,42 @@ func TestLogs_OnWrites(t *testing.T) {
 	require.Zero(t, recorder.dropped(t, dropLogsOff))
 }
 
-func TestLogs_TurnedOffWritesNothing(t *testing.T) {
+func TestLogs_OffWritesNothing(t *testing.T) {
 	t.Parallel()
 
-	features := realFeatures(t)
-	organizationID := "org-logs-off-" + uuid.NewString()
-	require.NoError(t, features.SetFeatureEnabled(t.Context(), organizationID, productfeatures.FeatureLogs, true))
-	require.NoError(t, features.SetFeatureEnabled(t.Context(), organizationID, productfeatures.FeatureLogs, false))
+	turnedOff := func(t *testing.T, organizationID string) func(context.Context, string) (bool, error) {
+		t.Helper()
+		features := realFeatures(t)
+		require.NoError(t, features.SetFeatureEnabled(t.Context(), organizationID, productfeatures.FeatureLogs, true))
+		require.NoError(t, features.SetFeatureEnabled(t.Context(), organizationID, productfeatures.FeatureLogs, false))
+		return realLogsCheck(features)
+	}
+	neverConfigured := func(t *testing.T, _ string) func(context.Context, string) (bool, error) {
+		t.Helper()
+		return realLogsCheck(realFeatures(t))
+	}
+	noCheck := func(*testing.T, string) func(context.Context, string) (bool, error) { return nil }
 
-	recorder, events, rollup := recordAttemptWithLogs(t, realLogsCheck(features), organizationID)
-	require.Zero(t, events)
-	require.Zero(t, rollup)
-	require.Equal(t, int64(3), recorder.dropped(t, dropLogsOff))
-	require.Equal(t, int64(3), stepsCounted(t, recorder), "the step metric has no org, so it has no gap")
-}
+	cases := []struct {
+		name  string
+		check func(*testing.T, string) func(context.Context, string) (bool, error)
+	}{
+		{"turned off", turnedOff},
+		{"never configured", neverConfigured},
+		{"no check", noCheck},
+	}
+	for _, tc := range cases {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
 
-func TestLogs_NeverConfiguredWritesNothing(t *testing.T) {
-	t.Parallel()
-
-	organizationID := "org-logs-unset-" + uuid.NewString()
-	recorder, events, rollup := recordAttemptWithLogs(t, realLogsCheck(realFeatures(t)), organizationID)
-	require.Zero(t, events)
-	require.Zero(t, rollup)
-	require.Equal(t, int64(3), recorder.dropped(t, dropLogsOff))
+			organizationID := "org-logs-off-" + uuid.NewString()
+			recorder, events, rollup := recordAttemptWithLogs(t, tc.check(t, organizationID), organizationID)
+			require.Zero(t, events)
+			require.Zero(t, rollup)
+			require.Equal(t, int64(3), recorder.dropped(t, dropLogsOff))
+			require.Equal(t, int64(3), stepsCounted(t, recorder), "the step metric has no org, so it has no gap")
+		})
+	}
 }
 
 // A failed check never guesses on, and the caller never sees it.
@@ -652,15 +700,6 @@ func TestLogs_LookupErrorWritesNothing(t *testing.T) {
 	require.Zero(t, events)
 	require.Zero(t, rollup)
 	require.Equal(t, int64(3), recorder.dropped(t, dropLogsCheck))
-}
-
-func TestLogs_NoCheckWritesNothing(t *testing.T) {
-	t.Parallel()
-
-	organizationID := "org-logs-nil-" + uuid.NewString()
-	recorder, events, _ := recordAttemptWithLogs(t, nil, organizationID)
-	require.Zero(t, events)
-	require.Equal(t, int64(3), recorder.dropped(t, dropLogsOff))
 }
 
 func TestLogs_SlowLookupDoesNotBlockTheRequestPath(t *testing.T) {

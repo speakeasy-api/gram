@@ -364,6 +364,7 @@ const ROUTE_PAGES: PageTree<RouteStructure> = {
       details: {
         component: MCPServerDetails,
         subPages: {
+          setup: {},
           overview: {},
           inspect: {},
           tools: {},

@@ -79,6 +79,9 @@ type consentInventoryTool struct {
 // consentToolInventory holds complete gateway discovery or accumulates a
 // single-server attempt across tools/list pages.
 type consentToolInventory struct {
+	// DirectAuthClient binds a direct preview to its typed credential (nil UUID for no auth).
+	DirectAuthClient *uuid.UUID `json:"direct_auth_client,omitempty"`
+
 	CompletedAt time.Time `json:"completed_at"`
 
 	// BackendHash pins evidence to the configured backend, not just a tool name.
@@ -165,17 +168,18 @@ func (s *Service) loadConsentInventoryDraft(ctx context.Context, endpoint *Resol
 		return consentToolInventory{}, fmt.Errorf("%w: %w", errConsentInventoryUnavailable, err)
 	}
 	return consentToolInventory{
-		CompletedAt:    time.Time{},
-		BackendHash:    backendHash,
-		StateID:        stateID,
-		Attempt:        attempt,
-		Resource:       endpointToolSelectionResource(endpoint),
-		Tools:          []consentInventoryTool{},
-		ExpectedCursor: "",
-		Complete:       false,
-		McpSessionID:   "",
-		MemberBindings: nil,
-		MemberOutcomes: nil,
+		DirectAuthClient: nil,
+		CompletedAt:      time.Time{},
+		BackendHash:      backendHash,
+		StateID:          stateID,
+		Attempt:          attempt,
+		Resource:         endpointToolSelectionResource(endpoint),
+		Tools:            []consentInventoryTool{},
+		ExpectedCursor:   "",
+		Complete:         false,
+		McpSessionID:     "",
+		MemberBindings:   nil,
+		MemberOutcomes:   nil,
 	}, nil
 }
 

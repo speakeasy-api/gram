@@ -23,8 +23,8 @@ const (
 	onceOrgBurst     = 200
 	onceOrgPerSecond = 10
 
-	// onceQueueShareNumerator and onceQueueShareDenominator give Once rows 3/4 of the queue,
-	// so a burst across organizations can't crowd out Step and End.
+	// onceQueueShareNumerator and onceQueueShareDenominator give Once and Start rows 3/4 of the
+	// queue, so a burst across organizations can't crowd out Step and End.
 	onceQueueShareNumerator   = 3
 	onceQueueShareDenominator = 4
 
@@ -160,6 +160,14 @@ func (l *onceLimiter) take(row Row, now time.Time) onceDecision {
 	entry.template = Row{} //nolint:exhaustruct // drops the held-back row
 	delete(l.withPending, key)
 	return onceDecision{allowed: true, repeats: repeats, lost: l.takeLost()}
+}
+
+// allowOrganization spends from the organization's ceiling alone, for a Start row.
+func (l *onceLimiter) allowOrganization(organizationID string, now time.Time) bool {
+	l.mu.Lock()
+	defer l.mu.Unlock()
+
+	return l.org(organizationID).AllowN(now, 1)
 }
 
 // holdBack counts a row another limit refused, and returns any count lost to eviction.

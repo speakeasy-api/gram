@@ -260,6 +260,59 @@ func TestOnce_LeavesTheQueueReserveForRealAttempts(t *testing.T) {
 	require.Equal(t, int64(1), recorder.dropped(t, dropQueueFull), "real attempts aren't held back, only limited by the queue")
 }
 
+// Anyone can start an attempt, so a flood of new ones stops at the organization's ceiling.
+func TestStart_AFloodStopsAtTheOrganizationCeiling(t *testing.T) {
+	t.Parallel()
+
+	conn := &slowConn{Conn: nil, delay: 0, sizes: nil}
+	cfg := testConfig()
+	cfg.queueSize = 4096
+	recorder := newTestRecorder(t, conn, cfg)
+
+	const flood = onceOrgBurst * 3
+	for range flood {
+		recorder.Start(t.Context(), Begin(testScope()), StepInboundAuthorize, ResultAccepted)
+	}
+	other := Begin(ServerScope("org-other", uuid.New(), uuid.New(), AppDCR))
+	recorder.Start(t.Context(), other, StepInboundAuthorize, ResultAccepted)
+	recorder.End(t.Context(), other, StepInboundConsent, CodeCanceled)
+	require.NoError(t, recorder.Shutdown(t.Context()))
+
+	written := 0
+	for _, size := range conn.sizes {
+		written += size
+	}
+	// The ceiling refills at 10 a second, so a slow loop may earn a few more.
+	require.InDelta(t, onceOrgBurst+2, written, 5, "the ceiling, then another organization's whole attempt")
+	require.Equal(t, int64(flood+2-written), recorder.dropped(t, dropRateLimited))
+}
+
+// New attempts stop at the same share of the queue Once rows have.
+func TestStart_LeavesTheQueueReserveForAttemptsUnderWay(t *testing.T) {
+	t.Parallel()
+
+	release := make(chan struct{})
+	defer close(release)
+	conn := &scriptedConn{Conn: nil, block: release, err: errors.New("stalled"), prepares: atomic.Int64{}}
+	cfg := testConfig()
+	cfg.queueSize = 8
+	cfg.maxBatch = 1
+	cfg.insertTimeout = time.Minute
+	recorder := newTestRecorder(t, conn, cfg)
+	attempt := Begin(testScope())
+
+	recorder.Step(t.Context(), attempt, StepInboundAuthorize, ResultAccepted)
+	require.Eventually(t, func() bool { return conn.prepares.Load() == 1 }, 10*time.Second, time.Millisecond)
+
+	for range 20 {
+		recorder.Start(t.Context(), Begin(testScope()), StepInboundAuthorize, ResultAccepted)
+	}
+	require.Equal(t, int64(14), recorder.dropped(t, dropQueueReserve), "6 of 8 slots go to new attempts")
+
+	recorder.End(t.Context(), attempt, StepInboundConsent, CodeCanceled)
+	require.Zero(t, recorder.dropped(t, dropQueueFull), "an attempt under way took the reserve")
+}
+
 // repeatsConn keeps each row's attempt count: one for the row, plus what it stands for.
 type repeatsConn struct {
 	driver.Conn

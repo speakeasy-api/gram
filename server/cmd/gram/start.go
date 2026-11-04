@@ -316,8 +316,9 @@ func restoreLocalPluginRepositories(
 // (POST /mcp/{mcpSlug}).
 //
 // Note: the effective drain is also bounded by infrastructure settings such as
-// terminationGracePeriodSeconds in Kubernetes, which must be set above this
-// value for the full window to be honored.
+// terminationGracePeriodSeconds in Kubernetes. The MCP service drains for up to
+// this plus probeDrainTimeout plus its 15s upstream refresh drain, about 95s,
+// so the grace period must exceed that for the full window to be honored.
 const shutdownDrainTimeout = 60 * time.Second
 
 // relayedRequestInterruptAfter is how long after SIGTERM a request relayed to
@@ -1154,6 +1155,7 @@ func newStartCommand() *cli.Command {
 				telemSvc,
 				auditLogger,
 				platformtoolsruntime.WithTriggerTools(triggerApp),
+				platformtoolsruntime.WithThreadContextAuthorizer(authzEngine),
 				platformtoolsruntime.WithSlackHTTPClient(guardianPolicy.PooledClient()),
 				platformtoolsruntime.WithFileURLMinting(encryptionClient, serverURL),
 				platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),
@@ -1494,6 +1496,7 @@ func newStartCommand() *cli.Command {
 			mux.Use(metering.NewMCPBandwidthMiddleware(logger, publishers.MeterReadings))
 			mux.Use(middleware.SessionMiddleware)
 			mux.Use(middleware.RBACOverrideMiddleware())
+			mux.Use(middleware.DenialHeaders())
 			// LiteLLM dispatch must run before canonical OTLP ingest because
 			// the metrics path is shared with harness telemetry.
 			mux.Use(litellm.OTLPMetricsDispatch(func() *litellm.Service { return litellmService }))
@@ -1519,7 +1522,10 @@ func newStartCommand() *cli.Command {
 				WithWorkloadTokenTargets(mcpService)
 			agentService.SetAgentVersions(deviceagentversions.NewStore(redisClient))
 			agentService.WithStateReportLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), "agent-report-state", agent.StateReportRate, ratelimit.WithMetrics(meterProvider)))
-			agentService.WithNewStateReportLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), "agent-report-state-new", agent.NewStateReportRate, ratelimit.WithMetrics(meterProvider)))
+			agentService.WithCrashReportLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), "agent-report-crash", agent.CrashReportRate, ratelimit.WithMetrics(meterProvider))).
+				WithCrashReportCredentialLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), "agent-report-crash-credential", agent.CrashReportCredentialRate, ratelimit.WithMetrics(meterProvider))).
+				WithMeterProvider(meterProvider).
+				WithNewStateReportLimiter(ratelimit.New(ratelimit.NewRedisStore(redisClient), "agent-report-state-new", agent.NewStateReportRate, ratelimit.WithMetrics(meterProvider)))
 			agent.Attach(mux, agentService)
 			upstreamRevoker := remotesessions.NewUpstreamRevoker(logger, tracerProvider, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, clientAssertionSigner)
 			agentmanagement.Attach(mux, agentmanagement.NewService(logger, tracerProvider, db, sessionManager, authzEngine, auditLogger, chatSessionsManager, upstreamRevoker))
@@ -1580,6 +1586,7 @@ func newStartCommand() *cli.Command {
 			if err := hooks.AttachAHP(mux, hooksService); err != nil {
 				return fmt.Errorf("attach AHP hooks: %w", err)
 			}
+			hooks.AttachTranscript(mux, hooksService)
 			anthropicinference.Attach(mux, logger, anthropicinference.NewService(logger, meterProvider, db, chatWriter, riskScanner, &background.TemporalChatTitleGenerator{TemporalEnv: temporalEnv}), aiintegrations.NewAnthropicInferenceResolver(db, encryptionClient))
 			litellmService = litellm.NewService(logger, tracerProvider, db, chDB, sessionManager, authzEngine, hooksService, litellmCalls, litellmTraceProcessor, litellmMetricProcessor, litellmHealthProcessor, litellmInstanceResolver, auditLogger, c.String("environment"))
 			litellm.Attach(mux, litellmService)
@@ -1812,6 +1819,7 @@ func newStartCommand() *cli.Command {
 			identityCommitter := remotesessions.NewIdentityCommitter(logger, db, encryptionClient, auditLogger, serverURL, guardianPolicy, tunnelHTTPClient, oauthregistration.NewMetrics(logger, meterProvider))
 			identityCommitter.SetCallbackOrigins(callbackOrigins)
 			remoteSessionsService := remotesessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, authzEngine, encryptionClient, env, guardianPolicy, tunnelHTTPClient, auditLogger, serverURL, identityCommitter, remotesessions.NewRefreshService(logger, meterProvider, db, encryptionClient, guardianPolicy, tunnelHTTPClient, remoteSessionsCache, remotesessions.WithRefreshIDTokenVerifier(idTokenVerifier), remotesessions.WithRefreshIssuerMetadataRefresher(issuerMetadataRefresher), remotesessions.WithRefreshSessionEnricher(remoteSessionEnricher), remotesessions.WithRefreshTokenEndpointAssertionSigner(clientAssertionSigner)), productFeatures, protectedResources)
+			remoteSessionsService.SetServerConnectionTester(platformmcp.NewRemoteMCPReadinessProber(logger, db, encryptionClient, guardianPolicy, remoteChallengeManager))
 			userSessionsService := usersessions.NewService(logger, tracerProvider, meterProvider, db, sessionManager, chatSessionsManager, authzEngine, auditLogger, guardianPolicy, tunnelHTTPClient, encryptionClient, usersessions.NewSigner(c.String(usersessions.JWTSigningKeyFlag)), serverURL.String(), sharedAuthorizationServerHosts, ratelimit.NewRedisStore(redisClient), mcpService.CodeModeAvailable, clientAssertionSigner)
 			usersessions.Attach(mux, userSessionsService)
 			tokenexchange.Attach(mux, tokenexchange.NewService(logger, tracerProvider, db, sessionManager, authzEngine, c.String("environment")))

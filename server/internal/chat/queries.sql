@@ -624,7 +624,22 @@ WITH candidate_chats AS (
     -- also carries a human identity (user_id or external_user_id) is that
     -- human's, whatever agent_id says.
     AND (@user_id = '' OR c.user_id = @user_id OR (c.user_id IS NULL AND COALESCE(c.external_user_id, '') = '' AND c.agent_id = ANY(@owned_agent_ids::uuid[])))
-    AND (sqlc.narg(agent_id)::uuid IS NULL OR c.agent_id = sqlc.narg(agent_id)::uuid)
+    -- An agent's sessions are the ones capture stamped with it plus the
+    -- threads of the assistant bound to it: the assistant runtime never stamps
+    -- chats.agent_id. ListChats and CountChats must share this filter.
+    AND (
+      sqlc.narg(agent_id)::uuid IS NULL
+      OR c.agent_id = sqlc.narg(agent_id)::uuid
+      OR c.id IN (
+        SELECT bound_thread.chat_id
+        FROM assistant_agent_bindings bound
+        JOIN assistants bound_assistant ON bound_assistant.id = bound.original_assistant_id AND bound_assistant.project_id = @project_id AND bound_assistant.deleted IS FALSE
+        JOIN assistant_threads bound_thread ON bound_thread.project_id = @project_id AND bound_thread.assistant_id = bound_assistant.id AND bound_thread.deleted IS FALSE
+        WHERE bound.original_agent_id = sqlc.narg(agent_id)::uuid
+          AND bound.project_id = @project_id
+          AND bound.deleted IS FALSE
+      )
+    )
     AND (
       @pinned::text = ''
       OR (@pinned::text = 'true' AND c.pinned_at IS NOT NULL)
@@ -769,7 +784,22 @@ WITH candidate_chats AS (
     -- user owns: agent-actor capture leaves user_id NULL, so an agent's
     -- sessions would otherwise belong to nobody.
     AND (@user_id = '' OR c.user_id = @user_id OR (c.user_id IS NULL AND COALESCE(c.external_user_id, '') = '' AND c.agent_id = ANY(@owned_agent_ids::uuid[])))
-    AND (sqlc.narg(agent_id)::uuid IS NULL OR c.agent_id = sqlc.narg(agent_id)::uuid)
+    -- An agent's sessions are the ones capture stamped with it plus the
+    -- threads of the assistant bound to it: the assistant runtime never stamps
+    -- chats.agent_id. ListChats and CountChats must share this filter.
+    AND (
+      sqlc.narg(agent_id)::uuid IS NULL
+      OR c.agent_id = sqlc.narg(agent_id)::uuid
+      OR c.id IN (
+        SELECT bound_thread.chat_id
+        FROM assistant_agent_bindings bound
+        JOIN assistants bound_assistant ON bound_assistant.id = bound.original_assistant_id AND bound_assistant.project_id = @project_id AND bound_assistant.deleted IS FALSE
+        JOIN assistant_threads bound_thread ON bound_thread.project_id = @project_id AND bound_thread.assistant_id = bound_assistant.id AND bound_thread.deleted IS FALSE
+        WHERE bound.original_agent_id = sqlc.narg(agent_id)::uuid
+          AND bound.project_id = @project_id
+          AND bound.deleted IS FALSE
+      )
+    )
     AND (
       @pinned::text = ''
       OR (@pinned::text = 'true' AND c.pinned_at IS NOT NULL)
@@ -2226,3 +2256,14 @@ UPDATE api_keys SET scopes = ARRAY[]::text[], subject_urn = @subject_urn,
   delegated_grants = @delegated_grants::jsonb, delegated_grants_version = @delegated_grants_version,
   expires_at = clock_timestamp() + interval '1 hour'
 WHERE id = @api_key_id AND project_id = @project_id;
+
+-- name: LockChatForCompaction :exec
+-- Serializes compaction writes for one chat. A missing chat is not an error.
+SELECT 1 FROM chats WHERE id = @id AND project_id = @project_id FOR UPDATE;
+
+-- name: AcquireToolCallSummaryLock :exec
+-- Session-level: the caller must release it on the same connection.
+SELECT pg_advisory_lock(@lock_key::bigint);
+
+-- name: ReleaseToolCallSummaryLock :exec
+SELECT pg_advisory_unlock(@lock_key::bigint);

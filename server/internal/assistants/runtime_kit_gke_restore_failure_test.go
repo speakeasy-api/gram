@@ -71,9 +71,9 @@ func TestKitGKEBackendFailedRestoreRevokesFreshAuthority(t *testing.T) {
 			_, err = k.Status(t.Context(), r)
 			require.ErrorContains(t, err, "fenced")
 			_, err = k.Ensure(t.Context(), r)
-			require.ErrorContains(t, err, "not safely restorable")
+			require.ErrorIs(t, err, errKitRuntimeUnrecoverable, "an interrupted restore is retired, not resumed")
 			require.ErrorContains(t, k.Stop(t.Context(), r), "cannot checkpoint")
-			require.Equal(t, 2, *fences, "retry must not bootstrap or publish the failed attempt")
+			require.Equal(t, 3, *fences, "retry revokes the abandoned attempt again without bootstrapping or publishing it")
 		})
 	}
 }

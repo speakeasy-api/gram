@@ -59,16 +59,15 @@ func TestAppOf(t *testing.T) {
 		clientID string
 		want     App
 	}{
-		{"host only", "https://Client.Example.com/path/meta.json", App{"client.example.com"}},
-		{"query and fragment dropped", "https://client.example.com/meta.json?a=b#c", App{"client.example.com"}},
-		{"caller text in the path dropped", "https://client.example.com/anything/a/caller/chooses", App{"client.example.com"}},
-		{"credentials dropped", "https://user:secret@client.example.com/m", App{"client.example.com"}},
+		{"catalog app", "https://claude.ai/oauth/claude-code-client-metadata", App{"claude.ai"}},
+		{"catalog pattern", "https://chatgpt.com/oauth/abc123/client.json", App{"chatgpt.com"}},
+		{"host outside the catalog", "https://client.example.com/path/meta.json", AppOtherMetadataURL},
+		{"catalog host with another path", "https://claude.ai/anything/a/caller/chooses", AppOtherMetadataURL},
 		{"dynamically registered", "3fa85f64-5717-4562-b3fc-2c963f66afa6", AppDCR},
 		{"dashboard", "", AppFirstParty},
-		{"host spelled like a kind", "https://dcr/meta.json", AppUnverified},
-		{"other host spelled like a kind", "https://workload:8443/meta.json", App{"workload:8443"}},
-		{"too long", long, AppUnverified},
-		{"unparsable", "https://bad host/", AppUnverified},
+		{"host spelled like a kind", "https://dcr/meta.json", AppOtherMetadataURL},
+		{"too long", long, AppOtherMetadataURL},
+		{"unparsable", "https://bad host/", AppOtherMetadataURL},
 	}
 	for _, tc := range cases {
 		t.Run(tc.name, func(t *testing.T) {

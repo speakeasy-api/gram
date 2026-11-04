@@ -13,6 +13,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/securityevent"
 	"github.com/speakeasy-api/gram/server/internal/authz"
 	"github.com/speakeasy-api/gram/server/internal/oops"
+	"github.com/speakeasy-api/gram/server/internal/testenv/testrepo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/speakeasy-api/gram/server/internal/workloadidentity"
 	"github.com/speakeasy-api/gram/server/internal/workloadpolicy/repo"
@@ -284,22 +285,21 @@ func TestWithdrawIssuer_RefusesASiblingProjectsIssuer(t *testing.T) {
 
 	// Same organization, a different project than the one the caller has selected.
 	siblingProject := uuid.New()
-	_, err := ti.conn.Exec( //nolint:glint // notestingrawsql: registering under another project is not reachable through the API
-		ctx, `
-		INSERT INTO projects (id, organization_id, name, slug)
-		VALUES ($1::uuid, $2, 'sibling', 'sibling-' || left($1::uuid::text, 8))
-	`, siblingProject, ti.orgID)
+	_, err := testrepo.New(ti.conn).CreateProjectFixture(ctx, testrepo.CreateProjectFixtureParams{
+		ID:             siblingProject,
+		Name:           "sibling",
+		Slug:           "sibling-" + siblingProject.String()[:8],
+		OrganizationID: ti.orgID,
+	})
 	require.NoError(t, err)
 
-	var siblingIssuer uuid.UUID
-	err = ti.conn.QueryRow( //nolint:glint // notestingrawsql: see above
-		ctx, `
-		INSERT INTO workload_issuers
-		  (organization_id, project_id, name, issuer, jwks_uri)
-		VALUES ($1, $2, 'sibling-ci', 'https://sibling.example.com',
-		        'https://sibling.example.com/.well-known/jwks.json')
-		RETURNING id
-	`, ti.orgID, siblingProject).Scan(&siblingIssuer)
+	siblingIssuer, err := testrepo.New(ti.conn).CreateWorkloadIssuerFixture(ctx, testrepo.CreateWorkloadIssuerFixtureParams{
+		OrganizationID: ti.orgID,
+		ProjectID:      uuid.NullUUID{UUID: siblingProject, Valid: true},
+		Name:           "sibling-ci",
+		Issuer:         "https://sibling.example.com",
+		JwksUri:        "https://sibling.example.com/.well-known/jwks.json",
+	})
 	require.NoError(t, err)
 
 	_, err = ti.service.WithdrawIssuer(ctx, &gen.WithdrawIssuerPayload{
@@ -311,9 +311,7 @@ func TestWithdrawIssuer_RefusesASiblingProjectsIssuer(t *testing.T) {
 	requireOopsCode(t, err, oops.CodeNotFound)
 
 	// Still live, so the refusal was a refusal and not a silent no-op.
-	var deleted bool
-	err = ti.conn.QueryRow( //nolint:glint // notestingrawsql: asserting the row the API must not have touched
-		ctx, `SELECT deleted FROM workload_issuers WHERE id = $1`, siblingIssuer).Scan(&deleted)
+	deleted, err := repo.New(ti.conn).GetWorkloadIssuerDeletedFixture(ctx, siblingIssuer)
 	require.NoError(t, err)
 	require.False(t, deleted, "a sibling project's issuer must survive a withdrawal it was never visible to")
 }

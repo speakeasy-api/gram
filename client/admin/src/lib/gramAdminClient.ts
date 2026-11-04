@@ -160,6 +160,8 @@ import { buildSetAdminOrganizationOnboardingStackMutation } from "@gram/admin-cl
 import type { AdminOnboardingStack } from "@gram/admin-client/models/components/adminonboardingstack";
 import type { SetOrganizationOnboardingStackRequestBody } from "@gram/admin-client/models/components/setorganizationonboardingstackrequestbody";
 import { buildSetAdminOrganizationFeatureMutation } from "@gram/admin-client/react-query/setAdminOrganizationFeature";
+import { adminSetOrganizationProviderSetup } from "@gram/admin-client/funcs/adminSetOrganizationProviderSetup";
+import type { SetOrganizationProviderSetupRequestBody } from "@gram/admin-client/models/components/setorganizationprovidersetuprequestbody";
 import type { ProductFeatures } from "@gram/admin-client/models/components/productfeatures";
 import type { SetOrganizationFeatureRequestBody } from "@gram/admin-client/models/components/setorganizationfeaturerequestbody";
 import type { AdminGetOrganizationFeaturesRequest } from "@gram/admin-client/models/operations/admingetorganizationfeatures";
@@ -513,6 +515,14 @@ export function setAdminOrganizationFeature(
   request: SetOrganizationFeatureRequestBody,
 ): Promise<ProductFeatures> {
   return generatedFeatureMutation.mutationFn({ request });
+}
+
+export function setAdminOrganizationProviderSetup(
+  request: SetOrganizationProviderSetupRequestBody,
+): Promise<ProductFeatures> {
+  return unwrapAsync(
+    adminSetOrganizationProviderSetup(mutationClient, request),
+  );
 }
 
 type SetFeatureMutationOptions = Omit<

@@ -272,9 +272,14 @@ func (s *Service) ServeConsentAction(w http.ResponseWriter, r *http.Request, end
 			return cerr
 		}
 		err := s.validateRemoteSession(ctx, logger, mcpconnectionattempts.FromRequest(r), endpoint, challengeState, *client)
+		// A notice lives on the cards, which saved consent's short page doesn't show.
+		noticeURL := backURL + "&consent=required"
 		switch {
 		case errors.Is(err, errValidationRateLimited):
-			http.Redirect(w, r, backURL+"&validate_limited="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
+			http.Redirect(w, r, noticeURL+"&validate_limited="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
+			return nil
+		case errors.Is(err, errRemoteSessionNoUsableCredential):
+			http.Redirect(w, r, noticeURL+"&validate_failed="+url.QueryEscape(client.ID.String()), http.StatusSeeOther)
 			return nil
 		case err != nil:
 			return err
@@ -405,7 +410,18 @@ func (s *Service) buildRemoteConnectURL(
 	if loginProjectID == uuid.Nil && resourceMember.serverID.Valid {
 		loginProjectID = resourceMember.projectID
 	}
+	typedAuthorization, err := s.remoteLoginTypedAuthorization(ctx, endpoint, challengeState, client, resourceMember)
+	if err != nil {
+		if errors.Is(err, errTypedLoginDenied) {
+			return "", false, oops.E(oops.CodeForbidden, err, "connection is not authorized").LogWarn(ctx, logger)
+		}
+		return "", false, oops.E(oops.CodeUnexpected, err, "resolve typed connection authorization").LogError(ctx, logger)
+	}
+	if typedAuthorization != nil {
+		loginProjectID = typedAuthorization.ProjectID
+	}
 	parent := remotesessions.ParentChallenge{
+		TypedAuthorization:  typedAuthorization,
 		ConnectionPopup:     challengeState.FirstParty && (challengeState.BindingRefreshAttemptID != "" || challengeState.ReauthenticateClientID != uuid.Nil),
 		ID:                  challengeState.ID,
 		ProjectID:           loginProjectID,

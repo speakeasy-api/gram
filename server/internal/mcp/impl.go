@@ -586,6 +586,7 @@ func NewService(
 		telemSvc,
 		auditLogger,
 		platformtoolsruntime.WithTriggerTools(triggerApp),
+		platformtoolsruntime.WithThreadContextAuthorizer(authzEngine),
 		platformtoolsruntime.WithSlackHTTPClient(guardianPolicy.PooledClient()),
 		platformtoolsruntime.WithExternalTools(platformExtras),
 		platformtoolsruntime.WithFeatureChecker(platformFeatureChecker),
@@ -725,6 +726,9 @@ func NewService(
 		tunnelManager:          newTunnelManager(tunnelRoutes, tunnelForwardToken, remoteProxyManager, tunnelGatewayCIDRs, callerAssertions),
 		tunnelPublic:           newTunnelPublicRuntime(redisClient, meterProvider, metrics, tunnelPublicConfig),
 		metaRuntime:            metaRuntimeConfig.withDefaults(),
+	}
+	if remoteChallengeMgr != nil {
+		remoteChallengeMgr.SetTypedAuthorizationValidator(service.ValidateRemoteLoginTypedAuthorization)
 	}
 	return service, nil
 }

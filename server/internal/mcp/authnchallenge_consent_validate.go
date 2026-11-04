@@ -25,11 +25,15 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/remotemcp/proxy"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
+	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
 // errRemoteSessionUnroutable marks a credential no upstream on this endpoint is ever handed.
 var errRemoteSessionUnroutable = errors.New("remote session routes to no upstream on this endpoint")
+
+// errRemoteSessionNoUsableCredential marks a card whose grant cannot produce a token right now, so nothing was probed.
+var errRemoteSessionNoUsableCredential = errors.New("remote session has no usable credential")
 
 // errRemoteSessionVerdictNotRecorded: the upstream was dialled but the verdict could not be written.
 var errRemoteSessionVerdictNotRecorded = errors.New("remote session verdict not recorded")
@@ -124,7 +128,15 @@ func (s *Service) probeRemoteSession(
 		}
 	}
 	if !usable {
-		return oops.E(oops.CodeBadRequest, errRemoteSessionUnroutable, "Connect this service before verifying it.").LogWarn(ctx, logger)
+		linked, err := s.clientLinkedToSignIn(ctx, endpoint, client, tokenProjectIDs)
+		if err != nil {
+			return oops.E(oops.CodeUnexpected, err, "check remote session client binding for validation").LogError(ctx, logger)
+		}
+		if reason := unservedCredentialReason(len(tokenProjectIDs), linked); reason != "" {
+			return oops.E(oops.CodeBadRequest, errRemoteSessionUnroutable, "This connection can't be checked here.").LogWarn(ctx, logger, attr.SlogReason(reason))
+		}
+		message, reason := s.noUsableCredentialRefusal(ctx, logger, endpoint, subject, client)
+		return oops.E(oops.CodeBadRequest, errRemoteSessionNoUsableCredential, "%s", message).LogWarn(ctx, logger, attr.SlogReason(reason))
 	}
 	if expectedGrant != nil && expectedGrant.RemoteSessionID != uuid.Nil &&
 		(entry.RemoteSessionID != expectedGrant.RemoteSessionID || !entry.RemoteSessionResolvedFromUpdatedAt.Equal(expectedGrant.RemoteSessionUpdatedAt)) {
@@ -199,6 +211,80 @@ func (s *Service) probeRemoteSession(
 	}
 	logger.InfoContext(ctx, "remote session validated", attr.SlogReason(reason))
 	return nil
+}
+
+// clientLinkedToSignIn reports whether token resolution can reach client: a typed registration need not be linked to the sign-in.
+func (s *Service) clientLinkedToSignIn(ctx context.Context, endpoint *ResolvedMcpEndpoint, client remotesessions.Client, projectIDs []uuid.UUID) (bool, error) {
+	for _, projectID := range projectIDs {
+		linked, err := remotesessions_repo.New(s.db).CheckRemoteSessionClientBindingForUserSessionIssuer(ctx, remotesessions_repo.CheckRemoteSessionClientBindingForUserSessionIssuerParams{
+			RemoteSessionClientID: client.ID,
+			UserSessionIssuerID:   endpoint.UserSessionIssuerID,
+			ProjectID:             projectID,
+			OrganizationID:        endpoint.OrganizationID,
+		})
+		if err != nil {
+			return false, fmt.Errorf("check remote session client binding: %w", err)
+		}
+		if linked {
+			return true, nil
+		}
+	}
+	return false, nil
+}
+
+// unservedCredentialReason names why token resolution can't reach this client; empty when it can.
+func unservedCredentialReason(projects int, linked bool) string {
+	switch {
+	case projects == 0:
+		return "this client serves no project on this endpoint"
+	case !linked:
+		return "this client is not linked to the endpoint's sign-in"
+	default:
+		return ""
+	}
+}
+
+// noUsableCredentialRefusal is the person's message and the log reason for a grant that yielded no token.
+func (s *Service) noUsableCredentialRefusal(ctx context.Context, logger *slog.Logger, endpoint *ResolvedMcpEndpoint, subject urn.SessionSubject, client remotesessions.Client) (message, reason string) {
+	statuses, err := s.endpointRemoteSessionStatuses(ctx, subject, endpoint)
+	if err != nil {
+		logger.WarnContext(ctx, "read remote session status for validation", attr.SlogError(err))
+		return noWorkingSignInMessage, "grant state could not be read"
+	}
+	state, connected := statuses[client.ID]
+	return noUsableCredentialMessage(state, connected), describeNoUsableCredential(state, connected, time.Now())
+}
+
+// noWorkingSignInMessage covers an outage, a broken client setup and an unreadable token: token resolution hides which.
+const noWorkingSignInMessage = "We could not get a working sign-in for this service. Try again. If it keeps failing, disconnect it and connect again, or ask your administrator."
+
+// noUsableCredentialMessage follows the card's state, so it names a control the card shows.
+func noUsableCredentialMessage(state remotesessions.RemoteSessionState, connected bool) string {
+	switch {
+	case !connected:
+		return "Connect this service before verifying it."
+	case state.Status == remotesessions.RemoteSessionExpired:
+		return "Reconnect this service."
+	default:
+		return noWorkingSignInMessage
+	}
+}
+
+// describeNoUsableCredential is the log reason for a grant that yielded no token.
+func describeNoUsableCredential(state remotesessions.RemoteSessionState, connected bool, now time.Time) string {
+	lapsed := func(deadline *time.Time) bool { return deadline != nil && !deadline.After(now) }
+	switch {
+	case !connected:
+		return "no grant is stored for this subject and client"
+	case lapsed(state.AuthorizationExpiresAt):
+		return "grant authorization lifetime has ended"
+	case lapsed(state.RefreshExpiresAt):
+		return "grant refresh token lifetime has ended"
+	case lapsed(state.AccessExpiresAt) && !state.CanRefresh:
+		return "access token has expired and the grant has no refresh token"
+	default:
+		return "grant is stored but its token could not be obtained or refreshed"
+	}
 }
 
 // resolveValidationTarget finds the upstream this endpoint would hand the credential to, judged as the consent subject.

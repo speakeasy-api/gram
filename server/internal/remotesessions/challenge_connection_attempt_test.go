@@ -170,6 +170,7 @@ func TestCompleteRemoteLogin_RecordsTheGatewayMember(t *testing.T) {
 
 	row := rec.RequireStep(mcpconnectionattempts.StepProviderSignIn, mcpconnectionattempts.ResultSignedIn)
 	require.Equal(t, member.UUID.String(), row.MemberID)
+	require.NotEmpty(t, row.RemoteSessionID, "the row names the session the sign-in stored")
 	require.Equal(t, mcpconnectionattempts.FamilyBrowser, row.ClientFamily, "the callback says which client the person used")
 }
 
