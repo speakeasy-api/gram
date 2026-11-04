@@ -89,6 +89,9 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 	if !ok {
 		return nil, codemode.ErrToolUnavailable
 	}
+	if err := b.connectRefusal(ctx, gate, member); err != nil {
+		return nil, err
+	}
 	if !codeConnectAvailable(gate) {
 		return nil, codemode.ErrToolUnavailable
 	}
@@ -148,6 +151,18 @@ func (b *metaCodeBackend) Connect(ctx context.Context, server string) (*codemode
 	}
 	b.connections.actions[server] = action
 	return action, nil
+}
+
+// connectRefusal stops a sign-in link for a stale choice that consent can't replace.
+func (b *metaCodeBackend) connectRefusal(ctx context.Context, gate *metaGateContext, member metaMember) error {
+	if _, stale := errors.AsType[memberStaleChoiceError](member.upstreamUnavailable); !stale {
+		return nil
+	}
+	message, reconnect := b.service.staleChoiceMessage(ctx, b.service.logger, gate, member)
+	if reconnect {
+		return nil
+	}
+	return &codemode.MemberRefusalError{Message: message, ConsentRequired: false}
 }
 
 // codeConnectAvailable reports whether Connect can mint a link bound to the

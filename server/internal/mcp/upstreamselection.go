@@ -826,7 +826,7 @@ func (c *memberChoices) apply(ctx context.Context, logger *slog.Logger, members 
 func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember, res authClientResolution, err error) {
 	member.authClient = &res
 	if reason, stale := staleNoAuthReason(res, err); stale {
-		member.upstreamUnavailable = memberStaleChoiceError{memberCredentialError{&metaMemberError{message: fmt.Sprintf("Server %q's sign-in setup changed, so this connection can't reach it.", member.slug)}}, reason}
+		member.upstreamUnavailable = memberStaleChoiceError{memberCredentialError{&metaMemberError{message: fmt.Sprintf("Server %q's sign-in setup changed.", member.slug)}}, reason}
 		return
 	}
 	if errors.Is(err, errUpstreamSelectionMissing) || errors.Is(err, errUpstreamSelectionUnusable) {
@@ -834,7 +834,7 @@ func (s *Service) applyMemberAuthClient(ctx context.Context, member *metaMember,
 		return
 	}
 	if err != nil {
-		member.upstreamUnavailable = memberDiscoveryError{metaMemberError: &metaMemberError{message: "This server's connection could not be checked; try again later."}, status: 0, retryable: false, retryAfter: 0}
+		member.upstreamUnavailable = memberDiscoveryError{metaMemberError: &metaMemberError{message: connectionNotCheckedMessage(member.slug)}, status: 0, retryable: false, retryAfter: 0}
 		return
 	}
 	switch res.outcome {
@@ -862,6 +862,11 @@ func staleNoAuthReason(res authClientResolution, err error) (string, bool) {
 	return "", false
 }
 
+// connectionNotCheckedMessage is for a failed lookup, which nothing keeps: a retry looks again.
+func connectionNotCheckedMessage(slug string) string {
+	return fmt.Sprintf("Server %q's connection could not be checked. Try again in a few minutes.", slug)
+}
+
 // staleChoiceMessage says who can fix a stale choice, and whether reconnecting does.
 func (s *Service) staleChoiceMessage(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember) (string, bool) {
 	authentication := gate.authentication
@@ -872,15 +877,15 @@ func (s *Service) staleChoiceMessage(ctx context.Context, logger *slog.Logger, g
 		return fmt.Sprintf("Server %q's sign-in setup changed. Ask whoever set this up to update this connection.", member.slug), false
 	}
 	if !authentication.refreshableUserSession {
-		return fmt.Sprintf("Server %q's sign-in setup changed. Sign in to this gateway again in your AI app. If that doesn't help, ask your administrator.", member.slug), false
+		return fmt.Sprintf("Server %q's sign-in setup changed. Reconnect this gateway in your AI app. If that doesn't help, ask your administrator.", member.slug), false
 	}
 	fixable, err := s.consentCanReplaceChoice(ctx, gate, member)
 	switch {
 	case err != nil:
 		logger.WarnContext(ctx, "check whether consent can replace a stale choice", attr.SlogMcpServerID(member.serverID.String()), attr.SlogError(err))
-		return "This server's connection could not be checked; try again later.", false
+		return connectionNotCheckedMessage(member.slug), false
 	case fixable:
-		return fmt.Sprintf("Server %q now needs a sign-in. Reconnect this gateway in your AI app and approve the new connection.", member.slug), true
+		return fmt.Sprintf("Server %q's sign-in setup changed. Reconnect this gateway in your AI app and approve the new connection.", member.slug), true
 	}
 	return fmt.Sprintf("Server %q needs your administrator to finish setup or give you access.", member.slug), false
 }
@@ -981,9 +986,9 @@ func (s *Service) memberFailureMessage(ctx context.Context, logger *slog.Logger,
 	return message
 }
 
-// noteStaleChoiceCall counts every attempt and warns once per subject, server and reason per window.
+// noteStaleChoiceCall counts each refused call or describe, not status or search sweeps, and warns once per subject, server and reason per window.
 func (s *Service) noteStaleChoiceCall(ctx context.Context, logger *slog.Logger, gate *metaGateContext, member metaMember, stale memberStaleChoiceError) {
-	s.metrics.RecordMetaMemberFailure(ctx, stale.reason)
+	s.metrics.RecordMetaStaleChoiceRefusal(ctx, stale.reason)
 	subject := ""
 	switch {
 	case gate.memberChoices != nil:

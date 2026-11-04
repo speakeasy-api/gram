@@ -19,6 +19,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/codemode"
 	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcp/mcpmetrics"
+	"github.com/speakeasy-api/gram/server/internal/mcp/metamcp"
 	"github.com/speakeasy-api/gram/server/internal/mcpjsonrpc"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients/authclientbackfill"
@@ -34,21 +35,22 @@ func TestStaleNoAuthClassification(t *testing.T) {
 		edit(&row)
 		return decideAuthClient(row)
 	}
-	require.True(t, ptr(noAuth(func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.RequiresUpstreamAuth = true })).staleNoAuth(), "a client was added")
-	require.True(t, ptr(noAuth(func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.UpstreamAuthPending = true })).staleNoAuth(), "an association no auth client records yet")
-	require.True(t, ptr(noAuth(func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.CredentialHeadersUncovered = true })).staleNoAuth(), "the message decides who can fix it")
-	require.False(t, ptr(noAuth(func(*upstreamclientsrepo.GetAuthClientSelectionRow) {})).staleNoAuth(), "a server that still needs no auth is served")
+	require.True(t, new(noAuth(func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.RequiresUpstreamAuth = true })).staleNoAuth(), "a client was added")
+	require.True(t, new(noAuth(func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.UpstreamAuthPending = true })).staleNoAuth(), "an association no auth client records yet")
+	require.True(t, new(noAuth(func(r *upstreamclientsrepo.GetAuthClientSelectionRow) { r.CredentialHeadersUncovered = true })).staleNoAuth(), "the message decides who can fix it")
+	require.False(t, new(noAuth(func(*upstreamclientsrepo.GetAuthClientSelectionRow) {})).staleNoAuth(), "a server that still needs no auth is served")
 
 	enforcedHeaders := withoutLegacyFallback(noAuth(func(r *upstreamclientsrepo.GetAuthClientSelectionRow) {
 		r.RequiresUpstreamAuth, r.ServerHasHeaderClients = true, true
 	}))
 	require.True(t, enforcedHeaders.staleNoAuth(), "under enforcement a new header client also needs a new choice")
 
-	require.False(t, ptr(decideAuthClient(upstreamclientsrepo.GetAuthClientSelectionRow{AuthClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}})).staleNoAuth(), "a named client that went away is a different gap")
-	require.False(t, ptr(gapResolution(authClientReasonMissingChoice)).staleNoAuth())
+	require.False(t, new(decideAuthClient(upstreamclientsrepo.GetAuthClientSelectionRow{AuthClientID: uuid.NullUUID{UUID: uuid.New(), Valid: true}})).staleNoAuth(), "a named client that went away is a different gap")
+	require.False(t, new(gapResolution(authClientReasonMissingChoice)).staleNoAuth())
 }
 
-func ptr[T any](v T) *T { return &v }
+//go:fix inline
+func ptr[T any](v T) *T { return new(v) }
 
 func TestStaleChoiceErrorChain(t *testing.T) {
 	t.Parallel()
@@ -130,7 +132,7 @@ func TestStaleChoiceEveryNonPersonGetsOwnerCopy(t *testing.T) {
 		message, reconnect := s.staleChoiceMessage(t.Context(), s.logger, gate, member)
 		require.False(t, reconnect, name)
 		require.Contains(t, message, "Ask whoever set this up", name)
-		require.NotContains(t, message, "needs a sign-in", name)
+		require.NotContains(t, message, "Reconnect this gateway", name)
 	}
 }
 
@@ -184,7 +186,7 @@ func TestCodeModeStaleChoiceKeepsConsentInstruction(t *testing.T) {
 				require.NoError(t, f.q.BindClientIssuerFixture(t.Context(), authclientbackfill.BindClientIssuerFixtureParams{RemoteSessionClientID: f.registration, UserSessionIssuerID: issuerID}))
 			}
 			member := metaMember{slug: "db", serverID: f.serverID, projectID: f.projectID, backend: metaMemberBackendProxied, upstreamUnavailable: staleMemberError(authClientReasonNoAuthForbidden)}
-			member.authClient = ptr(gapWithChoice(authClientReasonNoAuthForbidden))
+			member.authClient = new(gapWithChoice(authClientReasonNoAuthForbidden))
 			gate := &metaGateContext{
 				organizationID: f.orgID, projectID: f.projectID, userSessionIssuerID: issuerID,
 				authentication: &issuerGateAuthentication{refreshableUserSession: true, subject: urn.NewUserSubject("user_1")},
@@ -230,6 +232,53 @@ func TestStaleChoiceRemedyIsCachedPerPersonAndServer(t *testing.T) {
 	require.True(t, reached, "an organization gateway has no project; the member's project scopes its clients")
 }
 
+// A failed lookup offers only a retry, on every surface, and is never remembered.
+func TestStaleChoiceFailedLookupOffersOnlyARetry(t *testing.T) {
+	t.Parallel()
+	pool, err := TestInfra.CloneTestDatabase(t, "mcp_stale_choice_lookup")
+	require.NoError(t, err)
+	f := newAuthClientFixture(t, pool)
+	f.service.staleChoiceConsent = expirable.NewLRU[string, bool](10, nil, time.Minute)
+	pool.Close()
+	const want = `Server "db"'s connection could not be checked. Try again in a few minutes.`
+	member := metaMember{slug: "db", serverID: f.serverID, projectID: f.projectID, backend: metaMemberBackendProxied, upstreamUnavailable: staleMemberError(authClientReasonNoAuthForbidden)}
+	gate := &metaGateContext{
+		organizationID: f.orgID, projectID: f.projectID, userSessionIssuerID: uuid.New(),
+		authentication: &issuerGateAuthentication{refreshableUserSession: true, subject: urn.NewUserSubject("user_1")},
+		memberChoices:  &memberChoices{selector: &upstreamSelector{}, subject: urn.NewUserSubject("user_1"), byServer: map[uuid.UUID]*memberTokens{}},
+	}
+	logger := testenv.NewLogger(t)
+	require.Equal(t, want, f.service.memberFailureMessage(t.Context(), logger, gate, member, member.upstreamUnavailable))
+
+	status, detail := f.service.staleMemberStatus(t.Context(), logger, gate, member)
+	require.Equal(t, metamcp.SignInActionRequired, status)
+	require.Equal(t, want, detail)
+	text := metamcp.ConnectionStatusResult{ConnectURL: "https://example.com/connect", Servers: []metamcp.ConnectionStatusServer{{Slug: "db", Status: status, Detail: detail}}}.Text()
+	require.NotContains(t, text, "To sign in")
+	require.NotContains(t, text, "Reconnect this gateway")
+
+	backend := &metaCodeBackend{service: f.service}
+	require.Equal(t, want, backend.knownConnectionState(t.Context(), gate, member).Instructions)
+	for name, refusal := range map[string]error{
+		"tools.connect": backend.connectRefusal(t.Context(), gate, member),
+		"helper":        backend.helperFailure(t.Context(), gate, member, member.upstreamUnavailable),
+	} {
+		refused, ok := errors.AsType[*codemode.MemberRefusalError](refusal)
+		require.True(t, ok, name)
+		require.Equal(t, want, refused.Message, name)
+		require.NotErrorIs(t, refusal, codemode.ErrConsentRequired, name)
+	}
+	require.Zero(t, f.service.staleChoiceConsent.Len(), "a retry must look again")
+}
+
+// A choice that can't be read gets the same text.
+func TestUnreadableChoiceSaysItCouldNotBeChecked(t *testing.T) {
+	t.Parallel()
+	member := metaMember{slug: "db"}
+	(&Service{}).applyMemberAuthClient(t.Context(), &member, gapResolution(authClientReasonMissingChoice), errors.New("read failed"))
+	require.Equal(t, `Server "db"'s connection could not be checked. Try again in a few minutes.`, memberErrorMessage(member.upstreamUnavailable))
+}
+
 func TestStaleChoiceCountsEveryAttemptPastLogDedupe(t *testing.T) {
 	t.Parallel()
 	reader := sdkmetric.NewManualReader()
@@ -245,7 +294,7 @@ func TestStaleChoiceCountsEveryAttemptPastLogDedupe(t *testing.T) {
 	total := int64(0)
 	for _, scope := range collected.ScopeMetrics {
 		for _, m := range scope.Metrics {
-			if m.Name != "mcp.meta.member_failure" {
+			if m.Name != "mcp.meta.stale_choice_refusal" {
 				continue
 			}
 			sum, ok := m.Data.(metricdata.Sum[int64])
@@ -256,6 +305,17 @@ func TestStaleChoiceCountsEveryAttemptPastLogDedupe(t *testing.T) {
 		}
 	}
 	require.Equal(t, int64(3), total)
+}
+
+func TestConnectOffersNoLinkWhenConsentCannotReplaceTheChoice(t *testing.T) {
+	t.Parallel()
+	backend := &metaCodeBackend{service: &Service{logger: testenv.NewLogger(t)}}
+	gate := &metaGateContext{authentication: &issuerGateAuthentication{subject: urn.NewAgentSubject(uuid.New())}}
+	require.NoError(t, backend.connectRefusal(t.Context(), gate, metaMember{slug: "db"}), "only a stale choice is refused")
+	err := backend.connectRefusal(t.Context(), gate, metaMember{slug: "db", upstreamUnavailable: staleMemberError(authClientReasonNoAuthForbidden)})
+	refused, ok := errors.AsType[*codemode.MemberRefusalError](err)
+	require.True(t, ok)
+	require.Contains(t, refused.Message, "Ask whoever set this up")
 }
 
 func TestCodeModeHelperFailureNonPersonGetsOwnerCopy(t *testing.T) {

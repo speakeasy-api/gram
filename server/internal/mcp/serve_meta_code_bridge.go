@@ -433,10 +433,10 @@ type metaCodeInvocationKey struct{}
 // One invocation owns this state; it is never shared across parallel callbacks.
 type metaCodeInvocation struct {
 	dispatched bool
-	// rejected marks a call refused unexecuted for a reason the program can
-	// fix: the member's own unknown-tool or invalid-params error, a hosted
-	// lookup refusal before dispatch, hosted input-schema validation, or a
-	// stale no-auth choice.
+	// rejected marks a call refused unexecuted: the member's own unknown-tool
+	// or invalid-params error, a hosted lookup refusal before dispatch, hosted
+	// input-schema validation, or a stale no-auth choice. A program can fix
+	// all but the stale choice.
 	rejected bool
 	// message is the member-scoped failure the program would otherwise lose.
 	message string

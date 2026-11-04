@@ -62,7 +62,7 @@ const (
 	SignInNotRequired = "not_required"
 	// SignInError: a credential exists but cannot be used; Detail says why.
 	SignInError = "error"
-	// SignInActionRequired: signing in here won't help; Detail says who can fix it.
+	// SignInActionRequired: signing in here won't help; Detail says what to do.
 	SignInActionRequired = "action_required"
 	// SignInHidden: the caller hid the member, so its tools are not served.
 	SignInHidden = "hidden"
@@ -147,7 +147,7 @@ func (r ConnectionStatusResult) Text() string {
 		}
 	}
 	if needsConsent {
-		b.WriteString("\nStart authorization again in your AI client to review access.\n")
+		b.WriteString("\nReconnect this gateway in your AI app to review access.\n")
 	}
 	if hidden && r.ConnectURL != "" {
 		fmt.Fprintf(&b, "\nTo use a hidden server, show it again at %s.\n", r.ConnectURL)

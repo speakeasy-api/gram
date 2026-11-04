@@ -112,7 +112,7 @@ func callbackReply(id uint32, value json.RawMessage, callbackErr error) runnerRe
 	if refused, ok := errors.AsType[*MemberRefusalError](callbackErr); ok {
 		message = refused.Message
 	} else if errors.Is(callbackErr, ErrConsentRequired) {
-		message = "this server changed since consent; the user must reconnect and give consent again"
+		message = "this server changed since consent; the user must reconnect this gateway in their AI app and approve it"
 	} else if connect, ok := errors.AsType[*ConnectionRequiredError](callbackErr); ok {
 		data, _ := json.Marshal(struct {
 			Server string `json:"server"`

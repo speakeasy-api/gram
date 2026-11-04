@@ -1,6 +1,7 @@
 package metamcp
 
 import (
+	"strings"
 	"testing"
 
 	"github.com/stretchr/testify/require"
@@ -76,6 +77,13 @@ func TestIsConnectionStatusResourceURI(t *testing.T) {
 	}
 }
 
+func TestConnectionStatusViewUsesOneReconnectWording(t *testing.T) {
+	t.Parallel()
+	require.Equal(t, 2, strings.Count(ConnectionStatusHTML, "Reconnect this gateway in your AI app to review access"))
+	require.NotContains(t, ConnectionStatusHTML, "Start authorization again")
+	require.NotContains(t, ConnectionStatusHTML, "Give consent again")
+}
+
 func TestConnectionStatusText_NeedsConsentClaimsNoVerification(t *testing.T) {
 	t.Parallel()
 	text := ConnectionStatusResult{ConnectURL: "https://example.com/connect", Servers: []ConnectionStatusServer{
@@ -84,7 +92,7 @@ func TestConnectionStatusText_NeedsConsentClaimsNoVerification(t *testing.T) {
 	}}.Text()
 	require.Contains(t, text, "1 of 2 servers ready.")
 	require.NotContains(t, text, "verified at consent")
-	require.Contains(t, text, "Start authorization again")
+	require.Contains(t, text, "Reconnect this gateway in your AI app")
 	require.NotContains(t, text, "To sign in")
 }
 
