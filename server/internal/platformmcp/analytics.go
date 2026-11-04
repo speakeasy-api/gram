@@ -54,7 +54,8 @@ type AnalyticsService struct {
 }
 
 // NewAnalyticsService returns nil without a logger, an engine, an
-// organization resolver or a project reader, so the tools are served as stubs.
+// organization resolver, a project reader or an authorization client, so the
+// tools are served as stubs.
 func NewAnalyticsService(logger *slog.Logger, engine AnalyticsEngine, flags feature.Provider, organizations OrganizationSlugResolver, projects ProjectReadResolver, client *authz.Client, budget OperationBudget, signalFeatures analytics.SignalFeatures) *AnalyticsService {
 	if logger == nil || engine == nil || organizations == nil || projects == nil || client == nil {
 		return nil
