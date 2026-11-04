@@ -65,6 +65,11 @@ func canReregister(clientIDMetadataURI pgtype.Text, identityProviderConnectionID
 
 // refreshHappened maps a metric outcome to the row; revoked mid-refresh and canceled write none.
 func refreshHappened(outcome remotesessionmetrics.RefreshOutcome, client remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow, err error) (mcpconnectionattempts.Happened, bool) {
+	// A response body that was cut off or could not be decoded is malformed,
+	// even through a tunnel. Do not override canceled/deferred/no-row outcomes.
+	if (outcome == remotesessionmetrics.RefreshOutcomeUnreachable || outcome == remotesessionmetrics.RefreshOutcomeInternalError) && errors.Is(err, errRefreshUnusableAnswer) {
+		return mcpconnectionattempts.CodeMalformedResponse, true
+	}
 	if client.TunneledMcpServerID.Valid {
 		if code, ok := refreshTunnelFailure(outcome, err); ok {
 			return code, true
@@ -86,6 +91,15 @@ func refreshHappened(outcome remotesessionmetrics.RefreshOutcome, client remotes
 		}
 		return mcpconnectionattempts.CodeProviderOAuthInvalidClient, true
 	case remotesessionmetrics.RefreshOutcomeRejected, remotesessionmetrics.RefreshOutcomeRejectedUnparsed:
+		// Name provider failures without changing the response-facing refresh outcome.
+		if tokenErr, ok := errors.AsType[*TokenRefreshError](err); ok {
+			switch tokenErr.code {
+			case oautherr.CodeServerError:
+				return mcpconnectionattempts.CodeProviderServerError, true
+			case oautherr.CodeTemporarilyUnavailable:
+				return mcpconnectionattempts.CodeProviderUnavailable, true
+			}
+		}
 		return mcpconnectionattempts.CodeRefreshRejected, true
 	case remotesessionmetrics.RefreshOutcomeUpstreamError:
 		if tokenErr, ok := errors.AsType[*TokenRefreshError](err); ok && tokenErr.code == oautherr.CodeTemporarilyUnavailable {
@@ -97,9 +111,6 @@ func refreshHappened(outcome remotesessionmetrics.RefreshOutcome, client remotes
 	case remotesessionmetrics.RefreshOutcomeUnreachable:
 		return mcpconnectionattempts.CodeProviderUnreachable, true
 	case remotesessionmetrics.RefreshOutcomeInternalError:
-		if errors.Is(err, errRefreshUnusableAnswer) {
-			return mcpconnectionattempts.CodeMalformedResponse, true
-		}
 		if tokenErr, ok := errors.AsType[*TokenRefreshError](err); ok {
 			switch tokenErr.remedy {
 			case refreshRemedyAdministrator:

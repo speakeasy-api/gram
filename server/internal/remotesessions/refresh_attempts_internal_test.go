@@ -3,6 +3,8 @@ package remotesessions
 import (
 	"context"
 	"errors"
+	"fmt"
+	"io"
 	"net/http"
 	"testing"
 
@@ -139,18 +141,42 @@ func TestRefreshHappened_LocalTunnelTransportIsInternal(t *testing.T) {
 	}
 }
 
-func TestRefreshHappened_TemporaryOAuthErrorsAreRetryable(t *testing.T) {
+func TestRefreshHappened_TemporaryOAuthErrorsPreserveResponse(t *testing.T) {
 	t.Parallel()
 	for _, code := range []string{"server_error", "temporarily_unavailable"} {
 		for _, status := range []int{http.StatusOK, http.StatusBadRequest, http.StatusTooManyRequests} {
 			err := newTokenRefreshErrorFromHTTP(status, http.StatusText(status), []byte(`{"error":"`+code+`"}`))
 			outcome := refreshOutcomeForError(context.Background(), err)
-			want := remotesessionmetrics.RefreshOutcomeUpstreamError
+			want := remotesessionmetrics.RefreshOutcomeRejected
 			if status == http.StatusTooManyRequests {
 				want = remotesessionmetrics.RefreshOutcomeRateLimited
 			}
 			require.Equal(t, want, outcome)
-			require.True(t, refreshOutagePaced(outcome, err))
+			require.Equal(t, status == http.StatusTooManyRequests, refreshOutagePaced(outcome, err))
+		}
+	}
+}
+
+func TestRefreshHappened_MissingTokenDoesNotStartCooldown(t *testing.T) {
+	t.Parallel()
+	err := newTokenRefreshError("no access token", errRefreshUnusableAnswer, refreshRemedyAdministrator)
+	require.False(t, refreshOutagePaced(refreshOutcomeForError(context.Background(), err), err))
+}
+
+func TestRefreshHappened_TruncatedBodyPrecedesTunnelOutage(t *testing.T) {
+	t.Parallel()
+	err := fmt.Errorf("read refresh response: %w: %w: %w", errRefreshUpstreamUnreachable, errRefreshUnusableAnswer, io.ErrUnexpectedEOF)
+	for _, tunneled := range []bool{false, true} {
+		client := remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow{TunneledMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: tunneled}}
+		outcome := refreshOutcomeForError(context.Background(), err)
+		require.Equal(t, remotesessionmetrics.RefreshOutcomeUnreachable, outcome)
+		require.ErrorIs(t, &RefreshError{Outcome: outcome, err: err}, ErrRemoteSessionUnavailable)
+		what, ok := refreshHappened(outcome, client, err)
+		require.True(t, ok)
+		require.Equal(t, mcpconnectionattempts.CodeMalformedResponse, what)
+		for _, suppressed := range []remotesessionmetrics.RefreshOutcome{remotesessionmetrics.RefreshOutcomeCanceled, remotesessionmetrics.RefreshOutcomeDeferred, remotesessionmetrics.RefreshOutcomeSessionInactive} {
+			_, ok := refreshHappened(suppressed, client, err)
+			require.False(t, ok)
 		}
 	}
 }
