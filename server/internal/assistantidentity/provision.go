@@ -174,8 +174,8 @@ func (s *Service) selectAgent(ctx context.Context, tx pgx.Tx, p ProvisionParams)
 		if err != nil {
 			return agentrepo.Agent{}, fmt.Errorf("load actor grants: %w", err)
 		}
-		// No grant covers an agent whose owner is unknown.
-		if agent.OwnerUserID == "" {
+		// No grant covers an agent whose owner is unknown or a wildcard.
+		if agent.OwnerUserID == "" || agent.OwnerUserID == authz.WildcardResource {
 			return agentrepo.Agent{}, ErrAgentUnauthorized
 		}
 		bound := authz.NewAgentAccess(p.ActorUserID, grants).Grants()

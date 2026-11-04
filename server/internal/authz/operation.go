@@ -480,5 +480,7 @@ func typedOperations() []Operation {
 		Inference("project").Execute(),
 		Chat("chat").Read(), Chat("chat").Write(),
 		project.ReadChats(),
+		Agent("agent", "owner").Read(), Agent("agent", "owner").Write(),
+		Agent("agent", "owner").Authorize(), Agent("agent", "owner").Transfer(),
 	}
 }

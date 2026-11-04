@@ -4,6 +4,7 @@ import (
 	"context"
 	"testing"
 
+	"github.com/google/uuid"
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
@@ -72,12 +73,7 @@ func TestDelegatedAgentPermissionsAgreeAcrossEvaluators(t *testing.T) {
 				require.NoError(t, err)
 				require.Equal(t, tc.want, permissions)
 
-				_, _, err = service.authorizer.RequireAgent(ctx, db, agent.ID, OwnedAgentRead)
-				if tc.want.Read {
-					require.NoError(t, err)
-				} else {
-					requireOopsCode(t, err, oops.CodeForbidden)
-				}
+				requireAgentMatchesPermissions(t, ctx, service, agent.ID, tc.want)
 			})
 		}
 	}
@@ -120,7 +116,27 @@ func TestScopeOverrideNarrowsAgentPermissionsAcrossEvaluators(t *testing.T) {
 				visible, err := service.authorizer.visible(ctx, human, agent)
 				require.NoError(t, err, override)
 				require.True(t, visible, override)
+				requireAgentMatchesPermissions(t, ctx, service, agent.ID, want)
 			}
 		})
+	}
+}
+
+// requireAgentMatchesPermissions checks that enforcing each owner predicate
+// on the agent agrees with the projected permissions.
+func requireAgentMatchesPermissions(t *testing.T, ctx context.Context, service *Service, agentID uuid.UUID, want AgentPermissions) {
+	t.Helper()
+	for predicate, allowed := range map[OwnerPredicate]bool{
+		OwnedAgentRead:      want.Read,
+		OwnedAgentSetup:     want.Write,
+		OwnedAgentAuthorize: want.Authorize,
+		OwnedAgentTransfer:  want.Transfer,
+	} {
+		_, _, err := service.authorizer.RequireAgent(ctx, service.db, agentID, predicate)
+		if allowed {
+			require.NoError(t, err, predicate)
+		} else {
+			requireOopsCode(t, err, oops.CodeForbidden)
+		}
 	}
 }
