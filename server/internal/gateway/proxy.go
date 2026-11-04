@@ -435,6 +435,12 @@ func (tp *ToolProxy) doFunction(
 
 	setUserEmailEnv(payloadEnv, plan.AuthInput != nil && plan.AuthInput.GramEmail, env.GramEmail)
 
+	// The manifest does not say which declared variables a function requires,
+	// so a missing one cannot refuse the call outright. When the function then
+	// fails, the missing variables are the cause the caller can act on, not
+	// the runner's validation dump.
+	missingVariables := missingFunctionVariables(plan.Variables, payloadEnv)
+
 	req, err := tp.functions.ToolCall(ctx, functions.RunnerToolCallRequest{
 		RunnerBaseRequest: functions.RunnerBaseRequest{
 			InvocationID:      invocationID,
@@ -497,6 +503,10 @@ func (tp *ToolProxy) doFunction(
 			if resp.Header.Get("Gram-Invoke-ID") != invocationID.String() {
 				return fmt.Errorf("failed to verify function invocation ID")
 			}
+			if resp.StatusCode >= http.StatusBadRequest && len(missingVariables) > 0 {
+				responseStatusCode = resp.StatusCode
+				return oops.E(oops.CodeFailedPrecondition, nil, "server not configured: missing environment variables %s", strings.Join(missingVariables, ", ")).LogWarn(ctx, logger)
+			}
 			return nil
 		},
 		RetryConfig:       functionRunnerRetryConfig(),
@@ -510,6 +520,19 @@ func (tp *ToolProxy) doFunction(
 		OrganizationID:    descriptor.OrganizationID,
 		OrganizationSlug:  descriptor.OrganizationSlug,
 	})
+}
+
+// missingFunctionVariables lists, sorted, the variables a function declares
+// that the environment sent to its runner leaves unset or empty.
+func missingFunctionVariables(declared map[string]*functions.ManifestVariableAttributeV0, payloadEnv map[string]string) []string {
+	var missing []string
+	for key := range declared {
+		if payloadEnv[key] == "" {
+			missing = append(missing, key)
+		}
+	}
+	slices.Sort(missing)
+	return missing
 }
 
 // toolCallMeta converts a resolved caller identity into the `_meta` block sent
@@ -1160,6 +1183,11 @@ func reverseProxyRequest(ctx context.Context, opts ReverseProxyOptions) error {
 
 	if err := opts.VerifyResponse(resp); err != nil {
 		span.SetStatus(codes.Error, err.Error())
+		// A verifier that already explains the failure to the caller keeps
+		// its own code and message.
+		if shareable, ok := errors.AsType[*oops.ShareableError](err); ok {
+			return shareable
+		}
 		return oops.E(oops.CodeGatewayError, err, "response verification failed").LogError(ctx, opts.Logger)
 	}
 
