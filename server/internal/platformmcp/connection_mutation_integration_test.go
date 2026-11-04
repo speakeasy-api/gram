@@ -332,6 +332,17 @@ func TestSetMCPConnectionMutationRefusesOtherProjectsAndMissingWrite(t *testing.
 		Mode: "dual", ExpectedVersion: version, IdempotencyKey: uuid.NewString(), Confirmed: true,
 	})
 	require.ErrorAs(t, err, &denied)
+
+	otherProjectWrite := authz.GrantsToContext(ctx, []authz.Grant{
+		authz.NewGrant(authz.ScopeOrgAdmin, f.principal.OrganizationID),
+		authz.NewGrantWithSelector(authz.ScopeMCPWrite, authz.Selector{
+			authz.SelectorKeyResourceID: "*",
+			authz.SelectorKeyProjectID:  uuid.NewString(),
+		}),
+	})
+	_, err = f.setAddress(otherProjectWrite, MCPConnectionSettingsMCPServer, f.hostedID, version, "", f.orgSlug+"-third", "", true)
+	require.ErrorAs(t, err, &denied, "MCP write bounded to another project does not change this project's address")
+	require.Equal(t, string(authz.ScopeMCPWrite), denied.RequiredScope)
 }
 
 func TestSetMCPNetworkAccessChecksEntitlementAndIngress(t *testing.T) {
