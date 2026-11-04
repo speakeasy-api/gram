@@ -55,6 +55,18 @@ func TestService_ListScopes(t *testing.T) {
 		require.Equal(t, scope.Sensitive, scope.Sensitivity != nil, scope.Slug)
 	}
 
+	// Tasks come from the same package and only name catalogued scopes.
+	require.Len(t, result.Tasks, len(authz.Tasks()))
+	for _, task := range result.Tasks {
+		require.NotEmpty(t, task.Slug)
+		require.NotEmpty(t, task.Label)
+		for _, scope := range task.Scopes {
+			require.Contains(t, bySlug, scope, "%s: %s is not a listed scope", task.Slug, scope)
+		}
+	}
+	require.Equal(t, "session_review", result.Tasks[2].Slug)
+	require.Equal(t, []string{"chat:read", "log:read"}, result.Tasks[2].Scopes)
+
 	require.Equal(t, "org", bySlug[string(authz.ScopeOrgRead)].ResourceType)
 	require.Equal(t, "project", bySlug[string(authz.ScopeProjectWrite)].ResourceType)
 	require.Equal(t, "mcp", bySlug[string(authz.ScopeMCPConnect)].ResourceType)
@@ -122,42 +134,9 @@ func TestService_ListScopes(t *testing.T) {
 	}
 }
 
-// Every exclusion scope the catalog advertises must appear in the design's
-// exclusion_scope enum, or generated clients reject the listScopes response and
-// the roles page fails to load. The enum is a sixth place a new scope family has
-// to be added, and the count assertions above do not reach it.
-func TestService_ListScopes_ExclusionScopesAreInTheDesignEnum(t *testing.T) {
-	t.Parallel()
-
-	design, err := os.ReadFile(filepath.Join("..", "..", "design", "access", "design.go"))
-	require.NoError(t, err)
-
-	block := regexp.MustCompile(`(?s)Attribute\("exclusion_scope".*?Enum\((.*?)\)`).FindSubmatch(design)
-	require.NotNil(t, block, "could not find the exclusion_scope enum in the access design")
-
-	declared := make(map[string]bool)
-	for _, quoted := range regexp.MustCompile(`"([^"]+)"`).FindAllSubmatch(block[1], -1) {
-		declared[string(quoted[1])] = true
-	}
-	require.NotEmpty(t, declared)
-
-	ctx, ti := newTestAccessService(t)
-	result, err := ti.service.ListScopes(ctx, &gen.ListScopesPayload{})
-	require.NoError(t, err)
-
-	for _, scope := range result.Scopes {
-		if scope.ExclusionScope == nil {
-			continue
-		}
-		require.True(t, declared[*scope.ExclusionScope],
-			"scope %q advertises exclusion scope %q, which the design's exclusion_scope enum does not declare",
-			scope.Slug, *scope.ExclusionScope)
-	}
-}
-
-// Same trap as the exclusion enum: a category or sensitivity the catalogue
-// emits but the design does not declare makes generated clients reject the
-// whole listScopes response.
+// The scope enums come from the authz catalogue, but a category or sensitivity
+// the catalogue emits and the design does not declare still makes generated
+// clients reject the whole listScopes response.
 func TestService_ListScopes_CategoriesAndSensitivitiesAreInTheDesignEnum(t *testing.T) {
 	t.Parallel()
 

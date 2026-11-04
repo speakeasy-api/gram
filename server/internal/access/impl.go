@@ -288,7 +288,21 @@ func (s *Service) ListScopes(ctx context.Context, _ *gen.ListScopesPayload) (*ge
 		result = append(result, scopeDefinition(entry))
 	}
 
-	return &gen.ListScopesResult{Scopes: result}, nil
+	tasks := authz.Tasks()
+	taskModels := make([]*gen.ScopeTask, 0, len(tasks))
+	for _, task := range tasks {
+		scopes := make([]string, 0, len(task.Scopes))
+		for _, scope := range task.Scopes {
+			scopes = append(scopes, string(scope))
+		}
+		taskModels = append(taskModels, &gen.ScopeTask{
+			Slug:   task.Slug,
+			Label:  task.Label,
+			Scopes: scopes,
+		})
+	}
+
+	return &gen.ListScopesResult{Scopes: result, Tasks: taskModels}, nil
 }
 
 func scopeDefinition(entry authz.ScopeEntry) *gen.ScopeDefinition {
@@ -1604,10 +1618,22 @@ func (s *Service) RequestAccess(ctx context.Context, payload *gen.RequestAccessP
 		manageAccessLink = accessURL.String()
 	}
 
+	// Name the permission the way the role editor does, so the admin reads
+	// "View tool logs" rather than a slug. An unknown slug is sent as is.
+	permissionLabel := payload.Scope
+	permissionDescription := ""
+	if entry, ok := authz.ScopeEntryFor(authz.Scope(payload.Scope)); ok {
+		permissionLabel = entry.Label
+		permissionDescription = entry.Description
+	}
+
 	tmpl := email.AccessRequest{
-		RequesterName:    conv.Default(requester.DisplayName, requester.Email),
-		OrganizationName: org.Name,
-		ManageAccessLink: manageAccessLink,
+		RequesterName:         conv.Default(requester.DisplayName, requester.Email),
+		OrganizationName:      org.Name,
+		ManageAccessLink:      manageAccessLink,
+		PermissionLabel:       permissionLabel,
+		PermissionScope:       payload.Scope,
+		PermissionDescription: permissionDescription,
 	}
 
 	// Send emails to all admins

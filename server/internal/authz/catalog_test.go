@@ -115,6 +115,31 @@ func TestScopeCatalog_SubScopesMatchExpansions(t *testing.T) {
 	require.Empty(t, logRead.SubScopes())
 }
 
+// The API design builds its scope enums from these, so they must cover the
+// whole catalogue and list each exclusion scope once.
+func TestScopeNames_FollowTheCatalogue(t *testing.T) {
+	t.Parallel()
+
+	names := ScopeNames()
+	require.Len(t, names, len(scopeCatalog))
+	for i, entry := range scopeCatalog {
+		require.Equal(t, string(entry.Scope), names[i])
+	}
+
+	exclusions := ExclusionScopeNames()
+	sorted := slices.Clone(exclusions)
+	slices.Sort(sorted)
+	require.Len(t, slices.Compact(sorted), len(exclusions), "each exclusion scope is listed once")
+	for _, entry := range scopeCatalog {
+		exclusion, ok := ExclusionScopeFor(entry.Scope)
+		if ok {
+			require.Contains(t, exclusions, string(exclusion), "%s: exclusion scope missing", entry.Scope)
+		}
+	}
+	require.Equal(t, exclusions[0], string(ScopeOrgBlockedRead), "exclusions follow the catalogue order")
+	require.Contains(t, exclusions, string(ScopeRiskPolicyBypass))
+}
+
 func TestScopeCatalog_IsACopy(t *testing.T) {
 	t.Parallel()
 

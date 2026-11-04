@@ -10949,6 +10949,21 @@ func unmarshalScopeDefinitionResponseBodyToAccessScopeDefinition(v *ScopeDefinit
 	return res
 }
 
+// unmarshalScopeTaskResponseBodyToAccessScopeTask builds a value of type
+// *access.ScopeTask from a value of type *ScopeTaskResponseBody.
+func unmarshalScopeTaskResponseBodyToAccessScopeTask(v *ScopeTaskResponseBody) *access.ScopeTask {
+	res := &access.ScopeTask{
+		Slug:  *v.Slug,
+		Label: *v.Label,
+	}
+	res.Scopes = make([]string, len(v.Scopes))
+	for i, val := range v.Scopes {
+		res.Scopes[i] = val
+	}
+
+	return res
+}
+
 // unmarshalAccessMemberResponseBodyToAccessAccessMember builds a value of type
 // *access.AccessMember from a value of type *AccessMemberResponseBody.
 func unmarshalAccessMemberResponseBodyToAccessAccessMember(v *AccessMemberResponseBody) *access.AccessMember {
