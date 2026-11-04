@@ -19,6 +19,7 @@ import (
 
 	authrepo "github.com/speakeasy-api/gram/server/internal/auth/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -62,7 +63,7 @@ func TestMCPPrincipalCredentialReadmissionErrors(t *testing.T) {
 				projectID := uuid.New()
 				serverURL, err := url.Parse("https://example.com")
 				require.NoError(t, err)
-				service := &Service{logger: logger, authz: engine, serverURL: serverURL,
+				service := &Service{logger: logger, authz: engine, authzClient: authztest.NewParityClient(t, engine), serverURL: serverURL,
 					authRepo: authrepo.New(&admissionProjectsDB{projectID: projectID}),
 				}
 				switch caller {

@@ -60,19 +60,16 @@ func (i *ToolsCallAuthzInterceptor) Name() string {
 }
 
 // InterceptToolsCallRequest implements [proxy.ToolsCallRequestInterceptor].
-// It runs the dimensioned `mcp:connect` Require call against the configured
-// server ID and the tool name from the request params. Any error from the
-// engine — forbidden or otherwise — is surfaced to the user as the JSON-RPC
+// It requires [authz.MCPServerRef.CallTool] for the configured server ID and
+// the tool name from the request params. Any error from the client — forbidden
+// or otherwise — is surfaced to the user as the JSON-RPC
 // rejection envelope; the caller does not silently filter on tools/call (the
 // silent-omission semantics are reserved for tools/list parity, which is
 // gated on payload mutation support).
 //
-// [authz.MCPToolCallCheck] names its first parameter `toolsetID` for legacy
-// reasons, but the helper only stores it as the opaque `ResourceID` on the
-// returned [authz.Check]; passing the mcp_servers UUID is semantically
-// correct. It is the same resource id the handler runs the upfront
-// server-level `mcp:connect` check against, so per-tool and server-level
-// enforcement agree on what they are authorizing.
+// The server ID is the mcp_servers UUID, the same resource id the handler runs
+// the upfront server-level connect check against, so per-tool and
+// server-level enforcement agree on what they are authorizing.
 func (i *ToolsCallAuthzInterceptor) InterceptToolsCallRequest(ctx context.Context, call *proxy.ToolsCallRequest) error {
 	// Defensive: the proxy's typed dispatch (toolsCallRequestFromUserRequest)
 	// only constructs a ToolsCallRequest with non-nil Params, so this branch
