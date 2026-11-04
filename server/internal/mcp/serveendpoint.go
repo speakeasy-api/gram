@@ -1145,7 +1145,7 @@ func (s *Service) authorizeProxyBackendAccess(
 ) (context.Context, error) {
 	// mcp:connect covers non-tool proxy methods; tool interceptors still enforce per-tool scopes.
 	connect := authz.MCPCheck(authz.ScopeMCPConnect, mcpServer.ID.String(), projectID.String())
-	authorized, err := s.requireProxyBackendAccess(ctx, logger, authz.Project(organizationID, projectID.String()).MCPServer(mcpServer.ID.String()).Connect(), mcpServer)
+	authorized, err := s.requireProxyBackendAccess(ctx, logger, authz.MCPServer(projectID.String(), mcpServer.ID.String()).Connect(), mcpServer)
 	shadowCtx := ctx
 	if authorized != nil {
 		shadowCtx = authorized

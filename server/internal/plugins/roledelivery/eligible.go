@@ -46,7 +46,7 @@ func Eligible(ctx context.Context, tx pgx.Tx, org string, projectID, mcpServerID
 		if err != nil {
 			return false, err
 		}
-		yes, err := supplied(ctx, client, org, grants, *selected)
+		yes, err := supplied(ctx, client, grants, *selected)
 		if err != nil {
 			return false, err
 		}

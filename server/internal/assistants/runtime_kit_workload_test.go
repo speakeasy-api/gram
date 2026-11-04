@@ -61,11 +61,11 @@ func TestKitWorkloadInferenceRequiresBothPolicies(t *testing.T) {
 	t.Parallel()
 	project := uuid.New()
 	allowed := []authz.Grant{authz.NewGrant(authz.ScopeInferenceExecute, authz.WildcardResource)}
-	require.NoError(t, kitWorkloadInferenceAllowed(t.Context(), authztest.NewLoadedGrantsClient(), "org-test", project, allowed, allowed))
-	require.Error(t, kitWorkloadInferenceAllowed(t.Context(), authztest.NewLoadedGrantsClient(), "org-test", project, nil, allowed))
-	require.Error(t, kitWorkloadInferenceAllowed(t.Context(), authztest.NewLoadedGrantsClient(), "org-test", project, allowed, nil))
-	require.Error(t, kitWorkloadInferenceAllowed(t.Context(), authztest.NewLoadedGrantsClient(), "org-test", project, allowed))
-	require.Error(t, kitWorkloadInferenceAllowed(t.Context(), authztest.NewLoadedGrantsClient(), "org-test", uuid.Nil, allowed, allowed))
+	require.NoError(t, kitWorkloadInferenceAllowed(t.Context(), authztest.NewLoadedGrantsClient(), project, allowed, allowed))
+	require.Error(t, kitWorkloadInferenceAllowed(t.Context(), authztest.NewLoadedGrantsClient(), project, nil, allowed))
+	require.Error(t, kitWorkloadInferenceAllowed(t.Context(), authztest.NewLoadedGrantsClient(), project, allowed, nil))
+	require.Error(t, kitWorkloadInferenceAllowed(t.Context(), authztest.NewLoadedGrantsClient(), project, allowed))
+	require.Error(t, kitWorkloadInferenceAllowed(t.Context(), authztest.NewLoadedGrantsClient(), uuid.Nil, allowed, allowed))
 }
 
 func TestKitWorkloadRejectsForeignIdentityBeforeDatabase(t *testing.T) {

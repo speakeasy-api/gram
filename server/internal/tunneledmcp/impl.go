@@ -129,7 +129,7 @@ func (s *Service) CreateServer(ctx context.Context, payload *gen.CreateServerPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServers().Edit()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Edit()); err != nil {
 		return nil, err
 	}
 
@@ -235,7 +235,7 @@ func (s *Service) ListServers(ctx context.Context, payload *gen.ListServersPaylo
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServers().Read()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -253,7 +253,7 @@ func (s *Service) GetServer(ctx context.Context, payload *gen.GetServerPayload) 
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServers().Read()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -282,7 +282,7 @@ func (s *Service) ListServerConnections(ctx context.Context, payload *gen.ListSe
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServers().Read()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -311,7 +311,7 @@ func (s *Service) UpdateServer(ctx context.Context, payload *gen.UpdateServerPay
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServers().Edit()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Edit()); err != nil {
 		return nil, err
 	}
 
@@ -455,7 +455,7 @@ func (s *Service) RotateServerKey(ctx context.Context, payload *gen.RotateServer
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServers().Edit()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Edit()); err != nil {
 		return nil, err
 	}
 
@@ -536,7 +536,7 @@ func (s *Service) DeleteServer(ctx context.Context, payload *gen.DeleteServerPay
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServers().Edit()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Edit()); err != nil {
 		return err
 	}
 

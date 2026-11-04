@@ -150,7 +150,7 @@ func (s *Service) CreateToolset(ctx context.Context, payload *gen.CreateToolsetP
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServers().Edit()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Edit()); err != nil {
 		return nil, err
 	}
 
@@ -374,7 +374,7 @@ func (s *Service) ListToolsets(ctx context.Context, payload *gen.ListToolsetsPay
 
 	ops := make([]authz.Operation, len(toolsetIDs))
 	for i, id := range toolsetIDs {
-		ops[i] = authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(id).Read()
+		ops[i] = authz.MCPServer(authCtx.ProjectID.String(), id).Read()
 	}
 	allowed, err := s.authz.MatchMany(ctx, ops)
 	if err != nil {
@@ -435,7 +435,7 @@ func (s *Service) UpdateToolset(ctx context.Context, payload *gen.UpdateToolsetP
 	if err != nil {
 		return nil, oops.E(oops.CodeNotFound, err, "toolset not found").LogError(ctx, logger)
 	}
-	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(candidate.ID.String()).Edit()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), candidate.ID.String()).Edit()); err != nil {
 		return nil, err
 	}
 	if fields := deprecatedHostingFields(payload); len(fields) > 0 {
@@ -592,7 +592,7 @@ func (s *Service) DeleteToolset(ctx context.Context, payload *gen.DeleteToolsetP
 	case err != nil:
 		return oops.E(oops.CodeUnexpected, err, "failed to get toolset").LogError(ctx, logger)
 	}
-	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(candidate.ID.String()).Edit()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), candidate.ID.String()).Edit()); err != nil {
 		return err
 	}
 
@@ -699,7 +699,7 @@ func (s *Service) GetToolset(ctx context.Context, payload *gen.GetToolsetPayload
 		return nil, err
 	}
 
-	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(toolset.ID).Read()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), toolset.ID).Read()); err != nil {
 		return nil, err
 	}
 
@@ -723,7 +723,7 @@ func (s *Service) ListToolFilters(ctx context.Context, payload *gen.ListToolFilt
 		return nil, oops.E(oops.CodeUnexpected, err, "get toolset").LogError(ctx, s.logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(toolset.ID.String()).Read()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), toolset.ID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -780,8 +780,8 @@ func (s *Service) CloneToolset(ctx context.Context, payload *gen.CloneToolsetPay
 
 	if err := s.authz.Require(
 		ctx,
-		authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServers().Edit(),
-		authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(originalToolset.ID.String()).Read(),
+		authz.MCPServersInProject(authCtx.ProjectID.String()).Edit(),
+		authz.MCPServer(authCtx.ProjectID.String(), originalToolset.ID.String()).Read(),
 	); err != nil {
 		return nil, err
 	}
@@ -1030,7 +1030,7 @@ func (s *Service) AddExternalOAuthServer(ctx context.Context, payload *gen.AddEx
 		return nil, err
 	}
 
-	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(existingToolset.ID).Edit()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), existingToolset.ID).Edit()); err != nil {
 		return nil, err
 	}
 
@@ -1164,7 +1164,7 @@ func (s *Service) UpdateExternalOAuthServer(ctx context.Context, payload *gen.Up
 	case !toolset.ExternalOauthServerID.Valid:
 		return nil, oops.E(oops.CodeConflict, nil, "external OAuth server is not attached").LogError(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(toolset.ID.String()).Edit()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), toolset.ID.String()).Edit()); err != nil {
 		return nil, err
 	}
 
@@ -1192,7 +1192,7 @@ func (s *Service) UpdateExternalOAuthServer(ctx context.Context, payload *gen.Up
 	case !lockedToolset.ExternalOauthServerID.Valid:
 		return nil, oops.E(oops.CodeConflict, nil, "external OAuth server is not attached").LogError(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(lockedToolset.ID.String()).Edit()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), lockedToolset.ID.String()).Edit()); err != nil {
 		return nil, err
 	}
 
@@ -1265,7 +1265,7 @@ func (s *Service) RemoveOAuthServer(ctx context.Context, payload *gen.RemoveOAut
 		return nil, oops.E(oops.CodeUnexpected, err, "failed to get toolset").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(existingToolset.ID.String()).Edit()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), existingToolset.ID.String()).Edit()); err != nil {
 		return nil, err
 	}
 

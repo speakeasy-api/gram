@@ -695,7 +695,7 @@ func (s *Service) mintWorkloadGrantSession(ctx context.Context, logger *slog.Log
 		authorizationCtx, err = s.requireWorkloadSessionAuthorization(authorizationCtx, grant.endpoint, workloadSessionReachResource)
 	}
 	if err == nil && grant.session.Audience == InferenceResource {
-		err = s.authzClient.Require(authorizationCtx, authz.Project(organizationID, grant.session.ProjectID.String()).Inference().Execute())
+		err = s.authzClient.Require(authorizationCtx, authz.Inference(grant.session.ProjectID.String()).Execute())
 	}
 	switch {
 	case errors.Is(err, errCredentialRejected), err != nil && isCredentialDenial(err):
@@ -815,7 +815,7 @@ func (s *Service) recheckWorkloadGrantAuthorization(ctx context.Context, grant w
 		ops = append(ops, target.connectOperation())
 	}
 	if grant.session.Audience == InferenceResource {
-		ops = append(ops, authz.Project(grant.session.OrganizationID, grant.session.ProjectID.String()).Inference().Execute())
+		ops = append(ops, authz.Inference(grant.session.ProjectID.String()).Execute())
 	}
 	if len(ops) == 0 {
 		return nil

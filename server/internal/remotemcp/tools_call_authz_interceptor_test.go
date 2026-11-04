@@ -19,10 +19,9 @@ import (
 )
 
 const (
-	testServerID       = "11111111-1111-1111-1111-111111111111"
-	testMcpServerID    = "33333333-3333-3333-3333-333333333333"
-	testProjectID      = "22222222-2222-2222-2222-222222222222"
-	testOrganizationID = "org-test"
+	testServerID    = "11111111-1111-1111-1111-111111111111"
+	testMcpServerID = "33333333-3333-3333-3333-333333333333"
+	testProjectID   = "22222222-2222-2222-2222-222222222222"
 )
 
 // testServerIdentity pairs the remote_mcp_servers id with a distinct fronting
@@ -64,7 +63,7 @@ func newToolsCallRequest(toolName string) *proxy.ToolsCallRequest {
 func TestToolsCallAuthzInterceptor_Name(t *testing.T) {
 	t.Parallel()
 
-	interceptor := remotemcp.NewToolsCallAuthzInterceptor(authztest.NewParityClient(t, newAuthzEngineForTest(t)), emptyResolver(), testOrganizationID, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallAuthzInterceptor(authztest.NewParityClient(t, newAuthzEngineForTest(t)), emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 	require.Equal(t, "tools-call-authz", interceptor.Name())
 }
 
@@ -72,7 +71,7 @@ func TestToolsCallAuthzInterceptor_NilEnginePassesThrough(t *testing.T) {
 	t.Parallel()
 
 	// Defensive: a nil engine must not panic and must not reject.
-	interceptor := remotemcp.NewToolsCallAuthzInterceptor(nil, emptyResolver(), testOrganizationID, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallAuthzInterceptor(nil, emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
 	require.NoError(t, interceptor.InterceptToolsCallRequest(t.Context(), newToolsCallRequest("any_tool")))
 }
@@ -90,7 +89,7 @@ func TestToolsCallAuthzInterceptor_GrantsAllowMatchingTool(t *testing.T) {
 		}),
 	)
 
-	interceptor := remotemcp.NewToolsCallAuthzInterceptor(authztest.NewParityClient(t, engine), emptyResolver(), testOrganizationID, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallAuthzInterceptor(authztest.NewParityClient(t, engine), emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
 	require.NoError(t, interceptor.InterceptToolsCallRequest(ctx, newToolsCallRequest("search_tickets")))
 }
@@ -108,7 +107,7 @@ func TestToolsCallAuthzInterceptor_GrantsRejectNonMatchingTool(t *testing.T) {
 		}),
 	)
 
-	interceptor := remotemcp.NewToolsCallAuthzInterceptor(authztest.NewParityClient(t, engine), emptyResolver(), testOrganizationID, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallAuthzInterceptor(authztest.NewParityClient(t, engine), emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
 	err := interceptor.InterceptToolsCallRequest(ctx, newToolsCallRequest("delete_ticket"))
 
@@ -125,7 +124,7 @@ func TestToolsCallAuthzInterceptor_NoGrantsRejects(t *testing.T) {
 	ctx := contextvalues.SetAuthContext(t.Context(), authzAuthContext(t))
 	ctx = authztest.WithExactGrants(t, ctx)
 
-	interceptor := remotemcp.NewToolsCallAuthzInterceptor(authztest.NewParityClient(t, engine), emptyResolver(), testOrganizationID, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallAuthzInterceptor(authztest.NewParityClient(t, engine), emptyResolver(), testServerID, testProjectID, testenv.NewLogger(t))
 
 	err := interceptor.InterceptToolsCallRequest(ctx, newToolsCallRequest("any_tool"))
 
@@ -152,7 +151,7 @@ func TestToolsCallAuthzInterceptor_DispositionScopedGrantMatches(t *testing.T) {
 		"list_items":  "read_only",
 		"delete_item": "destructive",
 	}}
-	interceptor := remotemcp.NewToolsCallAuthzInterceptor(authztest.NewParityClient(t, engine), resolver, testOrganizationID, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallAuthzInterceptor(authztest.NewParityClient(t, engine), resolver, testServerID, testProjectID, testenv.NewLogger(t))
 
 	// read_only tool matches the disposition-scoped grant.
 	require.NoError(t, interceptor.InterceptToolsCallRequest(ctx, newToolsCallRequest("list_items")))
@@ -181,7 +180,7 @@ func TestToolsCallAuthzInterceptor_ResolverErrorFailsClosed(t *testing.T) {
 	)
 
 	resolver := fakeToolDispositionResolver{err: errors.New("metadata store unavailable")}
-	interceptor := remotemcp.NewToolsCallAuthzInterceptor(authztest.NewParityClient(t, engine), resolver, testOrganizationID, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallAuthzInterceptor(authztest.NewParityClient(t, engine), resolver, testServerID, testProjectID, testenv.NewLogger(t))
 
 	// The call is rejected despite the allowing grant: a resolver failure
 	// aborts before the authz check rather than proceeding on empty disposition.
@@ -207,7 +206,7 @@ func TestToolsCallAuthzInterceptor_UnclassifiedToolAuthorizedByToolGrant(t *test
 	)
 
 	resolver := fakeToolDispositionResolver{dispositions: map[string]string{"delete_ticket": "destructive"}}
-	interceptor := remotemcp.NewToolsCallAuthzInterceptor(authztest.NewParityClient(t, engine), resolver, testOrganizationID, testServerID, testProjectID, testenv.NewLogger(t))
+	interceptor := remotemcp.NewToolsCallAuthzInterceptor(authztest.NewParityClient(t, engine), resolver, testServerID, testProjectID, testenv.NewLogger(t))
 
 	require.NoError(t, interceptor.InterceptToolsCallRequest(ctx, newToolsCallRequest("search_tickets")))
 }

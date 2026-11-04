@@ -190,7 +190,7 @@ func (s *Service) authorizeServerScopes(ctx context.Context, operation func(auth
 	if err != nil {
 		return nil, nil, uuid.Nil, oops.E(oops.CodeBadRequest, err, "invalid mcp server id").LogError(ctx, logger)
 	}
-	if err := s.authz.Require(ctx, operation(authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(mcpServerID.String()))); err != nil {
+	if err := s.authz.Require(ctx, operation(authz.MCPServer(authCtx.ProjectID.String(), mcpServerID.String()))); err != nil {
 		return nil, nil, uuid.Nil, err
 	}
 	return authCtx, logger, mcpServerID, nil
@@ -217,7 +217,7 @@ func (s *Service) authorizeSharingServers(ctx context.Context, logger *slog.Logg
 		if id == target.server.ID {
 			continue
 		}
-		checks = append(checks, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(id.String()).Edit())
+		checks = append(checks, authz.MCPServer(authCtx.ProjectID.String(), id.String()).Edit())
 	}
 	if len(checks) > 0 {
 		if err := s.authz.Require(ctx, checks...); err != nil {
@@ -230,12 +230,12 @@ func (s *Service) authorizeSharingServers(ctx context.Context, logger *slog.Logg
 // canPin reports whether the caller holds mcp:write on every sharing server
 // (the target included) without recording a denial; failures read as false.
 func (s *Service) canPin(ctx context.Context, logger *slog.Logger, authCtx *contextvalues.AuthContext, target pinnableServer, sharing []uuid.UUID) bool {
-	checks := []authz.Operation{authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(target.server.ID.String()).Edit()}
+	checks := []authz.Operation{authz.MCPServer(authCtx.ProjectID.String(), target.server.ID.String()).Edit()}
 	for _, id := range sharing {
 		if id == target.server.ID {
 			continue
 		}
-		checks = append(checks, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(id.String()).Edit())
+		checks = append(checks, authz.MCPServer(authCtx.ProjectID.String(), id.String()).Edit())
 	}
 	ok, err := s.authz.Evaluate(ctx, checks...)
 	if err != nil {

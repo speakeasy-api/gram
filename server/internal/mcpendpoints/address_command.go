@@ -47,7 +47,7 @@ func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx,
 	if tx == nil || authCtx == nil || authCtx.ProjectID == nil || authCtx.ActiveOrganizationID == "" || authCtx.OrganizationSlug == "" || input.Slug == "" || input.McpServerID.Valid == input.MetaMcpServerID.Valid {
 		return nil, fmt.Errorf("invalid MCP endpoint create input")
 	}
-	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServers().Edit()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Edit()); err != nil {
 		return nil, err
 	}
 	if err := validateSlugPrefix(input.Slug, input.CustomDomainID, authCtx.OrganizationSlug); err != nil {
@@ -88,7 +88,7 @@ func (s *Service) CreateMcpEndpointInTransaction(ctx context.Context, tx pgx.Tx,
 		return nil, oops.E(oops.CodeInvalid, err, "invalid mcp endpoint")
 	}
 	if hostedServer != nil {
-		if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(hostedServer.ID.String()).Edit()); err != nil {
+		if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), hostedServer.ID.String()).Edit()); err != nil {
 			return nil, err
 		}
 		if err := checkHostedNewAddress(ctx, tx, s.logger, authCtx, *hostedServer, input.Slug, input.CustomDomainID); err != nil {
@@ -162,7 +162,7 @@ func (s *Service) UpdateMcpEndpointAddressInTransaction(ctx context.Context, tx 
 	if tx == nil || authCtx == nil || authCtx.ProjectID == nil || authCtx.ActiveOrganizationID == "" || authCtx.OrganizationSlug == "" || input.EndpointID == uuid.Nil || input.Slug == "" {
 		return nil, nil, fmt.Errorf("invalid MCP endpoint address update input")
 	}
-	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServers().Edit()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Edit()); err != nil {
 		return nil, nil, err
 	}
 	if err := validateSlugPrefix(input.Slug, input.CustomDomainID, authCtx.OrganizationSlug); err != nil {

@@ -155,10 +155,10 @@ func (s *Service) authorize(ctx context.Context, mutation bool) (*contextvalues.
 
 // readable keeps the servers the caller may read, as the MCP server lists do:
 // org:admin does not imply mcp:read.
-func (s *Service) readable(ctx context.Context, organizationID string, servers []repo.ListEligibleServersRow) ([]repo.ListEligibleServersRow, error) {
+func (s *Service) readable(ctx context.Context, servers []repo.ListEligibleServersRow) ([]repo.ListEligibleServersRow, error) {
 	ops := make([]authz.Operation, len(servers))
 	for i, sv := range servers {
-		ops[i] = authz.Project(organizationID, sv.ProjectID.String()).MCPServer(sv.ID.String()).Read()
+		ops[i] = authz.MCPServer(sv.ProjectID.String(), sv.ID.String()).Read()
 	}
 	matched, err := s.authz.MatchMany(ctx, ops)
 	if err != nil {
@@ -341,7 +341,7 @@ func (s *Service) load(ctx context.Context, logger *slog.Logger, organizationID 
 	if err != nil {
 		return nil, oops.E(oops.CodeUnexpected, err, "list servers").LogError(ctx, logger)
 	}
-	all, err = s.readable(ctx, organizationID, all)
+	all, err = s.readable(ctx, all)
 	if err != nil {
 		return nil, err
 	}
@@ -724,7 +724,7 @@ func (s *Service) Confirm(ctx context.Context, payload *srv.ConfirmPayload) (*sr
 			return nil, oops.E(oops.CodeUnexpected, err, "load server").LogError(ctx, logger)
 		}
 		server := repo.ListEligibleServersRow(sv)
-		if visible, err := s.readable(ctx, authCtx.ActiveOrganizationID, []repo.ListEligibleServersRow{server}); err != nil {
+		if visible, err := s.readable(ctx, []repo.ListEligibleServersRow{server}); err != nil {
 			return nil, err
 		} else if len(visible) == 0 {
 			return nil, oops.E(oops.CodeNotFound, nil, "server not found")
@@ -852,7 +852,7 @@ func (s *Service) Reset(ctx context.Context, payload *srv.ResetPayload) (*srv.Ok
 		return nil, oops.E(oops.CodeUnexpected, err, "load server").LogError(ctx, logger)
 	}
 	server := repo.ListEligibleServersRow(sv)
-	if visible, err := s.readable(ctx, authCtx.ActiveOrganizationID, []repo.ListEligibleServersRow{server}); err != nil {
+	if visible, err := s.readable(ctx, []repo.ListEligibleServersRow{server}); err != nil {
 		return nil, err
 	} else if len(visible) == 0 {
 		return nil, oops.E(oops.CodeNotFound, nil, "server not found")

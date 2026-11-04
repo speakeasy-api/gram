@@ -6,7 +6,7 @@ import (
 	"github.com/stretchr/testify/require"
 )
 
-// TestInferenceExecuteMatchesEngineCheck holds Project(org, project).Inference().Execute()
+// TestInferenceExecuteMatchesEngineCheck holds Inference(project).Execute()
 // to the engine's InferenceExecuteCheck in every migration mode: a grant
 // bounded to the project or to every project passes, and one bounded to
 // another project does not.
@@ -39,8 +39,8 @@ func TestInferenceExecuteMatchesEngineCheck(t *testing.T) {
 				ctx := humanClientContext(t, tc.grants...)
 				engineErr := engine.Require(ctx, InferenceExecuteCheck("proj_1"))
 				require.Equal(t, tc.allow, engineErr == nil, "the case must describe the engine's answer")
-				require.Equal(t, tc.allow, client.Require(ctx, Project("org_1", "proj_1").Inference().Execute()) == nil)
-				allowed, err := client.Evaluate(ctx, Project("org_1", "proj_1").Inference().Execute())
+				require.Equal(t, tc.allow, client.Require(ctx, Inference("proj_1").Execute()) == nil)
+				allowed, err := client.Evaluate(ctx, Inference("proj_1").Execute())
 				require.NoError(t, err)
 				require.Equal(t, tc.allow, allowed)
 			})

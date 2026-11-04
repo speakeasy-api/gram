@@ -54,7 +54,7 @@ func (s *Service) SetUserSessionIssuer(ctx context.Context, payload *gen.SetUser
 		return nil, oops.E(oops.CodeUnexpected, err, "load toolset").LogError(ctx, logger)
 	}
 
-	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(toolset.ID.String()).Edit()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), toolset.ID.String()).Edit()); err != nil {
 		return nil, err
 	}
 	if _, err := mcpserversrepo.New(s.db).GetMCPServerByIDAndProjectID(ctx, mcpserversrepo.GetMCPServerByIDAndProjectIDParams{ID: toolset.ID, ProjectID: *authCtx.ProjectID}); err != nil {

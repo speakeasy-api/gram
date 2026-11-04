@@ -363,14 +363,14 @@ func (f *ProxyManager) BuildTarget(
 	}
 	if visibility == mcpservers.VisibilityPrivate {
 		toolsCallReqInterceptors = append(toolsCallReqInterceptors,
-			NewToolsCallAuthzInterceptor(f.authz, f.toolDispositions, organizationID, identity.McpServerID, projectID, logger),
+			NewToolsCallAuthzInterceptor(f.authz, f.toolDispositions, identity.McpServerID, projectID, logger),
 		)
 	}
 
 	toolsListRespInterceptors := []proxy.ToolsListResponseInterceptor{}
 	if visibility == mcpservers.VisibilityPrivate {
 		toolsListRespInterceptors = append(toolsListRespInterceptors,
-			NewToolsListMCPConnectFilterInterceptor(f.authz, f.toolDispositions, organizationID, identity.McpServerID, projectID, logger),
+			NewToolsListMCPConnectFilterInterceptor(f.authz, f.toolDispositions, identity.McpServerID, projectID, logger),
 		)
 	}
 

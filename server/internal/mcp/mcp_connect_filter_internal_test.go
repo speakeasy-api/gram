@@ -53,7 +53,7 @@ func TestFilterToolsByMCPConnect_StopsAfterCancel(t *testing.T) {
 		tools[i] = &toolListEntry{Name: fmt.Sprintf("tool_%d", i)}
 	}
 
-	_, err := filterToolsByMCPConnect(ctx, testenv.NewLogger(t), authztest.NewClient(t, engine), toolsetID, "org-test", uuid.NewString(), tools)
+	_, err := filterToolsByMCPConnect(ctx, testenv.NewLogger(t), authztest.NewClient(t, engine), toolsetID, uuid.NewString(), tools)
 
 	require.ErrorIs(t, err, context.Canceled)
 	require.Equal(t, 1, *checks)

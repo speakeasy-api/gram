@@ -51,7 +51,7 @@ func (s *Service) GetMcpNetworkTraffic(ctx context.Context, payload *telem_gen.G
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(resourceID).Read()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(authCtx.ProjectID.String(), resourceID).Read()); err != nil {
 		return nil, err
 	}
 

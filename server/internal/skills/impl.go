@@ -220,7 +220,7 @@ func (s *Service) requireSkillGrant(ctx context.Context, organizationID, project
 	if skillID == "" {
 		return s.authz.Require(ctx, authz.Project(organizationID, projectID).ReadSkills())
 	}
-	return s.authz.Require(ctx, authz.Project(organizationID, projectID).Skill(skillID).Read())
+	return s.authz.Require(ctx, authz.Skill(projectID, skillID).Read())
 }
 
 func manifestErrorMessage(err error) string {

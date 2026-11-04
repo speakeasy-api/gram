@@ -129,7 +129,7 @@ func (s *Service) ListEMAServices(ctx context.Context, _ *orgissuersgen.ListEMAS
 		if !row.McpServerID.Valid || !emaBindingSetUp(row.State) {
 			continue
 		}
-		serverChecks[row.McpServerID.UUID.String()] = authz.Project(org, row.ProjectID.String()).MCPServer(mcpGrantResourceID(row.McpServerID.UUID, row.McpServerToolsetID)).Read()
+		serverChecks[row.McpServerID.UUID.String()] = authz.MCPServer(row.ProjectID.String(), mcpGrantResourceID(row.McpServerID.UUID, row.McpServerToolsetID)).Read()
 		server := &orgissuersgen.EMAServiceServer{
 			ID: row.McpServerID.UUID.String(), Name: row.McpServerName, Slug: row.McpServerSlug,
 			ProjectID: row.ProjectID.String(), ProjectSlug: row.ProjectSlug, ProjectName: row.ProjectName,

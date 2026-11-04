@@ -526,7 +526,7 @@ func (s *Service) filterMCPServerCountsByRead(ctx context.Context, authCtx *cont
 			grantID = server.ToolsetID.UUID.String()
 		}
 		grantIDByServer[server.ID.String()] = grantID
-		operations = append(operations, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServer(grantID).Read())
+		operations = append(operations, authz.MCPServer(authCtx.ProjectID.String(), grantID).Read())
 		grantIDs = append(grantIDs, grantID)
 	}
 	matched, err := s.authzClient.MatchMany(ctx, operations)

@@ -344,7 +344,7 @@ func (s *Service) GetMcpEndpoint(ctx context.Context, payload *gen.GetMcpEndpoin
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServers().Read()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -407,7 +407,7 @@ func (s *Service) ListMcpEndpoints(ctx context.Context, payload *gen.ListMcpEndp
 		return nil, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServers().Read()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 
@@ -469,7 +469,7 @@ func (s *Service) UpdateMcpEndpoint(ctx context.Context, payload *gen.UpdateMcpE
 
 	logger := s.logger.With(attr.SlogProjectID(authCtx.ProjectID.String()))
 	requireProjectWrite := func() error {
-		return s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServers().Edit())
+		return s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Edit())
 	}
 
 	endpointID, err := uuid.Parse(payload.ID)
@@ -688,7 +688,7 @@ func (s *Service) CheckMcpEndpointSlugAvailability(ctx context.Context, payload 
 		return false, oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServers().Read()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Read()); err != nil {
 		return false, err
 	}
 
@@ -737,7 +737,7 @@ func (s *Service) DeleteMcpEndpoint(ctx context.Context, payload *gen.DeleteMcpE
 		return oops.C(oops.CodeUnauthorized)
 	}
 
-	if err := s.authz.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).MCPServers().Edit()); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServersInProject(authCtx.ProjectID.String()).Edit()); err != nil {
 		return err
 	}
 
