@@ -354,6 +354,7 @@ func TestStaleNoAuthReconnectCopyMatchesConnect(t *testing.T) {
 		g.ti.service.SetAuthClientPermission(func() bool { return true })
 		connection := g.approve(t, ctx)
 		registration := g.attachSignIn(t, ctx, true)
+		seedPrincipalMCPConnectGrant(t, ctx, g.ti, g.org, urn.NewPrincipal(urn.PrincipalTypeUser, mockidp.MockUserID), g.serverID)
 		requireStaleError(t, g.call(t, connection.token, "source--tool_000"), staleReconnectCopy)
 		w, err := g.postConnect(t, ctx, registration)
 		require.NoError(t, err)
