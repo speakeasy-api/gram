@@ -12,6 +12,7 @@ import (
 
 	"github.com/speakeasy-api/gram/tunnel/wire"
 
+	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
@@ -64,7 +65,6 @@ func TestRefreshHappened_DownTunnelIsTheTunnel(t *testing.T) {
 		outcome remotesessionmetrics.RefreshOutcome
 		err     error
 	}{
-		{name: "no transport", outcome: remotesessionmetrics.RefreshOutcomeInternalError, err: newTokenRefreshError("no transport", errRefreshTunnelTransport, refreshRemedyRetry)},
 		{name: "unanswered", outcome: remotesessionmetrics.RefreshOutcomeUnreachable, err: errors.New("post refresh")},
 		{name: "gateway 502", outcome: remotesessionmetrics.RefreshOutcomeUpstreamError, err: &TokenRefreshError{statusCode: http.StatusBadGateway, tunnelError: wire.TunnelErrorNoRoute}},
 	} {
@@ -125,5 +125,32 @@ func TestRefreshHappened_NoRow(t *testing.T) {
 	for _, outcome := range []remotesessionmetrics.RefreshOutcome{remotesessionmetrics.RefreshOutcomeSessionInactive, remotesessionmetrics.RefreshOutcomeCanceled, remotesessionmetrics.RefreshOutcomeDeferred} {
 		_, ok := refreshHappened(outcome, client, context.Canceled)
 		require.False(t, ok, outcome)
+	}
+}
+
+func TestRefreshHappened_LocalTunnelTransportIsInternal(t *testing.T) {
+	t.Parallel()
+	client := remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow{TunneledMcpServerID: uuid.NullUUID{UUID: uuid.New(), Valid: true}}
+	for _, err := range []error{newTokenRefreshError("no transport", errRefreshTunnelTransport, refreshRemedyRetry), tunnelrouting.ErrTransportConfiguration} {
+		what, ok := refreshHappened(refreshOutcomeForError(context.Background(), err), client, err)
+		require.True(t, ok)
+		require.Equal(t, mcpconnectionattempts.CodeInternalError, what)
+		require.False(t, refreshOutagePaced(remotesessionmetrics.RefreshOutcomeInternalError, err))
+	}
+}
+
+func TestRefreshHappened_TemporaryOAuthErrorsAreRetryable(t *testing.T) {
+	t.Parallel()
+	for _, code := range []string{"server_error", "temporarily_unavailable"} {
+		for _, status := range []int{http.StatusOK, http.StatusBadRequest, http.StatusTooManyRequests} {
+			err := newTokenRefreshErrorFromHTTP(status, http.StatusText(status), []byte(`{"error":"`+code+`"}`))
+			outcome := refreshOutcomeForError(context.Background(), err)
+			want := remotesessionmetrics.RefreshOutcomeUpstreamError
+			if status == http.StatusTooManyRequests {
+				want = remotesessionmetrics.RefreshOutcomeRateLimited
+			}
+			require.Equal(t, want, outcome)
+			require.True(t, refreshOutagePaced(outcome, err))
+		}
 	}
 }

@@ -10,6 +10,7 @@ import (
 
 	"github.com/speakeasy-api/gram/server/internal/mcp/tunnelrouting"
 	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
+	"github.com/speakeasy-api/gram/server/internal/oautherr"
 	"github.com/speakeasy-api/gram/server/internal/remotesessions/remotesessionmetrics"
 	remotesessions_repo "github.com/speakeasy-api/gram/server/internal/remotesessions/repo"
 )
@@ -87,12 +88,18 @@ func refreshHappened(outcome remotesessionmetrics.RefreshOutcome, client remotes
 	case remotesessionmetrics.RefreshOutcomeRejected, remotesessionmetrics.RefreshOutcomeRejectedUnparsed:
 		return mcpconnectionattempts.CodeRefreshRejected, true
 	case remotesessionmetrics.RefreshOutcomeUpstreamError:
+		if tokenErr, ok := errors.AsType[*TokenRefreshError](err); ok && tokenErr.code == oautherr.CodeTemporarilyUnavailable {
+			return mcpconnectionattempts.CodeProviderUnavailable, true
+		}
 		return mcpconnectionattempts.CodeProviderServerError, true
 	case remotesessionmetrics.RefreshOutcomeRateLimited:
 		return mcpconnectionattempts.CodeProviderRateLimited, true
 	case remotesessionmetrics.RefreshOutcomeUnreachable:
 		return mcpconnectionattempts.CodeProviderUnreachable, true
 	case remotesessionmetrics.RefreshOutcomeInternalError:
+		if errors.Is(err, errRefreshUnusableAnswer) {
+			return mcpconnectionattempts.CodeMalformedResponse, true
+		}
 		if tokenErr, ok := errors.AsType[*TokenRefreshError](err); ok {
 			switch tokenErr.remedy {
 			case refreshRemedyAdministrator:
@@ -111,7 +118,10 @@ func refreshHappened(outcome remotesessionmetrics.RefreshOutcome, client remotes
 
 // refreshTunnelFailure names a refresh the tunnel stopped. A 502 the tunnel forwarded came from the provider.
 func refreshTunnelFailure(outcome remotesessionmetrics.RefreshOutcome, err error) (mcpconnectionattempts.Code, bool) {
-	if errors.Is(err, errRefreshTunnelTransport) || outcome == remotesessionmetrics.RefreshOutcomeUnreachable {
+	if errors.Is(err, errRefreshTunnelTransport) || errors.Is(err, tunnelrouting.ErrTransportConfiguration) {
+		return mcpconnectionattempts.CodeInternalError, true
+	}
+	if outcome == remotesessionmetrics.RefreshOutcomeUnreachable {
 		return mcpconnectionattempts.CodeTunnelUnavailable, true
 	}
 	if tokenErr, ok := errors.AsType[*TokenRefreshError](err); ok && tokenErr.statusCode == http.StatusBadGateway {
