@@ -698,6 +698,7 @@ func (m *ChallengeManager) resolveClientTokens(
 			return nil, fmt.Errorf("resolve access token: %w", err)
 		case resolved.Token == "":
 			if skipUnusable {
+				attribution.skipped.Note(projectID, c.RemoteSessionIssuerID, c.ClientID, ErrNoValidToken)
 				continue
 			}
 			return nil, ErrNoValidToken

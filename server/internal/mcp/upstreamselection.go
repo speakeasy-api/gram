@@ -35,6 +35,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/feature"
+	"github.com/speakeasy-api/gram/server/internal/mcpconnectionattempts"
 	"github.com/speakeasy-api/gram/server/internal/mcpidentity"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
 	"github.com/speakeasy-api/gram/server/internal/mcpservers/upstreamclients"
@@ -947,7 +948,8 @@ func (s *Service) decideConsentCanReplaceChoice(ctx context.Context, gate *metaG
 				}
 				// An existing connection needs no Connect.
 				reconnect, err := s.remoteChallengeMgr.AuthClientNeedsReconnect(ctx, remotesessions.AuthClientTokenRequest{
-					ProjectID: member.projectID, OrganizationID: gate.organizationID, UserSessionIssuerID: gate.userSessionIssuerID,
+					Attribution: remotesessions.RefreshAttribution{}, // Stored-state check; never refreshes.
+					ProjectID:   member.projectID, OrganizationID: gate.organizationID, UserSessionIssuerID: gate.userSessionIssuerID,
 					Subject: subject, RegistrationID: option.registrationID.UUID, SkipUnusable: false,
 				})
 				if err != nil {
@@ -1143,7 +1145,7 @@ func memberNeedsSignIn(member metaMember) bool {
 // up with a credential for through that credential, where typed auth client
 // resolution is enforced. It is nil for any other caller, before enforcement,
 // and for a key with no choices, so the gateway keeps its path.
-func (s *Service) agentKeyMemberChoices(ctx context.Context, organizationID string, agentID uuid.UUID) (*memberChoices, error) {
+func (s *Service) agentKeyMemberChoices(ctx context.Context, organizationID string, agentID uuid.UUID, scope mcpconnectionattempts.Scope) (*memberChoices, error) {
 	mode, byKey := contextvalues.APIKeyAuthorization(ctx)
 	authCtx, hasAuth := contextvalues.GetAuthContext(ctx)
 	if !byKey || mode != contextvalues.APIKeyAuthorizationModePrincipal || !hasAuth || authCtx == nil || authCtx.ActiveOrganizationID != organizationID {
@@ -1196,7 +1198,7 @@ func (s *Service) agentKeyMemberChoices(ctx context.Context, organizationID stri
 				OrganizationID:            organizationID,
 				UserSessionIssuerID:       issuerID,
 			}
-			tokens, err := s.resolveChosenMemberTokens(ctx, remotesessions.RefreshIn(connectionScope(endpoint, requestApp(ctx))), endpoint, subject, true, member)
+			tokens, err := s.resolveChosenMemberTokens(ctx, remotesessions.RefreshIn(scope), endpoint, subject, true, member)
 			if err != nil {
 				return nil, err
 			}

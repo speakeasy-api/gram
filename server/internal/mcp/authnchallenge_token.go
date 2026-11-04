@@ -1556,6 +1556,11 @@ func (s *Service) rotateRefreshToken(
 		logger.WarnContext(postCommitCtx, "failed to revoke old access token jti on refresh", attr.SlogError(revokeErr))
 	}
 
+	if err := writeTokenSuccess(ctx, w, logger, minted.Body); err != nil {
+		tracker.Continue()
+		return published, err
+	}
+
 	switch upstreamCheck {
 	case upstreamRefreshUnverified:
 		tracker.Refuse(ctx, mcpconnectionattempts.CodeRefreshedUnverified, mcpconnectionattempts.Subject(&minted.Subject), mcpconnectionattempts.FromRequest(r))
@@ -1564,7 +1569,7 @@ func (s *Service) rotateRefreshToken(
 	case upstreamRefreshServed, upstreamRefreshReconnect, upstreamRefreshEMARefused:
 		tracker.Succeed(ctx, mcpconnectionattempts.ResultRefreshed, mcpconnectionattempts.Subject(&minted.Subject), mcpconnectionattempts.FromRequest(r))
 	}
-	return published, writeTokenSuccess(ctx, w, logger, minted.Body)
+	return published, nil
 }
 
 // refreshNeedsUpstreamReconnect reports whether a session's refresh should be

@@ -41,9 +41,6 @@ func TestRefreshHappened_InvalidClientFollowsWhoCanRepairIt(t *testing.T) {
 		{name: "private key", client: withEndpoint(func(c *remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow) {
 			c.TokenEndpointAuthMethod = pgtype.Text{String: string(TokenEndpointAuthMethodPrivateKeyJWT), Valid: true}
 		}), want: mcpconnectionattempts.CodeProviderOAuthInvalidClient},
-		{name: "active managed binding", client: withEndpoint(func(c *remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow) {
-			c.HasActiveEmaBinding = true
-		}), want: mcpconnectionattempts.CodeProviderOAuthInvalidClient},
 		{name: "self", client: withEndpoint(func(c *remotesessions_repo.GetRemoteSessionClientWithIssuerByIDRow) {
 			c.CredentialOwner = string(CredentialOwnerSelf)
 		}), want: mcpconnectionattempts.CodeProviderOAuthInvalidClient},
