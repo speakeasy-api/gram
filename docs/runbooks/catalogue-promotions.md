@@ -80,8 +80,11 @@ messages as the slug is edited:
 
 The check uses the guides embedded in the server (`setupguides.PinnedVersion`),
 so it can lag the docs repository's `main`; delivery rechecks GitHub before
-requesting a guide. The Admin MCP promotion preview shows the same check as
-"Existing setup guide". Neither blocks publication.
+requesting a guide. The Admin MCP promotion preview runs the same exact-slug
+check as an "Existing setup guide" row, but with only two messages: any slug
+that already belongs to a guide gets the warning wording, including this
+server's own endpoint guide, and a free slug gets the pinned-version note.
+Neither blocks publication.
 
 Enable staff Admin MCP using `GRAM_ADMIN_MCP_ENABLED` and its independent
 `GRAM_ADMIN_MCP_SIGNING_KEY`. For writes, set `GRAM_ADMIN_MCP_WRITES_ENABLED=true`
