@@ -74,8 +74,9 @@ type tunnelClientFamilies struct {
 
 func newTunnelClientFamilies(store sessionClientInfoStore) *tunnelClientFamilies {
 	return &tunnelClientFamilies{
-		store: store,
-		cache: expirable.NewLRU[tunnelClientCacheKey, rememberedClient](tunnelClientCacheSize, nil, tunnelClientCacheTTL),
+		store:               store,
+		cache:               expirable.NewLRU[tunnelClientCacheKey, rememberedClient](tunnelClientCacheSize, nil, tunnelClientCacheTTL),
+		rowReadsPausedUntil: atomic.Int64{},
 	}
 }
 

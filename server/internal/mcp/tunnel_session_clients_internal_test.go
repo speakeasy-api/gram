@@ -3,7 +3,6 @@ package mcp
 import (
 	"context"
 	"errors"
-	"log/slog"
 	"net/http"
 	"net/http/httptest"
 	"testing"
@@ -139,15 +138,4 @@ func TestReportedClientReadsNothingUntilAsked(t *testing.T) {
 	req.Header.Set(proxy.McpSessionIDHeader, "session")
 	_ = service.reportedClient(t.Context(), req, uuid.New(), "scope")
 	require.Equal(t, 0, store.loads)
-}
-
-func BenchmarkSessionClientForRow(b *testing.B) {
-	store := &countingClientInfoStore{fakeClientInfoStore: newFakeClientInfoStore(), loads: 0, err: nil}
-	project := uuid.New()
-	families := newTunnelClientFamilies(store)
-	logger := slog.New(slog.DiscardHandler)
-	_, _ = families.forRow(logger, project, "scope", "session")
-	for b.Loop() {
-		_, _ = families.forRow(logger, project, "scope", "session")
-	}
 }
