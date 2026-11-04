@@ -110,7 +110,7 @@ Review follow-ups adopted on #8442 (each fails closed):
 ### Decided without reviewer input
 
 1. **Shared access helpers take an operation.** `requireOrgAccess`, `authorize` and `access` now take `func(authz.OrganizationRef) authz.Operation`, and callers pass `authz.OrganizationRef.Administer` or `.Read`, as identity-provider connections do in O3. _If reversed:_ map scopes locally, as product features does.
-2. **One remote-sessions test builds its key-set service with a parity client.** The delegation-status test constructs a `jsonwebkeysets` service directly, so it now passes a client too. That is the only change outside O4's packages.
+2. **One remote-sessions test builds its key-set service with a parity client.** The delegation-status test constructs a `jsonwebkeysets` service directly, so it now passes a client too. That is the only test change outside O4's packages.
 
 ## O5 (AIS-840): custom domains, network ingress, assets and LiteLLM
 
