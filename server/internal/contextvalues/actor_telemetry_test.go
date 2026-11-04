@@ -20,7 +20,7 @@ func TestActorTelemetryAttributes(t *testing.T) {
 		"gram.authorization.actor.type":         "agent",
 		"gram.authorization.actor.id":           principal.ID,
 		"gram.authorization.api_key_id":         "key_test",
-		"gram.authorization.authorizer_user_id": "user_authorizer",
+		"gram.authorization.authorizer_user_id": "",
 		"gram.authorization.owner_user_id":      "user_owner",
 		"gram.workload_issuer.id":               "",
 		"gram.workload.subject":                 "",

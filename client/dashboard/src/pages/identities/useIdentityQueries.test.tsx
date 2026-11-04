@@ -14,7 +14,23 @@ vi.mock("@/hooks/useRBAC", () => ({
 vi.mock("@gram/client/react-query/listChats.js", () => ({
   useListChats: (...args: unknown[]) => mocks.listChats(...args),
 }));
-const agent = { id: "agent", ownerUserId: "owner" } as ManagedAgent;
+const ownerPermissions = {
+  read: true,
+  write: true,
+  authorize: true,
+  transfer: true,
+};
+const noPermissions = {
+  read: false,
+  write: false,
+  authorize: false,
+  transfer: false,
+};
+const agent = {
+  id: "agent",
+  ownerUserId: "owner",
+  permissions: ownerPermissions,
+} as ManagedAgent;
 const from = new Date("2026-01-01T00:00:00Z");
 const to = new Date("2026-01-08T00:00:00Z");
 afterEach(cleanup);
@@ -45,7 +61,14 @@ it("stops querying when an owned agent is latched for reassignment", () => {
     { initialProps: { target: agent } },
   );
   expect(result.current).toBe(true);
-  rerender({ target: { ...agent, ownerReassignmentRequiredAt: new Date() } });
+  // The server stops reporting edit rights for a latched owner.
+  rerender({
+    target: {
+      ...agent,
+      ownerReassignmentRequiredAt: new Date(),
+      permissions: noPermissions,
+    },
+  });
   expect(result.current).toBe(false);
   expect(mocks.listChats).toHaveBeenLastCalledWith(
     expect.anything(),
@@ -56,15 +79,34 @@ it("stops querying when an owned agent is latched for reassignment", () => {
 
 it("does not treat another agent's owner as the viewer", () => {
   const { result } = renderHook(() =>
-    useCanReadAgentChats({ ...agent, ownerUserId: "other-owner" }),
+    useCanReadAgentChats({
+      ...agent,
+      ownerUserId: "other-owner",
+      permissions: { ...noPermissions, read: true },
+    }),
   );
   expect(result.current).toBe(false);
+});
+
+it("lets an editor of someone else's agent read its sessions", () => {
+  const { result } = renderHook(() =>
+    useCanReadAgentChats({
+      ...agent,
+      ownerUserId: "other-owner",
+      permissions: { ...noPermissions, read: true, write: true },
+    }),
+  );
+  expect(result.current).toBe(true);
 });
 
 it("allows an explicit chat reader after owner reassignment", () => {
   mocks.chatRead = true;
   const { result } = renderHook(() =>
-    useCanReadAgentChats({ ...agent, ownerReassignmentRequiredAt: new Date() }),
+    useCanReadAgentChats({
+      ...agent,
+      ownerReassignmentRequiredAt: new Date(),
+      permissions: noPermissions,
+    }),
   );
   expect(result.current).toBe(true);
 });

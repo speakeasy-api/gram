@@ -26,7 +26,7 @@ import {
 } from "@/lib/organizationFilters";
 import { CREATED_PRESETS, createdPresetMetadata } from "@/lib/createdRange";
 import { cn } from "@/lib/utils";
-import type { OrganizationsSearch } from "@/routes/organizations.index";
+import type { OrganizationsSearch } from "@/lib/organizationSearch";
 
 import { useApplyFilters } from "./applyFilters";
 import { CreateOrganization } from "./CreateOrganization";

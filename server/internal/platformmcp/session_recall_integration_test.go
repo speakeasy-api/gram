@@ -520,3 +520,25 @@ func TestSessionRecallContinueServesLatestGenerationOnly(t *testing.T) {
 	require.Contains(t, out.Digest, "current generation answer")
 	require.NotContains(t, out.Digest, "SUPERSEDED-GENERATION-ZERO")
 }
+
+// A cron session captured before cron titles stored its raw envelope; the
+// recall listing names it after its job, as the dashboard does.
+func TestSessionRecallListNamesStoredCronEnvelopesAfterTheirJob(t *testing.T) {
+	t.Parallel()
+
+	ctx := t.Context()
+	conn, err := platformMCPInfra.CloneTestDatabase(t, "platform_mcp_session_recall_cron_title")
+	require.NoError(t, err)
+
+	principal, project := seedRegistrationLifecycle(t, ctx, conn)
+	enabled := true
+	svc, _ := newRecallService(t, conn, &enabled)
+
+	chatID := seedRecallChat(t, ctx, conn, project.ID, principal.OrganizationID, principal.UserID, "ses_"+uuid.NewString(), "[cron:0f0e0d0c-0b0a-4908-8706-050403020100 weekly-skill-review] Review the skills", uuid.NullUUID{UUID: uuid.Nil, Valid: false})
+
+	out, err := svc.ListMySessions(ctx, principal, ListMySessionsInput{Limit: 0})
+	require.NoError(t, err)
+	require.Len(t, out.Sessions, 1)
+	require.Equal(t, chatID.String(), out.Sessions[0].ChatID)
+	require.Equal(t, "Cron: weekly-skill-review", out.Sessions[0].Title)
+}

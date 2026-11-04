@@ -310,6 +310,9 @@ func TestToolsCallConnections_PreSendFailures(t *testing.T) {
 		want         mcpconnectionattempts.Code
 	}{
 		{name: "missing caller header", target: "https://provider.example.com/mcp", headers: []proxy.ConfiguredHeader{{Name: "X-Tenant", ValueFromRequestHeader: "X-Tenant", IsRequired: true}}, want: mcpconnectionattempts.CodeInvalidRequest},
+		{name: "invalid stored destination", target: "https://provider.example.com/mcp", headers: []proxy.ConfiguredHeader{{Name: " bad", ValueFromRequestHeader: "X-Tenant", StaticValue: "", IsRequired: true}}, want: mcpconnectionattempts.CodeCredentialMisconfigured},
+		{name: "invalid stored source", target: "https://provider.example.com/mcp", headers: []proxy.ConfiguredHeader{{Name: "X-Tenant", ValueFromRequestHeader: " bad", StaticValue: "", IsRequired: true}}, want: mcpconnectionattempts.CodeCredentialMisconfigured},
+		{name: "reserved stored source", target: "https://provider.example.com/mcp", headers: []proxy.ConfiguredHeader{{Name: "X-Tenant", ValueFromRequestHeader: "Authorization", StaticValue: "", IsRequired: true}}, want: mcpconnectionattempts.CodeCredentialMisconfigured},
 		{name: "invalid target", target: "http://provider.example.com/mcp", want: mcpconnectionattempts.CodeCredentialMisconfigured},
 		{name: "build failure", target: "://invalid", want: mcpconnectionattempts.CodeInternalError},
 	} {

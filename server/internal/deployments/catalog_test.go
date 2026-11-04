@@ -7,7 +7,6 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/deployments/repo"
 	"github.com/speakeasy-api/gram/server/internal/externalmcp"
-	"github.com/speakeasy-api/gram/server/internal/feature"
 	"github.com/speakeasy-api/gram/server/internal/mcpregistry"
 	registryrepo "github.com/speakeasy-api/gram/server/internal/mcpregistry/repo"
 	"github.com/stretchr/testify/require"
@@ -33,7 +32,7 @@ func TestDeploymentsService_RejectNewCatalogSelection(t *testing.T) {
 	}
 }
 
-func TestDeploymentsService_EvolveRetainsCatalogIdentityAfterFlip(t *testing.T) {
+func TestDeploymentsService_EvolveRetainsCatalogIdentity(t *testing.T) {
 	t.Parallel()
 	for _, upsert := range []bool{false, true} {
 		t.Run(map[bool]string{false: "carried", true: "matching upsert"}[upsert], func(t *testing.T) {
@@ -42,7 +41,6 @@ func TestDeploymentsService_EvolveRetainsCatalogIdentityAfterFlip(t *testing.T) 
 			require.NoError(t, externalmcp.EnsureNativeCatalogSource(ctx, ti.conn))
 			auth, ok := contextvalues.GetAuthContext(ctx)
 			require.True(t, ok)
-			ti.feature.SetFlag(feature.FlagGramMCPCatalog, auth.ActiveOrganizationID, true)
 			// Seed accepted work without running a network-dependent extraction workflow.
 			q := repo.New(ti.conn)
 			depID, err := q.InsertDeployment(ctx, repo.InsertDeploymentParams{ProjectID: *auth.ProjectID, OrganizationID: auth.ActiveOrganizationID, UserID: auth.UserID, IdempotencyKey: uuid.NewString()})
@@ -50,7 +48,6 @@ func TestDeploymentsService_EvolveRetainsCatalogIdentityAfterFlip(t *testing.T) 
 			require.NoError(t, q.CreateDeploymentStatus(ctx, repo.CreateDeploymentStatusParams{DeploymentID: depID, Status: "completed"}))
 			_, err = q.UpsertDeploymentExternalMCP(ctx, repo.UpsertDeploymentExternalMCPParams{DeploymentID: depID, RegistryID: uuid.NullUUID{UUID: externalmcp.NativeCatalogRegistryID, Valid: true}, Name: "Test", Slug: "test", RegistryServerSpecifier: "example/server"})
 			require.NoError(t, err)
-			ti.feature.SetFlag(feature.FlagGramMCPCatalog, auth.ActiveOrganizationID, false)
 			form := &gen.EvolvePayload{NonBlocking: new(true)}
 			if upsert {
 				form.UpsertExternalMcps = []*gen.AddExternalMCPForm{{RegistryID: new(externalmcp.NativeCatalogRegistryID.String()), Name: "Renamed", Slug: "test", RegistryServerSpecifier: "example/server"}}
@@ -79,9 +76,6 @@ func TestDeploymentsService_RejectUnpublishedNativeAttachment(t *testing.T) {
 			t.Parallel()
 			ctx, ti := newTestDeploymentService(t, assetstest.NewTestBlobStore(t))
 			require.NoError(t, externalmcp.EnsureNativeCatalogSource(ctx, ti.conn))
-			auth, ok := contextvalues.GetAuthContext(ctx)
-			require.True(t, ok)
-			ti.feature.SetFlag(feature.FlagGramMCPCatalog, auth.ActiveOrganizationID, true)
 			raw := []byte(`{"server":{"name":"io.example/selection","description":"Selection","version":"1.0.0","remotes":[{"type":"streamable-http","url":"https://example.com/mcp"}]},"_meta":{"io.modelcontextprotocol.registry/official":{"status":"active"}}}`)
 			require.NoError(t, registryrepo.New(ti.conn).InsertRegistryEntryFixture(ctx, registryrepo.InsertRegistryEntryFixtureParams{ID: uuid.New(), Data: raw, Published: false}))
 			form := &gen.AddExternalMCPForm{RegistryID: new(externalmcp.NativeCatalogRegistryID.String()), Name: "Selection", Slug: "selection", RegistryServerSpecifier: "io.example/selection"}

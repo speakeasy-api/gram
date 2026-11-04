@@ -259,14 +259,14 @@ describe("Agent sessions", () => {
   });
   it("says who authorized a session, not who the agent is upstream", async () => {
     setup();
-    expect(screen.getByText("Authorized by")).toBeTruthy();
+    expect(screen.getByText("Person")).toBeTruthy();
     expect(screen.queryByText("The agent itself")).toBeNull();
     fireEvent.focus(screen.getByText("No one"));
     expect(
       (await screen.findAllByText(/On each server it then signs in/)).length,
     ).toBeGreaterThan(0);
   });
-  it("names whoever issued a key as the one who authorized it", () => {
+  it("names whoever issued a key as its issuer, not its authorizer", () => {
     render(
       <MemoryRouter>
         <AgentSessionsSection
@@ -274,7 +274,7 @@ describe("Agent sessions", () => {
             {
               ...session,
               subjectKind: "api-key",
-              authorizerUserId: "user_one",
+              keyIssuerUserId: "user_one",
             },
           ]}
           isLoading={false}
@@ -289,7 +289,28 @@ describe("Agent sessions", () => {
       </MemoryRouter>,
     );
     expect(screen.getByText("Example Person")).toBeTruthy();
+    expect(screen.getByText(/Issued by/)).toBeTruthy();
+    expect(screen.queryByText(/Authorized by/)).toBeNull();
     expect(screen.queryByText("No one")).toBeNull();
+  });
+  it("names whoever approved a session as its authorizer", () => {
+    render(
+      <MemoryRouter>
+        <AgentSessionsSection
+          sessions={[{ ...session, authorizerUserId: "user_one" }]}
+          isLoading={false}
+          isError={false}
+          canRevoke
+          onRetry={vi.fn<() => void>()}
+          onRevoke={vi.fn().mockResolvedValue(undefined)}
+          authorizerName={(id) =>
+            id === "user_one" ? "Example Person" : undefined
+          }
+        />
+      </MemoryRouter>,
+    );
+    expect(screen.getByText(/Authorized by/)).toBeTruthy();
+    expect(screen.getByText("Example Person")).toBeTruthy();
   });
   it("offers pagination without replacing the current sessions", () => {
     const onLoadMore = vi.fn<() => void>();

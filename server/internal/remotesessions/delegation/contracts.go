@@ -88,6 +88,9 @@ type RefreshError struct {
 	Kind RefreshFailure
 	// SigningFailure changes outcome ownership, never retry or claim semantics.
 	SigningFailure bool
+
+	// RetryAfter is how long the provider asked to wait, zero when it didn't say.
+	RetryAfter time.Duration
 }
 
 func (e *RefreshError) Error() string { return "delegation refresh failed" }

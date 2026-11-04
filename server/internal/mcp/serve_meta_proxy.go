@@ -530,7 +530,9 @@ func (s *Service) executeProxiedMemberTool(
 	dial, err := redial(ctx, gate, member)
 	if err != nil {
 		if _, ok := errors.AsType[*metaMemberError](err); ok {
-			return marshalMetaMemberFailure(ctx, logger, req.ID, err, s.memberFailureMessage(ctx, logger, gate, member, err))
+			message := s.memberFailureMessage(ctx, logger, gate, member, err)
+			failMetaToolCall(ctx, metaMemberErrorStatus(err), message)
+			return marshalMetaMemberFailure(ctx, logger, req.ID, err, message)
 		}
 		return nil, oops.E(oops.CodeUnexpected, err, "dial meta MCP member").LogError(ctx, logger)
 	}
@@ -547,6 +549,9 @@ func (s *Service) executeProxiedMemberTool(
 		upstreamResult, _, err = s.callOnMemberSession(ctx, logger, dial, redial, member, toolName, arguments)
 	}
 	if err != nil {
+		// The gateway logs this failure only when the call never reached
+		// the upstream interceptor.
+		failMetaToolCall(ctx, metaMemberErrorStatus(err), err.Error())
 		return marshalMetaMemberFailure(ctx, logger, req.ID, err, err.Error())
 	}
 
@@ -582,11 +587,18 @@ func (s *Service) callOnMemberSession(ctx context.Context, logger *slog.Logger, 
 	})
 	if err != nil {
 		ms.fail(ctx)
-		if ms.unsent() && ctx.Err() == nil {
+		unsent := ms.unsent()
+		if unsent && ctx.Err() == nil {
 			return nil, true, err
+		}
+		// A call that left the gateway is logged by the upstream interceptor.
+		if !unsent {
+			markMetaToolCallProxied(ctx)
 		}
 		return nil, false, memberClientFailure(ctx, logger, ms.outcome, ms.dial, member, err)
 	}
+	// The upstream interceptor wrote this call's row.
+	markMetaToolCallProxied(ctx)
 	return upstreamResult, false, nil
 }
 
