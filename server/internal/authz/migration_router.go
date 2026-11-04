@@ -104,6 +104,8 @@ func DefaultMigrationUnits() []MigrationUnit {
 		{Name: "organization", Types: []string{"organization"}, DependsOn: nil},
 		{Name: "project", Types: []string{"project"}, DependsOn: []string{"organization"}},
 		{Name: "mcp", Types: []string{"mcp_server", "mcp_auth_client"}, DependsOn: []string{"project"}},
+		{Name: "skill", Types: []string{"skill"}, DependsOn: []string{"project"}},
+		{Name: "assistant", Types: []string{"assistant"}, DependsOn: []string{"project"}},
 		{Name: "environment", Types: []string{"environment"}, DependsOn: []string{"project"}},
 	}
 }
@@ -215,6 +217,29 @@ func (r *MigrationRouter) routeFor(ctx context.Context, ops []Operation) route {
 	if pins == nil {
 		return old
 	}
+	return r.routeWith(ctx, ops, pins, requestOrganizationID(ctx))
+}
+
+// routeForLoaded chooses the evaluator for a decision over grants a service
+// loaded for organizationID. It reuses the request's pins when the request
+// was admitted; otherwise the call is its own boundary and reads its units'
+// modes for organizationID afresh, so background work that never passed
+// admission still follows its organization's rollout.
+func (r *MigrationRouter) routeForLoaded(ctx context.Context, ops []Operation, organizationID string) route {
+	if r == nil || len(ops) == 0 {
+		return route{mode: MigrationModeOld, units: nil}
+	}
+	pins := routePinsFromContext(ctx)
+	if pins == nil {
+		pins = &routePins{mu: sync.Mutex{}, modes: make(map[string]MigrationMode)}
+	} else if requested := requestOrganizationID(ctx); requested != "" {
+		organizationID = requested
+	}
+	return r.routeWith(ctx, ops, pins, organizationID)
+}
+
+func (r *MigrationRouter) routeWith(ctx context.Context, ops []Operation, pins *routePins, organizationID string) route {
+	old := route{mode: MigrationModeOld, units: nil}
 	var units []string
 	for _, op := range ops {
 		for _, typeName := range operationTypes(op) {
@@ -228,7 +253,6 @@ func (r *MigrationRouter) routeFor(ctx context.Context, ops []Operation) route {
 	slices.Sort(units)
 	units = slices.Compact(units)
 
-	organizationID := requestOrganizationID(ctx)
 	mode := MigrationModeNew
 	pins.mu.Lock()
 	defer pins.mu.Unlock()

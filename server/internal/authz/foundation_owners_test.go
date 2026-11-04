@@ -122,7 +122,6 @@ var foundationPackageOwners = map[string]string{
 	"internal/spendrules":                                    ownerO6,
 	"internal/telemetry":                                     ownerL1,
 	"internal/telemetry/analytics":                           ownerL1,
-	"internal/toolsets":                                      ownerM1,
 	"internal/tunneledmcp":                                   ownerM4,
 	"internal/unproxiedmcp":                                  ownerM4,
 	"internal/usage":                                         ownerO6,
@@ -151,6 +150,7 @@ var foundationFileOwners = map[string]string{
 
 var foundationFunctionOwners = map[string]string{
 	"internal/assistantidentity/actor.go canDelegateInference":                      ownerI1,
+	"internal/assistantidentity/provision.go *Service.selectAgent":                  ownerAG1,
 	"internal/assistants/runtime_kit_workload.go kitWorkloadInferenceAllowed":       ownerI1,
 	"internal/background/activities/process_workos_org_events.go handleRoleDeleted": ownerO2,
 	"internal/chat/impl.go *Service.GetAssistantSessionSummary":                     ownerC3,

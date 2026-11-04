@@ -163,6 +163,92 @@ func (p ProjectRef) PublishPlugin() Operation {
 	)
 }
 
+// ReadSkills asks to read the project's skills. Skill grants are stored
+// against the project ID, so the operation targets the project rather than
+// one skill.
+func (p ProjectRef) ReadSkills() Operation {
+	return newOperation("skill", "read", p.id, nil)
+}
+
+// AssistantRef names one assistant in its project for typed operations.
+// Every operation carries the project as a dimension, so a grant bounded to
+// one project never matches an assistant in another.
+type AssistantRef struct {
+	projectID string
+	id        string
+}
+
+// Assistant names an assistant. The caller must have verified that the
+// assistant belongs to the project.
+func Assistant(projectID, assistantID string) AssistantRef {
+	return AssistantRef{projectID: projectID, id: assistantID}
+}
+
+// AssistantsInProject names the assistants of a project as a whole, for
+// operations that are not about one existing assistant, such as creating
+// one. Grants for these operations are stored with the project's ID as the
+// resource, so the reference uses the project ID as the assistant ID and
+// also carries it as the project dimension.
+func AssistantsInProject(projectID string) AssistantRef {
+	return AssistantRef{projectID: projectID, id: projectID}
+}
+
+func (a AssistantRef) dimensions() map[string]string {
+	return map[string]string{SelectorKeyProjectID: a.projectID}
+}
+
+// Read asks to read the assistant.
+func (a AssistantRef) Read() Operation {
+	return newOperation("assistant", "read", a.id, a.dimensions())
+}
+
+// Write asks to change the assistant.
+func (a AssistantRef) Write() Operation {
+	return newOperation("assistant", "write", a.id, a.dimensions())
+}
+
+// MCPServerRef names one MCP server in its project for typed operations.
+// Every operation carries the project as a dimension, so a grant or block
+// bounded to one project never matches a server in another.
+type MCPServerRef struct {
+	projectID string
+	id        string
+}
+
+// MCPServer names an MCP server (a toolset). The caller must have verified
+// that the server belongs to the project.
+func MCPServer(projectID, serverID string) MCPServerRef {
+	return MCPServerRef{projectID: projectID, id: serverID}
+}
+
+// MCPServersInProject names the MCP servers of a project as a whole, for
+// operations that are not about one existing server, such as listing or
+// creating servers. Grants for these operations are stored with the
+// project's ID as the resource, so the reference uses the project ID as the
+// server ID and also carries it as the project dimension.
+func MCPServersInProject(projectID string) MCPServerRef {
+	return MCPServerRef{projectID: projectID, id: projectID}
+}
+
+func (m MCPServerRef) dimensions() map[string]string {
+	return map[string]string{SelectorKeyProjectID: m.projectID}
+}
+
+// Read asks to inspect the server's configuration.
+func (m MCPServerRef) Read() Operation {
+	return newOperation("mcp_server", "read", m.id, m.dimensions())
+}
+
+// Edit asks to change the server's configuration.
+func (m MCPServerRef) Edit() Operation {
+	return newOperation("mcp_server", "edit", m.id, m.dimensions())
+}
+
+// Connect asks to connect to the server.
+func (m MCPServerRef) Connect() Operation {
+	return newOperation("mcp_server", "connect", m.id, m.dimensions())
+}
+
 // EnvironmentRef names one environment in its project for typed
 // operations. Every operation carries the project as a dimension, so a grant
 // or block bounded to one project never matches an environment in another.
@@ -203,10 +289,14 @@ func (e EnvironmentRef) Write() Operation {
 func typedOperations() []Operation {
 	org := Organization("organization")
 	project := Project("organization", "project")
+	mcpServer := MCPServer("project", "server")
 	environment := Environment("project", "environment")
 	return []Operation{
 		org.Read(), org.Administer(),
 		project.Read(), project.Write(), project.PublishPlugin(),
+		mcpServer.Read(), mcpServer.Edit(), mcpServer.Connect(),
+		project.ReadSkills(),
+		Assistant("project", "assistant").Read(), Assistant("project", "assistant").Write(),
 		environment.Read(), environment.Write(),
 	}
 }
