@@ -1880,6 +1880,30 @@ func (q *Queries) IsAgentOwner(ctx context.Context, arg IsAgentOwnerParams) (boo
 	return exists, err
 }
 
+const isLiveAgent = `-- name: IsLiveAgent :one
+SELECT EXISTS (
+  SELECT 1
+  FROM agents a
+  WHERE a.id = $1
+    AND a.organization_id = $2
+    AND a.deleted IS FALSE
+)
+`
+
+type IsLiveAgentParams struct {
+	AgentID        uuid.UUID
+	OrganizationID string
+}
+
+// Whether an agent exists in the organization and is not deleted, before a
+// caller's agent:write grant on it lets them read its sessions.
+func (q *Queries) IsLiveAgent(ctx context.Context, arg IsLiveAgentParams) (bool, error) {
+	row := q.db.QueryRow(ctx, isLiveAgent, arg.AgentID, arg.OrganizationID)
+	var exists bool
+	err := row.Scan(&exists)
+	return exists, err
+}
+
 const linkAIIntegrationConfigChat = `-- name: LinkAIIntegrationConfigChat :one
 INSERT INTO ai_integration_config_chats (
     ai_integration_config_id

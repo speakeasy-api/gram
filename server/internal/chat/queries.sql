@@ -597,6 +597,17 @@ FROM agents a
 WHERE a.organization_id = @organization_id
   AND a.deleted IS FALSE;
 
+-- name: IsLiveAgent :one
+-- Whether an agent exists in the organization and is not deleted, before a
+-- caller's agent:write grant on it lets them read its sessions.
+SELECT EXISTS (
+  SELECT 1
+  FROM agents a
+  WHERE a.id = @agent_id
+    AND a.organization_id = @organization_id
+    AND a.deleted IS FALSE
+);
+
 -- name: IsAgentOwner :one
 SELECT EXISTS (
   SELECT 1

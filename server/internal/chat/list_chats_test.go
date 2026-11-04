@@ -653,6 +653,19 @@ func TestListChats_Member_SeesEditableAgentSessions(t *testing.T) {
 	result, err = ti.service.ListChats(readerCtx, defaultPayload())
 	require.NoError(t, err)
 	require.Equal(t, 0, result.Total)
+
+	// Where RBAC is not enforced (no session), an agent:write grant does not
+	// widen visibility: the editor sees only their own sessions.
+	authCtx, ok := contextvalues.GetAuthContext(editorCtx)
+	require.True(t, ok)
+	unenforced := *authCtx
+	unenforced.SessionID = nil
+	own := seedChat(t, ctx, ti, unenforced.UserID, "", "own chat")
+	result, err = ti.service.ListChats(contextvalues.SetAuthContext(editorCtx, &unenforced), defaultPayload())
+	require.NoError(t, err)
+	require.Equal(t, 1, result.Total)
+	require.Len(t, result.Chats, 1)
+	require.Equal(t, own.String(), result.Chats[0].ID)
 }
 
 // A chat that carries a human identity belongs to that human, even if an

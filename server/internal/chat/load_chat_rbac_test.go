@@ -289,6 +289,12 @@ func TestLoadChat_RBAC_AgentEditorReadsAgentSession(t *testing.T) {
 
 	err = ti.service.DeleteChat(editorCtx, &gen.DeleteChatPayload{ID: edited.String()})
 	requireOopsCode(t, err, oops.CodeForbidden)
+
+	// A grant on a deleted agent answers for none of its sessions.
+	_, err = agentrepo.New(ti.conn).DeleteAgent(ctx, agentrepo.DeleteAgentParams{OrganizationID: ti.orgID, ID: editedAgent})
+	require.NoError(t, err)
+	_, err = ti.service.LoadChat(editorCtx, loadPayload(edited.String()))
+	requireOopsCode(t, err, oops.CodeForbidden)
 }
 
 // A session that carries a human identity stays that human's even when an
