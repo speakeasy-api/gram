@@ -829,10 +829,8 @@ func newStreamsCommand() *cli.Command {
 			shutdownFuncs = append(shutdownFuncs, stopSessionLogger)
 
 			// Role-distribution setup only evaluates loaded role grants and never
-			// authorizes a request, so its engine needs no membership lookup and
-			// records no challenges.
-			roleDistributionEngine := authz.NewEngine(logger, db, func(context.Context, string) (bool, error) { return false, nil }, nil)
-			roleDistributionAuthz, err := newAuthzClient(logger, meterProvider, roleDistributionEngine, newFeatureFlags(ctx, c, logger, posthogClient))
+			// authorizes a request.
+			roleDistributionAuthz, err := newGrantsAuthzClient(logger, meterProvider, db, newFeatureFlags(ctx, c, logger, posthogClient))
 			if err != nil {
 				return fmt.Errorf("create role distribution authorization client: %w", err)
 			}
