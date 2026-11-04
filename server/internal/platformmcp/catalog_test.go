@@ -178,7 +178,7 @@ func TestCatalogCandidateFromEntryUsesConfiguredIdentity(t *testing.T) {
 	require.Equal(t, "reviewed-provider", candidate.ProviderKey)
 	require.Equal(t, "untrusted/entry", candidate.CatalogRef)
 	require.Equal(t, "Reviewed MCP", candidate.Name)
-	require.Equal(t, 4, candidate.ToolCount)
+	require.Nil(t, candidate.ToolCount)
 	require.Equal(t, "authorize", candidate.SetupIntent)
 }
 
