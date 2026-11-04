@@ -110,6 +110,8 @@ var scopeCatalog = []ScopeEntry{
 	{Scope: ScopeOrgBlockedRead, Label: "Blocked: view organization", Category: ScopeCategoryOrg, ResourceType: "org", Description: "Store exceptions for organization read access.", Sensitivity: SensitivityNone},
 	{Scope: ScopeOrgAdmin, Label: "Manage organization", Category: ScopeCategoryOrg, ResourceType: "org", Description: "Manage organization settings, members, roles and access. Includes removing members and changing what every role can do.", Sensitivity: SensitivityDestructiveAdmin},
 	{Scope: ScopeOrgBlockedAdmin, Label: "Blocked: manage organization", Category: ScopeCategoryOrg, ResourceType: "org", Description: "Store exceptions for organization admin access.", Sensitivity: SensitivityNone},
+	{Scope: ScopeOrgDeviceAgentSync, Label: "Sync device agent plugins", Category: ScopeCategoryOrg, ResourceType: "org", Description: "Let an agent's device agent sync the plugins assigned to it.", Sensitivity: SensitivityNone},
+	{Scope: ScopeOrgHooksIngest, Label: "Send hook events", Category: ScopeCategoryOrg, ResourceType: "org", Description: "Let an agent send AI-tool hook events and telemetry.", Sensitivity: SensitivityNone},
 	{Scope: ScopeProjectRead, Label: "View projects", Category: ScopeCategoryProject, ResourceType: "project", Description: "View projects and project-related resources.", Sensitivity: SensitivityNone},
 	{Scope: ScopeProjectBlockedRead, Label: "Blocked: view projects", Category: ScopeCategoryProject, ResourceType: "project", Description: "Store exceptions for project read access.", Sensitivity: SensitivityNone},
 	{Scope: ScopeProjectWrite, Label: "Manage projects", Category: ScopeCategoryProject, ResourceType: "project", Description: "Create and modify projects and project-related resources.", Sensitivity: SensitivityNone},
@@ -136,8 +138,8 @@ var scopeCatalog = []ScopeEntry{
 	{Scope: ScopeAssistantBlockedRead, Label: "Blocked: view assistants", Category: ScopeCategoryAssistant, ResourceType: "assistant", Description: "Store exceptions for assistant read access.", Sensitivity: SensitivityNone},
 	{Scope: ScopeAssistantWrite, Label: "Manage assistants", Category: ScopeCategoryAssistant, ResourceType: "assistant", Description: "Create and modify assistants within the project.", Sensitivity: SensitivityNone},
 	{Scope: ScopeAssistantBlockedWrite, Label: "Blocked: manage assistants", Category: ScopeCategoryAssistant, ResourceType: "assistant", Description: "Store exceptions for assistant write access.", Sensitivity: SensitivityNone},
-	{Scope: ScopeRiskPolicyEvaluate, Label: "Evaluate risk policies", Category: ScopeCategoryRiskPolicy, ResourceType: "risk_policy", Description: "Evaluate risk policies.", Sensitivity: SensitivityNone},
-	{Scope: ScopeRiskPolicyBypass, Label: "Bypass risk policies", Category: ScopeCategoryRiskPolicy, ResourceType: "risk_policy", Description: "Bypass risk policies.", Sensitivity: SensitivityNone},
+	{Scope: ScopeRiskPolicyEvaluate, Label: "Evaluate risk policies", Category: ScopeCategoryRiskPolicy, ResourceType: "risk_policy", Description: "Put the holder in the named risk policy's audience, so the policy is evaluated against their requests unless a bypass grant for the same policy exempts the request.", Sensitivity: SensitivityNone},
+	{Scope: ScopeRiskPolicyBypass, Label: "Bypass risk policies", Category: ScopeCategoryRiskPolicy, ResourceType: "risk_policy", Description: "Exempt the holder from the named risk policy for the exact server the grant names, by URL or identity. It only subtracts from a matching evaluate grant and never puts anyone in a policy's audience.", Sensitivity: SensitivityNone},
 	{Scope: ScopeRiskPolicyBlock, Label: "Block shadow MCP servers", Category: ScopeCategoryRiskPolicy, ResourceType: "risk_policy", Description: "Block specific shadow MCP servers under allow-by-default risk policies.", Sensitivity: SensitivityNone},
 	{Scope: ScopeChatRead, Label: "View agent sessions", Category: ScopeCategorySession, ResourceType: "chat", Description: "Read and pin other members' agent session transcripts, and reveal secrets flagged in Risk Events. Everyone keeps their own sessions.", Sensitivity: SensitivityConversations},
 	{Scope: ScopeChatWrite, Label: "Manage agent sessions", Category: ScopeCategorySession, ResourceType: "chat", Description: "Rename, delete, and give feedback on other members' agent sessions, and read their transcripts. Everyone keeps their own.", Sensitivity: SensitivityConversations},
@@ -151,8 +153,6 @@ var scopeCatalog = []ScopeEntry{
 	{Scope: ScopeWorkloadBlockedRead, Label: "Blocked: view workload identities", Category: ScopeCategoryWorkload, ResourceType: "workload", Description: "Store exceptions for workload read access.", Sensitivity: SensitivityNone},
 	{Scope: ScopeWorkloadWrite, Label: "Manage workload identities", Category: ScopeCategoryWorkload, ResourceType: "workload", Description: "Register workload issuers, admit and withdraw subjects, and assign agents to workloads.", Sensitivity: SensitivityNone},
 	{Scope: ScopeWorkloadBlockedWrite, Label: "Blocked: manage workload identities", Category: ScopeCategoryWorkload, ResourceType: "workload", Description: "Store exceptions for workload write access.", Sensitivity: SensitivityNone},
-	{Scope: ScopeOrgDeviceAgentSync, Label: "Sync device agent plugins", Category: ScopeCategoryOrg, ResourceType: "org", Description: "Let an agent's device agent sync the plugins assigned to it.", Sensitivity: SensitivityNone},
-	{Scope: ScopeOrgHooksIngest, Label: "Send hook events", Category: ScopeCategoryOrg, ResourceType: "org", Description: "Let an agent send AI-tool hook events and telemetry.", Sensitivity: SensitivityNone},
 }
 
 var scopeCatalogByScope = func() map[Scope]ScopeEntry {

@@ -124,6 +124,21 @@ func TestScopeCatalog_IsACopy(t *testing.T) {
 	require.NotEqual(t, "changed", second[0].Label)
 }
 
+// The catalogue is grouped by category in ScopeCategories order, so a
+// consumer that groups it gets one contiguous section per category.
+func TestScopeCatalog_IsGroupedByCategory(t *testing.T) {
+	t.Parallel()
+
+	var seen []ScopeCategory
+	for _, entry := range scopeCatalog {
+		if len(seen) == 0 || seen[len(seen)-1] != entry.Category {
+			require.NotContains(t, seen, entry.Category, "%s: category %q is split across the catalogue", entry.Scope, entry.Category)
+			seen = append(seen, entry.Category)
+		}
+	}
+	require.Equal(t, ScopeCategories, seen)
+}
+
 func TestScopeCategories_AreDistinct(t *testing.T) {
 	t.Parallel()
 
