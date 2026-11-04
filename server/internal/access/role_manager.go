@@ -92,7 +92,7 @@ func (r *RoleManager) WithPluginPublisher(publisher plugins.PluginPublishSignale
 // MutationReady reports whether this manager has every dependency required for
 // role writes and post-commit WorkOS reconciliation.
 func (r *RoleManager) MutationReady() bool {
-	return r != nil && r.db != nil && r.logger != nil && r.roles != nil && r.audit != nil
+	return r != nil && r.db != nil && r.logger != nil && r.roles != nil && r.audit != nil && r.roleDeliveryAuthz != nil
 }
 
 // ListRoles returns active roles for an organization from local records and enriches them with local grants and member counts.
