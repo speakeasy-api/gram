@@ -46,9 +46,19 @@ func (k *KitGKERuntimeBackend) reap(ctx context.Context, r assistantRuntimeRecor
 			return nil
 		}
 		var prior kitGKEBackendMetadata
-		if json.Unmarshal(raw, &prior) == nil && kitGKEFailedProjectedWorkload(prior, r, k.config.GKE.Namespace) {
-			r.BackendMetadataJSON = raw
-			return k.invalidateLegacy(ctx, r, prior)
+		if json.Unmarshal(raw, &prior) == nil {
+			// Provisioning never published checkpoint authority, so only the
+			// recorded object identities remain to collect.
+			if prior.Provisioning && len(prior.Checkpoint) == 0 {
+				r.BackendMetadataJSON = raw
+				return k.invalidateLegacy(ctx, r, prior)
+			}
+			// A retired row's objects carry the spec it was provisioned with,
+			// which later deploys move on from. Its exact identities still
+			// authorize deletion.
+			recorded := *k
+			recorded.fingerprint = prior.Fingerprint
+			k = &recorded
 		}
 	}
 	state, authority, err := k.loadAuthority(ctx, r)

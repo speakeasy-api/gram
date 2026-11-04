@@ -889,6 +889,7 @@ func kitWorkloadServiceAccount(in KitGKEProvisionInput) *unstructured.Unstructur
 // Verify every recorded UID before fencing and deleting; never discover or adopt
 // resources by name alone. The authority CAS makes a completed reset retryable.
 // Only failed pre-pool projected-token admissions can be automatically replaced.
+// Retired rows that never published checkpoint authority are collected here too.
 // Never use this path to resume an old snapshot or delete a live workload.
 func kitGKEFailedProjectedWorkload(m kitGKEBackendMetadata, r assistantRuntimeRecord, namespace string) bool {
 	return m.RuntimeID == r.ID && m.AssistantID == r.AssistantID && m.ProjectID == r.ProjectID &&
@@ -923,7 +924,7 @@ func (k *KitGKERuntimeBackend) invalidateLegacy(ctx context.Context, r assistant
 		{claimGVR, kitGKEName(r), m.ClaimUID}, {gkePodGVR, m.PodName, m.PodUID},
 		{kitWarmPoolGVR, m.WarmPoolName, m.WarmPoolUID}, {templateGVR, m.templateName(r), m.TemplateUID}, {kitSecretGVR, m.SecretName, m.SecretUID},
 	}
-	if projected {
+	if m.Workload != nil {
 		steps = append(steps, struct {
 			gvr  schema.GroupVersionResource
 			name string

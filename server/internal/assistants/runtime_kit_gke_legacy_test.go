@@ -144,3 +144,88 @@ func TestKitGKEReapClearedAuthorityRequiresRetiredEmptyObject(t *testing.T) {
 		})
 	}
 }
+
+func TestKitGKEReapRetiredRuntimeWithoutPublishedAuthority(t *testing.T) {
+	t.Parallel()
+	for _, tc := range []struct {
+		name           string
+		objectsPresent bool
+	}{
+		{name: "collects recorded objects", objectsPresent: true},
+		{name: "withdraws credentials when objects are gone", objectsPresent: false},
+	} {
+		t.Run(tc.name, func(t *testing.T) {
+			t.Parallel()
+			k, client, r, fences := kitGKEBackendFixture(t)
+			m := kitGKEBackendMetadata{
+				RuntimeID: r.ID, AssistantID: r.AssistantID, ProjectID: r.ProjectID,
+				Version: 3, Namespace: k.config.GKE.Namespace, Fingerprint: "earlier-spec", Provisioning: true,
+				ClaimUID: "claim-uid", WarmPoolName: kitGKEName(r) + "-pool", WarmPoolUID: "pool-uid",
+				TemplateName: kitGKEName(r) + "-template", TemplateUID: "template-uid",
+				SecretName: kitGKEName(r) + "-secret", SecretUID: "secret-uid", ServiceAccountUID: "ksa-uid",
+				Workload: &KitWorkloadBinding{IssuerID: uuid.New(), ServiceAccount: "kit-retired", Subject: "system:serviceaccount:" + k.config.GKE.Namespace + ":kit-retired"},
+			}
+			steps := []struct {
+				gvr        schema.GroupVersionResource
+				kind, name string
+				uid        types.UID
+			}{
+				{kitClaimGVR, "SandboxClaim", kitGKEName(r), m.ClaimUID},
+				{kitWarmPoolGVR, "SandboxWarmPool", m.WarmPoolName, m.WarmPoolUID},
+				{kitTemplateGVR, "SandboxTemplate", m.TemplateName, m.TemplateUID},
+				{kitSecretGVR, "Secret", m.SecretName, m.SecretUID},
+				{kitServiceAccountGVR, "ServiceAccount", m.Workload.ServiceAccount, m.ServiceAccountUID},
+			}
+			if tc.objectsPresent {
+				for _, step := range steps {
+					o := kitObject(step.kind, step.gvr.GroupVersion().String(), step.name, k.identity(r))
+					labels := o.GetLabels()
+					labels["gram.ai/project-id"] = r.ProjectID.String()
+					o.SetLabels(labels)
+					o.SetAnnotations(map[string]string{"speakeasy.com/kit-spec": m.Fingerprint})
+					o.SetUID(step.uid)
+					require.NoError(t, client.Tracker().Create(step.gvr, o, m.Namespace))
+				}
+			}
+			raw, err := json.Marshal(m)
+			require.NoError(t, err)
+			require.NoError(t, k.config.AuthorityStore.Save(t.Context(), r.LifecycleTx, r, r.BackendMetadataJSON, raw))
+			r.BackendMetadataJSON = raw
+			r.Retired = true
+
+			require.NoError(t, k.Reap(t.Context(), r))
+			require.Equal(t, 1, *fences)
+			for _, step := range steps {
+				_, err := client.Resource(step.gvr).Namespace(m.Namespace).Get(t.Context(), step.name, metav1.GetOptions{})
+				require.True(t, apierrors.IsNotFound(err), step.kind)
+			}
+			persisted, err := k.config.AuthorityStore.Load(t.Context(), r.LifecycleTx, r)
+			require.NoError(t, err)
+			require.JSONEq(t, "{}", string(persisted))
+		})
+	}
+}
+
+func TestKitGKEReapRetiredRuntimeAfterSpecChange(t *testing.T) {
+	t.Parallel()
+	k, client, r, fences := kitGKEBackendFixture(t)
+	result, err := k.Ensure(t.Context(), r)
+	require.NoError(t, err)
+	r.BackendMetadataJSON = result.BackendMetadataJSON
+	var m kitGKEBackendMetadata
+	require.NoError(t, json.Unmarshal(result.BackendMetadataJSON, &m))
+	k.fingerprint = "next-deploy-spec"
+
+	require.ErrorContains(t, k.Reap(t.Context(), r), "compatibility mismatch")
+	require.Zero(t, *fences)
+
+	r.Retired = true
+	require.NoError(t, k.Reap(t.Context(), r))
+	require.Equal(t, 1, *fences)
+	_, err = client.Resource(kitClaimGVR).Namespace(m.Namespace).Get(t.Context(), kitGKEName(r), metav1.GetOptions{})
+	require.True(t, apierrors.IsNotFound(err))
+	_, err = client.Resource(kitWarmPoolGVR).Namespace(m.Namespace).Get(t.Context(), m.WarmPoolName, metav1.GetOptions{})
+	require.True(t, apierrors.IsNotFound(err))
+	_, err = client.Resource(kitServiceAccountGVR).Namespace(m.Namespace).Get(t.Context(), m.Workload.ServiceAccount, metav1.GetOptions{})
+	require.True(t, apierrors.IsNotFound(err))
+}
