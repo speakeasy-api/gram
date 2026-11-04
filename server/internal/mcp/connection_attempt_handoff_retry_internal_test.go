@@ -28,13 +28,14 @@ func TestFederatedOnwardPreservesResponse(t *testing.T) {
 		{"redirect", nil, mcpconnectionattempts.Code{}},
 	} {
 		t.Run(tt.name, func(t *testing.T) {
+			t.Parallel()
 			rec := mcpconnectionattemptstest.New(t)
 			endpoint := directEndpoint()
 			tracker := rec.Recorder.Track(connectionScope(endpoint, mcpconnectionattempts.AppUnverified), mcpconnectionattempts.StepInboundSignIn)
 			tracker.Attach(openState().connectionAttempt(endpoint))
 			tracker.Consumed()
 			got := federatedOnward(t.Context(), tracker, tt.err)
-			require.True(t, got == tt.err, "the exact original error must reach the existing response handler")
+			require.True(t, got == tt.err, "the exact original error must reach the existing response handler") //nolint:errorlint // Error identity, not wrapped equivalence, preserves response handling.
 			tracker.Finish(t.Context())
 			if tt.err == nil {
 				rec.RequireNothing()
@@ -56,6 +57,7 @@ func TestRemoteSessionRefusalLeavesAttemptRetryable(t *testing.T) {
 		{remotesessions.ValidationOutcomeInactive, mcpconnectionattempts.CodeProviderRejected},
 	} {
 		t.Run(string(tt.verdict), func(t *testing.T) {
+			t.Parallel()
 			rec := mcpconnectionattemptstest.New(t)
 			service := &Service{connections: rec.Recorder}
 			endpoint, state := directEndpoint(), openState()
