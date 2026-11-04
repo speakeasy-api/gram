@@ -197,19 +197,22 @@ var consumerEntryPoints = map[string]consumerCategory{
 // inventory by name alone. Require, RequireAny, Evaluate and Filter are not:
 // their checks are inventoried where they are built instead.
 var engineEntryPoints = map[string]bool{
-	"PrepareContext":           true,
-	"RefreshContext":           true,
-	"CaptureAdmissionBoundary": true,
-	"PrepareMandatory":         true,
-	"AuthorizeMandatory":       true,
-	"DecideServerAdmission":    true,
-	"ShouldEnforce":            true,
-	"GetScopeOverrides":        true,
-	"EvaluateLoadedGrants":     true,
-	"RequireAnyUnblocked":      true,
-	"FindMatched":              true,
-	"InvalidateRoleCache":      true,
-	"InvalidateAllRoleCaches":  true,
+	"PrepareContext":                       true,
+	"RefreshContext":                       true,
+	"CaptureAdmissionBoundary":             true,
+	"PrepareMandatory":                     true,
+	"AuthorizeMandatory":                   true,
+	"DecideServerAdmission":                true,
+	"ShouldEnforce":                        true,
+	"GetScopeOverrides":                    true,
+	"EvaluateLoadedGrants":                 true,
+	"RequireAnyUnblocked":                  true,
+	"FindMatched":                          true,
+	"InvalidateRoleCache":                  true,
+	"InvalidateAllRoleCaches":              true,
+	"RequirePluginWrite":                   true,
+	"RequireUserOrganizationScope":         true,
+	"RequireUserOrganizationScopeWithDBTX": true,
 }
 
 // enforcingMethods annotate a check with the Engine method that decides it.
@@ -413,12 +416,31 @@ func scanFunction(fset *token.FileSet, rel, alias string, fn *ast.FuncDecl, byKe
 				}
 				return true
 			}
-			if engineEntryPoints[sel.Sel.Name] {
+			if engineEntryPoints[sel.Sel.Name] && !namesClient(sel.X) {
 				record(categoryEngine, sel.Sel.Name, "", "")
 			}
 		}
 		return true
 	})
+}
+
+// namesClient reports whether a method's receiver expression names the typed
+// client rather than the engine. The scan is syntactic, so it goes by the
+// name of the variable or field: services hold the client in a field such as
+// authzClient and the engine in authz or authzEngine. A call through the
+// client has migrated even when the method shares its name with an engine
+// entry point.
+func namesClient(expr ast.Expr) bool {
+	var name string
+	switch x := expr.(type) {
+	case *ast.Ident:
+		name = x.Name
+	case *ast.SelectorExpr:
+		name = x.Sel.Name
+	default:
+		return false
+	}
+	return strings.HasSuffix(strings.ToLower(name), "client")
 }
 
 func isAuthzSelector(expr ast.Expr, alias, name string) bool {
