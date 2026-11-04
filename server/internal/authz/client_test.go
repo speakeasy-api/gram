@@ -16,10 +16,31 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// newTestClient builds a default client whose every unit is routed to the
+// registry evaluator, so tests exercise the new decisions directly.
 func newTestClient(t *testing.T) (*Client, *Engine) {
 	t.Helper()
+	return newRoutedTestClient(t, nil, fixedModes(MigrationModeNew), nil)
+}
+
+// newRoutedTestClient builds a client over registry (the default registry
+// when nil) with the default units routed by source, recording shadow
+// comparisons into recorder when it is not nil.
+func newRoutedTestClient(t *testing.T, registry *s.Registry, source ModeSource, recorder ShadowRecorder) (*Client, *Engine) {
+	t.Helper()
 	engine := NewEngine(testenv.NewLogger(t), nil, staticChallengeLogging(false), workos.NewStubClient())
-	client, err := NewDefaultClient(engine)
+	if registry == nil {
+		var err error
+		registry, err = DefaultRegistry()
+		require.NoError(t, err)
+	}
+	router, err := NewMigrationRouter(registry, source, DefaultMigrationUnits()...)
+	require.NoError(t, err)
+	opts := []ClientOption{WithMigrationRouter(router), WithBuildVersion("test")}
+	if recorder != nil {
+		opts = append(opts, WithShadowRecorder(recorder))
+	}
+	client, err := NewClient(engine, registry, opts...)
 	require.NoError(t, err)
 	return client, engine
 }
@@ -43,12 +64,28 @@ var clientCorpusOperations = map[string]bool{
 func TestClientFoundationCorpus(t *testing.T) {
 	t.Parallel()
 
+	for _, fixture := range clientCorpusFixtures(t) {
+		t.Run(fixture.Name, func(t *testing.T) {
+			t.Parallel()
+			client, engine := newTestClient(t)
+			runClientCorpusCase(t, client, engine, fixture)
+		})
+	}
+}
+
+// clientCorpusFixtures selects the frozen fixtures the client must
+// reproduce: those on a corpus operation whose every scope the default
+// registry declares, minus the listed skips.
+func clientCorpusFixtures(t *testing.T) []foundationFixture {
+	t.Helper()
+
 	registry, err := DefaultRegistry()
 	require.NoError(t, err)
 
 	paths, err := filepath.Glob(filepath.Join(foundationCompatibilityDir, "*.json"))
 	require.NoError(t, err)
-	ran, skipped := 0, 0
+	var selected []foundationFixture
+	skipped := 0
 	for _, path := range paths {
 		raw, err := os.ReadFile(path)
 		require.NoError(t, err)
@@ -63,15 +100,12 @@ func TestClientFoundationCorpus(t *testing.T) {
 				skipped++
 				continue
 			}
-			ran++
-			t.Run(fixture.Name, func(t *testing.T) {
-				t.Parallel()
-				runClientCorpusCase(t, fixture)
-			})
+			selected = append(selected, fixture)
 		}
 	}
 	require.Equal(t, len(clientCorpusSkips), skipped, "a listed skip no longer applies")
-	require.Equal(t, 91, ran, "the selected frozen corpus changed; check every new case runs, then update the count")
+	require.Len(t, selected, 91, "the selected frozen corpus changed; check every new case runs, then update the count")
+	return selected
 }
 
 // clientCorpusSkips lists every selected fixture the client does not run,
@@ -92,10 +126,9 @@ func declaresEveryCheck(registry *s.Registry, f foundationFixture) bool {
 	return true
 }
 
-func runClientCorpusCase(t *testing.T, f foundationFixture) {
+func runClientCorpusCase(t *testing.T, client *Client, engine *Engine, f foundationFixture) {
 	t.Helper()
 
-	client, engine := newTestClient(t)
 	ctx := foundationContext(t, engine, f)
 	ops := make([]Operation, 0, len(f.Checks))
 	for _, c := range f.Checks {
@@ -239,7 +272,7 @@ func TestClientTypedOperations(t *testing.T) {
 		unenforced := *authCtx
 		unenforced.SessionID = nil
 		ctx = contextvalues.SetAuthContext(ctx, &unenforced)
-		enforce, err := client.engine.ShouldEnforce(ctx)
+		enforce, err := client.ShouldEnforce(ctx)
 		require.NoError(t, err)
 		require.False(t, enforce)
 

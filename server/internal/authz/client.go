@@ -6,9 +6,12 @@ import (
 	"fmt"
 	"slices"
 
+	"go.opentelemetry.io/otel"
+
 	authzrepo "github.com/speakeasy-api/gram/server/internal/authz/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz/schema"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
+	"github.com/speakeasy-api/gram/server/internal/oops"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
@@ -19,40 +22,97 @@ import (
 //
 // Services migrate to the Client one at a time. A service that has not
 // migrated keeps calling the Engine, which stays authoritative for it.
+//
+// A migrated call is routed by the migration units its operations touch:
+// the engine decides it (old), the engine decides and the registry evaluator
+// is compared with it (shadow), or the registry evaluator decides (new).
+// Without a router every call stays old, so wiring the client changes no
+// decision until a unit's flag says so.
 type Client struct {
 	engine    *Engine
 	registry  *schema.Registry
 	evaluator *RegistryEvaluator
+	router    *MigrationRouter
+	shadow    *shadowComparer
+}
+
+// ClientOption configures a Client.
+type ClientOption func(*clientOptions)
+
+type clientOptions struct {
+	router       *MigrationRouter
+	recorder     ShadowRecorder
+	budget       ShadowBudget
+	buildVersion string
+}
+
+// WithMigrationRouter routes calls by their units' modes. Without it every
+// call is decided by the engine.
+func WithMigrationRouter(router *MigrationRouter) ClientOption {
+	return func(o *clientOptions) { o.router = router }
+}
+
+// WithShadowRecorder receives shadow comparisons. The default logs through
+// the engine's logger and counts with the global meter provider.
+func WithShadowRecorder(recorder ShadowRecorder) ClientOption {
+	return func(o *clientOptions) { o.recorder = recorder }
+}
+
+// WithShadowBudget bounds shadow comparisons. The default is
+// DefaultShadowBudget.
+func WithShadowBudget(budget ShadowBudget) ClientOption {
+	return func(o *clientOptions) { o.budget = budget }
+}
+
+// WithBuildVersion names the server build in shadow comparison records.
+func WithBuildVersion(version string) ClientOption {
+	return func(o *clientOptions) { o.buildVersion = version }
 }
 
 // NewClient builds a client over engine and a compiled registry. It fails
 // when the registry does not declare every operation the typed constructors
-// build, so a missing declaration stops startup instead of erroring per
-// request.
-func NewClient(engine *Engine, registry *schema.Registry) (*Client, error) {
+// build, or when one of them has no engine form to fall back to, so a
+// missing declaration stops startup instead of erroring per request.
+func NewClient(engine *Engine, registry *schema.Registry, opts ...ClientOption) (*Client, error) {
 	if engine == nil {
 		return nil, errors.New("authorization client requires an engine")
+	}
+	options := clientOptions{router: nil, recorder: nil, budget: DefaultShadowBudget, buildVersion: ""}
+	for _, opt := range opts {
+		opt(&options)
 	}
 	evaluator, err := NewRegistryEvaluator(registry)
 	if err != nil {
 		return nil, fmt.Errorf("index authorization registry: %w", err)
 	}
-	client := &Client{engine: engine, registry: registry, evaluator: evaluator}
+	if options.recorder == nil {
+		options.recorder = NewShadowRecorder(engine.logger, otel.GetMeterProvider())
+	}
+	shadow, err := newShadowComparer(options.budget, options.recorder, options.buildVersion, registry.Fingerprint())
+	if err != nil {
+		return nil, err
+	}
+	client := &Client{engine: engine, registry: registry, evaluator: evaluator, router: options.router, shadow: shadow}
 	for _, op := range typedOperations() {
 		if err := client.checkDeclared(op); err != nil {
 			return nil, err
+		}
+		// Every unit starts old, so every typed operation needs an engine
+		// form until its unit's engine path is removed.
+		if _, ok := client.legacyFormFor(op); !ok {
+			return nil, fmt.Errorf("%w: operation %s has no engine form", ErrUnknownPermission, op)
 		}
 	}
 	return client, nil
 }
 
 // NewDefaultClient builds a client over the default registry.
-func NewDefaultClient(engine *Engine) (*Client, error) {
+func NewDefaultClient(engine *Engine, opts ...ClientOption) (*Client, error) {
 	registry, err := DefaultRegistry()
 	if err != nil {
 		return nil, err
 	}
-	return NewClient(engine, registry)
+	return NewClient(engine, registry, opts...)
 }
 
 func (c *Client) checkDeclared(op Operation) error {
@@ -93,6 +153,14 @@ func (c *Client) RefreshContext(ctx context.Context) (context.Context, error) {
 	return c.engine.RefreshContext(ctx)
 }
 
+// ShouldEnforce reports whether the request's authorization is enforced, as
+// Engine.ShouldEnforce does. Callers that skip work an unenforced request
+// would not be denied, such as building a filter, ask this instead of the
+// engine.
+func (c *Client) ShouldEnforce(ctx context.Context) (bool, error) {
+	return c.engine.ShouldEnforce(ctx)
+}
+
 // CaptureAdmissionBoundary captures the prepared policies for a job, so later
 // refreshes can narrow its authority but never widen it.
 func (c *Client) CaptureAdmissionBoundary(ctx context.Context) (AdmissionBoundary, error) {
@@ -100,12 +168,29 @@ func (c *Client) CaptureAdmissionBoundary(ctx context.Context) (AdmissionBoundar
 }
 
 // Require enforces every operation, recording one challenge as Engine.Require
-// does. A denial maps to forbidden; an invalid operation or missing prepared
-// policies map to unexpected.
+// does. While the engine decides, a call that mixes single operations with
+// alternatives records one challenge for the single operations and one per
+// alternatives operation, as the separate engine calls it replaces did. A
+// denial maps to forbidden; an invalid operation or missing prepared policies
+// map to unexpected.
 func (c *Client) Require(ctx context.Context, ops ...Operation) error {
 	if err := c.validate(ops); err != nil {
 		return c.engine.mapError(ctx, err)
 	}
+	rt := c.router.routeFor(ctx, ops)
+	switch rt.mode {
+	case MigrationModeNew:
+		return c.requireNew(ctx, ops)
+	case MigrationModeShadow:
+		err := c.requireOld(ctx, ops)
+		c.shadow.compare(ctx, "require", rt, ops, requireAnswer(err), func() shadowAnswer { return c.answerNew(ctx, ops, false) })
+		return err
+	default:
+		return c.requireOld(ctx, ops)
+	}
+}
+
+func (c *Client) requireNew(ctx context.Context, ops []Operation) error {
 	enforce, err := c.engine.ShouldEnforce(ctx)
 	if err != nil {
 		return err
@@ -147,11 +232,27 @@ func (c *Client) Require(ctx context.Context, ops ...Operation) error {
 
 // Evaluate reports whether every operation is allowed without recording a
 // challenge. Use it where a negative answer is a routine branch rather than a
-// denial. It errors only when an operation cannot be decided.
+// denial. It errors only when an operation cannot be decided. While the engine
+// decides, an alternatives operation still records a challenge, because the
+// engine has no quiet form of it.
 func (c *Client) Evaluate(ctx context.Context, ops ...Operation) (bool, error) {
 	if err := c.validate(ops); err != nil {
 		return false, c.engine.mapError(ctx, err)
 	}
+	rt := c.router.routeFor(ctx, ops)
+	switch rt.mode {
+	case MigrationModeNew:
+		return c.evaluateNew(ctx, ops)
+	case MigrationModeShadow:
+		allowed, err := c.evaluateOld(ctx, ops)
+		c.shadow.compare(ctx, "evaluate", rt, ops, shadowAnswer{allowed: []bool{allowed}, err: err}, func() shadowAnswer { return c.answerNew(ctx, ops, false) })
+		return allowed, err
+	default:
+		return c.evaluateOld(ctx, ops)
+	}
+}
+
+func (c *Client) evaluateNew(ctx context.Context, ops []Operation) (bool, error) {
 	enforce, err := c.engine.ShouldEnforce(ctx)
 	if err != nil {
 		return false, err
@@ -192,6 +293,20 @@ func (c *Client) MatchMany(ctx context.Context, ops []Operation) ([]bool, error)
 			return nil, c.engine.mapError(ctx, fmt.Errorf("%w: alternatives %s cannot be batch-matched", ErrInvalidCheck, op))
 		}
 	}
+	rt := c.router.routeFor(ctx, ops)
+	switch rt.mode {
+	case MigrationModeNew:
+		return c.matchManyNew(ctx, ops)
+	case MigrationModeShadow:
+		matched, err := c.matchManyOld(ctx, ops)
+		c.shadow.compare(ctx, "match_many", rt, ops, shadowAnswer{allowed: matched, err: err}, func() shadowAnswer { return c.answerNew(ctx, ops, true) })
+		return matched, err
+	default:
+		return c.matchManyOld(ctx, ops)
+	}
+}
+
+func (c *Client) matchManyNew(ctx context.Context, ops []Operation) ([]bool, error) {
 	enforce, err := c.engine.ShouldEnforce(ctx)
 	if err != nil {
 		return nil, err
@@ -244,8 +359,152 @@ func (c *Client) MatchMany(ctx context.Context, ops []Operation) ([]bool, error)
 	return matched, nil
 }
 
+// requireOld answers a call with the engine, as the caller did before it
+// migrated: single operations together through Engine.Require, then each
+// alternatives operation through RequireAnyUnblocked when it vetoes blocks
+// and RequireAny otherwise.
+func (c *Client) requireOld(ctx context.Context, ops []Operation) error {
+	singles, alternatives, err := c.legacyForms(ops)
+	if err != nil {
+		return c.engine.mapError(ctx, err)
+	}
+	if len(singles) > 0 || len(alternatives) == 0 {
+		if err := c.engine.Require(ctx, singles...); err != nil {
+			return err
+		}
+	}
+	for _, form := range alternatives {
+		if err := c.requireAlternativesOld(ctx, form); err != nil {
+			return err
+		}
+	}
+	return nil
+}
+
+// evaluateOld answers like requireOld without recording a challenge for
+// single operations. The engine has no quiet form of alternatives, so those
+// still record one.
+func (c *Client) evaluateOld(ctx context.Context, ops []Operation) (bool, error) {
+	singles, alternatives, err := c.legacyForms(ops)
+	if err != nil {
+		return false, c.engine.mapError(ctx, err)
+	}
+	if len(singles) > 0 || len(alternatives) == 0 {
+		allowed, err := c.engine.Evaluate(ctx, singles...)
+		if err != nil || !allowed {
+			return false, err
+		}
+	}
+	for _, form := range alternatives {
+		err := c.requireAlternativesOld(ctx, form)
+		if isForbidden(err) {
+			return false, nil
+		}
+		if err != nil {
+			return false, err
+		}
+	}
+	return true, nil
+}
+
+func (c *Client) matchManyOld(ctx context.Context, ops []Operation) ([]bool, error) {
+	singles, _, err := c.legacyForms(ops)
+	if err != nil {
+		return nil, c.engine.mapError(ctx, err)
+	}
+	return c.engine.FindMatched(ctx, singles)
+}
+
+func (c *Client) requireAlternativesOld(ctx context.Context, form legacyForm) error {
+	if form.anyUnblocked {
+		return c.engine.RequireAnyUnblocked(ctx, form.checks...)
+	}
+	return c.engine.RequireAny(ctx, form.checks...)
+}
+
+// legacyForms splits a call into the engine checks of its single operations,
+// in order, and the engine forms of its alternatives.
+func (c *Client) legacyForms(ops []Operation) ([]Check, []legacyForm, error) {
+	var singles []Check
+	var alternatives []legacyForm
+	for _, op := range ops {
+		form, ok := c.legacyFormFor(op)
+		if !ok {
+			return nil, nil, fmt.Errorf("%w: operation %s has no engine form", ErrInvalidCheck, op)
+		}
+		if form.alternatives {
+			alternatives = append(alternatives, form)
+			continue
+		}
+		singles = append(singles, form.checks...)
+	}
+	return singles, alternatives, nil
+}
+
+// answerNew is the registry evaluator's answer to a call, computed without
+// recording a challenge or logging, for comparison with the engine's. perOp
+// answers each operation, as MatchMany does; otherwise the answer is whether
+// every operation is allowed. It follows the new paths' order of checks so
+// both reach the same answer for the same request.
+func (c *Client) answerNew(ctx context.Context, ops []Operation, perOp bool) shadowAnswer {
+	enforce, err := c.engine.ShouldEnforce(ctx)
+	if err != nil {
+		return shadowAnswer{allowed: nil, err: err}
+	}
+	results := make([]bool, len(ops))
+	if !enforce {
+		for i, op := range ops {
+			results[i] = !c.deniedUnenforced(op)
+		}
+		return foldAnswer(results, perOp)
+	}
+	if len(ops) == 0 && !perOp {
+		return shadowAnswer{allowed: nil, err: ErrNoChecks}
+	}
+	set, ok := c.policySet(ctx)
+	if !ok {
+		return shadowAnswer{allowed: nil, err: ErrMissingGrants}
+	}
+	for i, op := range ops {
+		decision, err := c.decide(set, op)
+		if err != nil {
+			return shadowAnswer{allowed: nil, err: err}
+		}
+		results[i] = decision.Allowed
+		if !decision.Allowed && !perOp {
+			return shadowAnswer{allowed: []bool{false}, err: nil}
+		}
+	}
+	return foldAnswer(results, perOp)
+}
+
+func foldAnswer(results []bool, perOp bool) shadowAnswer {
+	if perOp {
+		return shadowAnswer{allowed: results, err: nil}
+	}
+	return shadowAnswer{allowed: []bool{!slices.Contains(results, false)}, err: nil}
+}
+
+// requireAnswer reads a Require result: a forbidden error is a denial, any
+// other error is no answer.
+func requireAnswer(err error) shadowAnswer {
+	switch {
+	case err == nil:
+		return shadowAnswer{allowed: []bool{true}, err: nil}
+	case isForbidden(err):
+		return shadowAnswer{allowed: []bool{false}, err: nil}
+	default:
+		return shadowAnswer{allowed: nil, err: err}
+	}
+}
+
+func isForbidden(err error) bool {
+	var shareable *oops.ShareableError
+	return errors.As(err, &shareable) && shareable.Code == oops.CodeForbidden
+}
+
 // validate rejects operations no typed constructor built, such as the zero
-// Operation, before any enforcement shortcut can let them through.
+// Operation, before routing or any enforcement shortcut can let them through.
 func (c *Client) validate(ops []Operation) error {
 	for _, op := range ops {
 		if op.permission.Type == "" {

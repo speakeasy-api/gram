@@ -89,6 +89,19 @@ const (
 	// MandatoryAuthzReasonKey is why the mandatory check denied.
 	MandatoryAuthzReasonKey = attribute.Key("gram.authz.mandatory.reason")
 
+	// AuthzMigrationUnitKey names the authorization migration units an operation touches.
+	AuthzMigrationUnitKey = attribute.Key("gram.authz.migration.unit")
+	// AuthzShadowEntryKey is the client entry point a shadow comparison ran for: require, evaluate or match_many.
+	AuthzShadowEntryKey = attribute.Key("gram.authz.shadow.entry")
+	// AuthzShadowPermissionsKey lists the typed permissions a shadow comparison covered, without resource IDs.
+	AuthzShadowPermissionsKey = attribute.Key("gram.authz.shadow.permissions")
+	// AuthzShadowOutcomeKey is how the registry evaluator compared with the engine.
+	AuthzShadowOutcomeKey = attribute.Key("gram.authz.shadow.outcome")
+	// AuthzShadowDetailKey is why a shadow comparison was incomparable, skipped or failed.
+	AuthzShadowDetailKey = attribute.Key("gram.authz.shadow.detail")
+	// AuthzModelVersionKey is the fingerprint of the compiled authorization registry.
+	AuthzModelVersionKey = attribute.Key("gram.authz.model_version")
+
 	// SigintRequestedWindowSizeKey records the configured message count including the target.
 	SigintRequestedWindowSizeKey = attribute.Key("gram.sigint.window.requested_size")
 
@@ -1328,6 +1341,35 @@ func SlogMandatoryAuthzSource(v string) slog.Attr {
 func MandatoryAuthzReason(v string) attribute.KeyValue { return MandatoryAuthzReasonKey.String(v) }
 func SlogMandatoryAuthzReason(v string) slog.Attr {
 	return slog.String(string(MandatoryAuthzReasonKey), v)
+}
+
+func AuthzMigrationUnit(v string) attribute.KeyValue { return AuthzMigrationUnitKey.String(v) }
+func SlogAuthzMigrationUnit(v string) slog.Attr {
+	return slog.String(string(AuthzMigrationUnitKey), v)
+}
+
+func AuthzShadowEntry(v string) attribute.KeyValue { return AuthzShadowEntryKey.String(v) }
+func SlogAuthzShadowEntry(v string) slog.Attr {
+	return slog.String(string(AuthzShadowEntryKey), v)
+}
+
+func SlogAuthzShadowPermissions(v string) slog.Attr {
+	return slog.String(string(AuthzShadowPermissionsKey), v)
+}
+
+func AuthzShadowOutcome(v string) attribute.KeyValue { return AuthzShadowOutcomeKey.String(v) }
+func SlogAuthzShadowOutcome(v string) slog.Attr {
+	return slog.String(string(AuthzShadowOutcomeKey), v)
+}
+
+func AuthzShadowDetail(v string) attribute.KeyValue { return AuthzShadowDetailKey.String(v) }
+func SlogAuthzShadowDetail(v string) slog.Attr {
+	return slog.String(string(AuthzShadowDetailKey), v)
+}
+
+func AuthzModelVersion(v string) attribute.KeyValue { return AuthzModelVersionKey.String(v) }
+func SlogAuthzModelVersion(v string) slog.Attr {
+	return slog.String(string(AuthzModelVersionKey), v)
 }
 
 // SlogAuthClientLegacyOutcome is the outcome the legacy upstream client choice reached.

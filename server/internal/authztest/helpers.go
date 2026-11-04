@@ -2,7 +2,9 @@ package authztest
 
 import (
 	"context"
+	"sync"
 	"testing"
+	"time"
 
 	"github.com/jackc/pgx/v5/pgxpool"
 
@@ -46,7 +48,8 @@ func ChallengeLoggingAlwaysEnabled(context.Context, string) (bool, error) {
 }
 
 // NewClient builds the typed authorization client over engine with the
-// default registry, failing the test if the registry does not compile.
+// default registry, failing the test if the registry does not compile. Like
+// production with every migration flag off, the engine decides every call.
 func NewClient(t *testing.T, engine *authz.Engine) *authz.Client {
 	t.Helper()
 
@@ -55,4 +58,73 @@ func NewClient(t *testing.T, engine *authz.Engine) *authz.Client {
 		t.Fatalf("create authorization client: %v", err)
 	}
 	return client
+}
+
+// NewClientInMode builds the default client with every default migration
+// unit routed to mode, so a migrated service's tests can run against the
+// engine, a shadow comparison, and the registry evaluator alike. As in
+// production, a context with no active organization always runs old, so a
+// test that wants the shadow or new path must authenticate an organization.
+func NewClientInMode(t *testing.T, engine *authz.Engine, mode authz.MigrationMode) *authz.Client {
+	t.Helper()
+
+	registry, err := authz.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("compile authorization registry: %v", err)
+	}
+	router, err := authz.NewMigrationRouter(registry, authz.FixedModes(mode), authz.DefaultMigrationUnits()...)
+	if err != nil {
+		t.Fatalf("create authorization migration router: %v", err)
+	}
+	client, err := authz.NewClient(engine, registry, authz.WithMigrationRouter(router))
+	if err != nil {
+		t.Fatalf("create authorization client: %v", err)
+	}
+	return client
+}
+
+// NewParityClient builds the default client with every default migration unit
+// in shadow mode and a recorder that fails the test on any disagreement, any
+// skipped comparison and any timeout. A comparison the test's own
+// cancellation cut short is ignored. The engine still answers every call, so
+// a service's existing assertions hold, and each organization-bound decision
+// the tests make is also checked against the registry evaluator.
+func NewParityClient(t *testing.T, engine *authz.Engine) *authz.Client {
+	t.Helper()
+
+	registry, err := authz.DefaultRegistry()
+	if err != nil {
+		t.Fatalf("compile authorization registry: %v", err)
+	}
+	router, err := authz.NewMigrationRouter(registry, authz.FixedModes(authz.MigrationModeShadow), authz.DefaultMigrationUnits()...)
+	if err != nil {
+		t.Fatalf("create authorization migration router: %v", err)
+	}
+	client, err := authz.NewClient(engine, registry,
+		authz.WithMigrationRouter(router),
+		authz.WithShadowRecorder(&parityRecorder{t: t, mu: sync.Mutex{}}),
+		authz.WithShadowBudget(authz.ShadowBudget{MaxConcurrent: 1024, Timeout: 5 * time.Second}),
+	)
+	if err != nil {
+		t.Fatalf("create authorization client: %v", err)
+	}
+	return client
+}
+
+type parityRecorder struct {
+	t  *testing.T
+	mu sync.Mutex
+}
+
+func (r *parityRecorder) RecordShadowComparison(_ context.Context, c authz.ShadowComparison) {
+	// A request the test cancelled on purpose proves nothing either way. An
+	// incomparable answer means the registry lacked facts it needs, so it
+	// fails parity like a disagreement.
+	canceled := c.Outcome == authz.ShadowFailed && c.Detail == "canceled"
+	if canceled || (!c.Outcome.Disagrees() && c.Outcome != authz.ShadowFailed && c.Outcome != authz.ShadowSkipped && c.Outcome != authz.ShadowIncomparable) {
+		return
+	}
+	r.mu.Lock()
+	defer r.mu.Unlock()
+	r.t.Errorf("authorization parity: %s %v on units %v gave %s (%s)", c.Entry, c.Permissions, c.Units, c.Outcome, c.Detail)
 }

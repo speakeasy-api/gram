@@ -1038,10 +1038,9 @@ func newStartCommand() *cli.Command {
 					AdmitWorkloadSessionInTx:         runtimepolicy.AdmitWorkloadSessionInTx,
 					DevMode:                          c.String("environment") == "local",
 				})
-			// The typed client must compile its registry at startup; a broken
-			// declaration stops the server instead of failing checks later.
-			if _, err := authz.NewDefaultClient(authzEngine); err != nil {
-				return fmt.Errorf("create authorization client: %w", err)
+			authzClient, err := newAuthzClient(logger, meterProvider, authzEngine, featureFlags)
+			if err != nil {
+				return err
 			}
 
 			telemetryLogPublisher := tm.NewLogPublisher(logger, tracerProvider, meterProvider, publishers.TelemetryLogs)
@@ -2216,6 +2215,7 @@ func newStartCommand() *cli.Command {
 						DB:                             db,
 						EncryptionClient:               encryptionClient,
 						FeatureProvider:                featureFlags,
+						AuthzClient:                    authzClient,
 						AssetStorage:                   assetStorage,
 						SlackClient:                    slackClient,
 						SlackDirectoryTokenRefresher:   slackDirectoryRefresher,
