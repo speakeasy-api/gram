@@ -533,6 +533,7 @@ const (
 	MetaMemberBackendKey   = attribute.Key("gram.meta.member.backend")
 	MetaDispatchOutcomeKey = attribute.Key("gram.meta.dispatch.outcome")
 	McpURLKey              = attribute.Key("gram.mcp.url")
+	McpSessionSubjectKey   = attribute.Key("gram.mcp.session_subject")
 
 	// Gateway consent diagnostics contain IDs and comparison results only,
 	// never credentials, configuration hashes, or captured tool definitions.
@@ -3522,6 +3523,8 @@ func SlogToolsetMCPEnabled(v bool) slog.Attr      { return slog.Bool(string(Tool
 
 func McpURL(v string) attribute.KeyValue { return McpURLKey.String(v) }
 func SlogMcpURL(v string) slog.Attr      { return slog.String(string(McpURLKey), v) }
+
+func SlogMcpSessionSubject(v string) slog.Attr { return slog.String(string(McpSessionSubjectKey), v) }
 
 func McpClientName(v string) attribute.KeyValue { return McpClientNameKey.String(v) }
 func SlogMcpClientName(v string) slog.Attr      { return slog.String(string(McpClientNameKey), v) }
