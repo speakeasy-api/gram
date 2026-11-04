@@ -1,10 +1,13 @@
 // Package schema declares authorization resource types and compiles them into
 // an immutable registry.
 //
-// Each resource type is declared once with NewType. A declaration binds local
-// relation names to existing stored scopes (Grant, Block), records the facts a
-// service loads for the resource (Attr, Derived, Guard), and composes the
-// operations callers check (Permission). Compile validates every declaration
+// Each resource type is declared once with NewType. A declaration names the
+// existing stored scopes its resources are granted and blocked by (Grant,
+// Block), records the facts a service loads for the resource (Attr, Derived,
+// Guard), and composes the operations callers check (Permission). Most
+// permissions are "this scope, the scopes that imply it, and its block", and
+// ScopePermission declares the grant and that permission in one line. Compile
+// validates every declaration
 // and returns a Registry whose projections (scope metadata, legacy check
 // satisfaction, containment closure, catalogue sub-scopes and the agent
 // runtime lifecycle) are derived from the declarations rather than maintained
@@ -15,23 +18,19 @@
 //	schema.NewType("mcp_server", schema.Parent("project"), schema.StoredKind("mcp"),
 //	    schema.SelectorKeys("project_id", "tool", "disposition"),
 //	    schema.GrantSurface("access"),
-//	    schema.Grant("viewer", schema.GrantSpec{
-//	        StoredAs:    "mcp:read",
+//	    schema.Block("mcp:blocked_read", schema.BlockSpec{Conditions: []string{"mcp_tools"}}),
+//	    schema.ScopePermission("read", "mcp:read", schema.GrantSpec{
 //	        Description: "Inspect server configuration",
 //	        AnchoredAt:  []string{"organization", "project", schema.Self},
 //	        Conditions:  []string{"mcp_tools"},
-//	    }),
-//	    schema.Block("read_blocked", schema.BlockSpec{
-//	        StoredAs:   "mcp:blocked_read",
-//	        Conditions: []string{"mcp_tools"},
-//	    }),
-//	    schema.Permission("read", schema.Rel("viewer"),
-//	        schema.AnswersScope("mcp:read"), schema.ExcludedBy("read_blocked")),
+//	    }, schema.AlsoGrantedBy("mcp:write"), schema.ExcludedBy("mcp:blocked_read")),
 //	)
 //
-// Grant and Block bind a local relation name to a scope that already exists
-// in storage, with its catalogue metadata. Declaring one grants nothing:
-// stored grants and role defaults decide who holds it.
+// Grant and Block name a scope that already exists in storage and carry its
+// catalogue metadata; the scope is also how expressions refer to it, as in
+// Rel("mcp:read"). Declaring one grants nothing: stored grants and role
+// defaults decide who holds it. The functions that take a scope accept any
+// string type, so callers pass their typed scope constants unconverted.
 //
 // The package only declares and compiles. It evaluates nothing, performs no
 // I/O and imports no service or authz code, so authz can depend on it.
@@ -113,6 +112,9 @@ type permissionDecl struct {
 	excludedBy  []string
 	answers     string
 	description string
+	// alsoGrantedBy holds AlsoGrantedBy scopes. ScopePermission folds them
+	// into its expression; on Permission they are a declaration error.
+	alsoGrantedBy []string
 }
 
 type alternativesDecl struct {
@@ -211,12 +213,23 @@ func Guard(name string, cond Cond) TypeOption {
 	})
 }
 
-// GrantSpec describes the stored allow scope a Grant binds and its catalogue
-// metadata. Only StoredAs is required.
-type GrantSpec struct {
-	// StoredAs names the existing stored scope the grant reads.
-	StoredAs string
+// ScopeName is any string type that names a stored scope, such as the
+// caller's own typed scope constants.
+type ScopeName interface{ ~string }
 
+// Scopes converts typed scope names to the plain strings spec fields hold.
+func Scopes[S ScopeName](scopes ...S) []string {
+	out := make([]string, len(scopes))
+	for i, scope := range scopes {
+		out[i] = string(scope)
+	}
+	return out
+}
+
+// GrantSpec describes the catalogue metadata of the stored allow scope a
+// Grant names. Description is required unless Internal; the other fields
+// are optional.
+type GrantSpec struct {
 	// Description is the catalogue text. Every grant that is not Internal
 	// needs one.
 	Description string
@@ -257,16 +270,13 @@ type GrantSpec struct {
 	GrantSurface string
 }
 
-// BlockSpec describes the stored blocking scope a Block binds. Only StoredAs
-// is required.
+// BlockSpec describes the stored blocking scope a Block names. Every field is
+// optional.
 type BlockSpec struct {
-	// StoredAs names the existing stored blocking scope
-	// (<resource>:blocked_<action>) the block reads.
-	StoredAs string
-
-	// ImpliedBy lists other blocks of the same type that also impose this
-	// one. A permission ExcludedBy this block is excluded by them as well, so
-	// a read block that also stops writes is declared on the write block.
+	// ImpliedBy lists other blocking scopes of the same type that also impose
+	// this one. A permission ExcludedBy this block is excluded by them as
+	// well, so a read block that also stops writes is declared on the write
+	// block.
 	ImpliedBy []string
 
 	// Conditions lists registered pure conditions every path through the
@@ -281,10 +291,12 @@ type BlockSpec struct {
 	GrantSurface string
 }
 
-// Grant binds a local relation to an existing stored allow scope and its
-// catalogue metadata. It grants nothing: stored grants and role defaults
-// decide who holds the scope.
-func Grant(name string, spec GrantSpec) TypeOption {
+// Grant declares that the type's resources are granted by an existing stored
+// allow scope, with its catalogue metadata. Expressions refer to it as
+// Rel(scope). It grants nothing: stored grants and role defaults decide who
+// holds the scope.
+func Grant[S ScopeName](scope S, spec GrantSpec) TypeOption {
+	name := string(scope)
 	spec.DefaultFor = slices.Clone(spec.DefaultFor)
 	spec.AnchoredAt = slices.Clone(spec.AnchoredAt)
 	spec.Conditions = slices.Clone(spec.Conditions)
@@ -293,7 +305,7 @@ func Grant(name string, spec GrantSpec) TypeOption {
 		t.relations = append(t.relations, relationDecl{
 			kind:         relationGrant,
 			name:         name,
-			storedAs:     spec.StoredAs,
+			storedAs:     name,
 			anchors:      spec.AnchoredAt,
 			conditions:   spec.Conditions,
 			selectorKeys: spec.SelectorKeys,
@@ -309,18 +321,19 @@ func Grant(name string, spec GrantSpec) TypeOption {
 	})
 }
 
-// Block binds a local relation to an existing stored blocking scope. It
-// blocks nothing on its own: stored block grants decide who is blocked, and
-// a block applies only through ExcludedBy. Blocks are internal and match
-// selectors strictly.
-func Block(name string, spec BlockSpec) TypeOption {
+// Block declares an existing stored blocking scope
+// (<resource>:blocked_<action>) of the type. It blocks nothing on its own:
+// stored block grants decide who is blocked, and a block applies only through
+// ExcludedBy. Blocks are internal and match selectors strictly.
+func Block[S ScopeName](scope S, spec BlockSpec) TypeOption {
+	name := string(scope)
 	spec.ImpliedBy = slices.Clone(spec.ImpliedBy)
 	spec.Conditions = slices.Clone(spec.Conditions)
 	return typeOptionFunc(func(t *TypeDecl) {
 		t.relations = append(t.relations, relationDecl{
 			kind:         relationBlock,
 			name:         name,
-			storedAs:     spec.StoredAs,
+			storedAs:     name,
 			anchors:      nil,
 			conditions:   spec.Conditions,
 			selectorKeys: nil,
@@ -341,12 +354,47 @@ func Block(name string, spec BlockSpec) TypeOption {
 func Permission(name string, expr Expr, opts ...PermissionOption) TypeOption {
 	opts = slices.Clone(opts)
 	return typeOptionFunc(func(t *TypeDecl) {
-		p := permissionDecl{name: name, expr: expr, direct: nil, excludedBy: nil, answers: "", description: ""}
+		p := permissionDecl{name: name, expr: expr, direct: nil, excludedBy: nil, answers: "", description: "", alsoGrantedBy: nil}
 		for _, opt := range opts {
 			opt.applyPermission(&p)
 		}
 		t.permissions = append(t.permissions, p)
 	})
+}
+
+// ScopePermission declares the common permission shape in one line: the type
+// is granted scope (as Grant(scope, spec) would declare it), and the
+// permission name is satisfied by scope or by any AlsoGrantedBy scope and
+// answers scope's existing checks. Add ExcludedBy for its block. Use Grant
+// and Permission instead when the permission needs any other expression.
+func ScopePermission[S ScopeName](name string, scope S, spec GrantSpec, opts ...PermissionOption) TypeOption {
+	grant := Grant(scope, spec)
+	opts = slices.Clone(opts)
+	return typeOptionFunc(func(t *TypeDecl) {
+		grant.applyType(t)
+		p := permissionDecl{name: name, expr: Rel(scope), direct: nil, excludedBy: nil, answers: string(scope), description: "", alsoGrantedBy: nil}
+		for _, opt := range opts {
+			opt.applyPermission(&p)
+		}
+		branches := []Expr{Rel(scope)}
+		for _, other := range p.alsoGrantedBy {
+			branches = append(branches, Rel(other))
+		}
+		p.expr = branches[0]
+		if len(branches) > 1 {
+			p.expr = Union(branches...)
+		}
+		p.alsoGrantedBy = nil
+		t.permissions = append(t.permissions, p)
+	})
+}
+
+// AlsoGrantedBy lists, for a ScopePermission, the other granted scopes of the
+// type that satisfy it, such as a write scope that implies read. It is a
+// declaration error on Permission, whose expression already says this.
+func AlsoGrantedBy[S ScopeName](scopes ...S) PermissionOption {
+	names := Scopes(scopes...)
+	return permissionOptionFunc(func(p *permissionDecl) { p.alsoGrantedBy = append(p.alsoGrantedBy, names...) })
 }
 
 // BlockRule says how the blocks of Alternatives' options combine. Every
@@ -415,15 +463,15 @@ func Alternatives(name string, spec AlternativesSpec) TypeOption {
 // instance, and the principal's own blocks always win. The named block is
 // the permission's direct block; the blocks that imply it, through
 // BlockSpec.ImpliedBy, exclude the permission too.
-func ExcludedBy(block string) PermissionOption {
-	return permissionOptionFunc(func(p *permissionDecl) { p.direct = append(p.direct, block) })
+func ExcludedBy[S ScopeName](block S) PermissionOption {
+	return permissionOptionFunc(func(p *permissionDecl) { p.direct = append(p.direct, string(block)) })
 }
 
 // AnswersScope names the stored scope whose existing authz.Check this
 // permission answers. The permission must be grant-only, so a check routed to
 // it keeps today's grant semantics.
-func AnswersScope(scope string) PermissionOption {
-	return permissionOptionFunc(func(p *permissionDecl) { p.answers = scope })
+func AnswersScope[S ScopeName](scope S) PermissionOption {
+	return permissionOptionFunc(func(p *permissionDecl) { p.answers = string(scope) })
 }
 
 // Describe sets the catalogue description of a Permission.

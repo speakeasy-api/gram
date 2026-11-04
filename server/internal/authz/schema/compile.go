@@ -356,7 +356,7 @@ func (c *compiler) validateRelations(t *TypeDecl) {
 	ancestors := c.ancestors(t)
 	for _, r := range t.relations {
 		where := fmt.Sprintf("type %q: %s %q", t.name, r.kind, r.name)
-		c.validateStoredAs(where, r)
+		c.validateStoredScope(where, r)
 		relKeys, ok := c.validateSelectorKeys(r.selectorKeys)
 		if !ok {
 			c.problemf("%s: selector keys %v must be distinct and exclude %s and %s", where, r.selectorKeys, selectorKeyResourceKind, selectorKeyResourceID)
@@ -476,9 +476,9 @@ func (c *compiler) expandExclusions() {
 	}
 }
 
-func (c *compiler) validateStoredAs(where string, r relationDecl) {
+func (c *compiler) validateStoredScope(where string, r relationDecl) {
 	if r.storedAs == "" {
-		c.problemf("%s: missing StoredAs", where)
+		c.problemf("%s: missing stored scope", where)
 		return
 	}
 	resource, action, ok := strings.Cut(r.storedAs, ":")
@@ -529,6 +529,9 @@ func (c *compiler) validatePermissions(t *TypeDecl, m members) {
 		c.validateExpr(t, m, where, p.expr)
 		if len(p.direct) > 1 {
 			c.problemf("%s: ExcludedBy is given more than once; declare broader blocks with BlockSpec.ImpliedBy", where)
+		}
+		if len(p.alsoGrantedBy) > 0 {
+			c.problemf("%s: AlsoGrantedBy applies only to ScopePermission; write the Union in the expression", where)
 		}
 		for _, name := range p.direct {
 			r, ok := m.relations[name]
