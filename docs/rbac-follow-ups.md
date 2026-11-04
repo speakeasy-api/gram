@@ -38,6 +38,13 @@ The RFC lets the engine and scope tables go only after production shadow compari
     - quiet-engine shims in the client (old-mode `Evaluate` challenge recording, `ShouldEnforce` forwarding);
     - `docs/rbac.md` and the `gram-rbac` skill, rewritten for the registry.
 
+## Readability follow-ups (approved by Tiago on 2026-11-04)
+
+- ~~Hierarchical resource handles, `authz.Project(org, p).MCPServer(id)`.~~ Dropped (#8540 closed): the flat constructors already take the project as a required argument and are easier to find from `authz.` autocomplete.
+- Scope-keyed grants and the one-line `s.ScopePermission`: #8541.
+- Derive the old engine's scope tables from the registry: #8542 (the static half of item 12).
+- Chat ownership as the first attribute declaration: item 10, stacked on the union-permissions change that replaces `s.Alternatives`. If the rule cannot land as a declaration plus a short handler call, the unused attribute grammar is deleted instead.
+
 ## Keeping this current
 
 When a follow-up lands, link its PR here and in Linear and strike the item. When a PR parks something new for later, add it here in the same change.
