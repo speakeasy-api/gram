@@ -406,7 +406,7 @@ func TestTemporaryGrant_Validation(t *testing.T) {
 		"root scope":        {PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), Scope: string(authz.ScopeRoot), ExpiresAt: inOneHour()},
 		"org admin scope":   {PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), Scope: string(authz.ScopeOrgAdmin), ExpiresAt: inOneHour()},
 		"too short":         {PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), Scope: string(authz.ScopeChatRead), ExpiresAt: time.Now().Add(time.Minute).UTC().Format(time.RFC3339)},
-		"too long":          {PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), Scope: string(authz.ScopeChatRead), ExpiresAt: time.Now().Add(31 * 24 * time.Hour).UTC().Format(time.RFC3339)},
+		"too long":          {PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), Scope: string(authz.ScopeChatRead), ExpiresAt: time.Now().Add(25 * time.Hour).UTC().Format(time.RFC3339)},
 		"past":              {PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), Scope: string(authz.ScopeChatRead), ExpiresAt: time.Now().Add(-time.Hour).UTC().Format(time.RFC3339)},
 		"wrong selector":    {PrincipalUrn: userPrincipalURN(temporaryGrantRecipientID), Scope: string(authz.ScopeChatRead), ExpiresAt: inOneHour(), Selector: &gen.Selector{ResourceKind: "mcp", ResourceID: "*"}},
 	}

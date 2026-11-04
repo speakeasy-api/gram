@@ -578,7 +578,7 @@ type CreateTemporaryGrantPayload struct {
 	// scope's kind.
 	Selector *Selector
 	// When the grant stops authorizing new requests. At least five minutes and at
-	// most 30 days from now.
+	// most 24 hours from now.
 	ExpiresAt string
 	// Why the access is needed, recorded in the audit log.
 	Reason *string
@@ -1257,7 +1257,7 @@ type RenewTemporaryGrantPayload struct {
 	SessionToken *string
 	// The temporary grant to renew.
 	ID string
-	// The new deadline. At least five minutes and at most 30 days from now.
+	// The new deadline. At least five minutes and at most 24 hours from now.
 	ExpiresAt string
 }
 

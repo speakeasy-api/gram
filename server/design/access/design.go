@@ -2441,7 +2441,7 @@ var CreateTemporaryGrantForm = Type("CreateTemporaryGrantForm", func() {
 	Attribute("principal_urn", String, "The principal receiving the access: an organization member (user:<id>), everyone (user:all), a role (role:organization:<id> or role:global:<id>) or an active agent (agent:<id>).")
 	Attribute("scope", String, "The scope to give, e.g. chat:read or log:read. Only scopes that grant access to read, use or manage resources can be given temporarily; org:admin, blocklist, auth client, risk policy and machine scopes cannot.")
 	Attribute("selector", SelectorModel, "The resource or activity boundary. Omit to cover every resource of the scope's kind.")
-	Attribute("expires_at", String, "When the grant stops authorizing new requests. At least five minutes and at most 30 days from now.", func() {
+	Attribute("expires_at", String, "When the grant stops authorizing new requests. At least five minutes and at most 24 hours from now.", func() {
 		Format(FormatDateTime)
 	})
 	Attribute("reason", String, "Why the access is needed, recorded in the audit log.", func() {
@@ -2455,7 +2455,7 @@ var RenewTemporaryGrantForm = Type("RenewTemporaryGrantForm", func() {
 	Attribute("id", String, "The temporary grant to renew.", func() {
 		Format(FormatUUID)
 	})
-	Attribute("expires_at", String, "The new deadline. At least five minutes and at most 30 days from now.", func() {
+	Attribute("expires_at", String, "The new deadline. At least five minutes and at most 24 hours from now.", func() {
 		Format(FormatDateTime)
 	})
 })

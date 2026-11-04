@@ -37,7 +37,7 @@ const (
 	// TemporaryGrantMaxDuration is the longest window a temporary grant can be
 	// given or renewed for, measured from the request. Longer access is a
 	// role assignment, not a temporary grant.
-	TemporaryGrantMaxDuration = 30 * 24 * time.Hour
+	TemporaryGrantMaxDuration = 24 * time.Hour
 
 	temporaryGrantStatusActive  = "active"
 	temporaryGrantStatusExpired = "expired"
@@ -96,7 +96,7 @@ func validateTemporaryGrantDeadline(expiresAt string, now time.Time) (time.Time,
 		return time.Time{}, fmt.Errorf("expires_at must be at least %s from now", TemporaryGrantMinDuration)
 	}
 	if deadline.After(now.Add(TemporaryGrantMaxDuration)) {
-		return time.Time{}, errors.New("expires_at must be at most 30 days from now; assign a role for longer access")
+		return time.Time{}, errors.New("expires_at must be at most 24 hours from now; assign a role for longer access")
 	}
 	return deadline, nil
 }

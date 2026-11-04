@@ -226,7 +226,7 @@ type CreateTemporaryGrantRequestBody struct {
 	// scope's kind.
 	Selector *SelectorRequestBody `form:"selector,omitempty" json:"selector,omitempty" xml:"selector,omitempty"`
 	// When the grant stops authorizing new requests. At least five minutes and at
-	// most 30 days from now.
+	// most 24 hours from now.
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 	// Why the access is needed, recorded in the audit log.
 	Reason *string `form:"reason,omitempty" json:"reason,omitempty" xml:"reason,omitempty"`
@@ -237,7 +237,7 @@ type CreateTemporaryGrantRequestBody struct {
 type RenewTemporaryGrantRequestBody struct {
 	// The temporary grant to renew.
 	ID *string `form:"id,omitempty" json:"id,omitempty" xml:"id,omitempty"`
-	// The new deadline. At least five minutes and at most 30 days from now.
+	// The new deadline. At least five minutes and at most 24 hours from now.
 	ExpiresAt *string `form:"expires_at,omitempty" json:"expires_at,omitempty" xml:"expires_at,omitempty"`
 }
 
