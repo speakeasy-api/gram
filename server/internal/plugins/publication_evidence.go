@@ -28,7 +28,7 @@ type PublicationEvidence struct {
 }
 
 // ErrPublicationEvidenceUnavailable is why a service can't resolve publication
-// evidence: it has no authorization engine to check the caller with, as a
+// evidence: it has no authorization client to check the caller with, as a
 // publisher built by NewPublisher does not.
 var ErrPublicationEvidenceUnavailable = errors.New("plugins service cannot authorize publication evidence")
 
@@ -59,7 +59,7 @@ func (s *Service) ResolvePublicationEvidence(ctx context.Context, organizationID
 	if err := s.CanResolvePublicationEvidence(); err != nil || organizationID == "" {
 		return nil, fmt.Errorf("publication evidence authorization unavailable")
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: organizationID, Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Organization(organizationID).Administer()); err != nil {
 		return nil, fmt.Errorf("authorize publication evidence: %w", err)
 	}
 	project, err := projectsrepo.New(s.db).GetProjectWithOrganizationMetadata(ctx, projectID)

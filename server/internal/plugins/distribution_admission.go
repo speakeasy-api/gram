@@ -33,7 +33,7 @@ func (s *Service) assignmentAdmissionGuard() func(context.Context, pgx.Tx, plugi
 		}
 		// Widening is a write: an organization administrator's widening is
 		// recorded as the Shadow MCP approval it stands for.
-		ctx, err := admission.AdministratorWriteContext(ctx, s.authz, plugin.OrganizationID)
+		ctx, err := admission.AdministratorWriteContext(ctx, s.engine, plugin.OrganizationID)
 		if err != nil {
 			return fmt.Errorf("%w: %w", admission.ErrUnavailable, err)
 		}
