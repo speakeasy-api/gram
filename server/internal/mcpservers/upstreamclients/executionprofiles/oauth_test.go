@@ -10,6 +10,7 @@ import (
 	"github.com/jackc/pgx/v5/pgtype"
 
 	"github.com/speakeasy-api/gram/server/internal/sessiontokens"
+	"github.com/speakeasy-api/gram/server/internal/testenv"
 	"github.com/speakeasy-api/gram/server/internal/urn"
 	"github.com/stretchr/testify/require"
 )
@@ -34,14 +35,12 @@ func oauthFixture(t *testing.T, execCtx Context) (*fixture, OAuthResume, session
 	require.NoError(t, err)
 	seeded, err := f.q.SeedOAuthResumeFixture(t.Context(), SeedOAuthResumeFixtureParams{ProjectID: f.projectID, OrganizationID: f.orgID, AssistantID: f.assistant, McpServerID: server, AuthClientID: selected, Jti: jti})
 	require.NoError(t, err)
-	var registration, issuer uuid.UUID
-	err = f.pool.QueryRow(t.Context(), `SELECT binding.remote_session_client_id, binding.user_session_issuer_id
-		FROM remote_session_client_user_session_issuers binding
-		JOIN mcp_auth_clients ac ON ac.remote_session_client_id = binding.remote_session_client_id
-		WHERE ac.id = $1 AND ac.project_id = $2 AND binding.user_session_issuer_id = $3`, selected, f.projectID, seeded.IssuerID).Scan(&registration, &issuer)
+	binding, err := f.q.GetOAuthIssuerBindingFixture(t.Context(), GetOAuthIssuerBindingFixtureParams{
+		AuthClientID: selected, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, IssuerID: seeded.IssuerID,
+	})
 	require.NoError(t, err)
-	require.Equal(t, selectedRegistration, registration)
-	require.Equal(t, seeded.IssuerID, issuer)
+	require.Equal(t, selectedRegistration, binding.RemoteSessionClientID)
+	require.Equal(t, seeded.IssuerID, binding.UserSessionIssuerID)
 	in := OAuthResume{Origin: GetOAuthResumeOriginParams{VersionID: old.VersionID, OrganizationID: f.orgID, ProjectID: f.projectID, AssistantID: f.assistant, ThreadID: seeded.ThreadID}, UserID: "oauth-user", ClientID: "oauth-fixture", IssuerID: seeded.IssuerID, ServerID: server}
 	return f, in, session, selected
 }
@@ -118,17 +117,32 @@ func TestAdoptOAuthSelectionIssuerScopesAndRefresh(t *testing.T) {
 		t.Run(scope, func(t *testing.T) {
 			t.Parallel()
 			f, in, session, selected := oauthFixture(t, ContextUserBacked)
+			project := uuid.NullUUID{UUID: f.projectID, Valid: true}
 			if scope != "project" {
-				_, err := f.pool.Exec(t.Context(), `UPDATE user_session_issuers SET project_id = NULL,
-					organization_id = CASE WHEN $3 THEN NULL ELSE organization_id END
-					WHERE id = $1 AND project_id = $2`, in.IssuerID, f.projectID, scope == "global")
-				require.NoError(t, err)
+				require.NoError(t, f.q.SetOAuthIssuerScopeFixture(t.Context(), SetOAuthIssuerScopeFixtureParams{
+					IssuerID: in.IssuerID, ProjectID: project, GlobalScope: scope == "global",
+				}))
 			}
-			// Refresh creates a new row identity but preserves the selected credential.
-			_, err := f.pool.Exec(t.Context(), `UPDATE user_sessions SET credential_id = id, id = $1
-				WHERE jti = $2 AND project_id = $3`, uuid.New(), session.JTI(), f.projectID)
+			signer := sessiontokens.NewSigner("oauth-fixture-secret")
+			raw, jti, err := signer.Mint(sessiontokens.MintParams{Subject: session.Subject(), Audience: "oauth-fixture", Issuer: session.Issuer(), ClientID: session.ClientID(), Lifetime: time.Hour})
 			require.NoError(t, err)
+			refreshed, err := signer.ValidateBearer(t.Context(), raw, "oauth-fixture", oauthNotRevoked{})
+			require.NoError(t, err)
+			// Rotation retires the predecessor and inserts a new row and JTI,
+			// retaining the stable credential referenced by the original selection.
+			rotation, err := f.q.RefreshOAuthSessionFixture(t.Context(), RefreshOAuthSessionFixtureParams{
+				OldJti: session.JTI(), NewJti: jti, ProjectID: project,
+			})
+			require.NoError(t, err)
+			require.NotEqual(t, rotation.OldID, rotation.NewID)
+			require.Equal(t, session.JTI(), rotation.OldJti)
+			require.Equal(t, refreshed.JTI(), rotation.NewJti)
+			require.NotEqual(t, rotation.OldJti, rotation.NewJti)
+			require.True(t, rotation.OldDeleted)
+			require.Equal(t, uuid.NullUUID{UUID: rotation.OldID, Valid: true}, rotation.CredentialID)
 			_, err = AdoptOAuthSelection(t.Context(), f.pool, in, session)
+			require.Error(t, err, "retired predecessor cannot publish a choice")
+			_, err = AdoptOAuthSelection(t.Context(), f.pool, in, refreshed)
 			require.NoError(t, err)
 			require.Equal(t, map[uuid.UUID]uuid.UUID{in.ServerID: selected}, f.choices(f.bind(ContextUserBacked).VersionID))
 		})
@@ -137,19 +151,11 @@ func TestAdoptOAuthSelectionIssuerScopesAndRefresh(t *testing.T) {
 
 func TestAdoptOAuthSelectionRejectsWithdrawnChoice(t *testing.T) {
 	t.Parallel()
-	for _, change := range []struct {
-		name string
-		sql  string
-	}{
-		{"disabled", `UPDATE mcp_auth_clients SET enabled = FALSE WHERE id = $1 AND project_id = $2`},
-		{"detached", `UPDATE mcp_server_auth_clients SET deleted_at = now() WHERE auth_client_id = $1 AND project_id = $2`},
-		{"unbound issuer", `DELETE FROM remote_session_client_user_session_issuers WHERE remote_session_client_id = (SELECT remote_session_client_id FROM mcp_auth_clients WHERE id = $1 AND project_id = $2)`},
-		{"deleted registration", `UPDATE remote_session_clients SET deleted_at = now() WHERE id = (SELECT remote_session_client_id FROM mcp_auth_clients WHERE id = $1 AND project_id = $2)`},
-	} {
-		t.Run(change.name, func(t *testing.T) {
+	for _, change := range []string{"disabled", "detached", "unbound issuer", "deleted registration"} {
+		t.Run(change, func(t *testing.T) {
 			t.Parallel()
 			f, in, session, selected := oauthFixture(t, ContextUserBacked)
-			_, err := f.pool.Exec(t.Context(), change.sql, selected, f.projectID)
+			err := f.q.WithdrawOAuthChoiceFixture(t.Context(), WithdrawOAuthChoiceFixtureParams{AuthClientID: selected, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, Change: change})
 			require.NoError(t, err)
 			_, err = AdoptOAuthSelection(t.Context(), f.pool, in, session)
 			require.Error(t, err)
@@ -167,25 +173,16 @@ func TestAdoptOAuthSelectionRejectsWithdrawnChoice(t *testing.T) {
 func TestOAuthResumeSelectionLocksLiveChoice(t *testing.T) {
 	t.Parallel()
 	f, in, session, selected := oauthFixture(t, ContextUserBacked)
-	tx, err := f.pool.Begin(t.Context())
-	require.NoError(t, err)
-	defer func() { _ = tx.Rollback(t.Context()) }()
-	_, err = New(tx).GetOAuthResumeSelection(t.Context(), GetOAuthResumeSelectionParams{
+	tx := testenv.BeginTx(t, t.Context(), f.pool)
+	_, err := New(tx).GetOAuthResumeSelection(t.Context(), GetOAuthResumeSelectionParams{
 		Jti: session.JTI(), SubjectUrn: session.Subject(), ClientID: in.ClientID,
 		IssuerID: in.IssuerID, McpServerID: in.ServerID, ProjectID: f.projectID, OrganizationID: f.orgID,
 	})
 	require.NoError(t, err)
-	for _, query := range []string{
-		`UPDATE mcp_auth_clients SET enabled = FALSE WHERE id = $1 AND project_id = $2`,
-		`UPDATE mcp_server_auth_clients SET deleted_at = now() WHERE auth_client_id = $1 AND project_id = $2`,
-		`DELETE FROM remote_session_client_user_session_issuers WHERE remote_session_client_id = (SELECT remote_session_client_id FROM mcp_auth_clients WHERE id = $1 AND project_id = $2)`,
-		`UPDATE remote_session_clients SET deleted_at = now() WHERE id = (SELECT remote_session_client_id FROM mcp_auth_clients WHERE id = $1 AND project_id = $2)`,
-	} {
-		other, err := f.pool.Begin(t.Context())
-		require.NoError(t, err)
-		_, err = other.Exec(t.Context(), `SET LOCAL lock_timeout = '50ms'`)
-		require.NoError(t, err)
-		_, err = other.Exec(t.Context(), query, selected, f.projectID)
+	for _, change := range []string{"disabled", "detached", "unbound issuer", "deleted registration"} {
+		other := testenv.BeginTx(t, t.Context(), f.pool)
+		testenv.SetLockTimeout(t, t.Context(), other, 50*time.Millisecond)
+		err = New(other).WithdrawOAuthChoiceFixture(t.Context(), WithdrawOAuthChoiceFixtureParams{AuthClientID: selected, ProjectID: uuid.NullUUID{UUID: f.projectID, Valid: true}, Change: change})
 		var pgErr *pgconn.PgError
 		require.ErrorAs(t, err, &pgErr)
 		require.Equal(t, "55P03", pgErr.Code, "live evidence must stay locked until publication commits")

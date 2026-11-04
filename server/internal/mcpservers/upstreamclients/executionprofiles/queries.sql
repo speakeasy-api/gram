@@ -528,3 +528,47 @@ WITH chat AS (
   FROM session, mcp_auth_clients ac WHERE ac.id = @auth_client_id AND ac.organization_id = @organization_id
 )
 SELECT thread.id AS thread_id, issuer.id AS issuer_id FROM thread, issuer;
+
+-- name: GetOAuthIssuerBindingFixture :one
+SELECT binding.remote_session_client_id, binding.user_session_issuer_id
+FROM remote_session_client_user_session_issuers binding
+JOIN mcp_auth_clients ac ON ac.remote_session_client_id = binding.remote_session_client_id
+WHERE ac.id = @auth_client_id AND ac.project_id = @project_id
+  AND binding.user_session_issuer_id = @issuer_id;
+
+-- name: SetOAuthIssuerScopeFixture :exec
+UPDATE user_session_issuers SET project_id = NULL,
+  organization_id = CASE WHEN @global_scope::boolean THEN NULL ELSE organization_id END
+WHERE id = @issuer_id AND project_id = @project_id;
+
+-- name: RefreshOAuthSessionFixture :one
+WITH retired AS (
+  UPDATE user_sessions SET deleted_at = clock_timestamp()
+  WHERE user_sessions.jti = @old_jti AND user_sessions.project_id = @project_id AND user_sessions.deleted IS FALSE
+  RETURNING *
+), replacement AS (
+  INSERT INTO user_sessions (project_id, organization_id, user_session_issuer_id,
+    user_session_client_id, subject_urn, jti, refresh_expires_at, expires_at, credential_id)
+  SELECT project_id, organization_id, user_session_issuer_id, user_session_client_id,
+    subject_urn, @new_jti, refresh_expires_at, expires_at, COALESCE(credential_id, id)
+  FROM retired RETURNING id, credential_id, jti
+)
+SELECT retired.id AS old_id, retired.jti AS old_jti, retired.deleted AS old_deleted,
+  replacement.id AS new_id, replacement.jti AS new_jti, replacement.credential_id
+FROM retired, replacement;
+
+-- name: WithdrawOAuthChoiceFixture :exec
+WITH disabled AS (
+  UPDATE mcp_auth_clients SET enabled = FALSE
+  WHERE id = @auth_client_id AND project_id = @project_id AND @change::text = 'disabled'
+), detached AS (
+  UPDATE mcp_server_auth_clients SET deleted_at = clock_timestamp()
+  WHERE auth_client_id = @auth_client_id AND project_id = @project_id AND @change::text = 'detached'
+), unbound AS (
+  DELETE FROM remote_session_client_user_session_issuers
+  WHERE remote_session_client_id = (SELECT ac.remote_session_client_id FROM mcp_auth_clients ac WHERE ac.id = @auth_client_id AND ac.project_id = @project_id)
+    AND @change::text = 'unbound issuer'
+)
+UPDATE remote_session_clients SET deleted_at = clock_timestamp()
+WHERE id = (SELECT ac.remote_session_client_id FROM mcp_auth_clients ac WHERE ac.id = @auth_client_id AND ac.project_id = @project_id)
+  AND @change::text = 'deleted registration';

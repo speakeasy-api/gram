@@ -173,6 +173,32 @@ func (q *Queries) EnsureProfile(ctx context.Context, arg EnsureProfileParams) er
 	return err
 }
 
+const getOAuthIssuerBindingFixture = `-- name: GetOAuthIssuerBindingFixture :one
+SELECT binding.remote_session_client_id, binding.user_session_issuer_id
+FROM remote_session_client_user_session_issuers binding
+JOIN mcp_auth_clients ac ON ac.remote_session_client_id = binding.remote_session_client_id
+WHERE ac.id = $1 AND ac.project_id = $2
+  AND binding.user_session_issuer_id = $3
+`
+
+type GetOAuthIssuerBindingFixtureParams struct {
+	AuthClientID uuid.UUID
+	ProjectID    uuid.NullUUID
+	IssuerID     uuid.UUID
+}
+
+type GetOAuthIssuerBindingFixtureRow struct {
+	RemoteSessionClientID uuid.UUID
+	UserSessionIssuerID   uuid.UUID
+}
+
+func (q *Queries) GetOAuthIssuerBindingFixture(ctx context.Context, arg GetOAuthIssuerBindingFixtureParams) (GetOAuthIssuerBindingFixtureRow, error) {
+	row := q.db.QueryRow(ctx, getOAuthIssuerBindingFixture, arg.AuthClientID, arg.ProjectID, arg.IssuerID)
+	var i GetOAuthIssuerBindingFixtureRow
+	err := row.Scan(&i.RemoteSessionClientID, &i.UserSessionIssuerID)
+	return i, err
+}
+
 const getOAuthResumeOrigin = `-- name: GetOAuthResumeOrigin :one
 SELECT p.trigger_instance_id, v.version
 FROM execution_selection_profile_versions v
@@ -857,6 +883,52 @@ func (q *Queries) RecordProfileChoice(ctx context.Context, arg RecordProfileChoi
 	return result.RowsAffected(), nil
 }
 
+const refreshOAuthSessionFixture = `-- name: RefreshOAuthSessionFixture :one
+WITH retired AS (
+  UPDATE user_sessions SET deleted_at = clock_timestamp()
+  WHERE user_sessions.jti = $1 AND user_sessions.project_id = $2 AND user_sessions.deleted IS FALSE
+  RETURNING id, project_id, organization_id, user_session_issuer_id, user_session_client_id, subject_urn, authorizer_user_id, delegated_grants, delegated_grants_version, jti, refresh_token_hash, refresh_expires_at, expires_at, tool_selection, last_used_at, resource, sign_in_id, credential_id, created_at, updated_at, deleted_at, deleted
+), replacement AS (
+  INSERT INTO user_sessions (project_id, organization_id, user_session_issuer_id,
+    user_session_client_id, subject_urn, jti, refresh_expires_at, expires_at, credential_id)
+  SELECT project_id, organization_id, user_session_issuer_id, user_session_client_id,
+    subject_urn, $3, refresh_expires_at, expires_at, COALESCE(credential_id, id)
+  FROM retired RETURNING id, credential_id, jti
+)
+SELECT retired.id AS old_id, retired.jti AS old_jti, retired.deleted AS old_deleted,
+  replacement.id AS new_id, replacement.jti AS new_jti, replacement.credential_id
+FROM retired, replacement
+`
+
+type RefreshOAuthSessionFixtureParams struct {
+	OldJti    string
+	ProjectID uuid.NullUUID
+	NewJti    string
+}
+
+type RefreshOAuthSessionFixtureRow struct {
+	OldID        uuid.UUID
+	OldJti       string
+	OldDeleted   bool
+	NewID        uuid.UUID
+	NewJti       string
+	CredentialID uuid.NullUUID
+}
+
+func (q *Queries) RefreshOAuthSessionFixture(ctx context.Context, arg RefreshOAuthSessionFixtureParams) (RefreshOAuthSessionFixtureRow, error) {
+	row := q.db.QueryRow(ctx, refreshOAuthSessionFixture, arg.OldJti, arg.ProjectID, arg.NewJti)
+	var i RefreshOAuthSessionFixtureRow
+	err := row.Scan(
+		&i.OldID,
+		&i.OldJti,
+		&i.OldDeleted,
+		&i.NewID,
+		&i.NewJti,
+		&i.CredentialID,
+	)
+	return i, err
+}
+
 const seedAssistantFixture = `-- name: SeedAssistantFixture :one
 INSERT INTO assistants (organization_id, project_id, name, model, instructions)
 VALUES ($1, $2, $3, 'fixture-model', 'fixture')
@@ -1206,6 +1278,23 @@ func (q *Queries) SeedWorkloadBindingFixture(ctx context.Context, arg SeedWorklo
 	return err
 }
 
+const setOAuthIssuerScopeFixture = `-- name: SetOAuthIssuerScopeFixture :exec
+UPDATE user_session_issuers SET project_id = NULL,
+  organization_id = CASE WHEN $1::boolean THEN NULL ELSE organization_id END
+WHERE id = $2 AND project_id = $3
+`
+
+type SetOAuthIssuerScopeFixtureParams struct {
+	GlobalScope bool
+	IssuerID    uuid.UUID
+	ProjectID   uuid.NullUUID
+}
+
+func (q *Queries) SetOAuthIssuerScopeFixture(ctx context.Context, arg SetOAuthIssuerScopeFixtureParams) error {
+	_, err := q.db.Exec(ctx, setOAuthIssuerScopeFixture, arg.GlobalScope, arg.IssuerID, arg.ProjectID)
+	return err
+}
+
 const setRequiresUpstreamAuthFixture = `-- name: SetRequiresUpstreamAuthFixture :exec
 UPDATE mcp_servers SET requires_upstream_auth = $1
 WHERE id = $2 AND project_id = $3
@@ -1219,5 +1308,33 @@ type SetRequiresUpstreamAuthFixtureParams struct {
 
 func (q *Queries) SetRequiresUpstreamAuthFixture(ctx context.Context, arg SetRequiresUpstreamAuthFixtureParams) error {
 	_, err := q.db.Exec(ctx, setRequiresUpstreamAuthFixture, arg.RequiresUpstreamAuth, arg.ID, arg.ProjectID)
+	return err
+}
+
+const withdrawOAuthChoiceFixture = `-- name: WithdrawOAuthChoiceFixture :exec
+WITH disabled AS (
+  UPDATE mcp_auth_clients SET enabled = FALSE
+  WHERE id = $1 AND project_id = $2 AND $3::text = 'disabled'
+), detached AS (
+  UPDATE mcp_server_auth_clients SET deleted_at = clock_timestamp()
+  WHERE auth_client_id = $1 AND project_id = $2 AND $3::text = 'detached'
+), unbound AS (
+  DELETE FROM remote_session_client_user_session_issuers
+  WHERE remote_session_client_id = (SELECT ac.remote_session_client_id FROM mcp_auth_clients ac WHERE ac.id = $1 AND ac.project_id = $2)
+    AND $3::text = 'unbound issuer'
+)
+UPDATE remote_session_clients SET deleted_at = clock_timestamp()
+WHERE id = (SELECT ac.remote_session_client_id FROM mcp_auth_clients ac WHERE ac.id = $1 AND ac.project_id = $2)
+  AND $3::text = 'deleted registration'
+`
+
+type WithdrawOAuthChoiceFixtureParams struct {
+	AuthClientID uuid.UUID
+	ProjectID    uuid.NullUUID
+	Change       string
+}
+
+func (q *Queries) WithdrawOAuthChoiceFixture(ctx context.Context, arg WithdrawOAuthChoiceFixtureParams) error {
+	_, err := q.db.Exec(ctx, withdrawOAuthChoiceFixture, arg.AuthClientID, arg.ProjectID, arg.Change)
 	return err
 }
