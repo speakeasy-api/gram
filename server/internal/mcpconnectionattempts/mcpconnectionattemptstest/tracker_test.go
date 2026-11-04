@@ -12,6 +12,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/urn"
 )
 
+// Even a consumed attempt is left open: the disconnect likely caused the outage, so it reads as abandoned.
 func TestTracker_ExplicitRefusalAfterDisconnectIsSilent(t *testing.T) {
 	t.Parallel()
 	for _, consumed := range []bool{false, true} {
