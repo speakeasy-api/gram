@@ -163,6 +163,50 @@ func (p ProjectRef) PublishPlugin() Operation {
 	)
 }
 
+// ReadSkills asks to read the project's skills. Skill grants are stored
+// against the project ID, so the operation targets the project rather than
+// one skill.
+func (p ProjectRef) ReadSkills() Operation {
+	return newOperation("skill", "read", p.id, nil)
+}
+
+// AssistantRef names one assistant in its project for typed operations.
+// Every operation carries the project as a dimension, so a grant bounded to
+// one project never matches an assistant in another.
+type AssistantRef struct {
+	projectID string
+	id        string
+}
+
+// Assistant names an assistant. The caller must have verified that the
+// assistant belongs to the project.
+func Assistant(projectID, assistantID string) AssistantRef {
+	return AssistantRef{projectID: projectID, id: assistantID}
+}
+
+// AssistantsInProject names the assistants of a project as a whole, for
+// operations that are not about one existing assistant, such as creating
+// one. Grants for these operations are stored with the project's ID as the
+// resource, so the reference uses the project ID as the assistant ID and
+// also carries it as the project dimension.
+func AssistantsInProject(projectID string) AssistantRef {
+	return AssistantRef{projectID: projectID, id: projectID}
+}
+
+func (a AssistantRef) dimensions() map[string]string {
+	return map[string]string{SelectorKeyProjectID: a.projectID}
+}
+
+// Read asks to read the assistant.
+func (a AssistantRef) Read() Operation {
+	return newOperation("assistant", "read", a.id, a.dimensions())
+}
+
+// Write asks to change the assistant.
+func (a AssistantRef) Write() Operation {
+	return newOperation("assistant", "write", a.id, a.dimensions())
+}
+
 // MCPServerRef names one MCP server in its project for typed operations.
 // Every operation carries the project as a dimension, so a grant or block
 // bounded to one project never matches a server in another.
@@ -217,5 +261,7 @@ func typedOperations() []Operation {
 		org.Read(), org.Administer(),
 		project.Read(), project.Write(), project.PublishPlugin(),
 		mcpServer.Read(), mcpServer.Edit(), mcpServer.Connect(),
+		project.ReadSkills(),
+		Assistant("project", "assistant").Read(), Assistant("project", "assistant").Write(),
 	}
 }

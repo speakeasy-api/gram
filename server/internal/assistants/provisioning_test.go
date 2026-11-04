@@ -22,7 +22,7 @@ import (
 func newProvisioningCore(t *testing.T, conn *pgxpool.Pool) *ServiceCore {
 	t.Helper()
 	logger := testenv.NewLogger(t)
-	return NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzEngine(t, conn))
+	return NewServiceCore(logger, testenv.NewTracerProvider(t), testenv.NewMeterProvider(t), conn, nil, nil, testRuntimeBackend{backend: runtimeBackendGKE}, nil, nil, nil, telemetry.NewStub(logger), nil, newTestAuditLogger(), testIdentityService, newTestAuthzClient(t, conn))
 }
 
 func newProvisioningProject(t *testing.T, conn *pgxpool.Pool, slug string) uuid.UUID {

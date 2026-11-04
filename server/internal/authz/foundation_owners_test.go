@@ -167,6 +167,7 @@ var foundationFileOwners = map[string]string{
 
 var foundationFunctionOwners = map[string]string{
 	"internal/assistantidentity/actor.go canDelegateInference":                      ownerI1,
+	"internal/assistantidentity/provision.go *Service.selectAgent":                  ownerAG1,
 	"internal/assistants/runtime_kit_workload.go kitWorkloadInferenceAllowed":       ownerI1,
 	"internal/background/activities/process_workos_org_events.go handleRoleDeleted": ownerO2,
 	"internal/chat/impl.go *Service.GetAssistantSessionSummary":                     ownerC3,

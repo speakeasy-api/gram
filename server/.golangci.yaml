@@ -540,6 +540,8 @@ linters:
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Client).Require("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Client).Evaluate("
         - "(*github.com/speakeasy-api/gram/server/internal/authz.Client).MatchMany("
+        - "(*github.com/speakeasy-api/gram/server/internal/authz.Client).RequireLoaded("
+        - "(*github.com/speakeasy-api/gram/server/internal/authz.Client).EvaluateLoaded("
         - "github.com/speakeasy-api/gram/server/internal/authz.GrantsForRole("
         - "github.com/speakeasy-api/gram/server/internal/organizations/orgprovision.ValidateName("
         - "(*github.com/speakeasy-api/gram/server/internal/auth.Auth).Authorize("
