@@ -9,6 +9,10 @@ import { Operator } from "@gram/client/models/components/logfilter.js";
 import { useMembers } from "@gram/client/react-query/members.js";
 import { useRoles } from "@gram/client/react-query/roles.js";
 import { DEFAULT_HOOK_TYPES } from "./observeFilterConstants";
+import {
+  TOOL_USAGE_DEFAULT_TYPES,
+  TOOL_USAGE_VALID_TYPES,
+} from "./observeTargetFilters";
 import { useObserveFilters } from "./useObserveFilters";
 
 vi.mock("@gram/client/react-query/members.js", () => ({
@@ -224,6 +228,35 @@ describe("useObserveFilters", () => {
     expect(result.current.filters.selectedHookTypes).toEqual(
       DEFAULT_HOOK_TYPES,
     );
+  });
+
+  it("selects local tools by default when every type is the default", () => {
+    // The identity page embeds Tool logs with every type as its default, so
+    // an agent that only makes local tool calls through hooks still shows up.
+    const { result } = renderHook(
+      () =>
+        useObserveFilters({
+          defaultTypes: TOOL_USAGE_VALID_TYPES,
+          validTypes: TOOL_USAGE_VALID_TYPES,
+        }),
+      { wrapper: makeWrapper("/") },
+    );
+
+    expect(result.current.selectedHookTypes).toEqual(TOOL_USAGE_VALID_TYPES);
+    expect(result.current.selectedHookTypes).toContain("local_tool");
+  });
+
+  it("leaves local tools out of the page-wide tool usage default", () => {
+    const { result } = renderHook(
+      () =>
+        useObserveFilters({
+          defaultTypes: TOOL_USAGE_DEFAULT_TYPES,
+          validTypes: TOOL_USAGE_VALID_TYPES,
+        }),
+      { wrapper: makeWrapper("/") },
+    );
+
+    expect(result.current.selectedHookTypes).not.toContain("local_tool");
   });
 
   it("parses role URL param and exposes selectedRoleIds", () => {
