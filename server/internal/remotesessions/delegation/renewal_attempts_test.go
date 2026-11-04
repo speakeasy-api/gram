@@ -75,6 +75,9 @@ func TestRenewal_FailuresKeepWhoFixes(t *testing.T) {
 	}{
 		{name: "invalid grant", kind: RefreshInvalidGrant, want: mcpconnectionattempts.CodeReauthenticationRequired, who: mcpconnectionattempts.WhoPerson, rows: 1},
 		{name: "configuration", kind: RefreshConfiguration, want: mcpconnectionattempts.CodeRenewalMisconfigured, who: mcpconnectionattempts.WhoAdmin, rows: 2},
+		{name: "client rejected", kind: RefreshClientRejected, want: mcpconnectionattempts.CodeRenewalMisconfigured, who: mcpconnectionattempts.WhoAdmin, rows: 2},
+		{name: "setup", kind: RefreshSetup, want: mcpconnectionattempts.CodeRenewalMisconfigured, who: mcpconnectionattempts.WhoAdmin, rows: 2},
+		{name: "setup retryable", kind: RefreshSetupRetryable, want: mcpconnectionattempts.CodeRenewalRetryable, who: mcpconnectionattempts.WhoProvider, rows: 1},
 		{name: "invalid identity", kind: RefreshInvalidIdentity, want: mcpconnectionattempts.CodeInvalidIdentity, who: mcpconnectionattempts.WhoAdmin, rows: 2},
 		{name: "retryable", kind: RefreshRetryable, want: mcpconnectionattempts.CodeRenewalRetryable, who: mcpconnectionattempts.WhoProvider, rows: 1},
 		{name: "ambiguous", kind: RefreshAmbiguous, want: mcpconnectionattempts.CodeRenewalAmbiguous, who: mcpconnectionattempts.WhoPerson, rows: 1},

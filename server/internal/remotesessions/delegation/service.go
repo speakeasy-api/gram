@@ -796,7 +796,6 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 	if !errors.As(cause, &failure) {
 		failure = &RefreshError{Kind: RefreshAmbiguous}
 	}
-	s.recordRenewal(ctx, b, renewalHappened(failure.Kind))
 	next := c
 	next.observedAt = s.now()
 	next.claim = uuid.Nil
@@ -808,6 +807,7 @@ func (s *Service) recordRefreshFailure(ctx context.Context, b Binding, c delegat
 	if (kind == RefreshConfiguration || kind == RefreshRetryable) && retained && !c.observedAt.IsZero() && !s.now().Before(c.observedAt.Add(configurationRetryLimit)) {
 		kind = RefreshInvalidGrant
 	}
+	s.recordRenewal(ctx, b, renewalHappened(kind))
 	switch kind {
 	case RefreshInvalidGrant:
 		next.refresh = ""
@@ -877,11 +877,11 @@ func renewalHappened(kind RefreshFailure) mcpconnectionattempts.Code {
 	switch kind {
 	case RefreshInvalidGrant:
 		return mcpconnectionattempts.CodeReauthenticationRequired
-	case RefreshConfiguration:
+	case RefreshConfiguration, RefreshClientRejected, RefreshSetup:
 		return mcpconnectionattempts.CodeRenewalMisconfigured
 	case RefreshInvalidIdentity:
 		return mcpconnectionattempts.CodeInvalidIdentity
-	case RefreshRetryable:
+	case RefreshRetryable, RefreshSetupRetryable:
 		return mcpconnectionattempts.CodeRenewalRetryable
 	case RefreshAmbiguous:
 		return mcpconnectionattempts.CodeRenewalAmbiguous
