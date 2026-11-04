@@ -106,6 +106,7 @@ trackedFiles:
   src/funcs/adminRemoteSessionsUpdateGlobalIssuer.ts: {}
   src/funcs/agentCreateSessionHandoff.ts: {}
   src/funcs/agentDeleteAiScanTarget.ts: {}
+  src/funcs/agentGetClaudeObservabilityPlugin.ts: {}
   src/funcs/agentGetConfiguration.ts: {}
   src/funcs/agentGetMyConnections.ts: {}
   src/funcs/agentGetPlugins.ts: {}
@@ -2472,6 +2473,7 @@ trackedFiles:
   src/models/operations/getactivedeployment.ts: {}
   src/models/operations/getadminopenrouterkeyusage.ts: {}
   src/models/operations/getagent.ts: {}
+  src/models/operations/getagentclaudeobservabilityplugin.ts: {}
   src/models/operations/getagentmyconnections.ts: {}
   src/models/operations/getagentplugins.ts: {}
   src/models/operations/getagentsessionmeta.ts: {}
@@ -3117,6 +3119,8 @@ trackedFiles:
   src/react-query/agent.ts: {}
   src/react-query/agentConnectionBlocks.core.ts: {}
   src/react-query/agentConnectionBlocks.ts: {}
+  src/react-query/agentGetClaudeObservabilityPlugin.core.ts: {}
+  src/react-query/agentGetClaudeObservabilityPlugin.ts: {}
   src/react-query/agentMyConnections.core.ts: {}
   src/react-query/agentMyConnections.ts: {}
   src/react-query/agentPlugins.core.ts: {}
@@ -7261,6 +7265,18 @@ examples:
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
         "500":
           application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": false, "timeout": true}
+  getAgentClaudeObservabilityPlugin:
+    speakeasy-default-get-agent-claude-observability-plugin:
+      parameters:
+        header:
+          Gram-User-Email: "dev@acme.corp"
+      responses:
+        "200":
+          application/zip: "x-file: example.file"
+        "400":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
+        "500":
+          application/json: {"fault": true, "id": "123abc", "message": "parameter 'p' must be an integer", "name": "bad_request", "temporary": true, "timeout": false}
   getAgentMyConnections:
     speakeasy-default-get-agent-my-connections:
       parameters:
