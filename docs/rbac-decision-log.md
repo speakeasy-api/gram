@@ -110,7 +110,7 @@ Review follow-ups adopted on #8442 (each fails closed):
 ### Decided without reviewer input
 
 1. **Shared access helpers take an operation.** `requireOrgAccess`, `authorize` and `access` now take `func(authz.OrganizationRef) authz.Operation`, and callers pass `authz.OrganizationRef.Administer` or `.Read`, as identity-provider connections do in O3. _If reversed:_ map scopes locally, as product features does.
-2. **One remote-sessions test builds its key-set service with a parity client.** The delegation-status test constructs a `jsonwebkeysets` service directly, so it now passes a client too. That is the only change outside O4's packages.
+2. **One remote-sessions test builds its key-set service with a parity client.** The delegation-status test constructs a `jsonwebkeysets` service directly, so it now passes a client too. That is the only test change outside O4's packages.
 
 ## O5 (AIS-840): custom domains, network ingress, assets and LiteLLM
 
@@ -137,7 +137,7 @@ Review follow-ups adopted on #8442 (each fails closed):
 
    The organization slice cannot declare those types without colliding with the slices that own them. _If reversed:_ O7 waits for AS1 and C1 and moves all three together.
 
-2. **Business memory has no service tests.** Its single administer check moved with the same mechanical change as the other services, so no parity comparisons cover it. The e2e suite run is its evidence. _If reversed:_ add a service test before moving it.
+2. **Business memory has no service tests.** Its single administer check moved with the same mechanical change as the other services, so no parity comparisons cover it. Its evidence is the RBAC e2e suite run, which is still pending; until it is attached to the PR, this check has no authorization evidence. _If reversed:_ add a service test before moving it.
 
 ## O8 (AIS-845): device agents and hooks
 
@@ -151,7 +151,7 @@ Review follow-ups adopted on #8442 (each fails closed):
 
 ### Decided without reviewer input
 
-1. **O2 lands in two parts.** This part moves the access service's 29 plain organization and project checks, which need nothing beyond the operations F6 already has. The second part covers the remaining 46 rows:
+1. **O2 lands in two parts.** This part moves the access service's 29 plain organization and project checks, which need nothing beyond the operations F6 already has. The second part covers the 48 O2 rows the inventory still lists on this branch. The 83 in the migration table is the baseline count, before later owner reassignments; these are the rows still open:
    - the organization-or-project read alternatives in `ListRoles` and `ListMembers`;
    - the MCP checks in explain access and resource audiences, which need M1's MCP server operations;
    - challenge-role assignment;

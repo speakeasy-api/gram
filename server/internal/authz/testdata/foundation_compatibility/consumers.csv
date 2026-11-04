@@ -174,7 +174,6 @@ internal/authclients/audience.go,takeOver,writer,MarkAuthPermissionTakenOverTx,,
 internal/authclients/choices.go,*Service.ListMcpServerAuthClientChoices,check,MCPCheck,ScopeMCPConnect,Require,1,M5 AIS-863
 internal/authclients/choices.go,*Service.ListMcpServerAuthClientChoices,projection,IsAgentKeyAuthClientType,,,1,X1 AIS-873
 internal/authclients/impl.go,*Service.require,check,Check,scope,Require,1,M5 AIS-863
-internal/background/activities/organization_administrators.go,organizationAdministratorEmails,loader,ResolveOrganizationAdminEmails,,,1,X1 AIS-873
 internal/background/activities/process_workos_org_events.go,handleOrganizationUpsert,writer,SeedPersonalAuthClientDefaultTx,,,1,X1 AIS-873
 internal/background/activities/process_workos_org_events.go,handleOrganizationUpsert,writer,SeedSystemRoleGrantsTx,,,1,X1 AIS-873
 internal/background/activities/process_workos_org_events.go,handleRoleDeleted,writer,DeleteRoleGrants,,,1,X1 AIS-873
