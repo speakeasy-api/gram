@@ -15,6 +15,9 @@ import { env } from "./env.ts";
 //   reader    a custom role with org:read and project:read only
 //   blocked   broad project and MCP write grants, plus project:blocked_write
 //             on the default project (but not on the sandbox project)
+//   elsewhere project:read everywhere, but MCP read/write/connect bounded to
+//             the sandbox project; any MCP action it can take in the default
+//             project comes through a check that ignores the project
 //   norole    an organization member with no role at all
 //   outsider  a user whose only organization is a different one
 //   anonymous no credential
@@ -25,6 +28,7 @@ export const USER_PERSONAS = [
   "member",
   "reader",
   "blocked",
+  "elsewhere",
   "norole",
   "outsider",
 ] as const;
@@ -141,7 +145,10 @@ type AuthInfo = {
   }[];
 };
 
-function customRoles(projectId: string): Record<string, RoleGrant[]> {
+function customRoles(
+  projectId: string,
+  sandboxId: string,
+): Record<string, RoleGrant[]> {
   const all = (kind: string) => [{ resource_kind: kind, resource_id: "*" }];
   return {
     [`${ROLE_PREFIX}-reader`]: [
@@ -159,6 +166,16 @@ function customRoles(projectId: string): Record<string, RoleGrant[]> {
         scope: "project:blocked_write",
         selectors: [{ resource_kind: "project", resource_id: projectId }],
       },
+    ],
+    [`${ROLE_PREFIX}-elsewhere`]: [
+      { scope: "org:read", selectors: all("org") },
+      { scope: "project:read", selectors: all("project") },
+      ...["mcp:read", "mcp:write", "mcp:connect"].map((scope) => ({
+        scope,
+        selectors: [
+          { resource_kind: "mcp", resource_id: "*", project_id: sandboxId },
+        ],
+      })),
     ],
   };
 }
@@ -196,7 +213,7 @@ export async function provisionWorld(): Promise<World> {
       org.id,
       SANDBOX_PROJECT_NAME,
     );
-    const roleIds = await ensureRoles(bootstrap, project.id);
+    const roleIds = await ensureRoles(bootstrap, project.id, sandbox.id);
 
     const idpOrgs = await idp.ensureOrg("speakeasy", "Speakeasy");
     const outsideOrg = await idp.ensureOrg(
@@ -209,6 +226,7 @@ export async function provisionWorld(): Promise<World> {
       member: [roleIds["member"]!],
       reader: [roleIds[`${ROLE_PREFIX}-reader`]!],
       blocked: [roleIds[`${ROLE_PREFIX}-blocked`]!],
+      elsewhere: [roleIds[`${ROLE_PREFIX}-elsewhere`]!],
       norole: [],
       outsider: [],
     };
@@ -294,6 +312,7 @@ async function ensureProject(
 async function ensureRoles(
   admin: ApiClient,
   projectId: string,
+  sandboxId: string,
 ): Promise<Record<string, string>> {
   type Role = { id: string; name: string; slug?: string };
   const list = await admin.ok<{ roles: Role[] }>(
@@ -304,7 +323,9 @@ async function ensureRoles(
   for (const r of list.roles) {
     if (r.slug === "admin" || r.slug === "member") ids[r.slug] = r.id;
   }
-  for (const [name, grants] of Object.entries(customRoles(projectId))) {
+  for (const [name, grants] of Object.entries(
+    customRoles(projectId, sandboxId),
+  )) {
     const existing = list.roles.find((r) => r.name === name);
     if (existing) {
       // Recreated rather than patched, so an edited definition here always

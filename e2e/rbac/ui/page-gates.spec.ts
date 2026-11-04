@@ -63,8 +63,12 @@ const GATES: PageGate[] = [
     slice: "mcp",
     path: `${DEFAULT}/mcp`,
     marker: "MCP Servers",
-    allowed: ["admin", "member", "blocked"],
+    allowed: ["admin", "member", "blocked", "elsewhere"],
     denied: ["reader", "norole"],
+    note:
+      "The elsewhere persona's MCP grants cover only the sandbox project, yet it opens this " +
+      "page and sees the default project's gateway servers: the list checks behind it name " +
+      "no project.",
   },
   {
     slice: "agents",
