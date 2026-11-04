@@ -589,6 +589,14 @@ WHERE a.organization_id = @organization_id
   AND a.owner_reassignment_required_at IS NULL
   AND a.deleted IS FALSE;
 
+-- name: ListOrganizationAgentIDs :many
+-- Every live agent in the organization: the candidates a caller's agent:write
+-- grants are filtered against to find the agents whose sessions they may read.
+SELECT a.id
+FROM agents a
+WHERE a.organization_id = @organization_id
+  AND a.deleted IS FALSE;
+
 -- name: IsAgentOwner :one
 SELECT EXISTS (
   SELECT 1

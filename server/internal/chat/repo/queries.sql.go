@@ -3668,6 +3668,35 @@ func (q *Queries) ListLatestGenerationChatMessages(ctx context.Context, arg List
 	return items, nil
 }
 
+const listOrganizationAgentIDs = `-- name: ListOrganizationAgentIDs :many
+SELECT a.id
+FROM agents a
+WHERE a.organization_id = $1
+  AND a.deleted IS FALSE
+`
+
+// Every live agent in the organization: the candidates a caller's agent:write
+// grants are filtered against to find the agents whose sessions they may read.
+func (q *Queries) ListOrganizationAgentIDs(ctx context.Context, organizationID string) ([]uuid.UUID, error) {
+	rows, err := q.db.Query(ctx, listOrganizationAgentIDs, organizationID)
+	if err != nil {
+		return nil, err
+	}
+	defer rows.Close()
+	var items []uuid.UUID
+	for rows.Next() {
+		var id uuid.UUID
+		if err := rows.Scan(&id); err != nil {
+			return nil, err
+		}
+		items = append(items, id)
+	}
+	if err := rows.Err(); err != nil {
+		return nil, err
+	}
+	return items, nil
+}
+
 const listOwnedAgentIDs = `-- name: ListOwnedAgentIDs :many
 SELECT a.id
 FROM agents a
