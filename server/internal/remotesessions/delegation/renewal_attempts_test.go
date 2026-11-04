@@ -426,6 +426,7 @@ func TestRenewal_FailurePersistenceOutcome(t *testing.T) {
 			} else {
 				rec.RequireEnded(mcpconnectionattempts.StepSignInRenewal, mcpconnectionattempts.CodeInternalError)
 				require.Len(t, rec.Rows(), 1)
+				require.NotEqual(t, uuid.Nil, store.rows[b].claim, "retain the claim after a potentially spent refresh POST")
 			}
 		})
 	}
