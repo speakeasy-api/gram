@@ -388,7 +388,17 @@ func TestGovernor_RefreshDecisionConfigurationFailureUnderTheCurrentRegistration
 	g := NewGovernor(testenv.NewLogger(t), f.db, f.chainer.enc, f.chainer.delegation)
 	f.retainRefreshableDelegation(t, "configuration_failure")
 	verdict := g.RefreshDecision(t.Context(), f.req)
-	require.Equal(t, RefreshUnconfirmed, verdict.Decision, "a sign-in under the same registration cannot repair a configuration failure")
+	require.Equal(t, RefreshReauthenticate, verdict.Decision, "an erased row holds nothing an administrator could fix, and a sign-in replaces it")
+	require.Equal(t, ReasonReauthenticationRequired, verdict.Reason)
+
+	affected, err := repo.New(f.db).SetTrustedDelegationStateFixture(t.Context(), repo.SetTrustedDelegationStateFixtureParams{
+		OrganizationID: f.req.OrganizationID, ClientID: f.sel.trustedClientID,
+		RetryAfter: pgtype.Timestamptz{Time: time.Now().Add(5 * time.Minute), Valid: true, InfinityModifier: pgtype.Finite},
+	})
+	require.NoError(t, err)
+	require.EqualValues(t, 1, affected)
+	verdict = g.RefreshDecision(t.Context(), f.req)
+	require.Equal(t, RefreshUnconfirmed, verdict.Decision, "a kept token paused after a refusal waits for the provider to be fixed")
 	require.Equal(t, ReasonConfigurationRequired, verdict.Reason)
 }
 

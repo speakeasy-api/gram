@@ -26,6 +26,9 @@ const InstrumentMCPRequestRejected = "mcp.request.rejected"
 // resource check happen earlier and are not counted.
 const InstrumentOAuthIDJAGExchange = "oauth.id_jag.exchange"
 
+// InstrumentOAuthIDJAGReleaseFailed counts assertions a failed exchange could not give back.
+const InstrumentOAuthIDJAGReleaseFailed = "oauth.id_jag.release_failed"
+
 // RequestRejectionReason is the closed set of reasons [Metrics] records on
 // mcp.request.rejected under gram.mcp.rejection_reason. It stays coarse so
 // the counter's per-server URL dimension does not multiply into many series.
@@ -141,6 +144,8 @@ type Metrics struct {
 	// client resolver against the upstream client choice, by whether they
 	// agreed and each side's outcome.
 	authClientParityCounter metric.Int64Counter
+	// metaStaleChoiceRefusalCounter counts gateway member calls and describes refused for a stale choice, by reason.
+	metaStaleChoiceRefusalCounter metric.Int64Counter
 	// mandatoryAuthzShadowCounter counts shadowed mandatory checks.
 	mandatoryAuthzShadowCounter metric.Int64Counter
 
@@ -199,6 +204,9 @@ type Metrics struct {
 	// oauthIDJAGExchangeCounter counts ID-JAG token exchanges by issuer,
 	// outcome, and rejection reason.
 	oauthIDJAGExchangeCounter metric.Int64Counter
+
+	// oauthIDJAGReleaseFailedCounter counts assertions left spent by a failed release.
+	oauthIDJAGReleaseFailedCounter metric.Int64Counter
 
 	// tunnelPublicRejectedCounter counts anonymous public tunnel requests the
 	// admission gate rejected with 429 before they reached the tunnel gateway.
@@ -319,6 +327,15 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(InstrumentOAuthIDJAGExchange), attr.SlogError(err))
 	}
 
+	oauthIDJAGReleaseFailedCounter, err := meter.Int64Counter(
+		InstrumentOAuthIDJAGReleaseFailed,
+		metric.WithDescription("ID-JAG assertions a failed exchange could not return to unused, so their retry is refused as a replay"),
+		metric.WithUnit("{assertion}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create metric", attr.SlogMetricName(InstrumentOAuthIDJAGReleaseFailed), attr.SlogError(err))
+	}
+
 	mcpRequestRejectedCounter, err := meter.Int64Counter(
 		InstrumentMCPRequestRejected,
 		metric.WithDescription("MCP requests rejected before dispatch by the Session OAuth authentication gate or by request validation, by rejection reason, OAuth failure reason, server URL, serving surface, and public/private network surface"),
@@ -355,6 +372,15 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		logger.ErrorContext(context.Background(), "failed to create auth client parity counter", attr.SlogError(err))
 	}
 
+	metaStaleChoiceRefusalCounter, err := meter.Int64Counter(
+		"mcp.meta.stale_choice_refusal",
+		metric.WithDescription("Calls and describes on a gateway member refused because its stored connection choice is stale, by reason"),
+		metric.WithUnit("{attempt}"),
+	)
+	if err != nil {
+		logger.ErrorContext(context.Background(), "failed to create meta stale choice refusal counter", attr.SlogError(err))
+	}
+
 	mandatoryAuthzShadowCounter, err := meter.Int64Counter(
 		"mcp.authz.mandatory_shadow",
 		metric.WithDescription("Shadowed mandatory server and auth client checks beside today's decision, by organization, surface, caller, both outcomes, policy source and deny reason"),
@@ -380,6 +406,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		metaMemberDispatchCounter:            metaMemberDispatchCounter,
 		mcpRequestRejectedCounter:            mcpRequestRejectedCounter,
 		authClientParityCounter:              authClientParityCounter,
+		metaStaleChoiceRefusalCounter:        metaStaleChoiceRefusalCounter,
 		mandatoryAuthzShadowCounter:          mandatoryAuthzShadowCounter,
 		mcpProtocolVersionRejectedCounter:    mcpProtocolVersionRejectedCounter,
 		mcpSkillReadCounter:                  mcpSkillReadCounter,
@@ -394,6 +421,7 @@ func NewMetrics(meter metric.Meter, logger *slog.Logger) *Metrics {
 		oauthAuthorityUnavailableCounter:     oauthAuthorityUnavailableCounter,
 		oauthResourceRejectedCounter:         oauthResourceRejectedCounter,
 		oauthIDJAGExchangeCounter:            oauthIDJAGExchangeCounter,
+		oauthIDJAGReleaseFailedCounter:       oauthIDJAGReleaseFailedCounter,
 		tunnelPublicRejectedCounter:          tunnelPublicRejectedCounter,
 	}
 }
@@ -568,6 +596,14 @@ func (m *Metrics) RecordAuthClientParity(ctx context.Context, agreed bool, outco
 		attr.AuthClientLegacyOutcome(legacyOutcome),
 		attr.AuthClientReason(reason),
 	))
+}
+
+// RecordMetaStaleChoiceRefusal counts one call or describe refused for a stale choice. Reasons are a closed set.
+func (m *Metrics) RecordMetaStaleChoiceRefusal(ctx context.Context, reason string) {
+	if m == nil || m.metaStaleChoiceRefusalCounter == nil {
+		return
+	}
+	m.metaStaleChoiceRefusalCounter.Add(ctx, 1, metric.WithAttributes(attr.AuthClientReason(reason)))
 }
 
 // MandatoryAuthzShadow is one shadowed mandatory check. Every field but

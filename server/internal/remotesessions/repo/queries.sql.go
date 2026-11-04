@@ -14628,6 +14628,45 @@ func (q *Queries) SetRemoteSessionValidation(ctx context.Context, arg SetRemoteS
 	return result.RowsAffected(), nil
 }
 
+const setTrustedDelegationStateFixture = `-- name: SetTrustedDelegationStateFixture :execrows
+UPDATE trusted_issuer_sessions SET
+  observation_status = COALESCE($1, observation_status),
+  refresh_claim_id = COALESCE($2::uuid, refresh_claim_id),
+  retry_after = COALESCE($3::timestamptz, retry_after),
+  observed_at = COALESCE($4::timestamptz, observed_at),
+  updated_at = COALESCE($5::timestamptz, updated_at)
+WHERE organization_id = $6::text
+  AND remote_session_client_id = $7::uuid
+  AND deleted IS FALSE
+`
+
+type SetTrustedDelegationStateFixtureParams struct {
+	ObservationStatus pgtype.Text
+	RefreshClaimID    uuid.NullUUID
+	RetryAfter        pgtype.Timestamptz
+	ObservedAt        pgtype.Timestamptz
+	UpdatedAt         pgtype.Timestamptz
+	OrganizationID    string
+	ClientID          uuid.UUID
+}
+
+// Test-only fixture for delegation states that take real time to reach.
+func (q *Queries) SetTrustedDelegationStateFixture(ctx context.Context, arg SetTrustedDelegationStateFixtureParams) (int64, error) {
+	result, err := q.db.Exec(ctx, setTrustedDelegationStateFixture,
+		arg.ObservationStatus,
+		arg.RefreshClaimID,
+		arg.RetryAfter,
+		arg.ObservedAt,
+		arg.UpdatedAt,
+		arg.OrganizationID,
+		arg.ClientID,
+	)
+	if err != nil {
+		return 0, err
+	}
+	return result.RowsAffected(), nil
+}
+
 const softDeleteOrganizationRemoteSessionClientFixture = `-- name: SoftDeleteOrganizationRemoteSessionClientFixture :exec
 UPDATE remote_session_clients SET deleted_at = clock_timestamp()
 WHERE id = $1 AND organization_id = $2 AND project_id IS NULL
