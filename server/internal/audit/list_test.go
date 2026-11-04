@@ -215,14 +215,16 @@ func TestListAuditLogs_InternalClassification(t *testing.T) {
 		}
 		rows, err := q.ListAuditLogs(ctx, p)
 		require.NoError(t, err)
+		switch filter {
+		case "none":
+			require.Len(t, rows, 2)
+		case "action":
+			require.Empty(t, rows)
+		default:
+			require.Len(t, rows, 1, filter)
+		}
 		for _, row := range rows {
 			require.False(t, row.IsInternal, filter)
-		}
-		if filter == "none" {
-			require.Len(t, rows, 2)
-		}
-		if filter == "action" {
-			require.Empty(t, rows)
 		}
 	}
 	actors, err := q.ListAuditActorFacets(ctx, repo.ListAuditActorFacetsParams{OrganizationID: orgID})
