@@ -30,8 +30,14 @@ func TestAuthorizationModesAgree(t *testing.T) {
 			ctx, ti := newTestLogsService(t)
 			engine := authz.NewEngine(ti.logger, ti.conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 			enabled := func(context.Context, string) (bool, error) { return true, nil }
+			// Shadow mode uses the parity client, so a disagreement fails the
+			// test instead of only being logged.
+			authorization := authztest.NewParityClient(t, engine)
+			if mode != authz.MigrationModeShadow {
+				authorization = authztest.NewClientInMode(t, engine, mode)
+			}
 			svc := telemetry.NewService(ti.logger, testenv.NewTracerProvider(t), ti.conn, ti.chConn, nil, nil, enabled, enabled, nil,
-				engine, authztest.NewClientInMode(t, engine, mode), ti.featureFlags)
+				engine, authorization, ti.featureFlags)
 
 			authCtx, ok := contextvalues.GetAuthContext(ctx)
 			require.True(t, ok)
