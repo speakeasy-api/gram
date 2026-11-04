@@ -27,18 +27,17 @@ import (
 // or backdated grants.
 type connectBackfillFixture struct {
 	t     *testing.T
-	ctx   context.Context
 	db    *pgxpool.Pool
 	orgID string
 }
 
-func newConnectBackfillFixture(t *testing.T) (*connectBackfillFixture, *Service) {
+func newConnectBackfillFixture(t *testing.T) (*connectBackfillFixture, *Service, context.Context) {
 	t.Helper()
 	ctx, svc, db := newTestAdminService(t)
 	ctx = contextvalues.SetAdminAuthContext(ctx, &contextvalues.AdminAuthContext{OIDCSubject: "staff-test"})
 	orgID := "org_" + uuid.NewString()
 	seedOrg(t, ctx, db, orgFixture{id: orgID, name: "mcp-connect-backfill", slug: "mcp-connect-backfill-" + uuid.NewString()[:8], accountType: "enterprise"})
-	return &connectBackfillFixture{t: t, ctx: ctx, db: db, orgID: orgID}, svc
+	return &connectBackfillFixture{t: t, db: db, orgID: orgID}, svc, ctx
 }
 
 type fixtureGrant struct {
@@ -61,7 +60,7 @@ func (f *connectBackfillFixture) grant(g fixtureGrant) {
 	f.t.Helper()
 	raw, err := json.Marshal(g.selector)
 	require.NoError(f.t, err)
-	err = repo.New(f.db).AdminInsertPrincipalGrantFixture(f.ctx, repo.AdminInsertPrincipalGrantFixtureParams{
+	err = repo.New(f.db).AdminInsertPrincipalGrantFixture(f.t.Context(), repo.AdminInsertPrincipalGrantFixtureParams{
 		OrganizationID: f.orgID,
 		PrincipalUrn:   g.principal,
 		Scope:          string(g.scope),
@@ -79,7 +78,7 @@ func (f *connectBackfillFixture) provision(principal urn.Principal, scope authz.
 	f.t.Helper()
 	raw, err := json.Marshal(selector)
 	require.NoError(f.t, err)
-	err = repo.New(f.db).AdminInsertAuthPermissionProvisionFixture(f.ctx, repo.AdminInsertAuthPermissionProvisionFixtureParams{
+	err = repo.New(f.db).AdminInsertAuthPermissionProvisionFixture(f.t.Context(), repo.AdminInsertAuthPermissionProvisionFixtureParams{
 		OrganizationID: f.orgID,
 		PrincipalUrn:   principal.String(),
 		Scope:          string(scope),
@@ -92,7 +91,7 @@ func (f *connectBackfillFixture) connectExpiry(principal urn.Principal, selector
 	f.t.Helper()
 	raw, err := json.Marshal(selector)
 	require.NoError(f.t, err)
-	expiresAt, err := repo.New(f.db).AdminGetConnectGrantExpiryFixture(f.ctx, repo.AdminGetConnectGrantExpiryFixtureParams{
+	expiresAt, err := repo.New(f.db).AdminGetConnectGrantExpiryFixture(f.t.Context(), repo.AdminGetConnectGrantExpiryFixtureParams{
 		OrganizationID: f.orgID,
 		PrincipalUrn:   principal,
 		Selectors:      raw,
@@ -131,7 +130,7 @@ func withoutReadWriteImplyingConnect(grants []authz.Grant) []authz.Grant {
 // implying connect equal the decisions before it with that implication.
 func TestBackfillMcpConnectGrantsPreservesConnectDecisions(t *testing.T) {
 	t.Parallel()
-	f, svc := newConnectBackfillFixture(t)
+	f, svc, ctx := newConnectBackfillFixture(t)
 
 	projectA, projectB := uuid.NewString(), uuid.NewString()
 	serverA, serverB, serverC, serverD := uuid.NewString(), uuid.NewString(), uuid.NewString(), uuid.NewString()
@@ -217,7 +216,7 @@ func TestBackfillMcpConnectGrantsPreservesConnectDecisions(t *testing.T) {
 		t.Helper()
 		decisions := map[string]bool{}
 		for name, principals := range callers {
-			grants, err := authz.LoadGrants(f.ctx, f.db, f.orgID, principals)
+			grants, err := authz.LoadGrants(ctx, f.db, f.orgID, principals)
 			require.NoError(t, err)
 			if dropReadWrite {
 				grants = withoutReadWriteImplyingConnect(grants)
@@ -242,7 +241,7 @@ func TestBackfillMcpConnectGrantsPreservesConnectDecisions(t *testing.T) {
 	require.Positive(t, allowed)
 	require.Less(t, allowed, len(before))
 
-	result, err := svc.BackfillMcpConnectGrants(f.ctx, &gen.BackfillMcpConnectGrantsPayload{})
+	result, err := svc.BackfillMcpConnectGrants(ctx, &gen.BackfillMcpConnectGrantsPayload{})
 	require.NoError(t, err)
 	require.Positive(t, result.Inserted)
 	require.Equal(t, int64(1), result.Extended, "the temporary connect grant outlived by write")
@@ -251,7 +250,7 @@ func TestBackfillMcpConnectGrantsPreservesConnectDecisions(t *testing.T) {
 	require.Equal(t, before, decide(true), "connect decisions without the implication must match today's")
 	require.Equal(t, before, decide(false), "the backfill must not change today's decisions")
 
-	again, err := svc.BackfillMcpConnectGrants(f.ctx, &gen.BackfillMcpConnectGrantsPayload{})
+	again, err := svc.BackfillMcpConnectGrants(ctx, &gen.BackfillMcpConnectGrantsPayload{})
 	require.NoError(t, err)
 	require.Equal(t, &gen.AdminBackfillMCPConnectGrantsResult{Inserted: 0, Extended: 0, TakenOver: 0}, again, "a rerun writes nothing")
 	require.Equal(t, before, decide(true))
@@ -259,7 +258,7 @@ func TestBackfillMcpConnectGrantsPreservesConnectDecisions(t *testing.T) {
 
 func TestBackfillMcpConnectGrantsCopiesExpiry(t *testing.T) {
 	t.Parallel()
-	f, svc := newConnectBackfillFixture(t)
+	f, svc, ctx := newConnectBackfillFixture(t)
 
 	server := uuid.NewString()
 	soon, later := time.Now().Add(time.Hour).Truncate(time.Microsecond), time.Now().Add(48*time.Hour).Truncate(time.Microsecond)
@@ -275,7 +274,7 @@ func TestBackfillMcpConnectGrantsCopiesExpiry(t *testing.T) {
 	f.grant(fixtureGrant{principal: permanentConnect, scope: authz.ScopeMCPRead, selector: selector, expiresAt: &soon})
 	f.grant(fixtureGrant{principal: permanentConnect, scope: authz.ScopeMCPConnect, selector: selector})
 
-	result, err := svc.BackfillMcpConnectGrants(f.ctx, &gen.BackfillMcpConnectGrantsPayload{})
+	result, err := svc.BackfillMcpConnectGrants(ctx, &gen.BackfillMcpConnectGrantsPayload{})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), result.Inserted)
 	require.Equal(t, int64(1), result.Extended)
@@ -296,7 +295,7 @@ func TestBackfillMcpConnectGrantsCopiesExpiry(t *testing.T) {
 
 func TestBackfillMcpConnectGrantsCreatedBefore(t *testing.T) {
 	t.Parallel()
-	f, svc := newConnectBackfillFixture(t)
+	f, svc, ctx := newConnectBackfillFixture(t)
 
 	cutoff := time.Now().Add(-time.Hour)
 	beforeCutoff := cutoff.Add(-time.Hour)
@@ -307,7 +306,7 @@ func TestBackfillMcpConnectGrantsCreatedBefore(t *testing.T) {
 	f.grant(fixtureGrant{principal: viewOnly, scope: authz.ScopeMCPRead, selector: selector})
 
 	createdBefore := cutoff.Format(time.RFC3339)
-	result, err := svc.BackfillMcpConnectGrants(f.ctx, &gen.BackfillMcpConnectGrantsPayload{CreatedBefore: &createdBefore})
+	result, err := svc.BackfillMcpConnectGrants(ctx, &gen.BackfillMcpConnectGrantsPayload{CreatedBefore: &createdBefore})
 	require.NoError(t, err)
 	require.Equal(t, int64(1), result.Inserted)
 
@@ -317,7 +316,7 @@ func TestBackfillMcpConnectGrantsCreatedBefore(t *testing.T) {
 	require.False(t, ok, "grants written after the cutoff are left alone")
 
 	invalid := "yesterday"
-	_, err = svc.BackfillMcpConnectGrants(f.ctx, &gen.BackfillMcpConnectGrantsPayload{CreatedBefore: &invalid})
+	_, err = svc.BackfillMcpConnectGrants(ctx, &gen.BackfillMcpConnectGrantsPayload{CreatedBefore: &invalid})
 	require.Error(t, err)
 }
 
