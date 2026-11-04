@@ -13,6 +13,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	organizationsrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	"github.com/speakeasy-api/gram/server/internal/orghost"
@@ -139,7 +140,7 @@ func newMemberMCPURLFixture(t *testing.T, name string) (context.Context, memberM
 	serverURL, err := url.Parse(testCanonicalBaseURL)
 	require.NoError(t, err)
 	service := NewPluginsService(conn, allowBudget(), name+"-key").
-		WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).
+		WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil), authztest.NewParityClient(t, authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil))).
 		withMemberMCPConnectionReader(testMemberMCPConnectionReader{}).
 		WithInstallLinks(serverURL, serverURL)
 	// A session makes the authorization engine enforce, so both tools check the

@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	platformrepo "github.com/speakeasy-api/gram/server/internal/platformmcp/repo"
@@ -50,8 +51,8 @@ func seedPluginMetadataFixture(t *testing.T, name string) (context.Context, plug
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	budget := &recordingOperationLimiter{result: ratelimit.Result{Allowed: true}}
-	service := testPluginTargets(conn).
-		WithAuthorization(engine).
+	service := testPluginTargets(t, conn).
+		WithAuthorization(engine, authztest.NewParityClient(t, engine)).
 		WithMetadataMutations(testenv.NewLogger(t), plugindelivery.NewPluginMetadataCore(audit.NewLogger(), plugindelivery.PublicationRequests{Enabled: false}), OperationBudget{Connection: budget, Organization: allowOperationLimiter{}}).
 		WithAutoSyncGuard(&stubAutoSyncGuard{})
 	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, UserID: principal.UserID}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))

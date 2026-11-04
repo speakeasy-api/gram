@@ -135,8 +135,10 @@ type GatewayService struct {
 	db      *pgxpool.Pool
 	queries *platformrepo.Queries
 	logger  *slog.Logger
-	// engine checks the mcp:write grants the management API checks.
+	// engine backs the gateway writer the management API shares.
 	engine *authz.Engine
+	// authz checks the mcp:write grants the management API checks.
+	authz *authz.Client
 	// admin re-checks org:admin live, like every other Platform MCP write
 	// that changes what servers people can reach.
 	admin       Authorizer
@@ -147,19 +149,19 @@ type GatewayService struct {
 	changes     OperationBudget
 }
 
-func NewGatewayService(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, engine *authz.Engine, admin Authorizer, guard *admission.Guard, endpoints MCPConnectionEndpointWriter, publication plugins.PublicationRequests, publisher plugins.PluginPublishSignaler, changes OperationBudget) (*GatewayService, error) {
-	if logger == nil || db == nil || auditLogger == nil || engine == nil || admin == nil || guard == nil || endpoints == nil || !changes.valid() {
+func NewGatewayService(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, engine *authz.Engine, client *authz.Client, admin Authorizer, guard *admission.Guard, endpoints MCPConnectionEndpointWriter, publication plugins.PublicationRequests, publisher plugins.PluginPublishSignaler, changes OperationBudget) (*GatewayService, error) {
+	if logger == nil || db == nil || auditLogger == nil || engine == nil || client == nil || admin == nil || guard == nil || endpoints == nil || !changes.valid() {
 		return nil, ErrGatewayInvalid
 	}
 	return &GatewayService{
-		db: db, queries: platformrepo.New(db), logger: logger, engine: engine, admin: admin,
+		db: db, queries: platformrepo.New(db), logger: logger, engine: engine, authz: client, admin: admin,
 		writer:    metamcp.GatewayWriter{Logger: logger, Audit: auditLogger, Authz: engine, Admission: guard},
 		endpoints: endpoints, publication: publication, publisher: publisher, changes: changes,
 	}, nil
 }
 
 func (s *GatewayService) valid() bool {
-	return s != nil && s.db != nil && s.queries != nil && s.logger != nil && s.engine != nil && s.admin != nil &&
+	return s != nil && s.db != nil && s.queries != nil && s.logger != nil && s.engine != nil && s.authz != nil && s.admin != nil &&
 		s.writer.Audit != nil && s.writer.Admission != nil && s.endpoints != nil && s.changes.valid()
 }
 
@@ -381,7 +383,7 @@ func (s *GatewayService) resolveProject(ctx context.Context, principal Principal
 	if err := s.admin.RequireLiveOrgAdmin(ctx, principal); err != nil {
 		return ResolvedProject{}, toolExposureAdminAuthorizationError(err)
 	}
-	if err := s.engine.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, resourceID.String(), projectID.String())); err != nil {
+	if err := s.authz.Require(ctx, authz.MCPServer(projectID.String(), resourceID.String()).Edit()); err != nil {
 		mapped := toolExposureAuthorizationError(err, authz.ScopeMCPWrite)
 		if _, ok := errors.AsType[*ExternalAuthorizationError](mapped); !ok {
 			return ResolvedProject{}, gatewayUnavailable(err)

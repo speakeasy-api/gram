@@ -132,7 +132,7 @@ func (s *PluginsService) GetMyMCPConnectionStatus(ctx context.Context, principal
 // budget. The device agent's menu bar reads it for each server in the
 // member's plugins.
 func (s *PluginsService) MemberConnectionStatus(ctx context.Context, principal Principal, grants []authz.Grant, projectID, mcpID uuid.UUID) (GetMyMCPConnectionStatusOutput, error) {
-	if s == nil || s.db == nil || s.now == nil || s.authorization == nil {
+	if s == nil || s.db == nil || s.now == nil || s.authzClient == nil {
 		return GetMyMCPConnectionStatusOutput{}, ErrUnavailable
 	}
 	target, err := s.resolveMemberMCPStatusTarget(ctx, principal, grants, projectID, mcpID)
@@ -295,7 +295,7 @@ func (s *PluginsService) memberMCPChainedStatus(ctx context.Context, principal P
 }
 
 func (s *PluginsService) memberMCPStatusTarget(ctx context.Context, principal Principal, input GetMyMCPStatusInput) (memberMCPStatusTarget, error) {
-	if !s.valid() || s.authorization == nil {
+	if !s.valid() || s.authzClient == nil {
 		return memberMCPStatusTarget{}, ErrUnavailable
 	}
 	projectID, err := uuid.Parse(strings.TrimSpace(input.ProjectID))
@@ -326,11 +326,11 @@ func (s *PluginsService) resolveMemberMCPStatusTarget(ctx context.Context, princ
 	if err != nil {
 		return memberMCPStatusTarget{}, fmt.Errorf("get member MCP status target: %w", err)
 	}
-	canRead, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPRead, mcpID.String(), projectID.String()))
+	canRead, err := s.authzClient.EvaluateGrants(ctx, grants, authz.MCPServer(projectID.String(), mcpID.String()).Read())
 	if err != nil {
 		return memberMCPStatusTarget{}, fmt.Errorf("evaluate MCP read access: %w", err)
 	}
-	canConnect, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPConnect, mcpID.String(), projectID.String()))
+	canConnect, err := s.authzClient.EvaluateGrants(ctx, grants, authz.MCPServer(projectID.String(), mcpID.String()).Connect())
 	if err != nil {
 		return memberMCPStatusTarget{}, fmt.Errorf("evaluate MCP connection access: %w", err)
 	}

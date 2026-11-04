@@ -16,3 +16,10 @@ func newDeliveryAuthz(t *testing.T) *authz.Client {
 	t.Helper()
 	return authztest.NewParityClient(t, authz.NewEngine(testenv.NewLogger(t), nil, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient()))
 }
+
+// newGrantsAuthz builds a parity client for services that only decide over
+// grants already in hand, which never reach the database.
+func newGrantsAuthz(t *testing.T) *authz.Client {
+	t.Helper()
+	return newDeliveryAuthz(t)
+}

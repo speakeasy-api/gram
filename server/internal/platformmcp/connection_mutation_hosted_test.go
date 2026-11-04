@@ -14,6 +14,7 @@ import (
 	"github.com/speakeasy-api/gram/server/gen/types"
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpendpoints"
@@ -80,9 +81,9 @@ func TestSetMCPNetworkAccessHostedToolsetUsesCanonicalPolicy(t *testing.T) {
 		authz.NewGrant(authz.ScopeMCPRead, toolset.ID.String()),
 		authz.NewGrant(authz.ScopeMCPWrite, project.ID.String()),
 	})
-	settings := NewMCPConnectionSettingsService(conn)
+	settings := NewMCPConnectionSettingsService(conn, newGrantsAuthz(t))
 	authorizer := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
-	service, err := NewMCPConnectionMutationService(conn, settings, unusedConnectionEndpointWriter{}, audit.NewLogger(), authorizer, allowConnectionNetworkAccess{}, plugins.PublicationRequests{}, nil)
+	service, err := NewMCPConnectionMutationService(conn, settings, unusedConnectionEndpointWriter{}, audit.NewLogger(), authztest.NewParityClient(t, authorizer), allowConnectionNetworkAccess{}, plugins.PublicationRequests{}, nil)
 	require.NoError(t, err)
 	before, err := settings.Get(ctx, principal, GetMCPConnectionSettingsInput{
 		ProjectID: project.ID.String(), TargetKind: MCPConnectionSettingsMCPServer, TargetID: toolset.ID.String(),

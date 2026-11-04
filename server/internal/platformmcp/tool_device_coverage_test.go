@@ -36,12 +36,12 @@ func (s *stubDeviceCoverageReader) FleetDevices(_ context.Context, query devicei
 }
 
 type stubOrgReadAuthorizer struct {
-	err    error
-	checks []authz.Check
+	err error
+	ops []authz.Operation
 }
 
-func (s *stubOrgReadAuthorizer) Require(_ context.Context, checks ...authz.Check) error {
-	s.checks = append(s.checks, checks...)
+func (s *stubOrgReadAuthorizer) Require(_ context.Context, ops ...authz.Operation) error {
+	s.ops = append(s.ops, ops...)
 	return s.err
 }
 
@@ -71,7 +71,7 @@ func TestDeviceCoverageGetCoverageReadsThePrincipalsOrganization(t *testing.T) {
 	require.EqualValues(t, 1, out.PolicyUnreported)
 	require.EqualValues(t, 1, out.EnforcementHalted)
 
-	require.Equal(t, []authz.Check{{Scope: authz.ScopeOrgRead, ResourceID: "org_1"}}, authorizer.checks)
+	require.Equal(t, []authz.Operation{authz.Organization("org_1").Read()}, authorizer.ops)
 }
 
 // The dashboard's device pages require org:read, so this surface must refuse

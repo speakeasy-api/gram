@@ -473,6 +473,7 @@ type PluginsService struct {
 	publicationRequests  plugindelivery.PublicationRequests
 	db                   *pgxpool.Pool
 	authorization        *authz.Engine
+	authzClient          *authz.Client
 	dashboardURL         *url.URL
 	serverURL            *url.URL
 	budget               OperationBudget
@@ -584,9 +585,13 @@ func (s *PluginsService) WithPublishStatus(describer publishstatus.Describer) *P
 	return s
 }
 
-func (s *PluginsService) WithAuthorization(engine *authz.Engine) *PluginsService {
+// WithAuthorization composes the caller's authorization: client decides the
+// caller's access, and engine decides whether an administrator's write
+// records a Shadow MCP review.
+func (s *PluginsService) WithAuthorization(engine *authz.Engine, client *authz.Client) *PluginsService {
 	if s != nil {
 		s.authorization = engine
+		s.authzClient = client
 	}
 	return s
 }
@@ -743,13 +748,14 @@ func (s *PluginsService) ListPlugins(ctx context.Context, principal Principal, i
 }
 
 func (s *PluginsService) IsOrganizationAdmin(ctx context.Context, principal Principal) (bool, error) {
+	if s == nil || s.authzClient == nil {
+		return false, ErrUnavailable
+	}
 	grants, ok := authz.GrantsFromContext(ctx)
 	if !ok {
 		return false, ErrUnavailable
 	}
-	allowed, err := authz.GrantsAuthorize(grants, authz.Check{
-		Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil,
-	})
+	allowed, err := s.authzClient.EvaluateGrants(ctx, grants, authz.Organization(principal.OrganizationID).Administer())
 	if err != nil {
 		return false, fmt.Errorf("authorize plugin inventory access: %w", err)
 	}
@@ -757,10 +763,10 @@ func (s *PluginsService) IsOrganizationAdmin(ctx context.Context, principal Prin
 }
 
 func (s *PluginsService) ListAssignedPlugins(ctx context.Context, principal Principal, input ListPluginsInput) (ListPluginsOutput, error) {
-	if !s.valid() || s.authorization == nil {
+	if !s.valid() || s.authzClient == nil {
 		return ListPluginsOutput{}, ErrUnavailable
 	}
-	if err := s.authorization.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: principal.OrganizationID}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(principal.OrganizationID).Read()); err != nil {
 		return ListPluginsOutput{}, err
 	}
 	if err := s.budget.Allow(ctx, principal); err != nil {
@@ -808,13 +814,13 @@ func (s *PluginsService) ListAssignedPlugins(ctx context.Context, principal Prin
 }
 
 func (s *PluginsService) GetAssignedPlugin(ctx context.Context, principal Principal, input GetPluginInput) (GetPluginOutput, error) {
-	if !s.valid() || s.authorization == nil {
+	if !s.valid() || s.authzClient == nil {
 		return GetPluginOutput{}, ErrUnavailable
 	}
 	if strings.TrimSpace(input.Plugin) == "" {
 		return GetPluginOutput{}, ErrPluginNotFound
 	}
-	if err := s.authorization.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceID: principal.OrganizationID}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(principal.OrganizationID).Read()); err != nil {
 		return GetPluginOutput{}, err
 	}
 	if err := s.budget.Allow(ctx, principal); err != nil {

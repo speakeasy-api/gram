@@ -2,7 +2,6 @@ package platformmcp
 
 import (
 	"context"
-	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"testing"
 
 	"github.com/google/uuid"
@@ -12,6 +11,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/auth/sessions"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpserversrepo "github.com/speakeasy-api/gram/server/internal/mcpservers/repo"
@@ -80,7 +80,7 @@ func TestRemovePluginServerThroughMCP(t *testing.T) {
 	otherMembershipID := add(otherPlugin.ID)
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	delivery := plugindelivery.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, &sessions.Manager{}, nil, engine, authztest.NewParityClient(t, engine), audit.NewLogger(), nil, "test", "https://example.test", nil, nil)
-	service := testPluginTargets(conn).WithAuthorization(engine).WithServerRemoval(delivery)
+	service := testPluginTargets(t, conn).WithAuthorization(engine, authztest.NewParityClient(t, engine)).WithServerRemoval(delivery)
 
 	admin := newPluginRemovalSession(t, service, principal, []authz.Grant{authz.NewGrant(authz.ScopeOrgAdmin, principal.OrganizationID)}, nil)
 	before := callSkillsTool[GetPluginOutput](t, ctx, admin, "get_plugin", map[string]any{"project_id": project.ID.String(), "plugin": plugin.ID.String()})

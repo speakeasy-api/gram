@@ -357,6 +357,30 @@ func (m MCPServerRef) CallTool(tool, disposition string) Operation {
 	return newOperation("mcp_server", "connect", m.id, dimensions)
 }
 
+// MCPAuthClientRef names one shared upstream auth client of a project's MCP
+// servers for typed operations. Every operation carries the client type and
+// the project as dimensions, and grants on auth clients match strictly, so a
+// grant bounded to another client type or project never matches.
+type MCPAuthClientRef struct {
+	projectID  string
+	id         string
+	clientType string
+}
+
+// MCPAuthClient names an upstream auth client. The caller must have verified
+// that the client serves the project and has the given type.
+func MCPAuthClient(projectID, clientID, clientType string) MCPAuthClientRef {
+	return MCPAuthClientRef{projectID: projectID, id: clientID, clientType: clientType}
+}
+
+// Use asks to connect through the auth client.
+func (a MCPAuthClientRef) Use() Operation {
+	return newOperation("mcp_auth_client", "use", a.id, map[string]string{
+		SelectorKeyClientType: a.clientType,
+		SelectorKeyProjectID:  a.projectID,
+	}).WithStrictMatch()
+}
+
 // InferenceRef names inference in one project for typed operations.
 type InferenceRef struct {
 	projectID string
@@ -437,6 +461,7 @@ func typedOperations() []Operation {
 		org.Read(), org.Administer(), org.SyncDeviceAgent(), org.IngestHooks("project"),
 		project.Read(), project.Write(), project.PublishPlugin(), project.ReadOrOrganizationRead(),
 		mcpServer.Read(), mcpServer.Edit(), mcpServer.Connect(), mcpServer.CallTool("tool", "read_only"),
+		MCPAuthClient("project", "client", "type").Use(),
 		project.ReadSkills(), project.WriteSkills(), Skill("project", "skill").Read(),
 		project.WriteOrAdminister(), project.ReadOrEditMCPServer("server"),
 		project.ReadToolLogs(),

@@ -111,7 +111,7 @@ func (r *PostgresReader) WithXAAIdentityChaining(governor IdentityChainingGovern
 	return r
 }
 
-// postgresXAAServerReader reads the authorization engine at call time, since
+// postgresXAAServerReader reads the authorization client at call time, since
 // WithAuthorization may compose after WithXAAIdentityChaining.
 type postgresXAAServerReader struct {
 	reader *PostgresReader
@@ -119,8 +119,8 @@ type postgresXAAServerReader struct {
 
 func (s *postgresXAAServerReader) Server(ctx context.Context, organizationID string, projectID, serverID uuid.UUID) (xaaServer, bool, error) {
 	var none xaaServer
-	engine := s.reader.authz
-	if engine == nil {
+	client := s.reader.authz
+	if client == nil {
 		return none, false, ErrUnavailable
 	}
 	row, err := oktarepo.New(s.reader.db).GetEligibleServer(ctx, oktarepo.GetEligibleServerParams{OrganizationID: organizationID, McpServerID: serverID})
@@ -133,11 +133,11 @@ func (s *postgresXAAServerReader) Server(ctx context.Context, organizationID str
 		return none, false, nil
 	}
 	// org:admin does not imply mcp:read, as in the dashboard's readiness list.
-	allowed, err := engine.Filter(ctx, []authz.Check{authz.MCPCheck(authz.ScopeMCPRead, serverID.String(), projectID.String())})
+	allowed, err := client.MatchMany(ctx, []authz.Operation{authz.MCPServer(projectID.String(), serverID.String()).Read()})
 	if err != nil {
 		return none, false, fmt.Errorf("filter XAA readiness server: %w", err)
 	}
-	if !slices.Contains(allowed, serverID.String()) {
+	if !allowed[0] {
 		return none, false, nil
 	}
 	vendor, err := remotesessions.NormalizeVendorIssuer(row.Issuer)

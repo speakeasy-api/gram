@@ -43,7 +43,7 @@ func TestSetPluginAssignmentsSetsAndKeepsInstallModes(t *testing.T) {
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPPluginAssignmentMutations, principal.OrganizationID, true)
-	service := testPluginTargets(conn).WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget(), newDeliveryAuthz(t))
+	service := testPluginTargets(t, conn).WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget(), newDeliveryAuthz(t))
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Shared Tools", "shared-tools")
 	now := time.Now().UTC()
 	_, err = accessrepo.New(conn).CreateOrganizationRole(ctx, accessrepo.CreateOrganizationRoleParams{
@@ -98,7 +98,7 @@ func TestSetPluginAssignmentsConflictsAfterModeOnlyEdit(t *testing.T) {
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPPluginAssignmentMutations, principal.OrganizationID, true)
-	service := testPluginTargets(conn).WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget(), newDeliveryAuthz(t))
+	service := testPluginTargets(t, conn).WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget(), newDeliveryAuthz(t))
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Shared Tools", "shared-tools")
 	queries := pluginsrepo.New(conn)
 	assign := func(mode string) {
@@ -133,7 +133,7 @@ func TestSetPluginAssignmentsRejectsConflictingModesForOneAssignment(t *testing.
 	principal, project := seedRegistrationLifecycle(t, ctx, conn)
 	flags := &feature.InMemory{}
 	flags.SetFlag(feature.FlagPlatformMCPPluginAssignmentMutations, principal.OrganizationID, true)
-	service := testPluginTargets(conn).WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget(), newDeliveryAuthz(t))
+	service := testPluginTargets(t, conn).WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget(), newDeliveryAuthz(t))
 	plugin := seedPlugin(t, ctx, conn, principal.OrganizationID, project.ID, "Shared Tools", "shared-tools")
 
 	first, err := service.ListPluginAssignments(ctx, principal, ListPluginAssignmentsInput{ProjectID: project.ID.String()})

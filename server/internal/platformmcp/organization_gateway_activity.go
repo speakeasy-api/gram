@@ -88,7 +88,7 @@ func (s *OrganizationGatewayActivityService) Get(ctx context.Context, principal 
 	if !s.valid() || principal.OrganizationID == "" {
 		return GetOrganizationGatewayActivityOutput{}, ErrOrganizationGatewayActivityUnavailable
 	}
-	if err := s.authorizer.Require(ctx, authz.Check{Scope: authz.ScopeOrgRead, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authorizer.Require(ctx, authz.Organization(principal.OrganizationID).Read()); err != nil {
 		return GetOrganizationGatewayActivityOutput{}, fmt.Errorf("require org read for organization gateway activity: %w", err)
 	}
 	now := s.now()

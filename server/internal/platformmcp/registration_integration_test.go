@@ -23,6 +23,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	audittestrepo "github.com/speakeasy-api/gram/server/internal/audit/audittest/repo"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	mcpendpointsrepo "github.com/speakeasy-api/gram/server/internal/mcpendpoints/repo"
@@ -101,7 +102,7 @@ func TestLiveExternalAuthorizationUsesCurrentMemberGrants(t *testing.T) {
 	dashboardURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
-	authorizer := NewLiveOrgAdminAuthorizer(conn, engine).WithDashboardURL(dashboardURL)
+	authorizer := NewLiveOrgAdminAuthorizer(conn, authztest.NewParityClient(t, engine)).WithDashboardURL(dashboardURL)
 	principal := Principal{UserID: memberID, OrganizationID: organizationID, ConnectionID: uuid.NewString(), Generation: uuid.NewString(), ClientID: "client-test", Surface: SurfacePlatformMCP}
 
 	// A caller context may already hold unrelated grants. The transport boundary
@@ -203,9 +204,9 @@ func TestMemberResourceDiscoveryUsesLiveRBAC(t *testing.T) {
 	require.EqualValues(t, maxInventoryAuthorizationCandidates+1, inserted)
 
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
-	prepared, err := NewLiveOrgAdminAuthorizer(conn, engine).PrepareExternalContext(ctx, principal)
+	prepared, err := NewLiveOrgAdminAuthorizer(conn, authztest.NewParityClient(t, engine)).PrepareExternalContext(ctx, principal)
 	require.NoError(t, err)
-	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(engine)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(authztest.NewParityClient(t, engine))
 	reader.setInventoryCursorKey("member-discovery-key")
 
 	projects, err := reader.ListProjects(prepared, principal, ListProjectsInput{Limit: 1})
@@ -296,9 +297,9 @@ func TestDelegatedDiagnosticsProjectReadAllowsCustomRoleAndDeniesOtherProjects(t
 	require.NoError(t, err)
 
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
-	prepared, err := NewLiveOrgAdminAuthorizer(conn, engine).PrepareExternalContext(ctx, principal)
+	prepared, err := NewLiveOrgAdminAuthorizer(conn, authztest.NewParityClient(t, engine)).PrepareExternalContext(ctx, principal)
 	require.NoError(t, err)
-	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(engine)
+	reader := NewPostgresReader(testenv.NewLogger(t), conn).WithAuthorization(authztest.NewParityClient(t, engine))
 
 	resolved, err := reader.ResolveProjectRead(prepared, principal, FindMCPInput{ProjectID: allowedProject.ID.String()})
 	require.NoError(t, err)
@@ -324,7 +325,7 @@ func TestLiveOrganizationSelectorAdmitsMembersWithoutOrgAdmin(t *testing.T) {
 	seedPlatformMCPAuthorizationMember(t, ctx, conn, organizationID, memberID, authz.SystemRoleMember)
 
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
-	selector := NewLiveOrganizationSelector(conn, NewLiveOrgAdminAuthorizer(conn, engine))
+	selector := NewLiveOrganizationSelector(conn, NewLiveOrgAdminAuthorizer(conn, authztest.NewParityClient(t, engine)))
 	options, err := selector.EligibleOrganizations(ctx, memberID)
 	require.NoError(t, err)
 	require.Equal(t, []OrganizationOption{{ID: organizationID, Name: "Member organization"}}, options)
@@ -349,7 +350,7 @@ func TestLiveExternalAuthorizationPreservesAdminAndRejectsDepartedMember(t *test
 	require.NoError(t, organizationsrepo.New(conn).DeleteOrganizationUserRelationship(ctx, organizationsrepo.DeleteOrganizationUserRelationshipParams{OrganizationID: organizationID, UserID: conv.ToPGText(departedID)}))
 
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
-	authorizer := NewLiveOrgAdminAuthorizer(conn, engine)
+	authorizer := NewLiveOrgAdminAuthorizer(conn, authztest.NewParityClient(t, engine))
 	admin := Principal{UserID: adminID, OrganizationID: organizationID, ConnectionID: uuid.NewString(), Generation: uuid.NewString(), ClientID: "client-test", Surface: SurfacePlatformMCP}
 	prepared, err := authorizer.PrepareExternalContext(ctx, admin)
 	require.NoError(t, err)

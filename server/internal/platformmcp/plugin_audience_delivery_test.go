@@ -49,7 +49,7 @@ func TestPluginAudienceDeliversExistingUseThroughMCP(t *testing.T) {
 	flags.SetFlag(feature.FlagPlatformMCPPluginAssignmentMutations, principal.OrganizationID, true)
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	delivery := plugindelivery.NewService(testenv.NewLogger(t), testenv.NewTracerProvider(t), conn, &sessions.Manager{}, nil, engine, authztest.NewParityClient(t, engine), audit.NewLogger(), nil, "test", "https://example.test", nil, nil).WithPublicationRequests(true)
-	service := testPluginTargets(conn).WithAuthorization(engine).WithServerRemoval(delivery).
+	service := testPluginTargets(t, conn).WithAuthorization(engine, authztest.NewParityClient(t, engine)).WithServerRemoval(delivery).
 		WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget(), newDeliveryAuthz(t)).
 		WithPublicationRequests(plugindelivery.PublicationRequests{Enabled: true})
 	accessReads := NewAccessReadService(testenv.NewLogger(t), conn, allowBudget(), "audience-delivery-access-key")
@@ -140,7 +140,7 @@ func TestPluginAudienceAssignmentSignalsPublishWithoutPublicationRequests(t *tes
 	flags.SetFlag(feature.FlagPlatformMCPPluginAssignmentMutations, principal.OrganizationID, true)
 	engine := authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)
 	signaler := &recordingPluginPublishSignaler{}
-	service := testPluginTargets(conn).WithAuthorization(engine).
+	service := testPluginTargets(t, conn).WithAuthorization(engine, authztest.NewParityClient(t, engine)).
 		WithAssignmentMutations(flags, NewPostgresOrganizationSlugResolver(conn), audit.NewLogger(), testOperationBudget(), newDeliveryAuthz(t)).
 		WithPublicationRequests(plugindelivery.PublicationRequests{Enabled: false})
 	service.WithRepublish(plugindelivery.PublicationRequests{Enabled: false}, signaler, testOperationBudget())

@@ -115,16 +115,17 @@ type CodeModeAvailability func(ctx context.Context, organizationID string) bool
 type MCPConnectionSettingsService struct {
 	db      platformrepo.DBTX
 	queries *platformrepo.Queries
+	authz   *authz.Client
 	// codeModeAvailable is nil when the deployment has no code runtime,
 	// which reads as unavailable.
 	codeModeAvailable CodeModeAvailability
 }
 
-func NewMCPConnectionSettingsService(db platformrepo.DBTX) *MCPConnectionSettingsService {
+func NewMCPConnectionSettingsService(db platformrepo.DBTX, client *authz.Client) *MCPConnectionSettingsService {
 	if db == nil {
 		return nil
 	}
-	return &MCPConnectionSettingsService{db: db, queries: platformrepo.New(db), codeModeAvailable: nil}
+	return &MCPConnectionSettingsService{db: db, queries: platformrepo.New(db), authz: client, codeModeAvailable: nil}
 }
 
 // WithCodeModeAvailability lets gateway settings report the discovery mode
@@ -165,11 +166,14 @@ func (s *MCPConnectionSettingsService) get(ctx context.Context, db platformrepo.
 	if err != nil || (input.TargetKind != MCPConnectionSettingsMCPServer && input.TargetKind != MCPConnectionSettingsGateway) {
 		return MCPConnectionSettings{}, ErrMCPConnectionSettingsInvalid
 	}
+	if s.authz == nil {
+		return MCPConnectionSettings{}, ErrUnavailable
+	}
 	grants, ok := authz.GrantsFromContext(ctx)
 	if !ok {
 		return MCPConnectionSettings{}, ErrUnavailable
 	}
-	admin, err := authz.GrantsAuthorize(grants, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: principal.OrganizationID, Dimensions: nil})
+	admin, err := s.authz.EvaluateGrants(ctx, grants, authz.Organization(principal.OrganizationID).Administer())
 	if err != nil {
 		return MCPConnectionSettings{}, fmt.Errorf("authorize MCP connection settings admin: %w", err)
 	}
@@ -177,7 +181,7 @@ func (s *MCPConnectionSettingsService) get(ctx context.Context, db platformrepo.
 		return MCPConnectionSettings{}, ErrMCPConnectionSettingsNotFound
 	}
 	if input.TargetKind == MCPConnectionSettingsMCPServer {
-		allowed, err := authz.GrantsAuthorize(grants, authz.MCPCheck(authz.ScopeMCPRead, targetID.String(), projectID.String()))
+		allowed, err := s.authz.EvaluateGrants(ctx, grants, authz.MCPServer(projectID.String(), targetID.String()).Read())
 		if err != nil {
 			return MCPConnectionSettings{}, fmt.Errorf("authorize MCP connection settings target: %w", err)
 		}

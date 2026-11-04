@@ -683,14 +683,14 @@ func newSkillsVerticalFixture(t *testing.T, ctx context.Context, name string, op
 		skills,
 		NewPostgresSkillTargets(conn),
 		store,
-		authzEngine,
+		authztest.NewParityClient(t, authzEngine),
 		NewCatalogRegistrationGate(testGate{enabled: options.capabilityEnabled}),
 		OperationBudget{Connection: allow(), Organization: allow()},
 	).WithInsights(insights, OperationBudget{Connection: insightsConnectionLane, Organization: insightsOrganizationLane})
 
 	runtimeAuthorizer := Authorizer(&testAuthorizer{})
 	if options.grantAdmin || options.grantSkillRead || options.grantSkillWrite {
-		runtimeAuthorizer = NewLiveOrgAdminAuthorizer(conn, authzEngine)
+		runtimeAuthorizer = NewLiveOrgAdminAuthorizer(conn, authztest.NewParityClient(t, authzEngine))
 	}
 	runtime := NewRuntimeWithLifecycle(
 		logger, &testAuthenticator{principal: principal}, testGate{enabled: true}, runtimeAuthorizer,

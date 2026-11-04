@@ -205,10 +205,9 @@ type MCPToolExposureService struct {
 	queries *platformrepo.Queries
 	logger  *slog.Logger
 	audit   *audit.Logger
-	// engine checks the resource-scoped mcp:write grant, exactly as the
-	// dashboard's own toolset update does.
-	engine *authz.Engine
-	// authzClient decides which servers a role delivers when tools change.
+	// authzClient checks the resource-scoped mcp:write grant, exactly as the
+	// dashboard's own toolset update does, and decides which servers a role
+	// delivers when tools change.
 	authzClient *authz.Client
 	// admin re-checks org:admin live through the shared authorizer, so a
 	// denial keeps the challenge and audit behavior every other
@@ -250,8 +249,8 @@ type MCPToolExposureService struct {
 // tools, and an agent that just added a tool needs to be able to say so.
 type ToolExposureIndexer func(ctx context.Context, projectID, toolsetID uuid.UUID) error
 
-func NewMCPToolExposureService(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, engine *authz.Engine, authzClient *authz.Client, admin Authorizer, cursorKeyMaterial string, publication plugins.PublicationRequests, publisher plugins.PluginPublishSignaler, reads, changes OperationBudget) (*MCPToolExposureService, error) {
-	if logger == nil || db == nil || auditLogger == nil || engine == nil || authzClient == nil || admin == nil || !reads.valid() || !changes.valid() {
+func NewMCPToolExposureService(logger *slog.Logger, db *pgxpool.Pool, auditLogger *audit.Logger, authzClient *authz.Client, admin Authorizer, cursorKeyMaterial string, publication plugins.PublicationRequests, publisher plugins.PluginPublishSignaler, reads, changes OperationBudget) (*MCPToolExposureService, error) {
+	if logger == nil || db == nil || auditLogger == nil || authzClient == nil || admin == nil || !reads.valid() || !changes.valid() {
 		return nil, ErrMCPToolExposureInvalid
 	}
 	cursors, err := newToolInventoryCursorCodec(cursorKeyMaterial)
@@ -259,7 +258,7 @@ func NewMCPToolExposureService(logger *slog.Logger, db *pgxpool.Pool, auditLogge
 		return nil, err
 	}
 	return &MCPToolExposureService{
-		db: db, queries: platformrepo.New(db), logger: logger, audit: auditLogger, engine: engine, authzClient: authzClient, admin: admin,
+		db: db, queries: platformrepo.New(db), logger: logger, audit: auditLogger, authzClient: authzClient, admin: admin,
 		cursors: cursors, exposureCursors: newSignedCursorKey("platform-mcp-tool-exposure-cursor", cursorKeyMaterial), exposurePageSize: maxExposedToolURNs,
 		publication: publication, publisher: publisher, reads: reads, changes: changes, now: time.Now,
 	}, nil
@@ -277,7 +276,7 @@ func (s *MCPToolExposureService) WithIndexing(index ToolExposureIndexer) *MCPToo
 }
 
 func (s *MCPToolExposureService) valid() bool {
-	return s != nil && s.db != nil && s.queries != nil && s.audit != nil && s.engine != nil && s.authzClient != nil && s.admin != nil && s.cursors != nil && len(s.exposureCursors) > 0 && s.exposurePageSize > 0 && s.reads.valid() && s.changes.valid() && s.now != nil
+	return s != nil && s.db != nil && s.queries != nil && s.audit != nil && s.authzClient != nil && s.admin != nil && s.cursors != nil && len(s.exposureCursors) > 0 && s.exposurePageSize > 0 && s.reads.valid() && s.changes.valid() && s.now != nil
 }
 
 // ListProjectTools reports the tools a project's latest completed deployment
@@ -856,7 +855,7 @@ func (s *MCPToolExposureService) resolveTarget(ctx context.Context, principal Pr
 	}
 	// Checked against the ids the caller named, before anything confirms they
 	// exist, so the answer is the same for a real and an invented target.
-	if err := s.engine.Require(ctx, authz.MCPCheck(authz.ScopeMCPWrite, mcpID.String(), projectID.String())); err != nil {
+	if err := s.authzClient.Require(ctx, authz.MCPServer(projectID.String(), mcpID.String()).Edit()); err != nil {
 		mapped := toolExposureAuthorizationError(err, authz.ScopeMCPWrite)
 		if _, ok := errors.AsType[*ExternalAuthorizationError](mapped); !ok {
 			// Same reasoning as the admin check: only a denial is safe to
@@ -899,24 +898,24 @@ func (s *MCPToolExposureService) authorizeEveryAffectedServer(ctx context.Contex
 	if len(fronting) > maxFrontingServers {
 		return toolExposureTooManyFrontingServers()
 	}
-	checks := make([]authz.Check, 0, len(fronting))
+	ops := make([]authz.Operation, 0, len(fronting))
 	for _, id := range fronting {
 		if id == named {
 			continue
 		}
-		checks = append(checks, authz.MCPCheck(authz.ScopeMCPWrite, id.String(), projectID.String()))
+		ops = append(ops, authz.MCPServer(projectID.String(), id.String()).Edit())
 	}
-	if len(checks) == 0 {
+	if len(ops) == 0 {
 		return nil
 	}
-	// One Require for the whole set: it is variadic and requires every check
-	// to pass, so the outcome is identical to checking them one at a time.
+	// One Require for the whole set: it is variadic and requires every
+	// operation to pass, so the outcome is identical to checking them one at a time.
 	// Looping would re-run the enforcement lookup — and its outbox insert — per
 	// alias on a non-transactional connection while the caller's transaction
 	// holds the toolset row lock, making lock-hold time grow with the number
 	// of aliases for no added safety. The refusal below is server-agnostic, so
 	// nothing is lost by not knowing which check failed.
-	if err := s.engine.Require(ctx, checks...); err != nil {
+	if err := s.authzClient.Require(ctx, ops...); err != nil {
 		mapped := toolExposureAuthorizationError(err, authz.ScopeMCPWrite)
 		if _, ok := errors.AsType[*ExternalAuthorizationError](mapped); !ok {
 			return toolExposureUnavailable(err)

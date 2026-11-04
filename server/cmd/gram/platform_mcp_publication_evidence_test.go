@@ -57,7 +57,7 @@ func TestPlatformMCPGetPluginUsesAuthorizedPublicationEvidence(t *testing.T) {
 	management := plugins.NewService(logger, testenv.NewTracerProvider(t), pool, &sessions.Manager{}, nil, engine, authztest.NewParityClient(t, engine), nil, nil, "test", "https://api.example.test", nil, nil)
 	publisher := plugins.NewPublisher(logger, pool, nil, nil, "test", "https://api.example.test", nil)
 	limiter := allowingPlatformMCPBudget{}
-	inventory := platformmcp.NewPluginsService(pool, platformmcp.OperationBudget{Connection: limiter, Organization: limiter}, "test-key")
+	inventory := platformmcp.NewPluginsService(pool, platformmcp.OperationBudget{Connection: limiter, Organization: limiter}, "test-key").WithAuthorization(engine, authztest.NewParityClient(t, engine))
 	require.NoError(t, withPlatformMCPPublicationEvidence(inventory, platformMCPConfig{PluginPublisher: publisher, PluginManagement: management}))
 	output, err := inventory.GetPlugin(ctx, platformmcp.Principal{OrganizationID: organizationID, ConnectionID: uuid.NewString(), Generation: uuid.NewString()}, platformmcp.GetPluginInput{ProjectID: project.ID.String(), Plugin: plugin.Slug})
 	require.NoError(t, err)

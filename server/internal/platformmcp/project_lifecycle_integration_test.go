@@ -18,6 +18,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	envrepo "github.com/speakeasy-api/gram/server/internal/environments/repo"
@@ -60,8 +61,7 @@ func seedProjectLifecycleFixture(t *testing.T, ctx context.Context, name string)
 	service, err := NewProjectLifecycleService(
 		testenv.NewLogger(t), conn,
 		projects.NewCore(testenv.NewLogger(t), audit.NewLogger(), nil, false),
-		engine, NewLiveOrgAdminAuthorizer(conn, engine), testOperationBudget(),
-	)
+		authztest.NewParityClient(t, engine), NewLiveOrgAdminAuthorizer(conn, authztest.NewParityClient(t, engine)), testOperationBudget())
 	require.NoError(t, err)
 	return ctx, projectLifecycleFixture{principal: principal, project: project, service: service, engine: engine, conn: conn}
 }
@@ -133,7 +133,7 @@ func TestCreateProjectWritesTheDashboardSideRecordsAndIsListed(t *testing.T) {
 	require.Equal(t, plugin.ID.String(), pluginAudit.SubjectID)
 	require.Equal(t, fixture.principal.UserID, pluginAudit.ActorID)
 
-	listed, err := NewPostgresReader(testenv.NewLogger(t), fixture.conn).WithAuthorization(fixture.engine).ListProjects(ctx, fixture.principal, ListProjectsInput{Limit: 100})
+	listed, err := NewPostgresReader(testenv.NewLogger(t), fixture.conn).WithAuthorization(authztest.NewParityClient(t, fixture.engine)).ListProjects(ctx, fixture.principal, ListProjectsInput{Limit: 100})
 	require.NoError(t, err)
 	require.Contains(t, listed.Projects, Project{ID: output.Project.ID, Name: "Support Team", Slug: "support-team"})
 }
@@ -273,7 +273,7 @@ func TestProjectLifecycleNeverReturnsDatabaseErrorText(t *testing.T) {
 	// past it and fails on the closed pool, which is what an outage looks
 	// like from here.
 	service, err := NewProjectLifecycleService(logger, broken, projects.NewCore(logger, audit.NewLogger(), nil, false),
-		fixture.engine, NewLiveOrgAdminAuthorizer(fixture.conn, fixture.engine), testOperationBudget())
+		authztest.NewParityClient(t, fixture.engine), NewLiveOrgAdminAuthorizer(fixture.conn, authztest.NewParityClient(t, fixture.engine)), testOperationBudget())
 	require.NoError(t, err)
 	broken.Close()
 

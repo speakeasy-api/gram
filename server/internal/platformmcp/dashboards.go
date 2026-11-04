@@ -52,7 +52,7 @@ type DashboardsService struct {
 	logger        *slog.Logger
 	management    dashboardsManagement
 	projects      *PostgresReader
-	engine        *authz.Engine
+	authz         *authz.Client
 	flags         feature.Provider
 	organizations OrganizationSlugResolver
 	db            *pgxpool.Pool
@@ -78,12 +78,12 @@ type dashboardsManagement interface {
 
 // NewDashboardsService returns nil when a dependency is missing, so the
 // tools are served as stubs.
-func NewDashboardsService(logger *slog.Logger, management *dashboards.Service, projects *PostgresReader, engine *authz.Engine, flags feature.Provider, organizations OrganizationSlugResolver, key string) *DashboardsService {
+func NewDashboardsService(logger *slog.Logger, management *dashboards.Service, projects *PostgresReader, client *authz.Client, flags feature.Provider, organizations OrganizationSlugResolver, key string) *DashboardsService {
 	var db *pgxpool.Pool
 	if projects != nil {
 		db = projects.db
 	}
-	s := &DashboardsService{logger: logger, management: management, projects: projects, engine: engine, flags: flags, organizations: organizations, db: db, key: []byte(key), now: time.Now}
+	s := &DashboardsService{logger: logger, management: management, projects: projects, authz: client, flags: flags, organizations: organizations, db: db, key: []byte(key), now: time.Now}
 	if !s.valid() {
 		return nil
 	}
@@ -91,7 +91,7 @@ func NewDashboardsService(logger *slog.Logger, management *dashboards.Service, p
 }
 
 func (s *DashboardsService) valid() bool {
-	return s != nil && s.logger != nil && s.management != nil && s.projects != nil && s.engine != nil && s.flags != nil && s.organizations != nil && s.db != nil && len(s.key) > 0 && s.now != nil
+	return s != nil && s.logger != nil && s.management != nil && s.projects != nil && s.authz != nil && s.flags != nil && s.organizations != nil && s.db != nil && len(s.key) > 0 && s.now != nil
 }
 
 // dashboardScope is the exact project a call runs in, and the organization
@@ -121,7 +121,7 @@ func (s *DashboardsService) scope(ctx context.Context, principal Principal, proj
 		return ctx, zero, ErrForbidden
 	}
 
-	if err := s.engine.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: id.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(principal.OrganizationID, id.String()).Read()); err != nil {
 		return ctx, zero, ErrForbidden
 	}
 

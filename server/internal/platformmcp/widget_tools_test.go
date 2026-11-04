@@ -60,7 +60,7 @@ func newWidgetToolsFixture(t *testing.T) (context.Context, *widgetToolsFixture) 
 	flags.SetFlag(feature.FlagExplore, principal.OrganizationID, true)
 	engine := authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	management := widgets.NewService(logger, tracer, db, &sessions.Manager{}, engine, authztest.NewParityClient(t, engine), audit.NewLogger())
-	service := NewWidgetService(slog.New(slog.NewJSONHandler(logs, nil)), management, NewPostgresReader(logger, db), engine, flags, NewPostgresOrganizationSlugResolver(db), "test-widget-tools-key")
+	service := NewWidgetService(slog.New(slog.NewJSONHandler(logs, nil)), management, NewPostgresReader(logger, db), engine, authztest.NewParityClient(t, engine), flags, NewPostgresOrganizationSlugResolver(db), "test-widget-tools-key")
 	require.NotNil(t, service)
 
 	reg := newRegistrar(newTestMCPServer())

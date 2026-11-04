@@ -609,28 +609,35 @@ func platformToolCallError(ctx context.Context, logger *slog.Logger, err error, 
 }
 
 // grantedPlatformToolScopes reports which of the tools' required scopes the
-// caller holds on the active project. One FindMatched call covers the batch,
+// caller holds on the active project. One MatchMany call covers the batch,
 // so a hidden tool leaves a filter record for diagnosis without recording a
 // denied requirement: a tool the caller cannot use is simply not offered.
-// Any failure hides every scope-gated tool.
+// Any failure, and any scope no project permission answers, hides the
+// scope-gated tools that need it.
 func (s *Service) grantedPlatformToolScopes(ctx context.Context, authCtx *contextvalues.AuthContext, tools []platformtools.ExternalTool) map[string]bool {
 	granted := map[string]bool{}
 	if authCtx.ProjectID == nil {
 		return granted
 	}
+	project := authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String())
 	scopes := make([]string, 0, len(tools))
-	checks := make([]authz.Check, 0, len(tools))
+	ops := make([]authz.Operation, 0, len(tools))
 	for _, tool := range tools {
 		if tool.RequiredScope == "" || slices.Contains(scopes, tool.RequiredScope) {
 			continue
 		}
+		op, ok := platformToolProjectOperation(project, authz.Scope(tool.RequiredScope))
+		if !ok {
+			s.logger.WarnContext(ctx, "hiding platform tool with unanswered scope", attr.SlogError(fmt.Errorf("no project permission answers %s", tool.RequiredScope)))
+			continue
+		}
 		scopes = append(scopes, tool.RequiredScope)
-		checks = append(checks, authz.Check{Scope: authz.Scope(tool.RequiredScope), ResourceKind: "", ResourceID: authCtx.ProjectID.String(), Dimensions: nil})
+		ops = append(ops, op)
 	}
-	if len(checks) == 0 {
+	if len(ops) == 0 {
 		return granted
 	}
-	matched, err := s.authz.FindMatched(ctx, checks)
+	matched, err := s.authzClient.MatchMany(ctx, ops)
 	if err != nil {
 		s.logger.WarnContext(ctx, "match platform tool scopes; hiding scope-gated tools", attr.SlogError(err))
 		return granted
@@ -639,6 +646,24 @@ func (s *Service) grantedPlatformToolScopes(ctx context.Context, authCtx *contex
 		granted[scope] = matched[i]
 	}
 	return granted
+}
+
+// platformToolProjectOperation is the project permission a platform tool's
+// required scope names on the active project.
+func platformToolProjectOperation(project authz.ProjectRef, scope authz.Scope) (authz.Operation, bool) {
+	switch scope {
+	case authz.ScopeProjectRead:
+		return project.Read(), true
+	case authz.ScopeProjectWrite:
+		return project.Write(), true
+	case authz.ScopeLogRead:
+		return project.ReadToolLogs(), true
+	case authz.ScopeChatRead:
+		return project.ReadChats(), true
+	default:
+		var none authz.Operation
+		return none, false
+	}
 }
 
 // platformToolFeatureAvailable reports whether a platform tool gated on

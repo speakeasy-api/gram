@@ -105,6 +105,7 @@ type WidgetService struct {
 	widgets       widgetManagement
 	projects      *PostgresReader
 	engine        *authz.Engine
+	authz         *authz.Client
 	flags         feature.Provider
 	organizations OrganizationSlugResolver
 	db            *pgxpool.Pool
@@ -114,8 +115,8 @@ type WidgetService struct {
 
 // NewWidgetService returns nil when a dependency is missing, so the tools are
 // served as stable refusals.
-func NewWidgetService(logger *slog.Logger, management *widgets.Service, projects *PostgresReader, engine *authz.Engine, flags feature.Provider, organizations OrganizationSlugResolver, key string) *WidgetService {
-	if logger == nil || management == nil || projects == nil || projects.db == nil || engine == nil || flags == nil || organizations == nil || key == "" {
+func NewWidgetService(logger *slog.Logger, management *widgets.Service, projects *PostgresReader, engine *authz.Engine, client *authz.Client, flags feature.Provider, organizations OrganizationSlugResolver, key string) *WidgetService {
+	if logger == nil || management == nil || projects == nil || projects.db == nil || engine == nil || client == nil || flags == nil || organizations == nil || key == "" {
 		return nil
 	}
 	return &WidgetService{
@@ -123,6 +124,7 @@ func NewWidgetService(logger *slog.Logger, management *widgets.Service, projects
 		widgets:       management,
 		projects:      projects,
 		engine:        engine,
+		authz:         client,
 		flags:         flags,
 		organizations: organizations,
 		db:            projects.db,
@@ -132,7 +134,7 @@ func NewWidgetService(logger *slog.Logger, management *widgets.Service, projects
 }
 
 func (s *WidgetService) valid() bool {
-	return s != nil && s.logger != nil && s.widgets != nil && s.projects != nil && s.engine != nil && s.flags != nil && s.organizations != nil && s.db != nil && len(s.key) > 0 && s.now != nil
+	return s != nil && s.logger != nil && s.widgets != nil && s.projects != nil && s.engine != nil && s.authz != nil && s.flags != nil && s.organizations != nil && s.db != nil && len(s.key) > 0 && s.now != nil
 }
 
 // WithWidgets attaches the widget tools. A nil service leaves them served as
@@ -504,7 +506,7 @@ func (s *WidgetService) scope(ctx context.Context, principal Principal, projectI
 		return ctx, project, ErrForbidden
 	}
 
-	if err := s.engine.Require(ctx, authz.Check{Scope: authz.ScopeProjectRead, ResourceKind: "", ResourceID: id.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(principal.OrganizationID, id.String()).Read()); err != nil {
 		return ctx, project, ErrForbidden
 	}
 

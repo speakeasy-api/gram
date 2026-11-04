@@ -46,7 +46,7 @@ func TestRequestAccessLinksFollowPlatformHost(t *testing.T) {
 			dashboardURL := mustTestURL(t, tc.dashboardURL)
 
 			authorizer := (&LiveOrgAdminAuthorizer{}).WithDashboardURL(dashboardURL).WithServerURL(tc.serverURL)
-			adminLink := parseLink(t, authorizer.requestAccessURL(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceID: "org-1"}))
+			adminLink := parseLink(t, authorizer.requestAccessURL(ctx, authz.ScopeOrgAdmin, "org-1"))
 			require.Equal(t, tc.wantBase+"/acme/request-access", adminLink)
 
 			plugins := &PluginsService{dashboardURL: dashboardURL, serverURL: tc.serverURL}

@@ -17,6 +17,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/hostedmcp"
@@ -131,8 +132,8 @@ func seedToolExposureFixture(t *testing.T, ctx context.Context, name string) (co
 	// The live org-admin authorizer, not a stub: the mutation re-checks
 	// membership and the org:admin grant against the database, so the test
 	// only passes when the seeded caller really is a live administrator.
-	admin := NewLiveOrgAdminAuthorizer(conn, engine)
-	service, err := NewMCPToolExposureService(testenv.NewLogger(t), conn, audit.NewLogger(), engine, newDeliveryAuthz(t), admin, "tool-exposure-cursor-key", plugins.PublicationRequests{}, nil, testOperationBudget(), testOperationBudget())
+	admin := NewLiveOrgAdminAuthorizer(conn, authztest.NewParityClient(t, engine))
+	service, err := NewMCPToolExposureService(testenv.NewLogger(t), conn, audit.NewLogger(), newDeliveryAuthz(t), admin, "tool-exposure-cursor-key", plugins.PublicationRequests{}, nil, testOperationBudget(), testOperationBudget())
 	require.NoError(t, err)
 
 	// Stands in for toolsets.TriggerToolsetIndexForVersion, which needs a

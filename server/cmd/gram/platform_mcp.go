@@ -282,7 +282,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	}
 
 	gate := platformmcp.NewOrganizationGate(config.ProductFeatures)
-	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.Authz).WithDashboardURL(config.DashboardURL).WithServerURL(config.ServerURL)
+	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.AuthzClient).WithDashboardURL(config.DashboardURL).WithServerURL(config.ServerURL)
 	oauthTelemetry := platformmcp.NewOAuthTelemetry(config.Logger, config.MeterProvider)
 	oauthStore := platformmcp.NewPostgresOAuthStore(config.DB).WithTelemetry(oauthTelemetry)
 	oauth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
@@ -483,7 +483,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	organizationSlugs := platformmcp.NewPostgresOrganizationSlugResolver(config.DB)
 	distributionAdmissionReads := platformmcp.NewShadowDistributionReadService(config.Logger, config.DB)
 	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey).
-		WithAuthorization(config.Authz).
+		WithAuthorization(config.Authz, config.AuthzClient).
 		WithRemoteSessions(config.RemoteChallengeManager).
 		WithAuthClientResolver(config.FeatureFlags).
 		WithIdentityChaining(chaining).
@@ -509,7 +509,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	if config.PluginManagement != nil {
 		pluginInventory.WithServerRemoval(config.PluginManagement).WithAutoSyncGuard(config.PluginManagement)
 	}
-	accessReads := platformmcp.NewAccessReadService(config.Logger, config.DB, budgets.AccessReads, config.JWTSigningKey)
+	accessReads := platformmcp.NewAccessReadService(config.Logger, config.DB, budgets.AccessReads, config.JWTSigningKey).WithAuthorization(config.AuthzClient)
 	if config.DirectoryReview != nil {
 		accessReads.WithDirectoryReview(config.DirectoryReview)
 	}
@@ -541,7 +541,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 	config.Mux.Handle(http.MethodPost, "/platform-mcp/local-fixture/revoke", fixtureOAuth.Handler().ServeHTTP)
 	config.Mux.Handle(http.MethodPost, "/platform-mcp/local-fixture/mcp", fixtureMCP.Handler().ServeHTTP)
 
-	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills).
+	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.AuthzClient, registrationGate, budgets.Skills).
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithCodeModeAvailability(config.CodeModeAvailable).
@@ -549,7 +549,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		WithInternalSessionIssuer(config.IssuerGate).
 		WithInboundEMATrust(config.InboundEMAUserIssuers, config.InboundEMARemoteIssuers).
 		WithXAAIdentityChaining(chaining, config.OutboundCallbackOrigin).
-		WithAuthorization(config.Authz).
+		WithAuthorization(config.AuthzClient).
 		WithReviewRequests(config.ShadowReview, budgets.ReviewRequests).
 		WithShadowMCPReviewLinks(shadowReviewLinks).
 		WithDataExports(config.Encryption, config.DashboardURL).
@@ -565,19 +565,19 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		// Metered on the sensitive allowance: a chat page carries masked
 		// participants and person references, like the drill-down reads.
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, chatfindings.New(config.DB, config.ChatRiskFindings), budgets.SensitiveDiagnostics, config.JWTSigningKey)).
-		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.Authz, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
-		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
+		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.AuthzClient, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
+		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL, config.AuthzClient).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
 		WithGatewaySessions(config.GatewaySessions).
 		WithGatewayProxy(config.GatewayProxy, config.FeatureFlags).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
 	platformReader.WithDeploymentRedeploy(newPlatformMCPDeploymentRedeploy(config, platformReader, limitStore))
-	platformReader.WithWorkloadAssertionReuse(config.WorkloadAssertionReuse)
+	platformReader.WithWorkloadAssertionReuse(config.WorkloadAssertionReuse, config.Authz)
 	// Metered on the diagnostics allowance, like the other aggregate reads.
-	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics, config.ProductFeatures).WithConversationAccess(config.ConversationAccess))
-	platformReader.WithWidgets(platformmcp.NewWidgetService(config.Logger, config.Widgets, platformReader, config.Authz, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
-	platformReader.WithDashboards(platformmcp.NewDashboardsService(config.Logger, config.Dashboards, platformReader, config.Authz, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
+	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, config.AuthzClient, budgets.Diagnostics, config.ProductFeatures).WithConversationAccess(config.ConversationAccess))
+	platformReader.WithWidgets(platformmcp.NewWidgetService(config.Logger, config.Widgets, platformReader, config.Authz, config.AuthzClient, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
+	platformReader.WithDashboards(platformmcp.NewDashboardsService(config.Logger, config.Dashboards, platformReader, config.AuthzClient, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
 	attachShadowInventory(platformReader, config, budgets.SensitiveDiagnostics)
 	attachShadowAI(platformReader, config, authorizer, budgets.SensitiveDiagnostics)
 	attachDeviceCoverage(platformReader, config, budgets.SensitiveDiagnostics)
@@ -632,7 +632,7 @@ func configureLocalFixturePlatformMCP(ctx context.Context, config platformMCPCon
 		accessReads,
 		accessRoleMutations,
 		platformmcp.NewAssistantIdentityService(config.AssistantIdentity, platformReader),
-		platformmcp.NewSignalAuthoringService(config.SignalAuthoring, platformReader, config.Authz, config.JWTSigningKey),
+		platformmcp.NewSignalAuthoringService(config.SignalAuthoring, platformReader, config.AuthzClient, config.JWTSigningKey),
 		newPlatformMCPConnectionMutations(config),
 	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry).WithDiscovery(platformmcp.DiscoveryConfig{Flags: config.FeatureFlags, CodeExecutor: config.CodeExecutor, CodeModeAvailable: config.CodeModeAvailable})
 	runtime, err = withPlatformMCPSkills(runtime, config)
@@ -703,7 +703,7 @@ func attachOrganizationGatewayActivity(reader *platformmcp.PostgresReader, confi
 	if config.GatewayActivity == nil {
 		return
 	}
-	service := platformmcp.NewOrganizationGatewayActivityService(config.DB, config.GatewayActivity, config.Authz, budget)
+	service := platformmcp.NewOrganizationGatewayActivityService(config.DB, config.GatewayActivity, config.AuthzClient, budget)
 	if service == nil {
 		config.Logger.WarnContext(context.Background(), "platform mcp organization gateway activity unavailable")
 		return
@@ -716,7 +716,7 @@ func attachOrganizationGatewayActivity(reader *platformmcp.PostgresReader, confi
 func attachDeviceCoverage(reader *platformmcp.PostgresReader, config platformMCPConfig, budget platformmcp.OperationBudget) {
 	service := platformmcp.NewDeviceCoverageService(
 		deviceintegrations.NewReader(config.Logger, config.DB, config.FeatureFlags),
-		config.Authz,
+		config.AuthzClient,
 		budget,
 	)
 	if service == nil {
@@ -887,7 +887,7 @@ func platformMCPPluginMetadataBudget(config platformMCPConfig, limitStore rateli
 
 func newPlatformMCPToolExposure(config platformMCPConfig, authorizer platformmcp.Authorizer, limitStore ratelimit.Store) *platformmcp.MCPToolExposureService {
 	service, err := platformmcp.NewMCPToolExposureService(
-		config.Logger, config.DB, config.AuditLogger, config.Authz, config.AuthzClient, authorizer, config.JWTSigningKey,
+		config.Logger, config.DB, config.AuditLogger, config.AuthzClient, authorizer, config.JWTSigningKey,
 		config.PublicationRequests, config.PluginPublishSignaler,
 		// The catalogue read is metered well above the write: an administrator
 		// narrowing down one tool legitimately pages through it, while each
@@ -932,7 +932,7 @@ func newPlatformMCPProjectLifecycle(config platformMCPConfig, authorizer platfor
 		return nil
 	}
 	service, err := platformmcp.NewProjectLifecycleService(
-		config.Logger, config.DB, config.ProjectCore, config.Authz, authorizer,
+		config.Logger, config.DB, config.ProjectCore, config.AuthzClient, authorizer,
 		platformmcp.OperationBudget{
 			Connection:   ratelimit.New(limitStore, platformmcp.ProjectMutationConnectionLimitName, ratelimit.PerMinute(platformmcp.ProjectMutationsPerConnectionPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
 			Organization: ratelimit.New(limitStore, platformmcp.ProjectMutationOrganizationLimitName, ratelimit.PerMinute(platformmcp.ProjectMutationsPerOrganizationPerMinute), ratelimit.WithMetrics(config.MeterProvider)),
@@ -951,7 +951,7 @@ func newPlatformMCPProjectLifecycle(config platformMCPConfig, authorizer platfor
 // catalogue.
 func newPlatformMCPGateways(config platformMCPConfig, authorizer platformmcp.Authorizer, limitStore ratelimit.Store) *platformmcp.GatewayService {
 	service, err := platformmcp.NewGatewayService(
-		config.Logger, config.DB, config.AuditLogger, config.Authz, authorizer, config.DistributionAdmission,
+		config.Logger, config.DB, config.AuditLogger, config.Authz, config.AuthzClient, authorizer, config.DistributionAdmission,
 		mcpendpoints.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuthzClient, config.AuditLogger, config.TemporalEnv, config.PluginPublisher != nil),
 		config.PublicationRequests, config.PluginPublishSignaler,
 		platformmcp.OperationBudget{
@@ -985,9 +985,9 @@ func platformMCPReconcileCustomDomains(config platformMCPConfig) func(context.Co
 func newPlatformMCPConnectionMutations(config platformMCPConfig) *platformmcp.MCPConnectionMutationService {
 	service, err := platformmcp.NewMCPConnectionMutationService(
 		config.DB,
-		platformmcp.NewMCPConnectionSettingsService(config.DB).WithCodeModeAvailability(config.CodeModeAvailable),
+		platformmcp.NewMCPConnectionSettingsService(config.DB, config.AuthzClient).WithCodeModeAvailability(config.CodeModeAvailable),
 		mcpendpoints.NewService(config.Logger, config.TracerProvider, config.DB, config.Sessions, config.Authz, config.AuthzClient, config.AuditLogger, config.TemporalEnv, config.PluginPublisher != nil),
-		config.AuditLogger, config.Authz, config.NetworkAccessAdmission, config.PublicationRequests, config.PluginPublishSignaler,
+		config.AuditLogger, config.AuthzClient, config.NetworkAccessAdmission, config.PublicationRequests, config.PluginPublishSignaler,
 	)
 	if err != nil {
 		config.Logger.WarnContext(context.Background(), "Platform MCP connection mutations unavailable", attr.SlogError(err))
@@ -1082,7 +1082,7 @@ func (w platformMCPWorkspaces) JoinInvitedWorkspace(ctx context.Context, userID,
 // endpoint is not metered by the Platform MCP operation budget.
 func newAgentConnectionStatuses(config platformMCPConfig) *platformmcp.PluginsService {
 	return platformmcp.NewPluginsService(config.DB, platformmcp.OperationBudget{}, config.JWTSigningKey).
-		WithAuthorization(config.Authz).
+		WithAuthorization(config.Authz, config.AuthzClient).
 		WithRemoteSessions(config.RemoteChallengeManager).
 		WithAuthClientResolver(config.FeatureFlags).
 		WithIdentityChaining(platformMCPIdentityChaining(config)).
@@ -1104,7 +1104,7 @@ func platformMCPIdentityChaining(config platformMCPConfig) platformmcp.IdentityC
 
 func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) (AssistantSurface, error) {
 	gate := platformmcp.NewOrganizationGate(config.ProductFeatures)
-	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.Authz).WithDashboardURL(config.DashboardURL).WithServerURL(config.ServerURL)
+	authorizer := platformmcp.NewLiveOrgAdminAuthorizer(config.DB, config.AuthzClient).WithDashboardURL(config.DashboardURL).WithServerURL(config.ServerURL)
 	oauthTelemetry := platformmcp.NewOAuthTelemetry(config.Logger, config.MeterProvider)
 	oauthStore := platformmcp.NewPostgresOAuthStore(config.DB).WithTelemetry(oauthTelemetry)
 	oauth, err := platformmcp.NewOAuthHTTP(platformmcp.OAuthHTTPConfig{
@@ -1284,7 +1284,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	organizationSlugs := platformmcp.NewPostgresOrganizationSlugResolver(config.DB)
 	distributionAdmissionReads := platformmcp.NewShadowDistributionReadService(config.Logger, config.DB)
 	pluginInventory := platformmcp.NewPluginsService(config.DB, budgets.Plugins, config.JWTSigningKey).
-		WithAuthorization(config.Authz).
+		WithAuthorization(config.Authz, config.AuthzClient).
 		WithRemoteSessions(config.RemoteChallengeManager).
 		WithAuthClientResolver(config.FeatureFlags).
 		WithIdentityChaining(chaining).
@@ -1310,7 +1310,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 	if config.PluginManagement != nil {
 		pluginInventory.WithServerRemoval(config.PluginManagement).WithAutoSyncGuard(config.PluginManagement)
 	}
-	accessReads := platformmcp.NewAccessReadService(config.Logger, config.DB, budgets.AccessReads, config.JWTSigningKey)
+	accessReads := platformmcp.NewAccessReadService(config.Logger, config.DB, budgets.AccessReads, config.JWTSigningKey).WithAuthorization(config.AuthzClient)
 	if config.DirectoryReview != nil {
 		accessReads.WithDirectoryReview(config.DirectoryReview)
 	}
@@ -1323,7 +1323,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithDistributionAdmission(config.DistributionAdmission).
 		WithShadowMCPStanding(distributionAdmissionReads, shadowReviewLinks).
 		WithAdministratorAuthorization(config.Authz)
-	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.Authz, registrationGate, budgets.Skills).
+	skillAuthoring := platformmcp.NewSkillsService(config.Skills, platformmcp.NewPostgresSkillTargets(config.DB), store, config.AuthzClient, registrationGate, budgets.Skills).
 		WithInsights(config.SkillInsights, budgets.Diagnostics)
 	platformReader := platformmcp.NewPostgresReader(config.Logger, config.DB).
 		WithCodeModeAvailability(config.CodeModeAvailable).
@@ -1331,7 +1331,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		WithInternalSessionIssuer(config.IssuerGate).
 		WithInboundEMATrust(config.InboundEMAUserIssuers, config.InboundEMARemoteIssuers).
 		WithXAAIdentityChaining(chaining, config.OutboundCallbackOrigin).
-		WithAuthorization(config.Authz).
+		WithAuthorization(config.AuthzClient).
 		WithReviewRequests(config.ShadowReview, budgets.ReviewRequests).
 		WithShadowMCPReviewLinks(shadowReviewLinks).
 		WithDataExports(config.Encryption, config.DashboardURL).
@@ -1347,19 +1347,19 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		// Metered on the sensitive allowance: a chat page carries masked
 		// participants and person references, like the drill-down reads.
 		WithChatMetadata(platformmcp.NewChatMetadataService(config.DB, chatfindings.New(config.DB, config.ChatRiskFindings), budgets.SensitiveDiagnostics, config.JWTSigningKey)).
-		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.Authz, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
-		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
+		WithChatSearch(platformmcp.NewChatSearchService(config.DB, config.AuthzClient, config.AuditLogger, budgets.SensitiveSessionRecall, config.JWTSigningKey)).
+		WithOrganizationGateway(platformmcp.NewOrganizationGatewayService(config.DB, config.ServerURL, config.AuthzClient).WithOrganizationHosts(config.CallbackOrigins.OrganizationHosts)).
 		WithGatewaySessions(config.GatewaySessions).
 		WithGatewayProxy(config.GatewayProxy, config.FeatureFlags).
 		WithToolExposure(newPlatformMCPToolExposure(config, authorizer, limitStore)).
 		WithGateways(newPlatformMCPGateways(config, authorizer, limitStore)).
 		WithProjectLifecycle(newPlatformMCPProjectLifecycle(config, authorizer, limitStore))
 	platformReader.WithDeploymentRedeploy(newPlatformMCPDeploymentRedeploy(config, platformReader, limitStore))
-	platformReader.WithWorkloadAssertionReuse(config.WorkloadAssertionReuse)
+	platformReader.WithWorkloadAssertionReuse(config.WorkloadAssertionReuse, config.Authz)
 	// Metered on the diagnostics allowance, like the other aggregate reads.
-	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, budgets.Diagnostics, config.ProductFeatures).WithConversationAccess(config.ConversationAccess))
-	platformReader.WithWidgets(platformmcp.NewWidgetService(config.Logger, config.Widgets, platformReader, config.Authz, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
-	platformReader.WithDashboards(platformmcp.NewDashboardsService(config.Logger, config.Dashboards, platformReader, config.Authz, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
+	platformReader.WithAnalytics(platformmcp.NewAnalyticsService(config.Logger, config.Analytics, config.FeatureFlags, organizationSlugs, platformReader, config.AuthzClient, budgets.Diagnostics, config.ProductFeatures).WithConversationAccess(config.ConversationAccess))
+	platformReader.WithWidgets(platformmcp.NewWidgetService(config.Logger, config.Widgets, platformReader, config.Authz, config.AuthzClient, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
+	platformReader.WithDashboards(platformmcp.NewDashboardsService(config.Logger, config.Dashboards, platformReader, config.AuthzClient, config.FeatureFlags, organizationSlugs, config.JWTSigningKey))
 	shadowInventory, shadowErr := platformmcp.NewShadowInventoryService(config.ShadowInventory, config.ShadowReview, config.FeatureFlags, organizationSlugs, platformrepo.New(config.DB), budgets.SensitiveDiagnostics, config.JWTSigningKey)
 	if shadowErr != nil {
 		config.Logger.WarnContext(context.Background(), "platform mcp shadow inventory unavailable", attr.SlogError(shadowErr))
@@ -1425,7 +1425,7 @@ func configureBrowserPlatformMCP(ctx context.Context, config platformMCPConfig) 
 		accessReads,
 		accessRoleMutations,
 		platformmcp.NewAssistantIdentityService(config.AssistantIdentity, platformReader),
-		platformmcp.NewSignalAuthoringService(config.SignalAuthoring, platformReader, config.Authz, config.JWTSigningKey),
+		platformmcp.NewSignalAuthoringService(config.SignalAuthoring, platformReader, config.AuthzClient, config.JWTSigningKey),
 		newPlatformMCPConnectionMutations(config),
 	).WithOAuthTelemetry(oauthTelemetry).WithRiskTelemetry(riskTelemetry).WithDiscovery(platformmcp.DiscoveryConfig{Flags: config.FeatureFlags, CodeExecutor: config.CodeExecutor, CodeModeAvailable: config.CodeModeAvailable})
 	runtime, err = withPlatformMCPSkills(runtime, config)

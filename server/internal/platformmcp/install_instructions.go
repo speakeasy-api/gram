@@ -53,7 +53,7 @@ type GetMyInstallInstructionsOutput struct {
 var ErrInstallTargetNotFound = errors.New("install target not found")
 
 func (s *PluginsService) GetMyInstallInstructions(ctx context.Context, principal Principal, input GetMyInstallInstructionsInput) (GetMyInstallInstructionsOutput, error) {
-	if !s.valid() || s.authorization == nil || !validOnboardingClient(input.ClientFamily) {
+	if !s.valid() || s.authzClient == nil || !validOnboardingClient(input.ClientFamily) {
 		return GetMyInstallInstructionsOutput{}, ErrUnavailable
 	}
 	targets := 0
@@ -95,7 +95,7 @@ func (s *PluginsService) GetMyInstallInstructions(ctx context.Context, principal
 	if err != nil {
 		return GetMyInstallInstructionsOutput{}, fmt.Errorf("get installable platform mcp server: %w", err)
 	}
-	if err := s.authorization.Require(ctx, authz.MCPCheck(authz.ScopeMCPConnect, mcpID.String(), projectID.String())); err != nil {
+	if err := s.authzClient.Require(ctx, authz.MCPServer(projectID.String(), mcpID.String()).Connect()); err != nil {
 		if isAuthorizationDenied(err) {
 			return GetMyInstallInstructionsOutput{}, ErrInstallTargetNotFound
 		}

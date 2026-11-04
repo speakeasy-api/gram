@@ -317,7 +317,7 @@ func newServerWithRiskMutations(reader Reader, catalog Catalog, registrations *R
 	if postgresReader, ok := reader.(*PostgresReader); ok {
 		registerWhoamiTool(reg, NewWhoamiService(postgresReader.db))
 		cardViewNeeded = true
-		registerMCPConnectionSettingsTool(reg, NewMCPConnectionSettingsService(postgresReader.db).WithCodeModeAvailability(postgresReader.codeModeAvailable))
+		registerMCPConnectionSettingsTool(reg, NewMCPConnectionSettingsService(postgresReader.db, postgresReader.authz).WithCodeModeAvailability(postgresReader.codeModeAvailable))
 		registerGatewaySessionTool(reg, postgresReader.gatewaySessions)
 		registerMCPConnectionMutationTools(reg, connectionMutationService)
 		if postgresReader.networkIngress == nil {

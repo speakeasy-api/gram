@@ -172,7 +172,7 @@ func NewDeploymentRedeployService(db *pgxpool.Pool, management DeploymentRedeplo
 	return &DeploymentRedeployService{
 		management: management,
 		resolveProject: func(ctx context.Context, p Principal, input FindMCPInput) (ResolvedProject, error) {
-			return projects.resolveProjectWithScope(ctx, p, input, authz.ScopeProjectWrite)
+			return projects.resolveProjectWithScope(ctx, p, input, authz.ProjectRef.Write)
 		},
 		organizations: NewPostgresOrganizationSlugResolver(db),
 		activeDeployment: func(ctx context.Context, tx pgx.Tx, projectID uuid.UUID) (string, error) {

@@ -20,6 +20,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/audit"
 	"github.com/speakeasy-api/gram/server/internal/audit/audittest"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/dataexports"
 	dataexportsrepo "github.com/speakeasy-api/gram/server/internal/dataexports/repo"
@@ -280,7 +281,7 @@ func TestPauseDataExportRefusesANonAdminIdenticallyForRealAndInventedRoutes(t *t
 	memberID := "member_" + uuid.NewString()
 	seedPlatformMCPAuthorizationMember(t, ctx, f.conn, f.principal.OrganizationID, memberID, authz.SystemRoleMember)
 	engine := authz.NewEngine(testenv.NewLogger(t), f.conn, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
-	service, err := NewDataExportRouteToggleService(testenv.NewLogger(t), f.conn, dataexports.NewRouteEnabledCore(audit.NewLogger(), testenv.NewEncryptionClient(t)), NewLiveOrgAdminAuthorizer(f.conn, engine), allowingBudget())
+	service, err := NewDataExportRouteToggleService(testenv.NewLogger(t), f.conn, dataexports.NewRouteEnabledCore(audit.NewLogger(), testenv.NewEncryptionClient(t)), NewLiveOrgAdminAuthorizer(f.conn, authztest.NewParityClient(t, engine)), allowingBudget())
 	require.NoError(t, err)
 	member := Principal{UserID: memberID, OrganizationID: f.principal.OrganizationID, ConnectionID: uuid.NewString(), Generation: uuid.NewString(), ClientID: "client-test", Surface: SurfacePlatformMCP}
 

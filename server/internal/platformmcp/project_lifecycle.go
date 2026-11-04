@@ -134,10 +134,10 @@ type ProjectLifecycleService struct {
 	queries *platformrepo.Queries
 	logger  *slog.Logger
 	core    *projects.Core
-	// engine checks the resource-scoped project:write grant a rename needs,
+	// authz checks the resource-scoped project:write grant a rename needs,
 	// exactly as the dashboard's own project update does; a rename needs
 	// nothing more.
-	engine *authz.Engine
+	authz *authz.Client
 	// admin re-checks org:admin live for a create, as the dashboard's project
 	// creation requires, so a denial keeps the challenge and audit behavior
 	// every other admin-gated Platform MCP path records.
@@ -148,18 +148,18 @@ type ProjectLifecycleService struct {
 	now     func() time.Time
 }
 
-func NewProjectLifecycleService(logger *slog.Logger, db *pgxpool.Pool, core *projects.Core, engine *authz.Engine, admin Authorizer, changes OperationBudget) (*ProjectLifecycleService, error) {
-	if logger == nil || db == nil || core == nil || engine == nil || admin == nil || !changes.valid() {
+func NewProjectLifecycleService(logger *slog.Logger, db *pgxpool.Pool, core *projects.Core, client *authz.Client, admin Authorizer, changes OperationBudget) (*ProjectLifecycleService, error) {
+	if logger == nil || db == nil || core == nil || client == nil || admin == nil || !changes.valid() {
 		return nil, ErrProjectLifecycleInvalid
 	}
 	return &ProjectLifecycleService{
 		db: db, queries: platformrepo.New(db), logger: logger, core: core,
-		engine: engine, admin: admin, changes: changes, now: time.Now,
+		authz: client, admin: admin, changes: changes, now: time.Now,
 	}, nil
 }
 
 func (s *ProjectLifecycleService) valid() bool {
-	return s != nil && s.db != nil && s.queries != nil && s.logger != nil && s.core != nil && s.engine != nil && s.admin != nil && s.changes.valid() && s.now != nil
+	return s != nil && s.db != nil && s.queries != nil && s.logger != nil && s.core != nil && s.authz != nil && s.admin != nil && s.changes.valid() && s.now != nil
 }
 
 // CreateProject creates an empty project in the caller's organization. The
@@ -383,7 +383,7 @@ func (s *ProjectLifecycleService) RenameProject(ctx context.Context, principal P
 	// against the id the caller named before anything confirms it exists, so
 	// a real and an invented project get the same answer and this tool cannot
 	// be used to probe for project ids.
-	if err := s.engine.Require(ctx, authz.Check{Scope: authz.ScopeProjectWrite, ResourceKind: "", ResourceID: projectID.String(), Dimensions: nil}); err != nil {
+	if err := s.authz.Require(ctx, authz.Project(principal.OrganizationID, projectID.String()).Write()); err != nil {
 		mapped := toolExposureAuthorizationError(err, authz.ScopeProjectWrite)
 		if _, ok := errors.AsType[*ExternalAuthorizationError](mapped); !ok {
 			return ProjectMutationOutput{}, s.unexpected(ctx, err)

@@ -14,6 +14,7 @@ import (
 	"github.com/stretchr/testify/require"
 
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/feature"
@@ -59,7 +60,7 @@ func TestMemberMCPAccessUsesLiveRBACAndTenantQualifiedTarget(t *testing.T) {
 
 	dashboardURL, err := url.Parse("https://app.example.test")
 	require.NoError(t, err)
-	service := NewPluginsService(conn, allowBudget(), "member-self-status-key").WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).WithInstallLinks(dashboardURL, dashboardURL)
+	service := NewPluginsService(conn, allowBudget(), "member-self-status-key").WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil), authztest.NewParityClient(t, authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil))).WithInstallLinks(dashboardURL, dashboardURL)
 	ctx = contextvalues.WithAuthenticatedActor(ctx, &contextvalues.AuthContext{ActiveOrganizationID: principal.OrganizationID, OrganizationSlug: "example-org"}, urn.NewPrincipal(urn.PrincipalTypeUser, principal.UserID))
 	input := GetMyMCPStatusInput{ProjectID: project.ID.String(), MCPID: mcpID.String()}
 
@@ -176,7 +177,7 @@ func TestMemberMCPConnectionStatusProjectsOnlyCallerState(t *testing.T) {
 	} {
 		t.Run(test.name, func(t *testing.T) {
 			t.Parallel()
-			service := NewPluginsService(conn, allowBudget(), "member-connection-status-key").WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).withMemberMCPConnectionReader(test.reader).WithInstallLinks(serverURL, serverURL)
+			service := NewPluginsService(conn, allowBudget(), "member-connection-status-key").WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil), authztest.NewParityClient(t, authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil))).withMemberMCPConnectionReader(test.reader).WithInstallLinks(serverURL, serverURL)
 			if test.resolver {
 				service.WithAuthClientResolver(resolverFlags)
 			}
@@ -190,7 +191,7 @@ func TestMemberMCPConnectionStatusProjectsOnlyCallerState(t *testing.T) {
 		})
 	}
 
-	service := NewPluginsService(conn, allowBudget(), "member-connection-denied-key").WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil)).withMemberMCPConnectionReader(testMemberMCPConnectionReader{}).WithInstallLinks(serverURL, serverURL)
+	service := NewPluginsService(conn, allowBudget(), "member-connection-denied-key").WithAuthorization(authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil), authztest.NewParityClient(t, authz.NewEngine(testenv.NewLogger(t), conn, func(context.Context, string) (bool, error) { return false, nil }, nil))).withMemberMCPConnectionReader(testMemberMCPConnectionReader{}).WithInstallLinks(serverURL, serverURL)
 	denied := authz.GrantsToContext(ctx, []authz.Grant{
 		authz.NewGrant(authz.ScopeMCPRead, mcpID.String()),
 		authz.NewGrant(authz.ScopeMCPBlockedConnect, mcpID.String()),

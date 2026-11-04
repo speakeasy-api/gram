@@ -107,7 +107,7 @@ func newAnalyticsTestHarness(t *testing.T, evaluation feature.Evaluation, budget
 	projects := &stubAnalyticsProjects{project: project, err: nil, inputs: nil}
 	flags := &riskMutationFlagProvider{evaluation: evaluation, err: nil, flag: "", groups: nil}
 	logs := &bytes.Buffer{}
-	service := NewAnalyticsService(slog.New(slog.NewJSONHandler(logs, nil)), engine, flags, riskMutationOrganizationResolver{slug: "org", err: nil}, projects, budget, nil)
+	service := NewAnalyticsService(slog.New(slog.NewJSONHandler(logs, nil)), engine, flags, riskMutationOrganizationResolver{slug: "org", err: nil}, projects, newGrantsAuthz(t), budget, nil)
 	require.NotNil(t, service)
 
 	reg := newRegistrar(newTestMCPServer())
@@ -259,10 +259,10 @@ func TestAnalyticsToolsStubWithoutAService(t *testing.T) {
 	}
 
 	logger := slog.New(slog.NewJSONHandler(&bytes.Buffer{}, nil))
-	require.Nil(t, NewAnalyticsService(nil, &stubAnalyticsEngine{}, nil, riskMutationOrganizationResolver{slug: "org", err: nil}, &stubAnalyticsProjects{}, allowAnalyticsBudget, nil))
-	require.Nil(t, NewAnalyticsService(logger, nil, nil, riskMutationOrganizationResolver{slug: "org", err: nil}, &stubAnalyticsProjects{}, allowAnalyticsBudget, nil))
-	require.Nil(t, NewAnalyticsService(logger, &stubAnalyticsEngine{}, nil, nil, &stubAnalyticsProjects{}, allowAnalyticsBudget, nil))
-	require.Nil(t, NewAnalyticsService(logger, &stubAnalyticsEngine{}, nil, riskMutationOrganizationResolver{slug: "org", err: nil}, nil, allowAnalyticsBudget, nil))
+	require.Nil(t, NewAnalyticsService(nil, &stubAnalyticsEngine{}, nil, riskMutationOrganizationResolver{slug: "org", err: nil}, &stubAnalyticsProjects{}, newGrantsAuthz(t), allowAnalyticsBudget, nil))
+	require.Nil(t, NewAnalyticsService(logger, nil, nil, riskMutationOrganizationResolver{slug: "org", err: nil}, &stubAnalyticsProjects{}, newGrantsAuthz(t), allowAnalyticsBudget, nil))
+	require.Nil(t, NewAnalyticsService(logger, &stubAnalyticsEngine{}, nil, nil, &stubAnalyticsProjects{}, newGrantsAuthz(t), allowAnalyticsBudget, nil))
+	require.Nil(t, NewAnalyticsService(logger, &stubAnalyticsEngine{}, nil, riskMutationOrganizationResolver{slug: "org", err: nil}, nil, newGrantsAuthz(t), allowAnalyticsBudget, nil))
 }
 
 func indexOfDescriptor(t *testing.T, reg *Registrar, name string) int {
