@@ -55,7 +55,7 @@ func TestDiscoveryRealCredentialsHTTP(t *testing.T) {
 	require.NoError(t, err)
 	az := authz.NewEngine(logger, db, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
 	m := goahttp.NewMuxer()
-	require.NoError(t, s.AttachDiscovery(ctx, logger, m, true, auth.New(logger, db, sessions, az), authztest.NewParityClient(t, az)))
+	require.NoError(t, s.AttachDiscovery(ctx, logger, m, true, auth.New(logger, db, sessions, authztest.NewParityClient(t, az)), authztest.NewParityClient(t, az)))
 	handler := middleware.SessionMiddleware(m)
 	makeKey := func(scopes []string) string {
 		key := "gram_local_" + uuid.NewString()
@@ -258,7 +258,7 @@ func TestDiscoveryRealCredentialsHTTP(t *testing.T) {
 		for _, enabled := range []bool{false, true} {
 			t.Run(fmt.Sprint(enabled), func(t *testing.T) {
 				mux := goahttp.NewMuxer()
-				require.NoError(t, s.AttachDiscovery(ctx, logger, mux, enabled, auth.New(logger, db, sessions, az), authztest.NewParityClient(t, az)))
+				require.NoError(t, s.AttachDiscovery(ctx, logger, mux, enabled, auth.New(logger, db, sessions, authztest.NewParityClient(t, az)), authztest.NewParityClient(t, az)))
 				origin, err := url.Parse("https://fixture.example.com")
 				require.NoError(t, err)
 				config, err := localfixture.NewConfig(origin)

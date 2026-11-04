@@ -102,6 +102,7 @@ func NewService(
 	featClient *productfeatures.Client,
 	serverURL *url.URL,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	scanEvaluator *mcpriskscan.Evaluator,
 ) *Service {
 	envRepo := environments_repo.New(db)
@@ -112,7 +113,7 @@ func NewService(
 		logger:           logger,
 		tracer:           tracer,
 		db:               db,
-		auth:             auth.New(logger, db, sessions, authzEngine),
+		auth:             auth.New(logger, db, sessions, authzClient),
 		chatSessions:     chatSessions,
 		toolset:          toolsets.NewToolsets(db),
 		environmentsRepo: envRepo,

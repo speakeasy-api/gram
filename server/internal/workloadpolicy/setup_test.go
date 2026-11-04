@@ -106,7 +106,7 @@ func newTestServiceWithFlags(t *testing.T, flags feature.Provider) (context.Cont
 	require.NotNil(t, authCtx.ProjectID)
 
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient())
-	service := workloadpolicy.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), authserver.Hosts{ServerURL: testServerURL, AuthenticationHostBaseURL: testAuthenticationHostURL, PlatformHosts: nil}, ratelimit.NewRedisStore(redisClient), flags)
+	service := workloadpolicy.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, authztest.NewParityClient(t, authzEngine), audit.NewLogger(), authserver.Hosts{ServerURL: testServerURL, AuthenticationHostBaseURL: testAuthenticationHostURL, PlatformHosts: nil}, ratelimit.NewRedisStore(redisClient), flags)
 
 	return ctx, &testInstance{
 		service:   service,

@@ -98,7 +98,7 @@ func NewService(
 		logger:      logger,
 		db:          db,
 		chConn:      chConn,
-		auth:        auth.New(logger, db, sessions, authz),
+		auth:        auth.New(logger, db, sessions, authzClient),
 		authz:       authz,
 		authzClient: authzClient,
 		roleMgr:     roleMgr,

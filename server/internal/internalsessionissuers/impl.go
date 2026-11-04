@@ -73,7 +73,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, meterP
 		logger:      logger,
 		metrics:     newMetrics(logger, meterProvider),
 		db:          db,
-		auth:        auth.New(logger, db, sessions, authzEngine),
+		auth:        auth.New(logger, db, sessions, authzClient),
 		authzClient: authzClient,
 		gate:        gate,
 		lifecycle:   NewLifecycle(db, auditLogger),

@@ -102,7 +102,7 @@ func NewService(
 	// API auth methods (APIKeyAuth, JWTAuth) will return unauthorized errors.
 	var a *auth.Auth
 	if sessions != nil {
-		a = auth.New(logger, db, sessions, authzEngine)
+		a = auth.New(logger, db, sessions, authorization)
 	}
 
 	return &Service{

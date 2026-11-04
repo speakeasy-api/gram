@@ -111,7 +111,7 @@ func newHooksAgentKey(t *testing.T, ctx context.Context, ti *testInstance, grant
 		AdmitPrincipalCredentialWithDBTX: runtimepolicy.AdmitPrincipalCredentialWithDBTX,
 	})
 	ti.service.authzClient = authztest.NewParityClient(t, engine)
-	ti.service.auth = auth.New(testenv.NewLogger(t), ti.conn, ti.sessionManager, engine)
+	ti.service.auth = auth.New(testenv.NewLogger(t), ti.conn, ti.sessionManager, ti.service.authzClient)
 	return hooksAgentKey{key: key, agent: actor}
 }
 

@@ -770,7 +770,7 @@ func newWorkerCommand() *cli.Command {
 			if err != nil {
 				return fmt.Errorf("configure principal credential signer: %w", err)
 			}
-			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzEngine, principalcredential.New(platformSigner, db), cache.NewRedisCacheAdapter(redisClient))
+			assistantTokenManager := assistanttokens.New(c.String(usersessions.JWTSigningKeyFlag), db, authzClient, principalcredential.New(platformSigner, db, authzClient), cache.NewRedisCacheAdapter(redisClient))
 
 			chatClient := chat.NewAgenticChatClient(completionsClient)
 

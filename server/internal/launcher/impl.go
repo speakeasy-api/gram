@@ -76,6 +76,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessions *sessions.Manager,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	keys openrouter.ExistingKeyLookup,
 	client *typesafe.Client,
 ) *Service {
@@ -84,7 +85,7 @@ func NewService(
 		tracer:  tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/launcher"),
 		logger:  logger,
 		db:      db,
-		auth:    auth.New(logger, db, sessions, authzEngine),
+		auth:    auth.New(logger, db, sessions, authzClient),
 		authz:   authzEngine,
 		keys:    keys,
 		client:  client,

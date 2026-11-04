@@ -71,7 +71,7 @@ func NewServiceWithPublication(logger *slog.Logger, tracerProvider trace.TracerP
 		tracer:               tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/networkingress"),
 		logger:               logger,
 		db:                   db,
-		auth:                 auth.New(logger, db, sessions, authzEngine),
+		auth:                 auth.New(logger, db, sessions, authzClient),
 		authzClient:          authzClient,
 		enc:                  enc,
 		audit:                auditLogger,

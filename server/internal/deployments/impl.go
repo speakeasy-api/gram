@@ -97,7 +97,7 @@ func NewService(
 		db:           db,
 		repo:         repo.New(db),
 		externalmcp:  externalmcpRepo.New(db),
-		auth:         auth.New(logger, db, sessions, authzEngine),
+		auth:         auth.New(logger, db, sessions, authzClient),
 		authz:        authzClient,
 		assets:       assetsRepo.New(db),
 		packages:     packagesRepo.New(db),

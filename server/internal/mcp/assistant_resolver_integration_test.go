@@ -6,6 +6,7 @@ package mcp_test
 import (
 	"context"
 	"encoding/json"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"net/http"
 	"net/http/httptest"
 	"net/http/httputil"
@@ -209,7 +210,7 @@ func mintAssistantBearerForOwner(
 	})
 	require.NoError(t, err)
 
-	token, err := assistanttokens.New("test-jwt-secret", ti.conn, ti.authzEngine, nil, nil).Generate(assistanttokens.GenerateInput{
+	token, err := assistanttokens.New("test-jwt-secret", ti.conn, authztest.NewParityClient(t, ti.authzEngine), nil, nil).Generate(assistanttokens.GenerateInput{
 		OrgID:       authCtx.ActiveOrganizationID,
 		ProjectID:   *authCtx.ProjectID,
 		UserID:      authCtx.UserID,

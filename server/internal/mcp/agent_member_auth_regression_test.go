@@ -246,7 +246,7 @@ func TestAgentMemberAuthRegression(t *testing.T) {
 					require.NoError(t, err)
 					require.Len(t, clients, 1)
 					projectIDText := projectID.String()
-					agents := agentmanagement.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, ti.authzEngine, ti.audit, nil, nil)
+					agents := agentmanagement.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, ti.authzEngine, authztest.NewParityClient(t, ti.authzEngine), ti.audit, nil, nil)
 					_, err = agents.CreatePolicyGrant(ctx, &agentsgen.CreatePolicyGrantPayload{AgentID: fx.agent.ID.String(), Scope: string(authz.ScopeMCPBlockedAuth), Effect: "allow", Selector: &agentsgen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCPAuthClient, ResourceID: clients[0].ID.String(), ProjectID: &projectIDText}})
 					require.NoError(t, err)
 				case "owner_block":
@@ -407,7 +407,7 @@ func issueMemberAuthRegressionKey(t *testing.T, ctx context.Context, ti *testIns
 	projectID := ac.ProjectID.String()
 	agentID := fx.agent.ID.String()
 	audience := authclients.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, ti.authzEngine, authztest.NewParityClient(t, ti.authzEngine), ti.audit, ti.enc)
-	agents := agentmanagement.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, ti.authzEngine, ti.audit, nil, nil)
+	agents := agentmanagement.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, ti.authzEngine, authztest.NewParityClient(t, ti.authzEngine), ti.audit, nil, nil)
 	requested := []*keysgen.AgentPolicyGrantForm{{Scope: string(authz.ScopeMCPConnect), Effect: "allow", Selector: &keysgen.AgentPolicySelector{ResourceKind: authz.ResourceKindMCP, ResourceID: serverID.String(), ProjectID: &projectID}}}
 	clients, err := authclientsrepo.New(ti.conn).ListServerAuthClients(ctx, authclientsrepo.ListServerAuthClientsParams{OrganizationID: ac.ActiveOrganizationID, ProjectID: *ac.ProjectID, McpServerID: serverID})
 	require.NoError(t, err)
@@ -429,7 +429,7 @@ func issueMemberAuthRegressionKey(t *testing.T, ctx context.Context, ti *testIns
 	// still intersects the explicit live owner and agent auth grants above.
 	// Do not invent a v5 key or broaden the production issuance contract.
 	version := int(runtimepolicy.IssuedDelegatedPolicyVersion)
-	issued, err := keys.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, "local", ti.authzEngine, ti.audit).CreateKey(ctx, &keysgen.CreateKeyPayload{Name: "Authorized member regression key", AgentID: &agentID, DelegatedGrantsVersion: &version, RequestedGrants: requested})
+	issued, err := keys.NewService(ti.logger, ti.tracerProvider, ti.conn, ti.sessionManager, "local", ti.authzEngine, authztest.NewParityClient(t, ti.authzEngine), ti.audit).CreateKey(ctx, &keysgen.CreateKeyPayload{Name: "Authorized member regression key", AgentID: &agentID, DelegatedGrantsVersion: &version, RequestedGrants: requested})
 	require.NoError(t, err)
 	require.NotNil(t, issued.Key)
 	return *issued.Key

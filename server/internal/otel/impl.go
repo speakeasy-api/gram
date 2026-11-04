@@ -68,7 +68,7 @@ func NewService(
 	return &Service{
 		logger:          logger,
 		tracer:          tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/otel"),
-		auth:            auth.New(logger, db, sessions, authzEngine),
+		auth:            auth.New(logger, db, sessions, authzClient),
 		authzClient:     authzClient,
 		chRepo:          chrepo.New(chConn),
 		logsEnabled:     logsEnabled,

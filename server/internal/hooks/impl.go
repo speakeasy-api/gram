@@ -310,7 +310,7 @@ func NewService(
 		telemetryLogger:    telemetryLogger,
 		otelLogPublisher:   otelLogPublisher,
 		otelTeeDrains:      sync.WaitGroup{},
-		auth:               auth.New(logger, db, sessionsMgr, authz),
+		auth:               auth.New(logger, db, sessionsMgr, authzClient),
 		authzClient:        authzClient,
 		audit:              auditLogger,
 		cache:              cacheAdapter,

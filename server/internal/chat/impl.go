@@ -139,7 +139,7 @@ func NewService(
 	logger = logger.With(attr.SlogComponent("chat"))
 
 	return &Service{
-		auth:             auth.New(logger, db, sessions, authzEngine),
+		auth:             auth.New(logger, db, sessions, authzClient),
 		authz:            authzEngine,
 		authzClient:      authzClient,
 		db:               db,

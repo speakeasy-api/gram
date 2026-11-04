@@ -47,7 +47,7 @@ func NewService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pg
 		tracer: tracerProvider.Tracer("github.com/speakeasy-api/gram/server/internal/hiddenmcpservers"),
 		logger: logger,
 		db:     db,
-		auth:   auth.New(logger, db, sessionManager, authzEngine),
+		auth:   auth.New(logger, db, sessionManager, authzClient),
 		authz:  authzClient,
 	}
 }

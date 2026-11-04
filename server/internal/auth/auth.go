@@ -22,23 +22,23 @@ import (
 )
 
 type Auth struct {
-	logger   *slog.Logger
-	db       *pgxpool.Pool
-	sessions *sessions.Manager
-	keys     *ByKey
-	repo     *repo.Queries
-	authz    *authz.Engine
+	logger      *slog.Logger
+	db          *pgxpool.Pool
+	sessions    *sessions.Manager
+	keys        *ByKey
+	repo        *repo.Queries
+	authzClient *authz.Client
 }
 
-func New(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, authzEngine *authz.Engine) *Auth {
+func New(logger *slog.Logger, db *pgxpool.Pool, sessions *sessions.Manager, authzClient *authz.Client) *Auth {
 	logger = logger.With(attr.SlogComponent("authorizer"))
 	return &Auth{
-		logger:   logger,
-		db:       db,
-		keys:     NewKeyAuth(db, logger, sessions.Billing()),
-		sessions: sessions,
-		repo:     repo.New(db),
-		authz:    authzEngine,
+		logger:      logger,
+		db:          db,
+		keys:        NewKeyAuth(db, logger, sessions.Billing()),
+		sessions:    sessions,
+		repo:        repo.New(db),
+		authzClient: authzClient,
 	}
 }
 
@@ -98,7 +98,7 @@ func (s *Auth) authorize(
 		}
 	}
 
-	ctx, err = s.authz.PrepareContext(ctx)
+	ctx, err = s.authzClient.PrepareContext(ctx)
 	if err != nil {
 		var shareable *oops.ShareableError
 		if errors.As(err, &shareable) && shareable.Code != oops.CodeUnexpected {
@@ -133,12 +133,7 @@ func (s *Auth) requireResolvedProjectAccess(ctx context.Context) error {
 		return oops.E(oops.CodeUnauthorized, nil, "no session found")
 	}
 
-	return s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeProjectRead,
-		ResourceKind: "",
-		ResourceID:   authCtx.ProjectID.String(),
-		Dimensions:   nil,
-	})
+	return s.authzClient.Require(ctx, authz.Project(authCtx.ActiveOrganizationID, authCtx.ProjectID.String()).Read())
 }
 
 func (s *Auth) checkProjectAccess(ctx context.Context, logger *slog.Logger, projectSlug string) (context.Context, error) {

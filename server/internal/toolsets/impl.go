@@ -104,7 +104,7 @@ func NewService(
 		db:                       db,
 		policy:                   policy,
 		repo:                     repo.New(db),
-		auth:                     auth.New(logger, db, sessions, authzEngine),
+		auth:                     auth.New(logger, db, sessions, authzClient),
 		authz:                    authzClient,
 		environmentRepo:          environmentsRepo.New(db),
 		toolsets:                 NewToolsets(db),

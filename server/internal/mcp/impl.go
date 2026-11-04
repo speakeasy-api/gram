@@ -621,7 +621,7 @@ func NewService(
 		orgsRepo:                  organizations_repo.New(db),
 		deploymentsRepo:           deployments_repo.New(db),
 		externalmcpRepo:           externalmcp_repo.New(db),
-		auth:                      auth.New(logger, db, sessions, authzEngine),
+		auth:                      auth.New(logger, db, sessions, authzClient),
 		env:                       env,
 		serverURL:                 serverURL,
 		callbackOrigins:           remotesessions.CallbackOrigins{Outbound: nil, Registration: nil, OrganizationHosts: nil},

@@ -68,7 +68,7 @@ func NewService(
 		db:              db,
 		repo:            repo.New(db),
 		variationsRepo:  vr.New(db),
-		auth:            auth.New(logger, db, sessions, authzEngine),
+		auth:            auth.New(logger, db, sessions, authzClient),
 		authz:           authzClient,
 		featureChecker:  featureChecker,
 		platformExtras:  platformExtras,

@@ -60,10 +60,10 @@ type ManagementService struct {
 var _ platformmcpgen.Service = (*ManagementService)(nil)
 var _ platformmcpgen.Auther = (*ManagementService)(nil)
 
-func NewManagementService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, gate Gate, authorizer Authorizer, mcpURL string, registrations *RegistrationService, readiness *ReadinessService, distributions *DistributionService, versionTokenKey string, catalog Catalog) *ManagementService {
+func NewManagementService(logger *slog.Logger, tracerProvider trace.TracerProvider, db *pgxpool.Pool, sessionManager *sessions.Manager, authzEngine *authz.Engine, authzClient *authz.Client, gate Gate, authorizer Authorizer, mcpURL string, registrations *RegistrationService, readiness *ReadinessService, distributions *DistributionService, versionTokenKey string, catalog Catalog) *ManagementService {
 	versionTokens, _ := newDistributionVersionTokenCodec(versionTokenKey)
 	return &ManagementService{
-		auth:          auth.New(logger, db, sessionManager, authzEngine),
+		auth:          auth.New(logger, db, sessionManager, authzClient),
 		db:            db,
 		authorizer:    authorizer,
 		gate:          gate,

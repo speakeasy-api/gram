@@ -99,7 +99,7 @@ func (m *Manager) AuthorizeRuntime(ctx context.Context, header string) (context.
 	if lifecycle.ThreadDeleted || lifecycle.AssistantDeleted || lifecycle.AssistantStatus != "active" {
 		return ctx, nil, oops.C(oops.CodeUnauthorized)
 	}
-	authed, err = m.authz.PrepareContext(authed)
+	authed, err = m.authzClient.PrepareContext(authed)
 	if err != nil {
 		if denied, ok := errors.AsType[*oops.ShareableError](err); ok && (denied.Code == oops.CodeUnauthorized || denied.Code == oops.CodeForbidden) {
 			return ctx, nil, oops.E(denied.Code, err, "runtime credential is no longer admitted")

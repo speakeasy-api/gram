@@ -93,7 +93,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 	signaler := &captureSignaler{projects: nil, errors: nil}
 
 	return ctx, &testInstance{
-		service:  chatanalysis.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, audit.NewLogger(), signaler),
+		service:  chatanalysis.NewService(logger, tracerProvider, conn, sessionManager, authzEngine, authztest.NewParityClient(t, authzEngine), audit.NewLogger(), signaler),
 		conn:     conn,
 		signaler: signaler,
 	}

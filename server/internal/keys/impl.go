@@ -60,6 +60,7 @@ func NewService(
 	sessions *sessions.Manager,
 	env string,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	auditLogger *audit.Logger,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("keys"))
@@ -70,7 +71,7 @@ func NewService(
 		logger:      logger,
 		db:          db,
 		repo:        repo.New(db),
-		auth:        auth.New(logger, db, sessions, authzEngine),
+		auth:        auth.New(logger, db, sessions, authzClient),
 		authz:       authzEngine,
 		projectRepo: project_repo.New(db),
 		orgsRepo:    organizations_repo.New(db),

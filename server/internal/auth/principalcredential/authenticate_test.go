@@ -12,6 +12,7 @@ import (
 	adminrepo "github.com/speakeasy-api/gram/server/internal/admin/repo"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	orgrepo "github.com/speakeasy-api/gram/server/internal/organizations/repo"
 	projectsrepo "github.com/speakeasy-api/gram/server/internal/projects/repo"
@@ -55,7 +56,7 @@ func TestAuthenticateRechecksTheAuthorizer(t *testing.T) {
 	db, err := infra.CloneTestDatabase(t, "principal_credential_authorizer")
 	require.NoError(t, err)
 	project := seedTenant(t, db, "user-1", "user-2")
-	issuer := principalcredential.New(newSigner(t), db)
+	issuer := principalcredential.New(newSigner(t), db, authztest.NewLoadedGrantsClient())
 
 	ctx, err := issuer.Authenticate(t.Context(), mintFor(t, issuer, project, "user-1"))
 	require.NoError(t, err)
@@ -80,7 +81,7 @@ func TestAuthenticateRejectsDisabledOrganizations(t *testing.T) {
 	db, err := infra.CloneTestDatabase(t, "principal_credential_disabled")
 	require.NoError(t, err)
 	project := seedTenant(t, db, "user-1")
-	issuer := principalcredential.New(newSigner(t), db)
+	issuer := principalcredential.New(newSigner(t), db, authztest.NewLoadedGrantsClient())
 	raw := mintFor(t, issuer, project, "user-1")
 	_, err = issuer.Authenticate(t.Context(), raw)
 	require.NoError(t, err)
@@ -96,7 +97,7 @@ func TestAuthenticateRevalidatesADifferentToken(t *testing.T) {
 	db, err := infra.CloneTestDatabase(t, "principal_credential_second_token")
 	require.NoError(t, err)
 	project := seedTenant(t, db, "user-1", "user-2")
-	issuer := principalcredential.New(newSigner(t), db)
+	issuer := principalcredential.New(newSigner(t), db, authztest.NewLoadedGrantsClient())
 
 	first, err := issuer.Authenticate(t.Context(), mintFor(t, issuer, project, "user-1"))
 	require.NoError(t, err)
@@ -108,7 +109,7 @@ func TestAuthenticateRevalidatesADifferentToken(t *testing.T) {
 
 	_, err = issuer.Authenticate(first, "not-a-credential")
 	require.ErrorIs(t, err, principalcredential.ErrNotCredential, "an existing credential never vouches for another value")
-	foreign := mintFor(t, principalcredential.New(newSigner(t), db), project, "user-1")
+	foreign := mintFor(t, principalcredential.New(newSigner(t), db, authztest.NewLoadedGrantsClient()), project, "user-1")
 	_, err = issuer.Authenticate(first, foreign)
 	require.ErrorIs(t, err, principalcredential.ErrInvalid)
 }

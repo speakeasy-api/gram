@@ -1091,7 +1091,7 @@ func serviceWithRedis(ctx context.Context, t *testing.T, f *transferFixture, ses
 	billingClient := billing.NewStubClient(logger, tracerProvider)
 	sessionManager := sessions.NewManager(logger, tracerProvider, conn, sessionRedis, testenv.NewCacheSuffix(t, cache.Suffix("auth")), nil, billingClient, f.instance.identityResolver)
 	authzEngine := authz.NewEngine(logger, conn, authztest.ChallengeLoggingAlwaysDisabled, workos.NewStubClient(), authz.EngineOpts{AdmitPrincipalCredential: runtimepolicy.AdmitPrincipalCredential})
-	return auth.NewService(logger, tracerProvider, conn, sessionManager, f.instance.identityResolver, f.instance.authConfigs, authzEngine, billingClient, noopCancelScheduler{}, posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", ""), nil, cache.NewRedisCacheAdapter(codeRedis), authz.NewProvisioner(conn), productfeatures.SeedOrganizationDefaultsTx, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), nil)
+	return auth.NewService(logger, tracerProvider, conn, sessionManager, f.instance.identityResolver, f.instance.authConfigs, authzEngine, authztest.NewParityClient(t, authzEngine), billingClient, noopCancelScheduler{}, posthog.New(ctx, logger, "test-posthog-key", "test-posthog-host", ""), nil, cache.NewRedisCacheAdapter(codeRedis), authz.NewProvisioner(conn), productfeatures.SeedOrganizationDefaultsTx, productfeatures.SeedEnterpriseTrialBundleTx, audit.NewLogger(), nil)
 }
 
 // brokenRedis is a client whose every command fails, as in an outage.

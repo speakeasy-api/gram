@@ -72,6 +72,7 @@ func NewService(
 	db *pgxpool.Pool,
 	sessionsManager *sessions.Manager,
 	authzEngine *authz.Engine,
+	authzClient *authz.Client,
 	env string,
 ) *Service {
 	logger = logger.With(attr.SlogComponent("tokenexchange"))
@@ -82,7 +83,7 @@ func NewService(
 		keysRepo:     keys_repo.New(db),
 		usersRepo:    users_repo.New(db),
 		projectsRepo: projects_repo.New(db),
-		auth:         auth.New(logger, db, sessionsManager, authzEngine),
+		auth:         auth.New(logger, db, sessionsManager, authzClient),
 		keyPrefix:    auth.APIKeyPrefix(env),
 	}
 }

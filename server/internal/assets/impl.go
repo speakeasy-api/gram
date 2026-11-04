@@ -100,7 +100,7 @@ func NewService(
 		logger:         logger,
 		guardianPolicy: guardianPolicy,
 		db:             db,
-		auth:           auth.New(logger, db, sessions, authzEngine),
+		auth:           auth.New(logger, db, sessions, authzClient),
 		authzClient:    authzClient,
 		storage:        storage,
 		jwtSecret:      jwtSecret,

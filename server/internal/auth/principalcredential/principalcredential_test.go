@@ -5,6 +5,7 @@ import (
 	"crypto/rsa"
 	"crypto/x509"
 	"encoding/pem"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"testing"
 
 	"github.com/golang-jwt/jwt/v5"
@@ -42,7 +43,7 @@ func agentCredential() principalcredential.Credential {
 
 func TestMintAndValidate(t *testing.T) {
 	t.Parallel()
-	issuer := principalcredential.New(newSigner(t), nil)
+	issuer := principalcredential.New(newSigner(t), nil, authztest.NewLoadedGrantsClient())
 	for name, c := range map[string]principalcredential.Credential{
 		"agent": agentCredential(),
 		"workload": {
@@ -74,7 +75,7 @@ func TestMintAndValidate(t *testing.T) {
 
 func TestMintCarriesTheSelectionProfileVersion(t *testing.T) {
 	t.Parallel()
-	issuer := principalcredential.New(newSigner(t), nil)
+	issuer := principalcredential.New(newSigner(t), nil, authztest.NewLoadedGrantsClient())
 	c := agentCredential()
 	c.SelectionProfileVersionID = uuid.NullUUID{UUID: uuid.New(), Valid: true}
 	raw, _, err := issuer.Mint(c)
@@ -96,7 +97,7 @@ func TestMintCarriesTheSelectionProfileVersion(t *testing.T) {
 
 func TestMintRejectsMalformedPrincipals(t *testing.T) {
 	t.Parallel()
-	issuer := principalcredential.New(newSigner(t), nil)
+	issuer := principalcredential.New(newSigner(t), nil, authztest.NewLoadedGrantsClient())
 	noAuthorizer := agentCredential()
 	noAuthorizer.AuthorizerUserID = ""
 	workloadWithUser := agentCredential()
@@ -111,20 +112,20 @@ func TestMintRejectsMalformedPrincipals(t *testing.T) {
 
 func TestValidateRejectsOtherSignersAndTokens(t *testing.T) {
 	t.Parallel()
-	raw, _, err := principalcredential.New(newSigner(t), nil).Mint(agentCredential())
+	raw, _, err := principalcredential.New(newSigner(t), nil, authztest.NewLoadedGrantsClient()).Mint(agentCredential())
 	require.NoError(t, err)
-	_, err = principalcredential.New(newSigner(t), nil).Validate(raw)
+	_, err = principalcredential.New(newSigner(t), nil, authztest.NewLoadedGrantsClient()).Validate(raw)
 	require.ErrorIs(t, err, principalcredential.ErrInvalid, "a token from another signing key is rejected")
 
 	other, err := jwt.NewWithClaims(jwt.SigningMethodHS256, jwt.MapClaims{"sub": "agent:x"}).SignedString([]byte("secret"))
 	require.NoError(t, err)
-	_, err = principalcredential.New(newSigner(t), nil).Validate(other)
+	_, err = principalcredential.New(newSigner(t), nil, authztest.NewLoadedGrantsClient()).Validate(other)
 	require.ErrorIs(t, err, principalcredential.ErrNotCredential)
 }
 
 func TestLegacyRuntimeTokenValidatorRejectsPrincipalCredentials(t *testing.T) {
 	t.Parallel()
-	raw, _, err := principalcredential.New(newSigner(t), nil).Mint(agentCredential())
+	raw, _, err := principalcredential.New(newSigner(t), nil, authztest.NewLoadedGrantsClient()).Mint(agentCredential())
 	require.NoError(t, err)
 	_, err = assistanttokens.New("secret", nil, nil, nil, nil).Validate(raw)
 	require.Error(t, err, "an RS256 principal credential never passes the HS256 assistant runtime token validator")

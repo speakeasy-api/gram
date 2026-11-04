@@ -76,6 +76,7 @@ func newTestService(t *testing.T) (context.Context, *testInstance) {
 		conn,
 		sessionManager,
 		authzEngine,
+		authztest.NewParityClient(t, authzEngine),
 		redisClient,
 		"local",
 	)

@@ -78,7 +78,7 @@ func TestWorkloadInference_ManagedCompletion(t *testing.T) {
 	_, err = q.InsertKitRuntimeSession(ctx, assistantrepo.InsertKitRuntimeSessionParams{SessionID: sessionID, RuntimeID: runtime.ID, ProjectID: project, AssistantID: a.ID, ThreadID: thread})
 	require.NoError(t, err)
 	token := requireWorkloadInferenceToken(t, f, issuer)
-	manager := assistanttokens.New("test-secret", f.ti.conn, f.ti.authzEngine, nil, nil)
+	manager := assistanttokens.New("test-secret", f.ti.conn, authztest.NewParityClient(t, f.ti.authzEngine), nil, nil)
 	calls := 0
 	client := &managedInferenceCompletion{complete: func(ctx context.Context, request openrouter.CompletionRequest) (*openrouter.CompletionResponse, error) {
 		calls++

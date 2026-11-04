@@ -22,6 +22,7 @@ import (
 	"github.com/speakeasy-api/gram/server/internal/agents/runtimepolicy"
 	"github.com/speakeasy-api/gram/server/internal/auth/principalcredential"
 	"github.com/speakeasy-api/gram/server/internal/authz"
+	"github.com/speakeasy-api/gram/server/internal/authztest"
 	"github.com/speakeasy-api/gram/server/internal/contextvalues"
 	"github.com/speakeasy-api/gram/server/internal/conv"
 	"github.com/speakeasy-api/gram/server/internal/mcpauthz"
@@ -79,7 +80,7 @@ func principalCredentialCaller(t *testing.T, ctx context.Context, conn *pgxpool.
 	require.NoError(t, err)
 	signer, err := mcpauthz.New(string(pem.EncodeToMemory(&pem.Block{Type: "PRIVATE KEY", Bytes: private})), string(pem.EncodeToMemory(&pem.Block{Type: "PUBLIC KEY", Bytes: public})), "https://platform.example.invalid", false)
 	require.NoError(t, err)
-	credentials := principalcredential.New(signer, conn)
+	credentials := principalcredential.New(signer, conn, authztest.NewLoadedGrantsClient())
 	raw, _, err := credentials.Mint(principalcredential.Credential{OrganizationID: organizationID, ProjectID: projectID, Principal: urn.NewPrincipal(urn.PrincipalTypeAgent, agent.ID.String()), AuthorizerUserID: auth.UserID})
 	require.NoError(t, err)
 	authenticated, err := credentials.Authenticate(ctx, raw)

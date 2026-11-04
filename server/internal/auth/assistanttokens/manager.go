@@ -100,14 +100,14 @@ type GenerateInput struct {
 }
 
 type Manager struct {
-	jwtSecret  string
-	db         *pgxpool.Pool
-	tokens     *tokenrepo.Queries
-	orgs       *organizationsrepo.Queries
-	projects   *projectsrepo.Queries
-	users      *usersrepo.Queries
-	authz      *authz.Engine
-	revocation *revocationCache
+	jwtSecret   string
+	db          *pgxpool.Pool
+	tokens      *tokenrepo.Queries
+	orgs        *organizationsrepo.Queries
+	projects    *projectsrepo.Queries
+	users       *usersrepo.Queries
+	authzClient *authz.Client
+	revocation  *revocationCache
 
 	// credentials mints and authenticates the principal credentials
 	// agent-backed turns run with; runtimeBindings records which assistant
@@ -116,7 +116,7 @@ type Manager struct {
 	runtimeBindings cache.Cache
 }
 
-func New(jwtSecret string, db *pgxpool.Pool, authzEngine *authz.Engine, credentials *principalcredential.Issuer, runtimeBindings cache.Cache) *Manager {
+func New(jwtSecret string, db *pgxpool.Pool, authzClient *authz.Client, credentials *principalcredential.Issuer, runtimeBindings cache.Cache) *Manager {
 	return &Manager{
 		credentials:     credentials,
 		runtimeBindings: runtimeBindings,
@@ -126,7 +126,7 @@ func New(jwtSecret string, db *pgxpool.Pool, authzEngine *authz.Engine, credenti
 		orgs:            organizationsrepo.New(db),
 		projects:        projectsrepo.New(db),
 		users:           usersrepo.New(db),
-		authz:           authzEngine,
+		authzClient:     authzClient,
 		revocation:      newRevocationCache(revocationCacheTTL),
 	}
 }
@@ -379,8 +379,8 @@ func (m *Manager) Authorize(ctx context.Context, tokenString string) (context.Co
 		ThreadID:    threadID,
 	})
 
-	if m.authz != nil {
-		ctx, err = m.authz.PrepareContext(ctx)
+	if m.authzClient != nil {
+		ctx, err = m.authzClient.PrepareContext(ctx)
 		if err != nil {
 			return ctx, nil, oops.E(oops.CodeUnexpected, err, "load assistant owner grants")
 		}
