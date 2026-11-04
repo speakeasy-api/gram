@@ -107,6 +107,7 @@ func DefaultMigrationUnits() []MigrationUnit {
 		{Name: "skill", Types: []string{"skill"}, DependsOn: []string{"project"}},
 		{Name: "assistant", Types: []string{"assistant"}, DependsOn: []string{"project"}},
 		{Name: "environment", Types: []string{"environment"}, DependsOn: []string{"project"}},
+		{Name: "inference", Types: []string{"inference"}, DependsOn: []string{"project"}},
 	}
 }
 

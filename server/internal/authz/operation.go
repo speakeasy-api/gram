@@ -325,6 +325,23 @@ func (m MCPServerRef) CallTool(tool, disposition string) Operation {
 	return newOperation("mcp_server", "connect", m.id, dimensions)
 }
 
+// InferenceRef names inference in one project for typed operations.
+type InferenceRef struct {
+	projectID string
+}
+
+// Inference names inference in a project. Inference grants are stored against
+// every resource of the project, so the operation targets the project ID and
+// carries it as a dimension.
+func Inference(projectID string) InferenceRef {
+	return InferenceRef{projectID: projectID}
+}
+
+// Execute asks to run inference in the project.
+func (i InferenceRef) Execute() Operation {
+	return newOperation("inference", "execute", i.projectID, map[string]string{SelectorKeyProjectID: i.projectID})
+}
+
 // typedOperations lists one instance of every operation the typed
 // constructors build. NewClient rejects a registry that does not declare
 // each of them, so a constructor can never name a missing permission at
@@ -341,5 +358,6 @@ func typedOperations() []Operation {
 		project.ReadSkills(), project.WriteSkills(), Skill("project", "skill").Read(),
 		Assistant("project", "assistant").Read(), Assistant("project", "assistant").Write(),
 		environment.Read(), environment.Write(),
+		Inference("project").Execute(),
 	}
 }

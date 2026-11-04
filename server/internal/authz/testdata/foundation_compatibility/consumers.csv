@@ -312,10 +312,7 @@ internal/mcp/authnchallenge_consent_bindings.go,*Service.serveConsentAgentConnec
 internal/mcp/authnchallenge_consent_mcp_endpoint.go,*Service.authorizedToolsetConsentInventory,check,MCPCheck,ScopeMCPConnect,,1,M3 AIS-861
 internal/mcp/authnchallenge_consent_meta_resource.go,*Service.authorizedMetaMembers,check,MCPCheck,ScopeMCPConnect,,1,M3 AIS-861
 internal/mcp/authnchallenge_token.go,*Service.handleTokenJWTBearerGrant,check,MCPCheck,ScopeMCPConnect,,1,M3 AIS-861
-internal/mcp/authnchallenge_workloadgrant.go,*Service.mintWorkloadGrantSession,check,InferenceExecuteCheck,,Require,1,I1 AIS-864
-internal/mcp/authnchallenge_workloadgrant.go,*Service.recheckWorkloadGrantAuthorization,check,InferenceExecuteCheck,,,1,I1 AIS-864
 internal/mcp/impl.go,*Service.serveToolsetResolved,check,MCPCheck,ScopeMCPConnect,,1,M3 AIS-861
-internal/mcp/inference_workload.go,*Service.AuthorizeWorkloadInference,check,InferenceExecuteCheck,,Require,1,I1 AIS-864
 internal/mcp/mandatory_shadow.go,*mandatoryShadow.recordServer,engine,DecideServerAdmission,,,1,M5 AIS-863
 internal/mcp/mandatory_shadow.go,mandatoryAuthClientCheck,check,MCPAuthClientCheck,,,1,M5 AIS-863
 internal/mcp/serve_meta_code_bridge.go,newMetaCodeBackend,loader,GrantsFromContext,,,1,M3 AIS-861

@@ -129,8 +129,6 @@ var foundationFileOwners = map[string]string{
 	"internal/chat/conversation_access.go":                      ownerC3,
 	"internal/killswitches/authorized_service.go":               ownerO2,
 	"internal/mcp/authclientresolve.go":                         ownerM5,
-	"internal/mcp/authnchallenge_workloadgrant.go":              ownerI1,
-	"internal/mcp/inference_workload.go":                        ownerI1,
 	"internal/mcp/mandatory_shadow.go":                          ownerM5,
 	"internal/mcp/serve_platform.go":                            ownerX3,
 	"internal/plugins/delivery_principals.go":                   ownerS2,

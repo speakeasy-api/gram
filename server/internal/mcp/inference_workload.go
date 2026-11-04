@@ -202,7 +202,7 @@ func (s *Service) AuthorizeWorkloadInference(ctx context.Context, token string) 
 	if err != nil {
 		return ctx, true, fmt.Errorf("authorize workload inference: %w", err)
 	}
-	if err := s.authz.Require(ctx, authz.InferenceExecuteCheck(projectID.String())); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Inference(projectID.String()).Execute()); err != nil {
 		return ctx, true, fmt.Errorf("authorize workload inference: %w", err)
 	}
 	return ctx, true, nil
