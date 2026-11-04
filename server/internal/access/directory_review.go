@@ -37,7 +37,7 @@ func (s *Service) ListDirectoryReviewItems(ctx context.Context, _ *gen.ListDirec
 	}
 	// Admin only, as for bulk setup: attribute values can carry personal
 	// directory data.
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(ac.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -110,7 +110,7 @@ func (s *Service) GetDirectoryReviewSettings(ctx context.Context, _ *gen.GetDire
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(ac.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -132,7 +132,7 @@ func (s *Service) UpdateDirectoryReviewSettings(ctx context.Context, payload *ge
 	if err != nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(ac.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -203,7 +203,7 @@ func (s *Service) ResolveDirectoryReviewItem(ctx context.Context, payload *gen.R
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(ac.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(

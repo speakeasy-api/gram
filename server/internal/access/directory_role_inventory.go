@@ -143,7 +143,7 @@ func DecodeDirectoryRoleInventory(reader io.Reader) (DirectoryRoleInventory, err
 // RunDirectoryRoleInventory runs an additive import or read-only shadow report.
 // The caller must authenticate a current, exact-organization support session and
 // prepare its authorization context. This is not a management or MCP endpoint.
-func RunDirectoryRoleInventory(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, engine *authz.Engine, auditLogger *audit.Logger, inventory DirectoryRoleInventory, shadow, apply bool) (*DirectoryRoleInventoryReport, error) {
+func RunDirectoryRoleInventory(ctx context.Context, logger *slog.Logger, db *pgxpool.Pool, engine *authz.Engine, client *authz.Client, auditLogger *audit.Logger, inventory DirectoryRoleInventory, shadow, apply bool) (*DirectoryRoleInventoryReport, error) {
 	report := &DirectoryRoleInventoryReport{
 		Committed: false, DefaultRoleSlug: inventory.DefaultRoleSlug, AddedMappings: 0,
 		MissingRoleSlugs: []string{}, AmbiguousRoleSlugs: []string{}, MissingGroupIDs: []string{},
@@ -153,7 +153,7 @@ func RunDirectoryRoleInventory(ctx context.Context, logger *slog.Logger, db *pgx
 	if !ok || !contextvalues.IsSupportSession(ctx) || ac.ActiveOrganizationID != inventory.OrganizationID || shadow && apply {
 		return report, errors.New("requires an exact-organization support session and one operation")
 	}
-	if err := engine.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := client.Require(ctx, authz.Organization(ac.ActiveOrganizationID).Administer()); err != nil {
 		return report, err
 	}
 
@@ -334,7 +334,7 @@ func RunDirectoryRoleInventory(ctx context.Context, logger *slog.Logger, db *pgx
 	}
 	writer := &Service{
 		tracer: nil, logger: logger, db: db, chConn: nil, auth: nil,
-		authz: engine, roleMgr: nil, audit: auditLogger, email: nil, orgHosts: nil, foldGate: nil,
+		authz: engine, authzClient: client, roleMgr: nil, audit: auditLogger, email: nil, orgHosts: nil, foldGate: nil,
 	}
 	for _, group := range groups {
 		// No expected set: each desired set was read under the source lock this

@@ -103,11 +103,17 @@ func run(ctx context.Context, args []string, input io.Reader, output io.Writer, 
 		return errors.New("could not authenticate a current support session for the inventory organization")
 	}
 	engine := authz.NewEngine(logger, db, func(context.Context, string) (bool, error) { return false, nil }, workos.NewStubClient())
-	ctx, err = engine.PrepareContext(ctx)
+	// No migration router: this support command has no feature flag
+	// provider, so the engine decides every call, as before.
+	client, err := authz.NewDefaultClient(engine)
+	if err != nil {
+		return fmt.Errorf("build authorization client: %w", err)
+	}
+	ctx, err = client.PrepareContext(ctx)
 	if err != nil {
 		return errors.New("could not prepare support session authorization")
 	}
-	report, runErr := access.RunDirectoryRoleInventory(ctx, logger, db, engine, audit.NewLogger(), inventory, options.shadow, options.apply)
+	report, runErr := access.RunDirectoryRoleInventory(ctx, logger, db, engine, client, audit.NewLogger(), inventory, options.shadow, options.apply)
 	if runErr != nil {
 		runErr = fmt.Errorf("directory role operation: %w", runErr)
 	}

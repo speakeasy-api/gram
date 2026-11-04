@@ -53,7 +53,7 @@ func (s *Service) PreviewDirectoryRoleSetup(ctx context.Context, _ *gen.PreviewD
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing auth context").LogError(ctx, s.logger)
 	}
 	// Admin only: attribute values can carry personal directory data.
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(ac.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(
@@ -269,7 +269,7 @@ func (s *Service) ApplyDirectoryRoleSetup(ctx context.Context, payload *gen.Appl
 	if err != nil {
 		return nil, err
 	}
-	if err := s.authz.Require(ctx, authz.Check{Scope: authz.ScopeOrgAdmin, ResourceKind: "", ResourceID: ac.ActiveOrganizationID, Dimensions: nil}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Organization(ac.ActiveOrganizationID).Administer()); err != nil {
 		return nil, err
 	}
 	trace.SpanFromContext(ctx).SetAttributes(

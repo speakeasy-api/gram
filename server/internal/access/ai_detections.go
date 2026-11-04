@@ -88,12 +88,7 @@ func (s *Service) ListEmployeeAIDetections(ctx context.Context, payload *gen.Lis
 	if err != nil || ac.ProjectID == nil {
 		return nil, oops.E(oops.CodeUnauthorized, err, "missing project auth context").LogError(ctx, s.logger)
 	}
-	if err := s.authz.Require(ctx, authz.Check{
-		Scope:        authz.ScopeProjectRead,
-		ResourceKind: "",
-		ResourceID:   ac.ProjectID.String(),
-		Dimensions:   nil,
-	}); err != nil {
+	if err := s.authzClient.Require(ctx, authz.Project(ac.ActiveOrganizationID, ac.ProjectID.String()).Read()); err != nil {
 		return nil, err
 	}
 	if err := s.requireProjectInOrganization(ctx, ac.ActiveOrganizationID, *ac.ProjectID); err != nil {

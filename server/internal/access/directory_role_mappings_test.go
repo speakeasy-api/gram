@@ -500,6 +500,7 @@ func TestService_DirectoryRoleMappings_UsesTransactionForLiveAuthorization(t *te
 	t.Cleanup(pool.Close)
 	ti.service.db = pool
 	ti.service.authz = authz.NewEngine(testenv.NewLogger(t), pool, authztest.ChallengeLoggingAlwaysDisabled, thirdpartyworkos.NewStubClient())
+	ti.service.authzClient = authztest.NewParityClient(t, ti.service.authz)
 
 	ctx, cancel := context.WithTimeout(ctx, 5*time.Second)
 	defer cancel()
