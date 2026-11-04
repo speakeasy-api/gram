@@ -133,7 +133,6 @@ var foundationPackageOwners = map[string]string{
 	"internal/tunneledmcp":                                   ownerM4,
 	"internal/unproxiedmcp":                                  ownerM4,
 	"internal/usage":                                         ownerO6,
-	"internal/usersessions":                                  ownerG2,
 	"internal/variations":                                    ownerP3,
 	"internal/widgets":                                       ownerP4,
 	"internal/workloadpolicy":                                ownerW1,
