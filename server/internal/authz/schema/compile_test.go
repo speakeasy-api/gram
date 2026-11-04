@@ -577,6 +577,16 @@ func TestCompile_RejectsInvalidDeclarations(t *testing.T) {
 			want:  `permission "pair": ExcludedBy does not apply to AnyOf; put it on the branch's own permission`,
 		},
 		{
+			name:  "AnyOf Via that is both the parent and an Attr",
+			types: []s.TypeDecl{simple("other"), simple("thing", s.Parent("other"), s.Attr("other", "other"), s.Permission("pair", s.AnyOf(s.Perm("read"), s.Via("other", "read"))))},
+			want:  `Via names "other", which is both the parent type and an Attr; rename the Attr`,
+		},
+		{
+			name:  "AnyOf with a description",
+			types: []s.TypeDecl{simple("thing", s.Permission("again", s.Rel("thing:read")), s.Permission("pair", s.AnyOf(s.Perm("read"), s.Perm("again")), s.Describe("Either")))},
+			want:  `permission "pair": Describe does not apply to AnyOf`,
+		},
+		{
 			name:  "AnyOf Via to an unrelated type",
 			types: []s.TypeDecl{simple("other"), simple("thing", s.Permission("pair", s.AnyOf(s.Perm("read"), s.Via("other", "read"))))},
 			want:  `Via names "other", which is neither the parent type nor an Attr`,

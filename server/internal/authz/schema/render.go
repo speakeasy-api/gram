@@ -12,7 +12,8 @@ func Render(r *Registry) string {
 	var b strings.Builder
 	b.WriteString("# Generated from the compiled authorization registry. Do not edit.\n")
 	b.WriteString("# Grammar: a | b union, a - b minus, is(fact) the actor is the user a fact names,\n")
-	b.WriteString("# via(rel).perm a permission on a related resource, when guard (expr) a guarded branch.\n")
+	b.WriteString("# via(rel).perm a permission on a related resource, when guard (expr) a guarded branch,\n")
+	b.WriteString("# any_of(a, b) one of other permissions, which must pass in every policy.\n")
 	for _, t := range r.Types() {
 		b.WriteString("\ntype " + t.Name + "\n")
 		if t.Parent != "" {

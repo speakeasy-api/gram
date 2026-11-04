@@ -370,6 +370,9 @@ func Permission(name string, expr Expr, opts ...PermissionOption) TypeOption {
 			return
 		}
 		var misused []string
+		if p.description != "" {
+			misused = append(misused, "Describe")
+		}
 		if len(p.direct) > 0 {
 			misused = append(misused, "ExcludedBy")
 		}

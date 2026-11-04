@@ -1,6 +1,7 @@
 # Generated from the compiled authorization registry. Do not edit.
 # Grammar: a | b union, a - b minus, is(fact) the actor is the user a fact names,
-# via(rel).perm a permission on a related resource, when guard (expr) a guarded branch.
+# via(rel).perm a permission on a related resource, when guard (expr) a guarded branch,
+# any_of(a, b) one of other permissions, which must pass in every policy.
 
 type organization
   stored_kind  org

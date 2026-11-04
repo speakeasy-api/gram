@@ -750,6 +750,10 @@ func (c *compiler) anyOfBranch(t *TypeDecl, m members, where string, branch Expr
 	case OpPerm:
 		return PermissionRef{Type: t.name, Permission: branch.name}, true
 	case OpVia:
+		if _, isAttr := m.attrs[branch.name]; isAttr && branch.name == t.parent {
+			c.problemf("%s: Via names %q, which is both the parent type and an Attr; rename the Attr", where, branch.name)
+			return PermissionRef{Type: "", Permission: ""}, false
+		}
 		if a, ok := m.attrs[branch.name]; ok {
 			if _, declared := c.byName[a.factType]; !declared {
 				c.problemf("%s: Via attr %q has type %q, which is not a declared type", where, branch.name, a.factType)
@@ -776,9 +780,14 @@ func (c *compiler) anyOfBranch(t *TypeDecl, m members, where string, branch Expr
 // permission reached through different Attrs, or through Perm and an Attr, is
 // asked of different instances and is not a duplicate.
 func firstDuplicateBranch(branches []Expr) string {
-	seen := make(map[string]bool, len(branches))
+	type branchKey struct {
+		op         Op
+		name       string
+		permission string
+	}
+	seen := make(map[branchKey]bool, len(branches))
 	for _, b := range branches {
-		key := string(b.op) + " " + b.name + " " + b.permission
+		key := branchKey{op: b.op, name: b.name, permission: b.permission}
 		if seen[key] {
 			if b.op == OpPerm {
 				return fmt.Sprintf("Perm(%q)", b.name)
