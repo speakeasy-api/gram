@@ -70,6 +70,11 @@ Review follow-ups adopted on #8442 (each fails closed):
 17. **The inventory skips engine-named methods called through the client.** `PrepareContext`, `RefreshContext` and the other engine entry points that the inventory matches by name also exist on the client. The scan has no type information, so it decides by the receiver's name: a variable or field whose name ends in "client" is the typed client, and the call has migrated. _If reversed:_ type-check the packages during the scan, which is far slower.
 18. **Loaded-grant questions route like every other decision.** `Client.EvaluateGrants(ctx, grants, op)` answers whether an already-loaded grant set allows an operation, such as another principal's or a role's grants. It routes old, shadow or new by the operation's unit, records no challenge (as `GrantsAuthorize` records none today), and rejects alternatives. It was first written for remote sessions and moved here so every slice shares one entry point. _If reversed:_ each slice keeps `GrantsAuthorize` until X1.
 19. **The client exposes `ShouldEnforce`.** It forwards to the engine, so a migrated service that skips filtering for unenforced requests no longer needs the engine for that one question. _If reversed:_ such services keep an engine field until X1.
+20. **The inventory now lists the engine's plugin-write and live-membership checks.** `RequirePluginWrite`, `RequireUserOrganizationScope` and `RequireUserOrganizationScopeWithDBTX` were missing from the engine entry points, so 16 call sites were never inventoried. They are now assigned:
+    - plugins to PL1, skills to S1, role matches to S2, and Platform MCP to X3;
+    - the three live organization-membership checks to O2: product features, killswitches, and access's transactional admin check. These read a user's current role membership, not the request's prepared policies, so they move together onto one client method.
+
+    _If reversed:_ assign the live-membership checks to their packages' slices.
 
 ## P1 (AIS-843): projects
 
