@@ -1,0 +1,146 @@
+# Generated from the compiled authorization registry. Do not edit.
+# Grammar: a | b union, a - b minus, is(fact) the actor is the user a fact names,
+# via(rel).perm a permission on a related resource, when guard (expr) a guarded branch.
+
+type organization
+  stored_kind  org
+  surface      access
+
+  grant org:admin "Administer the organization"  default: admin
+  grant org:device_agent_sync "Sync device agents"  delegatable_since: 2
+  grant org:hooks_ingest "Ingest hook events"  selectors: project_id  delegatable_since: 2
+  grant org:read "Read the organization"  default: admin, member
+
+  block org:blocked_admin  implied_by: org:blocked_read
+  block org:blocked_read
+
+  permission read = org:read | org:admin  answers org:read  excluded_by org:blocked_read
+  permission administer = org:admin  answers org:admin  excluded_by org:blocked_admin
+  permission sync_device_agent = org:device_agent_sync | org:admin  answers org:device_agent_sync
+  permission ingest_hooks = org:hooks_ingest | org:admin  answers org:hooks_ingest
+
+type project
+  parent       organization
+  stored_kind  project
+  surface      access
+
+  grant log:read "Read tool-call logs"  sensitive  anchored_at: organization, self
+  grant plugin:write "Publish plugins"  default: admin  anchored_at: organization, self
+  grant project:read "Read the project"  default: admin, member  anchored_at: organization, self  delegatable_since: 1
+  grant project:write "Change the project"  default: admin  anchored_at: organization, self  delegatable_since: 1
+
+  block plugin:blocked_write
+  block project:blocked_read  delegatable_since: 4
+  block project:blocked_write  implied_by: project:blocked_read  delegatable_since: 4
+
+  permission read = project:read | project:write  answers project:read  excluded_by project:blocked_read
+  permission write = project:write  answers project:write  excluded_by project:blocked_write
+  permission publish_plugin = plugin:write  answers plugin:write  excluded_by plugin:blocked_write
+  permission read_logs = log:read  answers log:read
+  alternatives plugin_publication = project.publish_plugin, organization.administer  blocks: any_vetoes
+  alternatives read_or_organization_read = organization.read, project.read  blocks: per_option
+  alternatives write_or_administer = project.write, organization.administer  blocks: per_option
+
+type mcp_server
+  parent       project
+  stored_kind  mcp
+  surface      access
+
+  grant mcp:connect "Connect and invoke permitted tools"  default: admin, member  anchored_at: organization, project, self  selectors: disposition, project_id, tool  conditions: mcp_tools  delegatable_since: 1
+  grant mcp:read "Inspect server configuration"  default: admin, member  anchored_at: organization, project, self  selectors: disposition, project_id, tool  conditions: mcp_tools  delegatable_since: 1
+  grant mcp:write "Change server configuration"  default: admin  anchored_at: organization, project, self  selectors: disposition, project_id, tool  conditions: mcp_tools  delegatable_since: 1
+
+  block mcp:blocked_connect  selectors: disposition, project_id, tool  conditions: mcp_tools  delegatable_since: 4
+  block mcp:blocked_read  selectors: disposition, project_id, tool  conditions: mcp_tools  delegatable_since: 4
+  block mcp:blocked_write  selectors: disposition, project_id, tool  conditions: mcp_tools  delegatable_since: 4
+
+  permission read = mcp:read | mcp:write  answers mcp:read  excluded_by mcp:blocked_read
+  permission edit = mcp:write  answers mcp:write  excluded_by mcp:blocked_write
+  permission connect = mcp:connect | mcp:read | mcp:write  answers mcp:connect  excluded_by mcp:blocked_connect
+  alternatives project_read_or_edit = project.read, mcp_server.edit  blocks: per_option
+
+type mcp_auth_client
+  parent       organization
+  stored_kind  mcp_auth_client
+  surface      access
+
+  grant mcp:auth "Use an upstream auth client"  matching: strict  default: admin, member  selectors: client_type, connection_owner, project_id, upstream_client  delegatable_since: 5
+
+  block mcp:blocked_auth  selectors: client_type, connection_owner, project_id, upstream_client  delegatable_since: 5
+
+  permission use = mcp:auth  answers mcp:auth  excluded_by mcp:blocked_auth
+
+type environment
+  parent       project
+  stored_kind  environment
+  surface      access
+
+  grant environment:read "View environments and their entries"  default: admin  anchored_at: organization, project, self  selectors: project_id  delegatable_since: 1
+  grant environment:write "Add, edit, clone and remove environments"  default: admin  anchored_at: organization, project, self  selectors: project_id  delegatable_since: 1
+
+  block environment:blocked_read  selectors: project_id  delegatable_since: 4
+  block environment:blocked_write  implied_by: environment:blocked_read  selectors: project_id  delegatable_since: 4
+
+  permission read = environment:read | environment:write  answers environment:read  excluded_by environment:blocked_read
+  permission write = environment:write  answers environment:write  excluded_by environment:blocked_write
+
+type risk_policy
+  stored_kind  risk_policy
+  surface      risk_policy
+
+  grant risk_policy:block "Block with the policy"  selectors: server_identity, server_url
+  grant risk_policy:bypass "Skip the policy"  selectors: server_identity, server_url
+  grant risk_policy:evaluate "Apply the policy"  selectors: server_identity, server_url  delegatable_since: 1
+
+  permission evaluate = risk_policy:evaluate - risk_policy:bypass  answers risk_policy:evaluate
+  permission bypass = risk_policy:bypass  answers risk_policy:bypass
+  permission block = risk_policy:block  answers risk_policy:block
+
+type skill
+  parent       project
+  stored_kind  skill
+  surface      access
+
+  grant skill:read "Read skills"  default: admin, member  anchored_at: organization, project, self  delegatable_since: 1
+  grant skill:write "Change skills"  default: admin  anchored_at: organization, project, self  delegatable_since: 1
+
+  block skill:blocked_read  delegatable_since: 4
+  block skill:blocked_write  implied_by: skill:blocked_read  delegatable_since: 4
+
+  permission read = skill:read | skill:write  answers skill:read  excluded_by skill:blocked_read
+  permission write = skill:write  answers skill:write  excluded_by skill:blocked_write
+  alternatives project_or_skill_read = skill.read, skill.read  blocks: any_vetoes
+
+type assistant
+  parent       project
+  stored_kind  assistant
+  surface      access
+
+  grant assistant:read "Read assistants"  default: admin, member  anchored_at: organization, project, self  selectors: project_id  delegatable_since: 3
+  grant assistant:write "Change assistants"  default: admin  anchored_at: organization, project, self  selectors: project_id  delegatable_since: 3
+
+  block assistant:blocked_read  selectors: project_id  delegatable_since: 4
+  block assistant:blocked_write  implied_by: assistant:blocked_read  selectors: project_id  delegatable_since: 4
+
+  permission read = assistant:read | assistant:write  answers assistant:read  excluded_by assistant:blocked_read
+  permission write = assistant:write  answers assistant:write  excluded_by assistant:blocked_write
+
+type inference
+  parent       project
+  stored_kind  inference
+  surface      access
+
+  grant inference:execute "Run inference through Speakeasy as a workload"  anchored_at: organization, project  selectors: project_id  delegatable_since: 6
+
+  permission execute = inference:execute  answers inference:execute
+
+type chat
+  parent       project
+  stored_kind  chat
+  surface      access
+
+  grant chat:read "Read session transcripts"  sensitive  anchored_at: organization, project, self
+  grant chat:write "Change session transcripts"  anchored_at: organization, project, self
+
+  permission read_grant = chat:read | chat:write  answers chat:read
+  permission write_grant = chat:write  answers chat:write
