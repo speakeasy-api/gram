@@ -89,7 +89,9 @@ const member = {
 } as unknown as AccessMember;
 
 function renderDialog() {
-  return render(<ChangeRoleDialog member={member} onOpenChange={vi.fn()} />);
+  return render(
+    <ChangeRoleDialog member={member} onOpenChange={vi.fn<() => void>()} />,
+  );
 }
 function addAuditor() {
   fireEvent.click(screen.getByText("Auditor"));

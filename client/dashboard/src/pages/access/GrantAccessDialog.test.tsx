@@ -89,7 +89,11 @@ const auditor = {
 
 function renderDialog() {
   return render(
-    <GrantAccessDialog userId={member.id} scope="log:read" onClose={vi.fn()} />,
+    <GrantAccessDialog
+      userId={member.id}
+      scope="log:read"
+      onClose={vi.fn<() => void>()}
+    />,
   );
 }
 
